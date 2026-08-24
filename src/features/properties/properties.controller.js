@@ -8,6 +8,7 @@ const offersService = require('./propertyOffers.service');
 const occurrencesService = require('./propertyInternalOccurrences.service');
 const mediaService = require('./propertyMedia.service');
 const documentsService = require('./propertyDocuments.service');
+const priceHistoryService = require('./propertyPriceHistory.service');
 const publishService = require('./publish.service');
 
 // --- Properties ---
@@ -162,6 +163,15 @@ const removeDocument = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+// --- Price history ---
+
+const listPriceHistory = catchAsync(async (req, res) => {
+  const history = await req.withTenantTransaction((transaction) =>
+    priceHistoryService.listPriceHistoryByProperty(req.params.id, transaction)
+  );
+  return success(res, { data: history });
+});
+
 // --- Publish ---
 
 const publishOffer = catchAsync(async (req, res) => {
@@ -192,5 +202,6 @@ module.exports = {
   createDocument,
   listDocuments,
   removeDocument,
+  listPriceHistory,
   publishOffer,
 };

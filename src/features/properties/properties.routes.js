@@ -34,6 +34,8 @@ propertiesRouter.post('/properties/:id/media', requirePermission('properties:upd
 propertiesRouter.get('/properties/:id/media', requirePermission('properties:read'), propertiesController.listMedia);
 propertiesRouter.delete('/properties/:id/media/:mediaId', requirePermission('properties:update'), propertiesController.removeMedia);
 
+propertiesRouter.get('/properties/:id/price-history', requirePermission('properties:read'), propertiesController.listPriceHistory);
+
 propertiesRouter.post('/properties/:id/documents', requirePermission('properties:update'), propertiesController.createDocument);
 propertiesRouter.get('/properties/:id/documents', requirePermission('properties:read'), propertiesController.listDocuments);
 propertiesRouter.delete('/properties/:id/documents/:documentId', requirePermission('properties:update'), propertiesController.removeDocument);

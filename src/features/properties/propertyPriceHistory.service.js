@@ -1,6 +1,7 @@
 'use strict';
 
-const { PropertyPriceHistory } = require('../../models');
+const { PropertyPriceHistory, PropertyOffer, Property } = require('../../models');
+const AppError = require('../../utils/AppError');
 const { publishPropertyPriceChanged } = require('./propertyEvents.service');
 
 /**
@@ -32,4 +33,25 @@ async function recordPriceHistory(
   return history;
 }
 
-module.exports = { recordPriceHistory };
+/**
+ * listPriceHistoryByProperty — leitura do histórico de preço de um imóvel. O histórico é
+ * gravado por OFERTA (offer_id, ver acima), então aqui resolvemos primeiro as ofertas do
+ * imóvel e devolvemos o histórico de todas elas em ordem cronológica decrescente — que é como
+ * a linha do tempo de preço da ficha do imóvel apresenta a informação.
+ */
+async function listPriceHistoryByProperty(propertyId, transaction) {
+  const property = await Property.findByPk(propertyId, { transaction });
+  if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
+
+  const offers = await PropertyOffer.findAll({ where: { propertyId }, attributes: ['id'], transaction });
+  const offerIds = offers.map((o) => o.id);
+  if (offerIds.length === 0) return [];
+
+  return PropertyPriceHistory.findAll({
+    where: { offerId: offerIds },
+    order: [['changed_at', 'DESC']],
+    transaction,
+  });
+}
+
+module.exports = { recordPriceHistory, listPriceHistoryByProperty };
