@@ -1,10 +1,22 @@
 'use strict';
 
-const { Person, PersonContact, PersonDocument } = require('../../models');
+const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
 const { findPotentialDuplicate } = require('./personDedup.service');
 const { publishPersonCreated } = require('./personEvents.service');
+const { VALID_ROLES } = require('./personRoles.service');
+
+// Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
+// payload de criação da pessoa (fonte única da lista: VALID_ROLES).
+function validatePersonRoleCode(roleCode) {
+  if (!VALID_ROLES.includes(roleCode)) {
+    throw AppError.badRequest(
+      `O campo "roleCode" deve ser um de: ${VALID_ROLES.join(', ')}.`,
+      'PERSON_ROLE_VALIDATION'
+    );
+  }
+}
 
 /**
  * CRUD puro de Person (mais a criação inicial de seus contacts/documents embutidos no payload
@@ -125,8 +137,73 @@ async function createPerson(payload, actorUserId, transaction) {
     }
   }
 
+  // `roles` e `addresses` embutidos no payload de criação: a tela de cadastro de contato envia
+  // papéis e endereço no mesmo formulário, então criar a pessoa e depois disparar N chamadas a
+  // /people/:id/roles e /people/:id/addresses deixaria o cadastro parcialmente escrito se uma
+  // delas falhasse. Aqui tudo entra na MESMA transação da Person.
+  if (Array.isArray(payload.roles)) {
+    for (const role of payload.roles) {
+      const roleCode = String(typeof role === 'string' ? role : role.roleCode || '').toUpperCase();
+      if (!roleCode) continue;
+      validatePersonRoleCode(roleCode);
+      await PersonRole.create(
+        {
+          groupId,
+          companyId,
+          personId: person.id,
+          roleCode,
+          startsAt: role.startsAt || null,
+          endsAt: role.endsAt || null,
+          createdBy: actorUserId || null,
+          updatedBy: actorUserId || null,
+        },
+        { transaction }
+      );
+    }
+  }
+
+  const addresses = Array.isArray(payload.addresses)
+    ? payload.addresses
+    : payload.address
+      ? [payload.address]
+      : [];
+  for (const address of addresses) {
+    if (!address) continue;
+    await PersonAddress.create(
+      {
+        groupId,
+        companyId,
+        personId: person.id,
+        zipCode: address.zipCode || null,
+        street: address.street || null,
+        number: address.number || null,
+        complement: address.complement || null,
+        neighborhood: address.neighborhood || null,
+        city: address.city || null,
+        state: address.state || null,
+        isCurrent: address.isCurrent !== undefined ? !!address.isCurrent : true,
+        validFrom: address.validFrom || null,
+        validUntil: address.validUntil || null,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+
   return getPerson(person.id, transaction);
 }
+
+// Sub-recursos sempre devolvidos junto da Person. `roles` e `addresses` entram aqui porque a
+// listagem/ficha de contatos precisa filtrar por papel e exibir o endereço atual sem ter que
+// fazer uma chamada extra por pessoa (N+1) — os sub-recursos continuam tendo CRUD próprio em
+// /people/:id/roles e /people/:id/addresses.
+const PERSON_INCLUDE = [
+  { model: PersonContact, as: 'contacts' },
+  { model: PersonDocument, as: 'documents' },
+  { model: PersonRole, as: 'roles' },
+  { model: PersonAddress, as: 'addresses' },
+];
 
 async function listPersons(transaction, filters = {}) {
   const where = {};
@@ -134,10 +211,7 @@ async function listPersons(transaction, filters = {}) {
   if (filters.status) where.status = filters.status;
   return Person.findAll({
     where,
-    include: [
-      { model: PersonContact, as: 'contacts' },
-      { model: PersonDocument, as: 'documents' },
-    ],
+    include: PERSON_INCLUDE,
     order: [['created_at', 'DESC']],
     transaction,
   });
@@ -145,10 +219,7 @@ async function listPersons(transaction, filters = {}) {
 
 async function getPerson(id, transaction) {
   const person = await Person.findByPk(id, {
-    include: [
-      { model: PersonContact, as: 'contacts' },
-      { model: PersonDocument, as: 'documents' },
-    ],
+    include: PERSON_INCLUDE,
     transaction,
   });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');

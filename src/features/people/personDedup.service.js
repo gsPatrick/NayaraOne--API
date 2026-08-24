@@ -54,4 +54,48 @@ async function findPotentialDuplicate(personData, transaction) {
   return null;
 }
 
-module.exports = { findPotentialDuplicate };
+/**
+ * listPotentialDuplicatePairs — versão "varredura" do mesmo critério de dedup acima, aplicada ao
+ * tenant inteiro em vez de a um payload de criação. Serve a listagem de contatos, que sinaliza
+ * cadastros suspeitos ("possível duplicata") e oferece o merge controlado (POST /people/:id/merge).
+ *
+ * Usa exclusivamente o **match médio** (critério 2 de findPotentialDuplicate): duas pessoas que
+ * compartilham o mesmo contato primário (mesmo contact_type + value_normalized). O match forte
+ * (mesmo tax_id_normalized) NÃO pode gerar par aqui: `UNIQUE(group_id, tax_id_normalized)` é uma
+ * constraint do banco (TAB-0100), então duas pessoas com o mesmo CPF/CNPJ não conseguem coexistir.
+ *
+ * Pessoas já mescladas (status='MERGED') são ignoradas — o par já foi resolvido.
+ *
+ * Retorna: [{ contactType, value, personIds: [id, id, ...] }]
+ */
+async function listPotentialDuplicatePairs(transaction) {
+  const contacts = await PersonContact.findAll({
+    where: { isPrimary: true },
+    transaction,
+  });
+
+  const byValue = new Map();
+  for (const contact of contacts) {
+    const key = `${contact.contactType}|${contact.valueNormalized}`;
+    if (!byValue.has(key)) byValue.set(key, []);
+    byValue.get(key).push(contact);
+  }
+
+  const pairs = [];
+  for (const [key, group] of byValue) {
+    const personIds = [...new Set(group.map((c) => c.personId))];
+    if (personIds.length < 2) continue;
+
+    // Descarta os já mesclados antes de decidir se ainda sobra um par de verdade.
+    const persons = await Person.findAll({ where: { id: personIds }, transaction });
+    const openIds = persons.filter((p) => p.status !== 'MERGED').map((p) => p.id);
+    if (openIds.length < 2) continue;
+
+    const [contactType, value] = key.split('|');
+    pairs.push({ contactType, value, personIds: openIds });
+  }
+
+  return pairs;
+}
+
+module.exports = { findPotentialDuplicate, listPotentialDuplicatePairs };

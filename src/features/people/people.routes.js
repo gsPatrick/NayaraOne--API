@@ -11,6 +11,8 @@ peopleRouter.use(authMiddleware, tenantMiddleware);
 
 peopleRouter.post('/people', requirePermission('people:create'), peopleController.create);
 peopleRouter.get('/people', requirePermission('people:read'), peopleController.list);
+// Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
+peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
 peopleRouter.patch('/people/:id', requirePermission('people:update'), peopleController.update);
 peopleRouter.delete('/people/:id', requirePermission('people:delete'), peopleController.remove);

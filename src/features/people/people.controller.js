@@ -9,6 +9,7 @@ const rolesService = require('./personRoles.service');
 const addressesService = require('./personAddresses.service');
 const consentsService = require('./personConsents.service');
 const mergeService = require('./personMerge.service');
+const dedupService = require('./personDedup.service');
 
 // --- Persons ---
 
@@ -22,9 +23,19 @@ const create = catchAsync(async (req, res) => {
 
 const list = catchAsync(async (req, res) => {
   const persons = await req.withTenantTransaction((transaction) =>
-    peopleService.listPersons(transaction, { type: req.query.type, status: req.query.status })
+    // O service filtra por `personType` (o nome do campo no model) — passar `type` aqui fazia o
+    // filtro de PF/PJ ser silenciosamente ignorado. Aceita os dois nomes na query string.
+    peopleService.listPersons(transaction, {
+      personType: req.query.personType || req.query.type,
+      status: req.query.status,
+    })
   );
   return success(res, { data: persons });
+});
+
+const listDuplicates = catchAsync(async (req, res) => {
+  const pairs = await req.withTenantTransaction((transaction) => dedupService.listPotentialDuplicatePairs(transaction));
+  return success(res, { data: pairs });
 });
 
 const getOne = catchAsync(async (req, res) => {
@@ -170,6 +181,7 @@ const merge = catchAsync(async (req, res) => {
 module.exports = {
   create,
   list,
+  listDuplicates,
   getOne,
   update,
   remove,
