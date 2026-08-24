@@ -28,6 +28,16 @@ propertiesRouter.patch('/properties/:id/offers/:offerId', requirePermission('pro
 propertiesRouter.post('/properties/:id/occurrences', requirePermission('properties:internal'), propertiesController.createOccurrence);
 propertiesRouter.get('/properties/:id/occurrences', requirePermission('properties:internal'), propertiesController.listOccurrences);
 
+// Mídia e documentos do imóvel — permissões normais do módulo (properties:read/update), pois
+// diferente das ocorrências internas não são conteúdo restrito.
+propertiesRouter.post('/properties/:id/media', requirePermission('properties:update'), propertiesController.createMedia);
+propertiesRouter.get('/properties/:id/media', requirePermission('properties:read'), propertiesController.listMedia);
+propertiesRouter.delete('/properties/:id/media/:mediaId', requirePermission('properties:update'), propertiesController.removeMedia);
+
+propertiesRouter.post('/properties/:id/documents', requirePermission('properties:update'), propertiesController.createDocument);
+propertiesRouter.get('/properties/:id/documents', requirePermission('properties:read'), propertiesController.listDocuments);
+propertiesRouter.delete('/properties/:id/documents/:documentId', requirePermission('properties:update'), propertiesController.removeDocument);
+
 // Publicação de oferta — REG-IMO-001 (vídeo obrigatório) avaliado via Motor de Regras.
 propertiesRouter.post('/offers/:id/publish', requirePermission('properties:update'), propertiesController.publishOffer);
 

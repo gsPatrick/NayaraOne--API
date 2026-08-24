@@ -6,6 +6,8 @@ const propertiesService = require('./properties.service');
 const ownersService = require('./propertyOwners.service');
 const offersService = require('./propertyOffers.service');
 const occurrencesService = require('./propertyInternalOccurrences.service');
+const mediaService = require('./propertyMedia.service');
+const documentsService = require('./propertyDocuments.service');
 const publishService = require('./publish.service');
 
 // --- Properties ---
@@ -21,9 +23,12 @@ const create = catchAsync(async (req, res) => {
 const list = catchAsync(async (req, res) => {
   const properties = await req.withTenantTransaction((transaction) =>
     propertiesService.listProperties(transaction, {
+      // O service filtra por publicationStatus/availabilityStatus (as duas colunas que
+      // substituíram a antiga "status") — mandar `status`/`city` aqui fazia o filtro ser
+      // silenciosamente ignorado.
       propertyType: req.query.propertyType,
-      status: req.query.status,
-      city: req.query.city,
+      publicationStatus: req.query.publicationStatus,
+      availabilityStatus: req.query.availabilityStatus,
     })
   );
   return success(res, { data: properties });
@@ -113,6 +118,50 @@ const listOccurrences = catchAsync(async (req, res) => {
   return success(res, { data: occurrences });
 });
 
+// --- Media ---
+
+const createMedia = catchAsync(async (req, res) => {
+  const media = await req.withTenantTransaction((transaction) =>
+    mediaService.createMedia(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { statusCode: 201, data: media });
+});
+
+const listMedia = catchAsync(async (req, res) => {
+  const media = await req.withTenantTransaction((transaction) => mediaService.listMedia(req.params.id, transaction));
+  return success(res, { data: media });
+});
+
+const removeMedia = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((transaction) =>
+    mediaService.deleteMedia(req.params.id, req.params.mediaId, transaction)
+  );
+  return success(res, { data: result });
+});
+
+// --- Documents ---
+
+const createDocument = catchAsync(async (req, res) => {
+  const document = await req.withTenantTransaction((transaction) =>
+    documentsService.createDocument(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { statusCode: 201, data: document });
+});
+
+const listDocuments = catchAsync(async (req, res) => {
+  const documents = await req.withTenantTransaction((transaction) =>
+    documentsService.listDocuments(req.params.id, transaction)
+  );
+  return success(res, { data: documents });
+});
+
+const removeDocument = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((transaction) =>
+    documentsService.deleteDocument(req.params.id, req.params.documentId, transaction)
+  );
+  return success(res, { data: result });
+});
+
 // --- Publish ---
 
 const publishOffer = catchAsync(async (req, res) => {
@@ -137,5 +186,11 @@ module.exports = {
   updateOffer,
   createOccurrence,
   listOccurrences,
+  createMedia,
+  listMedia,
+  removeMedia,
+  createDocument,
+  listDocuments,
+  removeDocument,
   publishOffer,
 };

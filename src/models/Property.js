@@ -103,6 +103,28 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'area_total_m2',
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'description',
+      },
+      bedrooms: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'bedrooms',
+      },
+      parkingSpots: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'parking_spots',
+      },
+      // Características de forma variável (mobiliado, piscina, elevador, ano de construção,
+      // vagas cobertas/descobertas...) — ver migration ...093.
+      attributesJson: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'attributes_json',
+      },
       publicationStatus: {
         type: DataTypes.STRING(30),
         allowNull: false,

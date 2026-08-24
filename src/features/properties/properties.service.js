@@ -1,6 +1,6 @@
 'use strict';
 
-const { Property, PropertyOwner, PropertyOffer, PropertyAddress } = require('../../models');
+const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishPropertyCreated } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -48,6 +48,11 @@ async function createProperty(payload, actorUserId, transaction) {
     state,
     zipCode,
     areaTotalM2,
+    // Atributos de anúncio (migration ...093).
+    description,
+    bedrooms,
+    parkingSpots,
+    attributesJson,
   } = payload;
   if (!groupId || !companyId || !title || !internalCode || !propertyType) {
     throw AppError.badRequest(
@@ -85,6 +90,10 @@ async function createProperty(payload, actorUserId, transaction) {
       state: state || null,
       zipCode: zipCode || null,
       areaTotalM2: areaTotalM2 || null,
+      description: description || null,
+      bedrooms: bedrooms !== undefined && bedrooms !== '' ? bedrooms : null,
+      parkingSpots: parkingSpots !== undefined && parkingSpots !== '' ? parkingSpots : null,
+      attributesJson: attributesJson || null,
       publicationStatus: publicationStatus ? String(publicationStatus).toUpperCase() : 'DRAFT',
       availabilityStatus: availabilityStatus ? String(availabilityStatus).toUpperCase() : 'AVAILABLE',
       createdBy: actorUserId || null,
@@ -112,6 +121,20 @@ async function createProperty(payload, actorUserId, transaction) {
   return property;
 }
 
+// Sub-recursos sempre devolvidos junto do imóvel. `media` e `documents` entram aqui para que a
+// ficha monte a galeria e o bloco de documentação sem uma chamada extra por imóvel — os dois
+// continuam com CRUD próprio em /properties/:id/media e /properties/:id/documents.
+// PropertyInternalOccurrence NUNCA entra nesta lista: é conteúdo restrito, exposto só pelos
+// endpoints com a permissão dedicada 'properties:internal'
+// (ver propertyInternalOccurrences.service.js).
+const PROPERTY_INCLUDE = [
+  { model: PropertyOwner, as: 'owners' },
+  { model: PropertyOffer, as: 'offers' },
+  { model: PropertyAddress, as: 'address' },
+  { model: PropertyMedia, as: 'media' },
+  { model: PropertyDocument, as: 'documents' },
+];
+
 async function listProperties(transaction, filters = {}) {
   const where = {};
   if (filters.propertyType) where.propertyType = String(filters.propertyType).toUpperCase();
@@ -119,11 +142,7 @@ async function listProperties(transaction, filters = {}) {
   if (filters.availabilityStatus) where.availabilityStatus = String(filters.availabilityStatus).toUpperCase();
   return Property.findAll({
     where,
-    include: [
-      { model: PropertyOwner, as: 'owners' },
-      { model: PropertyOffer, as: 'offers' },
-      { model: PropertyAddress, as: 'address' },
-    ],
+    include: PROPERTY_INCLUDE,
     order: [['created_at', 'DESC']],
     transaction,
   });
@@ -131,11 +150,7 @@ async function listProperties(transaction, filters = {}) {
 
 async function getProperty(id, transaction) {
   const property = await Property.findByPk(id, {
-    include: [
-      { model: PropertyOwner, as: 'owners' },
-      { model: PropertyOffer, as: 'offers' },
-      { model: PropertyAddress, as: 'address' },
-    ],
+    include: PROPERTY_INCLUDE,
     transaction,
   });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
@@ -163,8 +178,16 @@ async function updateProperty(id, payload, actorUserId, transaction) {
     state,
     zipCode,
     areaTotalM2,
+    description,
+    bedrooms,
+    parkingSpots,
+    attributesJson,
   } = payload;
 
+  if (description !== undefined) property.description = description;
+  if (bedrooms !== undefined) property.bedrooms = bedrooms;
+  if (parkingSpots !== undefined) property.parkingSpots = parkingSpots;
+  if (attributesJson !== undefined) property.attributesJson = attributesJson;
   if (title !== undefined) property.title = title;
   if (addressLine !== undefined) property.addressLine = addressLine;
   if (city !== undefined) property.city = city;
