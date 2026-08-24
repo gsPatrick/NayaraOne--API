@@ -25,6 +25,7 @@ const ADMIN_PERMISSIONS = [
   'units:create', 'units:read', 'units:update', 'units:delete',
   'users:create', 'users:read', 'users:update', 'users:delete',
   'memberships:create', 'memberships:read', 'memberships:update', 'memberships:delete',
+  'roles:create', 'roles:read', 'roles:update', 'roles:delete',
   'people:create', 'people:read', 'people:update', 'people:delete',
   'properties:create', 'properties:read', 'properties:update', 'properties:delete', 'properties:internal',
   'crm:opportunities:create', 'crm:opportunities:read', 'crm:opportunities:update', 'crm:opportunities:delete',

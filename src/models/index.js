@@ -116,6 +116,8 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.UserMembership.belongsTo(db.Unit, { foreignKey: 'unit_id', as: 'unit', constraints: false });
   db.RolePermission.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role', constraints: false });
   db.RolePermission.belongsTo(db.Permission, { foreignKey: 'permission_id', as: 'permission', constraints: false });
+  db.Role.hasMany(db.RolePermission, { foreignKey: 'role_id', as: 'rolePermissions', constraints: false });
+  db.Role.hasMany(db.UserMembership, { foreignKey: 'role_id', as: 'memberships', constraints: false });
   db.Substitution.belongsTo(db.User, { foreignKey: 'substitute_user_id', as: 'substituteUser', constraints: false });
   db.Substitution.belongsTo(db.User, { foreignKey: 'original_user_id', as: 'originalUser', constraints: false });
   db.Task.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
