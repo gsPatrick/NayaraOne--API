@@ -40,6 +40,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     entryType,
     nature,
     amount,
+    description,
     dueAt,
     idempotencyKey,
   } = payload;
@@ -73,6 +74,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       entryType: normalizedType,
       nature: normalizedNature,
       amount,
+      description: description || null,
       dueAt: dueAt || null,
       settledAt: null,
       status: 'PENDING',
@@ -132,11 +134,12 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     );
   }
   const beforeJson = entry.toJSON();
-  const { bankAccountId, costCenterId, resultCenterId, dueAt } = payload;
+  const { bankAccountId, costCenterId, resultCenterId, dueAt, description } = payload;
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;
   if (dueAt !== undefined) entry.dueAt = dueAt;
+  if (description !== undefined) entry.description = description;
   entry.updatedBy = actorUserId || null;
   await entry.save({ transaction });
 

@@ -63,6 +63,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'amount',
       },
+      description: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'description',
+      },
       dueAt: {
         type: DataTypes.DATE,
         allowNull: true,
