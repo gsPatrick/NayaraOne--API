@@ -3,11 +3,27 @@
 require('dotenv').config();
 
 const express = require('express');
+const cors = require('cors');
 const routes = require('./src/routes');
 const errorHandler = require('./src/middlewares/errorHandler');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 
 const app = express();
+
+// CORS — permite chamadas do(s) frontend(s) autorizados via CORS_ORIGIN (lista separada por
+// vírgula). Sem variável definida, libera geral (uso aceitável em homologação; em produção
+// definir CORS_ORIGIN explicitamente com o(s) domínio(s) real(is) do frontend).
+const corsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    credentials: true,
+  })
+);
 
 // Middlewares globais.
 app.use(express.json({ limit: '2mb' }));
