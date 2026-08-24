@@ -31,6 +31,12 @@ const ADMIN_PERMISSIONS = [
   'crm:visits:create', 'crm:visits:read', 'crm:visits:update', 'crm:visits:delete',
   'crm:messages:create', 'crm:messages:read', 'crm:messages:update', 'crm:messages:delete',
   'radar:create', 'radar:read', 'radar:update', 'radar:delete',
+  // Marco 4 — Financeiro (nomes conferidos em src/features/finance/finance.routes.js)
+  'finance:read', 'finance:create', 'finance:update',
+  'finance:settle', 'finance:approve', 'finance:reconcile', 'finance:bankAccounts',
+  // Marco 5 — Contratos/Locação/Jurídico (nomes conferidos em src/features/legal/legal.routes.js)
+  'legal:read', 'legal:create', 'legal:update',
+  'legal:sign', 'legal:approve', 'legal:deliverKeys',
 ];
 
 async function upsertPermissions() {
@@ -96,7 +102,7 @@ async function run() {
         groupId: group.id,
         companyId: companyRow.id,
         name: 'ADMIN',
-        description: 'Papel administrativo de seed (todas as permissões do escopo Marco 1/2).',
+        description: 'Papel administrativo de seed (todas as permissões do escopo Marcos 1 a 5).',
         isSystem: true,
       },
       transaction,
