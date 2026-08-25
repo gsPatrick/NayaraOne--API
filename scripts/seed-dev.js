@@ -38,6 +38,8 @@ const ADMIN_PERMISSIONS = [
   // Marco 5 — Contratos/Locação/Jurídico (nomes conferidos em src/features/legal/legal.routes.js)
   'legal:read', 'legal:create', 'legal:update',
   'legal:sign', 'legal:approve', 'legal:deliverKeys',
+  // Marco 6 — Obras e Pós-obra (nomes conferidos em src/features/construction/construction.routes.js)
+  'construction:read', 'construction:create', 'construction:update', 'construction:approve', 'construction:delete',
 ];
 
 async function upsertPermissions() {
