@@ -15,6 +15,7 @@ constructionRouter.get('/construction/projects', requirePermission('construction
 constructionRouter.get('/construction/projects/:id', requirePermission('construction:read'), constructionController.getProject);
 constructionRouter.patch('/construction/projects/:id', requirePermission('construction:update'), constructionController.updateProject);
 constructionRouter.post('/construction/projects/:id/transition', requirePermission('construction:update'), constructionController.transitionProject);
+constructionRouter.delete('/construction/projects/:id', requirePermission('construction:delete'), constructionController.removeProject);
 
 // Project stages
 constructionRouter.post('/construction/projects/:id/stages', requirePermission('construction:create'), constructionController.createProjectStage);
@@ -48,5 +49,6 @@ constructionRouter.post('/construction/maintenance-cases', requirePermission('co
 constructionRouter.get('/construction/maintenance-cases', requirePermission('construction:read'), constructionController.listMaintenanceCases);
 constructionRouter.get('/construction/maintenance-cases/:id', requirePermission('construction:read'), constructionController.getMaintenanceCase);
 constructionRouter.patch('/construction/maintenance-cases/:id', requirePermission('construction:update'), constructionController.updateMaintenanceCase);
+constructionRouter.delete('/construction/maintenance-cases/:id', requirePermission('construction:delete'), constructionController.removeMaintenanceCase);
 
 module.exports = constructionRouter;

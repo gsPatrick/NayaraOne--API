@@ -39,6 +39,10 @@ const transitionProject = catchAsync(async (req, res) => {
   );
   return success(res, { data: item });
 });
+const removeProject = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => projectsService.removeProject(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
 
 // --- Project stages ---
 const createProjectStage = catchAsync(async (req, res) => {
@@ -161,6 +165,12 @@ const updateMaintenanceCase = catchAsync(async (req, res) => {
   );
   return success(res, { data: item });
 });
+const removeMaintenanceCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    maintenanceCasesService.removeMaintenanceCase(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
 
 module.exports = {
   createProject,
@@ -168,6 +178,7 @@ module.exports = {
   getProject,
   updateProject,
   transitionProject,
+  removeProject,
   createProjectStage,
   listProjectStages,
   getProjectStage,
@@ -189,4 +200,5 @@ module.exports = {
   listMaintenanceCases,
   getMaintenanceCase,
   updateMaintenanceCase,
+  removeMaintenanceCase,
 };

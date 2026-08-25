@@ -103,4 +103,35 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   return maintenanceCase;
 }
 
-module.exports = { createMaintenanceCase, listMaintenanceCases, getMaintenanceCase, updateMaintenanceCase, STATUSES };
+async function removeMaintenanceCase(id, actorUserId, transaction) {
+  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  const beforeJson = maintenanceCase.toJSON();
+  maintenanceCase.deletedBy = actorUserId || null;
+  await maintenanceCase.save({ transaction });
+  await maintenanceCase.destroy({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      actorUserId,
+      action: 'construction.maintenance_case.delete',
+      entityType: 'MaintenanceCase',
+      entityId: maintenanceCase.id,
+      beforeJson,
+      reason: `Chamado de pós-obra ${maintenanceCase.id} excluído.`,
+    },
+    transaction
+  );
+
+  return { id: maintenanceCase.id };
+}
+
+module.exports = {
+  createMaintenanceCase,
+  listMaintenanceCases,
+  getMaintenanceCase,
+  updateMaintenanceCase,
+  removeMaintenanceCase,
+  STATUSES,
+};

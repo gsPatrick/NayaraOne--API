@@ -142,4 +142,28 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
   return project;
 }
 
-module.exports = { createProject, listProjects, getProject, updateProject, transitionProject, STATUSES };
+async function removeProject(id, actorUserId, transaction) {
+  const project = await getProject(id, transaction);
+  const beforeJson = project.toJSON();
+  project.deletedBy = actorUserId || null;
+  await project.save({ transaction });
+  await project.destroy({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      actorUserId,
+      action: 'construction.project.delete',
+      entityType: 'Project',
+      entityId: project.id,
+      beforeJson,
+      reason: `Obra "${project.name}" excluída.`,
+    },
+    transaction
+  );
+
+  return { id: project.id };
+}
+
+module.exports = { createProject, listProjects, getProject, updateProject, transitionProject, removeProject, STATUSES };
