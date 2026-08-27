@@ -39,7 +39,7 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'role_code',
         primaryKey: true,
-        comment: 'CLIENTE|PROPRIETARIO|LOCATARIO|FORNECEDOR|CORRETOR (lista aberta)',
+        comment: 'CLIENTE|PROPRIETARIO|LOCATARIO|FORNECEDOR|CORRETOR|COMPRADOR|FIADOR|COLABORADOR|LOCADOR (lista aberta)',
       },
       startsAt: {
         type: DataTypes.DATE,

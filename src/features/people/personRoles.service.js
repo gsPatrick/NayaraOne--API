@@ -5,7 +5,27 @@ const AppError = require('../../utils/AppError');
 
 // Valores confirmados pelo Caderno (citação literal, lista aberta/não exaustiva): CLIENTE,
 // PROPRIETARIO, LOCATARIO, FORNECEDOR — mais CORRETOR, já usado no mock do frontend.
-const VALID_ROLES = ['CLIENTE', 'PROPRIETARIO', 'LOCATARIO', 'FORNECEDOR', 'CORRETOR'];
+//
+// COMPRADOR, FIADOR, COLABORADOR e LOCADOR foram adicionados depois: o próprio Caderno já
+// qualifica essa lista como "aberta/não exaustiva", então ampliar não fere a fonte — é
+// exatamente o que ela permite. COMPRADOR/FIADOR já eram usados pelo formulário do front
+// (lib/mock/people.js) sem existir no backend, rejeitados com PERSON_ROLE_VALIDATION.
+// COLABORADOR (pessoa que atua como equipe interna) e LOCADOR (proprietário que loca o
+// imóvel — papel comercial distinto de PROPRIETARIO no dia a dia da imobiliária) foram
+// pedidos por feedback direto da cliente: um contato pode acumular vários desses papéis ao
+// mesmo tempo (ex.: é PROPRIETARIO e também LOCADOR e também COLABORADOR), e o formulário
+// não oferecia opção nenhuma pra isso.
+const VALID_ROLES = [
+  'CLIENTE',
+  'PROPRIETARIO',
+  'LOCATARIO',
+  'FORNECEDOR',
+  'CORRETOR',
+  'COMPRADOR',
+  'FIADOR',
+  'COLABORADOR',
+  'LOCADOR',
+];
 
 async function assertPersonExists(personId, transaction) {
   const person = await Person.findByPk(personId, { transaction });
