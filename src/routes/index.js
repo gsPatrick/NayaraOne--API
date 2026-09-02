@@ -16,6 +16,7 @@ const radarRouter = require('../features/radar/radar.routes');
 const financeRouter = require('../features/finance/finance.routes');
 const legalRouter = require('../features/legal/legal.routes');
 const constructionRouter = require('../features/construction/construction.routes');
+const auditRouter = require('../features/audit/audit.routes');
 
 /**
  * Agregador único de rotas da API.
@@ -43,5 +44,6 @@ router.use('/v1', radarRouter);
 router.use('/v1', financeRouter);
 router.use('/v1', legalRouter);
 router.use('/v1', constructionRouter);
+router.use('/v1', auditRouter);
 
 module.exports = router;
