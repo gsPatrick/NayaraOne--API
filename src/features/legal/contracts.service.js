@@ -1,6 +1,6 @@
 'use strict';
 
-const { Contract, ContractParty } = require('../../models');
+const { Contract, ContractParty, ContractVersion, Signature } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
@@ -48,6 +48,46 @@ async function assertRequirementsGate(contract, transaction) {
     throw AppError.conflict(
       `Contrato do tipo "${contract.contractType}" precisa ter partes com os papéis: ${missing.join(', ')} antes de avançar de status.`,
       'LEGAL_CONTRACT_REQUIREMENTS_GATE'
+    );
+  }
+}
+
+// FIX HOM-001 (homologação 28/08/2026, reportado pela cliente): a transição de status era
+// exposta via POST /legal/contracts/:id/transition chamando transitionContractStatus
+// diretamente com QUALQUER targetStatus permitido em VALID_TRANSITIONS, sem checar se existia
+// versão documental ou assinatura — só o fluxo automático do webhook (handleSignatureWebhook)
+// validava assinaturas antes de virar SIGNED, mas nada impedia chamar a transição manual e
+// pular esse caminho. Resultado real observado: contrato foi de DRAFT a ACTIVE sem nenhuma
+// versão de documento nem assinatura. Os dois gates abaixo fecham essa lacuna na própria
+// máquina de estados, então qualquer chamador (endpoint manual ou webhook) fica protegido.
+async function assertDocumentGate(contract, transaction) {
+  const versionCount = await ContractVersion.count({ where: { contractId: contract.id }, transaction });
+  if (versionCount === 0) {
+    throw AppError.conflict(
+      'O contrato precisa ter ao menos uma versão de documento registrada antes de avançar para "SIGNING".',
+      'LEGAL_CONTRACT_DOCUMENT_GATE'
+    );
+  }
+}
+
+async function assertSignatureGate(contract, transaction) {
+  const latestVersion = await ContractVersion.findOne({
+    where: { contractId: contract.id },
+    order: [['version_number', 'DESC']],
+    transaction,
+  });
+  if (!latestVersion) {
+    throw AppError.conflict(
+      'O contrato precisa ter uma versão de documento antes de avançar para "SIGNED".',
+      'LEGAL_CONTRACT_DOCUMENT_GATE'
+    );
+  }
+  const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
+  const allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  if (!allSigned) {
+    throw AppError.conflict(
+      'O contrato precisa ter todas as assinaturas confirmadas (status "SIGNED") na versão de documento vigente antes de avançar para "SIGNED".',
+      'LEGAL_CONTRACT_SIGNATURE_GATE'
     );
   }
 }
@@ -128,6 +168,12 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
 
   if (fromStatus === 'DRAFT' && targetStatus === 'DOCUMENTS_PENDING') {
     await assertRequirementsGate(contract, transaction);
+  }
+  if (targetStatus === 'SIGNING') {
+    await assertDocumentGate(contract, transaction);
+  }
+  if (targetStatus === 'SIGNED') {
+    await assertSignatureGate(contract, transaction);
   }
 
   const beforeJson = contract.toJSON();
