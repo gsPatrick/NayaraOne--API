@@ -7,6 +7,7 @@ const { MfaCredential, MfaStepUp, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { getSetting } = require('../settings/settings.service');
 
 const BCRYPT_ROUNDS = 10;
 const RECOVERY_CODE_COUNT = 8;
@@ -14,12 +15,28 @@ const ISSUER = 'Nayara One';
 
 // DECISÃO DE ENGENHARIA — não especificado no Caderno: duração da "janela de MFA recente".
 // O Caderno pede "janela configurável por risco" sem dar um número. Adotamos um único TTL
-// (10 minutos) configurável via env, no mesmo espírito de "escolher um ponto sensato e
-// documentar" usado em src/features/legal/contracts.service.js — não implementamos TTL
-// diferenciado por nível de risco (LOW/MEDIUM/HIGH/CRITICAL) porque o documento não define
-// os valores, e inventar números por risco sem base seria pior do que um único TTL explícito.
-// Value a confirmar com o cliente antes de produção.
-const STEP_UP_TTL_MINUTES = Number(process.env.MFA_STEP_UP_TTL_MINUTES || 10);
+// (10 minutos por default), configurável agora por tenant via painel de settings
+// (`mfa.step_up_ttl_minutes`, ver src/features/settings/settings.service.js) — a env var
+// MFA_STEP_UP_TTL_MINUTES vira apenas o fallback de ÚLTIMO CASO, usado só quando o tenant não
+// configurou nada no painel (preserva comportamento anterior a este módulo). Não implementamos
+// TTL diferenciado por nível de risco (LOW/MEDIUM/HIGH/CRITICAL) porque o documento não define
+// os valores, e inventar números por risco sem base seria pior do que um único TTL explícito
+// por tenant. Valor a confirmar com o cliente antes de produção.
+const STEP_UP_TTL_MINUTES_ENV_DEFAULT = Number(process.env.MFA_STEP_UP_TTL_MINUTES || 10);
+
+/**
+ * resolveStepUpTtlMinutes — resolve o TTL da janela de MFA recente para o tenant: prefere
+ * `mfa.step_up_ttl_minutes` (settings do tenant); cai para a env var (ou 10) só se ausente.
+ * Assíncrona porque `getSetting` lê do banco (tenant_settings) — os chamadores (verifyMfa) já
+ * são assíncronos e já têm `transaction`/`actorContext` disponíveis.
+ */
+async function resolveStepUpTtlMinutes(actorContext, transaction) {
+  const configured = await getSetting('mfa.step_up_ttl_minutes', actorContext, transaction, null);
+  if (configured !== null && configured !== undefined) {
+    return Number(configured);
+  }
+  return STEP_UP_TTL_MINUTES_ENV_DEFAULT;
+}
 
 function generateRecoveryCodes() {
   const codes = [];
@@ -168,8 +185,9 @@ async function verifyMfa(userId, code, actorContext, transaction) {
     throw AppError.unauthorized('Código MFA inválido.', 'MFA_INVALID_CODE');
   }
 
+  const ttlMinutes = await resolveStepUpTtlMinutes(actorContext, transaction);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + STEP_UP_TTL_MINUTES * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + ttlMinutes * 60 * 1000);
 
   const [stepUp] = await MfaStepUp.findOrBuild({
     where: { userId },
@@ -285,5 +303,6 @@ module.exports = {
   disableMfa,
   hasRecentMfa,
   assertRecentMfa,
-  STEP_UP_TTL_MINUTES,
+  resolveStepUpTtlMinutes,
+  STEP_UP_TTL_MINUTES: STEP_UP_TTL_MINUTES_ENV_DEFAULT,
 };

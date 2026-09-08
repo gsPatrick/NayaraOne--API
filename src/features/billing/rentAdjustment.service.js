@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishRentAdjusted } = require('./billingEvents.service');
 const { unavailableIndexSourceAdapter } = require('./adapters/IndexSourceAdapter');
+const { getSetting } = require('../settings/settings.service');
 
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -19,9 +20,18 @@ const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
  * percentual "raw" fornecido pela fonte como "applied" por padrão, salvo se o chamador
  * informar `appliedPercentageOverride` (negociação manual) — `applied` pode divergir de `raw`
  * por decisão comercial, mas nunca é gerado sozinho quando `raw` está ausente.
+ *
+ * `indexCode` é opcional no payload: se ausente, usamos `billing.default_index_code` (settings
+ * do tenant) como SUGESTÃO de índice padrão — é só um default de conveniência, o chamador pode
+ * sempre informar outro `indexCode` explicitamente; nada aqui trava o usuário no default.
  */
 async function requestRentAdjustment(payload, actorUserId, transaction, indexSourceAdapter = unavailableIndexSourceAdapter) {
-  const { groupId, companyId, contractId, indexCode, period, oldRentAmount, appliedPercentageOverride } = payload;
+  const { groupId, companyId, contractId, period, oldRentAmount, appliedPercentageOverride } = payload;
+  let { indexCode } = payload;
+
+  if (!indexCode && groupId && companyId) {
+    indexCode = await getSetting('billing.default_index_code', { groupId, companyId }, transaction, null);
+  }
 
   if (!groupId || !companyId || !contractId || !indexCode || oldRentAmount === undefined || oldRentAmount === null) {
     throw AppError.badRequest(

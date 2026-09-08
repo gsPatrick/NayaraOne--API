@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const billingScheduleService = require('./billingSchedule.service');
 const { publishChargeOverdue } = require('./billingEvents.service');
+const { getSetting } = require('../settings/settings.service');
 
 /**
  * openCollectionCase — abre um caso de cobrança para uma competência (billing_schedule) em
@@ -13,6 +14,19 @@ const { publishChargeOverdue } = require('./billingEvents.service');
  * Regras (fail-closed) — nunca um `if` hardcoded. Se a regra não estiver semeada/publicada
  * para o tenant, evaluateRule retorna DENY e usamos 0 dias de carência / 0% de multa e juros
  * (mais conservador — nunca aplicamos um valor "adivinhado").
+ *
+ * DECISÃO DE ENGENHARIA — como conectar o painel de settings ao Motor de Regras: o
+ * `evaluateRule` resolve a decisão (APLICA/NÃO APLICA a regra para este tenant) a partir de um
+ * AST/actionJson fixo de uma `RuleVersion` PUBLICADA — publicar uma nova versão é um fluxo
+ * próprio (aprovação, versionamento, auditoria, ver engines/rules), com um propósito diferente
+ * do painel de settings ("o cliente ajusta um número simples sem passar pelo fluxo de
+ * publicação de regra"). Por isso NÃO alteramos o motor de regras para ler settings: ele
+ * continua decidindo SE a multa/juros/carência se aplicam (fail-closed, 0 se a regra não
+ * estiver publicada). O QUANTO (percentual/dias) usado no CÁLCULO, uma vez que a regra decidiu
+ * "aplica", agora vem de `getSetting(...)` com o valor hardcoded de scripts/seedBillingRules.js
+ * como default (preserva o comportamento atual quando o tenant não configurou nada no painel).
+ * Isso mantém a auditabilidade do motor de regras (penalty_rule_version_id/graceRuleVersionId
+ * continuam gravados) e ainda assim torna o número ajustável por tenant sem publicar regra nova.
  */
 async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, transaction) {
   const billingSchedule = await billingScheduleService.getBillingSchedule(billingScheduleId, transaction);
@@ -23,7 +37,11 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
   const tenant = { groupId: billingSchedule.groupId, companyId: billingSchedule.companyId };
 
   const graceEvaluation = await evaluateRule('REG-LOC-002', { gracePeriodRuleActive: true }, tenant, { transaction });
-  const graceDays = graceEvaluation.decision === 'APPLY' ? Number(graceEvaluation.action.graceDays || 0) : 0;
+  const configuredGraceDays = await getSetting('billing.grace_period_days', tenant, transaction, 3);
+  const graceDays =
+    graceEvaluation.decision === 'APPLY'
+      ? Number(configuredGraceDays !== null && configuredGraceDays !== undefined ? configuredGraceDays : graceEvaluation.action.graceDays || 0)
+      : 0;
 
   if (daysPastDue < graceDays) {
     throw AppError.conflict(
@@ -38,8 +56,24 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
   }
 
   const penaltyEvaluation = await evaluateRule('REG-LOC-001', { isOverdue: true }, tenant, { transaction });
-  const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.penaltyPercentage || 0) : 0;
-  const monthlyInterestPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.monthlyInterestPercentage || 0) : 0;
+  const configuredPenaltyPercentage = await getSetting('billing.late_fee_percentage', tenant, transaction, 2);
+  const configuredInterestPercentage = await getSetting('billing.interest_percentage', tenant, transaction, 1);
+  const penaltyPercentage =
+    penaltyEvaluation.decision === 'APPLY'
+      ? Number(
+          configuredPenaltyPercentage !== null && configuredPenaltyPercentage !== undefined
+            ? configuredPenaltyPercentage
+            : penaltyEvaluation.action.penaltyPercentage || 0
+        )
+      : 0;
+  const monthlyInterestPercentage =
+    penaltyEvaluation.decision === 'APPLY'
+      ? Number(
+          configuredInterestPercentage !== null && configuredInterestPercentage !== undefined
+            ? configuredInterestPercentage
+            : penaltyEvaluation.action.monthlyInterestPercentage || 0
+        )
+      : 0;
 
   const balance = Number(billingSchedule.balance);
   const penaltyAmount = round2((balance * penaltyPercentage) / 100);

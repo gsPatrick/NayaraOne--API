@@ -44,6 +44,8 @@ const ADMIN_PERMISSIONS = [
   'audit:read',
   // Billing/Locação — Marco 5 (nomes conferidos em src/features/billing/billing.routes.js)
   'billing:create', 'billing:read', 'billing:update', 'billing:approve',
+  // Configurações por tenant (nomes conferidos em src/features/settings/settings.routes.js)
+  'settings:read', 'settings:update',
 ];
 
 async function upsertPermissions() {

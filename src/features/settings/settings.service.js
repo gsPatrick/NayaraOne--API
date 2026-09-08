@@ -1,0 +1,170 @@
+'use strict';
+
+const { Op } = require('sequelize');
+const { TenantSetting } = require('../../models');
+const AppError = require('../../utils/AppError');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+
+/**
+ * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
+ * configurações por tenant. `upsertSetting` REJEITA (400) qualquer chave que não esteja aqui
+ * ou qualquer valor fora da faixa/tipo esperado — nunca aceita "o que vier" silenciosamente.
+ *
+ * DECISÃO DE ENGENHARIA — não especificado no Caderno: as faixas abaixo (0-100% para
+ * percentuais, 1-120 minutos para janela de MFA) são limites de sanidade de engenharia (evitar
+ * configuração absurda, ex. multa de 500% ou step-up de 0 minutos), não um requisito de negócio
+ * documentado — a confirmar com o cliente antes de produção.
+ */
+const SETTINGS_SCHEMA = {
+  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
+  'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
+  'billing.grace_period_days': { type: 'integer', min: 0 },
+  'billing.default_index_code': { type: 'string' },
+  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
+  'mfa.required_for_sensitive_roles': { type: 'boolean' },
+};
+
+function validateAgainstSchema(key, value) {
+  const spec = SETTINGS_SCHEMA[key];
+  if (!spec) {
+    throw AppError.badRequest(`Chave de configuração desconhecida: "${key}".`, 'SETTING_UNKNOWN_KEY', { key });
+  }
+
+  if (spec.type === 'number' || spec.type === 'integer') {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      throw AppError.badRequest(`O valor de "${key}" deve ser numérico.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    if (spec.type === 'integer' && !Number.isInteger(value)) {
+      throw AppError.badRequest(`O valor de "${key}" deve ser um número inteiro.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    if (spec.min !== undefined && value < spec.min) {
+      throw AppError.badRequest(`O valor de "${key}" deve ser >= ${spec.min}.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    if (spec.max !== undefined && value > spec.max) {
+      throw AppError.badRequest(`O valor de "${key}" deve ser <= ${spec.max}.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    return;
+  }
+
+  if (spec.type === 'boolean') {
+    if (typeof value !== 'boolean') {
+      throw AppError.badRequest(`O valor de "${key}" deve ser booleano.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    return;
+  }
+
+  if (spec.type === 'string') {
+    if (typeof value !== 'string' || value.trim() === '') {
+      throw AppError.badRequest(`O valor de "${key}" deve ser uma string não vazia.`, 'SETTING_INVALID_VALUE', { key, value });
+    }
+    return;
+  }
+
+  // Fail closed: tipo de schema desconhecido/não implementado nunca é aceito silenciosamente.
+  throw AppError.badRequest(`Tipo de schema não suportado para "${key}".`, 'SETTING_SCHEMA_ERROR', { key });
+}
+
+/**
+ * getSetting — nunca lança erro por ausência de configuração: se a chave não estiver
+ * configurada para o tenant (ou se `tenant`/`transaction` estiverem ausentes/incompletos —
+ * ex.: chamada fora de contexto de tenant), retorna `defaultValue` silenciosamente. Isso é
+ * proposital: leitura de configuração é sempre "best effort com fallback seguro", nunca deve
+ * derrubar um fluxo de negócio (ex.: cálculo de multa) por falta de configuração — quem decide
+ * fail-closed é o Motor de Regras (ver collectionCase.service.js), não este helper.
+ */
+async function getSetting(key, tenant, transaction, defaultValue = null) {
+  try {
+    if (!tenant || !tenant.companyId) return defaultValue;
+    const row = await TenantSetting.findOne({
+      where: { companyId: tenant.companyId, key },
+      transaction,
+    });
+    if (!row) return defaultValue;
+    return row.value;
+  } catch (err) {
+    // Fail-safe: qualquer erro tratável (ex.: transaction inválida) retorna o default em vez
+    // de propagar — leitura de configuração nunca deve derrubar o chamador.
+    return defaultValue;
+  }
+}
+
+/**
+ * upsertSetting — cria ou atualiza (UPSERT por UNIQUE(company_id, key)) uma configuração de
+ * tenant. Fail closed: chave desconhecida ou valor fora do schema é rejeitado com AppError 400
+ * ANTES de qualquer escrita no banco.
+ */
+async function upsertSetting(key, value, tenant, actorUserId, transaction) {
+  if (!tenant || !tenant.groupId || !tenant.companyId) {
+    throw AppError.badRequest('Contexto de tenant (groupId/companyId) é obrigatório para configurar settings.', 'SETTING_TENANT_REQUIRED');
+  }
+
+  validateAgainstSchema(key, value);
+
+  const existing = await TenantSetting.findOne({ where: { companyId: tenant.companyId, key }, transaction });
+  const beforeJson = existing ? existing.toJSON() : null;
+
+  let row;
+  if (existing) {
+    existing.value = value;
+    existing.updatedBy = actorUserId || null;
+    await existing.save({ transaction });
+    row = existing;
+  } else {
+    row = await TenantSetting.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        key,
+        value,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+
+  await registrarAuditoria(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      actorUserId,
+      action: beforeJson ? 'settings.update' : 'settings.create',
+      entityType: 'TenantSetting',
+      entityId: row.id,
+      beforeJson,
+      afterJson: row.toJSON(),
+      reason: `Configuração "${key}" ${beforeJson ? 'atualizada' : 'criada'} para o tenant.`,
+    },
+    transaction
+  );
+
+  return row;
+}
+
+async function listSettingsByPrefix(prefix, tenant, transaction) {
+  if (!tenant || !tenant.companyId) {
+    throw AppError.badRequest('Contexto de tenant (companyId) é obrigatório para listar settings.', 'SETTING_TENANT_REQUIRED');
+  }
+  const where = { companyId: tenant.companyId };
+  if (prefix) where.key = { [Op.like]: `${prefix}%` };
+  return TenantSetting.findAll({ where, order: [['key', 'ASC']], transaction });
+}
+
+async function getSettingRow(key, tenant, transaction) {
+  if (!tenant || !tenant.companyId) {
+    throw AppError.badRequest('Contexto de tenant (companyId) é obrigatório para consultar settings.', 'SETTING_TENANT_REQUIRED');
+  }
+  const row = await TenantSetting.findOne({ where: { companyId: tenant.companyId, key }, transaction });
+  if (!row) {
+    throw AppError.notFound(`Configuração "${key}" não encontrada para este tenant.`, 'SETTING_NOT_FOUND');
+  }
+  return row;
+}
+
+module.exports = {
+  SETTINGS_SCHEMA,
+  getSetting,
+  upsertSetting,
+  listSettingsByPrefix,
+  getSettingRow,
+};

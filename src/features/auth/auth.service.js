@@ -6,8 +6,25 @@ const { sequelize, User, Session, UserMembership } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../../utils/jwt');
 const { getEffectiveAccess } = require('../memberships/effectivePermissions.service');
+const { getSetting } = require('../settings/settings.service');
 
 const BCRYPT_ROUNDS = 12;
+
+/**
+ * hasSensitivePermission — critério de "permissão sensível" para o gate de
+ * `mfaSetupRequired` no login (ver `login()` abaixo): qualquer permissão que comece com
+ * "finance:" ou "legal:", ou o usuário ter o papel ADMIN.
+ *
+ * DECISÃO DE ENGENHARIA — não especificado no Caderno: o critério exato de "papel/permissão
+ * sensível o bastante para exigir MFA" não é definido no documento; usamos o mesmo recorte já
+ * citado na tarefa (prefixo "finance:", prefixo "legal:" ou papel ADMIN) — a confirmar/ampliar
+ * com o cliente antes de produção (ex.: pode fazer sentido incluir outros domínios sensíveis
+ * no futuro).
+ */
+function hasSensitivePermission({ roles, permissions }) {
+  if ((roles || []).some((role) => role === 'ADMIN')) return true;
+  return (permissions || []).some((code) => code.startsWith('finance:') || code.startsWith('legal:'));
+}
 
 function refreshTokenTtlMs() {
   // Espelha JWT_REFRESH_TTL apenas para calcular expires_at de core.sessions;
@@ -141,6 +158,21 @@ async function login({ email, password, companyId }, meta = {}) {
     user.updatedBy = user.id;
     await user.save({ transaction });
 
+    // DECISÃO DE ENGENHARIA — não bloqueia o login: apenas SINALIZA `mfaSetupRequired: true`
+    // quando o tenant tem `mfa.required_for_sensitive_roles` habilitado E o usuário tem uma
+    // permissão sensível (finance:*/legal:*/ADMIN, ver hasSensitivePermission acima) mas ainda
+    // não habilitou MFA. O front decide o que fazer com esse sinal (ex.: forçar tela de setup
+    // logo após o login) — o Caderno não pede bloquear o próprio login por isso.
+    const requiredForSensitiveRoles = await getSetting(
+      'mfa.required_for_sensitive_roles',
+      { groupId: membership.groupId, companyId: membership.companyId },
+      transaction,
+      false
+    );
+    const mfaSetupRequired = Boolean(
+      requiredForSensitiveRoles && !user.mfaEnabled && hasSensitivePermission({ roles: claims.roles, permissions: claims.permissions })
+    );
+
     return {
       accessToken,
       refreshToken,
@@ -150,6 +182,7 @@ async function login({ email, password, companyId }, meta = {}) {
       companyId: claims.company_id,
       roles: claims.roles,
       permissions: claims.permissions,
+      ...(mfaSetupRequired ? { mfaSetupRequired: true } : {}),
     };
   });
 }

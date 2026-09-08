@@ -21,6 +21,7 @@ const modelDefiners = {
   Task: require('./Task'),
   Notification: require('./Notification'),
   SystemSetting: require('./SystemSetting'),
+  TenantSetting: require('./TenantSetting'),
   Rule: require('./Rule'),
   RuleVersion: require('./RuleVersion'),
   RuleScope: require('./RuleScope'),
