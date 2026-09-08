@@ -92,6 +92,16 @@ const modelDefiners = {
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),
   AuditLog: require('./AuditLog'),
+  BillingSchedule: require('./BillingSchedule'),
+  BillingScheduleItem: require('./BillingScheduleItem'),
+  CollectionCase: require('./CollectionCase'),
+  RentAdjustment: require('./RentAdjustment'),
+  GuaranteedRentContract: require('./GuaranteedRentContract'),
+  RentAdvance: require('./RentAdvance'),
+  UtilityObligation: require('./UtilityObligation'),
+  UtilityAccount: require('./UtilityAccount'),
+  UtilityReimbursement: require('./UtilityReimbursement'),
+  OwnershipTransferTask: require('./OwnershipTransferTask'),
 };
 
 const db = { sequelize, Sequelize };
@@ -268,5 +278,23 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.AiRecommendation.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
   db.AiRecommendation.belongsTo(db.User, { foreignKey: 'decided_by_user_id', as: 'decidedByUser', constraints: false });
   db.AuditLog.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });
+
+  // --- Billing (M07 Billing Locação/Utilities) ---
+  db.BillingSchedule.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.BillingSchedule.hasMany(db.BillingScheduleItem, { foreignKey: 'billing_schedule_id', as: 'items', constraints: false });
+  db.BillingScheduleItem.belongsTo(db.BillingSchedule, { foreignKey: 'billing_schedule_id', as: 'billingSchedule', constraints: false });
+  db.CollectionCase.belongsTo(db.BillingSchedule, { foreignKey: 'billing_schedule_id', as: 'billingSchedule', constraints: false });
+  db.CollectionCase.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.RentAdjustment.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.GuaranteedRentContract.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.RentAdvance.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.RentAdvance.belongsTo(db.FinancialEntry, { foreignKey: 'principal_entry_id', as: 'principalEntry', constraints: false });
+  db.RentAdvance.belongsTo(db.FinancialEntry, { foreignKey: 'cost_entry_id', as: 'costEntry', constraints: false });
+  db.UtilityObligation.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.UtilityObligation.hasMany(db.UtilityAccount, { foreignKey: 'utility_obligation_id', as: 'accounts', constraints: false });
+  db.UtilityAccount.belongsTo(db.UtilityObligation, { foreignKey: 'utility_obligation_id', as: 'obligation', constraints: false });
+  db.UtilityReimbursement.belongsTo(db.UtilityObligation, { foreignKey: 'utility_obligation_id', as: 'obligation', constraints: false });
+  db.UtilityReimbursement.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.OwnershipTransferTask.belongsTo(db.UtilityObligation, { foreignKey: 'utility_obligation_id', as: 'obligation', constraints: false });
 
 module.exports = db;
