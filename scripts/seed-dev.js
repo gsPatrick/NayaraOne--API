@@ -42,6 +42,8 @@ const ADMIN_PERMISSIONS = [
   'construction:read', 'construction:create', 'construction:update', 'construction:approve', 'construction:delete',
   // Atividades (trilha de auditoria — nome conferido em src/features/audit/audit.routes.js)
   'audit:read',
+  // Billing/Locação — Marco 5 (nomes conferidos em src/features/billing/billing.routes.js)
+  'billing:create', 'billing:read', 'billing:update', 'billing:approve',
 ];
 
 async function upsertPermissions() {
