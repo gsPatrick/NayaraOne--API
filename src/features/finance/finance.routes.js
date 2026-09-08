@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const financeController = require('./finance.controller');
 
@@ -25,7 +25,8 @@ financeRouter.delete('/finance/result-centers/:id', requirePermission('finance:u
 financeRouter.post('/finance/bank-accounts', requirePermission('finance:bankAccounts'), financeController.createBankAccount);
 financeRouter.get('/finance/bank-accounts', requirePermission('finance:read'), financeController.listBankAccounts);
 financeRouter.get('/finance/bank-accounts/:id', requirePermission('finance:read'), financeController.getBankAccount);
-financeRouter.patch('/finance/bank-accounts/:id', requirePermission('finance:bankAccounts'), financeController.updateBankAccount);
+// Alteração bancária é step-up MFA obrigatório (Caderno §3.3/3.4), independente de risco.
+financeRouter.patch('/finance/bank-accounts/:id', requirePermission('finance:bankAccounts'), requireRecentMfa, financeController.updateBankAccount);
 financeRouter.post('/finance/bank-accounts/:id/block', requirePermission('finance:bankAccounts'), financeController.blockBankAccount);
 financeRouter.delete('/finance/bank-accounts/:id', requirePermission('finance:bankAccounts'), financeController.removeBankAccount);
 
@@ -34,7 +35,9 @@ financeRouter.post('/finance/entries', requirePermission('finance:create'), fina
 financeRouter.get('/finance/entries', requirePermission('finance:read'), financeController.listFinancialEntries);
 financeRouter.get('/finance/entries/:id', requirePermission('finance:read'), financeController.getFinancialEntry);
 financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'), financeController.updateFinancialEntry);
-financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), financeController.settleFinancialEntry);
+// Liquidação de lançamento é step-up MFA obrigatório (Caderno §3.3/3.4: "aprovação de
+// pagamento" — liquidar é o ato que efetivamente movimenta o pagamento).
+financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntry);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
 
 // Bank transactions (extrato)
