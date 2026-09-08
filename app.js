@@ -26,7 +26,18 @@ app.use(
 );
 
 // Middlewares globais.
-app.use(express.json({ limit: '2mb' }));
+// `verify` guarda o corpo bruto (Buffer) em `req.rawBody` — necessário para validar a
+// assinatura HMAC de webhooks de provedores externos (ex.: assinatura eletrônica) sobre os
+// BYTES exatos recebidos, antes de qualquer parsing/normalização do JSON. Não afeta nenhuma
+// outra rota: o corpo já parseado (`req.body`) continua disponível normalmente.
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 const apiPrefix = process.env.APP_API_PREFIX || '/api';

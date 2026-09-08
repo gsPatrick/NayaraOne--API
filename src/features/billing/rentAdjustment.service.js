@@ -4,10 +4,23 @@ const { RentAdjustment, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishRentAdjusted } = require('./billingEvents.service');
-const { unavailableIndexSourceAdapter } = require('./adapters/IndexSourceAdapter');
+const { unavailableIndexSourceAdapter, IpcaIndexSourceAdapter, FgvIgpmIndexSourceAdapter } = require('./adapters/IndexSourceAdapter');
 const { getSetting } = require('../settings/settings.service');
 
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * resolveIndexSourceAdapter — escolhe o adapter de fonte de índice pelo `indexCode`: IPCA usa
+ * a API pública do IBGE; IGPM usa a FGV (manual/automático conforme settings do tenant);
+ * qualquer outro código mantém o comportamento atual (`unavailableIndexSourceAdapter` —
+ * sempre "indisponível", nunca inventa valor). Isso só é usado quando o chamador NÃO injeta um
+ * `indexSourceAdapter` explícito (ex.: testes usam `createMockIndexSourceAdapter`).
+ */
+function resolveIndexSourceAdapter(indexCode, tenant, transaction) {
+  if (indexCode === 'IPCA') return IpcaIndexSourceAdapter;
+  if (indexCode === 'IGPM') return new FgvIgpmIndexSourceAdapter({ getSettingFn: getSetting, tenant, transaction });
+  return unavailableIndexSourceAdapter;
+}
 
 /**
  * requestRentAdjustment — solicita/aplica um reajuste de aluguel para um contrato numa
@@ -25,7 +38,7 @@ const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
  * do tenant) como SUGESTÃO de índice padrão — é só um default de conveniência, o chamador pode
  * sempre informar outro `indexCode` explicitamente; nada aqui trava o usuário no default.
  */
-async function requestRentAdjustment(payload, actorUserId, transaction, indexSourceAdapter = unavailableIndexSourceAdapter) {
+async function requestRentAdjustment(payload, actorUserId, transaction, indexSourceAdapter = null) {
   const { groupId, companyId, contractId, period, oldRentAmount, appliedPercentageOverride } = payload;
   let { indexCode } = payload;
 
@@ -39,6 +52,12 @@ async function requestRentAdjustment(payload, actorUserId, transaction, indexSou
       'RENT_ADJUSTMENT_VALIDATION'
     );
   }
+
+  // Sem adapter explícito (uso normal em produção; testes injetam createMockIndexSourceAdapter):
+  // resolve dinamicamente pelo indexCode. IPCA -> IBGE; IGPM -> FGV; qualquer outro código
+  // mantém o comportamento atual (indisponível, nunca inventa percentual).
+  const resolvedIndexSourceAdapter =
+    indexSourceAdapter || resolveIndexSourceAdapter(indexCode, { groupId, companyId }, transaction);
   if (!period || !PERIOD_REGEX.test(period)) {
     throw AppError.badRequest('O campo "period" deve estar no formato "YYYY-MM".', 'RENT_ADJUSTMENT_VALIDATION');
   }
@@ -56,7 +75,7 @@ async function requestRentAdjustment(payload, actorUserId, transaction, indexSou
     );
   }
 
-  const indexResult = await indexSourceAdapter.getIndex(indexCode, period);
+  const indexResult = await resolvedIndexSourceAdapter.getIndex(indexCode, period);
 
   if (!indexResult || !indexResult.available) {
     const rentAdjustment = await RentAdjustment.create(
@@ -160,4 +179,5 @@ module.exports = {
   requestRentAdjustment,
   getRentAdjustment,
   listRentAdjustments,
+  resolveIndexSourceAdapter,
 };

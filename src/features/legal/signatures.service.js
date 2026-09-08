@@ -6,13 +6,35 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishSignatureRequested, publishSignatureSigned } = require('./legalEvents.service');
 const { getContractVersion } = require('./contractVersions.service');
 const { getContract, transitionContractStatus } = require('./contracts.service');
-const { SandboxSignatureAdapter } = require('./adapters/SignatureAdapter');
+const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('./adapters/SignatureAdapter');
+const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 
-// DECISÃO DE ENGENHARIA: instância única do adapter sandbox neste módulo — não há
-// configuração de provedor real (.env) neste marco, então não implementamos a seleção
-// dinâmica de adapter por env var; isso fica documentado como próximo passo natural quando
-// as credenciais de um provedor real existirem.
-const signatureAdapter = new SandboxSignatureAdapter();
+/**
+ * resolveSignatureAdapter — resolve o adapter de assinatura em runtime, por tenant, a partir
+ * de `legal.signature_provider` (settings). O token do provedor escolhido é descriptografado
+ * SÓ dentro desta função (escopo da chamada que monta o adapter) — nunca é guardado
+ * descriptografado em memória além da instância do adapter recém-criada, que vive apenas
+ * durante esta requisição.
+ *
+ * Fallback seguro: se o provider configurado for "sandbox", OU se não houver token
+ * configurado para o provider escolhido (ex.: cliente selecionou "clicksign" no painel mas
+ * ainda não preencheu o token), caímos para `SandboxSignatureAdapter` — a ausência de
+ * configuração NUNCA quebra o fluxo de negócio de solicitar assinatura.
+ */
+async function resolveSignatureAdapter(tenant, transaction) {
+  const provider = await getSetting('legal.signature_provider', tenant, transaction, 'sandbox');
+
+  if (provider === 'clicksign') {
+    const apiToken = await getDecryptedSetting('legal.clicksign_api_token', tenant, transaction, null);
+    if (apiToken) return new ClicksignSignatureAdapter({ apiToken });
+  } else if (provider === 'zapsign') {
+    const apiToken = await getDecryptedSetting('legal.zapsign_api_token', tenant, transaction, null);
+    if (apiToken) return new ZapSignSignatureAdapter({ apiToken });
+  }
+
+  // Fallback seguro: sandbox por padrão, ou quando o provider real não tem token configurado.
+  return new SandboxSignatureAdapter();
+}
 
 async function initiateSignature(contractVersionId, signerPersonIds, actorUserId, transaction) {
   if (!Array.isArray(signerPersonIds) || signerPersonIds.length === 0) {
@@ -20,6 +42,10 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
   }
   const contractVersion = await getContractVersion(contractVersionId, transaction);
 
+  const signatureAdapter = await resolveSignatureAdapter(
+    { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
+    transaction
+  );
   const { externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds);
 
   const signatures = [];
@@ -49,7 +75,7 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
         entityType: 'Signature',
         entityId: signature.id,
         afterJson: signature.toJSON(),
-        reason: `Assinatura solicitada (sandbox) à pessoa ${personId} para a versão ${contractVersion.id} do contrato.`,
+        reason: `Assinatura solicitada (provider: ${signatureAdapter.constructor.name}) à pessoa ${personId} para a versão ${contractVersion.id} do contrato.`,
       },
       transaction
     );
@@ -122,4 +148,4 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
   return { signature, contractTransitioned, alreadyProcessed: false };
 }
 
-module.exports = { initiateSignature, listSignaturesByContractVersion, handleSignatureWebhook };
+module.exports = { initiateSignature, listSignaturesByContractVersion, handleSignatureWebhook, resolveSignatureAdapter };

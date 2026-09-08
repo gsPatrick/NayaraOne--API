@@ -1,7 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
+const AppError = require('../../utils/AppError');
+const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const contractsService = require('./contracts.service');
 const contractVersionsService = require('./contractVersions.service');
 const signaturesService = require('./signatures.service');
@@ -71,15 +74,87 @@ const listSignaturesByContractVersion = catchAsync(async (req, res) => {
 // Webhook de assinatura — DECISÃO DE ENGENHARIA: um webhook de provedor real chegaria SEM
 // JWT de usuário (é o provedor externo chamando, autenticado por segredo/HMAC próprio), e
 // precisaria resolver group_id/company_id a partir do próprio Signature antes de aplicar
-// RLS. Como este marco só tem o SandboxSignatureAdapter (mock, sem provedor real por trás),
-// mantemos esta rota atrás do MESMO authMiddleware/tenantMiddleware das demais rotas de
-// legal (exige "legal:sign") — ou seja, aqui ela é chamada como uma ação autenticada que
-// SIMULA a chegada do webhook, não como endpoint público. Um adapter de provedor real
-// exigiria uma rota pública dedicada fora do router autenticado, validando a assinatura
-// HMAC do provedor antes de abrir a transação com SET LOCAL — esse trabalho fica para quando
-// houver um provedor real configurado.
+// RLS. Enquanto não existir uma rota pública dedicada fora do router autenticado, esta rota
+// continua atrás do MESMO authMiddleware/tenantMiddleware das demais rotas de legal (exige
+// "legal:sign") — ou seja, ela é chamada como uma ação autenticada que recebe/valida o
+// webhook, não como endpoint público de fato. Agora que existem provedores reais
+// (Clicksign/ZapSign) configuráveis via settings, a rota EXIGE HMAC válido do corpo bruto
+// sempre que o tenant tiver um provider real configurado — só o sandbox (sem provedor real
+// por trás) segue sem exigir HMAC, pois não há segredo de webhook para validar contra.
+
+const WEBHOOK_HEADER_BY_PROVIDER = {
+  // DECISÃO DE ENGENHARIA — validar contra documentação oficial atualizada de cada provedor
+  // antes de produção: nome exato do header de assinatura do webhook (e se é HMAC hex, base64,
+  // ou vem com prefixo tipo "sha256=") pode ter mudado desde a última verificação.
+  clicksign: 'x-clicksign-signature',
+  zapsign: 'x-zapsign-signature',
+};
+
+const WEBHOOK_SECRET_SETTING_BY_PROVIDER = {
+  clicksign: 'legal.clicksign_webhook_secret',
+  zapsign: 'legal.zapsign_webhook_secret',
+};
+
+function computeHmacSha256Hex(secret, rawBody) {
+  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+}
+
+/**
+ * verifyProviderWebhookSignature — compara o HMAC-SHA256 (hex) do corpo BRUTO da requisição
+ * com o valor recebido no header do provedor, usando `crypto.timingSafeEqual` — NUNCA
+ * comparação direta de string (`===`), que vazaria timing e permitiria um ataque de força
+ * bruta byte a byte sobre a assinatura esperada. `timingSafeEqual` exige buffers do mesmo
+ * tamanho, então checamos o tamanho primeiro (uma incompatibilidade de tamanho já é
+ * "inválido", sem precisar comparar byte a byte).
+ *
+ * DECISÃO DE ENGENHARIA — validar contra documentação oficial atualizada de cada provedor
+ * antes de produção: assumimos aqui o mesmo esquema (HMAC-SHA256 hex do corpo bruto) para
+ * Clicksign e ZapSign; cada provedor pode ter particularidades (ex.: incluir timestamp no
+ * cálculo, usar outro digest) que só são confirmáveis com credencial/documentação real.
+ */
+function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecret) {
+  const headerName = WEBHOOK_HEADER_BY_PROVIDER[provider];
+  if (!headerName || !webhookSecret || !rawBody || rawBody.length === 0) return false;
+
+  const received = headers ? headers[headerName] : null;
+  if (!received || typeof received !== 'string') return false;
+
+  let expectedBuffer;
+  let receivedBuffer;
+  try {
+    expectedBuffer = Buffer.from(computeHmacSha256Hex(webhookSecret, rawBody), 'hex');
+    receivedBuffer = Buffer.from(received, 'hex');
+  } catch (err) {
+    return false;
+  }
+
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
 const signatureWebhook = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => signaturesService.handleSignatureWebhook(req.params.externalSignatureId, req.body, t));
+  const result = await req.withTenantTransaction(async (t) => {
+    const tenant = { groupId: req.auth.groupId, companyId: req.auth.companyId };
+    const provider = await getSetting('legal.signature_provider', tenant, t, 'sandbox');
+
+    // Regra crítica: se um provedor real estiver configurado para o tenant, a rota DEVE
+    // rejeitar qualquer payload sem HMAC válido — nunca aplica o webhook "por confiança". O
+    // sandbox (sem provedor real por trás) segue sem exigir HMAC.
+    if (provider === 'clicksign' || provider === 'zapsign') {
+      const webhookSecretKey = WEBHOOK_SECRET_SETTING_BY_PROVIDER[provider];
+      const webhookSecret = await getDecryptedSetting(webhookSecretKey, tenant, t, null);
+      const rawBody = req.rawBody;
+      const isValid = verifyProviderWebhookSignature(provider, rawBody, req.headers, webhookSecret);
+      if (!isValid) {
+        throw AppError.unauthorized(
+          'Assinatura HMAC do webhook ausente ou inválida para o provedor configurado.',
+          'LEGAL_WEBHOOK_HMAC_INVALID'
+        );
+      }
+    }
+
+    return signaturesService.handleSignatureWebhook(req.params.externalSignatureId, req.body, t);
+  });
   return success(res, { data: result });
 });
 
@@ -225,7 +300,7 @@ const getEvidencePackage = catchAsync(async (req, res) => {
 module.exports = {
   createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties,
   createContractVersion, listContractVersions,
-  initiateSignature, listSignaturesByContractVersion, signatureWebhook,
+  initiateSignature, listSignaturesByContractVersion, signatureWebhook, verifyProviderWebhookSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,

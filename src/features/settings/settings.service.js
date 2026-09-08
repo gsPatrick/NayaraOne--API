@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const { TenantSetting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -22,6 +23,18 @@ const SETTINGS_SCHEMA = {
   'billing.default_index_code': { type: 'string' },
   'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
   'mfa.required_for_sensitive_roles': { type: 'boolean' },
+  'legal.signature_provider': { type: 'string', enum: ['sandbox', 'clicksign', 'zapsign'] },
+  // Campos abaixo são segredos de provedor externo — CRIPTOGRAFADOS em repouso (AES-256-GCM,
+  // ver src/utils/mfaCrypto.js) seguindo o mesmo padrão já usado para o segredo TOTP
+  // (src/features/users/mfa.service.js). `upsertSetting` criptografa antes de gravar;
+  // `getDecryptedSetting` é o único ponto que decifra, e só no escopo da chamada que precisa
+  // do valor em texto claro (nunca guardar o valor decifrado além disso).
+  'legal.clicksign_api_token': { type: 'string', encrypted: true },
+  'legal.zapsign_api_token': { type: 'string', encrypted: true },
+  'legal.clicksign_webhook_secret': { type: 'string', encrypted: true },
+  'legal.zapsign_webhook_secret': { type: 'string', encrypted: true },
+  'billing.igpm_mode': { type: 'string', enum: ['manual', 'automatic'] },
+  'billing.fgv_api_token': { type: 'string', encrypted: true },
 };
 
 function validateAgainstSchema(key, value) {
@@ -57,6 +70,13 @@ function validateAgainstSchema(key, value) {
     if (typeof value !== 'string' || value.trim() === '') {
       throw AppError.badRequest(`O valor de "${key}" deve ser uma string não vazia.`, 'SETTING_INVALID_VALUE', { key, value });
     }
+    if (Array.isArray(spec.enum) && !spec.enum.includes(value)) {
+      throw AppError.badRequest(
+        `O valor de "${key}" deve ser um dos seguintes: ${spec.enum.join(', ')}.`,
+        'SETTING_INVALID_VALUE',
+        { key, value }
+      );
+    }
     return;
   }
 
@@ -89,6 +109,30 @@ async function getSetting(key, tenant, transaction, defaultValue = null) {
 }
 
 /**
+ * getDecryptedSetting — mesma semântica "best effort com fallback seguro" de `getSetting`,
+ * mas para chaves marcadas `encrypted: true` no SETTINGS_SCHEMA: decifra o valor armazenado e
+ * retorna o segredo em texto claro. O valor decifrado deve viver só no escopo da chamada que
+ * o usa (ex.: montar o header Authorization de uma chamada HTTP) — nunca deve ser guardado em
+ * memória além disso (cache, variável de módulo etc.). Qualquer falha (chave ausente, valor
+ * corrompido, erro de decifragem) retorna `defaultValue` — nunca lança, pelo mesmo motivo de
+ * `getSetting`: leitura de configuração não pode derrubar o fluxo de negócio.
+ */
+async function getDecryptedSetting(key, tenant, transaction, defaultValue = null) {
+  const spec = SETTINGS_SCHEMA[key];
+  if (!spec || !spec.encrypted) {
+    // Fail closed: só decifra chaves explicitamente marcadas como segredo no schema.
+    return defaultValue;
+  }
+  const raw = await getSetting(key, tenant, transaction, null);
+  if (!raw) return defaultValue;
+  try {
+    return decryptSecret(raw);
+  } catch (err) {
+    return defaultValue;
+  }
+}
+
+/**
  * upsertSetting — cria ou atualiza (UPSERT por UNIQUE(company_id, key)) uma configuração de
  * tenant. Fail closed: chave desconhecida ou valor fora do schema é rejeitado com AppError 400
  * ANTES de qualquer escrita no banco.
@@ -100,12 +144,19 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction) {
 
   validateAgainstSchema(key, value);
 
+  // Campos marcados `encrypted: true` no schema são criptografados ANTES de tocar o banco —
+  // a coluna `value` (JSONB) nunca guarda o segredo em texto plano. `beforeJson`/`afterJson`
+  // da auditoria também usam a linha já com o valor criptografado (row.toJSON()), então a
+  // auditoria nunca expõe o segredo em texto claro.
+  const spec = SETTINGS_SCHEMA[key];
+  const storedValue = spec && spec.encrypted ? encryptSecret(value) : value;
+
   const existing = await TenantSetting.findOne({ where: { companyId: tenant.companyId, key }, transaction });
   const beforeJson = existing ? existing.toJSON() : null;
 
   let row;
   if (existing) {
-    existing.value = value;
+    existing.value = storedValue;
     existing.updatedBy = actorUserId || null;
     await existing.save({ transaction });
     row = existing;
@@ -115,7 +166,7 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction) {
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         key,
-        value,
+        value: storedValue,
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
@@ -164,6 +215,7 @@ async function getSettingRow(key, tenant, transaction) {
 module.exports = {
   SETTINGS_SCHEMA,
   getSetting,
+  getDecryptedSetting,
   upsertSetting,
   listSettingsByPrefix,
   getSettingRow,
