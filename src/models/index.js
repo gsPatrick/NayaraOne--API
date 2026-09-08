@@ -12,6 +12,8 @@ const modelDefiners = {
   User: require('./User'),
   UserMembership: require('./UserMembership'),
   Session: require('./Session'),
+  MfaCredential: require('./MfaCredential'),
+  MfaStepUp: require('./MfaStepUp'),
   Role: require('./Role'),
   Permission: require('./Permission'),
   RolePermission: require('./RolePermission'),

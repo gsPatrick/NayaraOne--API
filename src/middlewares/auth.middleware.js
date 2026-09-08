@@ -73,4 +73,33 @@ function requirePermission(permissionCode) {
   };
 }
 
-module.exports = { authMiddleware, requirePermission };
+/**
+ * requireRecentMfa — gate de step-up MFA (Caderno técnico Nayara §3.3/3.4: "step-up MFA
+ * para alteração bancária, aprovação de pagamento, ..."; "janela de MFA recente configurável
+ * por risco"). Deve ser montado DEPOIS de authMiddleware + tenantMiddleware (precisa de
+ * req.auth e req.withTenantTransaction).
+ *
+ * Fail closed: usuário sem MFA habilitado é bloqueado com mensagem explícita pedindo para
+ * habilitar primeiro (nunca abre exceção silenciosa); usuário com MFA habilitado mas sem
+ * verificação recente (dentro da janela de mfa.service.js) é bloqueado pedindo /mfa/verify.
+ * A checagem em si vive em mfa.service.assertRecentMfa (reaproveitada também por
+ * approvals.service.decideApprovalStep para o caso condicional a riskLevel HIGH/CRITICAL).
+ */
+function requireRecentMfa(req, res, next) {
+  if (!req.auth) {
+    return next(AppError.unauthorized('Contexto de autenticação ausente.', 'AUTH_CONTEXT_MISSING'));
+  }
+  if (!req.withTenantTransaction) {
+    return next(
+      AppError.forbidden('Contexto de tenant ausente para checagem de MFA (fail closed).', 'MFA_TENANT_CONTEXT_MISSING')
+    );
+  }
+  // require tardio para evitar dependência circular (mfa.service -> models -> ...).
+  const { assertRecentMfa } = require('../features/users/mfa.service');
+  return req
+    .withTenantTransaction((transaction) => assertRecentMfa(req.auth.userId, transaction))
+    .then(() => next())
+    .catch(next);
+}
+
+module.exports = { authMiddleware, requirePermission, requireRecentMfa };

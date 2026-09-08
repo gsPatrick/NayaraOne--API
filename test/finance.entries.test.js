@@ -10,6 +10,8 @@ const bankTransactionsService = require('../src/features/finance/bankTransaction
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const reconciliationService = require('../src/features/finance/reconciliation.service');
 const approvalsService = require('../src/features/finance/approvals.service');
+const mfaService = require('../src/features/users/mfa.service');
+const { authenticator } = require('otplib');
 const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -94,6 +96,13 @@ test('maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações in
       tenant.userId,
       transaction
     );
+
+    // Risco HIGH agora exige step-up MFA recente do aprovador (Caderno §3.3) — configura e
+    // verifica o MFA do segundo aprovador antes de decidir.
+    const { otpauthUri } = await mfaService.setupMfa(secondApproverUserId, tenant, transaction);
+    const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
+    await mfaService.confirmMfa(secondApproverUserId, authenticator.generate(secret), tenant, transaction);
+    await mfaService.verifyMfa(secondApproverUserId, authenticator.generate(secret), tenant, transaction);
 
     const { approvalRequest: afterFirstStep } = await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, secondApproverUserId, transaction);
     assert.equal(afterFirstStep.status, 'PENDING', 'risco HIGH exige 2 aprovações — 1 sozinha não fecha a solicitação');

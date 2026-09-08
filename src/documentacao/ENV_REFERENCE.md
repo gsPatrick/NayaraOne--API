@@ -26,6 +26,8 @@ deve ser commitado — use `.env` local (fora do controle de versão) a partir d
 | `JWT_ACCESS_TTL` | não (default `15m`) | Validade do access token (formato `jsonwebtoken`: `15m`, `1h`, etc.). |
 | `JWT_REFRESH_TTL` | não (default `7d`) | Validade do refresh token — também usada para calcular `core.sessions.expires_at`. |
 | `PII_HASH_SECRET` | sim | Segredo HMAC usado em `tax_id_normalized_hash` (busca exata de CPF/CNPJ sem expor o valor em claro, `src/features/people/personDocumentFormat.service.js`). Sem fallback — a aplicação lança `PII_HASH_CONFIG_MISSING` se ausente. Deve ser **diferente** dos segredos de JWT; nunca reutilizar entre ambientes; nunca commitar valor real. |
+| `MFA_ENCRYPTION_KEY` | sim | Chave AES-256-GCM (32 bytes: hex de 64 chars ou base64) usada para cifrar/decifrar o segredo TOTP em repouso (`src/utils/mfaCrypto.js`). Sem fallback — lança `MFA_CRYPTO_CONFIG_MISSING`/`MFA_CRYPTO_CONFIG_INVALID` se ausente ou malformada. Nunca reutilizar entre ambientes; nunca commitar valor real. |
+| `MFA_STEP_UP_TTL_MINUTES` | não (default `10`) | Duração, em minutos, da janela de "MFA recente" (step-up) aplicada por `requireRecentMfa`/`assertRecentMfa` (`src/features/users/mfa.service.js`). Valor não especificado no Caderno técnico — decisão de engenharia a confirmar com o cliente antes de produção. |
 
 \* Ou `DATABASE_URL`, ou o conjunto `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` — pelo
 menos uma das duas formas é obrigatória para a aplicação conectar ao PostgreSQL.

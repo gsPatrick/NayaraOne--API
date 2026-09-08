@@ -4,6 +4,7 @@ const { ApprovalRequest, ApprovalStep, BankAccount, FinancialEntry, Commission, 
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishApprovalRequestCreated, publishApprovalStepDecided } = require('./financeEvents.service');
+const { assertRecentMfa } = require('../users/mfa.service');
 
 // Motor genérico de dupla aprovação (maker-checker) — 03_MOTORES_TRANSVERSAIS.md: "Quem cria
 // não aprova; quem aprova não altera; quem executa valida o hash aprovado."
@@ -125,6 +126,13 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
   const existingSteps = await ApprovalStep.findAll({ where: { approvalRequestId }, transaction });
   if (existingSteps.some((s) => s.approverUserId === approverUserId)) {
     throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');
+  }
+
+  // Step-up MFA obrigatório para decisões de risco HIGH/CRITICAL (Caderno §3.3: "HIGH = MFA
+  // recente + permissão + auditoria reforçada; CRITICAL = MFA recente + segregação/aprovação +
+  // snapshot/hash + alerta + trilha"). Risco LOW/MEDIUM não exige MFA aqui.
+  if (['HIGH', 'CRITICAL'].includes(approvalRequest.riskLevel)) {
+    await assertRecentMfa(approverUserId, transaction);
   }
 
   if (expectedLockVersion !== undefined) {
