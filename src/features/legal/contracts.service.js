@@ -246,6 +246,74 @@ async function listContractParties(contractId, transaction) {
   return ContractParty.findAll({ where: { contractId }, transaction });
 }
 
+// Campos corrigíveis via correctContractData — deliberadamente NÃO inclui `status`
+// (isso é responsabilidade exclusiva de transitionContractStatus, que valida a máquina de
+// estados) nem `id`/`groupId`/`companyId` (identidade do registro, nunca "corrigida").
+const CORRECTABLE_FIELDS = ['startsAt', 'endsAt', 'totalValue', 'contractNumber', 'propertyId', 'opportunityId'];
+
+/**
+ * correctContractData — AUD-004: a homologação apontou que não existia nenhuma forma
+ * auditada de corrigir dados já registrados de um contrato (ex.: vigência informada errada).
+ * Diferente de um update genérico, esta função:
+ *   - Exige um motivo (`reason`) não vazio — correção de dado já gravado sem justificativa
+ *     documentada não é aceitável (rastreabilidade).
+ *   - Só aceita campos em CORRECTABLE_FIELDS — nunca o status (a máquina de estados já cobre
+ *     isso com suas próprias regras) nem colunas de identidade/tenant.
+ *   - Bloqueia contratos CANCELLED (nada a corrigir num contrato encerrado).
+ *   - Sempre grava um evento de auditoria append-only `legal.contract.data_correction` com
+ *     beforeJson/afterJson completos, o motivo e o autor — nunca sobrescreve silenciosamente.
+ */
+async function correctContractData(contractId, payload, actorUserId, transaction) {
+  const { reason, ...fields } = payload || {};
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest('O campo "reason" é obrigatório para justificar a correção.', 'LEGAL_CONTRACT_CORRECTION_VALIDATION');
+  }
+
+  const contract = await Contract.findByPk(contractId, { transaction });
+  if (!contract) {
+    throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
+  }
+  if (contract.status === 'CANCELLED') {
+    throw AppError.conflict('Contrato cancelado não pode ter dados corrigidos.', 'LEGAL_CONTRACT_CORRECTION_CANCELLED');
+  }
+
+  const requestedFields = Object.keys(fields).filter((key) => fields[key] !== undefined);
+  const invalidFields = requestedFields.filter((key) => !CORRECTABLE_FIELDS.includes(key));
+  if (invalidFields.length > 0) {
+    throw AppError.badRequest(
+      `Os campos [${invalidFields.join(', ')}] não podem ser corrigidos por esta ação. Campos permitidos: ${CORRECTABLE_FIELDS.join(', ')}.`,
+      'LEGAL_CONTRACT_CORRECTION_FIELD_NOT_ALLOWED'
+    );
+  }
+  if (requestedFields.length === 0) {
+    throw AppError.badRequest('Informe ao menos um campo para corrigir.', 'LEGAL_CONTRACT_CORRECTION_VALIDATION');
+  }
+
+  const beforeJson = contract.toJSON();
+  for (const field of requestedFields) {
+    contract[field] = fields[field];
+  }
+  contract.updatedBy = actorUserId || null;
+  await contract.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      actorUserId,
+      action: 'legal.contract.data_correction',
+      entityType: 'Contract',
+      entityId: contract.id,
+      beforeJson,
+      afterJson: contract.toJSON(),
+      reason: `Correção de dados do contrato: ${reason}`,
+    },
+    transaction
+  );
+
+  return contract;
+}
+
 module.exports = {
   createContract,
   listContracts,
@@ -253,6 +321,8 @@ module.exports = {
   transitionContractStatus,
   addContractParty,
   listContractParties,
+  correctContractData,
+  CORRECTABLE_FIELDS,
   CONTRACT_TYPES,
   VALID_TRANSITIONS,
   REQUIRED_ROLES_BY_TYPE,

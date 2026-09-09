@@ -45,6 +45,10 @@ const addContractParty = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractsService.addContractParty(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+const correctContractData = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.correctContractData(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
 const listContractParties = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => contractsService.listContractParties(req.params.id, t));
   return success(res, { data: items });
@@ -308,7 +312,7 @@ const getEvidencePackage = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties,
+  createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties, correctContractData,
   createContractVersion, listContractVersions,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,

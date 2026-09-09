@@ -173,6 +173,62 @@ test('HOMO-04 MFA bloqueia após 5 tentativas seguidas de código inválido (fai
   });
 });
 
+// --- AUD-008: versão de contrato sem conteúdo real não pode ser criada ---
+test('AUD-008 criar versão de contrato com content vazio/só espaço é rejeitado (não gera hash de documento vazio)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    await assert.rejects(
+      () => contractVersionsService.createContractVersion(contract.id, { content: '' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_VERSION_VALIDATION');
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => contractVersionsService.createContractVersion(contract.id, { content: '   ' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_VERSION_VALIDATION');
+        return true;
+      }
+    );
+    // conteúdo real continua funcionando normalmente.
+    const version = await contractVersionsService.createContractVersion(contract.id, { content: 'Texto real do contrato' }, tenant.userId, transaction);
+    assert.ok(version.contentHash);
+  });
+});
+
+// --- AUD-004: correção auditada de dados já gravados do contrato ---
+test('AUD-004 correctContractData exige motivo, bloqueia campos não permitidos e audita a correção', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+
+    await assert.rejects(
+      () => contractsService.correctContractData(contract.id, { startsAt: '2026-09-09T12:00:00.000Z' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_CORRECTION_VALIDATION');
+        return true;
+      }
+    );
+
+    await assert.rejects(
+      () => contractsService.correctContractData(contract.id, { status: 'ACTIVE', reason: 'tentando burlar a máquina de estados' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_CORRECTION_FIELD_NOT_ALLOWED');
+        return true;
+      }
+    );
+
+    const corrected = await contractsService.correctContractData(
+      contract.id,
+      { startsAt: '2026-09-09T12:00:00.000Z', endsAt: '2027-09-09T12:00:00.000Z', reason: 'Vigência informada errada na criação' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(new Date(corrected.startsAt).toISOString(), '2026-09-09T12:00:00.000Z');
+    assert.equal(new Date(corrected.endsAt).toISOString(), '2027-09-09T12:00:00.000Z');
+  });
+});
+
 test('HOMO-05 verificação MFA de origem/dispositivo diferente é sinalizada (isNewDevice), sem bloquear a ação', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { userId, secret } = await createMfaEnabledUser(transaction);

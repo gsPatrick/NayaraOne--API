@@ -27,8 +27,21 @@ function computeContentHash(content) {
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
   const { content, documentFileId, effectiveFrom } = payload;
-  if (content === undefined || content === null) {
-    throw AppError.badRequest('O campo "content" é obrigatório (texto/JSON do documento usado para calcular o content_hash).', 'LEGAL_CONTRACT_VERSION_VALIDATION');
+  // FIX AUD-008 (homologação 09/09/2026): `content === undefined || content === null` deixava
+  // passar `content: ""` (ou só espaços) como se fosse um documento real — o hash de uma
+  // string vazia é um hash "válido" tecnicamente, mas não representa nenhum conteúdo de
+  // verdade, e isso permitia satisfazer assertDocumentGate (que só checa "existe alguma
+  // versão") com uma versão vazia por trás. Content precisa ter conteúdo de fato: string não
+  // pode ser vazia/só espaço; objeto/JSON não pode ser vazio.
+  const hasRealContent =
+    content !== undefined &&
+    content !== null &&
+    (typeof content === 'string' ? content.trim().length > 0 : Object.keys(content).length > 0);
+  if (!hasRealContent) {
+    throw AppError.badRequest(
+      'O campo "content" é obrigatório e não pode ser vazio — precisa representar o conteúdo real do documento usado para calcular o content_hash.',
+      'LEGAL_CONTRACT_VERSION_VALIDATION'
+    );
   }
 
   const lastVersion = await ContractVersion.findOne({

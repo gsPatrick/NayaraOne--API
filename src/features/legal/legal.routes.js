@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const legalController = require('./legal.controller');
 
@@ -16,6 +16,9 @@ legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalCo
 legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), legalController.transitionContract);
 legalRouter.post('/legal/contracts/:id/parties', requirePermission('legal:create'), legalController.addContractParty);
 legalRouter.get('/legal/contracts/:id/parties', requirePermission('legal:read'), legalController.listContractParties);
+// AUD-004: correção auditada de dados já gravados (não é a máquina de estados) — ação HIGH,
+// exige MFA recente e motivo obrigatório (ver correctContractData em contracts.service.js).
+legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:update'), requireRecentMfa, legalController.correctContractData);
 
 // Contract versions
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
