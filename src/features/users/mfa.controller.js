@@ -15,7 +15,8 @@ const confirm = catchAsync(async (req, res) => {
 });
 
 const verify = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => mfaService.verifyMfa(req.auth.userId, req.body.code, req.auth, t));
+  const requestMeta = { ip: req.ip, userAgent: req.headers['user-agent'] };
+  const result = await req.withTenantTransaction((t) => mfaService.verifyMfa(req.auth.userId, req.body.code, req.auth, t, requestMeta));
   return success(res, { data: result });
 });
 

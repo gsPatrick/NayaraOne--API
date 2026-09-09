@@ -53,6 +53,12 @@ module.exports = (sequelize) => {
         field: 'external_signature_id',
         comment: "ID no provedor de assinatura eletrônica",
       },
+      providerEnvelopeId: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+        field: 'provider_envelope_id',
+        comment: "ID do envelope/documento no provedor — compartilhado por todos os signatários da mesma versão de contrato, usado para consultar status/cancelar no provedor real.",
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

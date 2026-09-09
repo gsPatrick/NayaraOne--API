@@ -37,6 +37,17 @@ class SandboxSignatureAdapter {
       externalSignatureIdsByPerson,
     };
   }
+
+  // Sandbox não tem provedor real por trás — "consulta de status" sempre responde "pendente"
+  // (nunca finaliza sozinho; a confirmação em sandbox vem de handleSignatureWebhook simulado).
+  async getStatus(providerEnvelopeId) {
+    return { providerEnvelopeId, status: 'PENDING', raw: null };
+  }
+
+  // Sandbox aceita cancelamento sempre (não há efeito colateral externo a desfazer).
+  async cancel(providerEnvelopeId) {
+    return { providerEnvelopeId, cancelled: true, raw: null };
+  }
 }
 
 /**
@@ -127,6 +138,10 @@ class ClicksignSignatureAdapter {
     // ou upload), não apenas um hash — usamos o hash como identificador de conteúdo aqui
     // porque este marco não tem acesso ao binário do documento neste ponto do fluxo; confirmar
     // o payload real de criação de documento contra a documentação/conta de homologação.
+    // `external_id` amarra o envelope à versão/hash exato do contrato que originou a
+    // assinatura — mesma decisão já usada no adapter do ZapSign (ver abaixo). Sem isso, uma
+    // consulta manual no painel do provedor não tinha como confirmar QUAL versão do contrato
+    // aquele envelope representa.
     const envelope = await this._request('POST', '/envelopes', {
       data: {
         type: 'envelopes',
@@ -135,6 +150,7 @@ class ClicksignSignatureAdapter {
           locale: 'pt-BR',
           auto_close: true,
           remind_interval: 3,
+          external_id: contractVersion.contentHash || contractVersion.id,
         },
       },
     });
@@ -156,6 +172,31 @@ class ClicksignSignatureAdapter {
     }
 
     return { providerEnvelopeId, externalSignatureIdsByPerson };
+  }
+
+  /**
+   * getStatus — consulta o status atual do envelope no Clicksign.
+   * DECISÃO DE ENGENHARIA — não testado contra credencial real: campo exato de status
+   * (`data.attributes.status`) e seus valores possíveis (ex.: "running", "closed", "canceled")
+   * devem ser confirmados contra a documentação/conta real antes de produção.
+   */
+  async getStatus(providerEnvelopeId) {
+    const envelope = await this._request('GET', `/envelopes/${providerEnvelopeId}`);
+    const rawStatus = envelope && envelope.data && envelope.data.attributes && envelope.data.attributes.status;
+    return { providerEnvelopeId, status: rawStatus || 'UNKNOWN', raw: envelope };
+  }
+
+  /**
+   * cancel — cancela o envelope no Clicksign.
+   * DECISÃO DE ENGENHARIA — não testado contra credencial real: o Clicksign v3 tipicamente
+   * cancela via PATCH mudando o status do envelope para "canceled" — confirmar o payload exato
+   * contra a documentação/conta real antes de produção.
+   */
+  async cancel(providerEnvelopeId) {
+    const result = await this._request('PATCH', `/envelopes/${providerEnvelopeId}`, {
+      data: { type: 'envelopes', id: providerEnvelopeId, attributes: { status: 'canceled' } },
+    });
+    return { providerEnvelopeId, cancelled: true, raw: result };
   }
 }
 
@@ -227,6 +268,28 @@ class ZapSignSignatureAdapter {
     });
 
     return { providerEnvelopeId, externalSignatureIdsByPerson };
+  }
+
+  /**
+   * getStatus — consulta o status atual do documento no ZapSign.
+   * DECISÃO DE ENGENHARIA — não testado contra credencial real: campo exato de status
+   * (`status`) e seus valores possíveis (ex.: "pending", "signed", "refused") devem ser
+   * confirmados contra a documentação/conta real antes de produção.
+   */
+  async getStatus(providerEnvelopeId) {
+    const doc = await this._request('GET', `/docs/${providerEnvelopeId}/`);
+    return { providerEnvelopeId, status: (doc && doc.status) || 'UNKNOWN', raw: doc };
+  }
+
+  /**
+   * cancel — cancela o documento no ZapSign.
+   * DECISÃO DE ENGENHARIA — não testado contra credencial real: o endpoint de cancelamento do
+   * ZapSign (`/docs/{token}/delete/` ou similar) e o método HTTP exato devem ser confirmados
+   * contra a documentação/conta real antes de produção.
+   */
+  async cancel(providerEnvelopeId) {
+    const result = await this._request('POST', `/docs/${providerEnvelopeId}/delete/`);
+    return { providerEnvelopeId, cancelled: true, raw: result };
   }
 }
 

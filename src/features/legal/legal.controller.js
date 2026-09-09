@@ -158,6 +158,16 @@ const signatureWebhook = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+const checkSignatureStatus = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => signaturesService.checkSignatureStatus(req.params.id, t));
+  return success(res, { data: result });
+});
+
+const cancelSignature = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => signaturesService.cancelSignature(req.params.id, req.auth.userId, t));
+  return success(res, { data: result });
+});
+
 // --- Guarantees ---
 const createGuarantee = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => guaranteesService.createGuarantee(req.params.contractId, req.body, req.auth.userId, t));
@@ -301,6 +311,7 @@ module.exports = {
   createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties,
   createContractVersion, listContractVersions,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, verifyProviderWebhookSignature,
+  checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,

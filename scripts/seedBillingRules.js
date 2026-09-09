@@ -13,6 +13,9 @@ const { sequelize, Rule, RuleVersion, RuleScope, RulePublication } = require('..
  *   REG-LOC-002  Carência antes de considerar em atraso    Define quantos dias de carência
  *                                                          existem antes de abrir um caso de
  *                                                          cobrança.
+ *   REG-LOC-003  Política de aplicação de reajuste         Marca qual versão de regra estava
+ *                                                          vigente quando um reajuste (IPCA/
+ *                                                          IGPM) foi calculado/gravado.
  *
  * DECISÃO DE ENGENHARIA — não especificado no Caderno: o Caderno pede multa/juros/carência via
  * Motor de Regras, mas não define os percentuais/prazos. Usamos os parâmetros mais comuns do
@@ -28,6 +31,14 @@ const { sequelize, Rule, RuleVersion, RuleScope, RulePublication } = require('..
  *     satisfeita pelo fato fixo que o chamador envia) — o NÚMERO de dias de carência vem da
  *     ação (`{ graceDays: 3 }`), nunca do resultado da condição em si (a condição não decide
  *     "quantos dias", só se a regra está publicada/vigente para o tenant).
+ *   - REG-LOC-003: mesmo padrão de "regra sempre ativa" que REG-LOC-002 — condição
+ *     `{ fact: "rentAdjustmentRuleActive", op: "==", value: true }`, ação
+ *     `{ appliedEqualsRawByDefault: true }` (documenta a política já implementada em
+ *     rentAdjustment.service.js: o percentual aplicado é igual ao bruto da fonte, salvo
+ *     negociação manual explícita via `appliedPercentageOverride`). O ganho aqui não é a
+ *     condição em si — é que toda RentAdjustment passa a gravar `ruleVersionId` (evidência de
+ *     QUAL versão da política estava vigente quando o reajuste foi calculado), exigido
+ *     explicitamente na homologação.
  * Estes valores DEVEM ser confirmados/ajustados pelo cliente antes de produção — ver relatório
  * final da implementação.
  */
@@ -47,6 +58,14 @@ const RULES = [
     domain: 'finance',
     conditionAstJson: { fact: 'gracePeriodRuleActive', op: '==', value: true },
     actionJson: { graceDays: 3 },
+  },
+  {
+    code: 'REG-LOC-003',
+    name: 'Política de aplicação de reajuste',
+    description: 'Define a política padrão de aplicação de índice de reajuste (IPCA/IGPM) e serve de evidência de versionamento por reajuste gravado.',
+    domain: 'finance',
+    conditionAstJson: { fact: 'rentAdjustmentRuleActive', op: '==', value: true },
+    actionJson: { appliedEqualsRawByDefault: true },
   },
 ];
 

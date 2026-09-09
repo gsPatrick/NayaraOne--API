@@ -46,7 +46,7 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
     { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
     transaction
   );
-  const { externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds);
+  const { providerEnvelopeId, externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds);
 
   const signatures = [];
   for (const personId of signerPersonIds) {
@@ -58,6 +58,7 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
         personId,
         status: 'PENDING',
         externalSignatureId: externalSignatureIdsByPerson[personId],
+        providerEnvelopeId: providerEnvelopeId || null,
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
@@ -148,4 +149,93 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
   return { signature, contractTransitioned, alreadyProcessed: false };
 }
 
-module.exports = { initiateSignature, listSignaturesByContractVersion, handleSignatureWebhook, resolveSignatureAdapter };
+/**
+ * checkSignatureStatus — consulta ATIVAMENTE o status do envelope no provedor (não espera o
+ * webhook chegar) via `adapter.getStatus`. Se o provedor confirmar "assinado" e a linha local
+ * ainda não refletir isso, reconcilia localmente (mesmo efeito de `handleSignatureWebhook`,
+ * auditado como reconciliação manual em vez de evento de webhook).
+ */
+async function checkSignatureStatus(signatureId, transaction) {
+  const signature = await Signature.findByPk(signatureId, { transaction });
+  if (!signature) {
+    throw AppError.notFound('Assinatura não encontrada.', 'LEGAL_SIGNATURE_NOT_FOUND');
+  }
+  if (!signature.providerEnvelopeId) {
+    // Assinaturas criadas antes desta funcionalidade não têm envelope gravado — não há como
+    // consultar o provedor retroativamente.
+    return { signature, providerStatus: null, reconciled: false };
+  }
+
+  const adapter = await resolveSignatureAdapter(
+    { groupId: signature.groupId, companyId: signature.companyId },
+    transaction
+  );
+  const providerStatus = await adapter.getStatus(signature.providerEnvelopeId);
+
+  const providerSaysSigned = String(providerStatus.status).toLowerCase().includes('sign')
+    || String(providerStatus.status).toLowerCase().includes('closed');
+  if (providerSaysSigned && signature.status !== 'SIGNED') {
+    await handleSignatureWebhook(signature.externalSignatureId, {}, transaction);
+    const refreshed = await Signature.findByPk(signatureId, { transaction });
+    return { signature: refreshed, providerStatus, reconciled: true };
+  }
+
+  return { signature, providerStatus, reconciled: false };
+}
+
+/**
+ * cancelSignature — cancela a assinatura no provedor real (se houver envelope) e marca a linha
+ * local como CANCELLED. Bloqueia cancelamento de assinatura já confirmada (SIGNED) — cancelar
+ * algo já assinado não desfaz o documento assinado, seria um estado inconsistente.
+ */
+async function cancelSignature(signatureId, actorUserId, transaction) {
+  const signature = await Signature.findByPk(signatureId, { transaction });
+  if (!signature) {
+    throw AppError.notFound('Assinatura não encontrada.', 'LEGAL_SIGNATURE_NOT_FOUND');
+  }
+  if (signature.status === 'SIGNED') {
+    throw AppError.conflict('Assinatura já confirmada não pode ser cancelada.', 'LEGAL_SIGNATURE_ALREADY_SIGNED');
+  }
+  if (signature.status === 'CANCELLED') {
+    return { signature, alreadyCancelled: true };
+  }
+
+  if (signature.providerEnvelopeId) {
+    const adapter = await resolveSignatureAdapter(
+      { groupId: signature.groupId, companyId: signature.companyId },
+      transaction
+    );
+    await adapter.cancel(signature.providerEnvelopeId);
+  }
+
+  const beforeJson = signature.toJSON();
+  signature.status = 'CANCELLED';
+  signature.updatedBy = actorUserId || null;
+  await signature.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: signature.groupId,
+      companyId: signature.companyId,
+      actorUserId,
+      action: 'legal.signature.cancel',
+      entityType: 'Signature',
+      entityId: signature.id,
+      beforeJson,
+      afterJson: signature.toJSON(),
+      reason: 'Assinatura cancelada junto ao provedor.',
+    },
+    transaction
+  );
+
+  return { signature, alreadyCancelled: false };
+}
+
+module.exports = {
+  initiateSignature,
+  listSignaturesByContractVersion,
+  handleSignatureWebhook,
+  resolveSignatureAdapter,
+  checkSignatureStatus,
+  cancelSignature,
+};

@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const rolesController = require('./roles.controller');
 
@@ -12,10 +12,12 @@ rolesRouter.use(authMiddleware, tenantMiddleware);
 // Catálogo de permissões (para a tela de administração montar os checkboxes por módulo).
 rolesRouter.get('/permissions', requirePermission('roles:read'), rolesController.listPermissions);
 
-rolesRouter.post('/roles', requirePermission('roles:create'), rolesController.create);
+// Concessão/alteração/remoção de permissão é ação HIGH (Caderno §3.3) — exige MFA recente,
+// mesmo padrão já aplicado a alteração bancária/liquidação (ver finance.routes.js).
+rolesRouter.post('/roles', requirePermission('roles:create'), requireRecentMfa, rolesController.create);
 rolesRouter.get('/roles', requirePermission('roles:read'), rolesController.list);
 rolesRouter.get('/roles/:id', requirePermission('roles:read'), rolesController.getOne);
-rolesRouter.patch('/roles/:id', requirePermission('roles:update'), rolesController.update);
-rolesRouter.delete('/roles/:id', requirePermission('roles:delete'), rolesController.remove);
+rolesRouter.patch('/roles/:id', requirePermission('roles:update'), requireRecentMfa, rolesController.update);
+rolesRouter.delete('/roles/:id', requirePermission('roles:delete'), requireRecentMfa, rolesController.remove);
 
 module.exports = rolesRouter;

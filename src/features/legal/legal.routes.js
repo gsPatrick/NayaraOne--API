@@ -25,6 +25,8 @@ legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read')
 legalRouter.post('/legal/contract-versions/:id/signatures', requirePermission('legal:sign'), legalController.initiateSignature);
 legalRouter.get('/legal/contract-versions/:id/signatures', requirePermission('legal:read'), legalController.listSignaturesByContractVersion);
 legalRouter.post('/legal/signatures/:externalSignatureId/webhook', requirePermission('legal:sign'), legalController.signatureWebhook);
+legalRouter.get('/legal/signatures/:id/status', requirePermission('legal:sign'), legalController.checkSignatureStatus);
+legalRouter.post('/legal/signatures/:id/cancel', requirePermission('legal:sign'), legalController.cancelSignature);
 
 // Guarantees
 legalRouter.post('/legal/contracts/:contractId/guarantees', requirePermission('legal:create'), legalController.createGuarantee);

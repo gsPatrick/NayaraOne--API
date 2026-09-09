@@ -24,6 +24,30 @@ const ISSUER = 'Nayara One';
 // por tenant. Valor a confirmar com o cliente antes de produção.
 const STEP_UP_TTL_MINUTES_ENV_DEFAULT = Number(process.env.MFA_STEP_UP_TTL_MINUTES || 10);
 
+// DECISÃO DE ENGENHARIA — não especificado no Caderno: limite de tentativas falhas e duração
+// do bloqueio. O Caderno pede "tentativas repetidas/falhas conforme política" sem definir o
+// número — 5 tentativas / 15 minutos de bloqueio é um valor conservador comum (ex.: mesma
+// ordem de grandeza usada por provedores de TOTP populares), ajustável depois se o cliente
+// pedir outro valor. Fail closed: ao atingir o limite, TODA tentativa (mesmo com código certo)
+// é rejeitada até o bloqueio expirar — nunca "deixa passar" por segurança.
+const MAX_FAILED_MFA_ATTEMPTS = 5;
+const MFA_LOCKOUT_MINUTES = 15;
+
+/**
+ * hashDeviceFingerprint — não é fingerprinting robusto de dispositivo (não há client-side
+ * fingerprint/cookie dedicado neste marco); é um hash do IP + User-Agent da requisição, usado
+ * só para DETECTAR e AUDITAR quando uma verificação de MFA vem de uma origem diferente da
+ * última conhecida. Nunca bloqueia a ação por isso (IP dinâmico/rede corporativa com NAT são
+ * legítimos e mudam) — apenas gera um evento de auditoria distinto para revisão humana.
+ */
+function hashDeviceFingerprint(requestMeta) {
+  if (!requestMeta || (!requestMeta.ip && !requestMeta.userAgent)) return null;
+  return crypto
+    .createHash('sha256')
+    .update(`${requestMeta.ip || ''}::${requestMeta.userAgent || ''}`)
+    .digest('hex');
+}
+
 /**
  * resolveStepUpTtlMinutes — resolve o TTL da janela de MFA recente para o tenant: prefere
  * `mfa.step_up_ttl_minutes` (settings do tenant); cai para a env var (ou 10) só se ausente.
@@ -150,11 +174,57 @@ async function confirmMfa(userId, code, actorContext, transaction) {
  * `requireRecentMfa` para liberar ações de step-up (aprovação de pagamento, liquidação,
  * alteração bancária etc — 03_MOTORES_TRANSVERSAIS.md §3.4).
  */
-async function verifyMfa(userId, code, actorContext, transaction) {
+/**
+ * assertNotLocked — fail closed: se o usuário estourou `MAX_FAILED_MFA_ATTEMPTS` recentemente,
+ * rejeita QUALQUER tentativa (mesmo com código certo) até `locked_until` expirar.
+ */
+function assertNotLocked(credential) {
+  if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) {
+    const remainingMinutes = Math.ceil((credential.lockedUntil.getTime() - Date.now()) / 60000);
+    throw AppError.forbidden(
+      `Muitas tentativas de código inválido. Tente novamente em ${remainingMinutes} minuto(s).`,
+      'MFA_LOCKED'
+    );
+  }
+}
+
+/**
+ * registerFailedAttempt — incrementa o contador de falhas e, ao atingir o limite, bloqueia por
+ * `MFA_LOCKOUT_MINUTES` e audita o bloqueio (evento distinto de "código inválido" comum, para
+ * dar visibilidade a um possível ataque de força bruta).
+ */
+async function registerFailedAttempt(credential, userId, actorContext, transaction) {
+  credential.failedAttempts += 1;
+  let justLocked = false;
+  if (credential.failedAttempts >= MAX_FAILED_MFA_ATTEMPTS) {
+    credential.lockedUntil = new Date(Date.now() + MFA_LOCKOUT_MINUTES * 60 * 1000);
+    credential.failedAttempts = 0;
+    justLocked = true;
+  }
+  await credential.save({ transaction });
+
+  if (justLocked) {
+    await registrarAuditoria(
+      {
+        groupId: actorContext.groupId,
+        companyId: actorContext.companyId,
+        actorUserId: userId,
+        action: 'users.mfa.locked',
+        entityType: 'User',
+        entityId: userId,
+        reason: `Bloqueado por ${MFA_LOCKOUT_MINUTES} minutos após ${MAX_FAILED_MFA_ATTEMPTS} tentativas seguidas de código MFA inválido.`,
+      },
+      transaction
+    );
+  }
+}
+
+async function verifyMfa(userId, code, actorContext, transaction, requestMeta = null) {
   const credential = await getCredentialForUser(userId, transaction);
   if (!credential || !credential.enabled) {
     throw AppError.forbidden('MFA não está habilitado para este usuário. Habilite o MFA antes de continuar.', 'MFA_NOT_ENABLED');
   }
+  assertNotLocked(credential);
   if (!code) {
     throw AppError.badRequest('O campo "code" é obrigatório.', 'MFA_VALIDATION');
   }
@@ -174,16 +244,24 @@ async function verifyMfa(userId, code, actorContext, transaction) {
         const remaining = credential.recoveryCodesHash.slice();
         remaining.splice(i, 1);
         credential.recoveryCodesHash = remaining;
-        // eslint-disable-next-line no-await-in-loop
-        await credential.save({ transaction });
         break;
       }
     }
   }
 
   if (!valid) {
+    await registerFailedAttempt(credential, userId, actorContext, transaction);
     throw AppError.unauthorized('Código MFA inválido.', 'MFA_INVALID_CODE');
   }
+
+  // Sucesso: zera o contador de falhas (não deixa "acumular" entre tentativas legítimas).
+  credential.failedAttempts = 0;
+
+  // Detecção de novo dispositivo/origem (não bloqueia — só audita, ver hashDeviceFingerprint).
+  const fingerprint = hashDeviceFingerprint(requestMeta);
+  const isNewDevice = Boolean(fingerprint && credential.lastDeviceFingerprint && fingerprint !== credential.lastDeviceFingerprint);
+  if (fingerprint) credential.lastDeviceFingerprint = fingerprint;
+  await credential.save({ transaction });
 
   const ttlMinutes = await resolveStepUpTtlMinutes(actorContext, transaction);
   const now = new Date();
@@ -224,7 +302,22 @@ async function verifyMfa(userId, code, actorContext, transaction) {
     transaction
   );
 
-  return { verifiedAt: now, expiresAt, usedRecoveryCode };
+  if (isNewDevice) {
+    await registrarAuditoria(
+      {
+        groupId: actorContext.groupId,
+        companyId: actorContext.companyId,
+        actorUserId: userId,
+        action: 'users.mfa.new_device',
+        entityType: 'User',
+        entityId: userId,
+        reason: 'Verificação MFA bem-sucedida a partir de uma origem (IP/dispositivo) diferente da última conhecida — sinalizado para revisão, não bloqueado.',
+      },
+      transaction
+    );
+  }
+
+  return { verifiedAt: now, expiresAt, usedRecoveryCode, isNewDevice };
 }
 
 /**
@@ -237,8 +330,10 @@ async function disableMfa(userId, code, actorContext, transaction) {
   if (!credential || !credential.enabled) {
     throw AppError.badRequest('MFA não está habilitado para este usuário.', 'MFA_NOT_ENABLED');
   }
+  assertNotLocked(credential);
   const secret = decryptSecret(credential.secretEncrypted);
   if (!code || !authenticator.check(String(code), secret)) {
+    await registerFailedAttempt(credential, userId, actorContext, transaction);
     throw AppError.unauthorized('Código TOTP inválido — não é possível desabilitar o MFA.', 'MFA_INVALID_CODE');
   }
 

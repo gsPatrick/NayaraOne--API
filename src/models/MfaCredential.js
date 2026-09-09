@@ -54,6 +54,22 @@ module.exports = (sequelize) => {
         defaultValue: [],
         field: 'recovery_codes_hash',
       },
+      failedAttempts: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: 'failed_attempts',
+      },
+      lockedUntil: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'locked_until',
+      },
+      lastDeviceFingerprint: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'last_device_fingerprint',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishRentAdjusted } = require('./billingEvents.service');
 const { unavailableIndexSourceAdapter, IpcaIndexSourceAdapter, FgvIgpmIndexSourceAdapter } = require('./adapters/IndexSourceAdapter');
 const { getSetting } = require('../settings/settings.service');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -77,6 +78,14 @@ async function requestRentAdjustment(payload, actorUserId, transaction, indexSou
 
   const indexResult = await resolvedIndexSourceAdapter.getIndex(indexCode, period);
 
+  // REG-LOC-003 — evidência de versionamento: qual versão da política de reajuste estava
+  // vigente quando este registro foi gravado. NUNCA bloqueia o reajuste (fail-safe, igual ao
+  // padrão de REG-LOC-001/002 em collectionCase.service.js) — se a regra não estiver
+  // semeada/publicada para o tenant, `ruleVersionId` fica null (evaluateRule só retorna um id
+  // quando resolve uma RuleVersion concreta, ver rulesEngine.js).
+  const ruleEvaluation = await evaluateRule('REG-LOC-003', { rentAdjustmentRuleActive: true }, { groupId, companyId }, { transaction });
+  const ruleVersionId = ruleEvaluation.ruleVersionId || null;
+
   if (!indexResult || !indexResult.available) {
     const rentAdjustment = await RentAdjustment.create(
       {
@@ -89,7 +98,7 @@ async function requestRentAdjustment(payload, actorUserId, transaction, indexSou
         appliedPercentage: null,
         oldRentAmount,
         newRentAmount: null,
-        ruleVersionId: null,
+        ruleVersionId,
         status: 'PENDING_SOURCE',
         appliedAt: null,
         createdBy: actorUserId || null,
@@ -134,7 +143,7 @@ async function requestRentAdjustment(payload, actorUserId, transaction, indexSou
       appliedPercentage,
       oldRentAmount,
       newRentAmount,
-      ruleVersionId: null,
+      ruleVersionId,
       status: 'APPLIED',
       appliedAt: new Date(),
       createdBy: actorUserId || null,
