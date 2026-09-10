@@ -20,8 +20,29 @@ const personContactsService = require('../src/features/people/personContacts.ser
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
 const { createMockIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const mfaService = require('../src/features/users/mfa.service');
+const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+
+// withCommittedTenantTransaction — diferente de withRollbackTenantTransaction: faz COMMIT de
+// verdade. Só usado pelo teste de concorrência real abaixo (TEC-09), que precisa de duas
+// transações independentes de fato concorrentes contra o MESMO registro já persistido — uma
+// única transação (como o resto dos testes usa) não consegue simular concorrência real. O
+// próprio teste limpa o registro criado ao final.
+async function withCommittedTenantTransaction(tenantCtx, fn) {
+  const t = await sequelize.transaction();
+  try {
+    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantCtx.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantCtx.companyId }, transaction: t });
+    await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenantCtx.userId }, transaction: t });
+    const result = await fn(t);
+    await t.commit();
+    return result;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
 
 let tenant;
 
@@ -251,4 +272,32 @@ test('HOMO-05 verificação MFA de origem/dispositivo diferente é sinalizada (i
     });
     assert.equal(third.isNewDevice, false, 'mesma origem da verificação anterior não deve ser sinalizada de novo');
   });
+});
+
+// --- TEC-09: concorrência real em liquidação de lançamento financeiro ---
+test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem sucesso (lockVersion otimista)', async () => {
+  const tenantCtx = tenant;
+  const entry = await withCommittedTenantTransaction(tenantCtx, (t) =>
+    financialEntriesService.createFinancialEntry(
+      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)' },
+      tenantCtx.userId,
+      t
+    )
+  );
+
+  try {
+    const results = await Promise.allSettled([
+      withCommittedTenantTransaction(tenantCtx, (t) => financialEntriesService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
+      withCommittedTenantTransaction(tenantCtx, (t) => financialEntriesService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
+    ]);
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    assert.equal(succeeded, 1, 'exatamente uma das duas tentativas simultâneas deve ter sucesso');
+    assert.equal(failed, 1, 'a outra deve falhar (conflito de versão ou status já SETTLED) — nunca as duas passarem');
+  } finally {
+    // Limpeza: este teste precisa de commit real (concorrência de verdade não é simulável numa
+    // única transação), então remove explicitamente o registro criado — nunca fica no banco.
+    await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entry.id } });
+  }
 });
