@@ -21,7 +21,12 @@ const rentAdjustmentService = require('../src/features/billing/rentAdjustment.se
 const { createMockIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const mfaService = require('../src/features/users/mfa.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const { User } = require('../src/models');
+const usersService = require('../src/features/users/users.service');
+const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
+const { publishDomainEvent } = require('../src/engines/events/outbox');
+const { dispatchPendingEventsForCompany } = require('../src/engines/events/outbox-dispatcher');
+const { runWithCorrelationId } = require('../src/middlewares/correlationId.middleware');
+const { User, Session, Group, Company } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 // withCommittedTenantTransaction — diferente de withRollbackTenantTransaction: faz COMMIT de
@@ -299,5 +304,120 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
     // Limpeza: este teste precisa de commit real (concorrência de verdade não é simulável numa
     // única transação), então remove explicitamente o registro criado — nunca fica no banco.
     await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entry.id } });
+  }
+});
+
+// --- TEC-08: correlation ID amarra auditoria e evento à requisição que os originou ---
+test('TEC-08 registrarAuditoria e publishDomainEvent gravam o correlationId da requisição em curso', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const correlationId = 'c0ffee00-0000-4000-8000-000000000001';
+    const { auditRow, outboxRow } = await runWithCorrelationId(correlationId, async () => {
+      const audit = await registrarAuditoria(
+        {
+          groupId: tenant.groupId,
+          companyId: tenant.companyId,
+          actorUserId: tenant.userId,
+          action: 'homologacao.tec08_test',
+          entityType: 'User',
+          entityId: tenant.userId,
+          reason: 'Teste automatizado TEC-08.',
+        },
+        transaction
+      );
+      const outbox = await publishDomainEvent(
+        {
+          groupId: tenant.groupId,
+          companyId: tenant.companyId,
+          aggregateType: 'User',
+          aggregateId: tenant.userId,
+          eventType: 'homologacao.tec08_test',
+          payload: {},
+          idempotencyKey: `homologacao.tec08_test:${uniqueSuffix()}`,
+        },
+        transaction
+      );
+      return { auditRow: audit, outboxRow: outbox };
+    });
+
+    assert.equal(auditRow.correlationId, correlationId, 'auditoria deve herdar o correlationId do contexto ativo, sem precisar que o chamador passe manualmente');
+    assert.equal(outboxRow.correlationId, correlationId, 'evento do outbox deve herdar o mesmo correlationId');
+  });
+});
+
+// --- TEC-12: suspender/excluir usuário revoga sessões ativas imediatamente ---
+test('TEC-12 suspender um usuário revoga imediatamente todas as sessões ativas dele', async () => {
+  const suffix = uniqueSuffix();
+  const user = await User.create({
+    name: `HOMO QA TEC-12 ${suffix}`,
+    email: `homo-qa-tec12-${suffix}@nayaraone.dev`,
+    passwordHash: 'x',
+    status: 'ACTIVE',
+  });
+  const session = await Session.create({
+    userId: user.id,
+    groupId: tenant.groupId,
+    companyId: tenant.companyId,
+    refreshTokenHash: `fake-hash-${suffix}`,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
+
+  try {
+    assert.equal(session.revokedAt, null);
+
+    await usersService.updateUser(user.id, { status: 'SUSPENDED' }, tenant.userId, {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+    });
+
+    await session.reload();
+    assert.ok(session.revokedAt, 'sessão deve ser revogada assim que o usuário é suspenso — nunca continuar válida até expirar naturalmente');
+  } finally {
+    await session.destroy({ force: true }).catch(() => {});
+    await user.destroy({ force: true }).catch(() => {});
+  }
+});
+
+// --- TEC-06/TEC-07: despachante do outbox processa por tenant e é RLS-safe ---
+test('TEC-06/TEC-07 dispatchPendingEventsForCompany processa eventos PENDING do tenant e marca DISPATCHED', async () => {
+  const idempotencyKey = `homologacao.tec06_test:${uniqueSuffix()}`;
+
+  // Precisa de COMMIT real: dispatchPendingEventsForCompany abre sua própria transação (é
+  // assim que roda em produção, fora de qualquer request HTTP) — dado gravado numa transação
+  // que só existe pra ser revertida nunca seria visível pra ela (isolamento de transação).
+  const t = await sequelize.transaction();
+  let eventRow;
+  try {
+    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+    await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+    eventRow = await publishDomainEvent(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        aggregateType: 'User',
+        aggregateId: tenant.userId,
+        eventType: 'homologacao.tec06_test',
+        payload: {},
+        idempotencyKey,
+      },
+      t
+    );
+    await t.commit();
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+
+  try {
+    const group = await Group.findByPk(tenant.groupId);
+    const company = await sequelize.transaction((ct) =>
+      sequelize
+        .query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: ct })
+        .then(() => Company.findByPk(tenant.companyId, { transaction: ct }))
+    );
+    const result = await dispatchPendingEventsForCompany(group, company, { limit: 500 });
+    assert.ok(result.dispatched >= 1, 'deve despachar ao menos o evento recém-criado deste teste');
+  } finally {
+    await sequelize.query('DELETE FROM integration.outbox_events WHERE id = :id', { replacements: { id: eventRow.id } });
   }
 });

@@ -6,9 +6,15 @@ const express = require('express');
 const cors = require('cors');
 const routes = require('./src/routes');
 const errorHandler = require('./src/middlewares/errorHandler');
+const { correlationIdMiddleware } = require('./src/middlewares/correlationId.middleware');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
+const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 
 const app = express();
+
+// TEC-08: correlation ID por requisição — precisa vir antes de qualquer outro middleware pra
+// cobrir toda a cadeia de chamadas (auditoria, eventos) desde o primeiro byte processado.
+app.use(correlationIdMiddleware);
 
 // CORS — permite chamadas do(s) frontend(s) autorizados via CORS_ORIGIN (lista separada por
 // vírgula). Sem variável definida, libera geral (uso aceitável em homologação; em produção
@@ -63,6 +69,12 @@ app.listen(port, () => {
 // colaterais/timers pendurados em test runners que importam este arquivo).
 if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !== 'true') {
   startRadarMatchingJob();
+}
+
+// Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
+// todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.
+if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLED !== 'true') {
+  startOutboxDispatcherJob();
 }
 
 module.exports = app;

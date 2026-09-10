@@ -2,6 +2,7 @@
 
 const { OutboxEvent } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { getCurrentCorrelationId } = require('../../middlewares/correlationId.middleware');
 
 /**
  * publishDomainEvent — grava um evento de domínio em "integration"."outbox_events" NA MESMA
@@ -59,7 +60,11 @@ async function publishDomainEvent(event, transaction) {
       eventType,
       eventVersion: eventVersion || 1,
       payloadJson: payload || {},
-      correlationId: correlationId || null,
+      // TEC-08: se o chamador não informar explicitamente (a grande maioria não informa), usa
+      // o correlationId da requisição HTTP em curso (AsyncLocalStorage, ver
+      // correlationId.middleware.js) — liga automaticamente o evento à requisição que o
+      // originou, sem precisar tocar cada um dos pontos que chamam publishDomainEvent.
+      correlationId: correlationId || getCurrentCorrelationId(),
       causationId: causationId || null,
       idempotencyKey,
       classification: classification || null,

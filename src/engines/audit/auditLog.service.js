@@ -1,6 +1,7 @@
 'use strict';
 
 const { AuditLog, sequelize } = require('../../models');
+const { getCurrentCorrelationId } = require('../../middlewares/correlationId.middleware');
 
 /**
  * registrarAuditoria — grava uma entrada em "audit"."audit_log". "audit"."audit_log" tem RLS
@@ -41,6 +42,7 @@ async function registrarAuditoria(
     beforeJson: beforeJson || null,
     afterJson: afterJson || null,
     reason: reason || null,
+    correlationId: getCurrentCorrelationId(),
     occurredAt: new Date(),
     createdBy: actorUserId || null,
     updatedBy: actorUserId || null,

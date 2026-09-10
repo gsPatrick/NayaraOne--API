@@ -1,9 +1,24 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
-const { User } = require('../../models');
+const { User, Session } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+
+/**
+ * revokeAllSessionsForUser — TEC-12 (homologação 10/09/2026): suspender ou excluir um usuário
+ * não invalidava as sessões (refresh tokens) já emitidas — o usuário desligado continuava
+ * conseguindo renovar o access token por até 7 dias (JWT_REFRESH_TTL) depois de "desligado".
+ * Chamado sempre que o status deixa de ser ACTIVE ou o usuário é excluído — "break-glass"
+ * (revogação de emergência) usa o mesmo caminho.
+ */
+async function revokeAllSessionsForUser(userId) {
+  const [count] = await Session.update(
+    { revokedAt: new Date() },
+    { where: { userId, revokedAt: null } }
+  );
+  return count;
+}
 
 const BCRYPT_ROUNDS = 12;
 
@@ -98,6 +113,11 @@ async function updateUser(id, payload, actorUserId, actorContext = {}) {
   user.updatedBy = actorUserId || null;
   await user.save();
 
+  let revokedSessions = 0;
+  if (statusChanged && status !== 'ACTIVE') {
+    revokedSessions = await revokeAllSessionsForUser(user.id);
+  }
+
   if (actorContext.groupId && actorContext.companyId) {
     await registrarAuditoria({
       groupId: actorContext.groupId,
@@ -109,7 +129,8 @@ async function updateUser(id, payload, actorUserId, actorContext = {}) {
       beforeJson,
       afterJson: toSafeJson(user),
       reason: statusChanged
-        ? `Status do usuário "${user.name}" alterado para "${status}".`
+        ? `Status do usuário "${user.name}" alterado para "${status}".` +
+          (revokedSessions > 0 ? ` ${revokedSessions} sessão(ões) ativa(s) revogada(s) imediatamente.` : '')
         : `Usuário "${user.name}" atualizado.`,
     });
   }
@@ -123,6 +144,7 @@ async function deleteUser(id, actorUserId, actorContext = {}) {
   user.deletedBy = actorUserId || null;
   await user.save();
   await user.destroy();
+  const revokedSessions = await revokeAllSessionsForUser(id);
 
   if (actorContext.groupId && actorContext.companyId) {
     await registrarAuditoria({
@@ -133,11 +155,12 @@ async function deleteUser(id, actorUserId, actorContext = {}) {
       entityType: 'User',
       entityId: id,
       beforeJson,
-      reason: `Usuário "${user.name}" (${user.email}) excluído.`,
+      reason: `Usuário "${user.name}" (${user.email}) excluído.` +
+        (revokedSessions > 0 ? ` ${revokedSessions} sessão(ões) ativa(s) revogada(s) imediatamente.` : ''),
     });
   }
 
   return { id };
 }
 
-module.exports = { createUser, listUsers, getUser, getUserSafe, updateUser, deleteUser, toSafeJson };
+module.exports = { createUser, listUsers, getUser, getUserSafe, updateUser, deleteUser, revokeAllSessionsForUser, toSafeJson };
