@@ -2,20 +2,23 @@
 
 const AppError = require('../utils/AppError');
 const { failure } = require('../utils/httpResponse');
+const logger = require('../utils/logger');
 
 /**
  * Middleware de erro global do Express — único ponto que traduz qualquer
  * exceção (operacional ou não) em resposta HTTP padronizada.
  * Deve ser o último middleware montado em app.js.
+ *
+ * FIX TEC-13 (homologação 10/09/2026): antes só logava em dev, e como texto livre. Agora todo
+ * erro (esperado ou não) vira um log estruturado com correlationId + rota, sempre — em
+ * produção também, porque é exatamente lá que se precisa investigar um incidente depois.
  */
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const isProduction = process.env.NODE_ENV === 'production';
+  const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
 
   if (err instanceof AppError) {
-    if (!isProduction) {
-      // eslint-disable-next-line no-console
-      console.error(`[AppError] ${err.code}: ${err.message}`);
-    }
+    logger.warn({ ...context, code: err.code, statusCode: err.statusCode }, `[AppError] ${err.code}: ${err.message}`);
     return failure(res, {
       statusCode: err.statusCode,
       code: err.code,
@@ -51,8 +54,7 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
-  // eslint-disable-next-line no-console
-  console.error('[UnhandledError]', err);
+  logger.error({ ...context, err: { message: err?.message, name: err?.name, stack: err?.stack } }, '[UnhandledError]');
 
   return failure(res, {
     statusCode: 500,

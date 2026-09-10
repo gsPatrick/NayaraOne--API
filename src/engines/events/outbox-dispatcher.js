@@ -2,6 +2,7 @@
 
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, OutboxEvent } = require('../../models');
+const { outboxPendingGauge, outboxDeadLetterGauge } = require('../../utils/metrics');
 
 /**
  * Outbox dispatcher — worker/processor simples do padrão Transactional Outbox
@@ -102,6 +103,25 @@ async function dispatchPendingEvents({ limit = 100 } = {}) {
         console.error(`[OutboxDispatcher] Falha ao processar empresa ${company.id} (grupo ${group.id}): ${err.message}`);
       }
     }
+  }
+
+  // Métricas (TEC-13): contagem global de PENDING/DEAD_LETTER, agregada entre todos os
+  // tenants — é leitura operacional interna (nunca exposta a usuário final), não dado de
+  // negócio de uma empresa específica. RESSALVA HONESTA: como "integration"."outbox_events"
+  // tem RLS por company_id, esta contagem SEM SET LOCAL só enxerga todos os tenants de verdade
+  // enquanto a conexão da API tiver BYPASSRLS (ver pendência TEC-03/04) — se esse privilégio
+  // for corrigido no futuro, este COUNT passa a sempre ver zero e precisará ser reescrito para
+  // somar por tenant (mesmo padrão de SET LOCAL usado no resto deste arquivo).
+  try {
+    const [pendingCount, deadLetterCount] = await Promise.all([
+      OutboxEvent.count({ where: { status: 'PENDING' } }),
+      OutboxEvent.count({ where: { status: 'DEAD_LETTER' } }),
+    ]);
+    outboxPendingGauge.set(pendingCount);
+    outboxDeadLetterGauge.set(deadLetterCount);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[OutboxDispatcher] Falha ao atualizar métricas:', err.message);
   }
 
   return totals;

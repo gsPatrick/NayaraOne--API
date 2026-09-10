@@ -26,6 +26,7 @@ const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../src/engines/events/outbox');
 const { dispatchPendingEventsForCompany } = require('../src/engines/events/outbox-dispatcher');
 const { runWithCorrelationId } = require('../src/middlewares/correlationId.middleware');
+const { withTimeout, HEALTH_CHECK_TIMEOUT_MS } = require('../src/features/health/health.controller');
 const { User, Session, Group, Company } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -420,4 +421,24 @@ test('TEC-06/TEC-07 dispatchPendingEventsForCompany processa eventos PENDING do 
   } finally {
     await sequelize.query('DELETE FROM integration.outbox_events WHERE id = :id', { replacements: { id: eventRow.id } });
   }
+});
+
+// --- TEC-19: failure drill — banco indisponível não deve travar o healthcheck ---
+test('TEC-19 healthcheck nunca fica pendurado esperando o banco — responde em até HEALTH_CHECK_TIMEOUT_MS', async () => {
+  // Simula exatamente o cenário do drill real (host de banco inalcançável): uma promise que
+  // nunca resolve nem rejeita, representando um connect() TCP pendurado. Antes da correção,
+  // isso travava /health por 20+ segundos num teste manual real contra um IP inalcançável.
+  const neverResolves = new Promise(() => {});
+  const startedAt = Date.now();
+
+  await assert.rejects(() => withTimeout(neverResolves, 200));
+
+  const elapsedMs = Date.now() - startedAt;
+  assert.ok(elapsedMs < 500, `deveria ter desistido perto de 200ms, levou ${elapsedMs}ms`);
+});
+
+test('TEC-19 healthcheck não trava quando a operação termina normalmente dentro do timeout', async () => {
+  const fast = Promise.resolve('ok');
+  const result = await withTimeout(fast, HEALTH_CHECK_TIMEOUT_MS);
+  assert.equal(result, 'ok');
 });

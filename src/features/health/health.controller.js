@@ -19,17 +19,34 @@ try {
 }
 const deployedAt = new Date().toISOString();
 
+// FIX TEC-19 (homologação 10/09/2026, drill real): sem timeout próprio, `sequelize.authenticate()`
+// pode ficar pendurado por dezenas de segundos quando o host do banco está inacessível (o
+// timeout de "acquire" do pool do Sequelize não limita o tempo do connect() TCP de verdade em
+// todo cenário — confirmado num teste real apontando pra um IP inalcançável: /health não
+// respondia em 20+ segundos). Um healthcheck que trava é pior que um que falha rápido — o
+// orquestrador (Easypanel) não sabe se o processo travou ou só está devagar. Timeout próprio
+// garante resposta em no máximo HEALTH_CHECK_TIMEOUT_MS, sempre.
+const HEALTH_CHECK_TIMEOUT_MS = 4000;
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout após ${ms}ms`)), ms)),
+  ]);
+}
+
 /**
  * GET /health
  * Verifica a saúde do processo e, quando possível, a conectividade com o banco. Também informa
  * o commit publicado (campo `commit`) e o instante em que este processo subiu (`deployedAt`) —
  * usado para confirmar, sem ambiguidade, qual versão está de fato no ar num ambiente.
- * Não depende de contexto de tenant — usado por load balancers/orquestradores.
+ * Não depende de contexto de tenant — usado por load balancers/orquestradores. SEMPRE responde
+ * em até HEALTH_CHECK_TIMEOUT_MS, mesmo se o banco estiver completamente inacessível.
  */
 const getHealth = catchAsync(async (req, res) => {
   let database = 'unknown';
   try {
-    await sequelize.authenticate();
+    await withTimeout(sequelize.authenticate(), HEALTH_CHECK_TIMEOUT_MS);
     database = 'up';
   } catch (err) {
     database = 'down';
@@ -63,7 +80,7 @@ const getPing = catchAsync(async (req, res) => {
 const getDbReadiness = catchAsync(async (req, res) => {
   const startedAt = Date.now();
   try {
-    await sequelize.query('SELECT 1');
+    await withTimeout(sequelize.query('SELECT 1'), HEALTH_CHECK_TIMEOUT_MS);
   } catch (err) {
     return success(res, {
       statusCode: 503,
@@ -75,4 +92,4 @@ const getDbReadiness = catchAsync(async (req, res) => {
   });
 });
 
-module.exports = { getHealth, getPing, getDbReadiness };
+module.exports = { getHealth, getPing, getDbReadiness, withTimeout, HEALTH_CHECK_TIMEOUT_MS };

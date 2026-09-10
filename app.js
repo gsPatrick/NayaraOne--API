@@ -6,7 +6,10 @@ const express = require('express');
 const cors = require('cors');
 const routes = require('./src/routes');
 const errorHandler = require('./src/middlewares/errorHandler');
+const logger = require('./src/utils/logger');
 const { correlationIdMiddleware } = require('./src/middlewares/correlationId.middleware');
+const { requestLoggerMiddleware, metricsRecorderMiddleware } = require('./src/middlewares/requestLogger.middleware');
+const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 
@@ -15,6 +18,20 @@ const app = express();
 // TEC-08: correlation ID por requisição — precisa vir antes de qualquer outro middleware pra
 // cobrir toda a cadeia de chamadas (auditoria, eventos) desde o primeiro byte processado.
 app.use(correlationIdMiddleware);
+
+// TEC-13: log estruturado + métrica de latência por requisição — /health e /api/metrics ficam
+// de fora do log (ruído de healthcheck/scraping, não interessa pra investigar incidente).
+app.use(requestLoggerMiddleware);
+app.use(metricsRecorderMiddleware);
+
+// TEC-13: endpoint Prometheus — formato padrão, qualquer coletor (Prometheus, Grafana Cloud,
+// Better Stack etc.) sabe ler direto. Funciona sozinho via `curl` mesmo sem nenhum coletor
+// configurado. Fora do prefixo /api/v1 (mesmo padrão de /health), fora de qualquer auth (é
+// leitura operacional agregada, não dado de negócio de tenant nenhum — mesmo padrão do /health).
+app.get('/api/metrics', async (req, res) => {
+  res.set('Content-Type', metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
+});
 
 // CORS — permite chamadas do(s) frontend(s) autorizados via CORS_ORIGIN (lista separada por
 // vírgula). Sem variável definida, libera geral (uso aceitável em homologação; em produção
@@ -61,8 +78,7 @@ app.use(errorHandler);
 const port = Number(process.env.PORT) || 3000;
 
 app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
+  logger.info({ port, apiPrefix }, `Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
 });
 
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos
