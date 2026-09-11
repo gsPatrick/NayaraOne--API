@@ -22,12 +22,15 @@ const { createMockIndexSourceAdapter } = require('../src/features/billing/adapte
 const mfaService = require('../src/features/users/mfa.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const usersService = require('../src/features/users/users.service');
+const commissionsService = require('../src/features/finance/commissions.service');
 const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../src/engines/events/outbox');
 const { dispatchPendingEventsForCompany } = require('../src/engines/events/outbox-dispatcher');
 const { runWithCorrelationId } = require('../src/middlewares/correlationId.middleware');
 const { withTimeout, HEALTH_CHECK_TIMEOUT_MS } = require('../src/features/health/health.controller');
-const { User, Session, Group, Company } = require('../src/models');
+const authService = require('../src/features/auth/auth.service');
+const { authMiddleware } = require('../src/middlewares/auth.middleware');
+const { User, Session, Group, Company, AuditLog } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 // withCommittedTenantTransaction — diferente de withRollbackTenantTransaction: faz COMMIT de
@@ -441,4 +444,124 @@ test('TEC-19 healthcheck não trava quando a operação termina normalmente dent
   const fast = Promise.resolve('ok');
   const result = await withTimeout(fast, HEALTH_CHECK_TIMEOUT_MS);
   assert.equal(result, 'ok');
+});
+
+// --- ADV-12: sessão revogada não pode mais chamar a API, nem com o access token já emitido ---
+function fakeReqRes(token) {
+  const req = { header: (name) => (name.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined) };
+  const res = {};
+  return { req, res };
+}
+
+test('ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi revogada — não espera expirar', async () => {
+  const { accessToken, sessionId } = await authService.login({ email: 'admin@nayaraone.dev', password: 'DevAdmin#2026' });
+
+  try {
+    // Antes de revogar: o mesmo middleware usado em toda rota autenticada deve deixar passar.
+    const { req: reqBefore, res: resBefore } = fakeReqRes(accessToken);
+    let errBefore = 'not-called';
+    await authMiddleware(reqBefore, resBefore, (err) => { errBefore = err; });
+    assert.equal(errBefore, undefined, 'antes de revogar, o middleware deve chamar next() sem erro');
+    assert.ok(reqBefore.auth, 'req.auth deve ser populado quando a sessão é válida');
+
+    // Revoga a sessão (mesmo efeito de usersService.revokeAllSessionsForUser ao suspender).
+    await Session.update({ revokedAt: new Date() }, { where: { id: sessionId } });
+
+    // Mesmo access token, mesma chamada — agora deve ser rejeitado imediatamente.
+    const { req: reqAfter, res: resAfter } = fakeReqRes(accessToken);
+    let errAfter = 'not-called';
+    await authMiddleware(reqAfter, resAfter, (err) => { errAfter = err; });
+    assert.notEqual(errAfter, undefined, 'depois de revogar, o middleware deve chamar next(err)');
+    assert.equal(errAfter.code, 'SESSION_INVALID');
+  } finally {
+    await Session.destroy({ where: { id: sessionId }, force: true }).catch(() => {});
+  }
+});
+
+// --- ADV-08: webhook de assinatura duplicado/fora de ordem não corrompe estado ---
+test('ADV-08 webhook duplicado (mesma assinatura) é no-op idempotente — não reaplica efeito nem duplica auditoria', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { version, personIds } = await createSignableContractVersion(transaction);
+    const [signatureA, signatureB] = await signaturesService.initiateSignature(version.id, personIds, tenant.userId, transaction);
+
+    // Primeira entrega do webhook: aplica o efeito normalmente.
+    const first = await signaturesService.handleSignatureWebhook(signatureA.externalSignatureId, {}, transaction);
+    assert.equal(first.alreadyProcessed, false);
+    assert.equal(first.contractTransitioned, false, 'ainda falta a signatureB assinar, contrato não pode transicionar');
+
+    const auditCountBefore = await AuditLog.count({
+      where: { entityType: 'Signature', entityId: signatureA.id },
+      transaction,
+    });
+
+    // Provedor reenvia o MESMO webhook (duplicado) — não pode reaplicar nem duplicar auditoria.
+    const duplicate = await signaturesService.handleSignatureWebhook(signatureA.externalSignatureId, {}, transaction);
+    assert.equal(duplicate.alreadyProcessed, true, 'webhook duplicado deve ser reconhecido como já processado');
+    assert.equal(duplicate.contractTransitioned, false);
+
+    const auditCountAfter = await AuditLog.count({
+      where: { entityType: 'Signature', entityId: signatureA.id },
+      transaction,
+    });
+    assert.equal(auditCountAfter, auditCountBefore, 'webhook duplicado não pode gravar uma segunda linha de auditoria');
+
+    // Fecha a assinatura restante: agora sim o contrato transiciona para SIGNED.
+    const last = await signaturesService.handleSignatureWebhook(signatureB.externalSignatureId, {}, transaction);
+    assert.equal(last.contractTransitioned, true);
+
+    const contractAfterAllSigned = await contractsService.getContract(version.contractId, transaction);
+    assert.equal(contractAfterAllSigned.status, 'SIGNED');
+
+    // "Fora de ordem": o webhook da PRIMEIRA assinatura chega de novo, atrasado, depois que o
+    // contrato inteiro já virou SIGNED. Não pode tentar retransicionar (o guard `contract.status
+    // === 'SIGNING'` já barra isso) nem lançar erro — precisa continuar respondendo no-op limpo.
+    const stale = await signaturesService.handleSignatureWebhook(signatureA.externalSignatureId, {}, transaction);
+    assert.equal(stale.alreadyProcessed, true);
+    assert.equal(stale.contractTransitioned, false, 'webhook atrasado não pode reacionar transição de contrato já SIGNED');
+
+    const contractStillSigned = await contractsService.getContract(version.contractId, transaction);
+    assert.equal(contractStillSigned.status, 'SIGNED', 'estado final do contrato não pode ser corrompido por webhook fora de ordem');
+  });
+});
+
+// --- ADV-18: rateio (parcelamento de comissão) sempre fecha em R$0,00 de diferença, mesmo com dízima ---
+test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o totalAmount, mesmo com divisão não exata', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // 1000 / 3 = 333.333... — o caso clássico de dízima que quebra rateio ingênuo.
+    // 100.01 / 7 — valor com centavo ímpar, ainda mais propenso a sobrar/faltar 1 centavo.
+    const cases = [
+      { baseAmount: 3000, percentage: 33.33333, installmentsCount: 3 }, // totalAmount ~999.9999 -> 1000.00 arredondado
+      { baseAmount: 1000.07, percentage: 10, installmentsCount: 7 },
+      { baseAmount: 50, percentage: 100, installmentsCount: 11 },
+    ];
+
+    for (const testCase of cases) {
+      // eslint-disable-next-line no-await-in-loop
+      const { commission, installments } = await commissionsService.createCommission(
+        {
+          groupId: tenant.groupId,
+          companyId: tenant.companyId,
+          beneficiaryUserId: tenant.userId,
+          baseAmount: testCase.baseAmount,
+          percentage: testCase.percentage,
+          installmentsCount: testCase.installmentsCount,
+        },
+        tenant.userId,
+        transaction
+      );
+
+      assert.equal(installments.length, testCase.installmentsCount);
+
+      const sumInCents = installments.reduce((acc, i) => acc + Math.round(Number(i.amount) * 100), 0);
+      const totalInCents = Math.round(Number(commission.totalAmount) * 100);
+      assert.equal(
+        sumInCents,
+        totalInCents,
+        `soma das ${testCase.installmentsCount} parcelas (${sumInCents} centavos) deve fechar exatamente com totalAmount (${totalInCents} centavos), sem sobra nem falta de 1 centavo`
+      );
+
+      // Nenhuma parcela individual pode ser negativa ou zero (rateio degenerado).
+      installments.forEach((i) => assert.ok(Number(i.amount) > 0, 'nenhuma parcela do rateio pode ficar em R$0,00 ou negativa'));
+    }
+  });
 });

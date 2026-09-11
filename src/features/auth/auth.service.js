@@ -73,18 +73,15 @@ async function resolveActiveTenant(userId, requestedCompanyId, transaction) {
 async function issueTokensForSession({ user, groupId, companyId, transaction, userAgent, ipAddress }) {
   const access = await getEffectiveAccess(user.id, companyId, transaction);
 
-  const claims = {
-    sub: user.id,
-    group_id: groupId,
-    company_id: companyId,
-    roles: access.roles.map((r) => r.name),
-    permissions: access.permissions,
-  };
-
-  const accessToken = signAccessToken(claims);
   const rawRefreshToken = crypto.randomUUID() + '.' + crypto.randomBytes(32).toString('hex');
   const refreshToken = signRefreshToken({ sub: user.id, group_id: groupId, company_id: companyId, jti: rawRefreshToken });
 
+  // FIX ADV-12 (homologação 10/09/2026): a sessão precisa existir ANTES do access token ser
+  // assinado — o token carrega `session_id` na claim pra que authMiddleware consiga checar, a
+  // CADA requisição autenticada, se essa sessão específica já foi revogada (ver
+  // src/middlewares/auth.middleware.js). Antes, revogar uma sessão (suspender usuário, logout
+  // remoto) só bloqueava a RENOVAÇÃO do token — o access token já emitido continuava
+  // funcionando normalmente até expirar sozinho (até 15 minutos), mesmo tendo sido revogado.
   const session = await Session.create(
     {
       userId: user.id,
@@ -99,6 +96,17 @@ async function issueTokensForSession({ user, groupId, companyId, transaction, us
     },
     { transaction }
   );
+
+  const claims = {
+    sub: user.id,
+    group_id: groupId,
+    company_id: companyId,
+    session_id: session.id,
+    roles: access.roles.map((r) => r.name),
+    permissions: access.permissions,
+  };
+
+  const accessToken = signAccessToken(claims);
 
   return { accessToken, refreshToken, session, claims };
 }

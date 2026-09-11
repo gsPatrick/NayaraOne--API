@@ -13,8 +13,19 @@ const { verifyAccessToken } = require('../utils/jwt');
  * Fail closed (IAM-015): ausência de header, token malformado, assinatura inválida ou
  * token expirado sempre resultam em 401 — nunca em prosseguir sem identidade resolvida.
  * Deve ser montado em toda rota que não seja pública (health/ping/auth/login/refresh).
+ *
+ * FIX ADV-12 (homologação 10/09/2026): antes, revogar uma sessão (suspender usuário, logout
+ * remoto) só impedia RENOVAR o token — um access token já emitido continuava funcionando
+ * normalmente em toda rota até expirar sozinho (até 15 minutos), mesmo já revogado. Agora
+ * checa `session_id` (claim adicionada em auth.service.js) a CADA requisição autenticada —
+ * sessão revogada ou expirada derruba o acesso na hora, não só na próxima renovação.
+ *
+ * RESSALVA HONESTA: "core"."sessions" não tem RLS por tenant (é identidade global, mesmo
+ * padrão de "core"."users") — a checagem abaixo é uma busca direta por ID (não depende de
+ * app.company_id estar setado), então não tem a mesma armadilha de RLS que outras correções
+ * desta rodada tiveram.
  */
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const header = req.header('authorization') || req.header('Authorization');
   if (!header || !header.startsWith('Bearer ')) {
     return next(AppError.unauthorized('Token de acesso ausente.', 'MISSING_ACCESS_TOKEN'));
@@ -37,6 +48,25 @@ function authMiddleware(req, res, next) {
       AppError.unauthorized('Token de acesso não carrega contexto de tenant completo.', 'INVALID_ACCESS_TOKEN_CLAIMS')
     );
   }
+
+  if (payload.session_id) {
+    try {
+      // require tardio pra evitar dependência circular (models -> ... -> middlewares).
+      const { Session } = require('../models');
+      const session = await Session.findByPk(payload.session_id);
+      if (!session || session.revokedAt || session.expiresAt < new Date()) {
+        return next(AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID'));
+      }
+    } catch (err) {
+      // Express 4 não captura rejeição de promise automaticamente em middleware async — sem
+      // este catch, uma falha no banco aqui deixaria a requisição pendurada pra sempre em vez
+      // de responder com erro (a mesma classe de problema corrigida no healthcheck, TEC-19).
+      return next(err);
+    }
+  }
+  // Tokens antigos (emitidos antes desta correção) não carregam session_id — continuam
+  // válidos normalmente até expirar sozinhos (no máximo 15 minutos de vida restante),
+  // sem quebrar quem já estava logado no momento do deploy.
 
   req.auth = {
     userId: payload.sub,
