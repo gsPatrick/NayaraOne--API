@@ -234,6 +234,39 @@ const compareInspections = catchAsync(async (req, res) => {
   );
   return success(res, { data: result });
 });
+const attachInspectionItemMedia = catchAsync(async (req, res) => {
+  const link = await req.withTenantTransaction((t) =>
+    inspectionsService.attachInspectionItemMedia(req.params.itemId, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: link });
+});
+const listInspectionItemMedia = catchAsync(async (req, res) => {
+  const links = await req.withTenantTransaction((t) => inspectionsService.listInspectionItemMedia(req.params.itemId, t));
+  return success(res, { data: links });
+});
+const signInspection = catchAsync(async (req, res) => {
+  const signature = await req.withTenantTransaction((t) =>
+    inspectionsService.signInspection(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: signature });
+});
+const listInspectionSignatures = catchAsync(async (req, res) => {
+  const signatures = await req.withTenantTransaction((t) => inspectionsService.listInspectionSignatures(req.params.id, t));
+  return success(res, { data: signatures });
+});
+const generateInspectionReport = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    inspectionsService.generateInspectionReport(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
+const getInspectionReport = catchAsync(async (req, res) => {
+  const { pdfBytes, reportHash } = await req.withTenantTransaction((t) => inspectionsService.getInspectionReport(req.params.id, t));
+  res.set('Content-Type', 'application/pdf');
+  res.set('X-Report-Sha256', reportHash);
+  res.set('Content-Disposition', `attachment; filename="vistoria-${req.params.id}.pdf"`);
+  return res.status(200).send(pdfBytes);
+});
 
 // --- Key deliveries ---
 const createKeyDelivery = catchAsync(async (req, res) => {
@@ -318,6 +351,7 @@ module.exports = {
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
+  attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,

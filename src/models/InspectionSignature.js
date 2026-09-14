@@ -3,12 +3,13 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * InspectionItem — tabela "legal"."inspection_items"
- * Item/ambiente avaliado dentro de uma vistoria, com condição registrada.
+ * InspectionSignature — tabela "legal"."inspection_signatures"
+ * Assinatura digital de uma parte (locador/locatário/vistoriador) confirmando o resultado de
+ * uma vistoria. Append-only (sem paranoid) — mesmo padrão de imutabilidade de "legal"."signatures".
  */
 module.exports = (sequelize) => {
-  const InspectionItem = sequelize.define(
-    'InspectionItem',
+  const InspectionSignature = sequelize.define(
+    'InspectionSignature',
     {
       id: {
         type: DataTypes.UUID,
@@ -31,31 +32,26 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'inspection_id',
       },
-      itemName: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        field: 'item_name',
-      },
-      condition: {
+      partyRole: {
         type: DataTypes.STRING(32),
-        allowNull: true,
-        field: 'condition',
-        comment: "GOOD|REGULAR|DAMAGED",
+        allowNull: false,
+        field: 'party_role',
+        comment: 'LANDLORD|TENANT|INSPECTOR',
       },
-      notes: {
-        type: DataTypes.TEXT,
+      signedByUserId: {
+        type: DataTypes.UUID,
         allowNull: true,
-        field: 'notes',
+        field: 'signed_by_user_id',
       },
-      damageDescription: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'damage_description',
+      signatureHash: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        field: 'signature_hash',
       },
-      estimatedBudget: {
-        type: DataTypes.DECIMAL(14, 2),
-        allowNull: true,
-        field: 'estimated_budget',
+      signedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: 'signed_at',
       },
       createdBy: {
         type: DataTypes.UUID,
@@ -67,23 +63,16 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'updated_by',
       },
-      deletedBy: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'deleted_by',
-      },
     },
     {
       schema: 'legal',
-      tableName: 'inspection_items',
+      tableName: 'inspection_signatures',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
-      paranoid: true,
-      deletedAt: 'deleted_at',
       underscored: true,
     }
   );
 
-  return InspectionItem;
+  return InspectionSignature;
 };

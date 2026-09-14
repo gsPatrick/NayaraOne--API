@@ -46,6 +46,12 @@ legalRouter.get('/legal/inspections/:id', requirePermission('legal:read'), legal
 legalRouter.post('/legal/inspections/:id/complete', requirePermission('legal:update'), legalController.completeInspection);
 legalRouter.post('/legal/inspections/:id/items', requirePermission('legal:create'), legalController.addInspectionItem);
 legalRouter.get('/legal/inspections/:id/items', requirePermission('legal:read'), legalController.listInspectionItems);
+legalRouter.post('/legal/inspections/items/:itemId/media', requirePermission('legal:create'), legalController.attachInspectionItemMedia);
+legalRouter.get('/legal/inspections/items/:itemId/media', requirePermission('legal:read'), legalController.listInspectionItemMedia);
+legalRouter.post('/legal/inspections/:id/sign', requirePermission('legal:update'), requireRecentMfa, legalController.signInspection);
+legalRouter.get('/legal/inspections/:id/signatures', requirePermission('legal:read'), legalController.listInspectionSignatures);
+legalRouter.post('/legal/inspections/:id/report', requirePermission('legal:update'), legalController.generateInspectionReport);
+legalRouter.get('/legal/inspections/:id/report', requirePermission('legal:read'), legalController.getInspectionReport);
 
 // Key deliveries
 legalRouter.post('/legal/key-deliveries', requirePermission('legal:create'), legalController.createKeyDelivery);

@@ -61,6 +61,7 @@ const modelDefiners = {
   LegalDeadline: require('./LegalDeadline'),
   Inspection: require('./Inspection'),
   InspectionItem: require('./InspectionItem'),
+  InspectionSignature: require('./InspectionSignature'),
   Guarantee: require('./Guarantee'),
   KeyDelivery: require('./KeyDelivery'),
   EvidencePackage: require('./EvidencePackage'),

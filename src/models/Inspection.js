@@ -69,6 +69,21 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      reportPdfBytes: {
+        type: DataTypes.BLOB,
+        allowNull: true,
+        field: 'report_pdf_bytes',
+      },
+      reportHash: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'report_hash',
+      },
+      reportGeneratedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'report_generated_at',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
