@@ -69,7 +69,13 @@ definido neste estágio do contrato — a definir junto com a contratante se/qua
 - **Backup automático e restore testado** (TEC-16/TEC-17): depende de provisionar isso no
   Postgres gerenciado (o Easypanel pode ou não já oferecer isso conforme o plano contratado —
   checar direto com o Easypanel).
-- **Usuário de banco com privilégio mínimo** (TEC-03/04): hoje a API conecta com um usuário
-  superusuário do Postgres, que ignora a proteção RLS por completo. Correção identificada,
-  decisão consciente (10/09/2026) de não aplicar agora por ser troca de credencial em ambiente
-  compartilhado — ver detalhe na conversa de homologação.
+- ~~Usuário de banco com privilégio mínimo (TEC-03/04)~~ — **resolvido em 14/09/2026**. Criado
+  o role `nayara_runtime` (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`), com grants
+  explícitos de SELECT/INSERT/UPDATE/DELETE nos 11 schemas da aplicação e `ALTER DEFAULT
+  PRIVILEGES` para que migrations futuras já herdem o grant automaticamente. Confirmado ao
+  vivo: `SELECT` com `app.company_id` falso retorna 0 linhas (antes retornava dados reais).
+  A troca revelou e corrigiu dois bugs reais de RLS que estavam mascarados pelo superusuário
+  (checagem de sessão do ADV-12 e revogação de sessão do TEC-12, ambas rodavam sem contexto de
+  tenant) — suite completa (86/86) revalidada contra o usuário novo. **Pendente**: atualizar a
+  variável `DATABASE_URL` no ambiente do Easypanel com a credencial nova (fora do meu acesso
+  direto à plataforma).
