@@ -24,6 +24,29 @@ function assertPositiveAmount(amount) {
   }
 }
 
+// FIX AUD-2026-09-14 (reportado pela cliente: sistema aceitou vencimento no ano "92026"):
+// nenhuma validação de faixa existia sobre `dueAt` — o campo DATE do Postgres aceita qualquer
+// ano dentro do range do tipo, e nada no backend rejeitava um valor absurdo digitado por engano
+// (typo de dígito extra) no front. Fail closed: vencimento precisa estar num intervalo humano
+// plausível (100 anos atrás a 50 anos à frente), nunca um valor literalmente impossível.
+const DUE_DATE_MIN_YEAR = new Date().getUTCFullYear() - 100;
+const DUE_DATE_MAX_YEAR = new Date().getUTCFullYear() + 50;
+
+function assertReasonableDueDate(dueAt) {
+  if (dueAt === undefined || dueAt === null || dueAt === '') return;
+  const parsed = new Date(dueAt);
+  if (Number.isNaN(parsed.getTime())) {
+    throw AppError.badRequest('O campo "dueAt" não é uma data válida.', 'FINANCE_ENTRY_VALIDATION');
+  }
+  const year = parsed.getUTCFullYear();
+  if (year < DUE_DATE_MIN_YEAR || year > DUE_DATE_MAX_YEAR) {
+    throw AppError.badRequest(
+      `O campo "dueAt" tem um ano fora do intervalo plausível (${DUE_DATE_MIN_YEAR} a ${DUE_DATE_MAX_YEAR}) — verifique se não há um dígito a mais ou a menos na data.`,
+      'FINANCE_ENTRY_VALIDATION'
+    );
+  }
+}
+
 /**
  * createFinancialEntry — cria uma obrigação/direito (conta a pagar/receber) em status PENDING.
  * `idempotencyKey`, quando informada, impede duplicidade (ex.: reprocessar o mesmo import não
@@ -60,6 +83,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     throw AppError.badRequest(`O campo "nature" deve ser um de: ${NATURES.join(', ')}.`, 'FINANCE_ENTRY_VALIDATION');
   }
   assertPositiveAmount(amount);
+  assertReasonableDueDate(dueAt);
 
   await assertNoDuplicatePayment(FinancialEntry, idempotencyKey, transaction);
 
@@ -135,6 +159,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   }
   const beforeJson = entry.toJSON();
   const { bankAccountId, costCenterId, resultCenterId, dueAt, description } = payload;
+  if (dueAt !== undefined) assertReasonableDueDate(dueAt);
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;

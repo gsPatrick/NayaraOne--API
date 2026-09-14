@@ -60,11 +60,29 @@ async function assertRequirementsGate(contract, transaction) {
 // pular esse caminho. Resultado real observado: contrato foi de DRAFT a ACTIVE sem nenhuma
 // versão de documento nem assinatura. Os dois gates abaixo fecham essa lacuna na própria
 // máquina de estados, então qualquer chamador (endpoint manual ou webhook) fica protegido.
+// FIX AUD-008 (homologação 14/09/2026, reprovado pela cliente com evidência real — contrato
+// b7198a6c-7748-433b-9efc-331e1a87b64d): o gate anterior só checava se EXISTIA alguma
+// ContractVersion (versionCount > 0), sem checar se essa versão tinha um documento real
+// anexado (documentFileId). Isso permitia criar uma versão só com um texto qualquer (satisfaz
+// "content não vazio", ver contractVersions.service.js) e avançar até SIGNING com um
+// content_hash calculado em cima de nada que representasse o documento de verdade. Confirmado
+// no ambiente: contrato tinha v1 com hash mas documentFileId null, em SIGNING. Agora o gate
+// exige que a ÚLTIMA versão tenha um documentFileId real (arquivo efetivamente anexado).
 async function assertDocumentGate(contract, transaction) {
-  const versionCount = await ContractVersion.count({ where: { contractId: contract.id }, transaction });
-  if (versionCount === 0) {
+  const latestVersion = await ContractVersion.findOne({
+    where: { contractId: contract.id },
+    order: [['version_number', 'DESC']],
+    transaction,
+  });
+  if (!latestVersion) {
     throw AppError.conflict(
       'O contrato precisa ter ao menos uma versão de documento registrada antes de avançar para "SIGNING".',
+      'LEGAL_CONTRACT_DOCUMENT_GATE'
+    );
+  }
+  if (!latestVersion.documentFileId) {
+    throw AppError.conflict(
+      'A versão mais recente do contrato não tem um documento real anexado (documentFileId ausente) — não é possível avançar para "SIGNING" com um hash calculado sobre um conteúdo que não representa o documento de verdade.',
       'LEGAL_CONTRACT_DOCUMENT_GATE'
     );
   }

@@ -127,6 +127,13 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   const beforeJson = offer.toJSON();
   const { askingPrice, confidentialMinPrice, acceptsFinancing, acceptsTrade, status, startsAt, endsAt, reasonCode } = payload;
 
+  // FIX AUD-2026-09-14 (reportado pela cliente: imóvel aparece simultaneamente como
+  // "Publicado" e "Sem oferta"): ao pausar/encerrar a ÚLTIMA offer ACTIVE de um imóvel,
+  // nada revertia property.publicationStatus — o imóvel ficava PUBLISHED pra sempre, mesmo
+  // sem nenhuma offer ACTIVE por trás. Agora, se essa era a offer ACTIVE que sustentava a
+  // publicação e não sobra nenhuma outra ACTIVE, o imóvel volta para INACTIVE.
+  const wasActive = offer.status === 'ACTIVE';
+
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!OFFER_STATUSES.includes(normalizedStatus)) {
@@ -164,6 +171,33 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   if (endsAt !== undefined) offer.endsAt = endsAt;
   offer.updatedBy = actorUserId || null;
   await offer.save({ transaction });
+
+  if (wasActive && offer.status !== 'ACTIVE' && property.publicationStatus === 'PUBLISHED') {
+    const remainingActive = await PropertyOffer.count({
+      where: { propertyId, status: 'ACTIVE' },
+      transaction,
+    });
+    if (remainingActive === 0) {
+      const propertyBeforeJson = property.toJSON();
+      property.publicationStatus = 'INACTIVE';
+      property.updatedBy = actorUserId || null;
+      await property.save({ transaction });
+      await registrarAuditoria(
+        {
+          groupId: property.groupId,
+          companyId: property.companyId,
+          actorUserId,
+          action: 'property.auto_unpublish',
+          entityType: 'Property',
+          entityId: property.id,
+          beforeJson: propertyBeforeJson,
+          afterJson: property.toJSON(),
+          reason: `Imóvel "${property.title}" despublicado automaticamente — a última offer ACTIVE (${offer.id}) foi alterada para ${offer.status}, sem nenhuma outra offer ACTIVE restante.`,
+        },
+        transaction
+      );
+    }
+  }
 
   await registrarAuditoria(
     {

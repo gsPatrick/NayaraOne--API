@@ -30,7 +30,7 @@ const { runWithCorrelationId } = require('../src/middlewares/correlationId.middl
 const { withTimeout, HEALTH_CHECK_TIMEOUT_MS } = require('../src/features/health/health.controller');
 const authService = require('../src/features/auth/auth.service');
 const { authMiddleware } = require('../src/middlewares/auth.middleware');
-const { User, Session, Group, Company, AuditLog } = require('../src/models');
+const { User, Session, Group, Company, AuditLog, File } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 // withCommittedTenantTransaction — diferente de withRollbackTenantTransaction: faz COMMIT de
@@ -90,9 +90,25 @@ async function createLeaseWithParties(transaction) {
 async function createSignableContractVersion(transaction) {
   const contract = await createLeaseWithParties(transaction);
   await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+  // FIX AUD-008 (14/09/2026): assertDocumentGate agora exige um File real anexado
+  // (documentFileId), não só um "content" textual — este teste precisa simular o mesmo caminho
+  // que um caso real de produção seguiria (documento efetivamente carregado).
+  const file = await File.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      storageKey: `homo-qa/contracts/${uniqueSuffix()}.pdf`,
+      fileName: `contrato-${uniqueSuffix()}.pdf`,
+      mimeType: 'application/pdf',
+      uploadedByUserId: tenant.userId,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
+  );
   const version = await contractVersionsService.createContractVersion(
     contract.id,
-    { content: `HOMO QA — corpo do contrato ${uniqueSuffix()}` },
+    { content: `HOMO QA — corpo do contrato ${uniqueSuffix()}`, documentFileId: file.id },
     tenant.userId,
     transaction
   );
@@ -224,6 +240,56 @@ test('AUD-008 criar versão de contrato com content vazio/só espaço é rejeita
     // conteúdo real continua funcionando normalmente.
     const version = await contractVersionsService.createContractVersion(contract.id, { content: 'Texto real do contrato' }, tenant.userId, transaction);
     assert.ok(version.contentHash);
+  });
+});
+
+// --- AUD-2026-09-14: lançamento financeiro não pode aceitar um ano de vencimento absurdo
+// (reportado pela cliente: sistema aceitou vencimento no ano "92026") ---
+test('AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra por engano) tanto na criação quanto na edição', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await assert.rejects(
+      () =>
+        financialEntriesService.createFinancialEntry(
+          {
+            groupId: tenant.groupId,
+            companyId: tenant.companyId,
+            entryType: 'DEBIT',
+            nature: 'PAYABLE',
+            amount: 100,
+            dueAt: '92026-09-20',
+          },
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.equal(err.code, 'FINANCE_ENTRY_VALIDATION');
+        return true;
+      }
+    );
+
+    // Data plausível continua funcionando normalmente.
+    const entry = await financialEntriesService.createFinancialEntry(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        entryType: 'DEBIT',
+        nature: 'PAYABLE',
+        amount: 100,
+        dueAt: '2026-09-20',
+      },
+      tenant.userId,
+      transaction
+    );
+    assert.ok(entry.id);
+
+    // Edição também precisa recusar o mesmo tipo de valor absurdo.
+    await assert.rejects(
+      () => financialEntriesService.updateFinancialEntry(entry.id, { dueAt: '92026-09-20' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'FINANCE_ENTRY_VALIDATION');
+        return true;
+      }
+    );
   });
 });
 
@@ -476,6 +542,36 @@ test('ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi re
   } finally {
     await Session.destroy({ where: { id: sessionId }, force: true }).catch(() => {});
   }
+});
+
+// --- AUD-008 (reaberto pela cliente 14/09/2026): reproduz o caso real do contrato
+// b7198a6c-7748-433b-9efc-331e1a87b64d — versão com content_hash calculado, mas sem documento
+// real anexado (documentFileId null), avançando até SIGNING. O fix anterior só bloqueava
+// content vazio; este teste prova que agora também é necessário um File real. ---
+test('AUD-008b versão SEM documentFileId (documento real) não pode avançar o contrato para SIGNING', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+    // Mesma reprodução do caso real: content textual "válido" (não vazio), mas SEM documentFileId.
+    await contractVersionsService.createContractVersion(
+      contract.id,
+      { content: `HOMO QA — corpo sem documento real ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
+
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'LEGAL_CONTRACT_DOCUMENT_GATE');
+        return true;
+      },
+      'sem documentFileId real, o contrato não pode chegar a SIGNING — este era exatamente o defeito reportado'
+    );
+  });
 });
 
 // --- ADV-08: webhook de assinatura duplicado/fora de ordem não corrompe estado ---

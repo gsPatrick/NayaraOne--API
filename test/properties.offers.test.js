@@ -111,3 +111,74 @@ test('offers: mudança de preço gera INSERT append-only em property_price_histo
     assert.equal(Number(history[0].newPrice), 300000);
   });
 });
+
+// FIX AUD-2026-09-14 (reportado pela cliente: imóvel aparece simultaneamente como "Publicado" e
+// "Sem oferta") — reproduz o caso real: imóvel PUBLISHED com uma offer ACTIVE; ao pausar/encerrar
+// essa offer (a última ACTIVE), o imóvel precisa voltar pra INACTIVE automaticamente, nunca ficar
+// PUBLISHED sem nenhuma offer ACTIVE por trás.
+test('offers: encerrar a última offer ACTIVE de um imóvel PUBLISHED despublica ele automaticamente', async () => {
+  const suffix = uniqueSuffix();
+
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await propertiesService.createProperty(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        title: `Imóvel Unpublish ${suffix}`,
+        internalCode: `UNP-${suffix}`,
+        propertyType: 'RESIDENTIAL',
+      },
+      tenant.userId,
+      transaction
+    );
+
+    const offer = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 400000 }, tenant.userId, transaction);
+    assert.equal(offer.status, 'ACTIVE');
+
+    // Simula o imóvel já publicado (sem depender da regra de vídeo obrigatório do publish.service).
+    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction);
+
+    await offersService.updateOffer(property.id, offer.id, { status: 'CLOSED' }, tenant.userId, transaction);
+
+    const propertyAfter = await propertiesService.getProperty(property.id, transaction);
+    assert.equal(
+      propertyAfter.publicationStatus,
+      'INACTIVE',
+      'imóvel não pode continuar PUBLISHED depois que a última offer ACTIVE foi encerrada — era exatamente o defeito reportado'
+    );
+
+    const remainingActive = await offersService.listOffers(property.id, transaction, { status: 'ACTIVE' });
+    assert.equal(remainingActive.length, 0);
+  });
+});
+
+test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo NÃO despublica ao encerrar a supersedida', async () => {
+  const suffix = uniqueSuffix();
+
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await propertiesService.createProperty(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        title: `Imóvel Unpublish Mantém ${suffix}`,
+        internalCode: `UNPM-${suffix}`,
+        propertyType: 'RESIDENTIAL',
+      },
+      tenant.userId,
+      transaction
+    );
+
+    const offer1 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 400000 }, tenant.userId, transaction);
+    const offer2 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
+    // offer1 já virou SUPERSEDED automaticamente aqui (offer2 é a ACTIVE atual).
+
+    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction);
+
+    // Tentar "reencerrar" a offer1 (já SUPERSEDED, nunca foi a ACTIVE vigente nesta chamada)
+    // não pode mexer na publicação, porque offer2 continua ACTIVE sustentando ela.
+    await offersService.updateOffer(property.id, offer1.id, { status: 'CLOSED' }, tenant.userId, transaction);
+
+    const propertyAfter = await propertiesService.getProperty(property.id, transaction);
+    assert.equal(propertyAfter.publicationStatus, 'PUBLISHED', 'não pode despublicar enquanto ainda existe outra offer ACTIVE (offer2)');
+  });
+});

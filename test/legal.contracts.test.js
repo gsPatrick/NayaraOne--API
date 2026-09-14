@@ -9,6 +9,24 @@ const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
 const AppError = require('../src/utils/AppError');
+const { File } = require('../src/models');
+
+async function createFakeDocumentFile(transaction) {
+  const suffix = uniqueSuffix();
+  return File.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      storageKey: `homo-qa/contracts/${suffix}.pdf`,
+      fileName: `contrato-${suffix}.pdf`,
+      mimeType: 'application/pdf',
+      uploadedByUserId: tenant.userId,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
+  );
+}
 
 let tenant;
 
@@ -67,7 +85,8 @@ test('HOM-001: contrato não avança para SIGNED sem todas as assinaturas confir
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
-    await contractVersionsService.createContractVersion(contract.id, { content: 'HOMO QA — corpo do contrato de teste' }, tenant.userId, transaction);
+    const file = await createFakeDocumentFile(transaction);
+    await contractVersionsService.createContractVersion(contract.id, { content: 'HOMO QA — corpo do contrato de teste', documentFileId: file.id }, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
@@ -88,9 +107,10 @@ test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato 
     const suffix = uniqueSuffix();
     const contract = await createLeaseWithParties(transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+    const file = await createFakeDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
       contract.id,
-      { content: `HOMO QA — corpo do contrato ${suffix}` },
+      { content: `HOMO QA — corpo do contrato ${suffix}`, documentFileId: file.id },
       tenant.userId,
       transaction
     );
