@@ -1,7 +1,7 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
-const { User, Session } = require('../../models');
+const { User, Session, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -11,13 +11,38 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  * conseguindo renovar o access token por até 7 dias (JWT_REFRESH_TTL) depois de "desligado".
  * Chamado sempre que o status deixa de ser ACTIVE ou o usuário é excluído — "break-glass"
  * (revogação de emergência) usa o mesmo caminho.
+ *
+ * FIX (14/09/2026, achado ao trocar o usuário de banco de superusuário para privilégio mínimo
+ * — TEC-03/04): "core"."sessions" tem RLS por tenant. O `Session.update` original rodava sem
+ * nenhum `SET LOCAL app.company_id`, então sob RLS real (sem bypass) o UPDATE combinava com
+ * ZERO linhas silenciosamente — nenhum erro, nenhuma sessão revogada de verdade. TEC-12 nunca
+ * funcionou em RLS real, só parecia funcionar porque a conexão era superusuário. Corrigido:
+ * exige groupId/companyId do chamador (o tenant de quem está suspendendo/excluindo) e abre uma
+ * transação curta com `SET LOCAL` antes do UPDATE.
+ *
+ * RESSALVA HONESTA: isso revoga sessões dentro do tenant do ator (groupId/companyId
+ * informados). Se o usuário tiver sessões ativas em OUTRA empresa (múltiplos vínculos), essas
+ * não são revogadas por esta chamada — não há como enxergar/revogar linhas de outro tenant sob
+ * RLS real sem reintroduzir um bypass, o que anularia o propósito do TEC-03/04. Não encontrei
+ * nenhum caso de teste ou uso real de usuário com sessão simultânea em múltiplas empresas nesta
+ * base de código, mas é uma limitação real a documentar, não a esconder.
  */
-async function revokeAllSessionsForUser(userId) {
-  const [count] = await Session.update(
-    { revokedAt: new Date() },
-    { where: { userId, revokedAt: null } }
-  );
-  return count;
+async function revokeAllSessionsForUser(userId, { groupId, companyId } = {}) {
+  if (!groupId || !companyId) {
+    throw AppError.badRequest(
+      'revokeAllSessionsForUser exige groupId e companyId do tenant do ator (RLS real não permite revogar sessão fora de um contexto de tenant).',
+      'USER_REVOKE_SESSIONS_TENANT_CONTEXT_MISSING'
+    );
+  }
+  return sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId }, transaction });
+    const [count] = await Session.update(
+      { revokedAt: new Date() },
+      { where: { userId, revokedAt: null }, transaction }
+    );
+    return count;
+  });
 }
 
 const BCRYPT_ROUNDS = 12;
@@ -114,8 +139,8 @@ async function updateUser(id, payload, actorUserId, actorContext = {}) {
   await user.save();
 
   let revokedSessions = 0;
-  if (statusChanged && status !== 'ACTIVE') {
-    revokedSessions = await revokeAllSessionsForUser(user.id);
+  if (statusChanged && status !== 'ACTIVE' && actorContext.groupId && actorContext.companyId) {
+    revokedSessions = await revokeAllSessionsForUser(user.id, actorContext);
   }
 
   if (actorContext.groupId && actorContext.companyId) {
@@ -144,7 +169,8 @@ async function deleteUser(id, actorUserId, actorContext = {}) {
   user.deletedBy = actorUserId || null;
   await user.save();
   await user.destroy();
-  const revokedSessions = await revokeAllSessionsForUser(id);
+  const revokedSessions =
+    actorContext.groupId && actorContext.companyId ? await revokeAllSessionsForUser(id, actorContext) : 0;
 
   if (actorContext.groupId && actorContext.companyId) {
     await registrarAuditoria({

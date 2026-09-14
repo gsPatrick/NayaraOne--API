@@ -20,10 +20,19 @@ const { verifyAccessToken } = require('../utils/jwt');
  * checa `session_id` (claim adicionada em auth.service.js) a CADA requisição autenticada —
  * sessão revogada ou expirada derruba o acesso na hora, não só na próxima renovação.
  *
- * RESSALVA HONESTA: "core"."sessions" não tem RLS por tenant (é identidade global, mesmo
- * padrão de "core"."users") — a checagem abaixo é uma busca direta por ID (não depende de
- * app.company_id estar setado), então não tem a mesma armadilha de RLS que outras correções
- * desta rodada tiveram.
+ * FIX (14/09/2026, achado ao trocar o usuário de banco de superusuário para privilégio mínimo
+ * — TEC-03/04): a ressalva anterior deste comentário estava ERRADA. "core"."sessions" TEM RLS
+ * por tenant (`tenant_isolation`, baseada em `company_id = current_setting('app.company_id')`
+ * — ver migrations/20260101000072-create-core-sessions.js). A checagem abaixo fazia
+ * `Session.findByPk` fora de qualquer transação com `SET LOCAL app.company_id`, porque
+ * authMiddleware roda ANTES do tenantMiddleware — sob RLS real (sem bypass), isso significa
+ * `current_setting('app.company_id')` vem NULL, a comparação `company_id = NULL` nunca é
+ * verdadeira, e a busca sempre retorna vazio: toda sessão válida era tratada como inválida.
+ * Isso ficou mascarado o tempo todo porque a conexão da aplicação era superusuário/BYPASSRLS.
+ * Corrigido: como o JWT já carrega `group_id`/`company_id` nas claims (a própria identidade
+ * que estamos validando), usamos esses valores para abrir uma transação curta com
+ * `SET LOCAL` antes de buscar a sessão — sem isso, precisaríamos remover o RLS da tabela
+ * (pior) ou usar uma segunda conexão privilegiada (reintroduziria o mesmo risco do TEC-03/04).
  */
 async function authMiddleware(req, res, next) {
   const header = req.header('authorization') || req.header('Authorization');
@@ -52,8 +61,12 @@ async function authMiddleware(req, res, next) {
   if (payload.session_id) {
     try {
       // require tardio pra evitar dependência circular (models -> ... -> middlewares).
-      const { Session } = require('../models');
-      const session = await Session.findByPk(payload.session_id);
+      const { Session, sequelize } = require('../models');
+      const session = await sequelize.transaction(async (transaction) => {
+        await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: payload.group_id }, transaction });
+        await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: payload.company_id }, transaction });
+        return Session.findByPk(payload.session_id, { transaction });
+      });
       if (!session || session.revokedAt || session.expiresAt < new Date()) {
         return next(AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID'));
       }

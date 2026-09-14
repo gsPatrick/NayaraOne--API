@@ -423,13 +423,18 @@ test('TEC-12 suspender um usuário revoga imediatamente todas as sessões ativas
     passwordHash: 'x',
     status: 'ACTIVE',
   });
-  const session = await Session.create({
-    userId: user.id,
-    groupId: tenant.groupId,
-    companyId: tenant.companyId,
-    refreshTokenHash: `fake-hash-${suffix}`,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
+  const session = await withCommittedTenantTransaction(tenant, (t) =>
+    Session.create(
+      {
+        userId: user.id,
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        refreshTokenHash: `fake-hash-${suffix}`,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+      { transaction: t }
+    )
+  );
 
   try {
     assert.equal(session.revokedAt, null);
@@ -439,10 +444,10 @@ test('TEC-12 suspender um usuário revoga imediatamente todas as sessões ativas
       companyId: tenant.companyId,
     });
 
-    await session.reload();
+    await withCommittedTenantTransaction(tenant, (t) => session.reload({ transaction: t }));
     assert.ok(session.revokedAt, 'sessão deve ser revogada assim que o usuário é suspenso — nunca continuar válida até expirar naturalmente');
   } finally {
-    await session.destroy({ force: true }).catch(() => {});
+    await withCommittedTenantTransaction(tenant, (t) => session.destroy({ force: true, transaction: t })).catch(() => {});
     await user.destroy({ force: true }).catch(() => {});
   }
 });
@@ -530,8 +535,11 @@ test('ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi re
     assert.equal(errBefore, undefined, 'antes de revogar, o middleware deve chamar next() sem erro');
     assert.ok(reqBefore.auth, 'req.auth deve ser populado quando a sessão é válida');
 
-    // Revoga a sessão (mesmo efeito de usersService.revokeAllSessionsForUser ao suspender).
-    await Session.update({ revokedAt: new Date() }, { where: { id: sessionId } });
+    // Revoga a sessão (mesmo efeito de usersService.revokeAllSessionsForUser ao suspender —
+    // exige contexto de tenant desde a correção TEC-03/04, RLS real de "core"."sessions").
+    await withCommittedTenantTransaction(tenant, (t) =>
+      Session.update({ revokedAt: new Date() }, { where: { id: sessionId }, transaction: t })
+    );
 
     // Mesmo access token, mesma chamada — agora deve ser rejeitado imediatamente.
     const { req: reqAfter, res: resAfter } = fakeReqRes(accessToken);
@@ -693,26 +701,35 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
     const result = await processLegalDeadlineAlertsForCompany({ id: tenant.groupId }, { id: tenant.companyId });
     assert.ok(result.alerted >= 1);
 
-    const reloaded = await LegalDeadline.findByPk(deadline.id);
-    assert.equal(reloaded.lastAlertedSeverity, 'OVERDUE');
+    // Leituras de tabelas com RLS (legal_deadlines, notifications, outbox_events) exigem
+    // contexto de tenant desde a correção TEC-03/04 (RLS real, sem bypass de superusuário).
+    await withCommittedTenantTransaction(tenant, async (t) => {
+      const reloaded = await LegalDeadline.findByPk(deadline.id, { transaction: t });
+      assert.equal(reloaded.lastAlertedSeverity, 'OVERDUE');
 
-    const notifications = await Notification.findAll({ where: { userId: tenant.userId, title: 'Prazo jurídico VENCIDO' } });
-    assert.ok(notifications.some((n) => n.body.includes(deadline.description)));
+      const notifications = await Notification.findAll({ where: { userId: tenant.userId, title: 'Prazo jurídico VENCIDO' }, transaction: t });
+      assert.ok(notifications.some((n) => n.body.includes(deadline.description)));
 
-    const events = await OutboxEvent.findAll({
-      where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+      const events = await OutboxEvent.findAll({
+        where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+        transaction: t,
+      });
+      assert.equal(events.length, 1, 'exatamente um evento de alerta deve ter sido publicado');
     });
-    assert.equal(events.length, 1, 'exatamente um evento de alerta deve ter sido publicado');
 
     // Roda o job de novo: mesma severidade (OVERDUE), não pode reavisar nem duplicar o evento.
-    const secondRun = await processLegalDeadlineAlertsForCompany({ id: tenant.groupId }, { id: tenant.companyId });
-    const eventsAfter = await OutboxEvent.findAll({
-      where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+    await processLegalDeadlineAlertsForCompany({ id: tenant.groupId }, { id: tenant.companyId });
+    await withCommittedTenantTransaction(tenant, async (t) => {
+      const eventsAfter = await OutboxEvent.findAll({
+        where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+        transaction: t,
+      });
+      assert.equal(eventsAfter.length, 1, 'segunda rodada do job não pode duplicar o alerta da mesma severidade');
     });
-    assert.equal(eventsAfter.length, 1, 'segunda rodada do job não pode duplicar o alerta da mesma severidade');
-    void secondRun;
   } finally {
-    if (deadline) await LegalDeadline.destroy({ where: { id: deadline.id }, force: true }).catch(() => {});
-    if (legalCase) await LegalCase.destroy({ where: { id: legalCase.id }, force: true }).catch(() => {});
+    await withCommittedTenantTransaction(tenant, async (t) => {
+      if (deadline) await LegalDeadline.destroy({ where: { id: deadline.id }, force: true, transaction: t });
+      if (legalCase) await LegalCase.destroy({ where: { id: legalCase.id }, force: true, transaction: t });
+    }).catch(() => {});
   }
 });
