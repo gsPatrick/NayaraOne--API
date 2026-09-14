@@ -126,6 +126,24 @@ function publishLegalCaseCreated(legalCase, transaction) {
   );
 }
 
+function publishLegalDeadlineAlert(deadline, severity, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: deadline.groupId,
+      companyId: deadline.companyId,
+      aggregateType: 'LegalDeadline',
+      aggregateId: deadline.id,
+      eventType: 'legal.deadline.alert',
+      payload: { id: deadline.id, legalCaseId: deadline.legalCaseId, description: deadline.description, dueAt: deadline.dueAt, severity },
+      // idempotencyKey inclui a severidade: um prazo que já alertou DUE_SOON precisa poder
+      // alertar de novo quando vira OVERDUE (é um evento genuinamente novo), mas nunca duas
+      // vezes pra MESMA severidade do MESMO prazo.
+      idempotencyKey: `legal.deadline.alert:${deadline.id}:${severity}`,
+    },
+    transaction
+  );
+}
+
 function publishEvidencePackageCreated(evidencePackage, transaction) {
   return publishDomainEvent(
     {
@@ -150,5 +168,6 @@ module.exports = {
   publishInspectionCompleted,
   publishKeyDeliveryReleased,
   publishLegalCaseCreated,
+  publishLegalDeadlineAlert,
   publishEvidencePackageCreated,
 };

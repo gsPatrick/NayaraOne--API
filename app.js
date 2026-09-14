@@ -12,6 +12,7 @@ const { requestLoggerMiddleware, metricsRecorderMiddleware } = require('./src/mi
 const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
+const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 
 const app = express();
 
@@ -91,6 +92,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.
 if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLED !== 'true') {
   startOutboxDispatcherJob();
+}
+
+// Alertas de prazos jurídicos (reportado pela cliente 14/09/2026 — "prazos e alertas
+// efetivamente utilizáveis"). Roda a cada 30 min dentro do próprio processo.
+if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_DEADLINE_ALERT_JOB_DISABLED !== 'true') {
+  startLegalDeadlineAlertJob();
 }
 
 module.exports = app;

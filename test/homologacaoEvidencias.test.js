@@ -661,3 +661,58 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
     }
   });
 });
+
+// --- Processos jurídicos, prazos e alertas efetivamente utilizáveis (reportado pela cliente
+// 14/09/2026) — o job de alerta precisa rodar de verdade (não só calcular severidade sob
+// demanda), notificar o responsável e não reavisar do mesmo prazo/severidade repetidamente. ---
+test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e não reavisa duas vezes pela mesma severidade', async () => {
+  const legalCasesService = require('../src/features/legal/legalCases.service');
+  const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+  const { processLegalDeadlineAlertsForCompany } = require('../src/engines/jobs/legalDeadlineAlertJob');
+  const { LegalCase, LegalDeadline, Notification, OutboxEvent } = require('../src/models');
+
+  let legalCase;
+  let deadline;
+  try {
+    legalCase = await withCommittedTenantTransaction(tenant, (t) =>
+      legalCasesService.createLegalCase(
+        { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', responsibleUserId: tenant.userId },
+        tenant.userId,
+        t
+      )
+    );
+    deadline = await withCommittedTenantTransaction(tenant, (t) =>
+      legalDeadlinesService.createLegalDeadline(
+        legalCase.id,
+        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        tenant.userId,
+        t
+      )
+    );
+
+    const result = await processLegalDeadlineAlertsForCompany({ id: tenant.groupId }, { id: tenant.companyId });
+    assert.ok(result.alerted >= 1);
+
+    const reloaded = await LegalDeadline.findByPk(deadline.id);
+    assert.equal(reloaded.lastAlertedSeverity, 'OVERDUE');
+
+    const notifications = await Notification.findAll({ where: { userId: tenant.userId, title: 'Prazo jurídico VENCIDO' } });
+    assert.ok(notifications.some((n) => n.body.includes(deadline.description)));
+
+    const events = await OutboxEvent.findAll({
+      where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+    });
+    assert.equal(events.length, 1, 'exatamente um evento de alerta deve ter sido publicado');
+
+    // Roda o job de novo: mesma severidade (OVERDUE), não pode reavisar nem duplicar o evento.
+    const secondRun = await processLegalDeadlineAlertsForCompany({ id: tenant.groupId }, { id: tenant.companyId });
+    const eventsAfter = await OutboxEvent.findAll({
+      where: { aggregateType: 'LegalDeadline', aggregateId: deadline.id, eventType: 'legal.deadline.alert' },
+    });
+    assert.equal(eventsAfter.length, 1, 'segunda rodada do job não pode duplicar o alerta da mesma severidade');
+    void secondRun;
+  } finally {
+    if (deadline) await LegalDeadline.destroy({ where: { id: deadline.id }, force: true }).catch(() => {});
+    if (legalCase) await LegalCase.destroy({ where: { id: legalCase.id }, force: true }).catch(() => {});
+  }
+});

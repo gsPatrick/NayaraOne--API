@@ -47,6 +47,11 @@ module.exports = (sequelize) => {
         defaultValue: 'PENDING',
         field: 'status',
       },
+      lastAlertedSeverity: {
+        type: DataTypes.STRING(16),
+        allowNull: true,
+        field: 'last_alerted_severity',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
