@@ -1,0 +1,75 @@
+name: CI
+
+# Reportado pela cliente 14/09/2026: "evidências verificáveis dos testes automatizados,
+# incluindo CI, logs, nomes dos testes, resultados, commit e build". Não existia pipeline de
+# CI nenhum — todo teste era rodado manualmente. Este workflow sobe um Postgres real (não
+# mock), roda migrations + seeds + a suíte de testes completa a cada push/PR, e falha o
+# build se qualquer teste falhar — evidência objetiva e verificável no próprio GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nayara_ci
+          POSTGRES_PASSWORD: nayara_ci_password
+          POSTGRES_DB: nayara_one_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: nayara_one_ci
+      DB_USER: nayara_ci
+      DB_PASSWORD: nayara_ci_password
+      DB_SSL: 'false'
+      JWT_ACCESS_SECRET: ci-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 7d
+      PII_HASH_SECRET: ci-pii-hash-secret-not-for-production
+      MFA_ENCRYPTION_KEY: 47f62af2f91a7ac9bb6ca3db95498c3ab311d033dd97f7e101b062a84c4781e0
+      APP_API_PREFIX: /api/v1
+      PORT: 3011
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        run: npm run migrate
+
+      - name: Seed base data (tenant, roles, permissions, regras)
+        run: |
+          node scripts/seed-dev.js
+          node scripts/seedBillingRules.js
+          node scripts/seedRealEstateRules.js
+
+      - name: Run test suite
+        run: npm test
