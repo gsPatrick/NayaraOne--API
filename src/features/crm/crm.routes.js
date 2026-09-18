@@ -39,6 +39,17 @@ crmRouter.get('/opportunities/:id', requirePermission('crm:opportunities:read'),
 crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), crmController.updateOpportunity);
 crmRouter.delete('/opportunities/:id', requirePermission('crm:opportunities:delete'), crmController.removeOpportunity);
 
+// --- Tarefas da oportunidade (M3-11) e timeline unificada (M3-19) ---
+// Precisam vir DEPOIS de '/opportunities/:id' no arquivo? Não: são caminhos mais específicos
+// ('/opportunities/:id/tasks'), o Express casa pela rota inteira, então a ordem é livre.
+crmRouter.post('/opportunities/:id/tasks', requirePermission('crm:tasks:create'), crmController.createOpportunityTask);
+crmRouter.get('/opportunities/:id/tasks', requirePermission('crm:tasks:read'), crmController.listOpportunityTasks);
+crmRouter.get(
+  '/opportunities/:id/timeline',
+  requirePermission('crm:opportunities:read'),
+  crmController.getOpportunityTimeline
+);
+
 crmRouter.post('/visits', requirePermission('crm:visits:create'), crmController.createVisit);
 crmRouter.get('/visits', requirePermission('crm:visits:read'), crmController.listVisits);
 crmRouter.get('/visits/:id', requirePermission('crm:visits:read'), crmController.getVisit);

@@ -5,6 +5,31 @@ const AppError = require('../../utils/AppError');
 
 const VISIT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'DONE', 'CANCELED', 'NO_SHOW'];
 
+/**
+ * M3-24 (correção): agendar uma visita para o PASSADO era aceito sem reclamar, o que
+ * produzia compromissos que ninguém jamais cumpriria e sujava a agenda/indicadores. Só vale
+ * para os status prospectivos (SCHEDULED/CONFIRMED) — registrar depois do fato uma visita
+ * que JÁ aconteceu (DONE/NO_SHOW/CANCELED) continua legítimo e comum na operação.
+ * Tolerância de 5 minutos para diferença de relógio entre cliente e servidor.
+ */
+const PROSPECTIVE_STATUSES = ['SCHEDULED', 'CONFIRMED'];
+const PAST_TOLERANCE_MS = 5 * 60 * 1000;
+
+function assertNotScheduledInThePast(scheduledAt, status) {
+  if (!PROSPECTIVE_STATUSES.includes(status)) return;
+  const when = new Date(scheduledAt);
+  if (Number.isNaN(when.getTime())) {
+    throw AppError.badRequest('O campo "scheduledAt" deve ser uma data válida.', 'VISIT_VALIDATION');
+  }
+  if (when.getTime() < Date.now() - PAST_TOLERANCE_MS) {
+    throw AppError.unprocessable(
+      'Não é possível agendar uma visita para uma data no passado. Para registrar uma visita que já ocorreu, use o status DONE, NO_SHOW ou CANCELED.',
+      'VISIT_SCHEDULED_IN_THE_PAST',
+      { scheduledAt: when.toISOString(), status }
+    );
+  }
+}
+
 async function createVisit(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, opportunityId, personId, agentUserId, scheduledAt, status, feedback } = payload;
   if (!groupId || !companyId || !propertyId || !personId || !scheduledAt) {
@@ -29,6 +54,8 @@ async function createVisit(payload, actorUserId, transaction) {
   if (!VISIT_STATUSES.includes(normalizedStatus)) {
     throw AppError.badRequest(`O campo "status" deve ser um de: ${VISIT_STATUSES.join(', ')}.`, 'VISIT_VALIDATION');
   }
+
+  assertNotScheduledInThePast(scheduledAt, normalizedStatus);
 
   return Visit.create(
     {
@@ -76,6 +103,9 @@ async function updateVisit(id, payload, actorUserId, transaction) {
   }
   if (feedback !== undefined) visit.feedback = feedback;
   if (agentUserId !== undefined) visit.agentUserId = agentUserId;
+  // Reagendar para o passado tem o mesmo problema de criar no passado — a checagem só roda
+  // quando a data foi efetivamente mexida (uma visita antiga pode ter outros campos editados).
+  if (scheduledAt !== undefined) assertNotScheduledInThePast(visit.scheduledAt, visit.status);
   visit.updatedBy = actorUserId || null;
   await visit.save({ transaction });
   return visit;

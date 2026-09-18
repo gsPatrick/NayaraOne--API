@@ -5,6 +5,13 @@ const AppError = require('../../utils/AppError');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
+/**
+ * M3-24 (correção): `channel` era gravado sem NENHUMA validação (a coluna é só um
+ * VARCHAR(32) sem CHECK), então um typo — "whatsap", "zap", "" — entrava no histórico e
+ * quebrava silenciosamente qualquer filtro/relatório por canal. Enum fechado, mesmo padrão de
+ * `direction`/`authorType`.
+ */
+const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'INSTAGRAM', 'OTHER'];
 
 /**
  * "crm"."messages" não tem `deleted_at`/paranoid no model (ver src/models/Message.js) — é
@@ -26,6 +33,11 @@ async function createMessage(payload, actorUserId, transaction) {
   const normalizedAuthorType = String(authorType).toUpperCase();
   if (!AUTHOR_TYPES.includes(normalizedAuthorType)) {
     throw AppError.badRequest(`O campo "authorType" deve ser um de: ${AUTHOR_TYPES.join(', ')}.`, 'MESSAGE_VALIDATION');
+  }
+
+  const normalizedChannel = channel ? String(channel).toUpperCase() : 'WHATSAPP';
+  if (!CHANNELS.includes(normalizedChannel)) {
+    throw AppError.badRequest(`O campo "channel" deve ser um de: ${CHANNELS.join(', ')}.`, 'MESSAGE_VALIDATION');
   }
 
   if (personId) {
@@ -51,7 +63,7 @@ async function createMessage(payload, actorUserId, transaction) {
       companyId,
       personId: personId || null,
       opportunityId: opportunityId || null,
-      channel: channel ? String(channel).toUpperCase() : 'WHATSAPP',
+      channel: normalizedChannel,
       direction: normalizedDirection,
       authorType: normalizedAuthorType,
       authorUserId: authorUserId || null,
@@ -89,4 +101,4 @@ async function updateMessageStatus(id, status, actorUserId, transaction) {
   return message;
 }
 
-module.exports = { createMessage, listMessages, getMessage, updateMessageStatus, DIRECTIONS, AUTHOR_TYPES };
+module.exports = { createMessage, listMessages, getMessage, updateMessageStatus, DIRECTIONS, AUTHOR_TYPES, CHANNELS };
