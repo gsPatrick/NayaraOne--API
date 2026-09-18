@@ -285,7 +285,7 @@ function withInterceptedProvider(responder, fn) {
     .finally(restore);
 }
 
-test('M5-12: Clicksign recebe external_id EXATAMENTE igual ao content_hash da ContractVersion', async () => {
+test('M5-12: Clicksign recebe o content_hash da ContractVersion no metadata do documento', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const contract = await contractsService.createContract(
@@ -315,10 +315,17 @@ test('M5-12: Clicksign recebe external_id EXATAMENTE igual ao content_hash da Co
 
         const envelopeCall = calls.find((c) => c.url.endsWith('/envelopes'));
         assert.ok(envelopeCall, 'o adapter precisa ter chamado POST /envelopes');
-        const sentExternalId = envelopeCall.body.data.attributes.external_id;
-        assert.equal(sentExternalId, version.contentHash, 'external_id enviado tem que ser o content_hash da versão');
-        assert.equal(sentExternalId, expectedHash);
-        assert.notEqual(sentExternalId, version.id, 'não pode cair no fallback do id quando existe hash');
+
+        const documentCall = calls.find((c) => c.url.endsWith('/documents'));
+        assert.ok(documentCall, 'o adapter precisa ter feito upload do documento (POST /envelopes/{id}/documents)');
+        const sentMetadata = JSON.parse(documentCall.body.data.attributes.metadata);
+        assert.equal(sentMetadata.contentHash, version.contentHash, 'metadata do documento tem que carregar o content_hash da versão');
+        assert.equal(sentMetadata.contentHash, expectedHash);
+        assert.notEqual(sentMetadata.contentHash, version.id, 'não pode cair no fallback do id quando existe hash');
+
+        const activateCall = calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/envelope-123'));
+        assert.ok(activateCall, 'o adapter precisa ativar o envelope (PATCH status running) para disparar o envio');
+        assert.equal(activateCall.body.data.attributes.status, 'running');
       }
     );
   });

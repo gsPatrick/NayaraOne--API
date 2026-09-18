@@ -59,6 +59,7 @@ const modelDefiners = {
   ContractParty: require('./ContractParty'),
   ContractVersion: require('./ContractVersion'),
   Signature: require('./Signature'),
+  SignatureProviderRouting: require('./SignatureProviderRouting'),
   ContractClause: require('./ContractClause'),
   ContractTemplate: require('./ContractTemplate'),
   ContractTemplateClause: require('./ContractTemplateClause'),

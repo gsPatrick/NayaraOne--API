@@ -7,6 +7,13 @@ const legalController = require('./legal.controller');
 
 const legalRouter = Router();
 
+// Webhook público do Clicksign — DEVE vir ANTES de `legalRouter.use(authMiddleware, ...)`
+// abaixo: é chamado pelo provedor externo, sem JWT nenhum. A verificação de autenticidade não
+// é o JWT do app, é o HMAC do corpo bruto (ver clicksignPublicWebhook/verifyProviderWebhookSignature
+// em legal.controller.js) validado contra o segredo por-tenant, resolvido via a tabela de
+// roteamento sem RLS (migration 20260101000172).
+legalRouter.post('/legal/webhooks/clicksign', legalController.clicksignPublicWebhook);
+
 legalRouter.use(authMiddleware, tenantMiddleware);
 
 // Contracts

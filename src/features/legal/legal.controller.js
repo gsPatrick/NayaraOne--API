@@ -5,6 +5,7 @@ const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
+const { sequelize, SignatureProviderRouting } = require('../../models');
 const contractsService = require('./contracts.service');
 const contractVersionsService = require('./contractVersions.service');
 const signaturesService = require('./signatures.service');
@@ -75,22 +76,16 @@ const listSignaturesByContractVersion = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => signaturesService.listSignaturesByContractVersion(req.params.id, t));
   return success(res, { data: items });
 });
-// Webhook de assinatura — DECISÃO DE ENGENHARIA: um webhook de provedor real chegaria SEM
-// JWT de usuário (é o provedor externo chamando, autenticado por segredo/HMAC próprio), e
-// precisaria resolver group_id/company_id a partir do próprio Signature antes de aplicar
-// RLS. Enquanto não existir uma rota pública dedicada fora do router autenticado, esta rota
-// continua atrás do MESMO authMiddleware/tenantMiddleware das demais rotas de legal (exige
-// "legal:sign") — ou seja, ela é chamada como uma ação autenticada que recebe/valida o
-// webhook, não como endpoint público de fato. Agora que existem provedores reais
-// (Clicksign/ZapSign) configuráveis via settings, a rota EXIGE HMAC válido do corpo bruto
-// sempre que o tenant tiver um provider real configurado — só o sandbox (sem provedor real
-// por trás) segue sem exigir HMAC, pois não há segredo de webhook para validar contra.
+// Webhook de assinatura — endpoint AUTENTICADO (mantido por compatibilidade/testes internos):
+// exige o MESMO authMiddleware/tenantMiddleware das demais rotas de legal ("legal:sign"). O
+// webhook PÚBLICO de verdade, chamado pelo Clicksign sem JWT nenhum, é `clicksignPublicWebhook`
+// abaixo — rota distinta, fora do authMiddleware (ver legal.routes.js).
 
 const WEBHOOK_HEADER_BY_PROVIDER = {
-  // DECISÃO DE ENGENHARIA — validar contra documentação oficial atualizada de cada provedor
-  // antes de produção: nome exato do header de assinatura do webhook (e se é HMAC hex, base64,
-  // ou vem com prefixo tipo "sha256=") pode ter mudado desde a última verificação.
-  clicksign: 'x-clicksign-signature',
+  // Confirmado contra a documentação oficial do Clicksign (developers.clicksign.com,
+  // 18/09/2026): header "Content-Hmac", valor "sha256=<hex>". ZapSign permanece assumido
+  // (mesmo esquema hipotético) até haver credencial real para confirmar.
+  clicksign: 'content-hmac',
   zapsign: 'x-zapsign-signature',
 };
 
@@ -99,22 +94,23 @@ const WEBHOOK_SECRET_SETTING_BY_PROVIDER = {
   zapsign: 'legal.zapsign_webhook_secret',
 };
 
+// Clicksign NÃO usa HMAC de verdade (chave como key do HMAC) apesar do nome do header —
+// a doc oficial descreve literalmente sha256(body BRUTO concatenado com o secret), sem
+// formatar o JSON antes do cálculo. ZapSign segue com HMAC-SHA256 genérico (key=secret) até
+// haver confirmação real do esquema.
+function computeClicksignSignatureHex(secret, rawBody) {
+  return crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(secret, 'utf8')])).digest('hex');
+}
 function computeHmacSha256Hex(secret, rawBody) {
   return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 }
 
 /**
- * verifyProviderWebhookSignature — compara o HMAC-SHA256 (hex) do corpo BRUTO da requisição
- * com o valor recebido no header do provedor, usando `crypto.timingSafeEqual` — NUNCA
- * comparação direta de string (`===`), que vazaria timing e permitiria um ataque de força
- * bruta byte a byte sobre a assinatura esperada. `timingSafeEqual` exige buffers do mesmo
- * tamanho, então checamos o tamanho primeiro (uma incompatibilidade de tamanho já é
- * "inválido", sem precisar comparar byte a byte).
- *
- * DECISÃO DE ENGENHARIA — validar contra documentação oficial atualizada de cada provedor
- * antes de produção: assumimos aqui o mesmo esquema (HMAC-SHA256 hex do corpo bruto) para
- * Clicksign e ZapSign; cada provedor pode ter particularidades (ex.: incluir timestamp no
- * cálculo, usar outro digest) que só são confirmáveis com credencial/documentação real.
+ * verifyProviderWebhookSignature — compara a assinatura do corpo BRUTO da requisição com o
+ * valor recebido no header do provedor, usando `crypto.timingSafeEqual` — NUNCA comparação
+ * direta de string (`===`), que vazaria timing e permitiria um ataque de força bruta byte a
+ * byte sobre a assinatura esperada. `timingSafeEqual` exige buffers do mesmo tamanho, então
+ * checamos o tamanho primeiro (uma incompatibilidade de tamanho já é "inválido").
  */
 function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecret) {
   const headerName = WEBHOOK_HEADER_BY_PROVIDER[provider];
@@ -122,12 +118,15 @@ function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecre
 
   const received = headers ? headers[headerName] : null;
   if (!received || typeof received !== 'string') return false;
+  const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
+
+  const expectedHex = provider === 'clicksign' ? computeClicksignSignatureHex(webhookSecret, rawBody) : computeHmacSha256Hex(webhookSecret, rawBody);
 
   let expectedBuffer;
   let receivedBuffer;
   try {
-    expectedBuffer = Buffer.from(computeHmacSha256Hex(webhookSecret, rawBody), 'hex');
-    receivedBuffer = Buffer.from(received, 'hex');
+    expectedBuffer = Buffer.from(expectedHex, 'hex');
+    receivedBuffer = Buffer.from(receivedHex, 'hex');
   } catch (err) {
     return false;
   }
@@ -159,6 +158,63 @@ const signatureWebhook = catchAsync(async (req, res) => {
 
     return signaturesService.handleSignatureWebhook(req.params.externalSignatureId, req.body, t);
   });
+  return success(res, { data: result });
+});
+
+/**
+ * clicksignPublicWebhook — endpoint PÚBLICO de verdade (fora do authMiddleware/tenantMiddleware
+ * — ver legal.routes.js), o único que o Clicksign de fato consegue chamar, já que o provedor
+ * externo não tem (e nunca terá) um JWT de usuário deste sistema.
+ *
+ * Fluxo (ver migration 20260101000172-create-legal-signature_provider_routing e a nota em
+ * signatures.service.js): extrai a "key" do signatário do payload do evento (formato
+ * confirmado contra a documentação oficial: `event.data.signer.key`), resolve group_id/
+ * company_id na tabela de roteamento (SEM RLS, só ids opacos), e SÓ DEPOIS abre a transação
+ * com `SET LOCAL` de tenant para validar o HMAC (segredo é por-tenant) e aplicar o webhook.
+ * Eventos que não são "sign" (ex.: refusal, cancel) são reconhecidos com 200 mas não têm
+ * efeito hoje — o domínio (handleSignatureWebhook) só sabe processar confirmação de assinatura;
+ * tratá-los é trabalho futuro, não parte deste marco.
+ */
+const clicksignPublicWebhook = catchAsync(async (req, res) => {
+  const eventName = req.body && req.body.event && req.body.event.name;
+  const signerKey = req.body && req.body.event && req.body.event.data && req.body.event.data.signer && req.body.event.data.signer.key;
+
+  if (!signerKey) {
+    // Evento sem signatário (ex.: upload, add_image) — reconhece sem processar.
+    return success(res, { data: { acknowledged: true, processed: false, reason: 'no_signer_key' } });
+  }
+
+  const routing = await SignatureProviderRouting.findOne({ where: { externalSignatureId: signerKey } });
+  if (!routing) {
+    // Assinatura desconhecida (de outro ambiente/conta, ou nunca solicitada por aqui) — 200
+    // para o Clicksign não ficar reenviando, mas não processa nada.
+    return success(res, { data: { acknowledged: true, processed: false, reason: 'unknown_signer' } });
+  }
+
+  const tenant = { groupId: routing.groupId, companyId: routing.companyId };
+  const rawBody = req.rawBody;
+
+  const result = await sequelize.transaction(async (t) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction: t });
+
+    const webhookSecret = await getDecryptedSetting('legal.clicksign_webhook_secret', tenant, t, null);
+    const isValid = verifyProviderWebhookSignature('clicksign', rawBody, req.headers, webhookSecret);
+    if (!isValid) {
+      throw AppError.unauthorized(
+        'Assinatura do webhook (Content-Hmac) ausente ou inválida.',
+        'LEGAL_WEBHOOK_HMAC_INVALID'
+      );
+    }
+
+    if (eventName !== 'sign') {
+      return { acknowledged: true, processed: false, reason: `event_${eventName}_not_handled` };
+    }
+
+    const applied = await signaturesService.handleSignatureWebhook(signerKey, req.body, t);
+    return { acknowledged: true, processed: true, ...applied };
+  });
+
   return success(res, { data: result });
 });
 
@@ -364,7 +420,7 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
 module.exports = {
   createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties, correctContractData,
   createContractVersion, listContractVersions,
-  initiateSignature, listSignaturesByContractVersion, signatureWebhook, verifyProviderWebhookSignature,
+  initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,

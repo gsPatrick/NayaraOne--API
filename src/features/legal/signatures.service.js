@@ -1,6 +1,6 @@
 'use strict';
 
-const { Signature, ContractVersion } = require('../../models');
+const { Signature, ContractVersion, SignatureProviderRouting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishSignatureRequested, publishSignatureSigned } = require('./legalEvents.service');
@@ -76,6 +76,22 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
       },
       { transaction }
     );
+
+    // Grava o mapeamento de roteamento (ver migration 20260101000172) na MESMA transação/
+    // tenant — é o único jeito do webhook público do provedor (sem JWT, sem tenant conhecido
+    // de antemão) descobrir group_id/company_id antes de aplicar RLS. Só grava quando existe
+    // externalSignatureId real (provedor real) — sandbox não recebe webhook de verdade.
+    if (signature.externalSignatureId) {
+      await SignatureProviderRouting.create(
+        {
+          externalSignatureId: signature.externalSignatureId,
+          providerEnvelopeId: providerEnvelopeId || null,
+          groupId: contractVersion.groupId,
+          companyId: contractVersion.companyId,
+        },
+        { transaction }
+      );
+    }
 
     await publishSignatureRequested(signature, transaction);
 

@@ -83,18 +83,20 @@ async function loadSignerContacts(signerPersonIds) {
 /**
  * ClicksignSignatureAdapter — integração real com a API v3 (REST) do Clicksign.
  *
- * DECISÃO DE ENGENHARIA — não testado contra credencial real: URL/payload baseado no
- * conhecimento geral da API pública do Clicksign v3, confirmar contra documentação oficial
- * atualizada antes de produção. Em especial: (1) o formato exato de criação de "envelope" e
- * "documento" a partir de conteúdo/hash pode exigir upload de arquivo (multipart) em vez de
- * apenas um hash, dependendo do plano/fluxo contratado; (2) o endpoint de adição de
- * signatário ("signers"/"requirements") e os campos aceitos podem variar entre contas; (3) o
- * nome exato do header de autenticação e o formato de erro podem ter mudado desde a última
- * verificação. Toda a chamada HTTP é centralizada em `_request` para isolar essa camada e
- * facilitar o ajuste quando houver acesso a uma conta real de homologação.
+ * Verificado contra a documentação oficial (developers.clicksign.com) em 18/09/2026:
+ * - Base URL: sandbox `https://sandbox.clicksign.com/api/v3`, produção `https://app.clicksign.com/api/v3`.
+ * - Autenticação: header `Authorization` com o access_token cru (SEM prefixo "Bearer").
+ * - Formato JSON:API em todo o corpo (`Content-Type`/`Accept: application/vnd.api+json`).
+ * - Fluxo de criação: POST /envelopes -> POST /envelopes/{id}/documents (upload base64) ->
+ *   POST /envelopes/{id}/signers (um por signatário) -> POST /envelopes/{id}/requirements
+ *   (qualificação "agree"/role "sign" + autenticação "provide_evidence"/auth "email", um par
+ *   por signatário+documento) -> PATCH /envelopes/{id} (status "running") para ativar e
+ *   disparar o envio de fato.
+ * - `.txt` é um formato aceito de documento — usado aqui porque este marco tem apenas o
+ *   `content` (texto) da ContractVersion, não um binário PDF já gerado.
  */
 class ClicksignSignatureAdapter {
-  constructor({ apiToken, baseUrl = 'https://app.clicksign.com/api/v3' } = {}) {
+  constructor({ apiToken, baseUrl = 'https://sandbox.clicksign.com/api/v3' } = {}) {
     if (!apiToken) {
       throw AppError.internal('ClicksignSignatureAdapter requer apiToken configurado.', 'LEGAL_SIGNATURE_PROVIDER_CONFIG_MISSING');
     }
@@ -108,6 +110,7 @@ class ClicksignSignatureAdapter {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
+        Accept: 'application/vnd.api+json',
         'Content-Type': 'application/vnd.api+json',
         Authorization: this.apiToken,
       },
@@ -133,15 +136,7 @@ class ClicksignSignatureAdapter {
   async requestSignature(contractVersion, signerPersonIds) {
     const signers = await loadSignerContacts(signerPersonIds);
 
-    // Cria o envelope ("documento") a partir do hash de conteúdo da versão do contrato.
-    // DECISÃO DE ENGENHARIA: o Clicksign v3 tipicamente espera o conteúdo do arquivo (base64
-    // ou upload), não apenas um hash — usamos o hash como identificador de conteúdo aqui
-    // porque este marco não tem acesso ao binário do documento neste ponto do fluxo; confirmar
-    // o payload real de criação de documento contra a documentação/conta de homologação.
-    // `external_id` amarra o envelope à versão/hash exato do contrato que originou a
-    // assinatura — mesma decisão já usada no adapter do ZapSign (ver abaixo). Sem isso, uma
-    // consulta manual no painel do provedor não tinha como confirmar QUAL versão do contrato
-    // aquele envelope representa.
+    // 1) Envelope — `deadline_at` fica em aberto (sem prazo) neste marco.
     const envelope = await this._request('POST', '/envelopes', {
       data: {
         type: 'envelopes',
@@ -150,12 +145,29 @@ class ClicksignSignatureAdapter {
           locale: 'pt-BR',
           auto_close: true,
           remind_interval: 3,
-          external_id: contractVersion.contentHash || contractVersion.id,
         },
       },
     });
     const providerEnvelopeId = envelope && envelope.data && envelope.data.id;
 
+    // 2) Documento — sobe o CONTEÚDO da versão do contrato como .txt (base64). `metadata`
+    // carrega o content_hash para amarrar o documento no provedor à versão/hash exato do
+    // contrato que originou a assinatura — sem isso, uma consulta manual no painel do Clicksign
+    // não teria como confirmar QUAL versão do contrato aquele documento representa.
+    const contentBase64 = Buffer.from(contractVersion.content || '', 'utf8').toString('base64');
+    const documentResponse = await this._request('POST', `/envelopes/${providerEnvelopeId}/documents`, {
+      data: {
+        type: 'documents',
+        attributes: {
+          filename: `contrato-${contractVersion.contractId}-v${contractVersion.versionNumber}.txt`,
+          content_base64: `data:text/plain;base64,${contentBase64}`,
+          metadata: JSON.stringify({ contentHash: contractVersion.contentHash || null, contractVersionId: contractVersion.id }),
+        },
+      },
+    });
+    const documentId = documentResponse && documentResponse.data && documentResponse.data.id;
+
+    // 3) Signatários + requisitos (qualificação de assinatura + autenticação por e-mail).
     const externalSignatureIdsByPerson = {};
     for (const signer of signers) {
       const signerResponse = await this._request('POST', `/envelopes/${providerEnvelopeId}/signers`, {
@@ -164,21 +176,47 @@ class ClicksignSignatureAdapter {
           attributes: {
             name: signer.name,
             email: signer.email,
-            communicate_events: { document_signed: 'email', signature_request: 'email' },
+            has_documentation: false,
+            communicate_events: { signature_request: 'email', signature_reminder: 'email', document_signed: 'email' },
           },
         },
       });
-      externalSignatureIdsByPerson[signer.personId] = signerResponse && signerResponse.data && signerResponse.data.id;
+      const signerId = signerResponse && signerResponse.data && signerResponse.data.id;
+      externalSignatureIdsByPerson[signer.personId] = signerId;
+
+      await this._request('POST', `/envelopes/${providerEnvelopeId}/requirements`, {
+        data: {
+          type: 'requirements',
+          attributes: { action: 'agree', role: 'sign' },
+          relationships: {
+            document: { data: { type: 'documents', id: documentId } },
+            signer: { data: { type: 'signers', id: signerId } },
+          },
+        },
+      });
+      await this._request('POST', `/envelopes/${providerEnvelopeId}/requirements`, {
+        data: {
+          type: 'requirements',
+          attributes: { action: 'provide_evidence', auth: 'email' },
+          relationships: {
+            document: { data: { type: 'documents', id: documentId } },
+            signer: { data: { type: 'signers', id: signerId } },
+          },
+        },
+      });
     }
+
+    // 4) Ativa o envelope — sem isso o Clicksign nunca dispara o convite de assinatura.
+    await this._request('PATCH', `/envelopes/${providerEnvelopeId}`, {
+      data: { id: providerEnvelopeId, type: 'envelopes', attributes: { status: 'running' } },
+    });
 
     return { providerEnvelopeId, externalSignatureIdsByPerson };
   }
 
   /**
    * getStatus — consulta o status atual do envelope no Clicksign.
-   * DECISÃO DE ENGENHARIA — não testado contra credencial real: campo exato de status
-   * (`data.attributes.status`) e seus valores possíveis (ex.: "running", "closed", "canceled")
-   * devem ser confirmados contra a documentação/conta real antes de produção.
+   * Valores documentados: "draft", "running", "closed", "canceled".
    */
   async getStatus(providerEnvelopeId) {
     const envelope = await this._request('GET', `/envelopes/${providerEnvelopeId}`);
@@ -187,10 +225,10 @@ class ClicksignSignatureAdapter {
   }
 
   /**
-   * cancel — cancela o envelope no Clicksign.
-   * DECISÃO DE ENGENHARIA — não testado contra credencial real: o Clicksign v3 tipicamente
-   * cancela via PATCH mudando o status do envelope para "canceled" — confirmar o payload exato
-   * contra a documentação/conta real antes de produção.
+   * cancel — cancela o envelope no Clicksign (PATCH status -> "canceled").
+   * DECISÃO DE ENGENHARIA — não confirmado na documentação pública se "canceled" é o valor
+   * exato aceito por PATCH (só "running" está documentado explicitamente); manter e validar
+   * contra a conta real na primeira tentativa de cancelamento.
    */
   async cancel(providerEnvelopeId) {
     const result = await this._request('PATCH', `/envelopes/${providerEnvelopeId}`, {
