@@ -9,6 +9,8 @@ const proposalsService = require('./proposals.service');
 const dashboardService = require('./dashboard.service');
 const feedbackCasesService = require('./feedbackCases.service');
 const opportunitiesExportService = require('./opportunitiesExport.service');
+const opportunityTasksService = require('./opportunityTasks.service');
+const opportunityTimelineService = require('./opportunityTimeline.service');
 
 // --- Opportunities ---
 
@@ -50,6 +52,36 @@ const removeOpportunity = catchAsync(async (req, res) => {
     opportunitiesService.deleteOpportunity(req.params.id, req.auth.userId, transaction)
   );
   return success(res, { data: result });
+});
+
+// --- Tarefas da oportunidade (M3-11) ---
+
+const createOpportunityTask = catchAsync(async (req, res) => {
+  const task = await req.withTenantTransaction((transaction) =>
+    opportunityTasksService.createOpportunityTask(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { statusCode: 201, data: task });
+});
+
+const listOpportunityTasks = catchAsync(async (req, res) => {
+  const tasks = await req.withTenantTransaction((transaction) =>
+    opportunityTasksService.listOpportunityTasks(req.params.id, transaction, {
+      status: req.query.status,
+      assignedToUserId: req.query.assignedToUserId,
+    })
+  );
+  return success(res, { data: tasks });
+});
+
+// --- Timeline omnichannel unificada (M3-19) ---
+
+const getOpportunityTimeline = catchAsync(async (req, res) => {
+  const timeline = await req.withTenantTransaction((transaction) =>
+    opportunityTimelineService.getOpportunityTimeline(req.params.id, transaction, {
+      types: req.query.types ? String(req.query.types).split(',') : undefined,
+    })
+  );
+  return success(res, { data: timeline });
 });
 
 // --- Visits ---
@@ -247,6 +279,9 @@ module.exports = {
   getOpportunity,
   updateOpportunity,
   removeOpportunity,
+  createOpportunityTask,
+  listOpportunityTasks,
+  getOpportunityTimeline,
   createVisit,
   listVisits,
   getVisit,

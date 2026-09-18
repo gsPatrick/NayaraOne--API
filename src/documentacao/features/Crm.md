@@ -15,6 +15,9 @@ Todas as rotas exigem `Authorization: Bearer <accessToken>`.
 | GET | `/api/v1/opportunities/:id` | `crm:opportunities:read` |
 | PATCH | `/api/v1/opportunities/:id` | `crm:opportunities:update` |
 | DELETE | `/api/v1/opportunities/:id` (soft delete) | `crm:opportunities:delete` |
+| POST | `/api/v1/opportunities/:id/tasks` | `crm:tasks:create` |
+| GET | `/api/v1/opportunities/:id/tasks` | `crm:tasks:read` |
+| GET | `/api/v1/opportunities/:id/timeline` | `crm:opportunities:read` |
 | POST | `/api/v1/visits` | `crm:visits:create` |
 | GET | `/api/v1/visits` | `crm:visits:read` |
 | GET | `/api/v1/visits/:id` | `crm:visits:read` |
@@ -76,6 +79,32 @@ Toda criação de opportunity e toda mudança de `stage` (via `PATCH` com `stage
 atual) publica `crm.opportunity.stage_changed` via `publishDomainEvent` (Transactional
 Outbox — mesma transação da escrita de domínio), com payload `{ id, fromStage, toStage }`.
 
+## Tarefas da oportunidade (M3-11)
+
+`opportunityTasks.service.js` grava em `core.tasks` (tabela polimórfica que já existia, com
+RLS real) usando `related_entity_type = 'crm.opportunities'` e
+`related_entity_id = <opportunity.id>`. **Não** existe tabela própria de tarefa de CRM: a
+caixa de tarefas do usuário continua sendo uma consulta só, servindo contrato, cobrança e
+oportunidade. `next_action` continua sendo a próxima ação obrigatória do funil; as tarefas
+são o plano de trabalho ao redor dela.
+
+- `status`: `OPEN|IN_PROGRESS|DONE|CANCELED`; `priority`: `LOW|NORMAL|HIGH|URGENT`.
+- Responsável (`assignedToUserId`) precisa ser um usuário **ACTIVE** — atribuir a um usuário
+  suspenso falha com `422 OPPORTUNITY_TASK_ASSIGNEE_NOT_ACTIVE`.
+- Toda criação grava auditoria `opportunity.task_create`.
+
+## Timeline unificada (M3-19)
+
+`GET /api/v1/opportunities/:id/timeline` devolve, num array único ordenado do mais recente
+para o mais antigo, os itens de todas as fontes da negociação: `MESSAGE` (crm.messages),
+`VISIT` (crm.visits, posicionada pela data agendada), `PROPOSAL` (crm.proposals), `TASK`
+(core.tasks) e `STAGE_CHANGE`/`OPPORTUNITY_CREATED` (lidos de `audit.audit_log`). Aceita
+`?types=MESSAGE,VISIT` para filtrar.
+
+A timeline é **derivada na leitura** — não há tabela de eventos a manter nem risco de
+divergir das entidades. As mudanças de estágio vêm da auditoria (registro permanente e
+append-only), não do outbox (fila de entrega, podável depois do despacho).
+
 ## Visits
 
 ```json
@@ -89,11 +118,19 @@ Outbox — mesma transação da escrita de domínio), com payload `{ id, fromSta
 ```
 Status possíveis: `SCHEDULED|CONFIRMED|DONE|CANCELED|NO_SHOW`.
 
+Visita **prospectiva** (`SCHEDULED`/`CONFIRMED`) não pode ser marcada nem reagendada para uma
+data no passado (`422 VISIT_SCHEDULED_IN_THE_PAST`, tolerância de 5 min para desvio de
+relógio). Registrar depois do fato uma visita que já aconteceu continua valendo — basta usar
+`DONE`, `NO_SHOW` ou `CANCELED`.
+
 ## Messages — append-only
 
 `crm.messages` não tem `deleted_at` no schema (não é `paranoid` no model) — é append-only
-por design: histórico de atendimento nunca é apagado nem o `body` é editado. O service
-expõe apenas `create`/`list`/`get` e um `PATCH /:id/status` restrito (ex.: `RECEIVED` ->
+por design: histórico de atendimento nunca é apagado nem o `body` é editado.
+
+Canais aceitos (enum fechado): `WHATSAPP|EMAIL|SMS|PHONE|IN_PERSON|PORTAL|INSTAGRAM|OTHER`.
+
+O service expõe apenas `create`/`list`/`get` e um `PATCH /:id/status` restrito (ex.: `RECEIVED` ->
 `READ`). Envio duplicado do mesmo `externalMessageId` (webhook reentregue) retorna a
 mensagem já existente em vez de duplicar.
 
@@ -114,6 +151,8 @@ mensagem já existente em vez de duplicar.
 - `400 OPPORTUNITY_VALIDATION` — `personId` ausente ou `temperature` inválida.
 - `422 OPPORTUNITY_NEXT_ACTION_REQUIRED` — opportunity ativa sem `nextAction`/`nextActionDueAt`.
 - `400 VISIT_VALIDATION` — campos obrigatórios ausentes ou `status` inválido.
-- `400 MESSAGE_VALIDATION` — `direction`/`authorType` ausentes ou inválidos.
+- `400 MESSAGE_VALIDATION` — `direction`/`authorType`/`channel` ausentes ou fora do enum.
+- `422 VISIT_SCHEDULED_IN_THE_PAST` — visita prospectiva agendada para o passado.
+- `400 OPPORTUNITY_TASK_VALIDATION` / `422 OPPORTUNITY_TASK_ASSIGNEE_NOT_ACTIVE` — tarefas de oportunidade.
 - `404 OPPORTUNITY_NOT_FOUND` / `VISIT_NOT_FOUND` / `MESSAGE_NOT_FOUND`.
 - `404 PERSON_NOT_FOUND` / `PROPERTY_NOT_FOUND` — ao referenciar IDs inexistentes.
