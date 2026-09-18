@@ -1,20 +1,46 @@
 'use strict';
 
-const { LegalCase, Task } = require('../../models');
+const { LegalCase, LegalCaseParty, Person, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishLegalCaseCreated } = require('./legalEvents.service');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
+/**
+ * M5-26 — PARTES e FASES formais do processo.
+ *
+ * LEGAL_CASE_PHASES é uma LISTA ABERTA (documentada): estes são os valores conhecidos hoje,
+ * validados quando informados; a coluna no banco é STRING, não ENUM, porque o rito varia por
+ * tipo de ação e a cliente pode precisar de fases próprias sem uma migration a cada uma.
+ * `updateLegalCase` valida contra esta lista — se for preciso aceitar fase customizada, basta
+ * acrescentar aqui (ou passar `allowUnknownPhase: true` no payload, para casos pontuais).
+ *
+ * PARTY_ROLES cobre o essencial do contencioso brasileiro: autor (PLAINTIFF), réu (DEFENDANT),
+ * testemunha (WITNESS) e terceiro interessado (THIRD_PARTY).
+ */
+const LEGAL_CASE_PHASES = ['INITIAL_PETITION', 'DISCOVERY', 'TRIAL', 'APPEAL', 'CLOSED'];
+const LEGAL_CASE_PARTY_ROLES = ['PLAINTIFF', 'DEFENDANT', 'WITNESS', 'THIRD_PARTY'];
+
+function assertValidPhase(phase, allowUnknownPhase) {
+  if (phase === undefined || phase === null) return;
+  if (!LEGAL_CASE_PHASES.includes(phase) && !allowUnknownPhase) {
+    throw AppError.badRequest(
+      `"phase" deve ser um de: ${LEGAL_CASE_PHASES.join(', ')} (lista aberta — use "allowUnknownPhase" para uma fase customizada).`,
+      'LEGAL_CASE_VALIDATION'
+    );
+  }
+}
+
 async function createLegalCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, contractId, propertyId, responsibleUserId, caseNumber, caseType, summary } = payload;
+  const { groupId, companyId, contractId, propertyId, responsibleUserId, escalationUserId, caseNumber, caseType, summary, phase } = payload;
   if (!groupId || !companyId || !caseType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "caseType" são obrigatórios.', 'LEGAL_CASE_VALIDATION');
   }
   if (!CASE_TYPES.includes(caseType)) {
     throw AppError.badRequest(`"caseType" deve ser um de: ${CASE_TYPES.join(', ')}.`, 'LEGAL_CASE_VALIDATION');
   }
+  assertValidPhase(phase, payload.allowUnknownPhase);
 
   const legalCase = await LegalCase.create(
     {
@@ -23,9 +49,11 @@ async function createLegalCase(payload, actorUserId, transaction) {
       contractId: contractId || null,
       propertyId: propertyId || null,
       responsibleUserId: responsibleUserId || null,
+      escalationUserId: escalationUserId || null,
       caseNumber: caseNumber || null,
       caseType,
       status: 'OPEN',
+      phase: phase || null,
       summary: summary || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -69,29 +97,102 @@ async function getLegalCase(id, transaction) {
 async function updateLegalCase(id, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(id, transaction);
   const beforeJson = legalCase.toJSON();
-  const { status, summary, responsibleUserId } = payload;
+  const { status, summary, responsibleUserId, escalationUserId, phase } = payload;
+  // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
+  // com antes/depois explícitos no `reason`, não só no diff genérico.
+  assertValidPhase(phase, payload.allowUnknownPhase);
+  const previousPhase = legalCase.phase;
   if (status !== undefined) legalCase.status = status;
   if (summary !== undefined) legalCase.summary = summary;
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
+  if (escalationUserId !== undefined) legalCase.escalationUserId = escalationUserId;
+  if (phase !== undefined) legalCase.phase = phase;
   legalCase.updatedBy = actorUserId || null;
   await legalCase.save({ transaction });
+
+  const phaseChanged = phase !== undefined && phase !== previousPhase;
 
   await registrarAuditoria(
     {
       groupId: legalCase.groupId,
       companyId: legalCase.companyId,
       actorUserId,
-      action: 'legal.case.update',
+      action: phaseChanged ? 'legal.case.phase_change' : 'legal.case.update',
       entityType: 'LegalCase',
       entityId: legalCase.id,
       beforeJson,
       afterJson: legalCase.toJSON(),
-      reason: `Processo jurídico ${legalCase.id} atualizado.`,
+      reason: phaseChanged
+        ? `Processo jurídico ${legalCase.id} mudou de fase: ${previousPhase || '(sem fase)'} -> ${legalCase.phase}.`
+        : `Processo jurídico ${legalCase.id} atualizado.`,
     },
     transaction
   );
 
   return legalCase;
+}
+
+/**
+ * addLegalCaseParty — M5-26: registra uma parte formal (Person) no processo, com seu papel
+ * processual. A UNIQUE (legal_case_id, person_id, party_role) no banco impede duplicar a mesma
+ * pessoa no mesmo papel; a MESMA pessoa pode ter dois papéis diferentes (ex.: réu em um
+ * pedido e testemunha em outro ponto), por isso o papel entra na chave.
+ */
+async function addLegalCaseParty(legalCaseId, payload, actorUserId, transaction) {
+  const legalCase = await getLegalCase(legalCaseId, transaction);
+  const { personId, partyRole } = payload;
+  if (!personId) {
+    throw AppError.badRequest('O campo "personId" é obrigatório.', 'LEGAL_CASE_PARTY_VALIDATION');
+  }
+  if (!LEGAL_CASE_PARTY_ROLES.includes(partyRole)) {
+    throw AppError.badRequest(
+      `"partyRole" deve ser um de: ${LEGAL_CASE_PARTY_ROLES.join(', ')}.`,
+      'LEGAL_CASE_PARTY_VALIDATION'
+    );
+  }
+  const person = await Person.findByPk(personId, { transaction });
+  if (!person) throw AppError.notFound('Pessoa não encontrada.', 'LEGAL_CASE_PARTY_PERSON_NOT_FOUND');
+
+  const existing = await LegalCaseParty.findOne({
+    where: { legalCaseId: legalCase.id, personId, partyRole },
+    transaction,
+  });
+  if (existing) {
+    throw AppError.conflict('Esta pessoa já está registrada neste papel no processo.', 'LEGAL_CASE_PARTY_DUPLICATE');
+  }
+
+  const party = await LegalCaseParty.create(
+    {
+      groupId: legalCase.groupId,
+      companyId: legalCase.companyId,
+      legalCaseId: legalCase.id,
+      personId,
+      partyRole,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: legalCase.groupId,
+      companyId: legalCase.companyId,
+      actorUserId,
+      action: 'legal.case_party.create',
+      entityType: 'LegalCaseParty',
+      entityId: party.id,
+      afterJson: party.toJSON(),
+      reason: `Parte ${partyRole} (pessoa ${personId}) adicionada ao processo ${legalCase.id}.`,
+    },
+    transaction
+  );
+
+  return party;
+}
+
+async function listLegalCaseParties(legalCaseId, transaction) {
+  return LegalCaseParty.findAll({ where: { legalCaseId }, order: [['created_at', 'ASC']], transaction });
 }
 
 /**
@@ -135,4 +236,15 @@ async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
   return task;
 }
 
-module.exports = { createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, CASE_TYPES };
+module.exports = {
+  createLegalCase,
+  listLegalCases,
+  getLegalCase,
+  updateLegalCase,
+  linkCaseToTask,
+  addLegalCaseParty,
+  listLegalCaseParties,
+  CASE_TYPES,
+  LEGAL_CASE_PHASES,
+  LEGAL_CASE_PARTY_ROLES,
+};

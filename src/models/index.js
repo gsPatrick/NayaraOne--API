@@ -59,7 +59,12 @@ const modelDefiners = {
   ContractParty: require('./ContractParty'),
   ContractVersion: require('./ContractVersion'),
   Signature: require('./Signature'),
+  ContractClause: require('./ContractClause'),
+  ContractTemplate: require('./ContractTemplate'),
+  ContractTemplateClause: require('./ContractTemplateClause'),
+  ContractAmendment: require('./ContractAmendment'),
   LegalCase: require('./LegalCase'),
+  LegalCaseParty: require('./LegalCaseParty'),
   LegalDeadline: require('./LegalDeadline'),
   Inspection: require('./Inspection'),
   InspectionItem: require('./InspectionItem'),
@@ -67,6 +72,7 @@ const modelDefiners = {
   Guarantee: require('./Guarantee'),
   KeyDelivery: require('./KeyDelivery'),
   EvidencePackage: require('./EvidencePackage'),
+  EvidencePackageAccessLog: require('./EvidencePackageAccessLog'),
   InsuranceCase: require('./InsuranceCase'),
   BankAccount: require('./BankAccount'),
   CostCenter: require('./CostCenter'),
@@ -224,6 +230,18 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.ContractVersion.belongsTo(db.File, { foreignKey: 'document_file_id', as: 'documentFile', constraints: false });
   db.Signature.belongsTo(db.ContractVersion, { foreignKey: 'contract_version_id', as: 'contractVersion', constraints: false });
   db.Signature.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  db.ContractTemplateClause.belongsTo(db.ContractTemplate, { foreignKey: 'contract_template_id', as: 'template', constraints: false });
+  db.ContractTemplateClause.belongsTo(db.ContractClause, { foreignKey: 'contract_clause_id', as: 'clause', constraints: false });
+  db.ContractTemplate.hasMany(db.ContractTemplateClause, { foreignKey: 'contract_template_id', as: 'templateClauses', constraints: false });
+  db.ContractAmendment.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.ContractAmendment.belongsTo(db.File, { foreignKey: 'document_file_id', as: 'documentFile', constraints: false });
+  db.Contract.hasMany(db.ContractAmendment, { foreignKey: 'contract_id', as: 'amendments', constraints: false });
+  db.LegalCaseParty.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
+  db.LegalCaseParty.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  db.LegalCase.hasMany(db.LegalCaseParty, { foreignKey: 'legal_case_id', as: 'parties', constraints: false });
+  db.LegalCase.belongsTo(db.User, { foreignKey: 'escalation_user_id', as: 'escalationUser', constraints: false });
+  db.EvidencePackageAccessLog.belongsTo(db.EvidencePackage, { foreignKey: 'evidence_package_id', as: 'evidencePackage', constraints: false });
+  db.EvidencePackageAccessLog.belongsTo(db.User, { foreignKey: 'accessed_by_user_id', as: 'accessedByUser', constraints: false });
   db.LegalCase.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.LegalCase.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
   db.LegalCase.belongsTo(db.User, { foreignKey: 'responsible_user_id', as: 'responsibleUser', constraints: false });

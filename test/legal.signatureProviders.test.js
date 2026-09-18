@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const settingsService = require('../src/features/settings/settings.service');
 const signaturesService = require('../src/features/legal/signatures.service');
-const { TenantSetting } = require('../src/models');
+const { TenantSetting, File } = require('../src/models');
 const legalController = require('../src/features/legal/legal.controller');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
@@ -117,9 +117,24 @@ async function createLeaseWithSignedContract(transaction) {
     transaction
   );
   await contractsService.addContractParty(contract.id, { personId: person.id, partyRole: 'TENANT' }, tenant.userId, transaction);
+  // M5-07: criar versão de contrato agora exige o arquivo do documento já na criação
+  // (default do tenant `legal.contract_version_requires_document` = true).
+  const file = await File.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      storageKey: `homo-qa/signatures/${suffix}.pdf`,
+      fileName: `contrato-${suffix}.pdf`,
+      mimeType: 'application/pdf',
+      uploadedByUserId: tenant.userId,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
+  );
   const version = await contractVersionsService.createContractVersion(
     contract.id,
-    { content: `conteúdo do contrato de teste ${suffix}` },
+    { content: `conteúdo do contrato de teste ${suffix}`, documentFileId: file.id },
     tenant.userId,
     transaction
   );

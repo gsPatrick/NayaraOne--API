@@ -63,6 +63,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'summary',
       },
+      // M5-26: fase processual (lista aberta — ver LEGAL_CASE_PHASES em legalCases.service.js).
+      phase: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'phase',
+      },
+      // M5-27: quem recebe o alerta escalado quando o responsável não age em um prazo vencido.
+      escalationUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'escalation_user_id',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

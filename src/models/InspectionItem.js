@@ -57,6 +57,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'estimated_budget',
       },
+      // M5-21: de quem é a responsabilidade pelo dano — obrigatório quando condition=DAMAGED.
+      responsibleParty: {
+        type: DataTypes.STRING(16),
+        allowNull: true,
+        field: 'responsible_party',
+        comment: 'TENANT|LANDLORD|SHARED|UNDETERMINED',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
