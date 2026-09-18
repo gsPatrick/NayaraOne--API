@@ -13,6 +13,7 @@ const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
+const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
 
 const app = express();
 
@@ -98,6 +99,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLE
 // efetivamente utilizáveis"). Roda a cada 30 min dentro do próprio processo.
 if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_DEADLINE_ALERT_JOB_DISABLED !== 'true') {
   startLegalDeadlineAlertJob();
+}
+
+// Escalonamento de reclamações/elogios/conflitos com SLA vencido (M3-20, 18/09/2026).
+if (process.env.NODE_ENV !== 'test' && process.env.FEEDBACK_CASE_ALERT_JOB_DISABLED !== 'true') {
+  startFeedbackCaseAlertJob();
 }
 
 module.exports = app;
