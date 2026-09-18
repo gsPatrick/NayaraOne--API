@@ -148,20 +148,33 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
     }
   }
 
-  const step = await ApprovalStep.create(
-    {
-      groupId: approvalRequest.groupId,
-      companyId: approvalRequest.companyId,
-      approvalRequestId,
-      approverUserId,
-      stepOrder: existingSteps.length + 1,
-      decision: normalizedDecision,
-      decidedAt: new Date(),
-      createdBy: approverUserId || null,
-      updatedBy: approverUserId || null,
-    },
-    { transaction }
-  );
+  // FIX (M4-24, 18/09/2026): a checagem "já decidiu?" acima (existingSteps.some(...)) é um
+  // SELECT no início da função — sob concorrência real (duplo-clique, retry), duas transações
+  // podem passar por ela ao mesmo tempo antes de qualquer uma commitar. A constraint única
+  // approval_steps_request_approver_uk é quem realmente fecha a corrida: a segunda tentativa
+  // falha aqui, convertida no mesmo erro de negócio que a checagem em memória já usava.
+  let step;
+  try {
+    step = await ApprovalStep.create(
+      {
+        groupId: approvalRequest.groupId,
+        companyId: approvalRequest.companyId,
+        approvalRequestId,
+        approverUserId,
+        stepOrder: existingSteps.length + 1,
+        decision: normalizedDecision,
+        decidedAt: new Date(),
+        createdBy: approverUserId || null,
+        updatedBy: approverUserId || null,
+      },
+      { transaction }
+    );
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');
+    }
+    throw err;
+  }
 
   await publishApprovalStepDecided(step, transaction);
 
