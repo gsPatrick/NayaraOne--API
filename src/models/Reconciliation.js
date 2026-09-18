@@ -36,6 +36,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'bank_transaction_id',
       },
+      matchGroupId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'match_group_id',
+        comment: 'Amarra todas as linhas de uma conciliação N:N (NULL nas conciliações 1:1)',
+      },
       matchedAt: {
         type: DataTypes.DATE,
         allowNull: false,

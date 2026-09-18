@@ -73,6 +73,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'due_at',
       },
+      competenceMonth: {
+        type: DataTypes.STRING(7),
+        allowNull: true,
+        field: 'competence_month',
+        comment: 'Mês contábil de competência no formato "YYYY-MM" (pode diferir do mês de vencimento)',
+      },
       settledAt: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -95,6 +101,34 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'reversal_of_entry_id',
         comment: "Auto-referência: aponta para o lançamento estornado",
+      },
+      parentEntryId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'parent_entry_id',
+        comment: 'Auto-referência: preenchido nas baixas PARCIAIS, aponta para o lançamento original',
+      },
+      requiresManualReview: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'requires_manual_review',
+        comment: 'Antifraude: pagamento anômalo, travado até revisão humana',
+      },
+      manualReviewReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'manual_review_reason',
+      },
+      manualReviewClearedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'manual_review_cleared_at',
+      },
+      manualReviewClearedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'manual_review_cleared_by',
       },
       lockVersion: {
         type: DataTypes.INTEGER,

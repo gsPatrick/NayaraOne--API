@@ -15,12 +15,57 @@ const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinan
 
 const ENTRY_TYPES = ['DEBIT', 'CREDIT'];
 const NATURES = ['PAYABLE', 'RECEIVABLE', 'TRANSFER', 'ADJUSTMENT'];
-const STATUSES = ['PENDING', 'SETTLED', 'REVERSED', 'CANCELLED'];
+// PARTIALLY_SETTLED (M4-06): lançamento que já recebeu uma ou mais baixas parciais mas ainda
+// tem saldo em aberto. Continua "vivo" (aceita novas baixas) até a soma fechar o total.
+const STATUSES = ['PENDING', 'PARTIALLY_SETTLED', 'SETTLED', 'REVERSED', 'CANCELLED'];
+
+// M4-03 — COMPETÊNCIA x VENCIMENTO.
+// `competenceMonth` ("YYYY-MM") é o mês contábil a que o lançamento pertence e pode ser
+// diferente do mês de vencimento (ex.: energia consumida em setembro que vence em outubro).
+// REGRA DE DERIVAÇÃO (quando o campo não é informado):
+//   1. se houver `dueAt`, usa o ano-mês do vencimento (em UTC);
+//   2. senão, usa o ano-mês de "agora" (momento da criação do lançamento = created_at).
+// Nunca derivamos de settledAt: competência é definida na origem da obrigação, não na baixa.
+const COMPETENCE_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function toCompetenceMonth(date) {
+  const d = new Date(date);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function resolveCompetenceMonth(competenceMonth, dueAt) {
+  if (competenceMonth !== undefined && competenceMonth !== null && competenceMonth !== '') {
+    const normalized = String(competenceMonth).trim();
+    if (!COMPETENCE_MONTH_REGEX.test(normalized)) {
+      throw AppError.badRequest(
+        'O campo "competenceMonth" deve estar no formato "YYYY-MM" (ex.: "2026-09").',
+        'FINANCE_ENTRY_VALIDATION'
+      );
+    }
+    return normalized;
+  }
+  if (dueAt) return toCompetenceMonth(dueAt);
+  return toCompetenceMonth(new Date());
+}
 
 function assertPositiveAmount(amount) {
   const numeric = Number(amount);
   if (!Number.isFinite(numeric) || numeric <= 0) {
     throw AppError.badRequest('O campo "amount" deve ser um número positivo (moeda em numeric/decimal — FIN-008).', 'FINANCE_ENTRY_VALIDATION');
+  }
+}
+
+/**
+ * assertNotUnderManualReview (M4-21) — fail closed: um lançamento flagado como anômalo pelo
+ * antifraude não pode ser liquidado (total nem parcialmente) enquanto um humano não liberar
+ * via `clearManualReview` (financeAntifraud.service.js).
+ */
+function assertNotUnderManualReview(entry) {
+  if (entry.requiresManualReview) {
+    throw AppError.conflict(
+      'Este lançamento está retido para revisão manual (antifraude) e não pode ser liquidado até ser liberado por um revisor.',
+      'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW'
+    );
   }
 }
 
@@ -65,6 +110,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     amount,
     description,
     dueAt,
+    competenceMonth,
     idempotencyKey,
   } = payload;
 
@@ -84,6 +130,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   }
   assertPositiveAmount(amount);
   assertReasonableDueDate(dueAt);
+  const resolvedCompetenceMonth = resolveCompetenceMonth(competenceMonth, dueAt);
 
   await assertNoDuplicatePayment(FinancialEntry, idempotencyKey, transaction);
 
@@ -100,6 +147,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       amount,
       description: description || null,
       dueAt: dueAt || null,
+      competenceMonth: resolvedCompetenceMonth,
       settledAt: null,
       status: 'PENDING',
       idempotencyKey: idempotencyKey || null,
@@ -135,6 +183,7 @@ async function listFinancialEntries(transaction, filters = {}) {
   if (filters.nature) where.nature = String(filters.nature).toUpperCase();
   if (filters.bankAccountId) where.bankAccountId = filters.bankAccountId;
   if (filters.costCenterId) where.costCenterId = filters.costCenterId;
+  if (filters.competenceMonth) where.competenceMonth = String(filters.competenceMonth).trim();
   return FinancialEntry.findAll({ where, order: [['due_at', 'ASC']], transaction });
 }
 
@@ -158,8 +207,11 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     );
   }
   const beforeJson = entry.toJSON();
-  const { bankAccountId, costCenterId, resultCenterId, dueAt, description } = payload;
+  const { bankAccountId, costCenterId, resultCenterId, dueAt, description, competenceMonth } = payload;
   if (dueAt !== undefined) assertReasonableDueDate(dueAt);
+  if (competenceMonth !== undefined) {
+    entry.competenceMonth = resolveCompetenceMonth(competenceMonth, dueAt !== undefined ? dueAt : entry.dueAt);
+  }
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;
@@ -192,9 +244,16 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
  */
 async function settleFinancialEntry(id, actorUserId, transaction) {
   const entry = await getFinancialEntry(id, transaction);
+  if (entry.status === 'PARTIALLY_SETTLED') {
+    throw AppError.conflict(
+      'Este lançamento já tem baixas parciais — use a liquidação parcial do saldo restante (settleFinancialEntryPartial) para fechá-lo.',
+      'FINANCE_ENTRY_INVALID_STATUS'
+    );
+  }
   if (entry.status !== 'PENDING') {
     throw AppError.conflict(`Só é possível liquidar um lançamento PENDING (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
   }
+  assertNotUnderManualReview(entry);
   const beforeJson = entry.toJSON();
 
   if (entry.bankAccountId) {
@@ -226,6 +285,135 @@ async function settleFinancialEntry(id, actorUserId, transaction) {
   return entry;
 }
 
+// --- M4-06: liquidação PARCIAL (recebimento/pagamento parcial no LEDGER) -------------------
+//
+// MODELAGEM (decisão documentada): o ledger é append-only e imutável — o `amount` do
+// lançamento original NUNCA é alterado por uma baixa parcial. Cada baixa vira um NOVO
+// lançamento SETTLED (mesmo entryType/nature/conta do pai) com o valor parcial, ligado ao
+// original por `parentEntryId`. O ORIGINAL só muda de STATUS:
+//   PENDING -> PARTIALLY_SETTLED (ainda há saldo) -> SETTLED (soma das baixas = amount).
+// O saldo restante é CALCULADO (`computeRemainingAmount`), nunca armazenado — assim não existe
+// a possibilidade de um "saldo materializado" divergir do que o ledger realmente diz.
+//
+// Toda a aritmética é feita em CENTAVOS inteiros: DECIMAL(18,2) em ponto flutuante daria
+// erro de arredondamento (0.1 + 0.2 !== 0.3) e a exigência aqui é precisão até o centavo.
+
+function toCents(value) {
+  return Math.round(Number(value) * 100);
+}
+
+function fromCents(cents) {
+  return (cents / 100).toFixed(2);
+}
+
+/**
+ * computeRemainingAmount — saldo em aberto do lançamento = amount - Σ(baixas parciais filhas
+ * que estão SETTLED). Retorna string com 2 casas (mesma precisão do DECIMAL(18,2)).
+ */
+async function computeRemainingAmount(entryOrId, transaction) {
+  const entry = typeof entryOrId === 'string' ? await getFinancialEntry(entryOrId, transaction) : entryOrId;
+  const children = await FinancialEntry.findAll({
+    where: { parentEntryId: entry.id, status: 'SETTLED' },
+    transaction,
+  });
+  const settledCents = children.reduce((acc, child) => acc + toCents(child.amount), 0);
+  return fromCents(toCents(entry.amount) - settledCents);
+}
+
+/**
+ * settleFinancialEntryPartial — baixa parcial de `partialAmount` sobre o lançamento `id`.
+ * Valida 0 < partialAmount <= saldo restante (tolerância zero, em centavos).
+ */
+async function settleFinancialEntryPartial(id, partialAmount, actorUserId, transaction) {
+  // Lock pessimista no pai: sem ele, duas baixas parciais concorrentes poderiam ler o mesmo
+  // saldo restante e, somadas, ultrapassar o total do lançamento.
+  const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
+
+  if (!['PENDING', 'PARTIALLY_SETTLED'].includes(entry.status)) {
+    throw AppError.conflict(
+      `Só é possível liquidar parcialmente um lançamento PENDING ou PARTIALLY_SETTLED (atual: "${entry.status}").`,
+      'FINANCE_ENTRY_INVALID_STATUS'
+    );
+  }
+  assertNotUnderManualReview(entry);
+  assertPositiveAmount(partialAmount);
+
+  const partialCents = toCents(partialAmount);
+  const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
+  if (partialCents > remainingCents) {
+    throw AppError.badRequest(
+      `Valor da baixa parcial (${fromCents(partialCents)}) é maior que o saldo restante do lançamento (${fromCents(remainingCents)}).`,
+      'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING'
+    );
+  }
+
+  if (entry.bankAccountId) {
+    await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
+  }
+
+  const beforeJson = entry.toJSON();
+
+  const settlement = await FinancialEntry.create(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      bankAccountId: entry.bankAccountId,
+      costCenterId: entry.costCenterId,
+      resultCenterId: entry.resultCenterId,
+      contractId: entry.contractId,
+      entryType: entry.entryType,
+      nature: entry.nature,
+      amount: fromCents(partialCents),
+      description: `Baixa parcial de ${fromCents(partialCents)} do lançamento ${entry.id}.`,
+      dueAt: entry.dueAt,
+      // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
+      // mesma; o que mudou foi só o momento do caixa).
+      competenceMonth: entry.competenceMonth,
+      settledAt: new Date(),
+      status: 'SETTLED',
+      idempotencyKey: null,
+      reversalOfEntryId: null,
+      parentEntryId: entry.id,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  const newRemainingCents = remainingCents - partialCents;
+  entry.status = newRemainingCents === 0 ? 'SETTLED' : 'PARTIALLY_SETTLED';
+  if (newRemainingCents === 0) entry.settledAt = new Date();
+  entry.updatedBy = actorUserId || null;
+  await entry.save({ transaction });
+
+  await publishFinancialEntrySettled(settlement, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      actorUserId,
+      action: 'finance.entry.settle_partial',
+      entityType: 'FinancialEntry',
+      entityId: entry.id,
+      beforeJson,
+      afterJson: {
+        original: entry.toJSON(),
+        settlementEntryId: settlement.id,
+        partialAmount: fromCents(partialCents),
+        remainingAmount: fromCents(newRemainingCents),
+      },
+      reason:
+        `Baixa parcial de ${fromCents(partialCents)} registrada no lançamento de ${entry.amount} ` +
+        `(saldo restante ${fromCents(newRemainingCents)}).`,
+    },
+    transaction
+  );
+
+  return { original: entry, settlement, remainingAmount: fromCents(newRemainingCents) };
+}
+
 /**
  * reverseEntry — ESTORNO. Nunca apaga nem edita o valor do lançamento original (FIN-010):
  * marca o original como REVERSED e cria um novo lançamento compensatório (`entryType`
@@ -254,6 +442,8 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
       nature: 'ADJUSTMENT',
       amount: original.amount,
       dueAt: null,
+      // O estorno pertence à mesma competência do lançamento estornado.
+      competenceMonth: original.competenceMonth,
       settledAt: new Date(),
       status: 'SETTLED',
       idempotencyKey: null,
@@ -294,6 +484,9 @@ module.exports = {
   getFinancialEntry,
   updateFinancialEntry,
   settleFinancialEntry,
+  settleFinancialEntryPartial,
+  computeRemainingAmount,
+  resolveCompetenceMonth,
   reverseFinancialEntry,
   ENTRY_TYPES,
   NATURES,
