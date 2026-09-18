@@ -511,7 +511,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
     }
     if (periodClosuresService && typeof periodClosuresService.closePeriod === 'function') {
       const closure = await periodClosuresService.closePeriod(
-        { groupId: tenant.groupId, companyId: tenant.companyId, competenceMonth: '2026-09' },
+        { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth: '2026-09' },
         tenant.userId,
         transaction
       );
