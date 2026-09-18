@@ -117,8 +117,22 @@ async function addInspectionItem(inspectionId, payload, actorUserId, transaction
     if (!damageDescription || !String(damageDescription).trim()) {
       throw AppError.badRequest('Item com condição "DAMAGED" precisa de "damageDescription".', 'LEGAL_INSPECTION_ITEM_VALIDATION');
     }
-    if (estimatedBudget === undefined || estimatedBudget === null || Number(estimatedBudget) < 0) {
-      throw AppError.badRequest('Item com condição "DAMAGED" precisa de "estimatedBudget" (>= 0).', 'LEGAL_INSPECTION_ITEM_VALIDATION');
+    // ADV (M5-32): `Number(estimatedBudget) < 0` deixava passar qualquer coisa NÃO numérica —
+    // `Number('abc')`/`Number("100'; DROP TABLE ...")` é NaN, e NaN < 0 é false. O valor
+    // chegava ao INSERT e só estourava (ou virava null) no banco. Agora o campo precisa ser um
+    // número FINITO e não negativo, validado na aplicação.
+    const budgetNumber = Number(estimatedBudget);
+    if (
+      estimatedBudget === undefined ||
+      estimatedBudget === null ||
+      estimatedBudget === '' ||
+      !Number.isFinite(budgetNumber) ||
+      budgetNumber < 0
+    ) {
+      throw AppError.badRequest(
+        'Item com condição "DAMAGED" precisa de "estimatedBudget" numérico e >= 0.',
+        'LEGAL_INSPECTION_ITEM_VALIDATION'
+      );
     }
     // M5-21: sem responsável definido, o orçamento do dano não vira cobrança nem desconto de
     // caução — mesma regra (obrigatório quando DAMAGED) de damageDescription/estimatedBudget.

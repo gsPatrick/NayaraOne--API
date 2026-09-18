@@ -15,10 +15,18 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
     );
   }
 
+  // ADV (M5-32): o contrato NUNCA era carregado na criação — quem chamasse o service com o
+  // UUID de um contrato de outra empresa e o próprio group/company no payload conseguia criar
+  // uma entrega de chaves apontando para um contrato que não pode nem ler. `getContract` roda
+  // sob o RLS do tenant do chamador, então um contrato de outro tenant simplesmente não existe
+  // aqui (404) — e o group/company gravados passam a vir do CONTRATO, não do payload, para que
+  // um payload forjado não consiga plantar a linha no tenant errado.
+  const contract = await getContract(contractId, transaction);
+
   const keyDelivery = await KeyDelivery.create(
     {
-      groupId,
-      companyId,
+      groupId: contract.groupId,
+      companyId: contract.companyId,
       contractId,
       inspectionId: inspectionId || null,
       deliveredToPersonId,
@@ -34,8 +42,8 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
 
   await registrarAuditoria(
     {
-      groupId,
-      companyId,
+      groupId: contract.groupId,
+      companyId: contract.companyId,
       actorUserId,
       action: 'legal.key_delivery.create',
       entityType: 'KeyDelivery',

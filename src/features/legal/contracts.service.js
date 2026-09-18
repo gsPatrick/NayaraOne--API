@@ -1,6 +1,6 @@
 'use strict';
 
-const { Contract, ContractParty, ContractVersion, Signature } = require('../../models');
+const { Contract, ContractParty, ContractVersion, Signature, Guarantee } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
@@ -110,6 +110,64 @@ async function assertSignatureGate(contract, transaction) {
   }
 }
 
+/**
+ * M5-10 (fechamento) — GATE DE ATIVAÇÃO (SIGNED -> ACTIVE).
+ *
+ * Até aqui a transição SIGNED -> ACTIVE estava protegida apenas por TRANSITIVIDADE: para
+ * chegar em SIGNED o contrato já teria passado por assertDocumentGate (SIGNING) e
+ * assertSignatureGate (SIGNED). Isso é frágil por dois motivos reais:
+ *   1) quem chama `transitionContractStatus` passa a INSTÂNCIA do contrato em mãos — basta ela
+ *      ter `status = 'SIGNED'` (carregada de uma linha adulterada por fora, ou mutada em
+ *      memória por um chamador interno) para que a ativação aconteça sem nenhuma reconferência;
+ *   2) o mundo muda ENTRE a assinatura e a ativação (uma assinatura pode ser cancelada, uma
+ *      garantia pode ser recusada/expirada) — ativar sem reconferir congela uma decisão tomada
+ *      com dados velhos.
+ *
+ * O gate abaixo NÃO assume nada do passado: reconfirma ativamente, no momento da ativação:
+ *   (a) existe ContractVersion vigente com `documentFileId` real (documento anexado);
+ *   (b) TODAS as Signature dessa versão estão SIGNED (e há ao menos uma);
+ *   (c) SE existir alguma Guarantee vinculada ao contrato, ao menos uma está ACTIVE.
+ *
+ * DECISÃO DE ENGENHARIA DOCUMENTADA sobre (c): contrato SEM NENHUMA garantia cadastrada NÃO é
+ * bloqueado. "Todo contrato exige garantia" não está definido no Caderno e não é verdade no
+ * mercado (locação com pagamento antecipado, contratos de venda, prestação de serviço). O que
+ * é inaceitável — e é o que travamos — é ativar um contrato cuja ÚNICA garantia registrada
+ * está CANCELLED/EXPIRED/PENDING: nesse caso alguém quis garantia, ela não está valendo, e
+ * ativar seria entregar o imóvel sem a proteção que o próprio contrato previu. Se no futuro a
+ * cliente definir tipos de contrato com garantia obrigatória, a regra entra aqui (e vira
+ * configuração por tenant, no mesmo padrão de legal.contract_version_requires_document).
+ */
+async function assertActivationGate(contract, transaction) {
+  const latestVersion = await ContractVersion.findOne({
+    where: { contractId: contract.id },
+    order: [['version_number', 'DESC']],
+    transaction,
+  });
+  if (!latestVersion || !latestVersion.documentFileId) {
+    throw AppError.conflict(
+      'Não é possível ATIVAR o contrato: não há versão de documento com arquivo real anexado (documentFileId).',
+      'LEGAL_CONTRACT_ACTIVATION_GATE'
+    );
+  }
+
+  const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
+  const allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  if (!allSigned) {
+    throw AppError.conflict(
+      'Não é possível ATIVAR o contrato: a versão vigente do documento não tem todas as assinaturas confirmadas (status "SIGNED").',
+      'LEGAL_CONTRACT_ACTIVATION_GATE'
+    );
+  }
+
+  const guarantees = await Guarantee.findAll({ where: { contractId: contract.id }, transaction });
+  if (guarantees.length > 0 && !guarantees.some((g) => g.status === 'ACTIVE')) {
+    throw AppError.conflict(
+      'Não é possível ATIVAR o contrato: existem garantias cadastradas, mas nenhuma delas está com status "ACTIVE".',
+      'LEGAL_CONTRACT_ACTIVATION_GATE'
+    );
+  }
+}
+
 async function createContract(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt } = payload;
   if (!groupId || !companyId || !contractType) {
@@ -192,6 +250,9 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   }
   if (targetStatus === 'SIGNED') {
     await assertSignatureGate(contract, transaction);
+  }
+  if (targetStatus === 'ACTIVE') {
+    await assertActivationGate(contract, transaction);
   }
 
   const beforeJson = contract.toJSON();
@@ -340,6 +401,7 @@ module.exports = {
   addContractParty,
   listContractParties,
   correctContractData,
+  assertActivationGate,
   CORRECTABLE_FIELDS,
   CONTRACT_TYPES,
   VALID_TRANSITIONS,

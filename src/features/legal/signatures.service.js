@@ -42,6 +42,18 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
   }
   const contractVersion = await getContractVersion(contractVersionId, transaction);
 
+  // ADV (M5-32): mandar um contrato CANCELADO para assinatura era possível — o service só
+  // olhava a ContractVersion e nunca o estado do contrato pai. Resultado: signatários recebendo
+  // para assinar um documento que a empresa já cancelou, e uma Signature PENDING pendurada num
+  // contrato terminal. Cancelado é estado terminal: nada mais é solicitado sobre ele.
+  const contract = await getContract(contractVersion.contractId, transaction);
+  if (contract.status === 'CANCELLED') {
+    throw AppError.conflict(
+      'Não é possível solicitar assinatura de um contrato CANCELADO.',
+      'LEGAL_SIGNATURE_CONTRACT_CANCELLED'
+    );
+  }
+
   const signatureAdapter = await resolveSignatureAdapter(
     { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
     transaction
