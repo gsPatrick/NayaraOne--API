@@ -72,6 +72,10 @@ const modelDefiners = {
   CostCenter: require('./CostCenter'),
   ResultCenter: require('./ResultCenter'),
   FinancialEntry: require('./FinancialEntry'),
+  ChartOfAccount: require('./ChartOfAccount'),
+  PaymentIntent: require('./PaymentIntent'),
+  IntercompanyTransfer: require('./IntercompanyTransfer'),
+  PeriodClosure: require('./PeriodClosure'),
   BankTransaction: require('./BankTransaction'),
   Reconciliation: require('./Reconciliation'),
   ApprovalRequest: require('./ApprovalRequest'),
@@ -242,6 +246,16 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.FinancialEntry.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });
   db.FinancialEntry.belongsTo(db.ResultCenter, { foreignKey: 'result_center_id', as: 'resultCenter', constraints: false });
   db.FinancialEntry.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.FinancialEntry.belongsTo(db.ChartOfAccount, { foreignKey: 'chart_of_account_id', as: 'chartOfAccount', constraints: false });
+  db.ChartOfAccount.belongsTo(db.ChartOfAccount, { foreignKey: 'parent_account_id', as: 'parentAccount', constraints: false });
+  db.ChartOfAccount.hasMany(db.ChartOfAccount, { foreignKey: 'parent_account_id', as: 'childAccounts', constraints: false });
+  db.PaymentIntent.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.PaymentIntent.belongsTo(db.ApprovalRequest, { foreignKey: 'approval_request_id', as: 'approvalRequest', constraints: false });
+  db.IntercompanyTransfer.belongsTo(db.Company, { foreignKey: 'from_company_id', as: 'fromCompany', constraints: false });
+  db.IntercompanyTransfer.belongsTo(db.Company, { foreignKey: 'to_company_id', as: 'toCompany', constraints: false });
+  db.IntercompanyTransfer.belongsTo(db.FinancialEntry, { foreignKey: 'from_entry_id', as: 'fromEntry', constraints: false });
+  db.IntercompanyTransfer.belongsTo(db.FinancialEntry, { foreignKey: 'to_entry_id', as: 'toEntry', constraints: false });
+  db.PeriodClosure.belongsTo(db.Company, { foreignKey: 'company_id', as: 'company', constraints: false });
   db.BankTransaction.belongsTo(db.BankAccount, { foreignKey: 'bank_account_id', as: 'bankAccount', constraints: false });
   db.Reconciliation.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
   db.Reconciliation.belongsTo(db.BankTransaction, { foreignKey: 'bank_transaction_id', as: 'bankTransaction', constraints: false });
