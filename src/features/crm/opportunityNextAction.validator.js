@@ -2,7 +2,11 @@
 
 const AppError = require('../../utils/AppError');
 
-const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST'];
+// M3-12: `WITHDRAWN` (desistência do cliente) entra aqui como terceiro estágio TERMINAL —
+// uma oportunidade da qual o cliente desistiu está fechada tanto quanto uma perdida, então
+// não faz sentido continuar exigindo `nextAction` dela. Ver a decisão de modelagem completa
+// em opportunityOutcomeReason.validator.js.
+const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
 
 function isActiveStage(stage) {
   return !CLOSED_STAGES.includes(String(stage || '').toUpperCase());

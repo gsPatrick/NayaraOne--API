@@ -51,6 +51,8 @@ const modelDefiners = {
   PropertyInternalOccurrence: require('./PropertyInternalOccurrence'),
   Opportunity: require('./Opportunity'),
   PropertyRadar: require('./PropertyRadar'),
+  Proposal: require('./Proposal'),
+  FeedbackCase: require('./FeedbackCase'),
   Visit: require('./Visit'),
   Message: require('./Message'),
   Contract: require('./Contract'),
@@ -201,6 +203,15 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.Opportunity.hasMany(db.Visit, { foreignKey: 'opportunity_id', as: 'visits', constraints: false });
   db.Opportunity.hasMany(db.Message, { foreignKey: 'opportunity_id', as: 'messages', constraints: false });
   db.Opportunity.hasMany(db.PropertyRadar, { foreignKey: 'opportunity_id', as: 'radars', constraints: false });
+  // --- CRM Marco 3: Proposal (M3-13/M3-25) e FeedbackCase (M3-20) ---
+  db.Proposal.belongsTo(db.Opportunity, { foreignKey: 'opportunity_id', as: 'opportunity', constraints: false });
+  db.Proposal.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
+  db.Proposal.belongsTo(db.Person, { foreignKey: 'proposed_by_person_id', as: 'proposedByPerson', constraints: false });
+  db.Proposal.belongsTo(db.User, { foreignKey: 'decided_by_user_id', as: 'decidedByUser', constraints: false });
+  db.Opportunity.hasMany(db.Proposal, { foreignKey: 'opportunity_id', as: 'proposals', constraints: false });
+  db.FeedbackCase.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  db.FeedbackCase.belongsTo(db.Opportunity, { foreignKey: 'opportunity_id', as: 'opportunity', constraints: false });
+  db.FeedbackCase.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
   db.Contract.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
   db.Contract.belongsTo(db.Opportunity, { foreignKey: 'opportunity_id', as: 'opportunity', constraints: false });
   db.ContractParty.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });

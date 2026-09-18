@@ -1,8 +1,8 @@
 'use strict';
 
-const { PropertyRadar, Person, Opportunity } = require('../../models');
+const { PropertyRadar, Person, Opportunity, Property, PropertyOffer } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { matchRadarToProperties } = require('./radarMatching.service');
+const { matchRadarToProperties, explainMatch } = require('./radarMatching.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 // CRUD de PropertyRadar — o matching determinístico contra properties/offers vive em
@@ -130,8 +130,24 @@ async function getRadarMatches(id, transaction) {
   return matchRadarToProperties(radar, transaction);
 }
 
+/**
+ * M3-15 — explicação do match de UM imóvel específico contra UM radar. Não mexe no matching
+ * determinístico (matchRadarToProperties continua sendo a fonte de verdade de "quem aparece
+ * na lista"); serve pra responder "por que este imóvel bate / não bate".
+ */
+async function explainRadarMatch(radarId, propertyId, transaction) {
+  const radar = await getRadar(radarId, transaction);
+  const property = await Property.findByPk(propertyId, {
+    include: [{ model: PropertyOffer, as: 'offers', required: false }],
+    transaction,
+  });
+  if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
+  return explainMatch(radar, property);
+}
+
 module.exports = {
   createRadar,
+  explainRadarMatch,
   listRadars,
   getRadar,
   updateRadar,

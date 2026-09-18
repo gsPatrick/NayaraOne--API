@@ -3,6 +3,7 @@
 const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
+const { assertOutcomeReason } = require('./opportunityOutcomeReason.validator');
 const { publishOpportunityCreated, publishOpportunityStageChanged } = require('./opportunityEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -24,6 +25,9 @@ async function createOpportunity(payload, actorUserId, transaction) {
     expectedValue,
     nextAction,
     nextActionDueAt,
+    wonReason,
+    lostReason,
+    withdrawnReason,
   } = payload;
 
   if (!groupId || !companyId || !personId) {
@@ -44,6 +48,9 @@ async function createOpportunity(payload, actorUserId, transaction) {
   }
 
   assertNextActionWhenActive({ stage: normalizedStage, nextAction, nextActionDueAt });
+  // M3-12: se já nasce num estágio de desfecho (CLOSED_WON/CLOSED_LOST/WITHDRAWN), o motivo
+  // estruturado é obrigatório e precisa pertencer ao enum daquele desfecho.
+  const outcome = assertOutcomeReason({ stage: normalizedStage, wonReason, lostReason, withdrawnReason });
 
   const opportunity = await Opportunity.create(
     {
@@ -57,6 +64,9 @@ async function createOpportunity(payload, actorUserId, transaction) {
       expectedValue: expectedValue !== undefined ? expectedValue : null,
       nextAction: nextAction || null,
       nextActionDueAt: nextActionDueAt || null,
+      wonReason: outcome && outcome.field === 'wonReason' ? outcome.value : null,
+      lostReason: outcome && outcome.field === 'lostReason' ? outcome.value : null,
+      withdrawnReason: outcome && outcome.field === 'withdrawnReason' ? outcome.value : null,
       closedAt: CLOSED_STAGES.includes(normalizedStage) ? new Date() : null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -101,13 +111,24 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
   const opportunity = await getOpportunity(id, transaction);
   const previousStage = opportunity.stage;
   const beforeJson = opportunity.toJSON();
-  const { stage, temperature, expectedValue, nextAction, nextActionDueAt, lostReason, ownerUserId } = payload;
+  const { stage, temperature, expectedValue, nextAction, nextActionDueAt, lostReason, wonReason, withdrawnReason, ownerUserId } =
+    payload;
 
   const nextStage = stage !== undefined ? String(stage).toUpperCase() : opportunity.stage;
   const nextNextAction = nextAction !== undefined ? nextAction : opportunity.nextAction;
   const nextNextActionDueAt = nextActionDueAt !== undefined ? nextActionDueAt : opportunity.nextActionDueAt;
 
   assertNextActionWhenActive({ stage: nextStage, nextAction: nextNextAction, nextActionDueAt: nextNextActionDueAt });
+
+  // M3-12: ao MOVER para um estágio de desfecho, exige o motivo estruturado. O motivo pode
+  // vir no próprio payload ou já estar gravado (ex.: reeditar uma oportunidade já fechada sem
+  // reenviar o motivo) — por isso o fallback para o valor atual da entidade.
+  const outcome = assertOutcomeReason({
+    stage: nextStage,
+    wonReason: wonReason !== undefined ? wonReason : opportunity.wonReason,
+    lostReason: lostReason !== undefined ? lostReason : opportunity.lostReason,
+    withdrawnReason: withdrawnReason !== undefined ? withdrawnReason : opportunity.withdrawnReason,
+  });
 
   if (temperature !== undefined) {
     if (temperature && !TEMPERATURES.includes(String(temperature).toUpperCase())) {
@@ -120,6 +141,11 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
   if (nextAction !== undefined) opportunity.nextAction = nextAction;
   if (nextActionDueAt !== undefined) opportunity.nextActionDueAt = nextActionDueAt;
   if (lostReason !== undefined) opportunity.lostReason = lostReason;
+  if (wonReason !== undefined) opportunity.wonReason = wonReason;
+  if (withdrawnReason !== undefined) opportunity.withdrawnReason = withdrawnReason;
+  // Grava o motivo já NORMALIZADO (upper case) do desfecho validado — garante que o painel
+  // (M3-17) agregue sempre sobre os mesmos valores canônicos.
+  if (outcome) opportunity[outcome.field] = outcome.value;
   if (stage !== undefined) {
     opportunity.stage = nextStage;
     if (CLOSED_STAGES.includes(nextStage) && !opportunity.closedAt) {

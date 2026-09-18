@@ -87,7 +87,7 @@ test('opportunity fechada (CLOSED_WON/CLOSED_LOST) não exige nextAction', async
     );
 
     const opportunity = await opportunitiesService.createOpportunity(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'CLOSED_LOST', lostReason: 'Sem orçamento' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'CLOSED_LOST', lostReason: 'FINANCING_DENIED' },
       tenant.userId,
       transaction
     );

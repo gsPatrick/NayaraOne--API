@@ -69,6 +69,19 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'lost_reason',
+        comment: 'Motivo estruturado de PERDA (enum LOST) — obrigatório ao entrar em CLOSED_LOST (M3-12).',
+      },
+      wonReason: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'won_reason',
+        comment: 'Motivo estruturado de GANHO (enum WON) — obrigatório ao entrar em CLOSED_WON (M3-12).',
+      },
+      withdrawnReason: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'withdrawn_reason',
+        comment: 'Motivo estruturado de DESISTÊNCIA (enum WITHDRAWN) — obrigatório ao entrar no stage WITHDRAWN (M3-12).',
       },
       nextAction: {
         type: DataTypes.TEXT,

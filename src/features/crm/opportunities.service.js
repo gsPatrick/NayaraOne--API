@@ -8,10 +8,17 @@
 
 const opportunityService = require('./opportunity.service');
 const { isActiveStage, assertNextActionWhenActive, CLOSED_STAGES } = require('./opportunityNextAction.validator');
+const outcomeReasons = require('./opportunityOutcomeReason.validator');
 
 module.exports = {
   ...opportunityService,
   isActiveStage,
   assertNextActionWhenActive,
   CLOSED_STAGES,
+  // M3-12 — enums fechados de motivo de ganho/perda/desistência.
+  WON_REASONS: outcomeReasons.WON_REASONS,
+  LOST_REASONS: outcomeReasons.LOST_REASONS,
+  WITHDRAWN_REASONS: outcomeReasons.WITHDRAWN_REASONS,
+  OUTCOME_STAGES: outcomeReasons.OUTCOME_STAGES,
+  assertOutcomeReason: outcomeReasons.assertOutcomeReason,
 };

@@ -43,4 +43,12 @@ const matches = catchAsync(async (req, res) => {
   return success(res, { data: results });
 });
 
-module.exports = { create, list, getOne, update, remove, matches };
+// M3-15: explica, critério a critério, por que um imóvel específico bate (ou não) num radar.
+const explainMatch = catchAsync(async (req, res) => {
+  const explanation = await req.withTenantTransaction((transaction) =>
+    radarService.explainRadarMatch(req.params.id, req.params.propertyId, transaction)
+  );
+  return success(res, { data: explanation });
+});
+
+module.exports = { create, list, getOne, update, remove, matches, explainMatch };

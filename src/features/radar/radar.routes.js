@@ -15,5 +15,11 @@ radarRouter.get('/radar/:id', requirePermission('radar:read'), radarController.g
 radarRouter.patch('/radar/:id', requirePermission('radar:update'), radarController.update);
 radarRouter.delete('/radar/:id', requirePermission('radar:delete'), radarController.remove);
 radarRouter.get('/radar/:id/matches', requirePermission('radar:read'), radarController.matches);
+// M3-15 — explicação dos critérios do Radar para um imóvel específico.
+radarRouter.get(
+  '/radar/:id/matches/:propertyId/explain',
+  requirePermission('radar:read'),
+  radarController.explainMatch
+);
 
 module.exports = radarRouter;
