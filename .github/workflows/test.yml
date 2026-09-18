@@ -33,12 +33,12 @@ jobs:
 
     env:
       NODE_ENV: development
-      DATABASE_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
+      # DATABASE_URL fica sem o usuário fixo aqui de propósito — é definida passo a passo
+      # abaixo, trocando de superusuário (migrations/seed) pra privilégio mínimo (testes). Ver
+      # comentário no step "Criar usuário de privilégio mínimo (nayara_ci_app)" pro motivo.
       DB_HOST: localhost
       DB_PORT: 5432
       DB_NAME: nayara_one_ci
-      DB_USER: nayara_ci
-      DB_PASSWORD: nayara_ci_password
       DB_SSL: 'false'
       JWT_ACCESS_SECRET: ci-access-secret-not-for-production
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
@@ -62,14 +62,55 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
+      # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
+      # cluster — que o Postgres sempre cria como SUPERUSER, com BYPASSRLS implícito. Isso
+      # significa que toda a suíte rodava com RLS completamente ignorado, mascarando qualquer
+      # falha real de isolamento entre empresas — exatamente o mesmo problema (TEC-03/04) já
+      # corrigido em produção (usuário nayara_runtime, sem BYPASSRLS/SUPERUSER). O CI nunca
+      # tinha essa mesma correção porque foi criado depois e ninguém percebeu que o usuário do
+      # container Docker oficial do Postgres é privilegiado por padrão. 19 testes adversariais
+      # de isolamento por tenant passavam localmente (contra o banco real com nayara_runtime) e
+      # falhavam só no CI — a causa era o CI, não o código da aplicação.
+      #
+      # Migrations e seeds continuam rodando como o superusuário (nayara_ci) — precisam de DDL
+      # (CREATE TABLE, CREATE POLICY, CREATE ROLE) que um usuário de privilégio mínimo não tem.
+      # Só a suíte de testes (último step) roda com o usuário de privilégio mínimo, do mesmo
+      # jeito que a API roda em produção.
       - name: Run migrations
+        env:
+          DATABASE_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
         run: npm run migrate
 
       - name: Seed base data (tenant, roles, permissions, regras)
+        env:
+          DATABASE_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
         run: |
           node scripts/seed-dev.js
           node scripts/seedBillingRules.js
           node scripts/seedRealEstateRules.js
 
-      - name: Run test suite
+      - name: Criar usuário de privilégio mínimo (nayara_ci_app)
+        env:
+          PGPASSWORD: nayara_ci_password
+        run: |
+          psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'nayara_ci_app') THEN
+                CREATE ROLE nayara_ci_app LOGIN PASSWORD 'nayara_ci_app_password'
+                  NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
+              END IF;
+            END $$;
+          SQL
+          for schema in ai audit construction core crm finance integration inventory legal people real_estate; do
+            psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA \"$schema\" TO nayara_ci_app;"
+            psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
+            psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"
+          done
+
+      - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
+        env:
+          DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
+          DB_USER: nayara_ci_app
+          DB_PASSWORD: nayara_ci_app_password
         run: npm test
