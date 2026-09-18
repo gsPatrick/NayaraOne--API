@@ -5,6 +5,8 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
 const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed } = require('./financeEvents.service');
+const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
+const { assertPeriodOpenForEntry } = require('./periodClosures.service');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -66,6 +68,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     description,
     dueAt,
     idempotencyKey,
+    chartOfAccountId,
+    isThirdPartyFunds,
+    thirdPartyReference,
   } = payload;
 
   if (!groupId || !companyId || !entryType || !nature || amount === undefined || amount === null) {
@@ -84,6 +89,26 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   }
   assertPositiveAmount(amount);
   assertReasonableDueDate(dueAt);
+
+  // M4-16 — dinheiro de terceiro (caução, depósito de garantia, valores que só transitam pela
+  // imobiliária) só pode ser marcado como tal se vier com a referência de a QUEM pertence.
+  // Sem isso, a marcação seria uma flag solta: dá pra tirar o valor da receita própria, mas não
+  // dá pra prestar contas de quem é o dinheiro — que é justamente a razão de segregar.
+  const normalizedThirdParty = isThirdPartyFunds === true || isThirdPartyFunds === 'true';
+  const normalizedThirdPartyReference =
+    thirdPartyReference === undefined || thirdPartyReference === null ? null : String(thirdPartyReference).trim();
+  if (normalizedThirdParty && !normalizedThirdPartyReference) {
+    throw AppError.badRequest(
+      'Lançamento marcado como dinheiro de terceiro exige "thirdPartyReference" não vazio (ex.: "Caução contrato X") — é o que identifica de quem é o dinheiro.',
+      'FINANCE_THIRD_PARTY_REFERENCE_REQUIRED'
+    );
+  }
+
+  await assertAccountUsableForEntry(chartOfAccountId, companyId, transaction);
+
+  // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
+  // da própria criação).
+  await assertPeriodOpenForEntry(companyId, [dueAt, new Date()], transaction);
 
   await assertNoDuplicatePayment(FinancialEntry, idempotencyKey, transaction);
 
@@ -104,6 +129,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       status: 'PENDING',
       idempotencyKey: idempotencyKey || null,
       reversalOfEntryId: null,
+      chartOfAccountId: chartOfAccountId || null,
+      isThirdPartyFunds: normalizedThirdParty,
+      thirdPartyReference: normalizedThirdPartyReference,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -129,12 +157,25 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   return entry;
 }
 
+/**
+ * listFinancialEntries — filtros disponíveis: status, nature, bankAccountId, costCenterId,
+ * chartOfAccountId (M4-01) e isThirdPartyFunds (M4-16).
+ *
+ * `isThirdPartyFunds` é um filtro de três estados de propósito: `true` devolve SÓ dinheiro de
+ * terceiro, `false` devolve SÓ receita/despesa própria, e omitir devolve tudo. É isso que
+ * permite somar "receita própria" sem nunca incluir caução — sem precisar que o chamador
+ * lembre de filtrar em memória.
+ */
 async function listFinancialEntries(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.nature) where.nature = String(filters.nature).toUpperCase();
   if (filters.bankAccountId) where.bankAccountId = filters.bankAccountId;
   if (filters.costCenterId) where.costCenterId = filters.costCenterId;
+  if (filters.chartOfAccountId) where.chartOfAccountId = filters.chartOfAccountId;
+  if (filters.isThirdPartyFunds !== undefined && filters.isThirdPartyFunds !== null && filters.isThirdPartyFunds !== '') {
+    where.isThirdPartyFunds = filters.isThirdPartyFunds === true || filters.isThirdPartyFunds === 'true';
+  }
   return FinancialEntry.findAll({ where, order: [['due_at', 'ASC']], transaction });
 }
 
@@ -158,8 +199,25 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     );
   }
   const beforeJson = entry.toJSON();
-  const { bankAccountId, costCenterId, resultCenterId, dueAt, description } = payload;
+  const { bankAccountId, costCenterId, resultCenterId, dueAt, description, chartOfAccountId } = payload;
   if (dueAt !== undefined) assertReasonableDueDate(dueAt);
+
+  // M4-19 — não se edita lançamento cuja competência (vencimento atual, vencimento novo ou
+  // criação) caia num mês já fechado.
+  await assertPeriodOpenForEntry(
+    entry.companyId,
+    [entry.dueAt, dueAt !== undefined ? dueAt : null, entry.createdAt],
+    transaction
+  );
+
+  if (chartOfAccountId !== undefined) {
+    if (chartOfAccountId === null) {
+      entry.chartOfAccountId = null;
+    } else {
+      await assertAccountUsableForEntry(chartOfAccountId, entry.companyId, transaction);
+      entry.chartOfAccountId = chartOfAccountId;
+    }
+  }
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;

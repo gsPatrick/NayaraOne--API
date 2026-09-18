@@ -46,6 +46,25 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'contract_id',
       },
+      chartOfAccountId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'chart_of_account_id',
+        comment: 'Classificação contábil opcional (finance.chart_of_accounts — M4-01)',
+      },
+      isThirdPartyFunds: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'is_third_party_funds',
+        comment: 'true = dinheiro de terceiro (caução/repasse) que apenas transita — NÃO é receita própria (M4-16)',
+      },
+      thirdPartyReference: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'third_party_reference',
+        comment: 'Identificação do titular/origem do dinheiro de terceiro (ex.: "Caução contrato X")',
+      },
       entryType: {
         type: DataTypes.STRING(16),
         allowNull: false,

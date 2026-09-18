@@ -11,6 +11,11 @@ const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
+const chartOfAccountsService = require('./chartOfAccounts.service');
+const paymentIntentsService = require('./paymentIntents.service');
+const intercompanyTransfersService = require('./intercompanyTransfers.service');
+const periodClosuresService = require('./periodClosures.service');
+const financialHealthReportService = require('./financialHealthReport.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -90,6 +95,8 @@ const listFinancialEntries = catchAsync(async (req, res) => {
       nature: req.query.nature,
       bankAccountId: req.query.bankAccountId,
       costCenterId: req.query.costCenterId,
+      chartOfAccountId: req.query.chartOfAccountId,
+      isThirdPartyFunds: req.query.isThirdPartyFunds,
     })
   );
   return success(res, { data: items });
@@ -193,7 +200,102 @@ const payOwnerRepasse = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Chart of accounts (plano de contas — M4-01) ---
+const createChartAccount = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => chartOfAccountsService.createAccount(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listChartAccounts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    chartOfAccountsService.listAccounts(t, {
+      parentId: req.query.parentId,
+      accountType: req.query.accountType,
+      isActive: req.query.isActive,
+      asTree: req.query.asTree === 'true',
+    })
+  );
+  return success(res, { data: items });
+});
+const updateChartAccount = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => chartOfAccountsService.updateAccount(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const deactivateChartAccount = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => chartOfAccountsService.deactivateAccount(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Payment intents (snapshot + hash — M4-07) ---
+const createPaymentIntent = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => paymentIntentsService.createPaymentIntent(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listPaymentIntents = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    paymentIntentsService.listPaymentIntents(t, { status: req.query.status, financialEntryId: req.query.financialEntryId })
+  );
+  return success(res, { data: items });
+});
+const approvePaymentIntent = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => paymentIntentsService.approvePaymentIntent(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const executePaymentIntent = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => paymentIntentsService.executePaymentIntent(req.params.id, req.auth.userId, t));
+  return success(res, { data: result });
+});
+const cancelPaymentIntent = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    paymentIntentsService.cancelPaymentIntent(req.params.id, req.body.reason, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// --- Intercompany transfers (M4-18) ---
+const createIntercompanyTransfer = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.createIntercompanyTransfer(withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
+const listIntercompanyTransfers = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.listIntercompanyTransfers(t, { status: req.query.status, toCompanyId: req.query.toCompanyId })
+  );
+  return success(res, { data: items });
+});
+const reconcileIntercompanyTransfer = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.reconcileIntercompanyTransfer(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// --- Period closures + relatório de saúde financeira (M4-19/M4-20) ---
+const closePeriod = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.closePeriod(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const reopenPeriod = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
+const listPeriodClosures = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    periodClosuresService.listPeriodClosures(t, { status: req.query.status, referenceMonth: req.query.referenceMonth })
+  );
+  return success(res, { data: items });
+});
+const getWeeklyHealthReport = catchAsync(async (req, res) => {
+  const report = await req.withTenantTransaction((t) => financialHealthReportService.getWeeklyHealthReport(t));
+  return success(res, { data: report });
+});
+
 module.exports = {
+  createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
+  createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
+  createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
+  closePeriod, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
