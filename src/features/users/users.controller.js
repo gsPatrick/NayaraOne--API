@@ -13,7 +13,7 @@ const create = catchAsync(async (req, res) => {
 });
 
 const list = catchAsync(async (req, res) => {
-  const users = await usersService.listUsers();
+  const users = await usersService.listUsers({ status: req.query.status });
   return success(res, { data: users });
 });
 

@@ -733,3 +733,24 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
     }).catch(() => {});
   }
 });
+
+// --- Seletores operacionais (CRM/jurídico) não podem oferecer usuário suspenso como
+// responsável/vendedor padrão — reportado pela cliente 18/09/2026. ---
+test('usersService.listUsers filtra por status — usuário suspenso não aparece quando filtra ACTIVE', async () => {
+  const usersService = require('../src/features/users/users.service');
+  const suffix = uniqueSuffix();
+  const activeUser = await User.create({ name: `HOMO QA status filter ativo ${suffix}`, email: `homo-qa-statusfilter-ativo-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' });
+  const suspendedUser = await User.create({ name: `HOMO QA status filter suspenso ${suffix}`, email: `homo-qa-statusfilter-suspenso-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'SUSPENDED' });
+
+  try {
+    const activeOnly = await usersService.listUsers({ status: 'ACTIVE' });
+    assert.ok(activeOnly.some((u) => u.id === activeUser.id), 'usuário ACTIVE deve aparecer no filtro status=ACTIVE');
+    assert.ok(!activeOnly.some((u) => u.id === suspendedUser.id), 'usuário SUSPENDED não pode aparecer no filtro status=ACTIVE');
+
+    const unfiltered = await usersService.listUsers();
+    assert.ok(unfiltered.some((u) => u.id === suspendedUser.id), 'sem filtro, continua listando todos (comportamento de tela administrativa)');
+  } finally {
+    await activeUser.destroy({ force: true }).catch(() => {});
+    await suspendedUser.destroy({ force: true }).catch(() => {});
+  }
+});

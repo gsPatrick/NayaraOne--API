@@ -105,8 +105,14 @@ async function createUser(payload, actorUserId, actorContext = {}) {
   return toSafeJson(user);
 }
 
-async function listUsers() {
-  const users = await User.findAll({ order: [['created_at', 'DESC']] });
+// FIX (reportado pela cliente 18/09/2026): seletores de responsável/vendedor no front
+// (processos jurídicos, CRM) buscavam TODOS os usuários sem filtro — usuário suspenso (ou de
+// QA) podia ser pré-selecionado como padrão. Adiciona suporte a filtro por status, pra telas
+// operacionais poderem pedir só ACTIVE.
+async function listUsers(filters = {}) {
+  const where = {};
+  if (filters.status) where.status = String(filters.status).toUpperCase();
+  const users = await User.findAll({ where, order: [['created_at', 'DESC']] });
   return users.map(toSafeJson);
 }
 
