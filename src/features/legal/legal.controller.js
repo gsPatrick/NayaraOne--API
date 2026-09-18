@@ -339,9 +339,26 @@ const listEvidencePackages = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => evidencePackagesService.listEvidencePackages(req.params.id, t));
   return success(res, { data: items });
 });
+// M5-28: o acesso HUMANO ao dossiê entra na cadeia de custódia (viewEvidencePackage), ao
+// contrário de getEvidencePackage, que é a leitura interna usada por outros fluxos.
 const getEvidencePackage = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => evidencePackagesService.getEvidencePackage(req.params.id, t));
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.viewEvidencePackage(req.params.id, req.auth.userId, t)
+  );
   return success(res, { data: item });
+});
+
+// M5-29: export autocontido e verificável do dossiê (registra EXPORTED na cadeia de custódia).
+const exportEvidencePackage = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    evidencePackagesService.exportEvidencePackage(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+
+const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => evidencePackagesService.listEvidenceAccessLog(req.params.id, t));
+  return success(res, { data });
 });
 
 module.exports = {
@@ -355,5 +372,5 @@ module.exports = {
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
-  createEvidencePackage, listEvidencePackages, getEvidencePackage,
+  createEvidencePackage, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
 };

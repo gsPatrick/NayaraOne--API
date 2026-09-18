@@ -6,6 +6,47 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractVersionCreated } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
+const { getSetting } = require('../settings/settings.service');
+
+/**
+ * M5-07 (fechamento) — DECISÃO DOCUMENTADA: até aqui `documentFileId` era opcional na CRIAÇÃO
+ * da versão e só virava obrigatório mais tarde, na transição para SIGNING (assertDocumentGate
+ * em contracts.service.js). Na prática isso permitia acumular versões "fantasma" sem arquivo
+ * nenhum, e a cliente reportou justamente isso.
+ *
+ * Optamos pela alternativa recomendada: uma CONFIGURAÇÃO POR TENANT
+ * `legal.contract_version_requires_document` (booleana), lida com `getSetting` no mesmo padrão
+ * de settings.service.js, com DEFAULT `true` — ou seja, fail-closed: sem configuração
+ * explícita, criar versão sem `documentFileId` é REJEITADO na hora da criação. Um tenant que
+ * tenha um fluxo legítimo de rascunho pode gravar o setting como `false` e voltar ao
+ * comportamento antigo.
+ *
+ * Também aceitamos um override por chamada (`payload.requireDocument`), útil para fluxos
+ * internos/migração de dados que precisam ser explícitos sobre a exceção — quando informado,
+ * ele tem precedência sobre o setting. O override NUNCA é "default false": quem passa
+ * `requireDocument: false` está assumindo a exceção conscientemente, e a decisão fica
+ * registrada na auditoria da versão criada.
+ *
+ * LIMITAÇÃO CONHECIDA (honesta): a chave ainda não está declarada no SETTINGS_SCHEMA de
+ * src/features/settings/settings.service.js — esse arquivo está fora do escopo de alteração
+ * deste trabalho (outro agente atua nele em paralelo). Enquanto a linha
+ * `'legal.contract_version_requires_document': { type: 'boolean' }` não for adicionada lá,
+ * `upsertSetting` rejeita a chave como desconhecida e a configuração só pode ser gravada
+ * diretamente na tabela core.tenant_settings. O comportamento DEFAULT (true) já está ativo e
+ * é o que importa para o requisito.
+ */
+const REQUIRE_DOCUMENT_SETTING_KEY = 'legal.contract_version_requires_document';
+
+async function isDocumentRequired(contract, payload, transaction) {
+  if (payload && typeof payload.requireDocument === 'boolean') return payload.requireDocument;
+  const value = await getSetting(
+    REQUIRE_DOCUMENT_SETTING_KEY,
+    { groupId: contract.groupId, companyId: contract.companyId },
+    transaction,
+    true
+  );
+  return value !== false;
+}
 
 /**
  * ContractVersion é append-only (sem paranoid, sem lock_version — ver model). content_hash é
@@ -41,6 +82,15 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
     throw AppError.badRequest(
       'O campo "content" é obrigatório e não pode ser vazio — precisa representar o conteúdo real do documento usado para calcular o content_hash.',
       'LEGAL_CONTRACT_VERSION_VALIDATION'
+    );
+  }
+
+  // M5-07: gate de documento na CRIAÇÃO (ver decisão documentada no topo do arquivo).
+  if (!documentFileId && (await isDocumentRequired(contract, payload, transaction))) {
+    throw AppError.badRequest(
+      'O campo "documentFileId" é obrigatório para criar uma versão de contrato: uma versão sem o arquivo do documento não é rastreável nem assinável. ' +
+        `Para permitir rascunhos sem arquivo neste tenant, configure "${REQUIRE_DOCUMENT_SETTING_KEY}" como false.`,
+      'LEGAL_CONTRACT_VERSION_DOCUMENT_REQUIRED'
     );
   }
 
@@ -95,4 +145,10 @@ async function getContractVersion(id, transaction) {
   return version;
 }
 
-module.exports = { createContractVersion, listContractVersions, getContractVersion, computeContentHash };
+module.exports = {
+  createContractVersion,
+  listContractVersions,
+  getContractVersion,
+  computeContentHash,
+  REQUIRE_DOCUMENT_SETTING_KEY,
+};

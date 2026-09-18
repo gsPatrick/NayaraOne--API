@@ -238,7 +238,11 @@ test('AUD-008 criar versão de contrato com content vazio/só espaço é rejeita
       }
     );
     // conteúdo real continua funcionando normalmente.
-    const version = await contractVersionsService.createContractVersion(contract.id, { content: 'Texto real do contrato' }, tenant.userId, transaction);
+    // M5-07: a criação de versão passou a exigir documentFileId por padrão. Este teste é sobre
+    // a validação de `content` (AUD-008), então mantemos o cenário sem arquivo com o override
+    // explícito `requireDocument: false` — o que está sob teste aqui é o conteúdo, não o gate
+    // de documento (esse tem teste próprio em marco5.legal.test.js).
+    const version = await contractVersionsService.createContractVersion(contract.id, { content: 'Texto real do contrato', requireDocument: false }, tenant.userId, transaction);
     assert.ok(version.contentHash);
   });
 });
@@ -563,7 +567,10 @@ test('AUD-008b versão SEM documentFileId (documento real) não pode avançar o 
     // Mesma reprodução do caso real: content textual "válido" (não vazio), mas SEM documentFileId.
     await contractVersionsService.createContractVersion(
       contract.id,
-      { content: `HOMO QA — corpo sem documento real ${uniqueSuffix()}` },
+      // M5-07: hoje a criação já rejeitaria isso por padrão; o override explícito mantém o
+      // cenário histórico do AUD-008b vivo para provar que o gate de SIGNING continua valendo
+      // mesmo se um tenant desligar a exigência na criação.
+      { content: `HOMO QA — corpo sem documento real ${uniqueSuffix()}`, requireDocument: false },
       tenant.userId,
       transaction
     );

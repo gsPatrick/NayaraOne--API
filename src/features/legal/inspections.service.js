@@ -11,6 +11,8 @@ const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC'];
 const CONDITIONS = ['GOOD', 'REGULAR', 'DAMAGED'];
 const MEDIA_TYPES = ['PHOTO', 'VIDEO'];
 const PARTY_ROLES = ['LANDLORD', 'TENANT', 'INSPECTOR'];
+// M5-21: de quem é a responsabilidade pelo dano encontrado na vistoria.
+const RESPONSIBLE_PARTIES = ['TENANT', 'LANDLORD', 'SHARED', 'UNDETERMINED'];
 
 async function createInspection(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, contractId, inspectorUserId, inspectionType, scheduledAt } = payload;
@@ -102,7 +104,7 @@ async function completeInspection(id, actorUserId, transaction) {
 
 async function addInspectionItem(inspectionId, payload, actorUserId, transaction) {
   const inspection = await getInspection(inspectionId, transaction);
-  const { itemName, condition, notes, damageDescription, estimatedBudget } = payload;
+  const { itemName, condition, notes, damageDescription, estimatedBudget, responsibleParty } = payload;
   if (!itemName) {
     throw AppError.badRequest('O campo "itemName" é obrigatório.', 'LEGAL_INSPECTION_ITEM_VALIDATION');
   }
@@ -118,6 +120,20 @@ async function addInspectionItem(inspectionId, payload, actorUserId, transaction
     if (estimatedBudget === undefined || estimatedBudget === null || Number(estimatedBudget) < 0) {
       throw AppError.badRequest('Item com condição "DAMAGED" precisa de "estimatedBudget" (>= 0).', 'LEGAL_INSPECTION_ITEM_VALIDATION');
     }
+    // M5-21: sem responsável definido, o orçamento do dano não vira cobrança nem desconto de
+    // caução — mesma regra (obrigatório quando DAMAGED) de damageDescription/estimatedBudget.
+    // 'UNDETERMINED' é uma resposta legítima ("ainda em apuração"), mas precisa ser explícita.
+    if (!RESPONSIBLE_PARTIES.includes(responsibleParty)) {
+      throw AppError.badRequest(
+        `Item com condição "DAMAGED" precisa de "responsibleParty" (um de: ${RESPONSIBLE_PARTIES.join(', ')}).`,
+        'LEGAL_INSPECTION_ITEM_VALIDATION'
+      );
+    }
+  } else if (responsibleParty !== undefined && responsibleParty !== null && !RESPONSIBLE_PARTIES.includes(responsibleParty)) {
+    throw AppError.badRequest(
+      `"responsibleParty" deve ser um de: ${RESPONSIBLE_PARTIES.join(', ')}.`,
+      'LEGAL_INSPECTION_ITEM_VALIDATION'
+    );
   }
 
   const item = await InspectionItem.create(
@@ -130,6 +146,7 @@ async function addInspectionItem(inspectionId, payload, actorUserId, transaction
       notes: notes || null,
       damageDescription: damageDescription || null,
       estimatedBudget: estimatedBudget !== undefined && estimatedBudget !== null ? estimatedBudget : null,
+      responsibleParty: responsibleParty || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -485,4 +502,5 @@ module.exports = {
   CONDITIONS,
   MEDIA_TYPES,
   PARTY_ROLES,
+  RESPONSIBLE_PARTIES,
 };

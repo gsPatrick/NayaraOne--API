@@ -52,6 +52,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'last_alerted_severity',
       },
+      // M5-27 — escalonamento: instante do PRIMEIRO alerta de OVERDUE (nunca sobrescrito) e
+      // instante em que o escalonamento ocorreu (também guarda de idempotência do job).
+      firstOverdueAlertedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'first_overdue_alerted_at',
+      },
+      escalatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'escalated_at',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

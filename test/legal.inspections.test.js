@@ -58,7 +58,7 @@ test('vistoria: item DAMAGED exige damageDescription e estimatedBudget', async (
 
     const item = await inspectionsService.addInspectionItem(
       inspection.id,
-      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Piso trincado em 3 pontos', estimatedBudget: 850.5 },
+      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Piso trincado em 3 pontos', estimatedBudget: 850.5, responsibleParty: 'TENANT' },
       tenant.userId,
       transaction
     );
@@ -164,7 +164,7 @@ test('vistoria: relatório PDF só é gerado depois de COMPLETED, é imutável (
     );
     await inspectionsService.addInspectionItem(
       inspection.id,
-      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Piso trincado', estimatedBudget: 500 },
+      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Piso trincado', estimatedBudget: 500, responsibleParty: 'TENANT' },
       tenant.userId,
       transaction
     );
@@ -236,7 +236,7 @@ test('vistoria: compareInspections continua funcionando junto com os novos campo
     await inspectionsService.addInspectionItem(entry.id, { itemName: 'Piso da sala', condition: 'GOOD' }, tenant.userId, transaction);
     await inspectionsService.addInspectionItem(
       exit.id,
-      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Trincado na saída', estimatedBudget: 300 },
+      { itemName: 'Piso da sala', condition: 'DAMAGED', damageDescription: 'Trincado na saída', estimatedBudget: 300, responsibleParty: 'TENANT' },
       tenant.userId,
       transaction
     );

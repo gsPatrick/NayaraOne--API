@@ -75,5 +75,8 @@ legalRouter.patch('/legal/deadlines/:id', requirePermission('legal:update'), leg
 legalRouter.post('/legal/cases/:id/evidence-packages', requirePermission('legal:create'), legalController.createEvidencePackage);
 legalRouter.get('/legal/cases/:id/evidence-packages', requirePermission('legal:read'), legalController.listEvidencePackages);
 legalRouter.get('/legal/evidence-packages/:id', requirePermission('legal:read'), legalController.getEvidencePackage);
+// M5-28/M5-29: export verificável do dossiê e leitura da cadeia de custódia.
+legalRouter.get('/legal/evidence-packages/:id/export', requirePermission('legal:read'), legalController.exportEvidencePackage);
+legalRouter.get('/legal/evidence-packages/:id/access-log', requirePermission('legal:read'), legalController.listEvidencePackageAccessLog);
 
 module.exports = legalRouter;
