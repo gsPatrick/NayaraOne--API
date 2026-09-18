@@ -210,6 +210,21 @@ async function updateProperty(id, payload, actorUserId, transaction) {
     if (!PUBLICATION_STATUSES.includes(normalized)) {
       throw AppError.badRequest(`O campo "publicationStatus" deve ser um de: ${PUBLICATION_STATUSES.join(', ')}.`, 'PROPERTY_VALIDATION');
     }
+    // FIX (reportado pela cliente 18/09/2026 — "Edifício Aurora — Apto 302" achado PUBLISHED
+    // sem NENHUMA offer, nem sequer uma inativa): este endpoint genérico de update permitia
+    // marcar publicationStatus=PUBLISHED sem checar oferta nenhuma, contornando tanto o gate
+    // de vídeo obrigatório (publish.service.js/REG-IMO-001) quanto a invariante "publicado
+    // exige oferta ativa" já corrigida em propertyOffers.service.js para o caso de encerrar a
+    // última oferta. Agora este caminho genérico também exige explicitamente uma offer ACTIVE.
+    if (normalized === 'PUBLISHED') {
+      const activeOfferCount = await PropertyOffer.count({ where: { propertyId: property.id, status: 'ACTIVE' }, transaction });
+      if (activeOfferCount === 0) {
+        throw AppError.conflict(
+          'Não é possível publicar um imóvel sem nenhuma oferta ativa vinculada.',
+          'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER'
+        );
+      }
+    }
     property.publicationStatus = normalized;
   }
   if (availabilityStatus !== undefined) {

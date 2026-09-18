@@ -182,3 +182,37 @@ test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo
     assert.equal(propertyAfter.publicationStatus, 'PUBLISHED', 'não pode despublicar enquanto ainda existe outra offer ACTIVE (offer2)');
   });
 });
+
+// FIX (reportado pela cliente 18/09/2026 — "Edifício Aurora — Apto 302" encontrado PUBLISHED
+// sem NENHUMA offer, nem sequer inativa): o gate de "última offer ACTIVE encerrada" acima não
+// cobre o caso de um imóvel publicado que NUNCA teve nenhuma offer — o endpoint genérico
+// updateProperty(publicationStatus) não checava isso.
+test('offers: NÃO é possível publicar um imóvel que nunca teve nenhuma offer', async () => {
+  const suffix = uniqueSuffix();
+
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await propertiesService.createProperty(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        title: `Imóvel Sem Offer ${suffix}`,
+        internalCode: `SEMOFFER-${suffix}`,
+        propertyType: 'RESIDENTIAL',
+      },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER');
+        return true;
+      },
+      'imóvel sem NENHUMA offer não pode ser publicado — era exatamente o defeito reportado no imóvel real'
+    );
+
+    const propertyAfter = await propertiesService.getProperty(property.id, transaction);
+    assert.notEqual(propertyAfter.publicationStatus, 'PUBLISHED');
+  });
+});
