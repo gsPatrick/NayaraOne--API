@@ -759,9 +759,31 @@ test('ADV-L17: duas transações simultâneas transicionando o MESMO contrato pa
     contractId = criado.id;
 
     // Dois operadores diferentes, ao mesmo tempo: um avança o contrato, o outro cancela.
+    //
+    // BARREIRA DE SINCRONIZAÇÃO: sem isso, a corrida depende de sorte de timing de I/O. Contra
+    // um Postgres local rápido (ex.: CI, localhost), a 2ª transação pode terminar de fato DEPOIS
+    // que a 1ª já commitou — aí ela lê o estado JÁ ATUALIZADO (DOCUMENTS_PENDING) e transiciona
+    // LEGITIMAMENTE para CANCELLED (transição válida a partir de DOCUMENTS_PENDING também), sem
+    // nenhum conflito de lock otimista: as duas terminam "fulfilled" e o teste falha por um
+    // problema de DESENHO DO TESTE, não da aplicação (achado real: 18/09/2026, via CI do
+    // GitHub Actions rodando Postgres em localhost — passava sempre contra o banco remoto local,
+    // onde a latência de rede "por acidente" garantia a sobreposição). A barreira abaixo força
+    // as DUAS transações a terminarem o SELECT (e enxergarem o MESMO lock_version) antes de
+    // qualquer uma delas seguir para o UPDATE — reproduzindo a corrida de verdade,
+    // independentemente da velocidade do banco.
+    let liberarBarreira;
+    const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+    let leituraPendentes = 2;
+    const aguardarAsDuasLeituras = () => {
+      leituraPendentes -= 1;
+      if (leituraPendentes === 0) liberarBarreira();
+      return barreira;
+    };
+
     const corrida = async (alvo) =>
       withCommittedTenantTransaction(async (t) => {
         const contract = await contractsService.getContract(contractId, t);
+        await aguardarAsDuasLeituras();
         return contractsService.transitionContractStatus(contract, alvo, tenant.userId, t);
       });
 
