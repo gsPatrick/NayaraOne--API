@@ -1,6 +1,6 @@
 'use strict';
 
-const { Company, Group } = require('../../models');
+const { sequelize, Company, Group } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -34,6 +34,16 @@ async function createCompany(payload, actorUserId, transaction) {
     { transaction }
   );
 
+  // FIX (achado 18/09/2026 ao trocar pra usuário de banco com privilégio mínimo — RLS real):
+  // "audit"."audit_log" tem RLS por company_id. No momento em que uma empresa é CRIADA, o
+  // contexto de tenant da transação (SET LOCAL app.company_id) ainda é o da empresa ATUAL do
+  // ator — nunca vai bater com company.id (a empresa recém-criada), então o INSERT do próprio
+  // evento de criação violava a política de RLS. Sob superuser/BYPASSRLS isso nunca apareceu.
+  // Como createCompany é sempre a última operação de sua transação (nenhum código roda depois
+  // usando o contexto de tenant original), trocamos o contexto pra empresa recém-criada só
+  // para este INSERT — semanticamente correto: o evento "esta empresa foi criada" pertence a
+  // ela mesma.
+  await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
   await registrarAuditoria(
     {
       groupId,
