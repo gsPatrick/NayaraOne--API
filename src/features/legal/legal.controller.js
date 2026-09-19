@@ -131,8 +131,31 @@ function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecre
     return false;
   }
 
-  if (expectedBuffer.length !== receivedBuffer.length) return false;
-  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+  const isValid = expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+
+  // DEBUG TEMPORÁRIO (remover após confirmar a fórmula real do Clicksign, achado divergente em
+  // 19/09/2026: eventos reais "sign"/"signature_started" davam LEGAL_WEBHOOK_HMAC_INVALID).
+  // Loga o hex recebido e TODAS as variantes de fórmula candidatas — nunca o secret em si —
+  // pra comparar no log e descobrir qual bate, sem reduzir a segurança da verificação real.
+  if (provider === 'clicksign' && !isValid) {
+    const bodyPlusSecret = crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(webhookSecret, 'utf8')])).digest('hex');
+    const secretPlusBody = crypto.createHash('sha256').update(Buffer.concat([Buffer.from(webhookSecret, 'utf8'), rawBody])).digest('hex');
+    const hmacKeySecret = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({
+      debugClicksignHmac: true,
+      receivedHex,
+      candidates: { bodyPlusSecret, secretPlusBody, hmacKeySecret },
+      matches: {
+        bodyPlusSecret: bodyPlusSecret === receivedHex,
+        secretPlusBody: secretPlusBody === receivedHex,
+        hmacKeySecret: hmacKeySecret === receivedHex,
+      },
+      bodyLength: rawBody.length,
+    }));
+  }
+
+  return isValid;
 }
 
 const signatureWebhook = catchAsync(async (req, res) => {
