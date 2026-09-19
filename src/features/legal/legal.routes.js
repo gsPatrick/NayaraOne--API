@@ -7,13 +7,17 @@ const legalController = require('./legal.controller');
 
 const legalRouter = Router();
 
-// Webhook público do Clicksign — DEVE vir ANTES de `legalRouter.use(authMiddleware, ...)`
-// abaixo: é chamado pelo provedor externo, sem JWT nenhum. A verificação de autenticidade não
-// é o JWT do app, é o HMAC do corpo bruto (ver clicksignPublicWebhook/verifyProviderWebhookSignature
-// em legal.controller.js) validado contra o segredo por-tenant, resolvido via a tabela de
-// roteamento sem RLS (migration 20260101000172).
-legalRouter.post('/legal/webhooks/clicksign', legalController.clicksignPublicWebhook);
-
+// Webhook público do Clicksign — NÃO fica aqui. Bug real encontrado em produção (19/09/2026,
+// testado com assinatura de verdade): registrar a rota pública ANTES de
+// `legalRouter.use(authMiddleware, ...)` não bastava, porque `routes/index.js` monta VÁRIOS
+// routers no mesmo prefixo "/v1" ANTES do legalRouter (groups, companies, units, users,
+// memberships, roles, people, properties, crm, radar, finance) — e cada um deles tem seu
+// próprio `algumRouter.use(authMiddleware)` SEM path, que intercepta QUALQUER requisição que
+// chegue a esse router, não só as rotas dele. Como o Express tenta cada router montado em
+// "/v1" em ordem até um responder, o groupsRouter (o primeiro da lista) já rejeitava toda
+// chamada ao nosso webhook com 401 antes do legalRouter sequer ser tentado. A rota pública de
+// verdade agora está em src/routes/index.js, registrada ANTES de qualquer router com gate de
+// autenticação — ver clicksignPublicWebhook em legal.controller.js.
 legalRouter.use(authMiddleware, tenantMiddleware);
 
 // Contracts
