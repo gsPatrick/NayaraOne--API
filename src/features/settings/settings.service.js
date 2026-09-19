@@ -30,6 +30,10 @@ const SETTINGS_SCHEMA = {
   // `getDecryptedSetting` é o único ponto que decifra, e só no escopo da chamada que precisa
   // do valor em texto claro (nunca guardar o valor decifrado além disso).
   'legal.clicksign_api_token': { type: 'string', encrypted: true },
+  // A conta do Clicksign (token de "Access token" no painel) é OU produção OU sandbox — nunca
+  // as duas; um token de produção é rejeitado (401) contra a URL de sandbox e vice-versa. Sem
+  // esse dado, o adapter não tem como saber qual base URL usar (ver ClicksignSignatureAdapter).
+  'legal.clicksign_environment': { type: 'string', enum: ['production', 'sandbox'] },
   'legal.zapsign_api_token': { type: 'string', encrypted: true },
   'legal.clicksign_webhook_secret': { type: 'string', encrypted: true },
   'legal.zapsign_webhook_secret': { type: 'string', encrypted: true },

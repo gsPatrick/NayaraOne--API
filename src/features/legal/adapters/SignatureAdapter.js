@@ -27,7 +27,7 @@ class SandboxSignatureAdapter {
    * Não persiste nada e não faz I/O — a persistência de Signature é responsabilidade do
    * chamador (signatures.service.js).
    */
-  async requestSignature(contractVersion, signerPersonIds) {
+  async requestSignature(contractVersion, signerPersonIds, transaction) {
     const externalSignatureIdsByPerson = {};
     for (const personId of signerPersonIds) {
       externalSignatureIdsByPerson[personId] = `sandbox-sig-${crypto.randomUUID()}`;
@@ -56,10 +56,17 @@ class SandboxSignatureAdapter {
  * envelope. Nunca inventa e-mail: se a pessoa não tiver um contato EMAIL cadastrado, o
  * adapter falha explicitamente (AppError) em vez de mandar um payload inválido ao provedor.
  */
-async function loadSignerContacts(signerPersonIds) {
+async function loadSignerContacts(signerPersonIds, transaction) {
+  // BUG REAL encontrado ao testar contra a conta Clicksign de verdade (19/09/2026): esta
+  // consulta rodava SEM transação/contexto de tenant — sob RLS real (FORCE ROW LEVEL SECURITY,
+  // sem BYPASSRLS), toda leitura sem `SET LOCAL app.company_id` retorna zero linhas, então
+  // QUALQUER solicitação de assinatura a um provedor real (Clicksign/ZapSign) falhava com
+  // "pessoa não encontrada", mesmo a pessoa existindo. Precisa da MESMA transação de tenant que
+  // o resto do fluxo (signatures.service.js já abre via req.withTenantTransaction).
   const people = await Person.findAll({
     where: { id: signerPersonIds },
     include: [{ association: 'contacts' }],
+    transaction,
   });
   const byId = new Map(people.map((p) => [p.id, p]));
 
@@ -96,7 +103,7 @@ async function loadSignerContacts(signerPersonIds) {
  *   `content` (texto) da ContractVersion, não um binário PDF já gerado.
  */
 class ClicksignSignatureAdapter {
-  constructor({ apiToken, baseUrl = 'https://sandbox.clicksign.com/api/v3' } = {}) {
+  constructor({ apiToken, baseUrl = 'https://app.clicksign.com/api/v3' } = {}) {
     if (!apiToken) {
       throw AppError.internal('ClicksignSignatureAdapter requer apiToken configurado.', 'LEGAL_SIGNATURE_PROVIDER_CONFIG_MISSING');
     }
@@ -133,8 +140,8 @@ class ClicksignSignatureAdapter {
     return json;
   }
 
-  async requestSignature(contractVersion, signerPersonIds) {
-    const signers = await loadSignerContacts(signerPersonIds);
+  async requestSignature(contractVersion, signerPersonIds, transaction) {
+    const signers = await loadSignerContacts(signerPersonIds, transaction);
 
     // 1) Envelope — `deadline_at` fica em aberto (sem prazo) neste marco.
     const envelope = await this._request('POST', '/envelopes', {
@@ -150,18 +157,36 @@ class ClicksignSignatureAdapter {
     });
     const providerEnvelopeId = envelope && envelope.data && envelope.data.id;
 
-    // 2) Documento — sobe o CONTEÚDO da versão do contrato como .txt (base64). `metadata`
-    // carrega o content_hash para amarrar o documento no provedor à versão/hash exato do
-    // contrato que originou a assinatura — sem isso, uma consulta manual no painel do Clicksign
-    // não teria como confirmar QUAL versão do contrato aquele documento representa.
-    const contentBase64 = Buffer.from(contractVersion.content || '', 'utf8').toString('base64');
+    // 2) Documento — LIMITAÇÃO REAL DESTE PROJETO (achada testando contra a conta Clicksign de
+    // verdade em 19/09/2026, não suposição): `ContractVersion` nunca armazena o TEXTO do
+    // contrato — só grava `contentHash` (o `content` que o chamador manda em
+    // createContractVersion existe só para calcular o hash e é descartado). O binário de
+    // verdade ficaria associado ao `documentFileId` (File.storageKey), mas este projeto NUNCA
+    // implementou um provedor de storage real (S3/etc.) — `storageKey` é só um metadado, sem
+    // upload/download de fato em lugar nenhum do código. Ou seja: não existe HOJE nenhum
+    // caminho pra recuperar o binário real do documento neste ponto do fluxo.
+    // Enquanto isso não for implementado (trabalho futuro, fora deste marco), sobe um documento
+    // de REFERÊNCIA gerado a partir do que de fato existe no banco — nunca inventa texto de
+    // contrato, é auditável e rastreável ao contentHash real, mas deixa claro que não é o
+    // documento assinado "de verdade": a fonte de verdade do conteúdo continua sendo o
+    // `contentHash` gravado em ContractVersion (comparável a qualquer momento), não este .txt.
+    const referenceText = [
+      `Contrato ${contractVersion.contractId} — versão ${contractVersion.versionNumber}`,
+      `Content hash (SHA-256, fonte de verdade do conteúdo): ${contractVersion.contentHash || '(ausente)'}`,
+      '',
+      'Este arquivo é um DOCUMENTO DE REFERÊNCIA para a assinatura eletrônica — o texto integral',
+      'do contrato não é armazenado como binário recuperável neste sistema (limitação conhecida:',
+      'não há storage de arquivo real implementado). A integridade do conteúdo assinado é',
+      'garantida pelo content_hash acima, gravado em ContractVersion no momento da criação.',
+    ].join('\n');
+    const contentBase64 = Buffer.from(referenceText, 'utf8').toString('base64');
     const documentResponse = await this._request('POST', `/envelopes/${providerEnvelopeId}/documents`, {
       data: {
         type: 'documents',
         attributes: {
           filename: `contrato-${contractVersion.contractId}-v${contractVersion.versionNumber}.txt`,
           content_base64: `data:text/plain;base64,${contentBase64}`,
-          metadata: JSON.stringify({ contentHash: contractVersion.contentHash || null, contractVersionId: contractVersion.id }),
+          metadata: { contentHash: contractVersion.contentHash || null, contractVersionId: contractVersion.id },
         },
       },
     });
@@ -225,16 +250,24 @@ class ClicksignSignatureAdapter {
   }
 
   /**
-   * cancel — cancela o envelope no Clicksign (PATCH status -> "canceled").
-   * DECISÃO DE ENGENHARIA — não confirmado na documentação pública se "canceled" é o valor
-   * exato aceito por PATCH (só "running" está documentado explicitamente); manter e validar
-   * contra a conta real na primeira tentativa de cancelamento.
+   * cancel — CONFIRMADO contra a conta real (19/09/2026): o envelope em si só aceita PATCH
+   * status "draft"/"running" — "canceled" no nível do envelope dá 400 ("status deve estar em:
+   * draft, running"). O cancelamento de verdade é por DOCUMENTO (PATCH
+   * /envelopes/{id}/documents/{document_id} status=canceled), e só funciona em documento
+   * "running" (documento em draft, nunca ativado, dá 422 "documento não pode ser cancelado").
+   * Por isso lista os documentos do envelope primeiro e cancela cada um.
    */
   async cancel(providerEnvelopeId) {
-    const result = await this._request('PATCH', `/envelopes/${providerEnvelopeId}`, {
-      data: { type: 'envelopes', id: providerEnvelopeId, attributes: { status: 'canceled' } },
-    });
-    return { providerEnvelopeId, cancelled: true, raw: result };
+    const documentsResponse = await this._request('GET', `/envelopes/${providerEnvelopeId}/documents`);
+    const documents = (documentsResponse && documentsResponse.data) || [];
+    const results = [];
+    for (const document of documents) {
+      const result = await this._request('PATCH', `/envelopes/${providerEnvelopeId}/documents/${document.id}`, {
+        data: { type: 'documents', id: document.id, attributes: { status: 'canceled' } },
+      });
+      results.push(result);
+    }
+    return { providerEnvelopeId, cancelled: true, raw: results };
   }
 }
 
@@ -285,8 +318,8 @@ class ZapSignSignatureAdapter {
     return json;
   }
 
-  async requestSignature(contractVersion, signerPersonIds) {
-    const signers = await loadSignerContacts(signerPersonIds);
+  async requestSignature(contractVersion, signerPersonIds, transaction) {
+    const signers = await loadSignerContacts(signerPersonIds, transaction);
 
     // DECISÃO DE ENGENHARIA: `/docs/` do ZapSign normalmente exige `base64_pdf` ou `url_pdf`;
     // aqui usamos apenas um identificador textual a partir do hash de conteúdo, na ausência do

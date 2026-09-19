@@ -26,7 +26,9 @@ async function resolveSignatureAdapter(tenant, transaction) {
 
   if (provider === 'clicksign') {
     const apiToken = await getDecryptedSetting('legal.clicksign_api_token', tenant, transaction, null);
-    if (apiToken) return new ClicksignSignatureAdapter({ apiToken });
+    const environment = await getSetting('legal.clicksign_environment', tenant, transaction, 'production');
+    const baseUrl = environment === 'sandbox' ? 'https://sandbox.clicksign.com/api/v3' : 'https://app.clicksign.com/api/v3';
+    if (apiToken) return new ClicksignSignatureAdapter({ apiToken, baseUrl });
   } else if (provider === 'zapsign') {
     const apiToken = await getDecryptedSetting('legal.zapsign_api_token', tenant, transaction, null);
     if (apiToken) return new ZapSignSignatureAdapter({ apiToken });
@@ -58,7 +60,7 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
     { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
     transaction
   );
-  const { providerEnvelopeId, externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds);
+  const { providerEnvelopeId, externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds, transaction);
 
   const signatures = [];
   for (const personId of signerPersonIds) {

@@ -318,7 +318,7 @@ test('M5-12: Clicksign recebe o content_hash da ContractVersion no metadata do d
 
         const documentCall = calls.find((c) => c.url.endsWith('/documents'));
         assert.ok(documentCall, 'o adapter precisa ter feito upload do documento (POST /envelopes/{id}/documents)');
-        const sentMetadata = JSON.parse(documentCall.body.data.attributes.metadata);
+        const sentMetadata = documentCall.body.data.attributes.metadata;
         assert.equal(sentMetadata.contentHash, version.contentHash, 'metadata do documento tem que carregar o content_hash da versão');
         assert.equal(sentMetadata.contentHash, expectedHash);
         assert.notEqual(sentMetadata.contentHash, version.id, 'não pode cair no fallback do id quando existe hash');
