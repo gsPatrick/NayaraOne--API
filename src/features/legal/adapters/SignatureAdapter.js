@@ -231,10 +231,28 @@ class ClicksignSignatureAdapter {
       });
     }
 
-    // 4) Ativa o envelope — sem isso o Clicksign nunca dispara o convite de assinatura.
+    // 4) Ativa o envelope.
     await this._request('PATCH', `/envelopes/${providerEnvelopeId}`, {
       data: { id: providerEnvelopeId, type: 'envelopes', attributes: { status: 'running' } },
     });
+
+    // 5) Dispara o convite de assinatura — CONFIRMADO contra a conta real (19/09/2026): ativar
+    // o envelope (passo 4) NÃO manda o e-mail sozinho nesta conta, apesar do que a documentação
+    // insinua ("para que as notificações sejam enviadas, você precisa ativá-lo"). O painel do
+    // Clicksign mostrava "Nenhum e-mail enviado" mesmo com o envelope "running" há minutos —
+    // só depois de chamar POST /envelopes/{id}/notifications o e-mail foi de fato disparado
+    // (confirmado via `summary: [{ signer_id, notified: true }]` na resposta). Esse endpoint
+    // tem rate limit agressivo (1 chamada/minuto) — uma falha aqui não deve derrubar
+    // `initiateSignature` (a Signature já foi criada com sucesso do lado do Clicksign; o
+    // signatário sempre pode ser renotificado depois via `checkSignatureStatus`/painel), por
+    // isso é best-effort (log, não throw).
+    try {
+      await this._request('POST', `/envelopes/${providerEnvelopeId}/notifications`, {
+        data: { type: 'notifications', attributes: {} },
+      });
+    } catch (err) {
+      // best-effort — não interrompe o fluxo de negócio por causa disso.
+    }
 
     return { providerEnvelopeId, externalSignatureIdsByPerson };
   }
