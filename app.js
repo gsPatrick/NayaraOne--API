@@ -57,7 +57,9 @@ app.use(
 // outra rota: o corpo já parseado (`req.body`) continua disponível normalmente.
 app.use(
   express.json({
-    limit: '2mb',
+    // 12mb: cobre o limite de 8MB de src/features/files/files.service.js (upload de arquivo
+    // via base64 infla ~33% o tamanho) + folga pro resto do payload JSON da requisição.
+    limit: '12mb',
     verify: (req, res, buf) => {
       req.rawBody = buf;
     },

@@ -20,6 +20,7 @@ const constructionRouter = require('../features/construction/construction.routes
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
+const filesRouter = require('../features/files/files.routes');
 
 /**
  * Agregador único de rotas da API.
@@ -64,5 +65,6 @@ router.use('/v1', constructionRouter);
 router.use('/v1', auditRouter);
 router.use('/v1', billingRouter);
 router.use('/v1', settingsRouter);
+router.use('/v1', filesRouter);
 
 module.exports = router;

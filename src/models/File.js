@@ -52,6 +52,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'checksum_sha256',
       },
+      // STOPGAP (ver migration 20260101000173) — binário guardado direto no Postgres enquanto
+      // não existe storage de objetos real. Nunca incluído em queries por padrão
+      // (excludeContentByDefault em files.service.js) para não pesar toda leitura de File.
+      content: {
+        type: DataTypes.BLOB('long'),
+        allowNull: true,
+      },
       uploadedByUserId: {
         type: DataTypes.UUID,
         allowNull: true,
@@ -82,6 +89,10 @@ module.exports = (sequelize) => {
       paranoid: true,
       deletedAt: 'deleted_at',
       underscored: true,
+      // `content` (BLOB) NUNCA vem por padrão — evita pesar toda leitura de File que só quer
+      // metadado (a imensa maioria dos casos). Quem precisa do binário usa File.scope('withContent').
+      defaultScope: { attributes: { exclude: ['content'] } },
+      scopes: { withContent: { attributes: {} } },
     }
   );
 
