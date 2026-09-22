@@ -4,6 +4,7 @@ const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, 
 const AppError = require('../../utils/AppError');
 const { publishPropertyCreated } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 const PUBLICATION_STATUSES = ['DRAFT', 'READY', 'PUBLISHED', 'INACTIVE'];
@@ -157,7 +158,7 @@ async function getProperty(id, transaction) {
   return property;
 }
 
-async function updateProperty(id, payload, actorUserId, transaction) {
+async function updateProperty(id, payload, actorUserId, transaction, tenant) {
   const property = await Property.findByPk(id, { transaction });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
   const beforeJson = property.toJSON();
@@ -222,6 +223,22 @@ async function updateProperty(id, payload, actorUserId, transaction) {
         throw AppError.conflict(
           'Não é possível publicar um imóvel sem nenhuma oferta ativa vinculada.',
           'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER'
+        );
+      }
+      // FIX (homologação 22/09/2026 — auditoria proativa): o comentário acima já prometia
+      // fechar "tanto o gate de vídeo obrigatório... quanto a invariante de oferta ativa", mas
+      // só a segunda checagem existia de fato — REG-IMO-001 nunca era avaliado aqui, então
+      // PATCH /properties/:id {publicationStatus: 'PUBLISHED'} publicava um imóvel sem vídeo
+      // contanto que tivesse uma oferta ACTIVE, contornando o mesmo gate que publish.service.js
+      // aplica corretamente pelo endpoint dedicado. Agora este caminho genérico também delega a
+      // decisão ao Motor de Regras (fail-closed) antes de publicar.
+      const videoCount = await PropertyMedia.count({ where: { propertyId: property.id, mediaType: 'VIDEO' }, transaction });
+      const evaluation = await evaluateRule('REG-IMO-001', { hasVideo: videoCount > 0 }, tenant, { transaction });
+      if (evaluation.decision !== 'APPLY') {
+        throw AppError.unprocessable(
+          'Publicação bloqueada: vídeo obrigatório ausente.',
+          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_001',
+          { ruleDecision: evaluation.decision, reason: evaluation.reason }
         );
       }
     }

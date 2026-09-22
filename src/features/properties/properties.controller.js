@@ -42,7 +42,7 @@ const getOne = catchAsync(async (req, res) => {
 
 const update = catchAsync(async (req, res) => {
   const property = await req.withTenantTransaction((transaction) =>
-    propertiesService.updateProperty(req.params.id, req.body, req.auth.userId, transaction)
+    propertiesService.updateProperty(req.params.id, req.body, req.auth.userId, transaction, req.auth)
   );
   return success(res, { data: property });
 });

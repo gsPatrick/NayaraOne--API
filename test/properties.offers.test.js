@@ -6,7 +6,23 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
-const { PropertyPriceHistory } = require('../src/models');
+const { PropertyPriceHistory, PropertyMedia } = require('../src/models');
+
+async function seedVideo(property, tenant, transaction) {
+  await PropertyMedia.create(
+    {
+      groupId: property.groupId,
+      companyId: property.companyId,
+      propertyId: property.id,
+      mediaType: 'VIDEO',
+      storageKey: `offers-test-video-${property.id}.mp4`,
+      originalName: 'video.mp4',
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
+  );
+}
 
 let tenant;
 
@@ -135,8 +151,10 @@ test('offers: encerrar a última offer ACTIVE de um imóvel PUBLISHED despublica
     const offer = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 400000 }, tenant.userId, transaction);
     assert.equal(offer.status, 'ACTIVE');
 
-    // Simula o imóvel já publicado (sem depender da regra de vídeo obrigatório do publish.service).
-    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction);
+    // Simula o imóvel já publicado (o gate de vídeo obrigatório do REG-IMO-001 também é
+    // aplicado por updateProperty desde a correção de homologação — precisa de vídeo seedado).
+    await seedVideo(property, tenant, transaction);
+    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction, tenant);
 
     await offersService.updateOffer(property.id, offer.id, { status: 'CLOSED' }, tenant.userId, transaction);
 
@@ -172,7 +190,8 @@ test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo
     const offer2 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
     // offer1 já virou SUPERSEDED automaticamente aqui (offer2 é a ACTIVE atual).
 
-    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction);
+    await seedVideo(property, tenant, transaction);
+    await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction, tenant);
 
     // Tentar "reencerrar" a offer1 (já SUPERSEDED, nunca foi a ACTIVE vigente nesta chamada)
     // não pode mexer na publicação, porque offer2 continua ACTIVE sustentando ela.
