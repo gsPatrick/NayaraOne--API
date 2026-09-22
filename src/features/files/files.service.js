@@ -5,7 +5,9 @@ const { File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8MB — suficiente para foto/vídeo curto de vistoria, sem estourar o limite de payload JSON.
+// 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria. Acima disso o stopgap de guardar
+// bytes direto no Postgres deixa de fazer sentido (precisaria de storage de objetos de verdade).
+const MAX_BYTES = 20 * 1024 * 1024;
 
 /**
  * uploadFile — STOPGAP (ver migration 20260101000173/File.js): guarda o binário direto no
@@ -91,4 +93,15 @@ async function getFileContent(id, transaction) {
   return file;
 }
 
-module.exports = { uploadFile, getFileContent };
+/**
+ * getFileMetadata — metadado puro (sem o binário), pra front decidir COMO exibir um arquivo
+ * (visualizador universal: imagem, PDF, áudio, vídeo, download simples) antes de baixar os
+ * bytes de verdade.
+ */
+async function getFileMetadata(id, transaction) {
+  const file = await File.findByPk(id, { transaction });
+  if (!file) throw AppError.notFound('Arquivo não encontrado.', 'FILE_NOT_FOUND');
+  return file;
+}
+
+module.exports = { uploadFile, getFileContent, getFileMetadata, MAX_BYTES };

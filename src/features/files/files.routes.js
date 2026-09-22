@@ -14,6 +14,7 @@ filesRouter.use(authMiddleware, tenantMiddleware);
 // autenticado do tenant pode anexar um arquivo" já implícito nos fluxos que criam File hoje
 // (ex.: contractVersions.service.js não checa uma permissão "files:create" separada).
 filesRouter.post('/files', filesController.uploadFile);
+filesRouter.get('/files/:id', filesController.getFileMetadata);
 filesRouter.get('/files/:id/content', filesController.downloadFile);
 
 module.exports = filesRouter;
