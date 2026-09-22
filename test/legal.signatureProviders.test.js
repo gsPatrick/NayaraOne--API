@@ -122,7 +122,14 @@ async function createLeaseWithSignedContract(transaction) {
     tenant.userId,
     transaction
   );
+  const landlord = await peopleService.createPerson(
+    { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `HOMO QA Locador ${suffix}` },
+    tenant.userId,
+    transaction
+  );
   await contractsService.addContractParty(contract.id, { personId: person.id, partyRole: 'TENANT' }, tenant.userId, transaction);
+  await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
+  await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   // M5-07: criar versão de contrato agora exige o arquivo do documento já na criação
   // (default do tenant `legal.contract_version_requires_document` = true).
   const file = await File.create(
@@ -144,6 +151,9 @@ async function createLeaseWithSignedContract(transaction) {
     tenant.userId,
     transaction
   );
+  await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
+  await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
+  await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
   const [signature] = await signaturesService.initiateSignature(version.id, [person.id], tenant.userId, transaction);
   return signature;
 }
