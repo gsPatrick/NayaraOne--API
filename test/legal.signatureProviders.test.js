@@ -86,9 +86,9 @@ test('settings: token de provedor de assinatura é armazenado criptografado no b
 test('legal webhook: verifyProviderWebhookSignature aceita HMAC válido e rejeita ausente/errado (timing-safe)', () => {
   const secret = 'webhook-secret-abc';
   const rawBody = Buffer.from(JSON.stringify({ event: 'signed' }));
-  // Esquema real do Clicksign (confirmado na documentação oficial): sha256(body bruto + secret
-  // concatenados), não HMAC-SHA256(key=secret) genérico — ver legal.controller.js.
-  const validClicksignHex = crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(secret, 'utf8')])).digest('hex');
+  // Esquema real do Clicksign (confirmado contra webhooks reais, 22/09/2026): HMAC-SHA256(key=secret),
+  // igual ao ZapSign — ver legal.controller.js.
+  const validClicksignHex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
   const validZapsignHex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
   assert.equal(
@@ -224,7 +224,7 @@ test('legal webhook: aceita quando o HMAC do corpo bruto é válido para o provi
 
     const bodyObj = {};
     const rawBody = Buffer.from(JSON.stringify(bodyObj));
-    const validHex = crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(webhookSecret, 'utf8')])).digest('hex');
+    const validHex = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
 
     const req = buildFakeReq({
       params: { externalSignatureId: signature.externalSignatureId },

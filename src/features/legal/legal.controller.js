@@ -94,13 +94,11 @@ const WEBHOOK_SECRET_SETTING_BY_PROVIDER = {
   zapsign: 'legal.zapsign_webhook_secret',
 };
 
-// Clicksign NÃO usa HMAC de verdade (chave como key do HMAC) apesar do nome do header —
-// a doc oficial descreve literalmente sha256(body BRUTO concatenado com o secret), sem
-// formatar o JSON antes do cálculo. ZapSign segue com HMAC-SHA256 genérico (key=secret) até
-// haver confirmação real do esquema.
-function computeClicksignSignatureHex(secret, rawBody) {
-  return crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(secret, 'utf8')])).digest('hex');
-}
+// CONFIRMADO contra webhooks reais do Clicksign (22/09/2026, via log de diagnóstico comparando
+// candidatos de fórmula): é HMAC-SHA256 de verdade (chave = secret), IGUAL ao ZapSign — a
+// documentação oficial ("Hash SHA256 da soma do Body com o Secret") sugeria concatenação, mas
+// contra payloads reais só o HMAC genérico bateu. Mantido como uma função só (ambos os
+// provedores usam o mesmo esquema); o nome do header ainda diferencia cada um.
 function computeHmacSha256Hex(secret, rawBody) {
   return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 }
@@ -120,7 +118,7 @@ function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecre
   if (!received || typeof received !== 'string') return false;
   const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
 
-  const expectedHex = provider === 'clicksign' ? computeClicksignSignatureHex(webhookSecret, rawBody) : computeHmacSha256Hex(webhookSecret, rawBody);
+  const expectedHex = computeHmacSha256Hex(webhookSecret, rawBody);
 
   let expectedBuffer;
   let receivedBuffer;
@@ -131,31 +129,8 @@ function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecre
     return false;
   }
 
-  const isValid = expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-
-  // DEBUG TEMPORÁRIO (remover após confirmar a fórmula real do Clicksign, achado divergente em
-  // 19/09/2026: eventos reais "sign"/"signature_started" davam LEGAL_WEBHOOK_HMAC_INVALID).
-  // Loga o hex recebido e TODAS as variantes de fórmula candidatas — nunca o secret em si —
-  // pra comparar no log e descobrir qual bate, sem reduzir a segurança da verificação real.
-  if (provider === 'clicksign' && !isValid) {
-    const bodyPlusSecret = crypto.createHash('sha256').update(Buffer.concat([rawBody, Buffer.from(webhookSecret, 'utf8')])).digest('hex');
-    const secretPlusBody = crypto.createHash('sha256').update(Buffer.concat([Buffer.from(webhookSecret, 'utf8'), rawBody])).digest('hex');
-    const hmacKeySecret = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({
-      debugClicksignHmac: true,
-      receivedHex,
-      candidates: { bodyPlusSecret, secretPlusBody, hmacKeySecret },
-      matches: {
-        bodyPlusSecret: bodyPlusSecret === receivedHex,
-        secretPlusBody: secretPlusBody === receivedHex,
-        hmacKeySecret: hmacKeySecret === receivedHex,
-      },
-      bodyLength: rawBody.length,
-    }));
-  }
-
-  return isValid;
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
 const signatureWebhook = catchAsync(async (req, res) => {
