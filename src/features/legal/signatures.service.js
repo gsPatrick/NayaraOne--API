@@ -55,6 +55,19 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
       'LEGAL_SIGNATURE_CONTRACT_CANCELLED'
     );
   }
+  // FIX (homologação 22/09/2026, achado real ao gerar evidência de teste do Clicksign): nada
+  // aqui verificava que o contrato estivesse em SIGNING antes de aceitar uma solicitação de
+  // assinatura — dava pra pedir assinatura de um contrato ainda em DRAFT (ou qualquer outro
+  // status). Resultado: a Signature ficava SIGNED de verdade no provedor, mas o contrato nunca
+  // transicionava (handleSignatureWebhook só promove pra SIGNED quando o contrato já está em
+  // SIGNING), gerando um estado contraditório — "assinado em X" com o contrato ainda em
+  // "Rascunho". Fail closed: só aceita solicitar assinatura com o contrato já em SIGNING.
+  if (contract.status !== 'SIGNING') {
+    throw AppError.conflict(
+      `Não é possível solicitar assinatura: o contrato precisa estar em "SIGNING" (está em "${contract.status}").`,
+      'LEGAL_SIGNATURE_CONTRACT_NOT_SIGNING'
+    );
+  }
 
   const signatureAdapter = await resolveSignatureAdapter(
     { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
