@@ -20,6 +20,17 @@ async function publishOffer(offerId, tenant, actorUserId, transaction) {
   const offer = await PropertyOffer.findByPk(offerId, { transaction });
   if (!offer) throw AppError.notFound('Oferta não encontrada.', 'PROPERTY_OFFER_NOT_FOUND');
 
+  // FIX (homologação 22/09/2026 — auditoria proativa): publishOffer nunca checava o status da
+  // própria offer — dava pra publicar o imóvel chamando este endpoint com o id de uma offer
+  // PAUSED/CLOSED/SUPERSEDED (bastava o imóvel ter vídeo em algum PropertyMedia), inconsistente
+  // com a invariante "publicado exige oferta ATIVA" aplicada em updateProperty/propertyOffers.
+  if (offer.status !== 'ACTIVE') {
+    throw AppError.conflict(
+      'Só é possível publicar a partir de uma oferta ativa.',
+      'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER'
+    );
+  }
+
   const property = await Property.findByPk(offer.propertyId, { transaction });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
 
