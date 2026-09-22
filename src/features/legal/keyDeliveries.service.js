@@ -1,6 +1,6 @@
 'use strict';
 
-const { KeyDelivery, Inspection } = require('../../models');
+const { KeyDelivery, Inspection, InspectionSignature } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishKeyDeliveryReleased } = require('./legalEvents.service');
@@ -106,6 +106,22 @@ async function releaseKeyDelivery(id, actorUserId, transaction) {
     throw AppError.conflict(
       'Não é possível liberar as chaves: contrato precisa estar assinado/ativo e a vistoria de entrada concluída.',
       'LEGAL_KEY_DELIVERY_BLOCKED'
+    );
+  }
+
+  // FIX (homologação 22/09/2026, reportado pela cliente): "concluída" (status COMPLETED) não
+  // significa "assinada" — completeInspection nunca exigiu nenhuma InspectionSignature. Uma
+  // vistoria podia ser marcada como concluída e liberar a chave sem locador NEM locatário terem
+  // assinado nada, o que não cumpre o que o Caderno descreve para M5-22 ("vistoria de entrada
+  // concluída E ASSINADA"). Exige as duas assinaturas de PARTE (LANDLORD e TENANT) — INSPECTOR é
+  // opcional (vistoriador nem sempre é uma parte formal do contrato).
+  const checkInSignatures = await InspectionSignature.findAll({ where: { inspectionId: checkIn.id }, transaction });
+  const signedRoles = new Set(checkInSignatures.map((s) => s.partyRole));
+  const missingRoles = ['LANDLORD', 'TENANT'].filter((role) => !signedRoles.has(role));
+  if (missingRoles.length > 0) {
+    throw AppError.conflict(
+      `Não é possível liberar as chaves: a vistoria de entrada está concluída mas falta(m) a assinatura de ${missingRoles.join(' e ')}.`,
+      'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'
     );
   }
 

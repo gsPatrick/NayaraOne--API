@@ -139,6 +139,19 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     );
     await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
 
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
+      'vistoria CONCLUÍDA mas SEM assinatura de locador/locatário ainda tem que bloquear a liberação'
+    );
+    await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'assinatura-locador-m522' }, tenant.userId, transaction);
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
+      'só o locador ter assinado ainda não basta — falta o locatário'
+    );
+    await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'assinatura-locatario-m522' }, tenant.userId, transaction);
+
     const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
     assert.equal(released.status, 'RELEASED');
     assert.ok(released.deliveredAt, 'precisa registrar QUANDO as chaves foram entregues');
