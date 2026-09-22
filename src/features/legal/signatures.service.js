@@ -5,7 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishSignatureRequested, publishSignatureSigned } = require('./legalEvents.service');
 const { getContractVersion } = require('./contractVersions.service');
-const { getContract, transitionContractStatus } = require('./contracts.service');
+const { getContract, transitionContractStatus, listContractParties, REQUIRED_ROLES_BY_TYPE } = require('./contracts.service');
 const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('./adapters/SignatureAdapter');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 
@@ -175,15 +175,35 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
   );
 
   const allSignatures = await Signature.findAll({ where: { contractVersionId: signature.contractVersionId }, transaction });
-  const allSigned = allSignatures.length > 0 && allSignatures.every((s) => s.status === 'SIGNED');
+  const allRequestedSigned = allSignatures.length > 0 && allSignatures.every((s) => s.status === 'SIGNED');
 
   let contractTransitioned = false;
-  if (allSigned) {
+  if (allRequestedSigned) {
     const contractVersion = await ContractVersion.findByPk(signature.contractVersionId, { transaction });
     const contract = await getContract(contractVersion.contractId, transaction);
+
+    // FIX (homologação 22/09/2026, M5-09 — achado real pela cliente): esta checagem só olhava
+    // se TODAS as Signature JÁ SOLICITADAS estavam SIGNED, nunca se TODAS AS PARTES
+    // OBRIGATÓRIAS do contrato (ex.: LANDLORD e TENANT numa locação) de fato tinham uma
+    // solicitação de assinatura registrada. Resultado real: um contrato com 2 partes formais
+    // virava "Assinado" tendo pedido (e recebido) assinatura de só 1 delas — a outra parte
+    // nunca foi nem convidada a assinar. Agora cruza contra `REQUIRED_ROLES_BY_TYPE` (o mesmo
+    // mapa já usado no gate de DRAFT->DOCUMENTS_PENDING): cada papel obrigatório do tipo de
+    // contrato precisa ter PELO MENOS UMA Signature SIGNED entre as pessoas que ocupam esse
+    // papel — não só "todas as que foram pedidas".
+    const requiredRoles = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
+    let allPartiesSigned = true;
+    if (requiredRoles.length > 0) {
+      const parties = await listContractParties(contract.id, transaction);
+      const signedPersonIds = new Set(allSignatures.filter((s) => s.status === 'SIGNED').map((s) => s.personId));
+      allPartiesSigned = requiredRoles.every((role) =>
+        parties.some((p) => p.partyRole === role && signedPersonIds.has(p.personId))
+      );
+    }
+
     // Só tenta transicionar se o contrato ainda não estiver em SIGNED/ACTIVE — evita erro de
     // transição inválida se o webhook do último signatário chegar duplicado numa corrida rara.
-    if (contract.status === 'SIGNING') {
+    if (allPartiesSigned && contract.status === 'SIGNING') {
       await transitionContractStatus(contract, 'SIGNED', null, transaction);
       contractTransitioned = true;
     }

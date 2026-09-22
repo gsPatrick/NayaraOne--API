@@ -214,10 +214,20 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
   const onlyInEntry = [];
   const onlyInExit = [];
 
+  // FIX (homologação 22/09/2026, achado real pela cliente): um item presente só na entrada
+  // (ex.: sumiu/foi removido até a saída) ou só na saída (ex.: apareceu algo que não estava na
+  // entrada) NUNCA entrava no array `divergences` — só ficava nos arrays auxiliares
+  // `onlyInEntry`/`onlyInExit`, que qualquer consumidor que olhasse só `divergences.length`
+  // (como o resumo "X divergências" da tela) ignorava completamente. Resultado real: entrada
+  // com um item e saída sem esse mesmo item mostrava "0 divergências". Item ausente de um dos
+  // lados É uma divergência — agora entra no array `divergences` também (com
+  // `entryCondition`/`exitCondition` null do lado que falta), além de continuar detalhado nos
+  // arrays auxiliares para quem precisar da categoria exata.
   for (const [name, entryItem] of entryByName.entries()) {
     const exitItem = exitByName.get(name);
     if (!exitItem) {
       onlyInEntry.push({ itemName: name, entryCondition: entryItem.condition });
+      divergences.push({ itemName: name, entryCondition: entryItem.condition, exitCondition: null, reason: 'MISSING_IN_EXIT' });
       continue;
     }
     if (entryItem.condition !== exitItem.condition) {
@@ -225,12 +235,14 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
         itemName: name,
         entryCondition: entryItem.condition,
         exitCondition: exitItem.condition,
+        reason: 'CONDITION_CHANGED',
       });
     }
   }
   for (const [name, exitItem] of exitByName.entries()) {
     if (!entryByName.has(name)) {
       onlyInExit.push({ itemName: name, exitCondition: exitItem.condition });
+      divergences.push({ itemName: name, entryCondition: null, exitCondition: exitItem.condition, reason: 'MISSING_IN_ENTRY' });
     }
   }
 
