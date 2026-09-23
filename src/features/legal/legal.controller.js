@@ -15,6 +15,7 @@ const keyDeliveriesService = require('./keyDeliveries.service');
 const legalCasesService = require('./legalCases.service');
 const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
+const contractAmendmentsService = require('./contractAmendments.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -250,6 +251,28 @@ const removeGuarantee = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+// --- Contract Amendments ---
+const createContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractAmendmentsService.createAmendment(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listContractAmendments = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractAmendmentsService.listAmendments(req.params.id, t));
+  return success(res, { data: items });
+});
+const getContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractAmendmentsService.getAmendment(req.params.id, t));
+  return success(res, { data: item });
+});
+const signContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractAmendmentsService.signAmendment(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
 // --- Inspections ---
 const createInspection = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => inspectionsService.createInspection(withTenant(req), req.auth.userId, t));
@@ -421,6 +444,7 @@ module.exports = {
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
+  createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
   createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,

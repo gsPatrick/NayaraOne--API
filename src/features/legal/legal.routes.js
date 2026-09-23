@@ -35,6 +35,11 @@ legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:updat
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
 legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read'), legalController.listContractVersions);
 
+legalRouter.post('/legal/contracts/:id/amendments', requirePermission('legal:create'), legalController.createContractAmendment);
+legalRouter.get('/legal/contracts/:id/amendments', requirePermission('legal:read'), legalController.listContractAmendments);
+legalRouter.get('/legal/amendments/:id', requirePermission('legal:read'), legalController.getContractAmendment);
+legalRouter.post('/legal/amendments/:id/sign', requirePermission('legal:update'), legalController.signContractAmendment);
+
 // Signatures
 legalRouter.post('/legal/contract-versions/:id/signatures', requirePermission('legal:sign'), legalController.initiateSignature);
 legalRouter.get('/legal/contract-versions/:id/signatures', requirePermission('legal:read'), legalController.listSignaturesByContractVersion);
