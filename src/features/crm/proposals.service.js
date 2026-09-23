@@ -189,7 +189,16 @@ async function getProposal(id, transaction) {
  * mas checamos e devolvemos 422 explicando o caminho correto: criar uma NOVA VERSÃO).
  */
 async function updateProposalStatus(id, payload, actorUserId, transaction) {
-  const proposal = await getProposal(id, transaction);
+  // Lock pessimista: sem isto, duas decisões concorrentes sobre a MESMA proposta (ex.: um
+  // corretor aceita enquanto outro rejeita a mesma proposta, em duas abas) liam o mesmo status
+  // de origem (SENT) antes de qualquer uma commitar — as duas passavam pela checagem de
+  // transição permitida (ambas SENT->ACCEPTED e SENT->REJECTED são válidas isoladamente) e a
+  // última a salvar vencia silenciosamente, sem detectar o conflito (lost update).
+  const proposal = await Proposal.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!proposal) throw AppError.notFound('Proposta não encontrada.', 'PROPOSAL_NOT_FOUND');
   const beforeJson = proposal.toJSON();
   const { status, notes, value } = payload || {};
 
