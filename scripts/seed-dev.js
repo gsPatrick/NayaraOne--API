@@ -31,6 +31,11 @@ const ADMIN_PERMISSIONS = [
   'crm:opportunities:create', 'crm:opportunities:read', 'crm:opportunities:update', 'crm:opportunities:delete',
   'crm:visits:create', 'crm:visits:read', 'crm:visits:update', 'crm:visits:delete',
   'crm:messages:create', 'crm:messages:read', 'crm:messages:update', 'crm:messages:delete',
+  'crm:tasks:create', 'crm:tasks:read',
+  'crm:proposals:create', 'crm:proposals:read', 'crm:proposals:update',
+  'crm:dashboard:read',
+  'crm:feedback:create', 'crm:feedback:read', 'crm:feedback:update',
+  'crm:opportunities:export',
   'radar:create', 'radar:read', 'radar:update', 'radar:delete',
   // Marco 4 — Financeiro (nomes conferidos em src/features/finance/finance.routes.js)
   'finance:read', 'finance:create', 'finance:update',
