@@ -25,7 +25,14 @@ async function createMembership(payload, actorUserId, transaction) {
     }
   }
 
-  const company = await Company.findOne({ where: { id: companyId, groupId } });
+  // FIX (auditoria adversarial): faltava passar `transaction` — sem ela, esta query roda numa
+  // conexão avulsa do pool sem o SET LOCAL app.group_id da requisição. Como "core"."companies"
+  // tem RLS FORCE (ver migration 20260101000001), current_setting('app.group_id') fica NULL
+  // nessa conexão avulsa e a política nunca casa nenhuma linha — findOne sempre retornava null,
+  // fazendo createMembership rejeitar TODA criação de vínculo com MEMBERSHIP_COMPANY_MISMATCH,
+  // mesmo para empresa/grupo válidos. Confirmado ao vivo: Company.findOne sem transaction
+  // retorna null mesmo havendo linhas na tabela.
+  const company = await Company.findOne({ where: { id: companyId, groupId }, transaction });
   if (!company) {
     throw AppError.badRequest('Empresa informada não pertence ao grupo informado.', 'MEMBERSHIP_COMPANY_MISMATCH');
   }
