@@ -131,6 +131,16 @@ async function listBillingSchedules(transaction, filters = {}) {
  * a cobrança "por engano" com saldo residual positivo.
  */
 async function registerPayment(id, amountPaid, actorUserId, transaction) {
+  // FIX (homologação 23/09/2026): sem lock pessimista aqui, duas chamadas concorrentes de
+  // registerPayment para a mesma competência liam o mesmo paidAmount/balance e a segunda
+  // sobrescrevia o resultado da primeira (lost update) — permitindo baixa duplicada não
+  // contabilizada ou saldo final incorreto. Mesmo padrão de lock já usado em
+  // settleFinancialEntryPartial (financialEntries.service.js). O lock é pego numa consulta
+  // separada, sem include, porque `SELECT ... FOR UPDATE` não é compatível com o LEFT JOIN
+  // de `items` que getBillingSchedule usa.
+  const lockedRow = await BillingSchedule.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!lockedRow) throw AppError.notFound('Cronograma de cobrança não encontrado.', 'BILLING_SCHEDULE_NOT_FOUND');
+
   const billingSchedule = await getBillingSchedule(id, transaction);
   const amount = Number(amountPaid);
   if (!Number.isFinite(amount) || amount <= 0) {
