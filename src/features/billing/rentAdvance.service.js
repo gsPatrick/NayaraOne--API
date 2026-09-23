@@ -78,8 +78,8 @@ async function requestRentAdvance(payload, actorUserId, transaction) {
   return rentAdvance;
 }
 
-async function getRentAdvance(id, transaction) {
-  const item = await RentAdvance.findByPk(id, { transaction });
+async function getRentAdvance(id, transaction, options = {}) {
+  const item = await RentAdvance.findByPk(id, { transaction, lock: options.lock });
   if (!item) throw AppError.notFound('Antecipação de aluguel não encontrada.', 'RENT_ADVANCE_NOT_FOUND');
   return item;
 }
@@ -122,8 +122,17 @@ async function transitionRentAdvance(rentAdvance, targetStatus, actorUserId, tra
   return rentAdvance;
 }
 
+// FIX (concorrência): propose/accept/reject/pay/recover liam a antecipação sem lock antes de
+// checar a transição de status permitida (STATUS_FLOW) — duas requisições concorrentes na
+// MESMA antecipação (ex.: aprovar e rejeitar ao mesmo tempo, ou dois cliques duplos de "pagar")
+// liam o mesmo status inicial e as duas passavam na validação, a segunda sobrescrevendo o
+// resultado da primeira (ou, no caso de payRentAdvance, as duas tentando criar os mesmos
+// FinancialEntry — só barrado por baixo, de forma "suja", pela constraint única de
+// idempotency_key). `lock: transaction.LOCK.UPDATE` na leitura serializa as tentativas
+// concorrentes: a segunda só prossegue depois que a primeira commitar, e aí reavalia o status
+// já atualizado e é corretamente rejeitada com RENT_ADVANCE_INVALID_TRANSITION/_STATUS.
 async function proposeRentAdvance(id, actorUserId, transaction) {
-  const rentAdvance = await getRentAdvance(id, transaction);
+  const rentAdvance = await getRentAdvance(id, transaction, { lock: transaction.LOCK.UPDATE });
   rentAdvance.proposedAt = new Date();
   return transitionRentAdvance(rentAdvance, 'PROPOSED', actorUserId, transaction);
 }
@@ -132,7 +141,7 @@ async function proposeRentAdvance(id, actorUserId, transaction) {
  * acceptRentAdvance — aprova a antecipação proposta. Endpoint "aprovar antecipação" do DoD.
  */
 async function acceptRentAdvance(id, actorUserId, transaction) {
-  const rentAdvance = await getRentAdvance(id, transaction);
+  const rentAdvance = await getRentAdvance(id, transaction, { lock: transaction.LOCK.UPDATE });
   rentAdvance.acceptedAt = new Date();
   return transitionRentAdvance(rentAdvance, 'ACCEPTED', actorUserId, transaction);
 }
@@ -147,7 +156,7 @@ function rejectRentAdvance(rentAdvance, actorUserId, transaction) {
  * lançamento misturando os dois (Caderno: "contabilizados separadamente no financeiro").
  */
 async function payRentAdvance(id, actorUserId, transaction) {
-  const rentAdvance = await getRentAdvance(id, transaction);
+  const rentAdvance = await getRentAdvance(id, transaction, { lock: transaction.LOCK.UPDATE });
   if (rentAdvance.status !== 'ACCEPTED') {
     throw AppError.conflict(`Só é possível pagar uma antecipação ACCEPTED (atual: "${rentAdvance.status}").`, 'RENT_ADVANCE_INVALID_STATUS');
   }
@@ -218,7 +227,7 @@ async function payRentAdvance(id, actorUserId, transaction) {
  * total. Marca RECOVERED quando o valor recuperado atinge principal + custo.
  */
 async function recoverRentAdvance(id, amountRecovered, actorUserId, transaction) {
-  const rentAdvance = await getRentAdvance(id, transaction);
+  const rentAdvance = await getRentAdvance(id, transaction, { lock: transaction.LOCK.UPDATE });
   if (!['PAID', 'RECOVERING'].includes(rentAdvance.status)) {
     throw AppError.conflict('Só é possível recuperar uma antecipação PAID/RECOVERING.', 'RENT_ADVANCE_INVALID_STATUS');
   }

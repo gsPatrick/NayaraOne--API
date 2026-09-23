@@ -412,6 +412,81 @@ test('billing: duas aberturas CONCORRENTES de caso de cobrança para a mesma com
   }
 });
 
+test('billing: duas recuperações CONCORRENTES da mesma antecipação de aluguel não perdem incremento (lost update)', async () => {
+  const suffix = uniqueSuffix();
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { contractId, advanceId } = await withCommitted(async (t) => {
+    const contract = await createLeaseContract(t, { contractNumber: `QA-ADVANCE-RACE-${suffix}` });
+    await activateContract(contract, t);
+    const advance = await rentAdvanceService.requestRentAdvance(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, monthsAdvanced: 3, principalAmount: 6000, costAmount: 0 },
+      tenant.userId,
+      t
+    );
+    await rentAdvanceService.proposeRentAdvance(advance.id, tenant.userId, t);
+    await rentAdvanceService.acceptRentAdvance(advance.id, tenant.userId, t);
+    await rentAdvanceService.payRentAdvance(advance.id, tenant.userId, t);
+    return { contractId: contract.id, advanceId: advance.id };
+  });
+
+  // BARREIRA DE SINCRONIZAÇÃO (mesmo padrão do ADV-L17/openCollectionCase acima): força as duas
+  // recuperações concorrentes a lerem o MESMO recoveredAmount inicial (0) antes de qualquer uma
+  // seguir para o lock/update — reproduzindo o lost update de verdade, independentemente da
+  // velocidade do banco.
+  let liberarBarreira;
+  const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+  let leiturasPendentes = 2;
+  const aguardarAsDuasLeituras = () => {
+    leiturasPendentes -= 1;
+    if (leiturasPendentes === 0) liberarBarreira();
+    return barreira;
+  };
+
+  const recuperar = (valor) =>
+    withCommitted(async (t) => {
+      await rentAdvanceService.getRentAdvance(advanceId, t);
+      await aguardarAsDuasLeituras();
+      return rentAdvanceService.recoverRentAdvance(advanceId, valor, tenant.userId, t);
+    });
+
+  try {
+    // Duas recuperações de 1000 ao mesmo tempo: sem serialização, ambas leem recoveredAmount=0
+    // e a última a escrever "vence", perdendo o incremento da outra (total ficaria 1000 em vez
+    // de 2000).
+    const resultados = await Promise.allSettled([recuperar(1000), recuperar(1000)]);
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    assert.equal(sucessos.length, 2, 'as duas recuperações são válidas isoladamente e devem ser aceitas');
+
+    await withCommitted(async (t) => {
+      const advance = await rentAdvanceService.getRentAdvance(advanceId, t);
+      assert.equal(Number(advance.recoveredAmount), 2000, 'as duas recuperações concorrentes precisam se somar, sem lost update');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
+        replacements: { id: contractId, k: `rent_advance%${advanceId}` },
+        transaction: t,
+      });
+      await sequelize.query('DELETE FROM finance.rent_advances WHERE id = :id', { replacements: { id: advanceId }, transaction: t });
+      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
+    });
+  }
+});
+
 // --- DoD 7: isolamento RLS entre tenants ---
 //
 // NOTA DE AMBIENTE: a role de conexão usada por este ambiente de dev/teste
