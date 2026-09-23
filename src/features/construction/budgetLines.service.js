@@ -4,6 +4,17 @@ const { BudgetLine } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
+function assertNonNegativeAmount(value, fieldName) {
+  if (value === undefined || value === null) return;
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    throw AppError.badRequest(`"${fieldName}" deve ser numérico.`, 'BUDGET_LINE_VALIDATION');
+  }
+  if (numeric < 0) {
+    throw AppError.badRequest(`"${fieldName}" não pode ser negativo.`, 'BUDGET_LINE_VALIDATION');
+  }
+}
+
 async function createBudgetLine(projectId, payload, actorUserId, transaction) {
   const { groupId, companyId, category, description, plannedAmount, costCenterId } = payload;
   if (!groupId || !companyId || !category || plannedAmount === undefined || plannedAmount === null) {
@@ -12,6 +23,9 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
       'BUDGET_LINE_VALIDATION'
     );
   }
+  // FIX (auditoria adversarial): plannedAmount/actualAmount aceitavam valor negativo tanto na
+  // criação quanto na edição — mesmo padrão de bug já achado em RDO/etapa de obra.
+  assertNonNegativeAmount(plannedAmount, 'plannedAmount');
 
   const line = await BudgetLine.create(
     {
@@ -60,6 +74,8 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
   const line = await getBudgetLine(id, transaction);
   const beforeJson = line.toJSON();
   const { category, description, plannedAmount, actualAmount, costCenterId } = payload;
+  assertNonNegativeAmount(plannedAmount, 'plannedAmount');
+  assertNonNegativeAmount(actualAmount, 'actualAmount');
   if (category !== undefined) line.category = category;
   if (description !== undefined) line.description = description;
   if (plannedAmount !== undefined) line.plannedAmount = plannedAmount;
