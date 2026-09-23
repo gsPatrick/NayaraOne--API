@@ -215,13 +215,30 @@ async function removeClauseFromTemplate(templateId, contractClauseId, actorUserI
  * uma ContractVersion) e `clauses` é a lista estruturada de {code, versionNumber, title} de
  * fato usada, para rastreabilidade de qual versão de cada cláusula entrou no documento.
  */
-async function renderTemplate(templateId, transaction) {
+/**
+ * renderTemplate — aceita `variables` opcional ({ chave: valor }) para substituir placeholders
+ * `{{chave}}` presentes no texto das cláusulas (ex.: {{nome_locador}}, {{valor_aluguel}}) pelo
+ * dado real informado pelo chamador. Placeholder sem valor correspondente em `variables` é
+ * deixado como está (não falha silenciosamente trocando por vazio, para ficar óbvio no texto
+ * final que faltou preencher algo).
+ */
+function applyTemplateVariables(text, variables) {
+  if (!variables || typeof variables !== 'object') return text;
+  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => {
+    if (Object.prototype.hasOwnProperty.call(variables, key) && variables[key] !== undefined && variables[key] !== null) {
+      return String(variables[key]);
+    }
+    return match;
+  });
+}
+
+async function renderTemplate(templateId, transaction, variables) {
   const template = await getTemplate(templateId, transaction);
   const entries = await listTemplateClauses(template.id, transaction);
   const active = entries.filter(({ clause }) => clause.isActive);
 
-  const sections = active.map(({ clause }) => `${clause.title}\n${clause.bodyText}`);
-  const content = [template.name, ...sections].join('\n\n');
+  const sections = active.map(({ clause }) => applyTemplateVariables(`${clause.title}\n${clause.bodyText}`, variables));
+  const content = [applyTemplateVariables(template.name, variables), ...sections].join('\n\n');
 
   return {
     templateId: template.id,

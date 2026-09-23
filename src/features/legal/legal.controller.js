@@ -16,6 +16,7 @@ const legalCasesService = require('./legalCases.service');
 const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
+const contractTemplatesService = require('./contractTemplates.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -64,6 +65,33 @@ const createContractVersion = catchAsync(async (req, res) => {
 const listContractVersions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => contractVersionsService.listContractVersions(req.params.id, t));
   return success(res, { data: items });
+});
+
+// --- Contract templates ---
+const createContractTemplate = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractTemplatesService.createTemplate(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listContractTemplates = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    contractTemplatesService.listTemplates(t, { contractType: req.query.contractType, isActive: req.query.isActive === undefined ? undefined : req.query.isActive === 'true' })
+  );
+  return success(res, { data: items });
+});
+const getContractTemplate = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractTemplatesService.getTemplate(req.params.id, t));
+  return success(res, { data: item });
+});
+const addClauseToContractTemplate = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+// Preview: apenas RENDERIZA o texto (com as variáveis opcionais informadas), não persiste nada
+// — quem quiser usar o resultado como conteúdo de uma versão chama depois
+// POST /legal/contracts/:id/versions com { content, templateId }.
+const renderContractTemplate = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTemplatesService.renderTemplate(req.params.id, t, req.body && req.body.variables));
+  return success(res, { data });
 });
 
 // --- Signatures ---
@@ -449,6 +477,7 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
 module.exports = {
   createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties, correctContractData,
   createContractVersion, listContractVersions,
+  createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,

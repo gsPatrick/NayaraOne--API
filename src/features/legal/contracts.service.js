@@ -1,11 +1,49 @@
 'use strict';
 
-const { Contract, ContractParty, ContractVersion, Signature, Guarantee } = require('../../models');
+const { Contract, ContractParty, ContractVersion, Signature, Guarantee, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
 
 const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE'];
+
+// Prefixo de numeração por contractType — ver 20260101000177-create-legal-contract_number_sequences.js.
+const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV' };
+
+/**
+ * generateContractNumber — gera o próximo número no formato "{PREFIXO}-{ANO}-{SEQ:04d}"
+ * (ex.: "LOC-2026-0001"), sequencial reiniciando por (companyId, contractType, ano corrente).
+ *
+ * CONCORRÊNCIA: usa um único `INSERT ... ON CONFLICT (company_id, contract_type, year)
+ * DO UPDATE SET last_seq = contract_number_sequences.last_seq + 1 RETURNING last_seq` — é uma
+ * instrução atômica no Postgres (o UPDATE de um upsert em conflito roda sob o lock de linha
+ * implícito da própria operação), então duas criações concorrentes NUNCA leem o mesmo
+ * last_seq: a segunda transação a chegar espera a primeira liberar a linha (lock de índice
+ * único) e enxerga o valor já incrementado. Deliberadamente NÃO usamos `SELECT COUNT(*) + 1`
+ * (corrida real: duas transações podem contar o mesmo total e gerar o mesmo próximo número).
+ */
+async function generateContractNumber(companyId, contractType, transaction) {
+  const prefix = CONTRACT_NUMBER_PREFIX[contractType];
+  if (!prefix) {
+    throw AppError.badRequest(`Não há prefixo de numeração configurado para contractType "${contractType}".`, 'LEGAL_CONTRACT_VALIDATION');
+  }
+  const year = new Date().getFullYear();
+
+  const [rows] = await sequelize.query(
+    `INSERT INTO "legal"."contract_number_sequences" (id, company_id, contract_type, "year", last_seq, created_at, updated_at)
+     VALUES (gen_random_uuid(), :companyId, :contractType, :year, 1, now(), now())
+     ON CONFLICT (company_id, contract_type, "year")
+     DO UPDATE SET last_seq = "legal"."contract_number_sequences".last_seq + 1, updated_at = now()
+     RETURNING last_seq`,
+    {
+      replacements: { companyId, contractType, year },
+      transaction,
+    }
+  );
+  const seq = rows[0].last_seq;
+  const seqPadded = String(seq).padStart(4, '0');
+  return `${prefix}-${year}-${seqPadded}`;
+}
 
 // Máquina de estados do Contract.status. Ordem linear conforme especificado no doc do Marco 5:
 // DRAFT -> DOCUMENTS_PENDING -> LEGAL_REVIEW -> APPROVED -> SIGNING -> SIGNED -> ACTIVE.
@@ -177,6 +215,10 @@ async function createContract(payload, actorUserId, transaction) {
     throw AppError.badRequest(`"contractType" deve ser um de: ${CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION');
   }
 
+  // Numeração automática: só gera se o chamador não informou um número explícito (correção
+  // manual via correctContractData continua livre para sobrescrever depois, se necessário).
+  const finalContractNumber = contractNumber || (await generateContractNumber(companyId, contractType, transaction));
+
   const contract = await Contract.create(
     {
       groupId,
@@ -184,7 +226,7 @@ async function createContract(payload, actorUserId, transaction) {
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
       contractType,
-      contractNumber: contractNumber || null,
+      contractNumber: finalContractNumber,
       status: 'DRAFT',
       totalValue: totalValue !== undefined ? totalValue : null,
       startsAt: startsAt || null,
@@ -221,7 +263,10 @@ async function listContracts(transaction, filters = {}) {
 }
 
 async function getContract(id, transaction) {
-  const contract = await Contract.findByPk(id, { transaction });
+  const contract = await Contract.findByPk(id, {
+    include: [{ model: ContractVersion, as: 'versions', include: [{ association: 'template', attributes: ['id', 'name'] }] }],
+    transaction,
+  });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
   return contract;
 }
@@ -402,8 +447,10 @@ module.exports = {
   listContractParties,
   correctContractData,
   assertActivationGate,
+  generateContractNumber,
   CORRECTABLE_FIELDS,
   CONTRACT_TYPES,
   VALID_TRANSITIONS,
   REQUIRED_ROLES_BY_TYPE,
+  CONTRACT_NUMBER_PREFIX,
 };

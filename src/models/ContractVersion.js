@@ -46,6 +46,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'content_hash',
       },
+      templateId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'template_id',
+        comment: 'FK opcional para legal.contract_templates — modelo que originou esta versão (ver migration 20260101000178).',
+      },
       effectiveFrom: {
         type: DataTypes.DATE,
         allowNull: false,

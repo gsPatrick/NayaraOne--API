@@ -67,7 +67,7 @@ function computeContentHash(content) {
 
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { content, documentFileId, effectiveFrom } = payload;
+  const { content, documentFileId, effectiveFrom, templateId } = payload;
   // FIX AUD-008 (homologação 09/09/2026): `content === undefined || content === null` deixava
   // passar `content: ""` (ou só espaços) como se fosse um documento real — o hash de uma
   // string vazia é um hash "válido" tecnicamente, mas não representa nenhum conteúdo de
@@ -109,6 +109,7 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       versionNumber: nextVersionNumber,
       documentFileId: documentFileId || null,
       contentHash: computeContentHash(content),
+      templateId: templateId || null,
       effectiveFrom: effectiveFrom || new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -136,7 +137,12 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
 }
 
 async function listContractVersions(contractId, transaction) {
-  return ContractVersion.findAll({ where: { contractId }, order: [['version_number', 'ASC']], transaction });
+  return ContractVersion.findAll({
+    where: { contractId },
+    include: [{ association: 'template', attributes: ['id', 'name'] }],
+    order: [['version_number', 'ASC']],
+    transaction,
+  });
 }
 
 async function getContractVersion(id, transaction) {

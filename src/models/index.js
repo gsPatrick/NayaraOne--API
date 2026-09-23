@@ -63,6 +63,7 @@ const modelDefiners = {
   ContractClause: require('./ContractClause'),
   ContractTemplate: require('./ContractTemplate'),
   ContractTemplateClause: require('./ContractTemplateClause'),
+  ContractNumberSequence: require('./ContractNumberSequence'),
   ContractAmendment: require('./ContractAmendment'),
   LegalCase: require('./LegalCase'),
   LegalCaseParty: require('./LegalCaseParty'),
@@ -229,6 +230,8 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.ContractParty.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
   db.ContractVersion.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.ContractVersion.belongsTo(db.File, { foreignKey: 'document_file_id', as: 'documentFile', constraints: false });
+  db.ContractVersion.belongsTo(db.ContractTemplate, { foreignKey: 'template_id', as: 'template', constraints: false });
+  db.Contract.hasMany(db.ContractVersion, { foreignKey: 'contract_id', as: 'versions', constraints: false });
   db.Signature.belongsTo(db.ContractVersion, { foreignKey: 'contract_version_id', as: 'contractVersion', constraints: false });
   db.Signature.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
   db.ContractTemplateClause.belongsTo(db.ContractTemplate, { foreignKey: 'contract_template_id', as: 'template', constraints: false });
