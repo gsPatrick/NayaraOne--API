@@ -14,6 +14,7 @@ const utilitiesService = require('../src/features/billing/utilities.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { createMockIndexSourceAdapter, unavailableIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const AppError = require('../src/utils/AppError');
+const { OwnershipTransferTask } = require('../src/models');
 
 let tenant;
 
@@ -549,6 +550,87 @@ test('billing: dois pagamentos CONCORRENTES de aluguel garantido para a mesma co
         transaction: t,
       });
       await sequelize.query('DELETE FROM finance.guaranteed_rent_contracts WHERE id = :id', { replacements: { id: guaranteedId }, transaction: t });
+      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
+    });
+  }
+});
+
+test('billing: duas conclusões CONCORRENTES da última tarefa de transferência não travam a obrigação em TRANSFER_PENDING', async () => {
+  const suffix = uniqueSuffix();
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { contractId, obligationId, taskAId, taskBId } = await withCommitted(async (t) => {
+    const contract = await createLeaseContract(t, { contractNumber: `QA-TRANSFER-RACE-${suffix}` });
+    const { obligation, transferTask } = await utilitiesService.createUtilityObligation(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        contractId: contract.id,
+        utilityType: 'ELECTRICITY',
+        responsibleParty: 'TENANT',
+        transferRequired: true,
+      },
+      tenant.userId,
+      t
+    );
+    // Segunda tarefa pendente pra mesma obrigação (ex.: transferência em duas etapas/dois
+    // provedores) — cenário real em que "a última a fechar" precisa fechar a obrigação.
+    const secondTask = await OwnershipTransferTask.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        utilityObligationId: obligation.id,
+        status: 'PENDING',
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction: t }
+    );
+    return { contractId: contract.id, obligationId: obligation.id, taskAId: transferTask.id, taskBId: secondTask.id };
+  });
+
+  let liberarBarreira;
+  const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+  let leiturasPendentes = 2;
+  const aguardarAsDuasLeituras = () => {
+    leiturasPendentes -= 1;
+    if (leiturasPendentes === 0) liberarBarreira();
+    return barreira;
+  };
+
+  const concluir = (taskId) =>
+    withCommitted(async (t) => {
+      await OwnershipTransferTask.findByPk(taskId, { transaction: t });
+      await aguardarAsDuasLeituras();
+      return utilitiesService.completeOwnershipTransfer(taskId, tenant.userId, t);
+    });
+
+  try {
+    const resultados = await Promise.allSettled([concluir(taskAId), concluir(taskBId)]);
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    assert.equal(sucessos.length, 2, 'as duas conclusões são válidas isoladamente (tarefas diferentes)');
+
+    await withCommitted(async (t) => {
+      const obligation = await utilitiesService.getUtilityObligation(obligationId, t);
+      assert.equal(obligation.status, 'TRANSFERRED', 'com as duas tarefas concluídas, a obrigação precisa fechar como TRANSFERRED');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await sequelize.query('DELETE FROM finance.ownership_transfer_tasks WHERE utility_obligation_id = :id', { replacements: { id: obligationId }, transaction: t });
+      await sequelize.query('DELETE FROM finance.utility_obligations WHERE id = :id', { replacements: { id: obligationId }, transaction: t });
       await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
     });
   }

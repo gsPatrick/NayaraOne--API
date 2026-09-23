@@ -152,7 +152,7 @@ async function createUtilityAccount(payload, actorUserId, transaction) {
  * TRANSFERRED.
  */
 async function completeOwnershipTransfer(taskId, actorUserId, transaction) {
-  const task = await OwnershipTransferTask.findByPk(taskId, { transaction });
+  const task = await OwnershipTransferTask.findByPk(taskId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!task) throw AppError.notFound('Tarefa de transferência não encontrada.', 'OWNERSHIP_TRANSFER_TASK_NOT_FOUND');
   if (task.status === 'COMPLETED') {
     throw AppError.conflict('Esta tarefa de transferência já está concluída.', 'OWNERSHIP_TRANSFER_TASK_ALREADY_COMPLETED');
@@ -163,12 +163,24 @@ async function completeOwnershipTransfer(taskId, actorUserId, transaction) {
   task.updatedBy = actorUserId || null;
   await task.save({ transaction });
 
+  // FIX (concorrência): quando uma obrigação tem MAIS DE UMA tarefa de transferência pendente,
+  // "pendingCount === 0" era um COUNT sem lock na linha da obrigação — duas tasks da MESMA
+  // obrigação sendo completadas ao mesmo tempo liam pendingCount=1 cada uma (a outra ainda não
+  // tinha commitado sua própria conclusão) e NENHUMA das duas marcava a obrigação como
+  // TRANSFERRED, mesmo as duas tarefas ficando COMPLETED ao final — obrigação travada em
+  // TRANSFER_PENDING pra sempre. `lock: transaction.LOCK.UPDATE` na obrigação serializa as
+  // conclusões concorrentes: a segunda só reavalia o COUNT depois que a primeira commitar, e aí
+  // já enxerga a tarefa da primeira como COMPLETED.
+  const obligation = await UtilityObligation.findByPk(task.utilityObligationId, {
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  if (!obligation) throw AppError.notFound('Obrigação de utilidade não encontrada.', 'UTILITY_OBLIGATION_NOT_FOUND');
   const pendingCount = await OwnershipTransferTask.count({
     where: { utilityObligationId: task.utilityObligationId, status: 'PENDING' },
     transaction,
   });
   if (pendingCount === 0) {
-    const obligation = await getUtilityObligation(task.utilityObligationId, transaction);
     obligation.status = 'TRANSFERRED';
     obligation.updatedBy = actorUserId || null;
     await obligation.save({ transaction });
