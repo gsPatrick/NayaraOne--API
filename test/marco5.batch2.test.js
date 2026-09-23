@@ -19,6 +19,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
+const personContactsService = require('../src/features/people/personContacts.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const proposalsService = require('../src/features/crm/proposals.service');
@@ -41,6 +42,7 @@ const {
   LegalDeadline,
   AuditLog,
   EvidencePackageAccessLog,
+  TenantSetting,
 } = require('../src/models');
 
 let tenant;
@@ -52,6 +54,30 @@ before(async () => {
 after(async () => {
   await sequelize.close();
 });
+
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
+// VERDADE (token real) para testes manuais de assinatura eletrônica em andamento. Os testes
+// abaixo (M5-10, M5-33) testam GATES DE NEGÓCIO (ativação, jornada E2E), não a integração real
+// com o Clicksign — precisam do Sandbox determinístico (sem I/O de rede, sem depender de regras
+// de validação de uma conta externa fora do nosso controle). Zeram explicitamente as settings de
+// assinatura DENTRO da própria transação de rollback (hard delete, nunca commitado — mesma nota
+// em test/legal.signatureProviders.test.js).
+const SIGNATURE_SETTING_KEYS = [
+  'legal.signature_provider',
+  'legal.clicksign_api_token',
+  'legal.clicksign_environment',
+  'legal.clicksign_webhook_secret',
+  'legal.zapsign_api_token',
+  'legal.zapsign_webhook_secret',
+];
+
+async function clearSignatureSettings(transaction) {
+  await TenantSetting.destroy({
+    where: { companyId: tenant.companyId, key: SIGNATURE_SETTING_KEYS },
+    transaction,
+    force: true,
+  });
+}
 
 async function createDocumentFile(transaction, prefix = 'm5b2') {
   const suffix = uniqueSuffix();
@@ -70,18 +96,30 @@ async function createDocumentFile(transaction, prefix = 'm5b2') {
   );
 }
 
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
+// VERDADE — o provedor real exige e-mail cadastrado no signatário (loadSignerContacts em
+// SignatureAdapter.js lança LEGAL_SIGNATURE_EMAIL_REQUIRED sem ele). Dado de teste legítimo:
+// todo Person criado aqui já sai com um e-mail de teste único, não é workaround de bug.
 async function createPerson(transaction, label) {
-  return Person.create(
+  const suffix = uniqueSuffix();
+  const person = await Person.create(
     {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personType: 'PF',
-      legalName: `${label} ${uniqueSuffix()}`,
+      legalName: `${label} ${suffix}`,
       createdBy: tenant.userId,
       updatedBy: tenant.userId,
     },
     { transaction }
   );
+  await personContactsService.createContact(
+    person.id,
+    { contactType: 'EMAIL', valueNormalized: `qa+${suffix}-${Date.now()}@nayaraone.dev`, isPrimary: true },
+    tenant.userId,
+    transaction
+  );
+  return person;
 }
 
 /**
@@ -164,6 +202,7 @@ test('M5-10: SIGNED forjado (sem documento nem assinatura) NÃO vira ACTIVE — 
 
 test('M5-10: contrato com documento mas com assinatura ainda PENDENTE não é ativado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const suffix = uniqueSuffix();
     const contract = await contractsService.createContract(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', totalValue: 1000 },
@@ -204,6 +243,7 @@ test('M5-10: contrato com documento mas com assinatura ainda PENDENTE não é at
 
 test('M5-10: garantia cadastrada mas NENHUMA ACTIVE bloqueia a ativação; sem nenhuma garantia, ativa normalmente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     // Caso 1 — contrato com garantia cadastrada e depois CANCELADA: ativar seria entregar o
     // imóvel sem a proteção que o próprio contrato previu.
     const comGarantia = await buildSignedLease(transaction);
@@ -382,6 +422,7 @@ test('M5-12: ZapSign recebe external_id EXATAMENTE igual ao content_hash da Cont
  */
 test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, vistoria, chaves e relatório com hash', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const suffix = uniqueSuffix();
 
     // 1) Imóvel + pessoas reais.
@@ -405,6 +446,16 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       tenant.userId,
       transaction
     );
+    // Provedor real (clicksign) configurado no tenant compartilhado exige e-mail por
+    // signatário — dado de teste legítimo, não workaround (ver nota em createPerson acima).
+    for (const person of [landlord, lessee, guarantor]) {
+      await personContactsService.createContact(
+        person.id,
+        { contactType: 'EMAIL', valueNormalized: `qa+${suffix}-${person.id.slice(0, 8)}@nayaraone.dev`, isPrimary: true },
+        tenant.userId,
+        transaction
+      );
+    }
 
     // 2) Oportunidade -> proposta enviada -> proposta ACEITA (origem real do contrato).
     const opportunity = await opportunitiesService.createOpportunity(

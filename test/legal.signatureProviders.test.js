@@ -23,9 +23,37 @@ after(async () => {
   await sequelize.close();
 });
 
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado
+// DE VERDADE (com token real) para testes manuais de assinatura eletrônica em andamento. Os
+// testes deste arquivo que assumem "nenhum provider configurado" não podem confiar no estado
+// real do tenant — precisam zerar explicitamente as settings de assinatura DENTRO da própria
+// transação de rollback antes de exercitar o código sob teste (nunca fora dela, e nunca commitado).
+const SIGNATURE_SETTING_KEYS = [
+  'legal.signature_provider',
+  'legal.clicksign_api_token',
+  'legal.clicksign_environment',
+  'legal.clicksign_webhook_secret',
+  'legal.zapsign_api_token',
+  'legal.zapsign_webhook_secret',
+];
+
+async function clearSignatureSettings(transaction) {
+  // `force: true` — TenantSetting é `paranoid` (soft delete), e UNIQUE(company_id, key) não
+  // tem filtro parcial por deleted_at: um soft delete deixaria a linha "fantasma" colidindo
+  // com qualquer upsertSetting/insert subsequente da mesma chave dentro da MESMA transação
+  // (violação de unique constraint). Hard delete aqui é seguro porque tudo roda dentro de
+  // `withRollbackTenantTransaction` — sofre rollback ao final do teste, nunca é commitado.
+  await TenantSetting.destroy({
+    where: { companyId: tenant.companyId, key: SIGNATURE_SETTING_KEYS },
+    transaction,
+    force: true,
+  });
+}
+
 // --- resolução de adapter conforme legal.signature_provider ---
 test('signatures: resolveSignatureAdapter usa Sandbox por padrão (sem configuração)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const adapter = await signaturesService.resolveSignatureAdapter(tenant, transaction);
     assert.equal(adapter.constructor.name, 'SandboxSignatureAdapter');
   });
@@ -33,6 +61,7 @@ test('signatures: resolveSignatureAdapter usa Sandbox por padrão (sem configura
 
 test('signatures: resolveSignatureAdapter cai para Sandbox (fallback seguro) quando provider=clicksign mas SEM token configurado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     await settingsService.upsertSetting('legal.signature_provider', 'clicksign', tenant, tenant.userId, transaction);
     const adapter = await signaturesService.resolveSignatureAdapter(tenant, transaction);
     assert.equal(adapter.constructor.name, 'SandboxSignatureAdapter');
@@ -197,6 +226,7 @@ function invokeController(controllerFn, req) {
 
 test('legal webhook: sandbox continua funcionando SEM exigir HMAC (nenhum provider real configurado)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const signature = await createLeaseWithSignedContract(transaction);
 
     const req = buildFakeReq({ params: { externalSignatureId: signature.externalSignatureId }, body: {} });
@@ -209,6 +239,7 @@ test('legal webhook: sandbox continua funcionando SEM exigir HMAC (nenhum provid
 
 test('legal webhook: rejeita payload SEM HMAC válido quando há provider real (clicksign) configurado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     await settingsService.upsertSetting('legal.signature_provider', 'clicksign', tenant, tenant.userId, transaction);
     await settingsService.upsertSetting('legal.clicksign_webhook_secret', 'real-webhook-secret', tenant, tenant.userId, transaction);
 
@@ -227,6 +258,7 @@ test('legal webhook: rejeita payload SEM HMAC válido quando há provider real (
 test('legal webhook: aceita quando o HMAC do corpo bruto é válido para o provider real configurado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const webhookSecret = 'real-webhook-secret-2';
+    await clearSignatureSettings(transaction);
     await settingsService.upsertSetting('legal.signature_provider', 'clicksign', tenant, tenant.userId, transaction);
     await settingsService.upsertSetting('legal.clicksign_webhook_secret', webhookSecret, tenant, tenant.userId, transaction);
 

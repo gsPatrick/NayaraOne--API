@@ -5,11 +5,35 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
+const personContactsService = require('../src/features/people/personContacts.service');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
 const AppError = require('../src/utils/AppError');
-const { File } = require('../src/models');
+const { File, TenantSetting } = require('../src/models');
+
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
+// VERDADE (token real) para testes manuais de assinatura eletrônica em andamento. O teste
+// "fluxo feliz" abaixo testa o GATE de negócio de ativação de contrato, não a integração real
+// com o Clicksign — precisa do Sandbox determinístico (sem I/O de rede). Zera explicitamente as
+// settings de assinatura DENTRO da própria transação de rollback (hard delete, nunca commitado —
+// mesma nota em test/legal.signatureProviders.test.js).
+const SIGNATURE_SETTING_KEYS = [
+  'legal.signature_provider',
+  'legal.clicksign_api_token',
+  'legal.clicksign_environment',
+  'legal.clicksign_webhook_secret',
+  'legal.zapsign_api_token',
+  'legal.zapsign_webhook_secret',
+];
+
+async function clearSignatureSettings(transaction) {
+  await TenantSetting.destroy({
+    where: { companyId: tenant.companyId, key: SIGNATURE_SETTING_KEYS },
+    transaction,
+    force: true,
+  });
+}
 
 async function createFakeDocumentFile(transaction) {
   const suffix = uniqueSuffix();
@@ -55,6 +79,18 @@ async function createLeaseWithParties(transaction) {
     tenant.userId,
     transaction
   );
+  // O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado
+  // DE VERDADE (token real) para testes manuais de assinatura eletrônica em andamento — o
+  // provedor real exige e-mail cadastrado por signatário (LEGAL_SIGNATURE_EMAIL_REQUIRED).
+  // Dado de teste legítimo, não workaround de bug.
+  for (const person of [landlord, tenantPerson]) {
+    await personContactsService.createContact(
+      person.id,
+      { contactType: 'EMAIL', valueNormalized: `qa+${suffix}-${person.id.slice(0, 8)}@nayaraone.dev`, isPrimary: true },
+      tenant.userId,
+      transaction
+    );
+  }
   await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
   await contractsService.addContractParty(contract.id, { personId: tenantPerson.id, partyRole: 'TENANT' }, tenant.userId, transaction);
   return contract;
@@ -104,6 +140,7 @@ test('HOM-001: contrato não avança para SIGNED sem todas as assinaturas confir
 
 test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato a ACTIVE', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const suffix = uniqueSuffix();
     const contract = await createLeaseWithParties(transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);

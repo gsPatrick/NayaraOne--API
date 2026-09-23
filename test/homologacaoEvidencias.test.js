@@ -30,8 +30,32 @@ const { runWithCorrelationId } = require('../src/middlewares/correlationId.middl
 const { withTimeout, HEALTH_CHECK_TIMEOUT_MS } = require('../src/features/health/health.controller');
 const authService = require('../src/features/auth/auth.service');
 const { authMiddleware } = require('../src/middlewares/auth.middleware');
-const { User, Session, Group, Company, AuditLog, File } = require('../src/models');
+const { User, Session, Group, Company, AuditLog, File, TenantSetting } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
+// VERDADE (com token real) para testes manuais de assinatura eletrônica em andamento. Testes
+// abaixo (HOMO-02/HOMO-03) esperam o comportamento do Sandbox (ex.: `checkSignatureStatus`
+// retornando sempre "PENDING", sem nenhuma chamada HTTP real) — não podem confiar no estado
+// real do tenant. Zeram explicitamente as settings de assinatura DENTRO da própria transação de
+// rollback antes de exercitar o código sob teste (hard delete, nunca commitado — ver mesma nota
+// em test/legal.signatureProviders.test.js).
+const SIGNATURE_SETTING_KEYS = [
+  'legal.signature_provider',
+  'legal.clicksign_api_token',
+  'legal.clicksign_environment',
+  'legal.clicksign_webhook_secret',
+  'legal.zapsign_api_token',
+  'legal.zapsign_webhook_secret',
+];
+
+async function clearSignatureSettings(transaction) {
+  await TenantSetting.destroy({
+    where: { companyId: tenant.companyId, key: SIGNATURE_SETTING_KEYS },
+    transaction,
+    force: true,
+  });
+}
 
 // withCommittedTenantTransaction — diferente de withRollbackTenantTransaction: faz COMMIT de
 // verdade. Só usado pelo teste de concorrência real abaixo (TEC-09), que precisa de duas
@@ -153,6 +177,7 @@ test('HOMO-01b reajuste PENDING_SOURCE também grava ruleVersionId quando a regr
 // --- Item 3 (Clicksign/ZapSign): consulta de status e cancelamento ---
 test('HOMO-02 assinatura grava o providerEnvelopeId e permite consultar status ativo no provedor', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const { version, personIds } = await createSignableContractVersion(transaction);
     const [signature] = await signaturesService.initiateSignature(version.id, personIds, tenant.userId, transaction);
     assert.ok(signature.providerEnvelopeId, 'providerEnvelopeId precisa ser persistido para permitir consulta/cancelamento futuros');
@@ -165,6 +190,7 @@ test('HOMO-02 assinatura grava o providerEnvelopeId e permite consultar status a
 
 test('HOMO-03 cancelamento de assinatura pendente funciona, e assinatura já confirmada não pode ser cancelada', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const { version, personIds } = await createSignableContractVersion(transaction);
     const [signatureA, signatureB] = await signaturesService.initiateSignature(version.id, personIds, tenant.userId, transaction);
 
@@ -592,6 +618,7 @@ test('AUD-008b versão SEM documentFileId (documento real) não pode avançar o 
 // --- ADV-08: webhook de assinatura duplicado/fora de ordem não corrompe estado ---
 test('ADV-08 webhook duplicado (mesma assinatura) é no-op idempotente — não reaplica efeito nem duplica auditoria', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const { version, personIds } = await createSignableContractVersion(transaction);
     const [signatureA, signatureB] = await signaturesService.initiateSignature(version.id, personIds, tenant.userId, transaction);
 

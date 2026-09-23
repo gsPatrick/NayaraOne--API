@@ -13,7 +13,8 @@ const guaranteesService = require('../src/features/legal/guarantees.service');
 const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
 const inspectionsService = require('../src/features/legal/inspections.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const { File, Person } = require('../src/models');
+const personContactsService = require('../src/features/people/personContacts.service');
+const { File, Person, TenantSetting } = require('../src/models');
 
 let tenant;
 
@@ -24,6 +25,29 @@ before(async () => {
 after(async () => {
   await sequelize.close();
 });
+
+// O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
+// VERDADE (token real) para testes manuais de assinatura eletrônica em andamento. M5-22/M5-23
+// testa o GATE de negócio de entrega de chaves, não a integração real com o Clicksign — precisa
+// do Sandbox determinístico (sem I/O de rede). Zera explicitamente as settings de assinatura
+// DENTRO da própria transação de rollback (hard delete, nunca commitado — mesma nota em
+// test/legal.signatureProviders.test.js).
+const SIGNATURE_SETTING_KEYS = [
+  'legal.signature_provider',
+  'legal.clicksign_api_token',
+  'legal.clicksign_environment',
+  'legal.clicksign_webhook_secret',
+  'legal.zapsign_api_token',
+  'legal.zapsign_webhook_secret',
+];
+
+async function clearSignatureSettings(transaction) {
+  await TenantSetting.destroy({
+    where: { companyId: tenant.companyId, key: SIGNATURE_SETTING_KEYS },
+    transaction,
+    force: true,
+  });
+}
 
 async function createLeaseWithParties(transaction) {
   const suffix = uniqueSuffix();
@@ -39,6 +63,17 @@ async function createLeaseWithParties(transaction) {
   );
   const landlord = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `M5 Locador ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
   const tenantPerson = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `M5 Locatário ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
+  // O tenant de homologação compartilhado tem `legal.signature_provider=clicksign`
+  // configurado DE VERDADE — o provedor real exige e-mail cadastrado por signatário
+  // (LEGAL_SIGNATURE_EMAIL_REQUIRED). Dado de teste legítimo, não workaround.
+  for (const person of [landlord, tenantPerson]) {
+    await personContactsService.createContact(
+      person.id,
+      { contactType: 'EMAIL', valueNormalized: `qa+${suffix}-${person.id.slice(0, 8)}@nayaraone.dev`, isPrimary: true },
+      tenant.userId,
+      transaction
+    );
+  }
   await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
   await contractsService.addContractParty(contract.id, { personId: tenantPerson.id, partyRole: 'TENANT' }, tenant.userId, transaction);
   return { contract, landlord, tenantPerson };
@@ -98,6 +133,7 @@ test('M5-17/M5-18 createGuarantee exige guarantorPersonId para GUARANTOR, persis
 // --- M5-22/M5-23: entrega de chaves bloqueada sem contrato assinado + vistoria concluída, registro completo ao liberar ---
 test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e registra quem/quando após concluída', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
     const { contract } = await createLeaseWithParties(transaction);
     const suffix = uniqueSuffix();
     const file = await File.create(
