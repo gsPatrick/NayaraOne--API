@@ -1,6 +1,6 @@
 'use strict';
 
-const { CollectionCase } = require('../../models');
+const { CollectionCase, BillingSchedule } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
@@ -29,6 +29,17 @@ const { getSetting } = require('../settings/settings.service');
  * continuam gravados) e ainda assim torna o número ajustável por tenant sem publicar regra nova.
  */
 async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, transaction) {
+  // FIX (concorrência): sem lock pessimista aqui, duas chamadas concorrentes de
+  // openCollectionCase para a mesma competência liam o "findOne" abaixo antes de qualquer uma
+  // delas ter criado a linha e as duas passavam pela checagem de duplicidade, criando DOIS
+  // CollectionCase para a mesma billing_schedule (nenhuma constraint única em
+  // billing_schedule_id). Lock pego numa consulta separada, sem include, pelo mesmo motivo já
+  // documentado em billingSchedule.service.js#registerPayment: `SELECT ... FOR UPDATE` não é
+  // compatível com o LEFT JOIN de `items` que getBillingSchedule usa. Travar a linha de
+  // billing_schedule serializa as duas chamadas concorrentes: a segunda só prossegue depois da
+  // primeira commitar, e aí enxerga o CollectionCase já criado pela primeira.
+  await BillingSchedule.findByPk(billingScheduleId, { transaction, lock: transaction.LOCK.UPDATE });
+
   const billingSchedule = await billingScheduleService.getBillingSchedule(billingScheduleId, transaction);
   if (billingSchedule.status === 'PAID') {
     throw AppError.conflict('Esta competência já está quitada — não há o que cobrar.', 'COLLECTION_CASE_ALREADY_PAID');

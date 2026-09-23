@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
@@ -330,6 +330,86 @@ test('billing: caso de cobrança dentro da carência (REG-LOC-002) é bloqueado'
     // Dívida original nunca é apagada/alterada mesmo após o acordo.
     assert.equal(Number(withAgreement.originalDebtAmount), Number(collectionCase.originalDebtAmount));
   });
+});
+
+test('billing: duas aberturas CONCORRENTES de caso de cobrança para a mesma competência não duplicam', async () => {
+  const suffix = uniqueSuffix();
+  // Concorrência real precisa de transações COMMITADAS (duas conexões enxergando o mesmo
+  // estado) — mesmo padrão do ADV-F21 (test/adversarial.finance.test.js).
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { contractId, scheduleId } = await withCommitted(async (t) => {
+    const contract = await createLeaseContract(t, { contractNumber: `QA-BILLING-RACE-${suffix}` });
+    const schedule = await billingScheduleService.generateBillingSchedule(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        contractId: contract.id,
+        period: '2026-11',
+        dueDate: '2026-11-05',
+        items: [{ componentType: 'RENT', amount: 2000 }],
+      },
+      tenant.userId,
+      t
+    );
+    return { contractId: contract.id, scheduleId: schedule.id };
+  });
+
+  // BARREIRA DE SINCRONIZAÇÃO (mesmo padrão do ADV-L17, ver commit 97dfd14): sem ela, a corrida
+  // depende de sorte de timing de I/O — contra um Postgres local rápido a 2ª transação pode só
+  // começar depois que a 1ª já commitou, lendo o estado já atualizado (CollectionCase já
+  // criado) e sendo legitimamente rejeitada por COLLECTION_CASE_DUPLICATE sem nenhum conflito
+  // de lock real ter ocorrido. A barreira força as duas a terminarem a leitura inicial da
+  // competência antes de qualquer uma seguir para o lock/checagem de duplicidade.
+  let liberarBarreira;
+  const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+  let leiturasPendentes = 2;
+  const aguardarAsDuasLeituras = () => {
+    leiturasPendentes -= 1;
+    if (leiturasPendentes === 0) liberarBarreira();
+    return barreira;
+  };
+
+  const abrirCaso = () =>
+    withCommitted(async (t) => {
+      await billingScheduleService.getBillingSchedule(scheduleId, t);
+      await aguardarAsDuasLeituras();
+      return collectionCaseService.openCollectionCase(scheduleId, 10, tenant.userId, t);
+    });
+
+  try {
+    const resultados = await Promise.allSettled([abrirCaso(), abrirCaso()]);
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    assert.equal(sucessos.length, 1, 'apenas UMA das aberturas concorrentes pode passar');
+    const falha = resultados.find((r) => r.status === 'rejected');
+    assert.equal(falha.reason.code, 'COLLECTION_CASE_DUPLICATE');
+
+    await withCommitted(async (t) => {
+      const casos = await collectionCaseService.listCollectionCases(t, { contractId });
+      assert.equal(casos.length, 1, 'nunca deve existir mais de um caso de cobrança para a mesma competência');
+    });
+  } finally {
+    // Limpeza: dados de teste num banco compartilhado — removidos via SQL direto.
+    await withCommitted(async (t) => {
+      await sequelize.query('DELETE FROM finance.collection_cases WHERE billing_schedule_id = :id', { replacements: { id: scheduleId }, transaction: t });
+      await sequelize.query('DELETE FROM finance.billing_schedule_items WHERE billing_schedule_id = :id', { replacements: { id: scheduleId }, transaction: t });
+      await sequelize.query('DELETE FROM finance.billing_schedules WHERE id = :id', { replacements: { id: scheduleId }, transaction: t });
+      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
+    });
+  }
 });
 
 // --- DoD 7: isolamento RLS entre tenants ---
