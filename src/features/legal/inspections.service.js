@@ -56,6 +56,33 @@ async function createInspection(payload, actorUserId, transaction) {
   return inspection;
 }
 
+/**
+ * createInspectionWithItems — (Bug 4 reportado pela cliente: falta de atomicidade) cria a
+ * vistoria E todos os seus itens dentro da MESMA transação recebida do controller. Antes, o
+ * front chamava `POST /inspections` e depois, em loop, `POST /inspections/:id/items` — cada
+ * chamada HTTP abre sua PRÓPRIA transação (`withTenantTransaction` por request), então um item
+ * inválido no meio do loop (ex.: DAMAGED sem damageDescription) já tinha a vistoria e os itens
+ * anteriores GRAVADOS de verdade, e só o item ruim falhava — vistoria parcial no banco,
+ * exatamente o que a cliente reproduziu. Usando este endpoint único, todos os itens são
+ * validados/criados antes de qualquer commit: se QUALQUER item for inválido, a exceção sobe,
+ * `withTenantTransaction` faz ROLLBACK da transação inteira e NADA fica gravado — nem a
+ * vistoria, nem nenhum item.
+ */
+async function createInspectionWithItems(payload, actorUserId, transaction) {
+  const { items, ...inspectionPayload } = payload || {};
+  const inspection = await createInspection(inspectionPayload, actorUserId, transaction);
+
+  const createdItems = [];
+  if (Array.isArray(items)) {
+    for (const itemPayload of items) {
+      const item = await addInspectionItem(inspection.id, itemPayload, actorUserId, transaction);
+      createdItems.push(item);
+    }
+  }
+
+  return { inspection, items: createdItems };
+}
+
 async function listInspections(transaction, filters = {}) {
   const where = {};
   if (filters.propertyId) where.propertyId = filters.propertyId;
@@ -512,6 +539,7 @@ async function getInspectionReport(inspectionId, transaction) {
 
 module.exports = {
   createInspection,
+  createInspectionWithItems,
   listInspections,
   getInspection,
   completeInspection,

@@ -278,6 +278,14 @@ const createInspection = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => inspectionsService.createInspection(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+// FIX (Bug 4, falta de atomicidade): cria a vistoria + todos os itens numa única transação —
+// ver comentário de createInspectionWithItems em inspections.service.js.
+const createInspectionWithItems = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    inspectionsService.createInspectionWithItems(withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
 const listInspections = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
     inspectionsService.listInspections(t, {
@@ -445,7 +453,7 @@ module.exports = {
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
-  createInspection, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
+  createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,

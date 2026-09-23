@@ -56,6 +56,9 @@ legalRouter.delete('/legal/guarantees/:id', requirePermission('legal:update'), l
 
 // Inspections
 legalRouter.post('/legal/inspections', requirePermission('legal:create'), legalController.createInspection);
+// FIX (Bug 4, atomicidade): cria vistoria + itens em UMA transação — se qualquer item for
+// inválido, nada é gravado (nem a vistoria, nem nenhum item). Ver createInspectionWithItems.
+legalRouter.post('/legal/inspections/with-items', requirePermission('legal:create'), legalController.createInspectionWithItems);
 legalRouter.get('/legal/inspections', requirePermission('legal:read'), legalController.listInspections);
 legalRouter.get('/legal/inspections/compare', requirePermission('legal:read'), legalController.compareInspections);
 legalRouter.get('/legal/inspections/:id', requirePermission('legal:read'), legalController.getInspection);
