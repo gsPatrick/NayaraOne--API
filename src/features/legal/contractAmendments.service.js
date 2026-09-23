@@ -142,7 +142,14 @@ async function getAmendment(id, transaction) {
  * assinado. Conteúdo (reason/changes/numeração) permanece imutável.
  */
 async function signAmendment(id, payload, actorUserId, transaction) {
-  const amendment = await getAmendment(id, transaction);
+  // Lock pessimista: duas chamadas concorrentes de assinatura pro mesmo aditivo (duplo clique,
+  // retry) não podem ambas ler status != SIGNED antes de qualquer uma commitar — sem isso,
+  // ambas passavam e gravavam auditoria duplicada da mesma assinatura.
+  const amendment = await ContractAmendment.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!amendment) throw AppError.notFound('Aditivo contratual não encontrado.', 'LEGAL_CONTRACT_AMENDMENT_NOT_FOUND');
   if (amendment.status === 'SIGNED') {
     throw AppError.conflict('Aditivo já está assinado.', 'LEGAL_CONTRACT_AMENDMENT_ALREADY_SIGNED');
   }
