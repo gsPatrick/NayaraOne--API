@@ -33,9 +33,19 @@ async function matchReconciliation(payload, actorUserId, transaction) {
     );
   }
 
-  const entry = await FinancialEntry.findByPk(financialEntryId, { transaction });
+  // FIX (homologação 23/09/2026 — auditoria adversarial, corrida real de verdade validada):
+  // não existe (e não dá pra existir sem redesenhar o schema — ver comentário em
+  // matchReconciliationGroup sobre por que um financial_entry_id/bank_transaction_id pode
+  // legitimamente se repetir em mais de uma linha dentro do MESMO grupo N:M) uma constraint
+  // única simples que trave "entry/transaction só pode ser conciliado uma vez" no banco. Sem
+  // isso, duas chamadas concorrentes de matchReconciliation para o MESMO entry/transaction
+  // liam "ainda não conciliado" ao mesmo tempo (SELECT-then-INSERT clássico) e as duas
+  // passavam. `FOR UPDATE` na leitura do entry/transaction serializa: a segunda transação
+  // BLOQUEIA até a primeira commitar, e só então reavalia assertNotAlreadyReconciled — que
+  // nesse ponto já enxerga a Reconciliation da primeira e barra corretamente.
+  const entry = await FinancialEntry.findByPk(financialEntryId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
-  const bankTransaction = await BankTransaction.findByPk(bankTransactionId, { transaction });
+  const bankTransaction = await BankTransaction.findByPk(bankTransactionId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!bankTransaction) throw AppError.notFound('Transação bancária não encontrada.', 'FINANCE_BANK_TRANSACTION_NOT_FOUND');
 
   if (Number(entry.amount) !== Math.abs(Number(bankTransaction.amount))) {
@@ -118,15 +128,18 @@ async function matchReconciliationGroup(payload, actorUserId, transaction) {
   const entryIds = uniqueList(financialEntryIds, 'financialEntryIds');
   const txIds = uniqueList(bankTransactionIds, 'bankTransactionIds');
 
+  // FIX (homologação 23/09/2026 — mesma corrida de matchReconciliation acima, aplicada ao
+  // caminho N:M): FOR UPDATE trava cada entry/transaction do grupo antes de checar se já foi
+  // conciliado, serializando tentativas concorrentes sobre o mesmo item.
   const entries = [];
   for (const entryId of entryIds) {
-    const entry = await FinancialEntry.findByPk(entryId, { transaction });
+    const entry = await FinancialEntry.findByPk(entryId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!entry) throw AppError.notFound(`Lançamento financeiro ${entryId} não encontrado.`, 'FINANCE_ENTRY_NOT_FOUND');
     entries.push(entry);
   }
   const bankTransactions = [];
   for (const txId of txIds) {
-    const bankTransaction = await BankTransaction.findByPk(txId, { transaction });
+    const bankTransaction = await BankTransaction.findByPk(txId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!bankTransaction) throw AppError.notFound(`Transação bancária ${txId} não encontrada.`, 'FINANCE_BANK_TRANSACTION_NOT_FOUND');
     bankTransactions.push(bankTransaction);
   }
