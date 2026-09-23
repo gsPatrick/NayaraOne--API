@@ -31,4 +31,9 @@ const upsertSetting = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
-module.exports = { listSettings, getSetting, upsertSetting };
+const getIntegrationsStatus = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => settingsService.getIntegrationsStatus(tenantFromAuth(req), t));
+  return success(res, { data });
+});
+
+module.exports = { listSettings, getSetting, upsertSetting, getIntegrationsStatus };

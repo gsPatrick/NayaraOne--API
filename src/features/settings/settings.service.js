@@ -216,6 +216,99 @@ async function getSettingRow(key, tenant, transaction) {
   return row;
 }
 
+const INTEGRATION_STATUS_TIMEOUT_MS = 5000;
+
+/**
+ * pingProvider — executa `fn(signal)` (uma chamada HTTP real e barata ao provedor) sob um
+ * timeout curto (5s por padrão), pra nunca travar a tela de configurações esperando resposta
+ * de rede de terceiro. Nunca lança: qualquer falha (erro HTTP, rede, timeout) vira
+ * `connected: false` com um motivo, e só timeout usa o reason 'timeout' explicitamente.
+ */
+async function pingProvider(fn, timeoutMs = INTEGRATION_STATUS_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fn(controller.signal);
+    return { connected: true };
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      return { connected: false, reason: 'timeout' };
+    }
+    return { connected: false, reason: 'auth_or_network_error' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * getIntegrationsStatus — pra cada integração externa configurável no painel (Clicksign,
+ * ZapSign, FGV/IGPM), faz uma chamada real mínima ao provedor pra confirmar que o token
+ * funciona, sem nunca devolver o segredo em texto claro (só usa o valor decifrado no escopo
+ * desta chamada de rede, nunca no retorno). Se não houver token configurado para o provider
+ * ativo, retorna `configured: false` e nem tenta testar rede.
+ */
+async function getIntegrationsStatus(tenant, transaction) {
+  const checkedAt = new Date().toISOString();
+
+  const result = {
+    clicksign: { configured: false, connected: false, checkedAt },
+    zapsign: { configured: false, connected: false, checkedAt },
+    igpm: { configured: false, connected: false, checkedAt },
+  };
+
+  const signatureProvider = await getSetting('legal.signature_provider', tenant, transaction, 'sandbox');
+
+  if (signatureProvider === 'clicksign') {
+    const token = await getDecryptedSetting('legal.clicksign_api_token', tenant, transaction, null);
+    if (token) {
+      const environment = await getSetting('legal.clicksign_environment', tenant, transaction, 'production');
+      const baseUrl = environment === 'sandbox' ? 'https://sandbox.clicksign.com/api/v3' : 'https://app.clicksign.com/api/v3';
+      const ping = await pingProvider(async (signal) => {
+        const response = await fetch(`${baseUrl}/envelopes?page%5Bsize%5D=1`, {
+          headers: { Accept: 'application/vnd.api+json', Authorization: token },
+          signal,
+        });
+        if (!response.ok) throw new Error(`Clicksign respondeu ${response.status}.`);
+      });
+      result.clicksign = { configured: true, checkedAt, ...ping };
+    }
+  } else if (signatureProvider === 'zapsign') {
+    const token = await getDecryptedSetting('legal.zapsign_api_token', tenant, transaction, null);
+    if (token) {
+      const ping = await pingProvider(async (signal) => {
+        const response = await fetch('https://api.zapsign.com.br/api/v1/docs/?limit=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal,
+        });
+        if (!response.ok) throw new Error(`ZapSign respondeu ${response.status}.`);
+      });
+      result.zapsign = { configured: true, checkedAt, ...ping };
+    }
+  }
+
+  // FGV/IGPM: só depende de rede quando o modo é 'automatic'. Em 'manual' (ou qualquer outro
+  // valor não-automático) não há dependência externa nenhuma — é sempre "verde".
+  const igpmMode = await getSetting('billing.igpm_mode', tenant, transaction, 'manual');
+  if (igpmMode === 'automatic') {
+    const token = await getDecryptedSetting('billing.fgv_api_token', tenant, transaction, null);
+    if (token) {
+      const period = new Date().toISOString().slice(0, 7).replace('-', '');
+      const ping = await pingProvider(async (signal) => {
+        const response = await fetch(`https://api.fgvdados.fgv.br/v1/indicadores/igpm/${period}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal,
+        });
+        if (!response.ok) throw new Error(`FGV respondeu ${response.status}.`);
+      });
+      result.igpm = { configured: true, checkedAt, ...ping };
+    }
+  } else {
+    result.igpm = { configured: true, connected: true, checkedAt };
+  }
+
+  return result;
+}
+
 module.exports = {
   SETTINGS_SCHEMA,
   getSetting,
@@ -223,4 +316,5 @@ module.exports = {
   upsertSetting,
   listSettingsByPrefix,
   getSettingRow,
+  getIntegrationsStatus,
 };
