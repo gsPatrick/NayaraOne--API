@@ -58,8 +58,8 @@ async function enrollGuaranteedRent(payload, actorUserId, transaction) {
   return guaranteedRentContract;
 }
 
-async function getGuaranteedRentContract(id, transaction) {
-  const item = await GuaranteedRentContract.findByPk(id, { transaction });
+async function getGuaranteedRentContract(id, transaction, options = {}) {
+  const item = await GuaranteedRentContract.findByPk(id, { transaction, lock: options.lock });
   if (!item) throw AppError.notFound('Aluguel garantido não encontrado.', 'GUARANTEED_RENT_NOT_FOUND');
   return item;
 }
@@ -79,7 +79,17 @@ async function listGuaranteedRentContracts(transaction, filters = {}) {
  *   2. RECEIVABLE — crédito a recuperar do locatário.
  */
 async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId, transaction) {
-  const guaranteedRentContract = await getGuaranteedRentContract(guaranteedRentContractId, transaction);
+  // FIX (concorrência): a checagem de duplicidade de competência (paymentsJson.some(period))
+  // era um SELECT-then-UPDATE sem lock — duas chamadas concorrentes de payGuaranteedRent para a
+  // MESMA competência liam o mesmo `paymentsJson` (sem a entrada ainda) e as duas passavam. A
+  // unicidade de idempotency_key (`guaranteed_rent.payable:<id>:<period>`) até impede o
+  // FinancialEntry duplicado no banco, mas a segunda chamada estourava como erro cru de
+  // constraint em vez do erro de negócio GUARANTEED_RENT_PAYMENT_DUPLICATE. `lock:
+  // transaction.LOCK.UPDATE` serializa as duas tentativas: a segunda só lê depois que a
+  // primeira commitar, e aí encontra a competência já paga e é rejeitada corretamente.
+  const guaranteedRentContract = await getGuaranteedRentContract(guaranteedRentContractId, transaction, {
+    lock: transaction.LOCK.UPDATE,
+  });
   if (guaranteedRentContract.status !== 'ACTIVE') {
     throw AppError.conflict('Aluguel garantido não está ativo.', 'GUARANTEED_RENT_INACTIVE');
   }

@@ -487,6 +487,73 @@ test('billing: duas recuperações CONCORRENTES da mesma antecipação de alugue
   }
 });
 
+test('billing: dois pagamentos CONCORRENTES de aluguel garantido para a mesma competência não duplicam', async () => {
+  const suffix = uniqueSuffix();
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { contractId, guaranteedId } = await withCommitted(async (t) => {
+    const contract = await createLeaseContract(t, { contractNumber: `QA-GUARANTEED-RACE-${suffix}` });
+    await activateContract(contract, t);
+    const guaranteed = await guaranteedRentService.enrollGuaranteedRent(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, coverageStartsAt: '2026-09-01' },
+      tenant.userId,
+      t
+    );
+    return { contractId: contract.id, guaranteedId: guaranteed.id };
+  });
+
+  let liberarBarreira;
+  const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+  let leiturasPendentes = 2;
+  const aguardarAsDuasLeituras = () => {
+    leiturasPendentes -= 1;
+    if (leiturasPendentes === 0) liberarBarreira();
+    return barreira;
+  };
+
+  const pagar = () =>
+    withCommitted(async (t) => {
+      await guaranteedRentService.getGuaranteedRentContract(guaranteedId, t);
+      await aguardarAsDuasLeituras();
+      return guaranteedRentService.payGuaranteedRent(guaranteedId, { period: '2026-09', amount: 2000 }, tenant.userId, t);
+    });
+
+  try {
+    const resultados = await Promise.allSettled([pagar(), pagar()]);
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    assert.equal(sucessos.length, 1, 'apenas UM dos pagamentos concorrentes da mesma competência pode passar');
+    const falha = resultados.find((r) => r.status === 'rejected');
+    assert.equal(falha.reason.code, 'GUARANTEED_RENT_PAYMENT_DUPLICATE');
+
+    await withCommitted(async (t) => {
+      const item = await guaranteedRentService.getGuaranteedRentContract(guaranteedId, t);
+      assert.equal(item.paymentsJson.length, 1, 'nunca deve existir mais de um pagamento para a mesma competência');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
+        replacements: { id: contractId, k: `guaranteed_rent%${guaranteedId}%` },
+        transaction: t,
+      });
+      await sequelize.query('DELETE FROM finance.guaranteed_rent_contracts WHERE id = :id', { replacements: { id: guaranteedId }, transaction: t });
+      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
+    });
+  }
+});
+
 // --- DoD 7: isolamento RLS entre tenants ---
 //
 // NOTA DE AMBIENTE: a role de conexão usada por este ambiente de dev/teste
