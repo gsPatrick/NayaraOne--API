@@ -89,6 +89,25 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   const deadline = await getLegalDeadline(id, transaction);
   const beforeJson = deadline.toJSON();
   const { status, description, dueAt } = payload;
+
+  // FIX (homologação 22/09/2026 — auditoria proativa): reabrir um prazo (status volta pra
+  // PENDING) ou adiar/antecipar dueAt depois que ele já tinha sido alertado como OVERDUE
+  // (lastAlertedSeverity='OVERDUE') e/ou escalado (escalatedAt setado) nunca resetava esses
+  // campos. Consequência real em legalDeadlineAlertJob.js: processDeadlinesInTransaction só
+  // alerta se o novo rank de severidade for MAIOR que o anterior — como OVERDUE já é o rank
+  // máximo, um novo vencimento nunca dispararia alerta de novo; e processEscalations só
+  // considera candidatos com escalatedAt: null — como já tinha sido setado da primeira vez, o
+  // prazo nunca mais entrava na lista de candidatos, mesmo reaberto e vencido outra vez. Ou
+  // seja: um prazo reaberto ficava, na prática, sem alerta e sem escalonamento para sempre.
+  // Agora, reabrir (status -> PENDING) ou mudar dueAt reseta o ciclo de alerta.
+  const reopening = status !== undefined && status === 'PENDING' && deadline.status !== 'PENDING';
+  const dueAtChanged = dueAt !== undefined && new Date(dueAt).getTime() !== new Date(deadline.dueAt).getTime();
+  if (reopening || dueAtChanged) {
+    deadline.lastAlertedSeverity = null;
+    deadline.firstOverdueAlertedAt = null;
+    deadline.escalatedAt = null;
+  }
+
   if (status !== undefined) deadline.status = status;
   if (description !== undefined) deadline.description = description;
   if (dueAt !== undefined) deadline.dueAt = dueAt;
