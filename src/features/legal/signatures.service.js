@@ -141,7 +141,16 @@ async function listSignaturesByContractVersion(contractVersionId, transaction) {
  * pai para SIGNED via transitionContractStatus.
  */
 async function handleSignatureWebhook(externalSignatureId, payload, transaction) {
-  const signature = await Signature.findOne({ where: { externalSignatureId }, transaction });
+  // Lock pessimista: duas entregas duplicadas do mesmo webhook (comum em qualquer provedor,
+  // inclusive Clicksign) rodando em transações concorrentes não podem ambas passar pelo
+  // findOne antes de qualquer uma commitar — sem lock, as duas veriam status !== 'SIGNED' e
+  // reaplicariam o efeito (evento publicado 2x, auditoria duplicada, tentativa dupla de
+  // transicionar o contrato).
+  const signature = await Signature.findOne({
+    where: { externalSignatureId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
   if (!signature) {
     throw AppError.notFound('Assinatura não encontrada para o externalSignatureId informado.', 'LEGAL_SIGNATURE_NOT_FOUND');
   }
