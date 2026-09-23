@@ -19,9 +19,18 @@ const list = catchAsync(async (req, res) => {
   return success(res, { data: radars });
 });
 
+// GET /radar/:id precisa devolver "matches" igual à criação/atualização: a tela de detalhe do
+// radar (app/painel/radar/[id]) lê apiRadar.matches direto da resposta deste endpoint sempre
+// que a página é aberta/recarregada — não só logo após criar/editar. Sem isso, reabrir um radar
+// já existente sempre mostrava "0 imóveis compatíveis", mesmo com imóvel ativo batendo 100% dos
+// critérios (bug real, confirmado comparando a resposta de criação com a de um GET subsequente).
 const getOne = catchAsync(async (req, res) => {
-  const radar = await req.withTenantTransaction((transaction) => radarService.getRadar(req.params.id, transaction));
-  return success(res, { data: radar });
+  const { radar, matches } = await req.withTenantTransaction(async (transaction) => {
+    const radar = await radarService.getRadar(req.params.id, transaction);
+    const matches = await radarService.matchRadarToProperties(radar, transaction);
+    return { radar, matches };
+  });
+  return success(res, { data: { ...radar.toJSON(), matches } });
 });
 
 const update = catchAsync(async (req, res) => {
