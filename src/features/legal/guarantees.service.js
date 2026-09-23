@@ -7,6 +7,28 @@ const { publishGuaranteeCreated } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 
 const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE'];
+// FIX (homologação 22/09/2026 — auditoria proativa): `status` era gravado como string livre
+// (sem ENUM/CHECK no model nem validação aqui), apesar de contracts.service.js/
+// assertActivationGate depender literalmente da string 'ACTIVE' pra decidir se a garantia conta
+// como ativa na ativação do contrato. Um typo (`"Ativa"`, `"active"` minúsculo) fazia a garantia
+// silenciosamente não contar, sem erro nenhum no cadastro — só aparecia depois, como bloqueio
+// inexplicado na ativação do contrato. Agora é validado contra um enum fechado, igual ao
+// restante do projeto.
+const GUARANTEE_STATUSES = ['ACTIVE', 'RELEASED', 'CANCELLED'];
+
+function assertValidDateRange(startsAt, endsAt) {
+  if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+    throw AppError.badRequest('"endsAt" não pode ser anterior a "startsAt".', 'LEGAL_GUARANTEE_VALIDATION');
+  }
+}
+
+function assertValidValue(value) {
+  if (value === undefined || value === null) return;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw AppError.badRequest('"value" deve ser um número positivo.', 'LEGAL_GUARANTEE_VALIDATION');
+  }
+}
 
 async function createGuarantee(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
@@ -21,6 +43,11 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
   if (guaranteeType === 'GUARANTOR' && !guarantorPersonId) {
     throw AppError.badRequest('"guarantorPersonId" é obrigatório quando "guaranteeType" é "GUARANTOR".', 'LEGAL_GUARANTEE_VALIDATION');
   }
+  if (status !== undefined && !GUARANTEE_STATUSES.includes(status)) {
+    throw AppError.badRequest(`"status" deve ser um de: ${GUARANTEE_STATUSES.join(', ')}.`, 'LEGAL_GUARANTEE_VALIDATION');
+  }
+  assertValidValue(value);
+  assertValidDateRange(startsAt, endsAt);
 
   const guarantee = await Guarantee.create(
     {
@@ -75,10 +102,22 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
   const guarantee = await getGuarantee(id, transaction);
   const beforeJson = guarantee.toJSON();
   const { status, startsAt, endsAt, value } = payload;
-  if (status !== undefined) guarantee.status = status;
+  if (status !== undefined) {
+    if (!GUARANTEE_STATUSES.includes(status)) {
+      throw AppError.badRequest(`"status" deve ser um de: ${GUARANTEE_STATUSES.join(', ')}.`, 'LEGAL_GUARANTEE_VALIDATION');
+    }
+    guarantee.status = status;
+  }
   if (startsAt !== undefined) guarantee.startsAt = startsAt;
   if (endsAt !== undefined) guarantee.endsAt = endsAt;
-  if (value !== undefined) guarantee.value = value;
+  assertValidDateRange(
+    startsAt !== undefined ? startsAt : guarantee.startsAt,
+    endsAt !== undefined ? endsAt : guarantee.endsAt
+  );
+  if (value !== undefined) {
+    assertValidValue(value);
+    guarantee.value = value;
+  }
   guarantee.updatedBy = actorUserId || null;
   await guarantee.save({ transaction });
 
