@@ -101,14 +101,23 @@ async function listOpportunities(transaction, filters = {}) {
   return Opportunity.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function getOpportunity(id, transaction) {
-  const opportunity = await Opportunity.findByPk(id, { transaction });
+async function getOpportunity(id, transaction, { lock = false } = {}) {
+  // FIX (homologação 23/09/2026 — auditoria adversarial de corrida): updateOpportunity (usada
+  // pela mudança de estágio no Kanban) lia a oportunidade sem lock pessimista. Duas transições
+  // concorrentes no mesmo card (drag-and-drop em duas abas) podiam basear-se ambas na mesma
+  // leitura obsoleta e a segunda a commitar sobrescrevia silenciosamente a transição da primeira,
+  // perdendo a passagem por um estágio intermediário na trilha de auditoria. Quem chama dentro de
+  // um fluxo de escrita passa `{ lock: true }` para travar a linha (SELECT ... FOR UPDATE).
+  const opportunity = await Opportunity.findByPk(id, {
+    transaction,
+    ...(lock ? { lock: transaction.LOCK.UPDATE } : {}),
+  });
   if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
   return opportunity;
 }
 
 async function updateOpportunity(id, payload, actorUserId, transaction) {
-  const opportunity = await getOpportunity(id, transaction);
+  const opportunity = await getOpportunity(id, transaction, { lock: true });
   const previousStage = opportunity.stage;
   const beforeJson = opportunity.toJSON();
   const { stage, temperature, expectedValue, nextAction, nextActionDueAt, lostReason, wonReason, withdrawnReason, ownerUserId } =
@@ -152,7 +161,15 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
       opportunity.closedAt = new Date();
     }
     if (!CLOSED_STAGES.includes(nextStage)) {
+      // FIX (homologação 23/09/2026 — teste adversarial de Kanban): reabrir uma oportunidade
+      // fechada (ex.: Perdido -> Em Contato) já zerava `closedAt`, mas mantinha `wonReason`/
+      // `lostReason` preenchidos do fechamento anterior — distorcendo o painel de "motivo mais
+      // comum" (M3-17), que passava a contar motivo de um desfecho que não existe mais. Agora
+      // reabrir também limpa os dois campos, a menos que o próprio payload esteja setando um
+      // desfecho novo neste mesmo request (caso `outcome` acima já vá sobrescrever em seguida).
       opportunity.closedAt = null;
+      if (!outcome || outcome.field !== 'wonReason') opportunity.wonReason = null;
+      if (!outcome || outcome.field !== 'lostReason') opportunity.lostReason = null;
     }
   }
 

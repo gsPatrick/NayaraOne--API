@@ -145,14 +145,24 @@ async function listFeedbackCases(transaction, filters = {}) {
   return FeedbackCase.findAll({ where, order: [['sla_due_at', 'ASC']], transaction });
 }
 
-async function getFeedbackCase(id, transaction) {
-  const feedbackCase = await FeedbackCase.findByPk(id, { transaction });
+async function getFeedbackCase(id, transaction, { lock = false } = {}) {
+  // FIX (homologação 23/09/2026 — auditoria adversarial de corrida): resolveFeedbackCase e
+  // escalateFeedbackCase liam o caso sem lock pessimista e decidiam a transição de status com
+  // base nessa leitura. Dois agentes agindo sobre o mesmo caso ao mesmo tempo (um resolve, outro
+  // escalona) podiam ambos passar da guarda de status e gravar, perdendo silenciosamente uma das
+  // duas decisões e deixando a trilha de auditoria/eventos de domínio contraditória. Quem chama
+  // dentro de um fluxo de escrita passa `{ lock: true }` para travar a linha (SELECT ... FOR
+  // UPDATE) e serializar concorrentes.
+  const feedbackCase = await FeedbackCase.findByPk(id, {
+    transaction,
+    ...(lock ? { lock: transaction.LOCK.UPDATE } : {}),
+  });
   if (!feedbackCase) throw AppError.notFound('Caso de feedback não encontrado.', 'FEEDBACK_CASE_NOT_FOUND');
   return feedbackCase;
 }
 
 async function resolveFeedbackCase(id, payload, actorUserId, transaction) {
-  const feedbackCase = await getFeedbackCase(id, transaction);
+  const feedbackCase = await getFeedbackCase(id, transaction, { lock: true });
   const beforeJson = feedbackCase.toJSON();
 
   if (feedbackCase.status === 'RESOLVED') {
@@ -209,7 +219,7 @@ async function resolveFeedbackCase(id, payload, actorUserId, transaction) {
  * na auditoria qual dos dois caminhos aconteceu.
  */
 async function escalateFeedbackCase(id, payload, actorUserId, transaction) {
-  const feedbackCase = await getFeedbackCase(id, transaction);
+  const feedbackCase = await getFeedbackCase(id, transaction, { lock: true });
   const beforeJson = feedbackCase.toJSON();
 
   if (feedbackCase.status === 'RESOLVED') {

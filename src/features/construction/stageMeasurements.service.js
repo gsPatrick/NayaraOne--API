@@ -63,8 +63,17 @@ async function listStageMeasurements(projectStageId, transaction) {
   return StageMeasurement.findAll({ where: { projectStageId }, order: [['measured_at', 'DESC']], transaction });
 }
 
-async function getStageMeasurement(id, transaction) {
-  const measurement = await StageMeasurement.findByPk(id, { transaction });
+async function getStageMeasurement(id, transaction, { lock = false } = {}) {
+  // FIX (homologação 23/09/2026 — auditoria adversarial de corrida): decideStageMeasurement lia
+  // a medição sem lock pessimista antes de checar status PENDING_APPROVAL e decidir. StageMeasurement
+  // não tem optimistic locking (diferente de ProjectStage). Dois aprovadores decidindo a mesma
+  // medição ao mesmo tempo (um aprova, outro rejeita) podiam ambos passar da guarda de status —
+  // quem commitasse por último vencia silenciosamente, deixando trilha de auditoria e evento de
+  // domínio contraditórios. Passa `{ lock: true }` na chamada de decisão para travar a linha.
+  const measurement = await StageMeasurement.findByPk(id, {
+    transaction,
+    ...(lock ? { lock: transaction.LOCK.UPDATE } : {}),
+  });
   if (!measurement) throw AppError.notFound('Medição não encontrada.', 'STAGE_MEASUREMENT_NOT_FOUND');
   return measurement;
 }
@@ -75,7 +84,7 @@ async function getStageMeasurement(id, transaction) {
  * nunca é editado diretamente via updateProjectStage).
  */
 async function decideStageMeasurement(id, { decision, rejectionReason }, actorUserId, transaction) {
-  const measurement = await getStageMeasurement(id, transaction);
+  const measurement = await getStageMeasurement(id, transaction, { lock: true });
   if (measurement.status !== 'PENDING_APPROVAL') {
     throw AppError.conflict(
       `Só é possível decidir uma medição "PENDING_APPROVAL" (atual: "${measurement.status}").`,
