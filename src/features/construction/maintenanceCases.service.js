@@ -72,7 +72,7 @@ async function getMaintenanceCase(id, transaction) {
 async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   const maintenanceCase = await getMaintenanceCase(id, transaction);
   const beforeJson = maintenanceCase.toJSON();
-  const { status, description, responsibleUserId } = payload;
+  const { status, description, responsibleUserId, warrantyDeadlineAt } = payload;
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!STATUSES.includes(normalizedStatus)) {
@@ -82,6 +82,12 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   }
   if (description !== undefined) maintenanceCase.description = description;
   if (responsibleUserId !== undefined) maintenanceCase.responsibleUserId = responsibleUserId;
+  if (warrantyDeadlineAt !== undefined) {
+    if (warrantyDeadlineAt !== null && Number.isNaN(new Date(warrantyDeadlineAt).getTime())) {
+      throw AppError.badRequest('"warrantyDeadlineAt" precisa ser uma data válida.', 'MAINTENANCE_CASE_WARRANTY_DEADLINE_INVALID');
+    }
+    maintenanceCase.warrantyDeadlineAt = warrantyDeadlineAt;
+  }
   maintenanceCase.updatedBy = actorUserId || null;
   await maintenanceCase.save({ transaction });
 
