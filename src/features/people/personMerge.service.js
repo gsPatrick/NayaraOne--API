@@ -61,10 +61,20 @@ async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
     throw AppError.badRequest('"absorbedId" não pode ser igual ao id canônico.', 'PERSON_MERGE_VALIDATION');
   }
 
-  const canonical = await Person.findByPk(canonicalId, { transaction });
+  // FIX (homologação 23/09/2026 — auditoria adversarial, mesmo padrão do bug de conciliação
+  // bancária corrigido nesta sessão): sem lock pessimista aqui, dois merges concorrentes do
+  // MESMO absorbedId pra canônicos DIFERENTES (duplo clique, duas abas) liam
+  // `absorbed.status !== 'MERGED'` ao mesmo tempo e os dois passavam — resultado: FKs
+  // remapeadas de forma inconsistente entre os dois canônicos (a segunda escrita de
+  // mergedIntoId vence, mas os UPDATEs de FK de cada merge já rodaram parcialmente contra o
+  // canônico errado), dois eventos person.merged publicados, duas linhas de auditoria
+  // contraditórias descrevendo o mesmo absorbedId fundido em pessoas diferentes. FOR UPDATE na
+  // leitura de `absorbed` serializa: o segundo merge concorrente espera o primeiro commitar e
+  // então reavalia `status === 'MERGED'` corretamente, barrando a segunda tentativa.
+  const canonical = await Person.findByPk(canonicalId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!canonical) throw AppError.notFound('Pessoa canônica não encontrada.', 'PERSON_NOT_FOUND');
 
-  const absorbed = await Person.findByPk(absorbedId, { transaction });
+  const absorbed = await Person.findByPk(absorbedId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!absorbed) throw AppError.notFound('Pessoa absorvida não encontrada.', 'PERSON_NOT_FOUND');
 
   if (absorbed.status === 'MERGED') {

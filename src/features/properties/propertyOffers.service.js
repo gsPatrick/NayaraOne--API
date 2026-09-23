@@ -51,24 +51,41 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
     await supersedeCurrentActiveOffer({ propertyId, offerType: normalizedType, actorUserId }, transaction);
   }
 
-  const offer = await PropertyOffer.create(
-    {
-      groupId: property.groupId,
-      companyId: property.companyId,
-      propertyId,
-      offerType: normalizedType,
-      askingPrice,
-      confidentialMinPrice: confidentialMinPrice !== undefined ? confidentialMinPrice : null,
-      acceptsFinancing: acceptsFinancing !== undefined ? acceptsFinancing : null,
-      acceptsTrade: acceptsTrade !== undefined ? acceptsTrade : null,
-      status: normalizedStatus,
-      startsAt: startsAt || null,
-      endsAt: endsAt || null,
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
-    },
-    { transaction }
-  );
+  // FIX (homologação 23/09/2026 — auditoria adversarial): supersedeCurrentActiveOffer +
+  // FOR UPDATE fecham a corrida quando já existe uma offer ACTIVE pra travar, mas a constraint
+  // única parcial (migration 20260101000175) é quem garante de verdade a invariante no caso
+  // residual (ex.: primeira offer ACTIVE do tipo, nada pra travar via FOR UPDATE). Se a
+  // constraint disparar (corrida real, janela mínima), converte pro mesmo formato de erro de
+  // negócio do resto do projeto em vez de vazar um 500 de constraint de banco.
+  let offer;
+  try {
+    offer = await PropertyOffer.create(
+      {
+        groupId: property.groupId,
+        companyId: property.companyId,
+        propertyId,
+        offerType: normalizedType,
+        askingPrice,
+        confidentialMinPrice: confidentialMinPrice !== undefined ? confidentialMinPrice : null,
+        acceptsFinancing: acceptsFinancing !== undefined ? acceptsFinancing : null,
+        acceptsTrade: acceptsTrade !== undefined ? acceptsTrade : null,
+        status: normalizedStatus,
+        startsAt: startsAt || null,
+        endsAt: endsAt || null,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Já existe uma oferta ACTIVE deste tipo para este imóvel (corrida concorrente detectada) — tente novamente.',
+        'PROPERTY_OFFER_ACTIVE_RACE'
+      );
+    }
+    throw err;
+  }
 
   await recordPriceHistory(
     {
@@ -170,7 +187,17 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   if (startsAt !== undefined) offer.startsAt = startsAt;
   if (endsAt !== undefined) offer.endsAt = endsAt;
   offer.updatedBy = actorUserId || null;
-  await offer.save({ transaction });
+  try {
+    await offer.save({ transaction });
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Já existe uma oferta ACTIVE deste tipo para este imóvel (corrida concorrente detectada) — tente novamente.',
+        'PROPERTY_OFFER_ACTIVE_RACE'
+      );
+    }
+    throw err;
+  }
 
   if (wasActive && offer.status !== 'ACTIVE' && property.publicationStatus === 'PUBLISHED') {
     const remainingActive = await PropertyOffer.count({

@@ -25,26 +25,43 @@ async function createAddress(personId, payload, actorUserId, transaction) {
     );
   }
 
-  return PersonAddress.create(
-    {
-      groupId: person.groupId,
-      companyId: person.companyId,
-      personId,
-      zipCode: payload.zipCode || null,
-      street: payload.street || null,
-      number: payload.number || null,
-      complement: payload.complement || null,
-      neighborhood: payload.neighborhood || null,
-      city: payload.city || null,
-      state: payload.state || null,
-      isCurrent,
-      validFrom: payload.validFrom || null,
-      validUntil: payload.validUntil || null,
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
-    },
-    { transaction }
-  );
+  // FIX (homologação 23/09/2026 — auditoria adversarial): o UPDATE acima (isCurrent=false WHERE
+  // isCurrent=true) só protege quando JÁ existe uma linha atual pra travar — se essa é a
+  // primeira criação de endereço da pessoa (nada pra desmarcar), duas criações concorrentes
+  // inserem duas linhas isCurrent=true ao mesmo tempo, sem nenhum lock em memória capaz de
+  // impedir isso. Corrigido com constraint única parcial no banco (migration
+  // 20260101000174-add-unique-current-address-per-person) — se disparar (corrida real, janela
+  // mínima), converte pro mesmo formato de erro de negócio do resto do projeto.
+  try {
+    return await PersonAddress.create(
+      {
+        groupId: person.groupId,
+        companyId: person.companyId,
+        personId,
+        zipCode: payload.zipCode || null,
+        street: payload.street || null,
+        number: payload.number || null,
+        complement: payload.complement || null,
+        neighborhood: payload.neighborhood || null,
+        city: payload.city || null,
+        state: payload.state || null,
+        isCurrent,
+        validFrom: payload.validFrom || null,
+        validUntil: payload.validUntil || null,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Já existe um endereço atual sendo criado para esta pessoa ao mesmo tempo (corrida concorrente detectada) — tente novamente.',
+        'PERSON_ADDRESS_CURRENT_RACE'
+      );
+    }
+    throw err;
+  }
 }
 
 async function listAddresses(personId, transaction) {
