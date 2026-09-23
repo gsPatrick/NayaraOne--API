@@ -14,6 +14,7 @@ const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob')
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
+const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
 
@@ -78,6 +79,10 @@ app.get('/', (req, res) => {
 
 // Error handler global — deve ser o último middleware montado.
 app.use(errorHandler);
+
+if (process.env.NODE_ENV !== 'test') {
+  runMigrationsOnBoot();
+}
 
 const port = Number(process.env.PORT) || 3000;
 
