@@ -397,6 +397,14 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   assertNotUnderManualReview(entry);
   assertPositiveAmount(partialAmount);
 
+  // FIX (homologação 22/09/2026 — auditoria proativa): createFinancialEntry e
+  // updateFinancialEntry sempre chamam assertPeriodOpenForEntry (M4-19), mas esta função criava
+  // um NOVO FinancialEntry (a baixa parcial, status SETTLED, na mesma competência do pai) sem
+  // checar se esse mês já estava fechado — dava pra inserir lançamento novo num período fechado
+  // por este caminho, quebrando a garantia de "o número que o contador viu no fechamento
+  // continua sendo o mesmo amanhã" que closePeriod promete.
+  await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
+
   const partialCents = toCents(partialAmount);
   const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
   if (partialCents > remainingCents) {
@@ -485,6 +493,12 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
   if (original.status === 'CANCELLED') {
     throw AppError.conflict('Lançamento cancelado não pode ser estornado.', 'FINANCE_ENTRY_INVALID_STATUS');
   }
+
+  // FIX (homologação 22/09/2026 — auditoria proativa): mesma lacuna de settleFinancialEntryPartial
+  // — o estorno cria um NOVO FinancialEntry compensatório (status SETTLED) na mesma competência
+  // do original, sem checar se esse mês já estava fechado.
+  await assertPeriodOpenForEntry(original.companyId, [original.competenceMonth, new Date()], transaction);
+
   const beforeJson = original.toJSON();
 
   const compensatingType = original.entryType === 'DEBIT' ? 'CREDIT' : 'DEBIT';
