@@ -9,6 +9,12 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   if (!groupId || !companyId || !reportDate) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "reportDate" são obrigatórios.', 'DAILY_REPORT_VALIDATION');
   }
+  if (workforceCount !== undefined && workforceCount !== null) {
+    const numericWorkforce = Number(workforceCount);
+    if (!Number.isFinite(numericWorkforce) || numericWorkforce < 0) {
+      throw AppError.badRequest('"workforceCount" deve ser um número maior ou igual a zero.', 'DAILY_REPORT_WORKFORCE_INVALID');
+    }
+  }
 
   const existing = await DailyReport.findOne({ where: { projectId, reportDate }, transaction });
   if (existing) {
@@ -63,7 +69,13 @@ async function updateDailyReport(id, payload, actorUserId, transaction) {
   const beforeJson = report.toJSON();
   const { weather, workforceCount, occurrences } = payload;
   if (weather !== undefined) report.weather = weather;
-  if (workforceCount !== undefined) report.workforceCount = workforceCount;
+  if (workforceCount !== undefined) {
+    const numericWorkforce = Number(workforceCount);
+    if (!Number.isFinite(numericWorkforce) || numericWorkforce < 0) {
+      throw AppError.badRequest('"workforceCount" deve ser um número maior ou igual a zero.', 'DAILY_REPORT_WORKFORCE_INVALID');
+    }
+    report.workforceCount = numericWorkforce;
+  }
   if (occurrences !== undefined) report.occurrences = occurrences;
   report.updatedBy = actorUserId || null;
   await report.save({ transaction });
