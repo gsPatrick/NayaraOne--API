@@ -17,11 +17,18 @@ const VALID_TRANSITIONS = {
   CANCELLED: [],
 };
 
+function assertValidDateRange(startsAt, endsAtPlanned) {
+  if (startsAt && endsAtPlanned && new Date(endsAtPlanned).getTime() < new Date(startsAt).getTime()) {
+    throw AppError.badRequest('"endsAtPlanned" não pode ser anterior a "startsAt".', 'PROJECT_DATE_RANGE_INVALID');
+  }
+}
+
 async function createProject(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
+  assertValidDateRange(startsAt, endsAtPlanned);
 
   const project = await Project.create(
     {
@@ -82,6 +89,10 @@ async function updateProject(id, payload, actorUserId, transaction) {
   if (startsAt !== undefined) project.startsAt = startsAt;
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
+  assertValidDateRange(
+    startsAt !== undefined ? startsAt : project.startsAt,
+    endsAtPlanned !== undefined ? endsAtPlanned : project.endsAtPlanned
+  );
   project.updatedBy = actorUserId || null;
   await project.save({ transaction });
 
