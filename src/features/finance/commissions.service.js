@@ -1,6 +1,6 @@
 'use strict';
 
-const { Commission, CommissionInstallment } = require('../../models');
+const { Commission, CommissionInstallment, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCommissionCreated } = require('./financeEvents.service');
@@ -147,10 +147,50 @@ async function markInstallmentPaid(installmentId, financialEntryId, actorUserId,
   if (installment.status === 'PAID') {
     throw AppError.conflict('Esta parcela já está paga.', 'FINANCE_COMMISSION_INSTALLMENT_ALREADY_PAID');
   }
+
+  // FIX (homologação 22/09/2026 — auditoria proativa): o comentário da função já prometia que a
+  // baixa "não gera dinheiro novo, só registra contra um lançamento real do ledger, evitando
+  // dupla contagem", mas o código nunca checava nada disso — aceitava financialEntryId
+  // inexistente, de um lançamento ainda não liquidado, de valor diferente da parcela, já
+  // reutilizado por outra parcela, ou nem informado (marcava PAID sem vincular a lançamento
+  // nenhum). Agora a validação é real e fail-closed.
+  if (!financialEntryId) {
+    throw AppError.badRequest(
+      'O campo "financialEntryId" é obrigatório para dar baixa na parcela — precisa apontar para um lançamento financeiro já liquidado.',
+      'FINANCE_COMMISSION_INSTALLMENT_ENTRY_REQUIRED'
+    );
+  }
+  const entry = await FinancialEntry.findByPk(financialEntryId, { transaction });
+  if (!entry) {
+    throw AppError.notFound('Lançamento financeiro informado não encontrado.', 'FINANCE_COMMISSION_INSTALLMENT_ENTRY_NOT_FOUND');
+  }
+  if (entry.status !== 'SETTLED') {
+    throw AppError.conflict(
+      'O lançamento financeiro informado ainda não está liquidado (SETTLED).',
+      'FINANCE_COMMISSION_INSTALLMENT_ENTRY_NOT_SETTLED'
+    );
+  }
+  if (round2(entry.amount) !== round2(installment.amount)) {
+    throw AppError.conflict(
+      'O valor do lançamento financeiro informado não corresponde ao valor da parcela.',
+      'FINANCE_COMMISSION_INSTALLMENT_ENTRY_AMOUNT_MISMATCH'
+    );
+  }
+  const alreadyUsed = await CommissionInstallment.findOne({
+    where: { financialEntryId },
+    transaction,
+  });
+  if (alreadyUsed && alreadyUsed.id !== installment.id) {
+    throw AppError.conflict(
+      'Este lançamento financeiro já foi usado para dar baixa em outra parcela.',
+      'FINANCE_COMMISSION_INSTALLMENT_ENTRY_ALREADY_USED'
+    );
+  }
+
   const beforeJson = installment.toJSON();
   installment.status = 'PAID';
   installment.paidAt = new Date();
-  installment.financialEntryId = financialEntryId || null;
+  installment.financialEntryId = financialEntryId;
   installment.updatedBy = actorUserId || null;
   await installment.save({ transaction });
 
