@@ -4,11 +4,20 @@ const { ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
+const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
+
+function assertValidDateRange(startsAt, endsAt) {
+  if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+    throw AppError.badRequest('"endsAt" não pode ser anterior a "startsAt".', 'PROJECT_STAGE_DATE_RANGE_INVALID');
+  }
+}
+
 async function createProjectStage(projectId, payload, actorUserId, transaction) {
   const { groupId, companyId, name, sequence, plannedPct, startsAt, endsAt } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_STAGE_VALIDATION');
   }
+  assertValidDateRange(startsAt, endsAt);
 
   const stage = await ProjectStage.create(
     {
@@ -62,9 +71,19 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   if (name !== undefined) stage.name = name;
   if (sequence !== undefined) stage.sequence = sequence;
   if (plannedPct !== undefined) stage.plannedPct = plannedPct;
-  if (status !== undefined) stage.status = status;
+  if (status !== undefined) {
+    const normalizedStatus = String(status).toUpperCase();
+    if (!STATUSES.includes(normalizedStatus)) {
+      throw AppError.badRequest(`"status" deve ser um de: ${STATUSES.join(', ')}.`, 'PROJECT_STAGE_STATUS_INVALID');
+    }
+    stage.status = normalizedStatus;
+  }
   if (startsAt !== undefined) stage.startsAt = startsAt;
   if (endsAt !== undefined) stage.endsAt = endsAt;
+  assertValidDateRange(
+    startsAt !== undefined ? startsAt : stage.startsAt,
+    endsAt !== undefined ? endsAt : stage.endsAt
+  );
   stage.updatedBy = actorUserId || null;
   await stage.save({ transaction });
 
@@ -86,4 +105,4 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   return stage;
 }
 
-module.exports = { createProjectStage, listProjectStages, getProjectStage, updateProjectStage };
+module.exports = { createProjectStage, listProjectStages, getProjectStage, updateProjectStage, STATUSES };
