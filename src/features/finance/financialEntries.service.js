@@ -301,7 +301,13 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
  * `bankAccountId`, valida elegibilidade antifraude (cooldown/bloqueio) antes de liquidar.
  */
 async function settleFinancialEntry(id, actorUserId, transaction) {
-  const entry = await getFinancialEntry(id, transaction);
+  // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
+  // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
+  // de qualquer uma commitar e ambas liquidavam — evento de liquidação publicado 2x, com efeito
+  // duplicado a jusante (ex.: comissão baixada duas vezes). Mesmo padrão já usado em
+  // settleFinancialEntryPartial.
+  const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   if (entry.status === 'PARTIALLY_SETTLED') {
     throw AppError.conflict(
       'Este lançamento já tem baixas parciais — use a liquidação parcial do saldo restante (settleFinancialEntryPartial) para fechá-lo.',
@@ -486,7 +492,11 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
  * invertido, mesmo `amount`) apontando de volta via `reversalOfEntryId`.
  */
 async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
-  const original = await getFinancialEntry(id, transaction);
+  // Lock pessimista: mesmo padrão de settleFinancialEntry — duas chamadas concorrentes de
+  // estorno pro mesmo lançamento não podem ambas ler status != REVERSED antes de qualquer uma
+  // commitar (senão criam DOIS lançamentos compensatórios pro mesmo original).
+  const original = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!original) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   if (original.status === 'REVERSED') {
     throw AppError.conflict('Este lançamento já foi estornado.', 'FINANCE_ENTRY_ALREADY_REVERSED');
   }

@@ -82,6 +82,19 @@ async function getPaymentIntent(id, transaction) {
   return intent;
 }
 
+// Variante com lock pessimista, usada pelas transições de status (approve/execute/cancel) —
+// sem isso, duas chamadas concorrentes (duplo clique, retry de rede) leem o mesmo status
+// "de origem" antes de qualquer uma commitar e ambas transicionam: no caso de
+// executePaymentIntent isso liquidaria o lançamento financeiro duas vezes.
+async function getPaymentIntentForUpdate(id, transaction) {
+  const intent = await PaymentIntent.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!intent) throw AppError.notFound('Intenção de pagamento não encontrada.', 'FINANCE_PAYMENT_INTENT_NOT_FOUND');
+  return intent;
+}
+
 async function createPaymentIntent(payload, actorUserId, transaction) {
   const { financialEntryId, approvalRequestId } = payload;
   if (!financialEntryId) {
@@ -164,7 +177,7 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
  * complementa com a prova do conteúdo.
  */
 async function approvePaymentIntent(id, actorUserId, transaction) {
-  const intent = await getPaymentIntent(id, transaction);
+  const intent = await getPaymentIntentForUpdate(id, transaction);
   if (intent.status !== 'PENDING') {
     throw AppError.conflict(
       `Só é possível aprovar uma intenção PENDING (atual: "${intent.status}").`,
@@ -233,7 +246,7 @@ async function approvePaymentIntent(id, actorUserId, transaction) {
  * settleFinancialEntry, que mantém as validações antifraude de conta bancária.
  */
 async function executePaymentIntent(id, actorUserId, transaction) {
-  const intent = await getPaymentIntent(id, transaction);
+  const intent = await getPaymentIntentForUpdate(id, transaction);
   if (intent.status !== 'APPROVED') {
     throw AppError.conflict(
       `Só é possível executar uma intenção APPROVED (atual: "${intent.status}").`,
@@ -278,7 +291,7 @@ async function executePaymentIntent(id, actorUserId, transaction) {
 }
 
 async function cancelPaymentIntent(id, reasonText, actorUserId, transaction) {
-  const intent = await getPaymentIntent(id, transaction);
+  const intent = await getPaymentIntentForUpdate(id, transaction);
   if (['EXECUTED', 'CANCELLED'].includes(intent.status)) {
     throw AppError.conflict(
       `Intenção com status "${intent.status}" não pode ser cancelada.`,
