@@ -115,7 +115,16 @@ async function updateProject(id, payload, actorUserId, transaction) {
 }
 
 async function transitionProject(id, targetStatus, actorUserId, transaction) {
-  const project = await getProject(id, transaction);
+  // Lock pessimista: sem isto, duas transições concorrentes a partir do mesmo status de
+  // origem (ex.: IN_PROGRESS->COMPLETED numa aba e IN_PROGRESS->CANCELLED em outra) liam o
+  // mesmo status de origem antes de qualquer uma commitar — ambas passavam pela checagem de
+  // transição válida isoladamente e a última a salvar vencia silenciosamente (lost update),
+  // mesmo padrão já corrigido em proposals.service.js.
+  const project = await Project.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
   const normalizedTarget = String(targetStatus || '').toUpperCase();
   if (!STATUSES.includes(normalizedTarget)) {
     throw AppError.badRequest(`"targetStatus" deve ser um de: ${STATUSES.join(', ')}.`, 'PROJECT_STATUS_INVALID');
