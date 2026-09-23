@@ -5,6 +5,12 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBankAccountCreated, publishBankAccountSensitiveDataChanged } = require('./financeEvents.service');
 
+const BANK_ACCOUNT_COOLDOWN_HOURS = Number(process.env.FINANCE_BANK_ACCOUNT_COOLDOWN_HOURS) || 48;
+
+function hoursSince(date) {
+  return (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60);
+}
+
 // Campos sensíveis: alterá-los reabre o cooldown antifraude (mesma regra de "conta nova"),
 // porque uma troca desses dados é exatamente o vetor de fraude que o período de resfriamento
 // existe para conter (ver financeAntifraud.service.js).
@@ -94,8 +100,26 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
     if (!STATUSES.includes(normalized)) {
       throw AppError.badRequest(`O campo "status" deve ser um de: ${STATUSES.join(', ')}.`, 'FINANCE_BANK_ACCOUNT_VALIDATION');
     }
-    // Reativação manual pós-bloqueio, por exemplo — não pula o cooldown se ainda dentro dele;
-    // quem decide isso é financeAntifraud.assertBankAccountEligibleForPayment no momento do pagamento.
+    // FIX (homologação 22/09/2026 — auditoria proativa): este comentário afirmava que reativar
+    // manualmente "não pula o cooldown se ainda dentro dele", mas isso era falso —
+    // assertBankAccountEligibleForPayment só reavalia o prazo quando o status já é
+    // PENDING_COOLDOWN; setar status=ACTIVE diretamente por aqui (sem alterar nenhum campo
+    // sensível, então sensitiveChanged fica false e não força de volta pra PENDING_COOLDOWN)
+    // fazia o pagamento passar liberado na hora, pulando o cooldown antifraude inteiro — o
+    // exato vetor de fraude que este módulo existe para bloquear. Agora a promoção manual para
+    // ACTIVE a partir de PENDING_COOLDOWN é bloqueada enquanto o prazo não tiver passado; quem
+    // promove de fato continua sendo a lazy transition no momento do pagamento.
+    if (
+      normalized === 'ACTIVE' &&
+      bankAccount.status === 'PENDING_COOLDOWN' &&
+      hoursSince(bankAccount.updated_at || bankAccount.created_at) < BANK_ACCOUNT_COOLDOWN_HOURS
+    ) {
+      const remaining = Math.ceil(BANK_ACCOUNT_COOLDOWN_HOURS - hoursSince(bankAccount.updated_at || bankAccount.created_at));
+      throw AppError.conflict(
+        `Não é possível reativar manualmente uma conta ainda em período de resfriamento (antifraude) — faltam ${remaining}h.`,
+        'FINANCE_BANK_ACCOUNT_COOLDOWN'
+      );
+    }
     bankAccount.status = normalized;
   }
 
