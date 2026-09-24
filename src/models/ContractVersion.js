@@ -46,6 +46,25 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'content_hash',
       },
+      // Texto de verdade da versão (cláusulas renderizadas) — ver migration
+      // 20260101000179. Persistido pra permitir reconstruir o PDF do contrato SOB DEMANDA
+      // (contractPdf.service.js, pdfkit em memória) sem depender de storage de binário: mesmo
+      // texto -> mesmo PDF -> mesmo hash, sempre reconstruível de forma determinística.
+      content: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      // Documento ASSINADO baixado do provedor (Clicksign/ZapSign) quando o envelope fecha —
+      // ver migration 20260101000180. Diferente do PDF não-assinado (nunca persistido, sempre
+      // reconstruído sob demanda a partir de `content`), este É persistido permanentemente em
+      // disco (uploads/contracts-signed/...) porque carrega a trilha de evidência do provedor
+      // (carimbos/hashes/timestamps de assinatura) — não é reconstruível a partir do nosso
+      // texto. Ver signatures.service.js#handleEnvelopeClosedWebhook.
+      signedDocumentFileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'signed_document_file_id',
+      },
       templateId: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -17,6 +17,7 @@ const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
+const contractPdfService = require('./contractPdf.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -65,6 +66,19 @@ const createContractVersion = catchAsync(async (req, res) => {
 const listContractVersions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => contractVersionsService.listContractVersions(req.params.id, t));
   return success(res, { data: items });
+});
+// GET (idempotente, sem efeito colateral): o PDF é gerado em memória, sob demanda, a partir do
+// texto já persistido em ContractVersion.content — não cria File nem grava nada em disco (ver
+// decisão documentada em contractPdf.service.js). Chamar duas vezes com o mesmo `content`
+// produz o mesmo PDF/hash, então não há razão pra exigir POST aqui.
+const generateContractVersionPdf = catchAsync(async (req, res) => {
+  const { buffer, fileName } = await req.withTenantTransaction((t) =>
+    contractPdfService.generateContractPdf(req.params.versionId, req.auth.userId, t)
+  );
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  res.setHeader('Content-Length', buffer.length);
+  return res.status(200).send(buffer);
 });
 
 // --- Contract templates ---
@@ -188,6 +202,23 @@ const signatureWebhook = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+// Extrai um id de envelope do payload do webhook, tentando os caminhos mais plováveis do
+// formato v3 (o mesmo formato já confirmado ao vivo pra `event.data.signer.key` no evento
+// "sign"). NÃO CONFIRMADO AO VIVO para eventos de envelope fechado (close/auto_close) — não
+// completamos um ciclo real de assinatura nesta sessão (exigiria clique de um signatário real
+// em e-mail, fora do nosso controle). Tenta múltiplos caminhos plausíveis de propósito, do
+// mais provável (espelha `event.data.signer.key`) a formatos legados vistos em documentação
+// mais antiga do Clicksign (`document.key`), pra não depender de acertar de primeira.
+function extractEnvelopeId(body) {
+  const event = body && body.event;
+  return (
+    (event && event.data && event.data.envelope && event.data.envelope.id) ||
+    (body && body.envelope && body.envelope.id) ||
+    (body && body.document && body.document.key) ||
+    null
+  );
+}
+
 /**
  * clicksignPublicWebhook — endpoint PÚBLICO de verdade (fora do authMiddleware/tenantMiddleware
  * — ver legal.routes.js), o único que o Clicksign de fato consegue chamar, já que o provedor
@@ -198,24 +229,36 @@ const signatureWebhook = catchAsync(async (req, res) => {
  * confirmado contra a documentação oficial: `event.data.signer.key`), resolve group_id/
  * company_id na tabela de roteamento (SEM RLS, só ids opacos), e SÓ DEPOIS abre a transação
  * com `SET LOCAL` de tenant para validar o HMAC (segredo é por-tenant) e aplicar o webhook.
- * Eventos que não são "sign" (ex.: refusal, cancel) são reconhecidos com 200 mas não têm
- * efeito hoje — o domínio (handleSignatureWebhook) só sabe processar confirmação de assinatura;
- * tratá-los é trabalho futuro, não parte deste marco.
+ *
+ * Dois tipos de evento tratados: "sign" (assinatura individual — `handleSignatureWebhook`) e
+ * "close"/"auto_close" (envelope fechado — `handleEnvelopeClosedWebhook`, baixa e persiste o
+ * PDF assinado). Esses dois nomes de evento de fechamento são os REGISTRADOS de verdade no
+ * webhook desta conta (`scripts/setupClicksignIntegration.js`), não uma suposição da
+ * documentação pública (que usa a expressão genérica "document_closed"). Outros eventos (ex.:
+ * refusal, cancel, deadline) são reconhecidos com 200 mas não têm efeito hoje — trabalho
+ * futuro, fora deste marco.
  */
 const clicksignPublicWebhook = catchAsync(async (req, res) => {
   const eventName = req.body && req.body.event && req.body.event.name;
   const signerKey = req.body && req.body.event && req.body.event.data && req.body.event.data.signer && req.body.event.data.signer.key;
+  const isEnvelopeClosedEvent = eventName === 'close' || eventName === 'auto_close';
+  const envelopeId = isEnvelopeClosedEvent ? extractEnvelopeId(req.body) : null;
 
-  if (!signerKey) {
-    // Evento sem signatário (ex.: upload, add_image) — reconhece sem processar.
-    return success(res, { data: { acknowledged: true, processed: false, reason: 'no_signer_key' } });
+  let routing = null;
+  if (signerKey) {
+    routing = await SignatureProviderRouting.findOne({ where: { externalSignatureId: signerKey } });
+  } else if (envelopeId) {
+    routing = await SignatureProviderRouting.findOne({ where: { providerEnvelopeId: envelopeId } });
+  } else {
+    // Evento sem signatário nem envelope identificável (ex.: upload, add_image) — reconhece
+    // sem processar.
+    return success(res, { data: { acknowledged: true, processed: false, reason: 'no_identifier_in_payload' } });
   }
 
-  const routing = await SignatureProviderRouting.findOne({ where: { externalSignatureId: signerKey } });
   if (!routing) {
-    // Assinatura desconhecida (de outro ambiente/conta, ou nunca solicitada por aqui) — 200
-    // para o Clicksign não ficar reenviando, mas não processa nada.
-    return success(res, { data: { acknowledged: true, processed: false, reason: 'unknown_signer' } });
+    // Assinatura/envelope desconhecido (de outro ambiente/conta, ou nunca solicitado por
+    // aqui) — 200 para o Clicksign não ficar reenviando, mas não processa nada.
+    return success(res, { data: { acknowledged: true, processed: false, reason: 'unknown_routing' } });
   }
 
   const tenant = { groupId: routing.groupId, companyId: routing.companyId };
@@ -234,12 +277,17 @@ const clicksignPublicWebhook = catchAsync(async (req, res) => {
       );
     }
 
-    if (eventName !== 'sign') {
-      return { acknowledged: true, processed: false, reason: `event_${eventName}_not_handled` };
+    if (eventName === 'sign' && signerKey) {
+      const applied = await signaturesService.handleSignatureWebhook(signerKey, req.body, t);
+      return { acknowledged: true, processed: true, ...applied };
     }
 
-    const applied = await signaturesService.handleSignatureWebhook(signerKey, req.body, t);
-    return { acknowledged: true, processed: true, ...applied };
+    if (isEnvelopeClosedEvent && envelopeId) {
+      const applied = await signaturesService.handleEnvelopeClosedWebhook(envelopeId, tenant, t);
+      return applied;
+    }
+
+    return { acknowledged: true, processed: false, reason: `event_${eventName}_not_handled` };
   });
 
   return success(res, { data: result });
@@ -476,7 +524,7 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
 
 module.exports = {
   createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties, correctContractData,
-  createContractVersion, listContractVersions,
+  createContractVersion, listContractVersions, generateContractVersionPdf,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,

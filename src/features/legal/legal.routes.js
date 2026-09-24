@@ -34,6 +34,10 @@ legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:updat
 // Contract versions
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
 legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read'), legalController.listContractVersions);
+// GET, não POST: sem efeito colateral (nada é persistido) — ver comentário em
+// legal.controller.js#generateContractVersionPdf. "legal:read" basta porque é só uma
+// representação (PDF) de um documento já existente, não altera o contrato/versão.
+legalRouter.get('/legal/contracts/:id/versions/:versionId/generate-pdf', requirePermission('legal:read'), legalController.generateContractVersionPdf);
 
 // Contract templates
 legalRouter.post('/legal/contract-templates', requirePermission('legal:create'), legalController.createContractTemplate);

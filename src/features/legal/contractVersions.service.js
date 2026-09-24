@@ -108,6 +108,12 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       contractId: contract.id,
       versionNumber: nextVersionNumber,
       documentFileId: documentFileId || null,
+      // Persiste o TEXTO de verdade (ver migration 20260101000179) — até aqui `content` só
+      // servia pra calcular o hash e era descartado, o que deixava o SignatureAdapter sem
+      // nenhum binário real pra subir ao provedor de assinatura. Quando `content` vem como
+      // objeto/JSON (fluxos que não usam renderTemplate), serializa do mesmo jeito que
+      // computeContentHash — mantém content_hash sempre coerente com o texto persistido.
+      content: typeof content === 'string' ? content : JSON.stringify(content),
       contentHash: computeContentHash(content),
       templateId: templateId || null,
       effectiveFrom: effectiveFrom || new Date(),

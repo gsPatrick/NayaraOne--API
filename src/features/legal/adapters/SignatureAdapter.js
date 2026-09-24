@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { Person } = require('../../../models');
 const AppError = require('../../../utils/AppError');
+const { generateContractPdf } = require('../contractPdf.service');
 
 /**
  * SignatureAdapter — contrato de integração com provedores de assinatura eletrônica.
@@ -47,6 +48,13 @@ class SandboxSignatureAdapter {
   // Sandbox aceita cancelamento sempre (não há efeito colateral externo a desfazer).
   async cancel(providerEnvelopeId) {
     return { providerEnvelopeId, cancelled: true, raw: null };
+  }
+
+  // Sandbox nunca tem um documento assinado de verdade por trás (não existe provedor real) —
+  // retorna null explicitamente em vez de inventar um PDF. handleEnvelopeClosedWebhook trata
+  // `null` como "nada pra baixar" e não falha por isso.
+  async downloadSignedDocument(providerEnvelopeId) {
+    return null;
   }
 }
 
@@ -99,8 +107,9 @@ async function loadSignerContacts(signerPersonIds, transaction) {
  *   (qualificação "agree"/role "sign" + autenticação "provide_evidence"/auth "email", um par
  *   por signatário+documento) -> PATCH /envelopes/{id} (status "running") para ativar e
  *   disparar o envio de fato.
- * - `.txt` é um formato aceito de documento — usado aqui porque este marco tem apenas o
- *   `content` (texto) da ContractVersion, não um binário PDF já gerado.
+ * - O documento enviado é o PDF REAL do contrato (gerado sob demanda via
+ *   `contractPdf.service.js#generateContractPdf`, mesma identidade visual usada no endpoint
+ *   manual de geração de PDF), não mais um `.txt` de referência (ver histórico abaixo).
  */
 class ClicksignSignatureAdapter {
   constructor({ apiToken, baseUrl = 'https://app.clicksign.com/api/v3' } = {}) {
@@ -157,35 +166,23 @@ class ClicksignSignatureAdapter {
     });
     const providerEnvelopeId = envelope && envelope.data && envelope.data.id;
 
-    // 2) Documento — LIMITAÇÃO REAL DESTE PROJETO (achada testando contra a conta Clicksign de
-    // verdade em 19/09/2026, não suposição): `ContractVersion` nunca armazena o TEXTO do
-    // contrato — só grava `contentHash` (o `content` que o chamador manda em
-    // createContractVersion existe só para calcular o hash e é descartado). O binário de
-    // verdade ficaria associado ao `documentFileId` (File.storageKey), mas este projeto NUNCA
-    // implementou um provedor de storage real (S3/etc.) — `storageKey` é só um metadado, sem
-    // upload/download de fato em lugar nenhum do código. Ou seja: não existe HOJE nenhum
-    // caminho pra recuperar o binário real do documento neste ponto do fluxo.
-    // Enquanto isso não for implementado (trabalho futuro, fora deste marco), sobe um documento
-    // de REFERÊNCIA gerado a partir do que de fato existe no banco — nunca inventa texto de
-    // contrato, é auditável e rastreável ao contentHash real, mas deixa claro que não é o
-    // documento assinado "de verdade": a fonte de verdade do conteúdo continua sendo o
-    // `contentHash` gravado em ContractVersion (comparável a qualquer momento), não este .txt.
-    const referenceText = [
-      `Contrato ${contractVersion.contractId} — versão ${contractVersion.versionNumber}`,
-      `Content hash (SHA-256, fonte de verdade do conteúdo): ${contractVersion.contentHash || '(ausente)'}`,
-      '',
-      'Este arquivo é um DOCUMENTO DE REFERÊNCIA para a assinatura eletrônica — o texto integral',
-      'do contrato não é armazenado como binário recuperável neste sistema (limitação conhecida:',
-      'não há storage de arquivo real implementado). A integridade do conteúdo assinado é',
-      'garantida pelo content_hash acima, gravado em ContractVersion no momento da criação.',
-    ].join('\n');
-    const contentBase64 = Buffer.from(referenceText, 'utf8').toString('base64');
+    // 2) Documento — CORRIGIDO (22/09/2026): até aqui subíamos um `.txt` de referência porque
+    // `ContractVersion` nunca guardava o texto de verdade (só `contentHash`), então não havia
+    // nenhum binário real pra recuperar neste ponto do fluxo. Agora `ContractVersion.content`
+    // é persistido (ver migration 20260101000179) e `contractPdf.service.js#generateContractPdf`
+    // reconstrói o PDF a partir dele, EM MEMÓRIA, sob demanda — sem storage de disco envolvido
+    // (contrato é conteúdo textual determinístico: mesmo `content` -> mesmo PDF). Subimos ESSE
+    // binário real pro Clicksign. Gera de novo a cada chamada (em vez de cachear) de propósito:
+    // garante que o documento enviado pra assinatura reflete o `content`/`contentHash` atuais
+    // da ContractVersion no momento exato da solicitação.
+    const { buffer: pdfBuffer } = await generateContractPdf(contractVersion.id, null, transaction);
+    const contentBase64 = pdfBuffer.toString('base64');
     const documentResponse = await this._request('POST', `/envelopes/${providerEnvelopeId}/documents`, {
       data: {
         type: 'documents',
         attributes: {
-          filename: `contrato-${contractVersion.contractId}-v${contractVersion.versionNumber}.txt`,
-          content_base64: `data:text/plain;base64,${contentBase64}`,
+          filename: `contrato-${contractVersion.contractId}-v${contractVersion.versionNumber}.pdf`,
+          content_base64: `data:application/pdf;base64,${contentBase64}`,
           metadata: { contentHash: contractVersion.contentHash || null, contractVersionId: contractVersion.id },
         },
       },
@@ -287,6 +284,50 @@ class ClicksignSignatureAdapter {
     }
     return { providerEnvelopeId, cancelled: true, raw: results };
   }
+
+  /**
+   * downloadSignedDocument — baixa o binário do documento assinado quando o envelope já
+   * fechou. CONFIRMADO POR LEITURA DE DOCUMENTAÇÃO (developers.clicksign.com/reference/
+   * api-listar-documentos, consultado 23/09/2026), NÃO testado ao vivo contra um envelope
+   * realmente fechado nesta sessão (completar um ciclo de assinatura real exige interação
+   * humana de terceiro — clique no link de assinatura recebido por e-mail — fora do nosso
+   * controle automatizável): a resposta de `GET /envelopes/{id}/documents` traz, por
+   * documento, `links.files.original` — uma URL presignada (S3) de download direto do
+   * arquivo. Pelo funcionamento padrão de provedores de assinatura eletrônica (o Clicksign
+   * carimba a evidência de assinatura DENTRO do mesmo PDF, não gera um arquivo separado),
+   * essa é a mesma URL que passa a servir o PDF já assinado/carimbado depois que o documento
+   * fecha — mas isso é uma inferência de comportamento típico do setor, não uma confirmação
+   * byte-a-byte feita nesta sessão. Se a conta em produção se comportar diferente (endpoint de
+   * export dedicado, ex. `/envelopes/{id}/documents/{id}/download`), este método precisa ser
+   * ajustado — o primeiro sintoma seria `downloadSignedDocument` retornando um PDF idêntico ao
+   * não-assinado (sem marca de assinatura visível).
+   *
+   * Retorna `null` (não lança) se o envelope não tiver nenhum documento — deixa o chamador
+   * (handleEnvelopeClosedWebhook) decidir como tratar "nada pra baixar" sem derrubar o
+   * processamento do webhook.
+   */
+  async downloadSignedDocument(providerEnvelopeId) {
+    const documentsResponse = await this._request('GET', `/envelopes/${providerEnvelopeId}/documents`);
+    const documents = (documentsResponse && documentsResponse.data) || [];
+    if (documents.length === 0) return null;
+
+    const document = documents[0];
+    const downloadUrl = document.links && document.links.files && document.links.files.original;
+    if (!downloadUrl) return null;
+
+    // URL presignada — SEM os headers de autenticação da API (Authorization/Accept JSON:API),
+    // que não se aplicam a um download direto de S3 e podem até fazer a assinatura da URL
+    // presignada ser rejeitada.
+    const fileResponse = await fetch(downloadUrl);
+    if (!fileResponse.ok) {
+      throw AppError.internal(
+        `Falha ao baixar o documento assinado do Clicksign (HTTP ${fileResponse.status}).`,
+        'LEGAL_SIGNATURE_PROVIDER_ERROR'
+      );
+    }
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    return { buffer: Buffer.from(arrayBuffer), fileName: document.attributes && document.attributes.filename };
+  }
 }
 
 /**
@@ -339,12 +380,18 @@ class ZapSignSignatureAdapter {
   async requestSignature(contractVersion, signerPersonIds, transaction) {
     const signers = await loadSignerContacts(signerPersonIds, transaction);
 
-    // DECISÃO DE ENGENHARIA: `/docs/` do ZapSign normalmente exige `base64_pdf` ou `url_pdf`;
-    // aqui usamos apenas um identificador textual a partir do hash de conteúdo, na ausência do
-    // binário do documento neste ponto do fluxo — confirmar contra documentação/conta real.
+    // CORRIGIDO (22/09/2026), mesma correção aplicada ao ClicksignSignatureAdapter: agora que
+    // `ContractVersion.content` é persistido (migration 20260101000179) e
+    // `contractPdf.service.js#generateContractPdf` reconstrói o PDF real em memória a partir
+    // dele, subimos o binário de verdade em `base64_pdf` em vez de só um `external_id`
+    // textual a partir do hash. DECISÃO DE ENGENHARIA ainda válida (não testado contra
+    // credencial real): nome exato do campo (`base64_pdf`) deve ser confirmado contra a
+    // documentação/conta real do ZapSign antes de produção.
+    const { buffer: pdfBuffer } = await generateContractPdf(contractVersion.id, null, transaction);
     const doc = await this._request('POST', '/docs/', {
       name: `Contrato ${contractVersion.contractId} v${contractVersion.versionNumber}`,
       external_id: contractVersion.contentHash || contractVersion.id,
+      base64_pdf: pdfBuffer.toString('base64'),
       signers: signers.map((signer) => ({ name: signer.name, email: signer.email })),
     });
     const providerEnvelopeId = doc && doc.token;
@@ -379,6 +426,29 @@ class ZapSignSignatureAdapter {
   async cancel(providerEnvelopeId) {
     const result = await this._request('POST', `/docs/${providerEnvelopeId}/delete/`);
     return { providerEnvelopeId, cancelled: true, raw: result };
+  }
+
+  /**
+   * downloadSignedDocument — baixa o PDF assinado do ZapSign.
+   * DECISÃO DE ENGENHARIA — não testado contra credencial real (este tenant não tem token
+   * ZapSign configurado nesta sessão, só Clicksign): campo exato de URL de download
+   * (`signed_file_url` assumido, baseado no padrão comum de resposta de `GET /docs/{token}/`)
+   * deve ser confirmado contra a documentação/conta real antes de produção.
+   */
+  async downloadSignedDocument(providerEnvelopeId) {
+    const doc = await this._request('GET', `/docs/${providerEnvelopeId}/`);
+    const downloadUrl = doc && doc.signed_file_url;
+    if (!downloadUrl) return null;
+
+    const fileResponse = await fetch(downloadUrl);
+    if (!fileResponse.ok) {
+      throw AppError.internal(
+        `Falha ao baixar o documento assinado do ZapSign (HTTP ${fileResponse.status}).`,
+        'LEGAL_SIGNATURE_PROVIDER_ERROR'
+      );
+    }
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    return { buffer: Buffer.from(arrayBuffer), fileName: (doc && doc.filename) || null };
   }
 }
 

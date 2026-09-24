@@ -1,6 +1,7 @@
 'use strict';
 
-const { Signature, ContractVersion, SignatureProviderRouting } = require('../../models');
+const crypto = require('crypto');
+const { Signature, ContractVersion, ContractParty, Person, File, SignatureProviderRouting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishSignatureRequested, publishSignatureSigned } = require('./legalEvents.service');
@@ -8,6 +9,7 @@ const { getContractVersion } = require('./contractVersions.service');
 const { getContract, transitionContractStatus, listContractParties, REQUIRED_ROLES_BY_TYPE } = require('./contracts.service');
 const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('./adapters/SignatureAdapter');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
+const diskStorage = require('../../utils/diskStorage');
 
 /**
  * resolveSignatureAdapter — resolve o adapter de assinatura em runtime, por tenant, a partir
@@ -168,6 +170,26 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
 
   await publishSignatureSigned(signature, transaction);
 
+  // Rastreamento "quantos de quantos" (pedido explícito do usuário, 23/09/2026): a auditoria
+  // antes só registrava "assinatura confirmada", sem dar visão de quantas ainda faltam — quem
+  // lia o log tinha que ir contar Signatures manualmente. Busca a pessoa (nome) e o papel dela
+  // no contrato (via ContractParty) pra deixar a descrição legível por humano, e conta quantas
+  // das assinaturas SOLICITADAS pra esta ContractVersion já estão SIGNED (incluindo esta).
+  const allSignatures = await Signature.findAll({ where: { contractVersionId: signature.contractVersionId }, transaction });
+  const signedCount = allSignatures.filter((s) => s.status === 'SIGNED').length;
+  const totalCount = allSignatures.length;
+
+  const signedContractVersion = await ContractVersion.findByPk(signature.contractVersionId, { transaction });
+  const [person, party] = await Promise.all([
+    Person.findByPk(signature.personId, { transaction }),
+    ContractParty.findOne({ where: { contractId: signedContractVersion.contractId, personId: signature.personId }, transaction }),
+  ]);
+  const personLabel = person ? person.legalName : signature.personId;
+  const roleLabel = party ? party.partyRole : null;
+  const progressLabel = signedCount >= totalCount
+    ? 'todas as assinaturas concluídas'
+    : `${signedCount} de ${totalCount} assinaturas concluídas`;
+
   await registrarAuditoria(
     {
       groupId: signature.groupId,
@@ -178,12 +200,11 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
       entityId: signature.id,
       beforeJson,
       afterJson: signature.toJSON(),
-      reason: `Assinatura confirmada via webhook do provedor (externalSignatureId=${externalSignatureId}).`,
+      reason: `Assinado por ${personLabel}${roleLabel ? ` (${roleLabel})` : ''} — ${progressLabel} (externalSignatureId=${externalSignatureId}).`,
     },
     transaction
   );
 
-  const allSignatures = await Signature.findAll({ where: { contractVersionId: signature.contractVersionId }, transaction });
   const allRequestedSigned = allSignatures.length > 0 && allSignatures.every((s) => s.status === 'SIGNED');
 
   let contractTransitioned = false;
@@ -303,10 +324,103 @@ async function cancelSignature(signatureId, actorUserId, transaction) {
   return { signature, alreadyCancelled: false };
 }
 
+/**
+ * handleEnvelopeClosedWebhook — trata o evento de ENVELOPE/DOCUMENTO fechado (não confundir
+ * com `handleSignatureWebhook`, que trata assinatura INDIVIDUAL de UM signatário). Disparado
+ * pelos eventos `close`/`auto_close` do Clicksign (nomes reais registrados por este projeto em
+ * `scripts/setupClicksignIntegration.js` — a documentação pública fala genericamente em
+ * "document_closed", mas o webhook desta conta foi registrado com a lista
+ * ['sign', 'refusal', 'auto_close', 'close', 'cancel', 'deadline'], então são esses os nomes
+ * que efetivamente chegam aqui).
+ *
+ * Baixa o PDF ASSINADO de verdade do provedor (via adapter.downloadSignedDocument — ver
+ * SignatureAdapter.js) e persiste em disco (uploads/contracts-signed/..., categoria dedicada e
+ * DIFERENTE da usada pelo PDF não-assinado, que nunca é persistido — ver contractPdf.service.js
+ * e a migration 20260101000180 pra decisão de engenharia completa). Idempotente: se a
+ * ContractVersion já tiver `signedDocumentFileId`, não baixa de novo nem duplica o File.
+ *
+ * NÃO testado ao vivo contra um fechamento de envelope real nesta sessão (ver ressalva em
+ * ClicksignSignatureAdapter#downloadSignedDocument) — completar um ciclo real de assinatura
+ * exige interação humana de terceiro fora do nosso controle. Validado por leitura de
+ * documentação oficial + inspeção do fluxo de webhook já existente e testado
+ * (`clicksignPublicWebhook`/roteamento por `SignatureProviderRouting`).
+ */
+async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transaction) {
+  const routing = await SignatureProviderRouting.findOne({ where: { providerEnvelopeId }, transaction });
+  if (!routing) {
+    return { acknowledged: true, processed: false, reason: 'unknown_envelope' };
+  }
+
+  const signature = await Signature.findOne({ where: { providerEnvelopeId }, transaction });
+  if (!signature) {
+    return { acknowledged: true, processed: false, reason: 'no_signature_for_envelope' };
+  }
+
+  const contractVersion = await ContractVersion.findByPk(signature.contractVersionId, { transaction });
+  if (!contractVersion) {
+    return { acknowledged: true, processed: false, reason: 'contract_version_not_found' };
+  }
+  if (contractVersion.signedDocumentFileId) {
+    // Idempotência: webhook duplicado (close + auto_close pro mesmo envelope, ou reentrega do
+    // provedor) não deve baixar/gravar o documento assinado de novo.
+    return { acknowledged: true, processed: false, reason: 'already_downloaded', fileId: contractVersion.signedDocumentFileId };
+  }
+
+  const adapter = await resolveSignatureAdapter(tenant, transaction);
+  const downloaded = await adapter.downloadSignedDocument(providerEnvelopeId);
+  if (!downloaded || !downloaded.buffer || downloaded.buffer.length === 0) {
+    return { acknowledged: true, processed: false, reason: 'no_document_available' };
+  }
+
+  const contract = await getContract(contractVersion.contractId, transaction);
+  const safeContractNumber = String(contract.contractNumber || contract.id).replace(/[^a-zA-Z0-9-]/g, '_');
+  const fileName = downloaded.fileName || `contrato-assinado-${safeContractNumber}.pdf`;
+  const storageKey = diskStorage.saveFile('contracts-signed', contract.groupId, fileName, downloaded.buffer);
+
+  const checksumSha256 = crypto.createHash('sha256').update(downloaded.buffer).digest('hex');
+
+  const file = await File.create(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      storageKey,
+      fileName,
+      mimeType: 'application/pdf',
+      sizeBytes: downloaded.buffer.length,
+      checksumSha256,
+      uploadedByUserId: null,
+      createdBy: null,
+      updatedBy: null,
+    },
+    { transaction }
+  );
+
+  contractVersion.signedDocumentFileId = file.id;
+  contractVersion.updatedBy = null;
+  await contractVersion.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      actorUserId: null,
+      action: 'legal.contract_version.signed_document_downloaded',
+      entityType: 'ContractVersion',
+      entityId: contractVersion.id,
+      afterJson: { fileId: file.id, storageKey, sizeBytes: downloaded.buffer.length, checksumSha256 },
+      reason: `Documento assinado do contrato ${contract.contractNumber || contract.id} baixado do provedor e salvo permanentemente (envelope ${providerEnvelopeId} fechado).`,
+    },
+    transaction
+  );
+
+  return { acknowledged: true, processed: true, fileId: file.id };
+}
+
 module.exports = {
   initiateSignature,
   listSignaturesByContractVersion,
   handleSignatureWebhook,
+  handleEnvelopeClosedWebhook,
   resolveSignatureAdapter,
   checkSignatureStatus,
   cancelSignature,

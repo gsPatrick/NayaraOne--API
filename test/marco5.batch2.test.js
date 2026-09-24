@@ -350,7 +350,7 @@ test('M5-12: Clicksign recebe o content_hash da ContractVersion no metadata do d
       ({ url }) => (url.endsWith('/envelopes') ? { data: { id: 'envelope-123' } } : { data: { id: 'signer-1' } }),
       async (calls) => {
         const adapter = new ClicksignSignatureAdapter({ apiToken: 'fake-token' });
-        const result = await adapter.requestSignature(version, ['fake-person-id']);
+        const result = await adapter.requestSignature(version, ['fake-person-id'], transaction);
         assert.equal(result.providerEnvelopeId, 'envelope-123');
 
         const envelopeCall = calls.find((c) => c.url.endsWith('/envelopes'));
@@ -394,7 +394,7 @@ test('M5-12: ZapSign recebe external_id EXATAMENTE igual ao content_hash da Cont
       () => ({ token: 'doc-token-abc', signers: [{ token: 'signer-token-1' }] }),
       async (calls) => {
         const adapter = new ZapSignSignatureAdapter({ apiToken: 'fake-token' });
-        const result = await adapter.requestSignature(version, ['fake-person-id']);
+        const result = await adapter.requestSignature(version, ['fake-person-id'], transaction);
         assert.equal(result.providerEnvelopeId, 'doc-token-abc');
 
         const docCall = calls.find((c) => c.url.endsWith('/docs/'));
