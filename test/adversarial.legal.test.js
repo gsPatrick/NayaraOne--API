@@ -813,3 +813,97 @@ test('ADV-L17: duas transações simultâneas transicionando o MESMO contrato pa
     }
   }
 });
+
+// --- REGRESSÃO homologação (contrato c00af665-98b9-47bc-8aa2-b7c7143ec894): "Violação de
+// restrição de unicidade" ao avançar para SIGNING mesmo com documento anexado ---
+//
+// CAUSA RAIZ real (não era o gate de documento, nem a transição em si): `createContractVersion`
+// calculava `nextVersionNumber` com um `SELECT MAX(version_number) ... ORDER BY DESC` sem
+// nenhum lock antes de decidir (Categoria 1 do catálogo: "SELECT sem lock antes de decidir").
+// Duas chamadas de criação de versão quase simultâneas para o MESMO contrato (duplo-clique em
+// "Nova versão"/"Anexar documento", ou um retry de rede) liam o mesmo `lastVersion`, calculavam
+// o mesmo número, e a SEGUNDA gravação estourava a UNIQUE (contract_id, version_number) de
+// "legal"."contract_versions" com o erro genérico "Violação de restrição de unicidade" — sem
+// nenhuma versão nova de fato criada na segunda tentativa, e sem o avanço de status que
+// dependia dela. Este teste reproduz a corrida com DUAS transações REAIS commitadas (nunca
+// rollback — rollback não reproduz corrida real) disputando `createContractVersion` do mesmo
+// contrato, e prova que agora as duas terminam com sucesso (a segunda serializa atrás da
+// primeira via lock de linha do contrato) em vez de uma delas estourar a UNIQUE crua.
+test('ADV-L18: duas criações de versão simultâneas do MESMO contrato nunca estouram a UNIQUE (contract_id, version_number)', async () => {
+  let contractId = null;
+  try {
+    const criado = await withCommittedTenantTransaction(async (t) => {
+      const contract = await contractsService.createContract(
+        { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', totalValue: 1000, contractNumber: `ADV-L18-${uniqueSuffix()}` },
+        tenant.userId,
+        t
+      );
+      const landlord = await createPerson(t, 'ADV-L18 Locador');
+      const lessee = await createPerson(t, 'ADV-L18 Locatário');
+      await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, t);
+      await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, t);
+      await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, t);
+      return contract;
+    });
+    contractId = criado.id;
+
+    let liberarBarreira;
+    const barreira = new Promise((resolve) => { liberarBarreira = resolve; });
+    let leituraPendentes = 2;
+    const aguardarAsDuasLeituras = () => {
+      leituraPendentes -= 1;
+      if (leituraPendentes === 0) liberarBarreira();
+      return barreira;
+    };
+
+    const criarVersao = async (label) =>
+      withCommittedTenantTransaction(async (t) => {
+        const file = await createDocumentFile(t, `adv-l18-${label}`);
+        await aguardarAsDuasLeituras();
+        return contractVersionsService.createContractVersion(
+          contractId,
+          { content: `ADV-L18 conteúdo ${label} ${uniqueSuffix()}`, documentFileId: file.id },
+          tenant.userId,
+          t
+        );
+      });
+
+    const resultados = await Promise.allSettled([criarVersao('a'), criarVersao('b')]);
+    const falhos = resultados.filter((r) => r.status === 'rejected');
+    assert.equal(
+      falhos.length,
+      0,
+      `nenhuma das duas criações concorrentes pode falhar com violação de unicidade: ${JSON.stringify(resultados.map((r) => r.status === 'rejected' ? String(r.reason && r.reason.message) : 'ok'))}`
+    );
+
+    const versoes = await withCommittedTenantTransaction((t) => contractVersionsService.listContractVersions(contractId, t));
+    assert.equal(versoes.length, 2, 'as duas versões precisam ter sido criadas de verdade');
+    const numeros = versoes.map((v) => v.versionNumber).sort((a, b) => a - b);
+    assert.deepEqual(numeros, [1, 2], 'os números de versão têm que ser sequenciais e sem colisão, mesmo sob corrida');
+  } finally {
+    if (contractId) {
+      await withCommittedTenantTransaction(async (t) => {
+        await sequelize.query('DELETE FROM legal.contract_versions WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
+        await sequelize.query('DELETE FROM legal.contract_parties WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
+        await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
+      });
+    }
+  }
+});
+
+// --- REGRESSÃO homologação: "as partes aparecem sem nome" — addContractParty aceitava
+// personId inexistente/inválido, criando uma parte "órfã" que nenhuma tela consegue resolver ---
+test('REGRESSÃO addContractParty rejeita personId que não existe (evita parte "órfã" sem nome resolvível)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract } = await createLeaseWithParties(transaction);
+    const personIdInexistente = '00000000-0000-4000-8000-000000000000';
+    await assert.rejects(
+      () => contractsService.addContractParty(contract.id, { personId: personIdInexistente, partyRole: 'GUARANTOR' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_PARTY_PERSON_NOT_FOUND');
+        return true;
+      },
+      'personId inexistente não pode virar uma ContractParty "fantasma" sem nome exibível'
+    );
+  });
+});

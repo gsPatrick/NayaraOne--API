@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { ContractVersion } = require('../../models');
+const { Contract, ContractVersion } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractVersionCreated } = require('./legalEvents.service');
@@ -93,6 +93,27 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       'LEGAL_CONTRACT_VERSION_DOCUMENT_REQUIRED'
     );
   }
+
+  // FIX (homologação, contrato c00af665-98b9-47bc-8aa2-b7c7143ec894 — "Violação de restrição
+  // de unicidade" ao avançar o contrato): a CAUSA RAIZ real não estava na transição em si, mas
+  // aqui — `nextVersionNumber` era calculado com um SELECT MAX(version_number) sem nenhum lock
+  // antes da decisão (Categoria 1 do catálogo de bugs conhecidos: "SELECT sem lock antes de
+  // decidir"). Duas requisições de criação de versão para o MESMO contrato próximas no tempo
+  // (ex.: duplo-clique em "Nova versão"/"Anexar documento", ou um retry de rede depois de um
+  // upload que pareceu ter falhado mas já tinha sido commitado) liam o mesmo `lastVersion`,
+  // calculavam o mesmo `nextVersionNumber`, e a SEGUNDA gravação estourava a UNIQUE
+  // (contract_id, version_number) de "legal"."contract_versions" (ver migration
+  // 20260101000170) com o erro cru "Violação de restrição de unicidade" — sem nenhuma mensagem
+  // de negócio clara, e sem a versão nova (nem o avanço de status que dependia dela) acontecer.
+  // Fix: `SELECT ... FOR UPDATE` na linha do CONTRATO antes de calcular o próximo número —
+  // serializa duas criações de versão concorrentes para o mesmo contrato (a segunda espera a
+  // primeira commitar e só então enxerga o `lastVersion` já atualizado, calculando o número
+  // seguinte corretamente em vez de repetir o mesmo número da primeira).
+  await Contract.findByPk(contract.id, {
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+    attributes: ['id'],
+  });
 
   const lastVersion = await ContractVersion.findOne({
     where: { contractId: contract.id },
