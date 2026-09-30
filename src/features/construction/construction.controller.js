@@ -5,6 +5,7 @@ const { success } = require('../../utils/httpResponse');
 const projectsService = require('./projects.service');
 const projectStagesService = require('./projectStages.service');
 const stageMeasurementsService = require('./stageMeasurements.service');
+const stageDependenciesService = require('./stageDependencies.service');
 const dailyReportsService = require('./dailyReports.service');
 const budgetLinesService = require('./budgetLines.service');
 const qualityChecklistService = require('./qualityChecklist.service');
@@ -64,6 +65,18 @@ const updateProjectStage = catchAsync(async (req, res) => {
     projectStagesService.updateProjectStage(req.params.id, req.body, req.auth.userId, t)
   );
   return success(res, { data: item });
+});
+
+// --- Stage dependencies ---
+const createStageDependency = catchAsync(async (req, res) => {
+  const dependency = await req.withTenantTransaction((t) =>
+    stageDependenciesService.createStageDependency(req.params.id, withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: dependency });
+});
+const listStageDependencies = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => stageDependenciesService.listStageDependencies(req.params.id, t));
+  return success(res, { data: items });
 });
 
 // --- Stage measurements ---
@@ -183,6 +196,8 @@ module.exports = {
   listProjectStages,
   getProjectStage,
   updateProjectStage,
+  createStageDependency,
+  listStageDependencies,
   createStageMeasurement,
   listStageMeasurements,
   decideStageMeasurement,

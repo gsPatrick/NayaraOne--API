@@ -23,6 +23,10 @@ constructionRouter.get('/construction/projects/:id/stages', requirePermission('c
 constructionRouter.get('/construction/stages/:id', requirePermission('construction:read'), constructionController.getProjectStage);
 constructionRouter.patch('/construction/stages/:id', requirePermission('construction:update'), constructionController.updateProjectStage);
 
+// Stage dependencies (M6-03/M6-19/M6-56 — sem ciclo)
+constructionRouter.post('/construction/stages/:id/dependencies', requirePermission('construction:create'), constructionController.createStageDependency);
+constructionRouter.get('/construction/stages/:id/dependencies', requirePermission('construction:read'), constructionController.listStageDependencies);
+
 // Stage measurements (aprovação exige permissão dedicada — mesmo padrão de finance:approve/legal:approve)
 constructionRouter.post('/construction/stages/:id/measurements', requirePermission('construction:create'), constructionController.createStageMeasurement);
 constructionRouter.get('/construction/stages/:id/measurements', requirePermission('construction:read'), constructionController.listStageMeasurements);

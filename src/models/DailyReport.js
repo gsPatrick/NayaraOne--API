@@ -20,10 +20,16 @@ module.exports = (sequelize) => {
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       projectId: { type: DataTypes.UUID, allowNull: false, field: 'project_id' },
       reportDate: { type: DataTypes.DATEONLY, allowNull: false, field: 'report_date' },
+      shiftCode: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'UNICO', field: 'shift_code' },
       weather: { type: DataTypes.STRING(32), allowNull: true, field: 'weather' },
       workforceCount: { type: DataTypes.INTEGER, allowNull: true, field: 'workforce_count' },
       occurrences: { type: DataTypes.TEXT, allowNull: true, field: 'occurrences' },
       reportedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'reported_by_user_id' },
+      // M6-20: correção nunca sobrescreve — aponta para o registro que esta linha substitui.
+      supersedesId: { type: DataTypes.UUID, allowNull: true, field: 'supersedes_id' },
+      // M6-94: captura offline — ID local do app + chave de idempotência de sincronização.
+      clientLocalId: { type: DataTypes.STRING(128), allowNull: true, field: 'client_local_id' },
+      idempotencyKey: { type: DataTypes.STRING(128), allowNull: true, field: 'idempotency_key' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
