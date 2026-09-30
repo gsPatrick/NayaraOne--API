@@ -15,6 +15,9 @@ constructionRouter.get('/construction/projects', requirePermission('construction
 constructionRouter.get('/construction/projects/:id', requirePermission('construction:read'), constructionController.getProject);
 constructionRouter.patch('/construction/projects/:id', requirePermission('construction:update'), constructionController.updateProject);
 constructionRouter.post('/construction/projects/:id/transition', requirePermission('construction:update'), constructionController.transitionProject);
+// Gate de entrega da obra (M6-25/M6-39/M6-51/M6-65/M6-79/M6-87) — permissão dedicada de
+// aprovação, mesmo padrão de `/construction/measurements/:id/decide`.
+constructionRouter.post('/construction/projects/:id/deliver', requirePermission('construction:approve'), constructionController.deliverProject);
 constructionRouter.delete('/construction/projects/:id', requirePermission('construction:delete'), constructionController.removeProject);
 // M6-42/M6-99 — read model de custo/KPIs da obra.
 constructionRouter.get('/construction/projects/:id/health', requirePermission('construction:read'), constructionController.getProjectHealth);
@@ -84,5 +87,17 @@ constructionRouter.get('/construction/maintenance-cases', requirePermission('con
 constructionRouter.get('/construction/maintenance-cases/:id', requirePermission('construction:read'), constructionController.getMaintenanceCase);
 constructionRouter.patch('/construction/maintenance-cases/:id', requirePermission('construction:update'), constructionController.updateMaintenanceCase);
 constructionRouter.delete('/construction/maintenance-cases/:id', requirePermission('construction:delete'), constructionController.removeMaintenanceCase);
+
+// Warranty actions (histórico de atendimento dentro do chamado de garantia)
+constructionRouter.post(
+  '/construction/maintenance-cases/:id/actions',
+  requirePermission('construction:update'),
+  constructionController.createWarrantyAction
+);
+constructionRouter.get(
+  '/construction/maintenance-cases/:id/actions',
+  requirePermission('construction:read'),
+  constructionController.listWarrantyActions
+);
 
 module.exports = constructionRouter;

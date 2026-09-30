@@ -111,14 +111,17 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   );
 }
 
-// DECISÃO DE ENGENHARIA: todos os eventos acima usam o prefixo `construction.` (convenção
-// interna adotada antes deste marco). `project.budget.approved`, `nonconformity.opened` e
-// `nonconformity.closed` são os nomes CANÔNICOS exigidos explicitamente pela fonte (checklist
-// Marco 6) — publicados sem o prefixo de propósito, mesmo divergindo da convenção interna,
-// porque são os nomes que consumidores externos (Financeiro, BI) esperam encontrar no
-// barramento de eventos. Migração dos nomes antigos para o padrão canônico da fonte fica
-// registrada como dívida técnica conhecida (M6-69/M6-71/M6-72/M6-76 etc.), fora do escopo
-// desta entrega.
+// DECISÃO DE ENGENHARIA: todos os eventos "técnicos" de CRUD deste módulo usam o prefixo
+// `construction.` (convenção interna adotada antes deste marco). Os eventos abaixo
+// (`project.budget.approved`, `nonconformity.opened`, `nonconformity.closed`,
+// `warranty.case.closed`, `project.delivered`, `measurement.submitted`, `measurement.approved`)
+// são os nomes CANÔNICOS exigidos explicitamente pela fonte (checklist Marco 6) — publicados
+// sem o prefixo de propósito, mesmo divergindo da convenção interna, porque são os nomes que
+// consumidores externos (Financeiro, BI) esperam encontrar no barramento de eventos. Migração
+// dos nomes antigos (`construction.project.created`, `construction.project.status_changed`,
+// `construction.stage_measurement.decided`, `construction.maintenance_case.opened`) para o
+// padrão canônico da fonte fica registrada como dívida técnica conhecida (M6-69/M6-71/M6-72),
+// fora do escopo desta entrega.
 function publishBudgetApproved(budget, transaction) {
   return publishDomainEvent(
     {
@@ -135,6 +138,21 @@ function publishBudgetApproved(budget, transaction) {
         approvedAt: budget.approvedAt,
       },
       idempotencyKey: `project.budget.approved:${budget.id}`,
+    },
+    transaction
+  );
+}
+
+function publishWarrantyCaseClosed(maintenanceCase, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      aggregateType: 'MaintenanceCase',
+      aggregateId: maintenanceCase.id,
+      eventType: 'warranty.case.closed',
+      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, status: maintenanceCase.status },
+      idempotencyKey: `warranty.case.closed:${maintenanceCase.id}`,
     },
     transaction
   );
@@ -170,6 +188,27 @@ function publishNonconformityClosed(nonconformity, transaction) {
   );
 }
 
+// M6-25/M6-39/M6-51/M6-65/M6-79/M6-87: evento de entrega da obra, disparado pelo gate dedicado
+// `POST /construction/projects/:id/deliver` (ver projects.service.js#deliverProject). Segue a
+// mesma convenção sem prefixo pedida para `warranty.case.closed` — ambos são eventos "de
+// negócio" de alto nível (fim de garantia / entrega da obra), diferente dos eventos técnicos de
+// CRUD (`construction.project.created`, `construction.project.status_changed`) que continuam
+// prefixados.
+function publishProjectDelivered(project, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      aggregateType: 'Project',
+      aggregateId: project.id,
+      eventType: 'project.delivered',
+      payload: { id: project.id, name: project.name, status: project.status },
+      idempotencyKey: `project.delivered:${project.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
@@ -180,4 +219,6 @@ module.exports = {
   publishBudgetApproved,
   publishNonconformityOpened,
   publishNonconformityClosed,
+  publishWarrantyCaseClosed,
+  publishProjectDelivered,
 };

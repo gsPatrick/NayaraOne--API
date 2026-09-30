@@ -62,6 +62,55 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'warranty_deadline_at',
       },
+      category: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'category',
+      },
+      severity: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'MEDIUM',
+        field: 'severity',
+      },
+      slaDueAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'sla_due_at',
+      },
+      escalationLevel: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'NONE',
+        field: 'escalation_level',
+      },
+      beforeMediaFileIds: {
+        type: DataTypes.ARRAY(DataTypes.UUID),
+        allowNull: false,
+        defaultValue: [],
+        field: 'before_media_file_ids',
+      },
+      afterMediaFileIds: {
+        type: DataTypes.ARRAY(DataTypes.UUID),
+        allowNull: false,
+        defaultValue: [],
+        field: 'after_media_file_ids',
+      },
+      laborCost: {
+        type: DataTypes.DECIMAL(14, 2),
+        allowNull: true,
+        field: 'labor_cost',
+      },
+      materialCost: {
+        type: DataTypes.DECIMAL(14, 2),
+        allowNull: true,
+        field: 'material_cost',
+      },
+      rootCauseCode: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'root_cause_code',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,
