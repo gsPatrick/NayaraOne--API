@@ -138,11 +138,22 @@ async function assertSignatureGate(contract, transaction) {
       'LEGAL_CONTRACT_DOCUMENT_GATE'
     );
   }
+  // FIX (29/09/2026, mesmo padrão do gate de ativação abaixo): "toda Signature que existe está
+  // SIGNED" não garante que EXISTE uma Signature pra cada parte obrigatória — cruza contra
+  // REQUIRED_ROLES_BY_TYPE.
   const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
-  const allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  const requiredRolesForSigning = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
+  let allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  if (allSigned && requiredRolesForSigning.length > 0) {
+    const parties = await ContractParty.findAll({ where: { contractId: contract.id }, transaction });
+    const signedPersonIds = new Set(signatures.filter((s) => s.status === 'SIGNED').map((s) => s.personId));
+    allSigned = requiredRolesForSigning.every((role) =>
+      parties.some((p) => p.partyRole === role && signedPersonIds.has(p.personId))
+    );
+  }
   if (!allSigned) {
     throw AppError.conflict(
-      'O contrato precisa ter todas as assinaturas confirmadas (status "SIGNED") na versão de documento vigente antes de avançar para "SIGNED".',
+      'O contrato precisa ter todas as assinaturas confirmadas (status "SIGNED") de TODAS as partes obrigatórias antes de avançar para "SIGNED".',
       'LEGAL_CONTRACT_SIGNATURE_GATE'
     );
   }
@@ -188,11 +199,28 @@ async function assertActivationGate(contract, transaction) {
     );
   }
 
+  // FIX (29/09/2026 — cliente achou um contrato de teste ativo com só 1 de 2 partes
+  // obrigatórias assinadas): checar "toda Signature que existe está SIGNED" NÃO é suficiente —
+  // se só foi criada Signature pra UMA das partes (ex.: a outra nunca foi convidada a assinar,
+  // ou a criação da Signature dela falhou em silêncio antes de outro fix desta sessão),
+  // `signatures.every(...)` passa igual, porque não há nenhuma Signature ruim pra reprovar, só
+  // falta uma inteira. Precisa cruzar contra REQUIRED_ROLES_BY_TYPE + as partes reais do
+  // contrato (mesmo padrão já usado em handleSignatureWebhook, signatures.service.js) — cada
+  // papel obrigatório do tipo de contrato precisa ter uma pessoa titular com Signature SIGNED,
+  // não só "as assinaturas que existem estão OK".
   const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
-  const allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  const requiredRoles = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
+  let allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
+  if (allSigned && requiredRoles.length > 0) {
+    const parties = await ContractParty.findAll({ where: { contractId: contract.id }, transaction });
+    const signedPersonIds = new Set(signatures.filter((s) => s.status === 'SIGNED').map((s) => s.personId));
+    allSigned = requiredRoles.every((role) =>
+      parties.some((p) => p.partyRole === role && signedPersonIds.has(p.personId))
+    );
+  }
   if (!allSigned) {
     throw AppError.conflict(
-      'Não é possível ATIVAR o contrato: a versão vigente do documento não tem todas as assinaturas confirmadas (status "SIGNED").',
+      'Não é possível ATIVAR o contrato: a versão vigente do documento não tem todas as assinaturas confirmadas (status "SIGNED") de TODAS as partes obrigatórias.',
       'LEGAL_CONTRACT_ACTIVATION_GATE'
     );
   }
