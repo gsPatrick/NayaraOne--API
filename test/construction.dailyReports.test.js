@@ -253,3 +253,30 @@ test('RDO aceita e preserva documentFileIds por trabalhador (documentação do p
     assert.deepEqual(workers[0].documentFileIds, [fakeDocId]);
   });
 });
+
+// Achado numa auditoria do FRONT do Marco 6 (30/09/2026): não existia NENHUMA forma de listar a
+// equipe do dia já registrada num RDO (só a criação/substituição interna existia). Sem isso, o
+// Front não conseguia mostrar/editar os trabalhadores já salvos ao reabrir um RDO existente.
+test('listDailyWorkers devolve a equipe do dia registrada para um RDO', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+    const worker = await peopleService.createPerson(
+      withTenant({ personType: 'PF', legalName: `Pedreiro HOM-QA ${suffix}` }),
+      tenant.userId,
+      t
+    );
+
+    const created = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-20', workers: [{ personId: worker.id, role: 'Pedreiro' }] }),
+      tenant.userId,
+      t
+    );
+
+    const workers = await dailyReportsService.listDailyWorkers(created.id, t);
+    assert.equal(workers.length, 1);
+    assert.equal(workers[0].personId, worker.id);
+    assert.equal(workers[0].role, 'Pedreiro');
+  });
+});

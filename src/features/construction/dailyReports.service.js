@@ -168,6 +168,14 @@ async function listDailyReports(projectId, transaction) {
   return DailyReport.findAll({ where: { projectId }, order: [['report_date', 'DESC']], transaction });
 }
 
+// Achado numa auditoria do FRONT do Marco 6 (30/09/2026): não existia NENHUMA forma de listar
+// a equipe do dia (DailyWorker) já registrada num RDO — `replaceDailyWorkers` era só uma função
+// interna, sem endpoint. Editar um RDO existente não conseguia mostrar/corrigir os
+// trabalhadores/documentação já salvos.
+async function listDailyWorkers(dailyReportId, transaction) {
+  return DailyWorker.findAll({ where: { dailyReportId }, transaction });
+}
+
 async function getDailyReport(id, transaction) {
   const report = await DailyReport.findByPk(id, { transaction });
   if (!report) throw AppError.notFound('RDO não encontrado.', 'DAILY_REPORT_NOT_FOUND');
@@ -266,4 +274,5 @@ module.exports = {
   getCurrentDailyReport,
   correctDailyReport,
   updateDailyReport,
+  listDailyWorkers,
 };
