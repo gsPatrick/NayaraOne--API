@@ -111,6 +111,33 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'root_cause_code',
       },
+      // Achado numa rodada de verificação de integrações (30/09/2026): "Desconto/ressarcimento
+      // passa por regra/aprovação e Financeiro" — funcionalidade inteira ausente até então.
+      resolutionType: {
+        type: DataTypes.STRING(16), // DISCOUNT | REIMBURSEMENT
+        allowNull: true,
+        field: 'resolution_type',
+      },
+      resolutionAmount: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+        field: 'resolution_amount',
+      },
+      resolutionStatus: {
+        type: DataTypes.STRING(24), // PENDING_APPROVAL | APPROVED
+        allowNull: true,
+        field: 'resolution_status',
+      },
+      resolutionApprovedByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'resolution_approved_by_user_id',
+      },
+      resolutionFinancialEntryId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'resolution_financial_entry_id',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

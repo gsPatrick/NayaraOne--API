@@ -126,6 +126,18 @@ constructionRouter.get(
   constructionController.listWarrantyActions
 );
 
+// Desconto/ressarcimento de garantia (regra/aprovação + Financeiro)
+constructionRouter.post(
+  '/construction/maintenance-cases/:id/resolution',
+  requirePermission('construction:update'),
+  constructionController.proposeWarrantyResolution
+);
+constructionRouter.post(
+  '/construction/maintenance-cases/:id/resolution/approve',
+  requirePermission('construction:update'),
+  constructionController.approveWarrantyResolution
+);
+
 // Material requests (M6-28) — mínimo exigido para o Marco 6, integração completa com
 // Estoque/Patrimônio é escopo do Marco 7 (ver materialRequests.service.js).
 constructionRouter.post('/construction/projects/:id/material-requests', requirePermission('construction:create'), constructionController.createMaterialRequest);

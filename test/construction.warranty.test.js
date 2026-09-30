@@ -215,3 +215,89 @@ test('warranty: fechar o chamado (status=CLOSED) não lança erro (evento warran
     assert.equal(closed.status, 'CLOSED');
   });
 });
+
+// --- Desconto/ressarcimento de garantia (regra/aprovação + Financeiro) ---
+// Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige que o
+// desconto/ressarcimento passe por regra/aprovação e seja integrado ao Financeiro.
+
+test('warranty: proposeWarrantyResolution dentro da alçada (<= threshold padrão de 1000) aprova automaticamente e cria lançamento financeiro', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Infiltração — desconto combinado.' },
+      tenant.userId,
+      transaction
+    );
+
+    const resolved = await maintenanceCasesService.proposeWarrantyResolution(
+      warrantyCase.id,
+      { resolutionType: 'discount', resolutionAmount: 250 },
+      tenant.userId,
+      transaction
+    );
+
+    assert.equal(resolved.resolutionType, 'DISCOUNT');
+    assert.equal(Number(resolved.resolutionAmount), 250);
+    assert.equal(resolved.resolutionStatus, 'APPROVED');
+    assert.ok(resolved.resolutionApprovedByUserId);
+    assert.ok(resolved.resolutionFinancialEntryId, 'deveria ter criado um lançamento financeiro automaticamente');
+  });
+});
+
+test('warranty: proposeWarrantyResolution acima da alçada fica PENDING_APPROVAL sem lançamento financeiro até aprovação explícita', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Ressarcimento de alto valor.' },
+      tenant.userId,
+      transaction
+    );
+
+    const proposed = await maintenanceCasesService.proposeWarrantyResolution(
+      warrantyCase.id,
+      { resolutionType: 'REIMBURSEMENT', resolutionAmount: 5000 },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(proposed.resolutionStatus, 'PENDING_APPROVAL');
+    assert.equal(proposed.resolutionFinancialEntryId, null);
+
+    const approved = await maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, tenant.userId, transaction);
+    assert.equal(approved.resolutionStatus, 'APPROVED');
+    assert.ok(approved.resolutionFinancialEntryId, 'aprovação explícita deveria criar o lançamento financeiro');
+  });
+});
+
+test('warranty: approveWarrantyResolution rejeita quando não há resolução pendente de aprovação', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado sem resolução proposta.' },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, tenant.userId, transaction),
+      rejectsWithCode('WARRANTY_RESOLUTION_NOT_PENDING')
+    );
+  });
+});
+
+test('warranty: proposeWarrantyResolution rejeita resolutionType inválido e amount <= 0', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para validação.' },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => maintenanceCasesService.proposeWarrantyResolution(warrantyCase.id, { resolutionType: 'REFUND', resolutionAmount: 100 }, tenant.userId, transaction),
+      rejectsWithCode('WARRANTY_RESOLUTION_VALIDATION')
+    );
+    await assert.rejects(
+      () => maintenanceCasesService.proposeWarrantyResolution(warrantyCase.id, { resolutionType: 'DISCOUNT', resolutionAmount: 0 }, tenant.userId, transaction),
+      rejectsWithCode('WARRANTY_RESOLUTION_VALIDATION')
+    );
+  });
+});

@@ -21,6 +21,9 @@ module.exports = (sequelize) => {
       dailyReportId: { type: DataTypes.UUID, allowNull: false, field: 'daily_report_id' },
       personId: { type: DataTypes.UUID, allowNull: false, field: 'person_id' },
       role: { type: DataTypes.STRING(128), allowNull: true, field: 'role' },
+      // Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige
+      // "documentação correspondente" vinculada ao prestador, além da Pessoa em si.
+      documentFileIds: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [], field: 'document_file_ids' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
       deletedBy: { type: DataTypes.UUID, allowNull: true, field: 'deleted_by' },

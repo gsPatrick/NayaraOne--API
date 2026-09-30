@@ -4,6 +4,11 @@ const { MaintenanceCase, WarrantyAction } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
+const { getApprovalThreshold } = require('./lossRecords.service');
+const financialEntriesService = require('../finance/financialEntries.service');
+
+const RESOLUTION_TYPES = ['DISCOUNT', 'REIMBURSEMENT'];
+const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
 
 // DECISÃO DE ENGENHARIA: status de MaintenanceCase (pós-obra/garantia) é STRING(32) livre nas
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
@@ -344,6 +349,109 @@ async function listWarrantyActions(warrantyCaseId, transaction) {
   });
 }
 
+/**
+ * proposeWarrantyResolution — M6-XX (achado em rodada de verificação de integrações,
+ * 30/09/2026): "Desconto/ressarcimento passa por regra/aprovação e Financeiro". Registra a
+ * proposta de desconto/ressarcimento; abaixo da alçada configurada (mesmo mecanismo de
+ * `lossRecords.service.js`, contexto próprio `WARRANTY_RESOLUTION`), já nasce APPROVED e cria
+ * o lançamento financeiro real imediatamente; acima da alçada, nasce PENDING_APPROVAL e exige
+ * `approveWarrantyResolution` explícito antes de gerar qualquer efeito financeiro.
+ */
+async function proposeWarrantyResolution(id, payload, actorUserId, transaction) {
+  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  const { resolutionType, resolutionAmount } = payload || {};
+  const normalizedType = String(resolutionType || '').toUpperCase();
+  if (!RESOLUTION_TYPES.includes(normalizedType)) {
+    throw AppError.badRequest(`"resolutionType" deve ser um de: ${RESOLUTION_TYPES.join(', ')}.`, 'WARRANTY_RESOLUTION_VALIDATION');
+  }
+  const numericAmount = Number(resolutionAmount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw AppError.badRequest('"resolutionAmount" deve ser um número maior que zero.', 'WARRANTY_RESOLUTION_VALIDATION');
+  }
+
+  const threshold = await getApprovalThreshold(maintenanceCase.groupId, maintenanceCase.companyId, CONTEXT_WARRANTY_RESOLUTION, transaction);
+  const withinThreshold = numericAmount <= threshold;
+
+  maintenanceCase.resolutionType = normalizedType;
+  maintenanceCase.resolutionAmount = numericAmount;
+  maintenanceCase.resolutionStatus = withinThreshold ? 'APPROVED' : 'PENDING_APPROVAL';
+  maintenanceCase.updatedBy = actorUserId || null;
+
+  if (withinThreshold) {
+    maintenanceCase.resolutionApprovedByUserId = actorUserId || null;
+    await createWarrantyResolutionFinancialEntry(maintenanceCase, actorUserId, transaction);
+  }
+  await maintenanceCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      actorUserId,
+      action: 'construction.maintenance_case.resolution_proposed',
+      entityType: 'MaintenanceCase',
+      entityId: maintenanceCase.id,
+      afterJson: { resolutionType: normalizedType, resolutionAmount: numericAmount, resolutionStatus: maintenanceCase.resolutionStatus },
+      reason: `Proposta de ${normalizedType === 'DISCOUNT' ? 'desconto' : 'ressarcimento'} de ${numericAmount} para o caso ${maintenanceCase.id}.`,
+    },
+    transaction
+  );
+
+  return maintenanceCase;
+}
+
+async function approveWarrantyResolution(id, actorUserId, transaction) {
+  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  if (maintenanceCase.resolutionStatus !== 'PENDING_APPROVAL') {
+    throw AppError.conflict('Não há resolução de garantia pendente de aprovação para este caso.', 'WARRANTY_RESOLUTION_NOT_PENDING');
+  }
+  maintenanceCase.resolutionStatus = 'APPROVED';
+  maintenanceCase.resolutionApprovedByUserId = actorUserId || null;
+  maintenanceCase.updatedBy = actorUserId || null;
+  await createWarrantyResolutionFinancialEntry(maintenanceCase, actorUserId, transaction);
+  await maintenanceCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      actorUserId,
+      action: 'construction.maintenance_case.resolution_approved',
+      entityType: 'MaintenanceCase',
+      entityId: maintenanceCase.id,
+      afterJson: { resolutionFinancialEntryId: maintenanceCase.resolutionFinancialEntryId },
+      reason: `Resolução de garantia aprovada e integrada ao Financeiro para o caso ${maintenanceCase.id}.`,
+    },
+    transaction
+  );
+
+  return maintenanceCase;
+}
+
+/**
+ * createWarrantyResolutionFinancialEntry — chama o service REAL do Financeiro (nenhum
+ * financeiro paralelo/fake), idempotente via `idempotencyKey` UNIQUE derivada do id do caso —
+ * aprovar a MESMA resolução mais de uma vez nunca cria dois lançamentos.
+ */
+async function createWarrantyResolutionFinancialEntry(maintenanceCase, actorUserId, transaction) {
+  const entry = await financialEntriesService.createFinancialEntry(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      entryType: 'DEBIT',
+      nature: 'PAYABLE',
+      amount: maintenanceCase.resolutionAmount,
+      description: `${maintenanceCase.resolutionType === 'DISCOUNT' ? 'Desconto' : 'Ressarcimento'} de garantia — caso ${maintenanceCase.id}`,
+      idempotencyKey: `warranty.resolution:${maintenanceCase.id}`,
+      constructionProjectId: maintenanceCase.projectId || null,
+    },
+    actorUserId,
+    transaction
+  );
+  maintenanceCase.resolutionFinancialEntryId = entry.id;
+  return entry;
+}
+
 module.exports = {
   createMaintenanceCase,
   listMaintenanceCases,
@@ -352,6 +460,8 @@ module.exports = {
   removeMaintenanceCase,
   createWarrantyAction,
   listWarrantyActions,
+  proposeWarrantyResolution,
+  approveWarrantyResolution,
   computeSlaDueAt,
   computeEscalationLevel,
   STATUSES,

@@ -383,6 +383,20 @@ const listWarrantyActions = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 
+// --- Desconto/ressarcimento de garantia (regra/aprovação + Financeiro) ---
+const proposeWarrantyResolution = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    maintenanceCasesService.proposeWarrantyResolution(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+const approveWarrantyResolution = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    maintenanceCasesService.approveWarrantyResolution(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
 module.exports = {
   createProject,
   listProjects,
@@ -444,6 +458,8 @@ module.exports = {
   upsertApprovalThreshold,
   createWarrantyAction,
   listWarrantyActions,
+  proposeWarrantyResolution,
+  approveWarrantyResolution,
   createMaterialRequest,
   listMaterialRequests,
   receiveMaterialRequest,

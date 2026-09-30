@@ -222,3 +222,34 @@ test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-o
     assert.deepEqual(originalReloaded.evidenceFileIds, [fakeFileId1], 'registro original não deve ser alterado (append-only)');
   });
 });
+
+// Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige "documentação
+// correspondente" vinculada ao prestador do dia — campo estava inteiramente ausente em
+// DailyWorker. Confirma que o RDO aceita e preserva documentFileIds por trabalhador.
+test('RDO aceita e preserva documentFileIds por trabalhador (documentação do prestador)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+    const worker = await peopleService.createPerson(
+      withTenant({ personType: 'PF', legalName: `Prestador HOM-QA ${suffix}` }),
+      tenant.userId,
+      t
+    );
+    const fakeDocId = '33333333-3333-3333-3333-333333333333';
+
+    const created = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({
+        reportDate: '2026-09-19',
+        workers: [{ personId: worker.id, role: 'Eletricista', documentFileIds: [fakeDocId] }],
+      }),
+      tenant.userId,
+      t
+    );
+
+    const { DailyWorker } = require('../src/models');
+    const workers = await DailyWorker.findAll({ where: { dailyReportId: created.id }, transaction: t });
+    assert.equal(workers.length, 1);
+    assert.deepEqual(workers[0].documentFileIds, [fakeDocId]);
+  });
+});
