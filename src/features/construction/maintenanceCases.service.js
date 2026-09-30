@@ -227,7 +227,13 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
 
   const now = new Date();
   if (slaRecalcNeeded) {
-    const slaBaseDate = maintenanceCase.warrantyDeadlineAt || maintenanceCase.createdAt || now;
+    // BUG CORRIGIDO (30/09/2026, achado via smoke test do postObraHealth.service.js): o model
+    // MaintenanceCase usa `createdAt: 'created_at'` como opção de timestamps, que renomeia o
+    // atributo JS para `created_at` — `maintenanceCase.createdAt` (camelCase) sempre era
+    // `undefined`, então o fallback nunca usava a data de criação real quando
+    // `warrantyDeadlineAt` não estava definido (caía direto em `now`, calculando o SLA a partir
+    // do momento da EDIÇÃO em vez da criação do caso).
+    const slaBaseDate = maintenanceCase.warrantyDeadlineAt || maintenanceCase.created_at || now;
     maintenanceCase.slaDueAt = computeSlaDueAt(slaBaseDate, maintenanceCase.severity);
   }
   // Recalcula o nível de escalonamento sempre que o caso é tocado (mesma regra usada pelo job

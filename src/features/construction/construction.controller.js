@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const projectsService = require('./projects.service');
 const projectHealthService = require('./projectHealth.service');
+const postObraHealthService = require('./postObraHealth.service');
 const projectStagesService = require('./projectStages.service');
 const stageMeasurementsService = require('./stageMeasurements.service');
 const stageDependenciesService = require('./stageDependencies.service');
@@ -72,6 +73,11 @@ const getProjectStage = catchAsync(async (req, res) => {
 });
 const getProjectHealth = catchAsync(async (req, res) => {
   const health = await req.withTenantTransaction((t) => projectHealthService.getProjectHealth(req.params.id, t));
+  return success(res, { data: health });
+});
+
+const getPostObraHealth = catchAsync(async (req, res) => {
+  const health = await req.withTenantTransaction((t) => postObraHealthService.getPostObraHealth(req.params.id, t));
   return success(res, { data: health });
 });
 const updateProjectStage = catchAsync(async (req, res) => {
@@ -350,6 +356,7 @@ module.exports = {
   deliverProject,
   removeProject,
   getProjectHealth,
+  getPostObraHealth,
   createProjectStage,
   listProjectStages,
   getProjectStage,

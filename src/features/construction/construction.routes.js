@@ -21,6 +21,7 @@ constructionRouter.post('/construction/projects/:id/deliver', requirePermission(
 constructionRouter.delete('/construction/projects/:id', requirePermission('construction:delete'), constructionController.removeProject);
 // M6-42/M6-99 — read model de custo/KPIs da obra.
 constructionRouter.get('/construction/projects/:id/health', requirePermission('construction:read'), constructionController.getProjectHealth);
+constructionRouter.get('/construction/projects/:id/post-obra-health', requirePermission('construction:read'), constructionController.getPostObraHealth);
 
 // Project stages
 constructionRouter.post('/construction/projects/:id/stages', requirePermission('construction:create'), constructionController.createProjectStage);

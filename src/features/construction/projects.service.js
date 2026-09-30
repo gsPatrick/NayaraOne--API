@@ -1,6 +1,6 @@
 'use strict';
 
-const { Project, sequelize } = require('../../models');
+const { Project, ProjectCodeSequence, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const {
@@ -35,12 +35,34 @@ function assertValidDateRange(startsAt, endsAtPlanned) {
   }
 }
 
+/**
+ * generateProjectCode — M6-01 (fechado 30/09/2026): gera "OBRA-{ANO}-{SEQ:04d}" (ex.:
+ * OBRA-2026-0001), sequencial por (companyId, ano corrente). Mesmo padrão atômico de
+ * `generateContractNumber` (legal/contracts.service.js): um único INSERT...ON CONFLICT...DO
+ * UPDATE, nunca SELECT COUNT(*)+1 (evita corrida de concorrência real).
+ */
+async function generateProjectCode(companyId, transaction) {
+  const year = new Date().getFullYear();
+  const [rows] = await sequelize.query(
+    `INSERT INTO "construction"."project_code_sequences" (id, company_id, "year", last_seq, created_at, updated_at)
+     VALUES (gen_random_uuid(), :companyId, :year, 1, now(), now())
+     ON CONFLICT (company_id, "year")
+     DO UPDATE SET last_seq = "construction"."project_code_sequences".last_seq + 1, updated_at = now()
+     RETURNING last_seq`,
+    { replacements: { companyId, year }, transaction }
+  );
+  const seq = rows[0].last_seq;
+  return `OBRA-${year}-${String(seq).padStart(4, '0')}`;
+}
+
 async function createProject(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned } = payload;
+  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, code } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
   assertValidDateRange(startsAt, endsAtPlanned);
+
+  const resolvedCode = code || (await generateProjectCode(companyId, transaction));
 
   const project = await Project.create(
     {
@@ -49,6 +71,7 @@ async function createProject(payload, actorUserId, transaction) {
       propertyId: propertyId || null,
       unitId: unitId || null,
       name,
+      code: resolvedCode,
       responsibleUserId: responsibleUserId || null,
       budgetAmount: budgetAmount != null ? budgetAmount : null,
       startsAt: startsAt || null,
@@ -95,7 +118,7 @@ async function getProject(id, transaction) {
 async function updateProject(id, payload, actorUserId, transaction) {
   const project = await getProject(id, transaction);
   const beforeJson = project.toJSON();
-  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId } = payload;
+  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate } = payload;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
   if (budgetAmount !== undefined) project.budgetAmount = budgetAmount;
@@ -103,6 +126,7 @@ async function updateProject(id, payload, actorUserId, transaction) {
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
   if (unitId !== undefined) project.unitId = unitId;
+  if (actualEndDate !== undefined) project.actualEndDate = actualEndDate;
   assertValidDateRange(
     startsAt !== undefined ? startsAt : project.startsAt,
     endsAtPlanned !== undefined ? endsAtPlanned : project.endsAtPlanned
@@ -153,6 +177,12 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
 
   const fromStatus = project.status;
   project.status = normalizedTarget;
+  // M6-01: `actualEndDate` marcado automaticamente ao concluir, se ainda não informado
+  // manualmente — evita depender de PATCH separado pra registrar quando a obra terminou de
+  // verdade.
+  if (normalizedTarget === 'COMPLETED' && !project.actualEndDate) {
+    project.actualEndDate = new Date().toISOString().slice(0, 10);
+  }
   project.updatedBy = actorUserId || null;
   await project.save({ transaction });
 

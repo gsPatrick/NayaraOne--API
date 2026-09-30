@@ -111,6 +111,7 @@ const modelDefiners = {
   LossRecord: require('./LossRecord'),
   ApprovalThreshold: require('./ApprovalThreshold'),
   MaterialRequest: require('./MaterialRequest'),
+  ProjectCodeSequence: require('./ProjectCodeSequence'),
   InventoryItem: require('./InventoryItem'),
   InventoryMovement: require('./InventoryMovement'),
   Asset: require('./Asset'),

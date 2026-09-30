@@ -1,7 +1,17 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Project, ProjectStage, StageMeasurement, BudgetLine, FinancialEntry, ChangeOrder } = require('../../models');
+const {
+  sequelize,
+  Project,
+  ProjectStage,
+  StageMeasurement,
+  BudgetLine,
+  FinancialEntry,
+  ChangeOrder,
+  LossRecord,
+  Nonconformity,
+} = require('../../models');
 const AppError = require('../../utils/AppError');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
@@ -146,6 +156,33 @@ async function getProjectHealth(projectId, transaction) {
     return acc;
   }, {});
 
+  // wastagePct (M6-99, fechado 30/09/2026 2ª rodada): soma de LossRecord do tipo LOSS
+  // APPROVED desta obra / baselineBudget — desperdício real de material, não estimado.
+  const lossRecords = await LossRecord.findAll({
+    where: { projectId, movementType: 'LOSS', status: 'APPROVED' },
+    transaction,
+  });
+  const totalLossValue = lossRecords.reduce((acc, l) => acc + toNumber(l.estimatedValue), 0);
+  const wastagePct = baselineBudget > 0 ? round2((totalLossValue / baselineBudget) * 100) : null;
+
+  // recurrenceByRootCause (M6-99, fechado 30/09/2026 2ª rodada): agrupa Nonconformity da obra
+  // por motivo de perda (LossRecord.reason) e por severidade — a fonte não define uma taxonomia
+  // fixa de "causa raiz" para NC, então usamos severidade (já existe, sem inventar campo novo)
+  // combinada com o motivo de LossRecord quando presente.
+  const nonconformities = await Nonconformity.findAll({ where: { projectId }, transaction });
+  const recurrenceMap = new Map();
+  for (const nc of nonconformities) {
+    const key = nc.severity || 'DESCONHECIDA';
+    recurrenceMap.set(key, (recurrenceMap.get(key) || 0) + 1);
+  }
+  for (const l of lossRecords) {
+    const key = l.reason || 'DESCONHECIDA';
+    recurrenceMap.set(key, (recurrenceMap.get(key) || 0) + 1);
+  }
+  const recurrenceByRootCause = [...recurrenceMap.entries()]
+    .map(([cause, count]) => ({ cause, count }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     // --- Os 9 campos pedidos pelo M6-42 ---
     baselineBudget: round2(baselineBudget),
@@ -168,11 +205,8 @@ async function getProjectHealth(projectId, transaction) {
       isOverdue,
       payablePendingTotal: round2(pendingEntries.reduce((acc, e) => acc + toNumber(e.amount), 0)),
       measurementsByStatus,
-      // TODOs — dependem de fatias em paralelo (não implementadas nesta entrega):
-      //  - wastagePct (desperdício de material): depende de custeio de estoque (mesma lacuna
-      //    de `consumedInventoryCost` acima).
-      //  - approvedChangesCount/pendingChangesCount: depende da entidade Change Orders.
-      wastagePct: null,
+      wastagePct,
+      recurrenceByRootCause,
     },
   };
 }

@@ -14,7 +14,7 @@ function assertValidDateRange(startsAt, endsAt) {
 }
 
 async function createProjectStage(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, name, sequence, plannedPct, startsAt, endsAt } = payload;
+  const { groupId, companyId, name, sequence, plannedPct, startsAt, endsAt, stageCode, plannedCost } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_STAGE_VALIDATION');
   }
@@ -26,6 +26,8 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
       companyId,
       projectId,
       name,
+      stageCode: stageCode || null,
+      plannedCost: plannedCost != null ? plannedCost : null,
       sequence: sequence != null ? sequence : 1,
       plannedPct: plannedPct != null ? plannedPct : null,
       measuredPct: null,
@@ -68,11 +70,13 @@ async function getProjectStage(id, transaction) {
 async function updateProjectStage(id, payload, actorUserId, transaction) {
   const stage = await getProjectStage(id, transaction);
   const beforeJson = stage.toJSON();
-  const { name, sequence, plannedPct, status, startsAt, endsAt } = payload;
+  const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost } = payload;
   const previousStatus = stage.status;
   if (name !== undefined) stage.name = name;
   if (sequence !== undefined) stage.sequence = sequence;
   if (plannedPct !== undefined) stage.plannedPct = plannedPct;
+  if (stageCode !== undefined) stage.stageCode = stageCode;
+  if (plannedCost !== undefined) stage.plannedCost = plannedCost;
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!STATUSES.includes(normalizedStatus)) {

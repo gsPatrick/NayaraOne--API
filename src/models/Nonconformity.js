@@ -53,6 +53,11 @@ module.exports = (sequelize) => {
       requiresAcceptance: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'requires_acceptance' },
       acceptedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'accepted_by_user_id' },
       closedAt: { type: DataTypes.DATE, allowNull: true, field: 'closed_at' },
+      // M6-59 (fechado 30/09/2026): flag de alerta — nunca bloqueia, só sinaliza reuso de
+      // evidência (mesmo checksum de arquivo já usado em outra Nonconformity da empresa).
+      evidenceReuseFlagged: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'evidence_reuse_flagged' },
+      evidenceReuseReferenceId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_reuse_reference_id' },
+      evidenceReuseDetails: { type: DataTypes.JSONB, allowNull: true, field: 'evidence_reuse_details' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

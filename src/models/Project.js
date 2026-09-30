@@ -63,6 +63,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'ends_at_planned',
       },
+      // M6-01 (fechado 30/09/2026): código legível único por empresa (ex.: OBRA-2026-0001),
+      // gerado automaticamente em createProject via generateProjectCode() quando não informado.
+      code: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: 'code',
+      },
+      actualEndDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: 'actual_end_date',
+      },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
