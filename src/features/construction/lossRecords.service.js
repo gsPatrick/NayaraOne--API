@@ -185,7 +185,7 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
       // devolução expunha o UUID interno cru do registro original direto na tela do usuário
       // ("Devolução do registro de perda <uuid>") — usa a descrição do material (já disponível
       // e legível), não o id interno.
-      reason: (payload && payload.reason) || `Devolução de "${original.materialDescription}" (perda original de ${original.quantity} un.).`,
+      reason: (payload && payload.reason) || `Devolução de "${original.materialDescription}" (perda original de ${Number(original.quantity)} un.).`,
       movementType: 'RETURN',
       relatedLossRecordId: original.id,
       status: 'APPROVED',
