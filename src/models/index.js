@@ -97,6 +97,9 @@ const modelDefiners = {
   MaintenanceCase: require('./MaintenanceCase'),
   StageMeasurement: require('./StageMeasurement'),
   DailyReport: require('./DailyReport'),
+  StageDependency: require('./StageDependency'),
+  DailyWorker: require('./DailyWorker'),
+  DailyMaterial: require('./DailyMaterial'),
   BudgetLine: require('./BudgetLine'),
   QualityChecklistItem: require('./QualityChecklistItem'),
   InventoryItem: require('./InventoryItem'),
@@ -314,6 +317,15 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'approved_by_user_id', as: 'approvedByUser', constraints: false });
   db.DailyReport.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.DailyReport.belongsTo(db.User, { foreignKey: 'reported_by_user_id', as: 'reportedByUser', constraints: false });
+  db.DailyReport.belongsTo(db.DailyReport, { foreignKey: 'supersedes_id', as: 'supersedes', constraints: false });
+  db.DailyReport.hasMany(db.DailyWorker, { foreignKey: 'daily_report_id', as: 'workers', constraints: false });
+  db.DailyReport.hasMany(db.DailyMaterial, { foreignKey: 'daily_report_id', as: 'materials', constraints: false });
+  db.DailyWorker.belongsTo(db.DailyReport, { foreignKey: 'daily_report_id', as: 'dailyReport', constraints: false });
+  db.DailyWorker.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  db.DailyMaterial.belongsTo(db.DailyReport, { foreignKey: 'daily_report_id', as: 'dailyReport', constraints: false });
+  db.ProjectStage.hasMany(db.StageDependency, { foreignKey: 'stage_id', as: 'dependencies', constraints: false });
+  db.StageDependency.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
+  db.StageDependency.belongsTo(db.ProjectStage, { foreignKey: 'depends_on_stage_id', as: 'dependsOnStage', constraints: false });
   db.BudgetLine.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.BudgetLine.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });
   db.QualityChecklistItem.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
