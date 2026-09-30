@@ -84,10 +84,12 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
     weather,
     workforceCount,
     occurrences,
+    servicesPerformed,
     workers,
     materials,
     clientLocalId,
     idempotencyKey,
+    evidenceFileIds,
   } = payload;
   if (!groupId || !companyId || !reportDate) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "reportDate" são obrigatórios.', 'DAILY_REPORT_VALIDATION');
@@ -125,6 +127,8 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
       weather: weather || null,
       workforceCount: workforceCount != null ? workforceCount : null,
       occurrences: occurrences || null,
+      servicesPerformed: servicesPerformed || null,
+      evidenceFileIds: Array.isArray(evidenceFileIds) ? evidenceFileIds : [],
       reportedByUserId: actorUserId || null,
       clientLocalId: clientLocalId || null,
       idempotencyKey: idempotencyKey || null,
@@ -195,7 +199,7 @@ async function getCurrentDailyReport(id, transaction) {
  */
 async function correctDailyReport(id, payload, actorUserId, transaction) {
   const original = await getCurrentDailyReport(id, transaction);
-  const { weather, workforceCount, occurrences, workers, materials } = payload;
+  const { weather, workforceCount, occurrences, servicesPerformed, workers, materials, evidenceFileIds } = payload;
   validateWorkforceCount(workforceCount);
 
   const revision = await DailyReport.create(
@@ -208,6 +212,8 @@ async function correctDailyReport(id, payload, actorUserId, transaction) {
       weather: weather !== undefined ? weather : original.weather,
       workforceCount: workforceCount !== undefined ? workforceCount : original.workforceCount,
       occurrences: occurrences !== undefined ? occurrences : original.occurrences,
+      servicesPerformed: servicesPerformed !== undefined ? servicesPerformed : original.servicesPerformed,
+      evidenceFileIds: Array.isArray(evidenceFileIds) ? evidenceFileIds : original.evidenceFileIds,
       reportedByUserId: original.reportedByUserId,
       supersedesId: original.id,
       createdBy: actorUserId || null,

@@ -23,7 +23,14 @@ module.exports = (sequelize) => {
       shiftCode: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'UNICO', field: 'shift_code' },
       weather: { type: DataTypes.STRING(32), allowNull: true, field: 'weather' },
       workforceCount: { type: DataTypes.INTEGER, allowNull: true, field: 'workforce_count' },
+      // A fonte separa "serviços" (o que foi executado) de "ocorrências e bloqueios" —
+      // achado numa rodada de verificação de integrações, campo próprio ausente até então.
+      servicesPerformed: { type: DataTypes.TEXT, allowNull: true, field: 'services_performed' },
       occurrences: { type: DataTypes.TEXT, allowNull: true, field: 'occurrences' },
+      // Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige que o
+      // diário registre "fotos" — campo ausente até então (não é divergência de nome, é campo
+      // inteiro faltando).
+      evidenceFileIds: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [], field: 'evidence_file_ids' },
       reportedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'reported_by_user_id' },
       // M6-20: correção nunca sobrescreve — aponta para o registro que esta linha substitui.
       supersedesId: { type: DataTypes.UUID, allowNull: true, field: 'supersedes_id' },

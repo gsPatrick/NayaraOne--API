@@ -191,3 +191,34 @@ test('M6-94: idempotencyKey de captura offline evita duplicar RDO ao ressincroni
     assert.equal(resynced.id, first.id);
   });
 });
+
+// Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige que o diário
+// registre "fotos" — campo estava inteiramente ausente. Confirma que o RDO aceita e preserva
+// evidência fotográfica, inclusive através de uma correção (append-only).
+test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-only)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+    const fakeFileId1 = '11111111-1111-1111-1111-111111111111';
+    const fakeFileId2 = '22222222-2222-2222-2222-222222222222';
+
+    const created = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-18', evidenceFileIds: [fakeFileId1] }),
+      tenant.userId,
+      t
+    );
+    assert.deepEqual(created.evidenceFileIds, [fakeFileId1]);
+
+    const corrected = await dailyReportsService.correctDailyReport(
+      created.id,
+      { evidenceFileIds: [fakeFileId1, fakeFileId2] },
+      tenant.userId,
+      t
+    );
+    assert.deepEqual(corrected.evidenceFileIds, [fakeFileId1, fakeFileId2]);
+
+    const originalReloaded = await DailyReport.findByPk(created.id, { transaction: t });
+    assert.deepEqual(originalReloaded.evidenceFileIds, [fakeFileId1], 'registro original não deve ser alterado (append-only)');
+  });
+});
