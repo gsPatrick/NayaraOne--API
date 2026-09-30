@@ -3,12 +3,15 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * BudgetLine — tabela "construction"."budget_lines"
- * Linha de orçamento/custo de uma obra (previsto x realizado).
+ * MarginRule — tabela "construction"."margin_rules"
+ * Versão vigente (ou histórica) da margem mínima exigida para aprovar orçamento de obra.
+ * Ver DECISÃO DE ENGENHARIA no cabeçalho da migração 20260101000181 — cada linha é uma versão
+ * imutável; o próprio `id` é o `rule_version_id` gravado em "construction"."budgets" no
+ * momento da aprovação (M6-23/M6-61).
  */
 module.exports = (sequelize) => {
-  const BudgetLine = sequelize.define(
-    'BudgetLine',
+  const MarginRule = sequelize.define(
+    'MarginRule',
     {
       id: {
         type: DataTypes.UUID,
@@ -18,13 +21,9 @@ module.exports = (sequelize) => {
       },
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
-      projectId: { type: DataTypes.UUID, allowNull: false, field: 'project_id' },
-      budgetId: { type: DataTypes.UUID, allowNull: true, field: 'budget_id' },
-      costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
-      category: { type: DataTypes.STRING(128), allowNull: false, field: 'category' },
+      minMarginPct: { type: DataTypes.DECIMAL(5, 2), allowNull: false, field: 'min_margin_pct' },
       description: { type: DataTypes.STRING(255), allowNull: true, field: 'description' },
-      plannedAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: false, field: 'planned_amount' },
-      actualAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'actual_amount' },
+      isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
@@ -32,7 +31,7 @@ module.exports = (sequelize) => {
     },
     {
       schema: 'construction',
-      tableName: 'budget_lines',
+      tableName: 'margin_rules',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
@@ -43,5 +42,5 @@ module.exports = (sequelize) => {
     }
   );
 
-  return BudgetLine;
+  return MarginRule;
 };

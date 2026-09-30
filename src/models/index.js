@@ -98,6 +98,9 @@ const modelDefiners = {
   StageMeasurement: require('./StageMeasurement'),
   DailyReport: require('./DailyReport'),
   BudgetLine: require('./BudgetLine'),
+  Budget: require('./Budget'),
+  ChangeOrder: require('./ChangeOrder'),
+  MarginRule: require('./MarginRule'),
   QualityChecklistItem: require('./QualityChecklistItem'),
   InventoryItem: require('./InventoryItem'),
   InventoryMovement: require('./InventoryMovement'),
@@ -316,6 +319,13 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.DailyReport.belongsTo(db.User, { foreignKey: 'reported_by_user_id', as: 'reportedByUser', constraints: false });
   db.BudgetLine.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.BudgetLine.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });
+  db.BudgetLine.belongsTo(db.Budget, { foreignKey: 'budget_id', as: 'budget', constraints: false });
+  db.Budget.hasMany(db.BudgetLine, { foreignKey: 'budget_id', as: 'lines', constraints: false });
+  db.Budget.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Budget.belongsTo(db.MarginRule, { foreignKey: 'rule_version_id', as: 'marginRule', constraints: false });
+  db.Project.hasMany(db.Budget, { foreignKey: 'project_id', as: 'budgets', constraints: false });
+  db.ChangeOrder.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Project.hasMany(db.ChangeOrder, { foreignKey: 'project_id', as: 'changeOrders', constraints: false });
   db.QualityChecklistItem.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.QualityChecklistItem.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.QualityChecklistItem.belongsTo(db.User, { foreignKey: 'checked_by_user_id', as: 'checkedByUser', constraints: false });
