@@ -3,12 +3,16 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * Project — tabela "construction"."projects"
- * Obra/empreendimento de construção civil.
+ * MaterialRequest — tabela "construction"."material_requests"
+ * Requisição mínima de material nascida da obra/etapa (M6-28). DECISÃO DE ENGENHARIA: este é
+ * o mínimo esperado para o Marco 6 — a integração completa com Estoque/Patrimônio (movimento
+ * real de saldo, devolução com movimento inverso, alçada de perda) é escopo do Marco 7. Aqui
+ * apenas registramos a requisição e o recebimento, com eventos de domínio para o consumidor
+ * de Estoque integrar quando esse módulo existir.
  */
 module.exports = (sequelize) => {
-  const Project = sequelize.define(
-    'Project',
+  const MaterialRequest = sequelize.define(
+    'MaterialRequest',
     {
       id: {
         type: DataTypes.UUID,
@@ -26,48 +30,43 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'company_id',
       },
-      propertyId: {
+      projectId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'project_id',
+      },
+      stageId: {
         type: DataTypes.UUID,
         allowNull: true,
-        field: 'property_id',
+        field: 'stage_id',
       },
-      // M6-95: dimensão unit_id além de group_id/company_id — relacionamento raiz
-      // group -> company -> unit; nullable porque nem toda empresa opera com unidades.
-      unitId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'unit_id',
-      },
-      name: {
+      description: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        field: 'name',
       },
-      responsibleUserId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'responsible_user_id',
+      quantity: {
+        type: DataTypes.DECIMAL(18, 3),
+        allowNull: false,
       },
-      budgetAmount: {
-        type: DataTypes.DECIMAL(18, 2),
-        allowNull: true,
-        field: 'budget_amount',
-      },
-      startsAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'starts_at',
-      },
-      endsAtPlanned: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'ends_at_planned',
+      unit: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
       },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
-        defaultValue: 'PLANNED',
-        field: 'status',
+        defaultValue: 'REQUESTED',
+        comment: 'REQUESTED|RECEIVED',
+      },
+      requestedByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'requested_by_user_id',
+      },
+      receivedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'received_at',
       },
       lockVersion: {
         type: DataTypes.INTEGER,
@@ -93,7 +92,7 @@ module.exports = (sequelize) => {
     },
     {
       schema: 'construction',
-      tableName: 'projects',
+      tableName: 'material_requests',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
@@ -104,5 +103,5 @@ module.exports = (sequelize) => {
     }
   );
 
-  return Project;
+  return MaterialRequest;
 };

@@ -5,10 +5,13 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
 
-const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE'];
+// M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
+// empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
+// createContract abaixo e migrations/20260101000237-add-construction_project_id-to-legal-contracts.js).
+const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE', 'CONSTRUCTION'];
 
 // Prefixo de numeração por contractType — ver 20260101000177-create-legal-contract_number_sequences.js.
-const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV' };
+const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV', CONSTRUCTION: 'OBR' };
 
 /**
  * generateContractNumber — gera o próximo número no formato "{PREFIXO}-{ANO}-{SEQ:04d}"
@@ -235,12 +238,20 @@ async function assertActivationGate(contract, transaction) {
 }
 
 async function createContract(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt } = payload;
+  const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId } = payload;
   if (!groupId || !companyId || !contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
   if (!CONTRACT_TYPES.includes(contractType)) {
     throw AppError.badRequest(`"contractType" deve ser um de: ${CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION');
+  }
+  // M6-104: contrato de empreitada (CONSTRUCTION) precisa nascer já vinculado à obra —
+  // sem isso não há como o Marco 6 amarrar o contrato à execução física da obra.
+  if (contractType === 'CONSTRUCTION' && !constructionProjectId) {
+    throw AppError.badRequest(
+      '"constructionProjectId" é obrigatório para contratos do tipo "CONSTRUCTION".',
+      'LEGAL_CONTRACT_CONSTRUCTION_PROJECT_REQUIRED'
+    );
   }
 
   // Numeração automática: só gera se o chamador não informou um número explícito (correção
@@ -253,6 +264,7 @@ async function createContract(payload, actorUserId, transaction) {
       companyId,
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
+      constructionProjectId: constructionProjectId || null,
       contractType,
       contractNumber: finalContractNumber,
       status: 'DRAFT',

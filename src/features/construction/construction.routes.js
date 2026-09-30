@@ -100,4 +100,10 @@ constructionRouter.get(
   constructionController.listWarrantyActions
 );
 
+// Material requests (M6-28) — mínimo exigido para o Marco 6, integração completa com
+// Estoque/Patrimônio é escopo do Marco 7 (ver materialRequests.service.js).
+constructionRouter.post('/construction/projects/:id/material-requests', requirePermission('construction:create'), constructionController.createMaterialRequest);
+constructionRouter.get('/construction/projects/:id/material-requests', requirePermission('construction:read'), constructionController.listMaterialRequests);
+constructionRouter.post('/construction/material-requests/:id/receive', requirePermission('construction:update'), constructionController.receiveMaterialRequest);
+
 module.exports = constructionRouter;

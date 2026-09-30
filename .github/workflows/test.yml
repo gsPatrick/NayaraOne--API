@@ -62,6 +62,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # M6-96: scanner de hard-code cobrindo o módulo de Obras — vigia contra regressão de
+      # margem/comissão/valor monetário fixado em código em vez de vir do Motor de Regras.
+      - name: Scanner de hard-code (Obras/Construction)
+        run: node scripts/scanConstructionHardcode.js
+
       # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
       # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
       # cluster — que o Postgres sempre cria como SUPERUSER, com BYPASSRLS implícito. Isso

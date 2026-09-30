@@ -3,7 +3,12 @@
 const { Project, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishProjectCreated, publishProjectStatusChanged, publishProjectDelivered } = require('./constructionEvents.service');
+const {
+  publishProjectCreated,
+  publishProjectStatusChanged,
+  publishProjectStarted,
+  publishProjectDelivered,
+} = require('./constructionEvents.service');
 
 // DECISÃO DE ENGENHARIA: os documentos fonte não definem os valores válidos de
 // projects.status (coluna STRING(32) livre, só com default 'PLANNED') — workflow linear
@@ -31,7 +36,7 @@ function assertValidDateRange(startsAt, endsAtPlanned) {
 }
 
 async function createProject(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned } = payload;
+  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
@@ -42,6 +47,7 @@ async function createProject(payload, actorUserId, transaction) {
       groupId,
       companyId,
       propertyId: propertyId || null,
+      unitId: unitId || null,
       name,
       responsibleUserId: responsibleUserId || null,
       budgetAmount: budgetAmount != null ? budgetAmount : null,
@@ -89,13 +95,14 @@ async function getProject(id, transaction) {
 async function updateProject(id, payload, actorUserId, transaction) {
   const project = await getProject(id, transaction);
   const beforeJson = project.toJSON();
-  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId } = payload;
+  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId } = payload;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
   if (budgetAmount !== undefined) project.budgetAmount = budgetAmount;
   if (startsAt !== undefined) project.startsAt = startsAt;
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
+  if (unitId !== undefined) project.unitId = unitId;
   assertValidDateRange(
     startsAt !== undefined ? startsAt : project.startsAt,
     endsAtPlanned !== undefined ? endsAtPlanned : project.endsAtPlanned
@@ -150,6 +157,12 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
   await project.save({ transaction });
 
   await publishProjectStatusChanged(project, fromStatus, transaction);
+
+  // M6-71: evento distinto e específico, disparado só na primeira vez que a obra entra em
+  // execução (PLANNED -> IN_PROGRESS) — não em qualquer status_changed genérico.
+  if (fromStatus === 'PLANNED' && normalizedTarget === 'IN_PROGRESS') {
+    await publishProjectStarted(project, transaction);
+  }
 
   await registrarAuditoria(
     {

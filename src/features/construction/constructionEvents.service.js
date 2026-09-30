@@ -5,6 +5,21 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 // Publicação dos domain events do módulo construction (Transactional Outbox), seguindo o
 // mesmo padrão de src/features/legal/legalEvents.service.js e financeEvents.service.js —
 // sempre dentro da MESMA transação da operação de negócio.
+//
+// CONVENÇÃO OFICIAL DE NOMENCLATURA DO MÓDULO (M6-69/M6-71/M6-72/M6-105/M6-106 — decisão final
+// de resolução de merge): eventos TÉCNICOS de CRUD (created/status_changed/decided/opened)
+// mantêm o prefixo `construction.` (ex.: `construction.project.created`,
+// `construction.stage_measurement.decided`, `construction.maintenance_case.opened`) — mesmo
+// padrão já usado em `legal.*` e `finance.*`. Já os eventos de NEGÓCIO de alto nível usam o
+// nome CANÔNICO sem prefixo, exigido pela fonte/checklist do Marco 6, porque são os nomes que
+// consumidores externos (Financeiro, BI) esperam encontrar no barramento:
+//   - `project.budget.approved`, `nonconformity.opened`, `nonconformity.closed`,
+//     `warranty.case.closed`, `project.delivered`, `measurement.submitted`,
+//     `measurement.approved`, `project.stage.completed` (M6-106), `project.started` (M6-71).
+//   - M6-105: fechamento de caso de pós-obra/garantia usa SOMENTE `warranty.case.closed`
+//     (publishWarrantyCaseClosed) — não existe um segundo evento
+//     `construction.maintenance_case.closed`/`publishMaintenanceCaseClosed` duplicado para o
+//     mesmo caso.
 
 function publishProjectCreated(project, transaction) {
   return publishDomainEvent(
@@ -111,17 +126,6 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   );
 }
 
-// DECISÃO DE ENGENHARIA: todos os eventos "técnicos" de CRUD deste módulo usam o prefixo
-// `construction.` (convenção interna adotada antes deste marco). Os eventos abaixo
-// (`project.budget.approved`, `nonconformity.opened`, `nonconformity.closed`,
-// `warranty.case.closed`, `project.delivered`, `measurement.submitted`, `measurement.approved`)
-// são os nomes CANÔNICOS exigidos explicitamente pela fonte (checklist Marco 6) — publicados
-// sem o prefixo de propósito, mesmo divergindo da convenção interna, porque são os nomes que
-// consumidores externos (Financeiro, BI) esperam encontrar no barramento de eventos. Migração
-// dos nomes antigos (`construction.project.created`, `construction.project.status_changed`,
-// `construction.stage_measurement.decided`, `construction.maintenance_case.opened`) para o
-// padrão canônico da fonte fica registrada como dívida técnica conhecida (M6-69/M6-71/M6-72),
-// fora do escopo desta entrega.
 function publishBudgetApproved(budget, transaction) {
   return publishDomainEvent(
     {
@@ -209,9 +213,90 @@ function publishProjectDelivered(project, transaction) {
   );
 }
 
+// M6-71: disparado só na primeira transição PLANNED -> IN_PROGRESS (ver projects.service.js).
+// Nome canônico sem prefixo (decisão final de resolução de merge — ver comentário de
+// convenção no topo do arquivo).
+function publishProjectStarted(project, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      aggregateType: 'Project',
+      aggregateId: project.id,
+      eventType: 'project.started',
+      payload: { id: project.id, name: project.name },
+      idempotencyKey: `project.started:${project.id}`,
+    },
+    transaction
+  );
+}
+
+// M6-72/M6-106: nome canônico escolhido — ver comentário de convenção no topo do arquivo.
+function publishStageCompleted(stage, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: stage.groupId,
+      companyId: stage.companyId,
+      aggregateType: 'ProjectStage',
+      aggregateId: stage.id,
+      eventType: 'project.stage.completed',
+      payload: { id: stage.id, projectId: stage.projectId, name: stage.name },
+      idempotencyKey: `project.stage.completed:${stage.id}`,
+    },
+    transaction
+  );
+}
+
+// M6-28: mínimo exigido para o marco — integração completa com Estoque é do Marco 7 (ver
+// comentário na migration 20260101000236-create-construction-material_requests.js).
+function publishMaterialRequested(materialRequest, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: materialRequest.groupId,
+      companyId: materialRequest.companyId,
+      aggregateType: 'MaterialRequest',
+      aggregateId: materialRequest.id,
+      eventType: 'material.requested',
+      payload: {
+        id: materialRequest.id,
+        projectId: materialRequest.projectId,
+        stageId: materialRequest.stageId,
+        description: materialRequest.description,
+        quantity: materialRequest.quantity,
+        unit: materialRequest.unit,
+      },
+      idempotencyKey: `material.requested:${materialRequest.id}`,
+    },
+    transaction
+  );
+}
+
+function publishMaterialReceived(materialRequest, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: materialRequest.groupId,
+      companyId: materialRequest.companyId,
+      aggregateType: 'MaterialRequest',
+      aggregateId: materialRequest.id,
+      eventType: 'material.received',
+      payload: {
+        id: materialRequest.id,
+        projectId: materialRequest.projectId,
+        stageId: materialRequest.stageId,
+        description: materialRequest.description,
+        quantity: materialRequest.quantity,
+        unit: materialRequest.unit,
+      },
+      idempotencyKey: `material.received:${materialRequest.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
+  publishProjectStarted,
   publishStageMeasurementDecided,
   publishMeasurementSubmitted,
   publishMeasurementApproved,
@@ -221,4 +306,7 @@ module.exports = {
   publishNonconformityClosed,
   publishWarrantyCaseClosed,
   publishProjectDelivered,
+  publishStageCompleted,
+  publishMaterialRequested,
+  publishMaterialReceived,
 };
