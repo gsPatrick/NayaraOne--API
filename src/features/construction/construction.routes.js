@@ -16,6 +16,8 @@ constructionRouter.get('/construction/projects/:id', requirePermission('construc
 constructionRouter.patch('/construction/projects/:id', requirePermission('construction:update'), constructionController.updateProject);
 constructionRouter.post('/construction/projects/:id/transition', requirePermission('construction:update'), constructionController.transitionProject);
 constructionRouter.delete('/construction/projects/:id', requirePermission('construction:delete'), constructionController.removeProject);
+// M6-42/M6-99 — read model de custo/KPIs da obra.
+constructionRouter.get('/construction/projects/:id/health', requirePermission('construction:read'), constructionController.getProjectHealth);
 
 // Project stages
 constructionRouter.post('/construction/projects/:id/stages', requirePermission('construction:create'), constructionController.createProjectStage);
@@ -30,6 +32,10 @@ constructionRouter.get('/construction/stages/:id/dependencies', requirePermissio
 // Stage measurements (aprovação exige permissão dedicada — mesmo padrão de finance:approve/legal:approve)
 constructionRouter.post('/construction/stages/:id/measurements', requirePermission('construction:create'), constructionController.createStageMeasurement);
 constructionRouter.get('/construction/stages/:id/measurements', requirePermission('construction:read'), constructionController.listStageMeasurements);
+constructionRouter.get('/construction/measurements/:id/items', requirePermission('construction:read'), constructionController.listMeasurementItems);
+constructionRouter.post('/construction/measurements/:id/submit', requirePermission('construction:create'), constructionController.submitStageMeasurement);
+constructionRouter.post('/construction/measurements/:id/review', requirePermission('construction:update'), constructionController.reviewStageMeasurement);
+constructionRouter.post('/construction/measurements/:id/revise', requirePermission('construction:create'), constructionController.reviseStageMeasurement);
 constructionRouter.post('/construction/measurements/:id/decide', requirePermission('construction:approve'), constructionController.decideStageMeasurement);
 
 // Daily reports (RDO)

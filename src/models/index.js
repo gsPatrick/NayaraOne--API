@@ -96,6 +96,7 @@ const modelDefiners = {
   ProjectStage: require('./ProjectStage'),
   MaintenanceCase: require('./MaintenanceCase'),
   StageMeasurement: require('./StageMeasurement'),
+  MeasurementItem: require('./MeasurementItem'),
   DailyReport: require('./DailyReport'),
   StageDependency: require('./StageDependency'),
   DailyWorker: require('./DailyWorker'),
@@ -318,6 +319,12 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.StageMeasurement.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'measured_by_user_id', as: 'measuredByUser', constraints: false });
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'approved_by_user_id', as: 'approvedByUser', constraints: false });
+  db.StageMeasurement.belongsTo(db.User, { foreignKey: 'reviewed_by_user_id', as: 'reviewedByUser', constraints: false });
+  db.StageMeasurement.belongsTo(db.FinancialEntry, { foreignKey: 'payable_financial_entry_id', as: 'payableFinancialEntry', constraints: false });
+  db.StageMeasurement.belongsTo(db.StageMeasurement, { foreignKey: 'parent_measurement_id', as: 'parentMeasurement', constraints: false });
+  db.StageMeasurement.hasMany(db.MeasurementItem, { foreignKey: 'measurement_id', as: 'items', constraints: false });
+  db.MeasurementItem.belongsTo(db.StageMeasurement, { foreignKey: 'measurement_id', as: 'measurement', constraints: false });
+  db.FinancialEntry.belongsTo(db.Project, { foreignKey: 'construction_project_id', as: 'constructionProject', constraints: false });
   db.DailyReport.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.DailyReport.belongsTo(db.User, { foreignKey: 'reported_by_user_id', as: 'reportedByUser', constraints: false });
   db.DailyReport.belongsTo(db.DailyReport, { foreignKey: 'supersedes_id', as: 'supersedes', constraints: false });
