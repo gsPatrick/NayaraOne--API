@@ -90,17 +90,49 @@ async function releaseKeyDelivery(id, actorUserId, transaction) {
     );
   }
 
-  const checkInWhere = { contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' };
-  let checkIn = await Inspection.findOne({ where: checkInWhere, transaction });
-  if (!checkIn && contract.propertyId) {
-    // Fallback: algumas vistorias de CHECK_IN podem não estar diretamente vinculadas ao
-    // contrato (contract_id nullable em Inspection) — aceitamos também uma vistoria concluída
-    // do mesmo imóvel. Decisão de engenharia: sem isso, contratos criados após a vistoria (ou
-    // vistorias registradas antes do contrato existir) nunca liberariam a chave.
+  // FIX (homologação, LOC-2026-0002): quando um contrato tem MAIS DE UMA vistoria de CHECK_IN
+  // concluída (ex.: uma antiga já assinada, e uma nova ainda sem assinatura porque a antiga foi
+  // refeita), `findOne` sem ORDER escolhia qualquer uma delas — na prática, muitas vezes a mais
+  // antiga/assinada, autorizando a entrega mesmo a vistoria REALMENTE vinculada a esta entrega
+  // de chaves (keyDelivery.inspectionId) estando pendente de assinatura. A vistoria que importa
+  // para o gate é: (1) a explicitamente referenciada por esta entrega de chaves, se houver; ou
+  // (2) na ausência de vínculo explícito, a vistoria de CHECK_IN concluída MAIS RECENTE do
+  // contrato (nunca "qualquer uma que exista assinada") — ordenada por completed_at/created_at.
+  let checkIn = null;
+  if (keyDelivery.inspectionId) {
     checkIn = await Inspection.findOne({
-      where: { propertyId: contract.propertyId, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+      where: { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
       transaction,
     });
+    if (!checkIn) {
+      throw AppError.conflict(
+        'Não é possível liberar as chaves: a vistoria de entrada vinculada a esta entrega não está concluída.',
+        'LEGAL_KEY_DELIVERY_BLOCKED'
+      );
+    }
+  } else {
+    checkIn = await Inspection.findOne({
+      where: { contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+      order: [
+        ['completedAt', 'DESC'],
+        ['created_at', 'DESC'],
+      ],
+      transaction,
+    });
+    if (!checkIn && contract.propertyId) {
+      // Fallback: algumas vistorias de CHECK_IN podem não estar diretamente vinculadas ao
+      // contrato (contract_id nullable em Inspection) — aceitamos também a vistoria concluída
+      // MAIS RECENTE do mesmo imóvel. Decisão de engenharia: sem isso, contratos criados após a
+      // vistoria (ou vistorias registradas antes do contrato existir) nunca liberariam a chave.
+      checkIn = await Inspection.findOne({
+        where: { propertyId: contract.propertyId, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+        order: [
+          ['completedAt', 'DESC'],
+          ['created_at', 'DESC'],
+        ],
+        transaction,
+      });
+    }
   }
   if (!checkIn) {
     throw AppError.conflict(

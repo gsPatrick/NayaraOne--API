@@ -1,6 +1,6 @@
 'use strict';
 
-const { Contract, ContractParty, ContractVersion, Signature, Guarantee, sequelize } = require('../../models');
+const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
@@ -306,6 +306,22 @@ async function getContract(id, transaction) {
  * (evita 2 SELECTs quando o chamador já a tem em mãos, ex.: signatures.service.js).
  */
 async function transitionContractStatus(contract, targetStatus, actorUserId, transaction) {
+  // NOTA DE INVESTIGAÇÃO (homologação, contrato c00af665-98b9-47bc-8aa2-b7c7143ec894 —
+  // "Violação de restrição de unicidade" ao avançar para SIGNING): a hipótese inicial foi uma
+  // corrida de concorrência aqui (duas transições simultâneas do mesmo `fromStatus` disputando
+  // o mesmo INSERT no outbox de eventos). Investigação confirmou que essa corrida específica JÁ
+  // é coberta pelo lock otimista existente no model `Contract` (`lockVersion`/`version` — ver
+  // Contract.js): `contract.save()` abaixo falha primeiro com `OptimisticLockError` quando duas
+  // transições concorrentes partem do mesmo estado, então a segunda NUNCA chega a tentar o
+  // INSERT duplicado no outbox — não há violação de UNIQUE possível por esse caminho (ver
+  // ADV-L17 em test/adversarial.legal.test.js, que já provava isso). Adicionar aqui um `SELECT
+  // ... FOR UPDATE` extra SERIALIZARIA as duas transições em vez de rejeitar a perdedora — o que
+  // mudaria um comportamento correto (a segunda falha rápido e o cliente decide se tenta de
+  // novo) para um comportamento diferente (a segunda espera e reaplica sobre o estado novo),
+  // sem necessidade real. A CAUSA RAIZ verdadeira do "Violação de restrição de unicidade" deste
+  // contrato estava em `createContractVersion` (contractVersions.service.js) — o cálculo de
+  // `nextVersionNumber` ali SIM tinha um SELECT sem lock antes de decidir, e é lá que o fix e o
+  // teste de regressão (ADV-L18) foram aplicados.
   const fromStatus = contract.status;
   const allowedTargets = VALID_TRANSITIONS[fromStatus] || [];
   if (!allowedTargets.includes(targetStatus)) {
@@ -362,6 +378,22 @@ async function addContractParty(contractId, payload, actorUserId, transaction) {
   }
   if (!VALID_ROLES.includes(partyRole)) {
     throw AppError.badRequest(`"partyRole" deve ser um de: ${VALID_ROLES.join(', ')}.`, 'LEGAL_CONTRACT_PARTY_VALIDATION');
+  }
+
+  // FIX (homologação — contrato com "as partes aparecem sem nome"): `personId` nunca era
+  // conferido contra a tabela `people.persons`. Um `personId` inválido/de outro tenant (RLS faz
+  // `Person.findByPk` sob o mesmo tenant do `getContract` acima simplesmente não achar a
+  // pessoa) ainda assim criava a linha em `legal.contract_parties` — o contrato ficava com uma
+  // parte "órfã" que nenhuma tela consegue resolver (a listagem de pessoas do tenant nunca
+  // contém esse id), e a tela de detalhe do contrato cai no fallback "—"/"?" do nome, porque o
+  // dado nunca existiu de fato, não porque a tela falhou em exibi-lo. Fail closed: exige que a
+  // pessoa exista (mesmo tenant, via RLS) antes de gravar a parte.
+  const person = await Person.findByPk(personId, { transaction });
+  if (!person) {
+    throw AppError.badRequest(
+      `Pessoa "${personId}" não encontrada — não é possível adicionar uma parte ao contrato com um "personId" inexistente.`,
+      'LEGAL_CONTRACT_PARTY_PERSON_NOT_FOUND'
+    );
   }
 
   const party = await ContractParty.create(
