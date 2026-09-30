@@ -87,14 +87,28 @@ async function getBudgetLine(id, transaction) {
 async function updateBudgetLine(id, payload, actorUserId, transaction) {
   const line = await getBudgetLine(id, transaction);
 
-  // Baseline imutável (M6-17/M6-22): se a linha está vinculada a um orçamento agregado já
-  // `APPROVED`, nenhum campo de VALOR pode ser alterado por este caminho de UPDATE direto —
-  // a única forma de alterar valor depois da aprovação é um Change Order aprovado (ver
-  // changeOrders.service.js:decideChangeOrder). Campos não financeiros (category/description/
-  // costCenterId) continuam editáveis livremente, pois não afetam o valor congelado.
-  const { category, description, plannedAmount, actualAmount, costCenterId } = payload;
-  const touchesAmount = plannedAmount !== undefined || actualAmount !== undefined;
-  if (touchesAmount && line.budgetId) {
+  // M6-22 (CORRIGIDO em 30/09/2026 — auditoria pós-merge encontrou o gap): "custo realizado
+  // sempre vem de Financeiro/Estoque via evento, nunca digitado solto dentro de Obras".
+  // `actualAmount` NUNCA pode ser setado por este endpoint de edição manual — hoje nenhum
+  // consumidor de evento popula esse campo ainda (dependência cruzada com a integração real
+  // de custo por linha de orçamento, fora do escopo desta correção pontual), mas o gap real e
+  // urgente era permitir digitação manual livre; fechado aqui incondicionalmente, e não só
+  // quando a linha já tem `budgetId` de um orçamento aprovado — a regra é "nunca via UPDATE
+  // direto", não "só depois de aprovado".
+  if (payload.actualAmount !== undefined) {
+    throw AppError.badRequest(
+      '"actualAmount" não pode ser editado diretamente — custo realizado só é populado automaticamente via integração com Financeiro/Estoque.',
+      'BUDGET_LINE_ACTUAL_AMOUNT_READONLY'
+    );
+  }
+
+  // Baseline imutável (M6-17): se a linha está vinculada a um orçamento agregado já
+  // `APPROVED`, o campo `plannedAmount` também não pode ser alterado por este caminho de
+  // UPDATE direto — a única forma de alterar valor depois da aprovação é um Change Order
+  // aprovado (ver changeOrders.service.js:decideChangeOrder). Campos não financeiros
+  // (category/description/costCenterId) continuam editáveis livremente.
+  const { category, description, plannedAmount, costCenterId } = payload;
+  if (plannedAmount !== undefined && line.budgetId) {
     const budget = await Budget.findByPk(line.budgetId, { transaction });
     if (budget && budget.status === 'APPROVED') {
       throw AppError.conflict(
@@ -106,11 +120,9 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
 
   const beforeJson = line.toJSON();
   assertNonNegativeAmount(plannedAmount, 'plannedAmount');
-  assertNonNegativeAmount(actualAmount, 'actualAmount');
   if (category !== undefined) line.category = category;
   if (description !== undefined) line.description = description;
   if (plannedAmount !== undefined) line.plannedAmount = plannedAmount;
-  if (actualAmount !== undefined) line.actualAmount = actualAmount;
   if (costCenterId !== undefined) line.costCenterId = costCenterId;
   line.updatedBy = actorUserId || null;
   await line.save({ transaction });

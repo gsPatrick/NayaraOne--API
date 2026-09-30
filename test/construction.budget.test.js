@@ -58,10 +58,36 @@ test('M6-54: editar plannedAmount de linha de orçamento com baseline APPROVED �
       }
     );
 
+    // M6-22 (corrigido em 30/09/2026): actualAmount nunca é editável via este endpoint,
+    // aprovado ou não — custo realizado só vem de integração com Financeiro/Estoque.
     await assert.rejects(
       () => budgetLinesService.updateBudgetLine(line.id, { actualAmount: 100 }, tenant.userId, transaction),
       (err) => {
-        assert.equal(err.code, 'BUDGET_LINE_BASELINE_LOCKED');
+        assert.equal(err.code, 'BUDGET_LINE_ACTUAL_AMOUNT_READONLY');
+        return true;
+      }
+    );
+  });
+});
+
+test('M6-22: actualAmount não pode ser editado nem em orçamento ainda DRAFT (nunca via UPDATE direto)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await projectsService.createProject(
+      { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Obra M6-22', managerUserId: tenant.userId },
+      tenant.userId,
+      transaction
+    );
+    const line = await budgetLinesService.createBudgetLine(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, category: 'Material', plannedAmount: 1000 },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => budgetLinesService.updateBudgetLine(line.id, { actualAmount: 500 }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'BUDGET_LINE_ACTUAL_AMOUNT_READONLY');
         return true;
       }
     );

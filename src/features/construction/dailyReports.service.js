@@ -3,6 +3,7 @@
 const { DailyReport, DailyWorker, DailyMaterial } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishDailyLogCreated } = require('./constructionEvents.service');
 
 const DEFAULT_SHIFT_CODE = 'UNICO';
 
@@ -149,6 +150,11 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  // M6-73 (corrigido em 30/09/2026 — auditoria pós-merge encontrou a ausência): evento de
+  // domínio nunca era disparado na criação de RDO, apesar de já existir no motor de eventos
+  // do módulo. Nome canônico exigido pela fonte, sem prefixo `construction.`.
+  await publishDailyLogCreated(report, transaction);
 
   return report;
 }

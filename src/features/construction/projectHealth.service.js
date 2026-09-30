@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Project, ProjectStage, StageMeasurement, BudgetLine, FinancialEntry } = require('../../models');
+const { sequelize, Project, ProjectStage, StageMeasurement, BudgetLine, FinancialEntry, ChangeOrder } = require('../../models');
 const AppError = require('../../utils/AppError');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
@@ -24,29 +24,18 @@ function round2(value) {
 
 /**
  * getApprovedChangeOrdersTotal — M6-97/M6-42: soma de change orders aprovados da obra.
- * DECISÃO DE ENGENHARIA (pedida explicitamente no escopo desta fatia): a entidade de Change
- * Orders (`construction_change_orders` ou equivalente) está sendo implementada em paralelo por
- * outro agente (budgetLines.service.js / nova entidade). Enquanto essa tabela não existir no
- * banco, devolve 0 sem quebrar o endpoint. Quando a tabela existir, basta que ela tenha
- * `project_id`, `status` e uma coluna de valor (`amount`) — ajustar a query abaixo então.
- *
- * TODO(M6-xx, dependência cruzada): trocar a consulta ad-hoc abaixo por
- * `changeOrdersService.getApprovedTotal(projectId, transaction)` assim que o outro agente
- * publicar o service/model de Change Orders.
+ * CORRIGIDO em 30/09/2026 (auditoria pós-merge): a versão anterior consultava a tabela
+ * inexistente `construction.construction_change_orders`, caindo sempre no catch e retornando
+ * 0 silenciosamente mesmo com Change Orders aprovados de verdade. A tabela real, criada pela
+ * fatia de orçamento/baseline, é `construction.change_orders` com coluna `budget_impact`
+ * (model `ChangeOrder`) — usa o model Sequelize diretamente, não SQL ad-hoc.
  */
 async function getApprovedChangeOrdersTotal(projectId, transaction) {
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total
-         FROM construction.construction_change_orders
-        WHERE project_id = :projectId AND status = 'APPROVED'`,
-      { replacements: { projectId }, transaction }
-    );
-    return toNumber(rows && rows[0] ? rows[0].total : 0);
-  } catch (err) {
-    // Tabela ainda não existe (fatia em paralelo não terminou) — não é um erro deste endpoint.
-    return 0;
-  }
+  const total = await ChangeOrder.sum('budgetImpact', {
+    where: { projectId, status: 'APPROVED' },
+    transaction,
+  });
+  return toNumber(total);
 }
 
 async function getProject(id, transaction) {

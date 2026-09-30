@@ -231,6 +231,40 @@ function publishProjectStarted(project, transaction) {
   );
 }
 
+// M6-73: nome canônico exigido pela fonte, sem prefixo — mesmo padrão de publishProjectStarted.
+function publishDailyLogCreated(report, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: report.groupId,
+      companyId: report.companyId,
+      aggregateType: 'DailyReport',
+      aggregateId: report.id,
+      eventType: 'project.daily_log.created',
+      payload: { id: report.id, projectId: report.projectId, reportDate: report.reportDate, shiftCode: report.shiftCode },
+      idempotencyKey: `project.daily_log.created:${report.id}`,
+    },
+    transaction
+  );
+}
+
+// M6-74: nome canônico exigido pela fonte, sem prefixo. `dateKey` (YYYY-MM-DD) entra na
+// idempotencyKey de propósito — ver projectDelayDetectionJob.js para o motivo (permite um novo
+// evento de lembrete por dia enquanto a obra continuar atrasada, sem duplicar no mesmo dia).
+function publishProjectDelayDetected(project, dateKey, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      aggregateType: 'Project',
+      aggregateId: project.id,
+      eventType: 'project.delay.detected',
+      payload: { id: project.id, name: project.name, endsAtPlanned: project.endsAtPlanned, status: project.status },
+      idempotencyKey: `project.delay.detected:${project.id}:${dateKey}`,
+    },
+    transaction
+  );
+}
+
 // M6-72/M6-106: nome canônico escolhido — ver comentário de convenção no topo do arquivo.
 function publishStageCompleted(stage, transaction) {
   return publishDomainEvent(
@@ -297,6 +331,8 @@ module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
   publishProjectStarted,
+  publishDailyLogCreated,
+  publishProjectDelayDetected,
   publishStageMeasurementDecided,
   publishMeasurementSubmitted,
   publishMeasurementApproved,

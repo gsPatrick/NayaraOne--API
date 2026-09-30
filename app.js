@@ -15,6 +15,7 @@ const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatche
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
+const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -118,6 +119,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.FEEDBACK_CASE_ALERT_JOB_DISAB
 // dentro do próprio processo, mesmo padrão de feedbackCaseAlertJob.
 if (process.env.NODE_ENV !== 'test' && process.env.WARRANTY_ESCALATION_JOB_DISABLED !== 'true') {
   startWarrantyEscalationJob();
+}
+
+// Detecção de atraso de obra (M6-74). Roda a cada 1h dentro do próprio processo, mesmo padrão
+// do job de escalonamento de garantia acima.
+if (process.env.NODE_ENV !== 'test' && process.env.PROJECT_DELAY_DETECTION_JOB_DISABLED !== 'true') {
+  startProjectDelayDetectionJob();
 }
 
 module.exports = app;
