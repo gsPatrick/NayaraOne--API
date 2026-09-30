@@ -95,7 +95,7 @@ async function generateProjectCode(companyId, transaction) {
 }
 
 async function createProject(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, code } = payload;
+  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, code, costCenterId } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
@@ -113,6 +113,7 @@ async function createProject(payload, actorUserId, transaction) {
       code: resolvedCode,
       responsibleUserId: responsibleUserId || null,
       budgetAmount: budgetAmount != null ? budgetAmount : null,
+      costCenterId: costCenterId || null,
       startsAt: startsAt || null,
       endsAtPlanned: endsAtPlanned || null,
       status: 'PLANNED',
@@ -157,7 +158,7 @@ async function getProject(id, transaction) {
 async function updateProject(id, payload, actorUserId, transaction) {
   const project = await getProject(id, transaction);
   const beforeJson = project.toJSON();
-  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate } = payload;
+  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId } = payload;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
   if (budgetAmount !== undefined) project.budgetAmount = budgetAmount;
@@ -166,6 +167,7 @@ async function updateProject(id, payload, actorUserId, transaction) {
   if (propertyId !== undefined) project.propertyId = propertyId;
   if (unitId !== undefined) project.unitId = unitId;
   if (actualEndDate !== undefined) project.actualEndDate = actualEndDate;
+  if (costCenterId !== undefined) project.costCenterId = costCenterId;
   assertValidDateRange(
     startsAt !== undefined ? startsAt : project.startsAt,
     endsAtPlanned !== undefined ? endsAtPlanned : project.endsAtPlanned

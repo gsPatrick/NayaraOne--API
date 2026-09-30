@@ -89,7 +89,7 @@ async function createMeasurementItems(measurement, items, actorUserId, transacti
  * (não é possível aprovar uma medição sem valor — ver guarda em `decideStageMeasurement`).
  */
 async function createStageMeasurement(projectStageId, payload, actorUserId, transaction) {
-  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount } = payload;
+  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount, costCenterId } = payload;
   if (!groupId || !companyId || measuredPct === undefined || measuredPct === null || !measuredAt) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "measuredPct" e "measuredAt" são obrigatórios.',
@@ -115,6 +115,7 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
       status: 'DRAFT',
       revisionNumber: 1,
       totalAmount: totalAmount !== undefined && totalAmount !== null ? totalAmount : null,
+      costCenterId: costCenterId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -335,6 +336,16 @@ async function createPayableForMeasurement(measurement, actorUserId, transaction
   const stage = await getProjectStage(measurement.projectStageId, transaction);
   const project = await Project.findByPk(stage.projectId, { transaction });
 
+  // M6-97 (reforço — achado em nova rodada de verificação de integrações, 30/09/2026): a fonte
+  // (Centro Financeiro BLINDADO) exige "Centro de custo obrigatório para despesa" como regra
+  // transversal do Financeiro. A obrigação gerada aqui é uma despesa (DEBIT/PAYABLE) — resolve
+  // o centro de custo da medição (override pontual) ou, na ausência, o centro de custo padrão
+  // da obra. Se nenhum dos dois estiver configurado, o lançamento ainda é criado sem centro de
+  // custo (o Financeiro trata isso hoje como opcional na validação, não fail-closed) — decisão
+  // de engenharia: reforçar essa regra como fail-closed é uma mudança transversal ao módulo
+  // Financeiro inteiro, fora do escopo do Marco 6, não só desta integração pontual.
+  const resolvedCostCenterId = measurement.costCenterId || (project ? project.costCenterId : null) || null;
+
   const entry = await financialEntriesService.createFinancialEntry(
     {
       groupId: measurement.groupId,
@@ -345,6 +356,7 @@ async function createPayableForMeasurement(measurement, actorUserId, transaction
       description: `Medição aprovada — etapa "${stage.name}" (medição ${measurement.id})`,
       idempotencyKey: `measurement.payable:${measurement.id}`,
       constructionProjectId: project ? project.id : stage.projectId,
+      costCenterId: resolvedCostCenterId,
     },
     actorUserId,
     transaction

@@ -42,6 +42,9 @@ module.exports = (sequelize) => {
       payableFinancialEntryId: { type: DataTypes.UUID, allowNull: true, field: 'payable_financial_entry_id' },
       parentMeasurementId: { type: DataTypes.UUID, allowNull: true, field: 'parent_measurement_id' },
       revisionNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, field: 'revision_number' },
+      // M6-97 (reforço): override pontual de centro de custo por medição — se ausente, o
+      // lançamento gerado usa o centro de custo padrão da obra (Project.costCenterId).
+      costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

@@ -75,6 +75,14 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'actual_end_date',
       },
+      // M6-97 (reforço): centro de custo padrão da obra — "Centro de custo obrigatório para
+      // despesa" é regra transversal do Financeiro; lançamentos gerados por Obras (medições
+      // aprovadas) usam este valor quando a medição não tiver um próprio.
+      costCenterId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'cost_center_id',
+      },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
