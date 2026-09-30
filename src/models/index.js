@@ -106,6 +106,9 @@ const modelDefiners = {
   ChangeOrder: require('./ChangeOrder'),
   MarginRule: require('./MarginRule'),
   QualityChecklistItem: require('./QualityChecklistItem'),
+  Nonconformity: require('./Nonconformity'),
+  LossRecord: require('./LossRecord'),
+  ApprovalThreshold: require('./ApprovalThreshold'),
   InventoryItem: require('./InventoryItem'),
   InventoryMovement: require('./InventoryMovement'),
   Asset: require('./Asset'),
@@ -348,6 +351,15 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.QualityChecklistItem.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.QualityChecklistItem.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.QualityChecklistItem.belongsTo(db.User, { foreignKey: 'checked_by_user_id', as: 'checkedByUser', constraints: false });
+  db.Project.hasMany(db.Nonconformity, { foreignKey: 'project_id', as: 'nonconformities', constraints: false });
+  db.Nonconformity.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Nonconformity.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
+  db.Nonconformity.belongsTo(db.User, { foreignKey: 'responsible_user_id', as: 'responsibleUser', constraints: false });
+  db.Nonconformity.belongsTo(db.User, { foreignKey: 'accepted_by_user_id', as: 'acceptedByUser', constraints: false });
+  db.Project.hasMany(db.LossRecord, { foreignKey: 'project_id', as: 'lossRecords', constraints: false });
+  db.LossRecord.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.LossRecord.belongsTo(db.User, { foreignKey: 'approved_by_user_id', as: 'approvedByUser', constraints: false });
+  db.LossRecord.belongsTo(db.LossRecord, { foreignKey: 'related_loss_record_id', as: 'relatedLossRecord', constraints: false });
   db.InventoryMovement.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryMovement.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.InventoryMovement.belongsTo(db.User, { foreignKey: 'moved_by_user_id', as: 'movedByUser', constraints: false });

@@ -65,6 +65,19 @@ constructionRouter.post('/construction/projects/:id/quality-items', requirePermi
 constructionRouter.get('/construction/projects/:id/quality-items', requirePermission('construction:read'), constructionController.listQualityItems);
 constructionRouter.post('/construction/quality-items/:id/check', requirePermission('construction:update'), constructionController.checkQualityItem);
 
+// Nonconformities (não conformidades)
+constructionRouter.post('/construction/projects/:id/nonconformities', requirePermission('construction:create'), constructionController.createNonconformity);
+constructionRouter.get('/construction/projects/:id/nonconformities', requirePermission('construction:read'), constructionController.listNonconformities);
+constructionRouter.get('/construction/nonconformities/:id', requirePermission('construction:read'), constructionController.getNonconformity);
+constructionRouter.post('/construction/nonconformities/:id/close', requirePermission('construction:update'), constructionController.closeNonconformity);
+
+// Loss records (perda de material por alçada)
+constructionRouter.post('/construction/projects/:id/loss-records', requirePermission('construction:create'), constructionController.createLossRecord);
+constructionRouter.get('/construction/projects/:id/loss-records', requirePermission('construction:read'), constructionController.listLossRecords);
+constructionRouter.post('/construction/loss-records/:id/approve', requirePermission('construction:approve'), constructionController.approveLossRecord);
+constructionRouter.post('/construction/loss-records/:id/return', requirePermission('construction:update'), constructionController.returnLossRecord);
+constructionRouter.post('/construction/approval-thresholds', requirePermission('construction:update'), constructionController.upsertApprovalThreshold);
+
 // Maintenance cases (pós-obra/garantia)
 constructionRouter.post('/construction/maintenance-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
 constructionRouter.get('/construction/maintenance-cases', requirePermission('construction:read'), constructionController.listMaintenanceCases);

@@ -112,12 +112,13 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
 }
 
 // DECISÃO DE ENGENHARIA: todos os eventos acima usam o prefixo `construction.` (convenção
-// interna adotada antes deste marco). `project.budget.approved` é o nome CANÔNICO exigido
-// explicitamente pela fonte (checklist Marco 6, M6-70) — publicado sem o prefixo de propósito,
-// mesmo divergindo da convenção interna, porque este é o nome que consumidores externos
-// (Financeiro, BI) esperam encontrar no barramento de eventos. Migração dos nomes antigos para
-// o padrão canônico da fonte fica registrada como dívida técnica conhecida (M6-69/M6-71/
-// M6-72/M6-76 etc.), fora do escopo desta entrega.
+// interna adotada antes deste marco). `project.budget.approved`, `nonconformity.opened` e
+// `nonconformity.closed` são os nomes CANÔNICOS exigidos explicitamente pela fonte (checklist
+// Marco 6) — publicados sem o prefixo de propósito, mesmo divergindo da convenção interna,
+// porque são os nomes que consumidores externos (Financeiro, BI) esperam encontrar no
+// barramento de eventos. Migração dos nomes antigos para o padrão canônico da fonte fica
+// registrada como dívida técnica conhecida (M6-69/M6-71/M6-72/M6-76 etc.), fora do escopo
+// desta entrega.
 function publishBudgetApproved(budget, transaction) {
   return publishDomainEvent(
     {
@@ -139,6 +140,36 @@ function publishBudgetApproved(budget, transaction) {
   );
 }
 
+function publishNonconformityOpened(nonconformity, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: nonconformity.groupId,
+      companyId: nonconformity.companyId,
+      aggregateType: 'Nonconformity',
+      aggregateId: nonconformity.id,
+      eventType: 'nonconformity.opened',
+      payload: { id: nonconformity.id, projectId: nonconformity.projectId, severity: nonconformity.severity },
+      idempotencyKey: `nonconformity.opened:${nonconformity.id}`,
+    },
+    transaction
+  );
+}
+
+function publishNonconformityClosed(nonconformity, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: nonconformity.groupId,
+      companyId: nonconformity.companyId,
+      aggregateType: 'Nonconformity',
+      aggregateId: nonconformity.id,
+      eventType: 'nonconformity.closed',
+      payload: { id: nonconformity.id, projectId: nonconformity.projectId, severity: nonconformity.severity },
+      idempotencyKey: `nonconformity.closed:${nonconformity.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
@@ -147,4 +178,6 @@ module.exports = {
   publishMeasurementApproved,
   publishMaintenanceCaseOpened,
   publishBudgetApproved,
+  publishNonconformityOpened,
+  publishNonconformityClosed,
 };
