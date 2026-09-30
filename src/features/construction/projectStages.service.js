@@ -3,6 +3,7 @@
 const { ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishStageCompleted } = require('./constructionEvents.service');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
 
@@ -68,6 +69,7 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   const stage = await getProjectStage(id, transaction);
   const beforeJson = stage.toJSON();
   const { name, sequence, plannedPct, status, startsAt, endsAt } = payload;
+  const previousStatus = stage.status;
   if (name !== undefined) stage.name = name;
   if (sequence !== undefined) stage.sequence = sequence;
   if (plannedPct !== undefined) stage.plannedPct = plannedPct;
@@ -86,6 +88,12 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   );
   stage.updatedBy = actorUserId || null;
   await stage.save({ transaction });
+
+  // M6-72/M6-106: dispara só na transição de fato para DONE (não repete em updates que já
+  // estavam DONE) — nome canônico definido em constructionEvents.service.js.
+  if (previousStatus !== 'DONE' && stage.status === 'DONE') {
+    await publishStageCompleted(stage, transaction);
+  }
 
   await registrarAuditoria(
     {

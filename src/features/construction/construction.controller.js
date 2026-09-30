@@ -9,6 +9,7 @@ const dailyReportsService = require('./dailyReports.service');
 const budgetLinesService = require('./budgetLines.service');
 const qualityChecklistService = require('./qualityChecklist.service');
 const maintenanceCasesService = require('./maintenanceCases.service');
+const materialRequestsService = require('./materialRequests.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -172,6 +173,26 @@ const removeMaintenanceCase = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Material requests (M6-28) ---
+const createMaterialRequest = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    materialRequestsService.createMaterialRequest(req.params.id, withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listMaterialRequests = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    materialRequestsService.listMaterialRequests(req.params.id, t, { status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const receiveMaterialRequest = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
 module.exports = {
   createProject,
   listProjects,
@@ -201,4 +222,7 @@ module.exports = {
   getMaintenanceCase,
   updateMaintenanceCase,
   removeMaintenanceCase,
+  createMaterialRequest,
+  listMaterialRequests,
+  receiveMaterialRequest,
 };

@@ -3,7 +3,7 @@
 const { MaintenanceCase } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishMaintenanceCaseOpened } = require('./constructionEvents.service');
+const { publishMaintenanceCaseOpened, publishMaintenanceCaseClosed } = require('./constructionEvents.service');
 
 // DECISÃO DE ENGENHARIA: status de MaintenanceCase (pós-obra/garantia) é STRING(32) livre nas
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
@@ -72,6 +72,7 @@ async function getMaintenanceCase(id, transaction) {
 async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   const maintenanceCase = await getMaintenanceCase(id, transaction);
   const beforeJson = maintenanceCase.toJSON();
+  const previousStatus = maintenanceCase.status;
   const { status, description, responsibleUserId, warrantyDeadlineAt } = payload;
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
@@ -90,6 +91,12 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   }
   maintenanceCase.updatedBy = actorUserId || null;
   await maintenanceCase.save({ transaction });
+
+  // M6-105: nome canônico escolhido = construction.maintenance_case.closed (ver comentário
+  // de convenção em constructionEvents.service.js).
+  if (previousStatus !== 'CLOSED' && maintenanceCase.status === 'CLOSED') {
+    await publishMaintenanceCaseClosed(maintenanceCase, transaction);
+  }
 
   await registrarAuditoria(
     {

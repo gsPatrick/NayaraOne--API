@@ -99,6 +99,7 @@ const modelDefiners = {
   DailyReport: require('./DailyReport'),
   BudgetLine: require('./BudgetLine'),
   QualityChecklistItem: require('./QualityChecklistItem'),
+  MaterialRequest: require('./MaterialRequest'),
   InventoryItem: require('./InventoryItem'),
   InventoryMovement: require('./InventoryMovement'),
   Asset: require('./Asset'),
@@ -308,6 +309,12 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.Project.hasMany(db.DailyReport, { foreignKey: 'project_id', as: 'dailyReports', constraints: false });
   db.Project.hasMany(db.BudgetLine, { foreignKey: 'project_id', as: 'budgetLines', constraints: false });
   db.Project.hasMany(db.QualityChecklistItem, { foreignKey: 'project_id', as: 'qualityItems', constraints: false });
+  db.Project.belongsTo(db.Unit, { foreignKey: 'unit_id', as: 'unit', constraints: false });
+  db.Project.hasMany(db.MaterialRequest, { foreignKey: 'project_id', as: 'materialRequests', constraints: false });
+  db.MaterialRequest.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.MaterialRequest.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
+  db.MaterialRequest.belongsTo(db.User, { foreignKey: 'requested_by_user_id', as: 'requestedByUser', constraints: false });
+  db.Contract.belongsTo(db.Project, { foreignKey: 'construction_project_id', as: 'constructionProject', constraints: false });
   db.ProjectStage.hasMany(db.StageMeasurement, { foreignKey: 'project_stage_id', as: 'measurements', constraints: false });
   db.StageMeasurement.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'measured_by_user_id', as: 'measuredByUser', constraints: false });
