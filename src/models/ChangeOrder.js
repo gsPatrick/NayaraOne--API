@@ -3,12 +3,12 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * BudgetLine — tabela "construction"."budget_lines"
- * Linha de orçamento/custo de uma obra (previsto x realizado).
+ * ChangeOrder — tabela "construction"."change_orders"
+ * Única forma de alterar valor de um orçamento já `APPROVED` (M6-06/M6-17/M6-33).
  */
 module.exports = (sequelize) => {
-  const BudgetLine = sequelize.define(
-    'BudgetLine',
+  const ChangeOrder = sequelize.define(
+    'ChangeOrder',
     {
       id: {
         type: DataTypes.UUID,
@@ -19,12 +19,14 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       projectId: { type: DataTypes.UUID, allowNull: false, field: 'project_id' },
-      budgetId: { type: DataTypes.UUID, allowNull: true, field: 'budget_id' },
-      costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
-      category: { type: DataTypes.STRING(128), allowNull: false, field: 'category' },
-      description: { type: DataTypes.STRING(255), allowNull: true, field: 'description' },
-      plannedAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: false, field: 'planned_amount' },
-      actualAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'actual_amount' },
+      reasonCode: { type: DataTypes.STRING(64), allowNull: false, field: 'reason_code' },
+      description: { type: DataTypes.TEXT, allowNull: false, field: 'description' },
+      budgetImpact: { type: DataTypes.DECIMAL(18, 2), allowNull: false, field: 'budget_impact' },
+      scheduleImpactDays: { type: DataTypes.INTEGER, allowNull: true, field: 'schedule_impact_days' },
+      evidenceFileIds: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [], field: 'evidence_file_ids' },
+      status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
+      decidedBy: { type: DataTypes.UUID, allowNull: true, field: 'decided_by' },
+      decidedAt: { type: DataTypes.DATE, allowNull: true, field: 'decided_at' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
@@ -32,7 +34,7 @@ module.exports = (sequelize) => {
     },
     {
       schema: 'construction',
-      tableName: 'budget_lines',
+      tableName: 'change_orders',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
@@ -43,5 +45,5 @@ module.exports = (sequelize) => {
     }
   );
 
-  return BudgetLine;
+  return ChangeOrder;
 };

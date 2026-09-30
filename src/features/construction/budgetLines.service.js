@@ -1,6 +1,6 @@
 'use strict';
 
-const { BudgetLine } = require('../../models');
+const { BudgetLine, Budget } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -16,7 +16,7 @@ function assertNonNegativeAmount(value, fieldName) {
 }
 
 async function createBudgetLine(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, category, description, plannedAmount, costCenterId } = payload;
+  const { groupId, companyId, category, description, plannedAmount, costCenterId, budgetId } = payload;
   if (!groupId || !companyId || !category || plannedAmount === undefined || plannedAmount === null) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "category" e "plannedAmount" são obrigatórios.',
@@ -27,11 +27,25 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
   // criação quanto na edição — mesmo padrão de bug já achado em RDO/etapa de obra.
   assertNonNegativeAmount(plannedAmount, 'plannedAmount');
 
+  // Baseline imutável (M6-17): não é possível acrescentar linha nova a um orçamento agregado
+  // já `APPROVED` — isso aumentaria o custo total sem passar por Change Order.
+  if (budgetId) {
+    const budget = await Budget.findByPk(budgetId, { transaction });
+    if (!budget) throw AppError.notFound('Orçamento não encontrado.', 'BUDGET_NOT_FOUND');
+    if (budget.status === 'APPROVED') {
+      throw AppError.conflict(
+        'Este orçamento já está APPROVED (baseline imutável) — novas linhas de custo só via Change Order aprovado.',
+        'BUDGET_LINE_BASELINE_LOCKED'
+      );
+    }
+  }
+
   const line = await BudgetLine.create(
     {
       groupId,
       companyId,
       projectId,
+      budgetId: budgetId || null,
       costCenterId: costCenterId || null,
       category,
       description: description || null,
@@ -72,8 +86,25 @@ async function getBudgetLine(id, transaction) {
 
 async function updateBudgetLine(id, payload, actorUserId, transaction) {
   const line = await getBudgetLine(id, transaction);
-  const beforeJson = line.toJSON();
+
+  // Baseline imutável (M6-17/M6-22): se a linha está vinculada a um orçamento agregado já
+  // `APPROVED`, nenhum campo de VALOR pode ser alterado por este caminho de UPDATE direto —
+  // a única forma de alterar valor depois da aprovação é um Change Order aprovado (ver
+  // changeOrders.service.js:decideChangeOrder). Campos não financeiros (category/description/
+  // costCenterId) continuam editáveis livremente, pois não afetam o valor congelado.
   const { category, description, plannedAmount, actualAmount, costCenterId } = payload;
+  const touchesAmount = plannedAmount !== undefined || actualAmount !== undefined;
+  if (touchesAmount && line.budgetId) {
+    const budget = await Budget.findByPk(line.budgetId, { transaction });
+    if (budget && budget.status === 'APPROVED') {
+      throw AppError.conflict(
+        'Esta linha pertence a um orçamento já APPROVED (baseline imutável) — altere o valor só via Change Order aprovado.',
+        'BUDGET_LINE_BASELINE_LOCKED'
+      );
+    }
+  }
+
+  const beforeJson = line.toJSON();
   assertNonNegativeAmount(plannedAmount, 'plannedAmount');
   assertNonNegativeAmount(actualAmount, 'actualAmount');
   if (category !== undefined) line.category = category;

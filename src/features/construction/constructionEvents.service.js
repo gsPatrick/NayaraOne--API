@@ -66,9 +66,38 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   );
 }
 
+// DECISÃO DE ENGENHARIA: todos os eventos acima usam o prefixo `construction.` (convenção
+// interna adotada antes deste marco). `project.budget.approved` é o nome CANÔNICO exigido
+// explicitamente pela fonte (checklist Marco 6, M6-70) — publicado sem o prefixo de propósito,
+// mesmo divergindo da convenção interna, porque este é o nome que consumidores externos
+// (Financeiro, BI) esperam encontrar no barramento de eventos. Migração dos nomes antigos para
+// o padrão canônico da fonte fica registrada como dívida técnica conhecida (M6-69/M6-71/
+// M6-72/M6-76 etc.), fora do escopo desta entrega.
+function publishBudgetApproved(budget, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: budget.groupId,
+      companyId: budget.companyId,
+      aggregateType: 'Budget',
+      aggregateId: budget.id,
+      eventType: 'project.budget.approved',
+      payload: {
+        id: budget.id,
+        projectId: budget.projectId,
+        baselineAmount: budget.baselineAmount,
+        ruleVersionId: budget.ruleVersionId,
+        approvedAt: budget.approvedAt,
+      },
+      idempotencyKey: `project.budget.approved:${budget.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
   publishStageMeasurementDecided,
   publishMaintenanceCaseOpened,
+  publishBudgetApproved,
 };

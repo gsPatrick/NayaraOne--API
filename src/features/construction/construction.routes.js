@@ -43,6 +43,17 @@ constructionRouter.post('/construction/projects/:id/budget-lines', requirePermis
 constructionRouter.get('/construction/projects/:id/budget-lines', requirePermission('construction:read'), constructionController.listBudgetLines);
 constructionRouter.patch('/construction/budget-lines/:id', requirePermission('construction:update'), constructionController.updateBudgetLine);
 
+// Budgets (orçamento agregado / baseline / aprovação — M6-04/M6-17/M6-31/M6-32)
+constructionRouter.post('/construction/projects/:id/budgets', requirePermission('construction:create'), constructionController.createBudget);
+constructionRouter.get('/construction/projects/:id/budgets', requirePermission('construction:read'), constructionController.listBudgets);
+constructionRouter.get('/construction/budgets/:id', requirePermission('construction:read'), constructionController.getBudget);
+constructionRouter.post('/construction/budgets/:id/approve', requirePermission('construction:approve'), constructionController.approveBudget);
+
+// Change Orders (M6-06/M6-33)
+constructionRouter.post('/construction/projects/:id/change-orders', requirePermission('construction:create'), constructionController.createChangeOrder);
+constructionRouter.get('/construction/projects/:id/change-orders', requirePermission('construction:read'), constructionController.listChangeOrders);
+constructionRouter.post('/construction/change-orders/:id/decide', requirePermission('construction:approve'), constructionController.decideChangeOrder);
+
 // Quality checklist
 constructionRouter.post('/construction/projects/:id/quality-items', requirePermission('construction:create'), constructionController.createQualityItem);
 constructionRouter.get('/construction/projects/:id/quality-items', requirePermission('construction:read'), constructionController.listQualityItems);

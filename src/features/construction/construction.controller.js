@@ -8,6 +8,8 @@ const stageMeasurementsService = require('./stageMeasurements.service');
 const stageDependenciesService = require('./stageDependencies.service');
 const dailyReportsService = require('./dailyReports.service');
 const budgetLinesService = require('./budgetLines.service');
+const budgetsService = require('./budgets.service');
+const changeOrdersService = require('./changeOrders.service');
 const qualityChecklistService = require('./qualityChecklist.service');
 const maintenanceCasesService = require('./maintenanceCases.service');
 
@@ -137,6 +139,42 @@ const updateBudgetLine = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Budgets (orçamento agregado / baseline / aprovação) ---
+const createBudget = catchAsync(async (req, res) => {
+  const budget = await req.withTenantTransaction((t) => budgetsService.createBudget(req.params.id, withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: budget });
+});
+const listBudgets = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => budgetsService.listBudgets(req.params.id, t));
+  return success(res, { data: items });
+});
+const getBudget = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => budgetsService.getBudget(req.params.id, t));
+  return success(res, { data: item });
+});
+const approveBudget = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => budgetsService.approveBudget(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Change Orders ---
+const createChangeOrder = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    changeOrdersService.createChangeOrder(req.params.id, withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listChangeOrders = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => changeOrdersService.listChangeOrders(req.params.id, t));
+  return success(res, { data: items });
+});
+const decideChangeOrder = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    changeOrdersService.decideChangeOrder(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
 // --- Quality checklist ---
 const createQualityItem = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
@@ -208,6 +246,13 @@ module.exports = {
   createBudgetLine,
   listBudgetLines,
   updateBudgetLine,
+  createBudget,
+  listBudgets,
+  getBudget,
+  approveBudget,
+  createChangeOrder,
+  listChangeOrders,
+  decideChangeOrder,
   createQualityItem,
   listQualityItems,
   checkQualityItem,
