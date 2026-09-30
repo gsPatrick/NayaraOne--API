@@ -106,6 +106,11 @@ constructionRouter.post('/construction/loss-records/:id/approve', requirePermiss
 constructionRouter.post('/construction/loss-records/:id/return', requirePermission('construction:update'), constructionController.returnLossRecord);
 constructionRouter.post('/construction/approval-thresholds', requirePermission('construction:update'), constructionController.upsertApprovalThreshold);
 
+// Margem mínima de obra (MarginRule) — pré-requisito pra approveBudget conseguir aprovar
+// QUALQUER orçamento (bug crítico achado numa auditoria do Front: nunca teve endpoint).
+constructionRouter.post('/construction/margin-rules', requirePermission('construction:update'), constructionController.createMarginRule);
+constructionRouter.get('/construction/margin-rules/active', requirePermission('construction:read'), constructionController.getActiveMarginRule);
+
 // Maintenance cases (pós-obra/garantia)
 constructionRouter.post('/construction/maintenance-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
 // M6-40: path canônico exigido pela fonte ("POST /warranty-cases"), mesmo controller/entidade

@@ -19,6 +19,7 @@ const maintenanceCasesService = require('./maintenanceCases.service');
 const nonconformitiesService = require('./nonconformities.service');
 const lossRecordsService = require('./lossRecords.service');
 const materialRequestsService = require('./materialRequests.service');
+const marginRulesService = require('./marginRules.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -372,6 +373,20 @@ const returnLossRecord = catchAsync(async (req, res) => {
   );
   return success(res, { statusCode: 201, data: item });
 });
+// --- Margem mínima de obra (MarginRule) — achado numa auditoria do Front do Marco 6:
+// createMarginRule/getActiveMarginRule NUNCA tiveram endpoint (só eram chamadas direto em
+// teste). Sem isso, NENHUMA empresa real conseguia aprovar orçamento algum: approveBudget
+// exige uma margem mínima ativa configurada e não havia como configurá-la a não ser inserindo
+// a linha direto no banco. ---
+const createMarginRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) => marginRulesService.createMarginRule(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: rule });
+});
+const getActiveMarginRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) => marginRulesService.getActiveMarginRule(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: rule });
+});
+
 const upsertApprovalThreshold = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     lossRecordsService.upsertApprovalThreshold(withTenant(req), req.auth.userId, t)
@@ -465,6 +480,8 @@ module.exports = {
   listLossRecords,
   approveLossRecord,
   returnLossRecord,
+  createMarginRule,
+  getActiveMarginRule,
   upsertApprovalThreshold,
   createWarrantyAction,
   listWarrantyActions,
