@@ -43,6 +43,10 @@ const removeProject = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => projectsService.removeProject(req.params.id, req.auth.userId, t));
   return success(res, { data: item });
 });
+const deliverProject = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => projectsService.deliverProject(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
 
 // --- Project stages ---
 const createProjectStage = catchAsync(async (req, res) => {
@@ -172,12 +176,25 @@ const removeMaintenanceCase = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Warranty actions (histórico de atendimento dentro do chamado de garantia) ---
+const createWarrantyAction = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    maintenanceCasesService.createWarrantyAction(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listWarrantyActions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => maintenanceCasesService.listWarrantyActions(req.params.id, t));
+  return success(res, { data: items });
+});
+
 module.exports = {
   createProject,
   listProjects,
   getProject,
   updateProject,
   transitionProject,
+  deliverProject,
   removeProject,
   createProjectStage,
   listProjectStages,
@@ -201,4 +218,6 @@ module.exports = {
   getMaintenanceCase,
   updateMaintenanceCase,
   removeMaintenanceCase,
+  createWarrantyAction,
+  listWarrantyActions,
 };

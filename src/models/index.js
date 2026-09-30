@@ -95,6 +95,7 @@ const modelDefiners = {
   Project: require('./Project'),
   ProjectStage: require('./ProjectStage'),
   MaintenanceCase: require('./MaintenanceCase'),
+  WarrantyAction: require('./WarrantyAction'),
   StageMeasurement: require('./StageMeasurement'),
   DailyReport: require('./DailyReport'),
   BudgetLine: require('./BudgetLine'),
@@ -304,6 +305,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.MaintenanceCase.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.MaintenanceCase.belongsTo(db.Person, { foreignKey: 'opened_by_person_id', as: 'openedByPerson', constraints: false });
   db.MaintenanceCase.belongsTo(db.User, { foreignKey: 'responsible_user_id', as: 'responsibleUser', constraints: false });
+  db.MaintenanceCase.hasMany(db.WarrantyAction, { foreignKey: 'warranty_case_id', as: 'warrantyActions', constraints: false });
+  db.WarrantyAction.belongsTo(db.MaintenanceCase, { foreignKey: 'warranty_case_id', as: 'warrantyCase', constraints: false });
+  db.WarrantyAction.belongsTo(db.User, { foreignKey: 'performed_by_user_id', as: 'performedByUser', constraints: false });
   db.Project.hasMany(db.ProjectStage, { foreignKey: 'project_id', as: 'stages', constraints: false });
   db.Project.hasMany(db.DailyReport, { foreignKey: 'project_id', as: 'dailyReports', constraints: false });
   db.Project.hasMany(db.BudgetLine, { foreignKey: 'project_id', as: 'budgetLines', constraints: false });
