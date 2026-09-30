@@ -181,7 +181,11 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
       materialDescription: original.materialDescription,
       quantity: returnQuantity,
       estimatedValue: returnValue,
-      reason: (payload && payload.reason) || `Devolução do registro de perda ${original.id}.`,
+      // Achado numa varredura final do Front do Marco 6 (30/09/2026): o motivo padrão da
+      // devolução expunha o UUID interno cru do registro original direto na tela do usuário
+      // ("Devolução do registro de perda <uuid>") — usa a descrição do material (já disponível
+      // e legível), não o id interno.
+      reason: (payload && payload.reason) || `Devolução de "${original.materialDescription}" (perda original de ${original.quantity} un.).`,
       movementType: 'RETURN',
       relatedLossRecordId: original.id,
       status: 'APPROVED',

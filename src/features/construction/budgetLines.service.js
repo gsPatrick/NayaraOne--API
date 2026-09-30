@@ -112,7 +112,7 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
     const budget = await Budget.findByPk(line.budgetId, { transaction });
     if (budget && budget.status === 'APPROVED') {
       throw AppError.conflict(
-        'Esta linha pertence a um orçamento já APPROVED (baseline imutável) — altere o valor só via Change Order aprovado.',
+        'Esta linha pertence a um orçamento já aprovado (baseline imutável) — altere o valor só via Change Order aprovado.',
         'BUDGET_LINE_BASELINE_LOCKED'
       );
     }

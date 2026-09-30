@@ -142,7 +142,7 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
   });
   if (!budget || budget.status !== 'APPROVED') {
     throw AppError.conflict(
-      'Só é possível aprovar Change Order de obra com orçamento já APPROVED (baseline existente).',
+      'Só é possível aprovar Change Order de obra com orçamento já aprovado (baseline existente).',
       'CHANGE_ORDER_NO_APPROVED_BUDGET'
     );
   }
