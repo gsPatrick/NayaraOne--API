@@ -4,10 +4,21 @@ const { QualityChecklistItem } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
+// DECISÃO DE ENGENHARIA (M6-12): categorias fixas escolhidas a partir dos ofícios de obra mais
+// comuns (lista não documentada na fonte — ver comentário da migration
+// 20260101000219-add-category-to-quality_checklist_items.js). Mantém o item como campo livre
+// (texto da verificação específica), mas classifica o TIPO do item, saindo do "texto livre
+// puro" anterior.
+const CATEGORIES = ['PINTURA', 'HIDRAULICA', 'ELETRICA', 'ESTRUTURA', 'ACABAMENTO', 'ALVENARIA', 'OUTROS'];
+
 async function createQualityItem(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, projectStageId, item } = payload;
+  const { groupId, companyId, projectStageId, item, category } = payload;
   if (!groupId || !companyId || !item) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "item" são obrigatórios.', 'QUALITY_ITEM_VALIDATION');
+  }
+  const normalizedCategory = category ? String(category).toUpperCase() : 'OUTROS';
+  if (!CATEGORIES.includes(normalizedCategory)) {
+    throw AppError.badRequest(`"category" deve ser um de: ${CATEGORIES.join(', ')}.`, 'QUALITY_ITEM_CATEGORY_INVALID');
   }
 
   const checklistItem = await QualityChecklistItem.create(
@@ -17,6 +28,7 @@ async function createQualityItem(projectId, payload, actorUserId, transaction) {
       projectId,
       projectStageId: projectStageId || null,
       item,
+      category: normalizedCategory,
       status: 'PENDING',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -86,4 +98,4 @@ async function checkQualityItem(id, { status, notes }, actorUserId, transaction)
   return item;
 }
 
-module.exports = { createQualityItem, listQualityItems, getQualityItem, checkQualityItem };
+module.exports = { createQualityItem, listQualityItems, getQualityItem, checkQualityItem, CATEGORIES };

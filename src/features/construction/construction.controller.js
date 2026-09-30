@@ -9,6 +9,8 @@ const dailyReportsService = require('./dailyReports.service');
 const budgetLinesService = require('./budgetLines.service');
 const qualityChecklistService = require('./qualityChecklist.service');
 const maintenanceCasesService = require('./maintenanceCases.service');
+const nonconformitiesService = require('./nonconformities.service');
+const lossRecordsService = require('./lossRecords.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -172,6 +174,60 @@ const removeMaintenanceCase = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Nonconformities (não conformidades) ---
+const createNonconformity = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    nonconformitiesService.createNonconformity(req.params.id, withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listNonconformities = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    nonconformitiesService.listNonconformities(req.params.id, t, { status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const getNonconformity = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => nonconformitiesService.getNonconformity(req.params.id, t));
+  return success(res, { data: item });
+});
+const closeNonconformity = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    nonconformitiesService.closeNonconformity(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// --- Loss records (perda de material) ---
+const createLossRecord = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    lossRecordsService.createLossRecord(req.params.id, withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listLossRecords = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    lossRecordsService.listLossRecords(req.params.id, t, { status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const approveLossRecord = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => lossRecordsService.approveLossRecord(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const returnLossRecord = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    lossRecordsService.returnLossRecord(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const upsertApprovalThreshold = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    lossRecordsService.upsertApprovalThreshold(withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
 module.exports = {
   createProject,
   listProjects,
@@ -201,4 +257,13 @@ module.exports = {
   getMaintenanceCase,
   updateMaintenanceCase,
   removeMaintenanceCase,
+  createNonconformity,
+  listNonconformities,
+  getNonconformity,
+  closeNonconformity,
+  createLossRecord,
+  listLossRecords,
+  approveLossRecord,
+  returnLossRecord,
+  upsertApprovalThreshold,
 };

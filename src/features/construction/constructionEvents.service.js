@@ -66,9 +66,41 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   );
 }
 
+function publishNonconformityOpened(nonconformity, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: nonconformity.groupId,
+      companyId: nonconformity.companyId,
+      aggregateType: 'Nonconformity',
+      aggregateId: nonconformity.id,
+      eventType: 'nonconformity.opened',
+      payload: { id: nonconformity.id, projectId: nonconformity.projectId, severity: nonconformity.severity },
+      idempotencyKey: `nonconformity.opened:${nonconformity.id}`,
+    },
+    transaction
+  );
+}
+
+function publishNonconformityClosed(nonconformity, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: nonconformity.groupId,
+      companyId: nonconformity.companyId,
+      aggregateType: 'Nonconformity',
+      aggregateId: nonconformity.id,
+      eventType: 'nonconformity.closed',
+      payload: { id: nonconformity.id, projectId: nonconformity.projectId, severity: nonconformity.severity },
+      idempotencyKey: `nonconformity.closed:${nonconformity.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
   publishStageMeasurementDecided,
   publishMaintenanceCaseOpened,
+  publishNonconformityOpened,
+  publishNonconformityClosed,
 };
