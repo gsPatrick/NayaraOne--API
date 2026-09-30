@@ -107,6 +107,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     costCenterId,
     resultCenterId,
     contractId,
+    constructionProjectId,
     entryType,
     nature,
     amount,
@@ -167,6 +168,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       costCenterId: costCenterId || null,
       resultCenterId: resultCenterId || null,
       contractId: contractId || null,
+      // M6-97 — dimensão de origem Obras: só preenchida quando o lançamento nasce de uma
+      // medição/obra (ver stageMeasurements.service.js), permite relatório de margem por obra.
+      constructionProjectId: constructionProjectId || null,
       entryType: normalizedType,
       nature: normalizedNature,
       amount,

@@ -51,6 +51,51 @@ function publishStageMeasurementDecided(measurement, transaction) {
   );
 }
 
+// M6-10 — eventos de domínio dos estados de "meio de caminho" da máquina de estados completa
+// da medição (DRAFT -> SUBMITTED -> REVIEWED -> APPROVED -> PAYABLE). Nomes EXATOS pedidos no
+// escopo, sem prefixo "construction." (diferente dos demais eventos deste arquivo — decisão
+// deliberada para casar com o nome de evento já esperado por quem consome, ex.: testes/outros
+// agentes do Marco 6).
+function publishMeasurementSubmitted(measurement, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: measurement.groupId,
+      companyId: measurement.companyId,
+      aggregateType: 'StageMeasurement',
+      aggregateId: measurement.id,
+      eventType: 'measurement.submitted',
+      payload: { id: measurement.id, projectStageId: measurement.projectStageId, status: measurement.status, totalAmount: measurement.totalAmount },
+      idempotencyKey: `measurement.submitted:${measurement.id}:${measurement.revisionNumber}`,
+    },
+    transaction
+  );
+}
+
+function publishMeasurementApproved(measurement, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: measurement.groupId,
+      companyId: measurement.companyId,
+      aggregateType: 'StageMeasurement',
+      aggregateId: measurement.id,
+      eventType: 'measurement.approved',
+      payload: {
+        id: measurement.id,
+        projectStageId: measurement.projectStageId,
+        status: measurement.status,
+        measuredPct: measurement.measuredPct,
+        totalAmount: measurement.totalAmount,
+        payableFinancialEntryId: measurement.payableFinancialEntryId,
+      },
+      // Idempotency key fixa por medição (não por revisão): uma medição só pode ser aprovada
+      // UMA vez de verdade — reprocessar o mesmo evento de aprovação não pode gerar um segundo
+      // evento "measurement.approved" para o outbox.
+      idempotencyKey: `measurement.approved:${measurement.id}`,
+    },
+    transaction
+  );
+}
+
 function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   return publishDomainEvent(
     {
@@ -70,5 +115,7 @@ module.exports = {
   publishProjectCreated,
   publishProjectStatusChanged,
   publishStageMeasurementDecided,
+  publishMeasurementSubmitted,
+  publishMeasurementApproved,
   publishMaintenanceCaseOpened,
 };

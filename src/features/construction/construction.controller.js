@@ -3,6 +3,7 @@
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const projectsService = require('./projects.service');
+const projectHealthService = require('./projectHealth.service');
 const projectStagesService = require('./projectStages.service');
 const stageMeasurementsService = require('./stageMeasurements.service');
 const dailyReportsService = require('./dailyReports.service');
@@ -59,6 +60,10 @@ const getProjectStage = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => projectStagesService.getProjectStage(req.params.id, t));
   return success(res, { data: item });
 });
+const getProjectHealth = catchAsync(async (req, res) => {
+  const health = await req.withTenantTransaction((t) => projectHealthService.getProjectHealth(req.params.id, t));
+  return success(res, { data: health });
+});
 const updateProjectStage = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     projectStagesService.updateProjectStage(req.params.id, req.body, req.auth.userId, t)
@@ -82,6 +87,26 @@ const decideStageMeasurement = catchAsync(async (req, res) => {
     stageMeasurementsService.decideStageMeasurement(req.params.id, req.body, req.auth.userId, t)
   );
   return success(res, { data: item });
+});
+const submitStageMeasurement = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => stageMeasurementsService.submitStageMeasurement(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const reviewStageMeasurement = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    stageMeasurementsService.reviewStageMeasurement(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+const reviseStageMeasurement = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    stageMeasurementsService.reviseStageMeasurement(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listMeasurementItems = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => stageMeasurementsService.listMeasurementItems(req.params.id, t));
+  return success(res, { data: items });
 });
 
 // --- Daily reports (RDO) ---
@@ -179,12 +204,17 @@ module.exports = {
   updateProject,
   transitionProject,
   removeProject,
+  getProjectHealth,
   createProjectStage,
   listProjectStages,
   getProjectStage,
   updateProjectStage,
   createStageMeasurement,
   listStageMeasurements,
+  submitStageMeasurement,
+  reviewStageMeasurement,
+  reviseStageMeasurement,
+  listMeasurementItems,
   decideStageMeasurement,
   createDailyReport,
   listDailyReports,
