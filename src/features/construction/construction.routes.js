@@ -18,10 +18,14 @@ constructionRouter.post('/construction/projects/:id/transition', requirePermissi
 // Gate de entrega da obra (M6-25/M6-39/M6-51/M6-65/M6-79/M6-87) — permissão dedicada de
 // aprovação, mesmo padrão de `/construction/measurements/:id/decide`.
 constructionRouter.post('/construction/projects/:id/deliver', requirePermission('construction:approve'), constructionController.deliverProject);
+constructionRouter.post('/construction/projects/:id/close-warranty', requirePermission('construction:approve'), constructionController.closeProjectWarranty);
 constructionRouter.delete('/construction/projects/:id', requirePermission('construction:delete'), constructionController.removeProject);
 // M6-42/M6-99 — read model de custo/KPIs da obra.
 constructionRouter.get('/construction/projects/:id/health', requirePermission('construction:read'), constructionController.getProjectHealth);
 constructionRouter.get('/construction/projects/:id/post-obra-health', requirePermission('construction:read'), constructionController.getPostObraHealth);
+// M6-101: NAY Obras — componente nomeado de resumo determinístico (nunca decide, M6-27).
+constructionRouter.get('/construction/projects/:id/nay-summary', requirePermission('construction:read'), constructionController.getNayObrasSummary);
+constructionRouter.get('/construction/projects/:id/nay-summary/post-obra', requirePermission('construction:read'), constructionController.getNayObrasPostObraSummary);
 
 // Project stages
 constructionRouter.post('/construction/projects/:id/stages', requirePermission('construction:create'), constructionController.createProjectStage);
@@ -41,9 +45,27 @@ constructionRouter.post('/construction/measurements/:id/submit', requirePermissi
 constructionRouter.post('/construction/measurements/:id/review', requirePermission('construction:update'), constructionController.reviewStageMeasurement);
 constructionRouter.post('/construction/measurements/:id/revise', requirePermission('construction:create'), constructionController.reviseStageMeasurement);
 constructionRouter.post('/construction/measurements/:id/decide', requirePermission('construction:approve'), constructionController.decideStageMeasurement);
+// M6-35: path canônico exigido pela fonte ("POST /projects/:id/measurements") — cria a medição
+// vinculada à etapa informada em `projectStageId` no corpo, mesmo comportamento/controller de
+// `POST /construction/stages/:id/measurements` acima.
+constructionRouter.post(
+  '/construction/projects/:id/measurements',
+  requirePermission('construction:create'),
+  constructionController.createStageMeasurementByProject
+);
+// M6-36: path canônico exigido pela fonte ("POST /measurements/:id/approve") — SÓ aprova (não
+// aceita rejeitar, diferente de `/decide` acima, que cobre os dois); nome do endpoint bate
+// literalmente com o verbo que ele executa.
+constructionRouter.post(
+  '/construction/measurements/:id/approve',
+  requirePermission('construction:approve'),
+  constructionController.approveStageMeasurement
+);
 
 // Daily reports (RDO)
 constructionRouter.post('/construction/projects/:id/daily-reports', requirePermission('construction:create'), constructionController.createDailyReport);
+// M6-34: path canônico exigido pela fonte ("POST /projects/:id/daily-logs"), mesmo controller.
+constructionRouter.post('/construction/projects/:id/daily-logs', requirePermission('construction:create'), constructionController.createDailyReport);
 constructionRouter.get('/construction/projects/:id/daily-reports', requirePermission('construction:read'), constructionController.listDailyReports);
 constructionRouter.get('/construction/daily-reports/:id', requirePermission('construction:read'), constructionController.getDailyReport);
 constructionRouter.patch('/construction/daily-reports/:id', requirePermission('construction:update'), constructionController.updateDailyReport);
@@ -84,6 +106,9 @@ constructionRouter.post('/construction/approval-thresholds', requirePermission('
 
 // Maintenance cases (pós-obra/garantia)
 constructionRouter.post('/construction/maintenance-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
+// M6-40: path canônico exigido pela fonte ("POST /warranty-cases"), mesmo controller/entidade
+// (`MaintenanceCase` já é o WarrantyCase estruturado, M6-15/M6-26).
+constructionRouter.post('/construction/warranty-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
 constructionRouter.get('/construction/maintenance-cases', requirePermission('construction:read'), constructionController.listMaintenanceCases);
 constructionRouter.get('/construction/maintenance-cases/:id', requirePermission('construction:read'), constructionController.getMaintenanceCase);
 constructionRouter.patch('/construction/maintenance-cases/:id', requirePermission('construction:update'), constructionController.updateMaintenanceCase);

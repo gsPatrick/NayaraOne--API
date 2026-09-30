@@ -145,7 +145,10 @@ async function getProjectHealth(projectId, transaction) {
   const isOverdue = Boolean(
     project.endsAtPlanned &&
       new Date(project.endsAtPlanned).getTime() < Date.now() &&
-      !['COMPLETED', 'CANCELLED'].includes(project.status)
+      // M6-18: obra fisicamente concluída/entregue não fica mais "em risco de atraso" — a
+      // fonte lista FINAL_INSPECTION como o marco de conclusão física, seguido de
+      // DELIVERED/WARRANTY/CLOSED, nenhum deles ainda "em execução".
+      !['FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED'].includes(project.status)
   );
   const scheduleDelayDays = isOverdue
     ? Math.ceil((Date.now() - new Date(project.endsAtPlanned).getTime()) / (24 * 60 * 60 * 1000))

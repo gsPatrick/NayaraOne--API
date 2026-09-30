@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBudgetApproved } = require('./constructionEvents.service');
 const marginRulesService = require('./marginRules.service');
+const projectsService = require('./projects.service');
 
 // DECISÃO DE ENGENHARIA (M6-04, ver migração 20260101000182): "construction"."budgets" é o
 // agregado da obra — um por projeto (índice único parcial `budgets_unique_per_project`).
@@ -104,6 +105,15 @@ async function approveBudget(id, actorUserId, transaction) {
   await budget.save({ transaction });
 
   await publishBudgetApproved(budget, transaction);
+
+  // M6-18: aprovar o orçamento agregado avança a obra PLANNED -> BUDGETED automaticamente —
+  // é exatamente esse o marco que a fonte define pra essa transição. Só dispara se a obra
+  // ainda estiver PLANNED (idempotente por natureza: Budget só aprova uma vez, DRAFT->APPROVED
+  // é caminho único, então isto roda no máximo uma vez por obra).
+  const project = await Project.findByPk(budget.projectId, { transaction });
+  if (project && project.status === 'PLANNED') {
+    await projectsService.transitionProject(project.id, 'BUDGETED', actorUserId, transaction);
+  }
 
   await registrarAuditoria(
     {

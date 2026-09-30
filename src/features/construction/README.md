@@ -14,26 +14,41 @@ campo-a-campo o catálogo físico de duas delas (`projects`/TAB-0700 e
 `project_stages`/TAB-0701). As outras 14 não têm especificação de coluna — são descritas em
 prosa, sem tabela física.
 
-**Decisão**: em vez de inventar um schema de 16 tabelas sem base na fonte, o schema real deste
-módulo usa **7 tabelas físicas**, fundindo entidades conceitualmente próximas em uma tabela
-mais simples quando a fusão não perde nenhuma informação exigida pela fonte:
+**Decisão (atualizada em 30/09/2026, rodada final — fechamento de 100% dos itens M6)**: o
+schema real deste módulo usa **19 tabelas físicas**. A maioria das 16 entidades conceituais da
+spec agora tem tabela própria de verdade; a única fusão que permanece é `daily_reports`
+(diário) absorvendo equipe/materiais do dia como tabelas-filhas relacionadas (não campos soltos
+— `daily_workers`/`daily_materials` são tabelas reais vinculadas por `daily_report_id`), porque
+a fonte trata o RDO como um único registro por `(project_id, report_date, shift_code)` com
+equipe/material anexados, não três entidades independentes:
 
-| Tabela física | Substitui (spec conceitual) | Motivo da fusão |
+| Tabela física | Mapeamento pra entidade conceitual da fonte | Situação |
 |---|---|---|
-| `construction.projects` | `projects` | 1:1, sem fusão. |
-| `construction.project_stages` | `project_stages` (+ `stage_dependencies`, ainda não implementado) | 1:1 nas colunas detalhadas pela fonte. |
-| `construction.daily_reports` | `daily_logs` + `daily_workers` + `daily_materials` | O RDO real do dia é um único registro por `(project_id, report_date)` — equipe/materiais do dia cabem como campos/JSON do mesmo registro, evitando 3 tabelas para um conceito que a fonte também trata como um único "diário". |
-| `construction.stage_measurements` | `measurements` + `measurement_items` | Medição deste módulo é por etapa (não por item de serviço detalhado) — um registro por medição cobre o que a fonte pede em `measuredPct`/status, sem a granularidade de itens que a fonte não chega a especificar campo-a-campo. |
-| `construction.budget_lines` | `budgets` + `budget_items` | Orçamento é tratado como uma coleção de linhas soltas por centro de custo, sem um agregado "Budget" com status próprio — **conhecido como limitação** (ver M6-04/M6-17 no checklist: falta o estado `APPROVED`/baseline imutável agregado). |
-| `construction.quality_checklist_items` | `quality_checks` | Checklist de qualidade por item, sem categorização por "tipo de obra" que a fonte cita em prosa mas não detalha em coluna. |
-| `construction.maintenance_cases` | `warranty_cases` + `warranty_actions` | Caso de garantia e as ações tomadas dentro dele cabem em um único registro com histórico via auditoria (`registrarAuditoria`), em vez de duas tabelas — a fonte não especifica campos de `warranty_actions` além de "ações tomadas". |
-| `construction.material_requests` | requisição mínima de material (M6-28) | Nova (não fundida) — ver seção abaixo. |
+| `construction.projects` | `projects` | 1:1, real. |
+| `construction.project_stages` | `project_stages` | 1:1, real. |
+| `construction.stage_dependencies` | `stage_dependencies` | 1:1, real (M6-03/M6-19). |
+| `construction.budgets` | `budgets` | 1:1, real — agregado com baseline imutável (M6-04/M6-17). |
+| `construction.budget_lines` | `budget_items` | Nome diferente (`budget_lines` em vez de `budget_items`), mesmo papel — linha de item vinculada a `budgetId`. |
+| `construction.change_orders` | `change_orders` | 1:1, real (M6-06/M6-33). |
+| `construction.daily_reports` | `daily_logs` | 1:1 no conceito de "diário do dia"; equipe/materiais viram tabelas-filhas (ver abaixo), não campos soltos. |
+| `construction.daily_workers` | `daily_workers` | 1:1, real (tabela-filha de `daily_reports`). |
+| `construction.daily_materials` | `daily_materials` | 1:1, real (tabela-filha de `daily_reports`). |
+| `construction.stage_measurements` | `measurements` | 1:1, real — máquina de estados completa DRAFT→SUBMITTED→REVIEWED→APPROVED→PAYABLE. |
+| `construction.measurement_items` | `measurement_items` | 1:1, real (M6-11). |
+| `construction.quality_checklist_items` | `quality_checks` | 1:1, com categoria (M6-12). |
+| `construction.nonconformities` | `nonconformities` | 1:1, real (M6-13), incluindo alerta de evidência reutilizada (M6-59). |
+| `construction.loss_records` | `loss_records` | 1:1, real (M6-14), com alçada de aprovação por valor. |
+| `construction.maintenance_cases` | `warranty_cases` | 1:1 — nome diferente, mesmo papel: caso de garantia estruturado (category/severity/SLA/mídia/custos). |
+| `construction.warranty_actions` | `warranty_actions` | 1:1, real (M6-16), tabela própria vinculada a `maintenance_cases`. |
+| `construction.material_requests` | requisição mínima de material (M6-28) | Nova (não prevista como entidade separada na spec) — mínimo exigido pelo Marco 6, integração completa de estoque é Marco 7. |
+| `construction.project_code_sequences` | (suporte, não é entidade de negócio) | Contador atômico para gerar `Project.code` (M6-01), mesmo padrão de `legal.contract_number_sequences`. |
+| `construction.approval_thresholds` | (suporte, não é entidade de negócio) | Configuração de alçada por valor para aprovação de perda de material (M6-29). |
 
-Esta fusão é uma decisão consciente de simplicidade sobre uma spec sem detalhe físico
-completo, não uma omissão silenciosa. Onde a fusão deixa uma lacuna de negócio real (ex.:
-baseline de orçamento imutável, dependências de etapa sem ciclo, itens de medição
-detalhados), isso continua registrado como item aberto na Tabela-Mestre do checklist do Marco
-6 — não é escondido por esta decisão de schema.
+A única simplificação que resta em relação à spec conceitual original é o agrupamento de
+equipe/material do dia como tabelas-filhas do diário (em vez de entidades totalmente
+independentes sem vínculo) — decisão consciente, não perde nenhuma informação exigida pela
+fonte, e é exatamente como a fonte descreve o conceito de "diário" em prosa (um registro do dia
+com equipe e materiais anexados).
 
 ### M6-28 — Requisição de material (mínimo do Marco 6)
 
@@ -51,7 +66,7 @@ consumidor de Estoque integrar.
 O Anexo I classifica Obras como **TIER 1** de disaster recovery (RPO/RTO intermediário), junto
 com CRM, locação e estoque. **Decisão**: este módulo **não tem um mecanismo de backup/restore
 próprio/dedicado** — ele é coberto pelo mecanismo geral de backup/restore do banco Postgres
-inteiro (todas as 7 tabelas do schema `construction`, com RLS `ENABLE + FORCE` ativado,
+inteiro (todas as 19 tabelas do schema `construction`, com RLS `ENABLE + FORCE` ativado,
 participam do dump/restore do banco como qualquer outro schema do sistema). Isso é uma decisão
 consciente, não uma lacuna: criar um mecanismo de backup separado por módulo adicionaria
 complexidade operacional (múltiplos pontos de restore, risco de dessincronia entre schemas)
@@ -60,3 +75,11 @@ banco completo bem operado (rotina de `pg_dump`/WAL archiving + teste periódico
 mesmo mecanismo usado pelos demais módulos do sistema). Se no futuro Obras precisar de um RPO
 mais agressivo que os demais módulos Tier 1, isso justificaria revisitar esta decisão — não há
 indicação disso na fonte hoje.
+
+**Garantia de nível de aplicação que torna um restore seguro** (mesmo raciocínio de M4-25 —
+`test/marco4.finance.batch3.test.js` — aplicado aqui): o "restore de banco" em si é
+responsabilidade de infraestrutura, não deste código; o que este módulo garante é que
+reprocessar (replay) uma operação já processada, depois de um restore, NUNCA duplica efeito
+colateral real. Isso está comprovado por teste real: `M6-94` (idempotencyKey de RDO — reenviar
+o mesmo registro offline após "restore" não duplica), `M6-55`/`M6-68` (aprovar a mesma medição
+duas vezes, sob concorrência real com `Promise.allSettled`, nunca cria duas contas a pagar).

@@ -213,7 +213,40 @@ function publishProjectDelivered(project, transaction) {
   );
 }
 
-// M6-71: disparado só na primeira transição PLANNED -> IN_PROGRESS (ver projects.service.js).
+// M6-18: obra entra em garantia imediatamente após a entrega (DELIVERED -> WARRANTY, mesma
+// chamada de deliverProject).
+function publishProjectWarrantyStarted(project, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      aggregateType: 'Project',
+      aggregateId: project.id,
+      eventType: 'project.warranty_started',
+      payload: { id: project.id, name: project.name, status: project.status },
+      idempotencyKey: `project.warranty_started:${project.id}`,
+    },
+    transaction
+  );
+}
+
+// M6-18: obra encerrada definitivamente (WARRANTY -> CLOSED, via closeProjectWarranty).
+function publishProjectClosed(project, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      aggregateType: 'Project',
+      aggregateId: project.id,
+      eventType: 'project.closed',
+      payload: { id: project.id, name: project.name, status: project.status },
+      idempotencyKey: `project.closed:${project.id}`,
+    },
+    transaction
+  );
+}
+
+// M6-71: disparado só na primeira transição READY -> ACTIVE (ver projects.service.js).
 // Nome canônico sem prefixo (decisão final de resolução de merge — ver comentário de
 // convenção no topo do arquivo).
 function publishProjectStarted(project, transaction) {
@@ -342,6 +375,8 @@ module.exports = {
   publishNonconformityClosed,
   publishWarrantyCaseClosed,
   publishProjectDelivered,
+  publishProjectWarrantyStarted,
+  publishProjectClosed,
   publishStageCompleted,
   publishMaterialRequested,
   publishMaterialReceived,

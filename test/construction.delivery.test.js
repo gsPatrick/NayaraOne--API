@@ -5,6 +5,10 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const projectsService = require('../src/features/construction/projects.service');
+const budgetsService = require('../src/features/construction/budgets.service');
+const marginRulesService = require('../src/features/construction/marginRules.service');
+const nonconformitiesService = require('../src/features/construction/nonconformities.service');
+const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const AppError = require('../src/utils/AppError');
 
 function rejectsWithCode(expectedCode) {
@@ -25,34 +29,43 @@ after(async () => {
   await sequelize.close();
 });
 
-async function createTestProject(transaction, status = 'PLANNED') {
-  const project = await projectsService.createProject(
-    {
-      groupId: tenant.groupId,
-      companyId: tenant.companyId,
-      name: `Obra de teste entrega ${uniqueSuffix()}`,
-    },
-    tenant.userId,
-    transaction
-  );
-  if (status === 'IN_PROGRESS' || status === 'COMPLETED') {
-    await projectsService.transitionProject(project.id, 'IN_PROGRESS', tenant.userId, transaction);
-  }
-  if (status === 'COMPLETED') {
-    await projectsService.transitionProject(project.id, 'COMPLETED', tenant.userId, transaction);
-  }
+function withTenant(fields) {
+  return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
+}
+
+// M6-18: percorre a máquina de estados EXATA da fonte até o status pedido — cada etapa via o
+// mecanismo real (aprovar orçamento avança PLANNED->BUDGETED automaticamente, o resto via
+// transitionProject genérico).
+async function createTestProject(transaction, targetStatus = 'PLANNED') {
+  const project = await projectsService.createProject(withTenant({ name: `Obra de teste entrega ${uniqueSuffix()}` }), tenant.userId, transaction);
+  if (targetStatus === 'PLANNED') return project;
+
+  await marginRulesService.createMarginRule(withTenant({ minMarginPct: 10 }), tenant.userId, transaction);
+  const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+  await budgetsService.approveBudget(budget.id, tenant.userId, transaction); // PLANNED -> BUDGETED
+  if (targetStatus === 'BUDGETED') return projectsService.getProject(project.id, transaction);
+
+  await projectsService.transitionProject(project.id, 'READY', tenant.userId, transaction);
+  if (targetStatus === 'READY') return projectsService.getProject(project.id, transaction);
+
+  await projectsService.transitionProject(project.id, 'ACTIVE', tenant.userId, transaction);
+  if (targetStatus === 'ACTIVE') return projectsService.getProject(project.id, transaction);
+
+  await projectsService.transitionProject(project.id, 'FINAL_INSPECTION', tenant.userId, transaction);
   return projectsService.getProject(project.id, transaction);
 }
 
 // --- Máquina de estados: DELIVERED é um estado válido, mas não alcançável pela transição genérica ---
 
-test('delivery: STATUSES inclui DELIVERED como estado terminal do projeto', () => {
-  assert.ok(projectsService.STATUSES.includes('DELIVERED'));
+test('delivery: STATUSES inclui os 8 estados exatos da fonte + CANCELLED', () => {
+  for (const status of ['PLANNED', 'BUDGETED', 'READY', 'ACTIVE', 'PAUSED', 'FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED']) {
+    assert.ok(projectsService.STATUSES.includes(status), `falta o status ${status}`);
+  }
 });
 
 test('delivery: transitionProject genérico não permite ir direto para DELIVERED (só via gate dedicado)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const project = await createTestProject(transaction, 'COMPLETED');
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await assert.rejects(
       () => projectsService.transitionProject(project.id, 'DELIVERED', tenant.userId, transaction),
       rejectsWithCode('PROJECT_STATUS_TRANSITION_INVALID')
@@ -60,74 +73,120 @@ test('delivery: transitionProject genérico não permite ir direto para DELIVERE
   });
 });
 
+test('delivery: máquina de estados completa PLANNED->BUDGETED->READY->ACTIVE->PAUSED->ACTIVE->FINAL_INSPECTION funciona de ponta a ponta', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'ACTIVE');
+    assert.equal(project.status, 'ACTIVE');
+
+    const paused = await projectsService.transitionProject(project.id, 'PAUSED', tenant.userId, transaction);
+    assert.equal(paused.status, 'PAUSED');
+
+    const resumed = await projectsService.transitionProject(project.id, 'ACTIVE', tenant.userId, transaction);
+    assert.equal(resumed.status, 'ACTIVE');
+
+    const finalInspection = await projectsService.transitionProject(project.id, 'FINAL_INSPECTION', tenant.userId, transaction);
+    assert.equal(finalInspection.status, 'FINAL_INSPECTION');
+    assert.ok(finalInspection.actualEndDate, 'actualEndDate deve ser preenchido automaticamente ao entrar em FINAL_INSPECTION');
+  });
+});
+
 // --- Gate de entrega (M6-25/M6-39/M6-51/M6-65/M6-79/M6-87) ---
 
-test('delivery: deliverProject recusa entregar obra que não está COMPLETED', async () => {
+test('delivery: deliverProject recusa entregar obra que não está FINAL_INSPECTION', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const project = await createTestProject(transaction, 'IN_PROGRESS');
+    const project = await createTestProject(transaction, 'ACTIVE');
     await assert.rejects(
       () => projectsService.deliverProject(project.id, tenant.userId, transaction),
-      rejectsWithCode('PROJECT_NOT_COMPLETED')
+      rejectsWithCode('PROJECT_NOT_READY_FOR_DELIVERY')
     );
   });
 });
 
-test('delivery: deliverProject entrega obra COMPLETED sem pendência crítica (tabela nonconformities ainda não existe = tratado como "sem pendência")', async () => {
+test('delivery: deliverProject entrega obra FINAL_INSPECTION sem pendência crítica e avança direto para WARRANTY', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const project = await createTestProject(transaction, 'COMPLETED');
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     const delivered = await projectsService.deliverProject(project.id, tenant.userId, transaction);
-    assert.equal(delivered.status, 'DELIVERED');
+    // M6-18: DELIVERED é instantâneo — a mesma chamada já avança para WARRANTY.
+    assert.equal(delivered.status, 'WARRANTY');
   });
 });
 
-// M6-65: entregar com pendência crítica bloqueia. A tabela real `construction.nonconformities`
-// está sendo criada por outro agente em paralelo (fatia de Não Conformidades) e ainda não foi
-// mergeada neste momento — e a credencial de banco disponível para os testes (`nayara_runtime`,
-// o usuário de runtime da aplicação, DE PROPÓSITO sem privilégio de CREATE em nenhum schema,
-// por princípio de menor privilégio) não pode criar a tabela real nem uma tabela fake via DDL
-// para simular a pendência. Para comprovar o bloqueio de verdade SEM precisar de DDL, este
-// teste troca temporariamente `sequelize.query` (a mesma função que
-// `projects.service.js#hasOpenCriticalNonconformity` chama internamente) por um stub que
-// responde como se a tabela existisse e tivesse uma linha OPEN/CRITICAL — exercitando o
-// caminho real de `deliverProject` (lock, checagem, erro fail-closed), só sem depender de DDL.
-// Restaura `sequelize.query` original no `finally`, então não deixa nenhum estado global preso
-// entre testes. Depois do merge da fatia real de Não Conformidades, o ideal é ACRESCENTAR (não
-// substituir) um teste de integração de verdade contra a tabela `construction.nonconformities`
-// mergeada.
+// M6-65: entregar com pendência crítica bloqueia — teste de integração real contra a tabela
+// `construction.nonconformities` (já mergeada), sem stub.
 test('delivery: deliverProject BLOQUEIA entrega quando há não conformidade CRITICAL/OPEN vinculada ao projeto', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const project = await createTestProject(transaction, 'COMPLETED');
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
+    await nonconformitiesService.createNonconformity(
+      project.id,
+      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL' }),
+      tenant.userId,
+      transaction
+    );
 
-    const originalQuery = sequelize.query.bind(sequelize);
-    sequelize.query = async (sql, options) => {
-      if (typeof sql === 'string' && sql.includes('construction"."nonconformities"')) {
-        return [[{ '?column?': 1 }]];
-      }
-      return originalQuery(sql, options);
-    };
-    try {
-      await assert.rejects(
-        () => projectsService.deliverProject(project.id, tenant.userId, transaction),
-        rejectsWithCode('PROJECT_DELIVERY_BLOCKED_BY_CRITICAL_NONCONFORMITY')
-      );
-    } finally {
-      sequelize.query = originalQuery;
-    }
+    await assert.rejects(
+      () => projectsService.deliverProject(project.id, tenant.userId, transaction),
+      rejectsWithCode('PROJECT_DELIVERY_BLOCKED_BY_CRITICAL_NONCONFORMITY')
+    );
 
     const reloaded = await projectsService.getProject(project.id, transaction);
-    assert.equal(reloaded.status, 'COMPLETED', 'projeto não deveria ter sido transicionado quando bloqueado');
+    assert.equal(reloaded.status, 'FINAL_INSPECTION', 'projeto não deveria ter sido transicionado quando bloqueado');
   });
 });
 
-test('delivery: hasOpenCriticalNonconformity trata "tabela não existe" (42P01) como "sem pendência"', async () => {
+test('delivery: hasOpenCriticalNonconformity retorna false quando não há nenhuma NC crítica aberta', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    // Sem stub nenhum: a tabela `construction.nonconformities` de fato ainda não existe neste
-    // ambiente, então este teste exercita o comportamento REAL do fallback defensivo.
-    const blocked = await projectsService.hasOpenCriticalNonconformity(
-      tenant.companyId,
-      '00000000-0000-0000-0000-000000000000',
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
+    const blocked = await projectsService.hasOpenCriticalNonconformity(tenant.companyId, project.id, transaction);
+    assert.equal(blocked, false);
+  });
+});
+
+// --- M6-18: fechamento definitivo (WARRANTY -> CLOSED) ---
+
+test('closeProjectWarranty: bloqueia fechar com caso de garantia ainda aberto', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
+    const delivered = await projectsService.deliverProject(project.id, tenant.userId, transaction);
+    assert.equal(delivered.status, 'WARRANTY');
+
+    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    await maintenanceCasesService.createMaintenanceCase(
+      withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração', severity: 'MEDIUM' }),
+      tenant.userId,
       transaction
     );
-    assert.equal(blocked, false);
+
+    await assert.rejects(
+      () => projectsService.closeProjectWarranty(project.id, tenant.userId, transaction),
+      rejectsWithCode('PROJECT_WARRANTY_CLOSE_BLOCKED_BY_OPEN_CASE')
+    );
+  });
+});
+
+test('closeProjectWarranty: fecha a obra quando todos os casos de garantia estão CLOSED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
+    await projectsService.deliverProject(project.id, tenant.userId, transaction);
+
+    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração', severity: 'MEDIUM' }),
+      tenant.userId,
+      transaction
+    );
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
+
+    const closed = await projectsService.closeProjectWarranty(project.id, tenant.userId, transaction);
+    assert.equal(closed.status, 'CLOSED');
+  });
+});
+
+test('closeProjectWarranty: recusa fechar obra que não está WARRANTY', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'ACTIVE');
+    await assert.rejects(
+      () => projectsService.closeProjectWarranty(project.id, tenant.userId, transaction),
+      rejectsWithCode('PROJECT_NOT_IN_WARRANTY')
+    );
   });
 });

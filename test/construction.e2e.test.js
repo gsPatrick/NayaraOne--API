@@ -75,9 +75,14 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.userId, transaction);
     assert.equal(receivedRequest.status, 'RECEIVED');
 
-    // 4. Iniciar obra (PLANNED -> IN_PROGRESS)
-    const started = await projectsService.transitionProject(project.id, 'IN_PROGRESS', tenant.userId, transaction);
-    assert.equal(started.status, 'IN_PROGRESS');
+    // 4. Iniciar obra — o orçamento aprovado no passo 2 já avançou PLANNED -> BUDGETED
+    // automaticamente; segue READY -> ACTIVE (M6-18, máquina de estados de 8 estágios).
+    const afterBudget = await projectsService.getProject(project.id, transaction);
+    assert.equal(afterBudget.status, 'BUDGETED');
+    const ready = await projectsService.transitionProject(project.id, 'READY', tenant.userId, transaction);
+    assert.equal(ready.status, 'READY');
+    const started = await projectsService.transitionProject(project.id, 'ACTIVE', tenant.userId, transaction);
+    assert.equal(started.status, 'ACTIVE');
 
     // 5. Diário de obra (RDO)
     const report = await dailyReportsService.createDailyReport(
@@ -131,12 +136,13 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     const openNcs = await nonconformitiesService.listNonconformities(project.id, transaction, { status: 'OPEN' });
     assert.equal(openNcs.filter((nc) => nc.severity === 'CRITICAL').length, 0, 'não deve haver NC crítica aberta');
 
-    // 10. Completar e entregar a obra (gate real: bloquearia se houvesse NC crítica)
-    const completed = await projectsService.transitionProject(project.id, 'COMPLETED', tenant.userId, transaction);
-    assert.equal(completed.status, 'COMPLETED');
-    assert.ok(completed.actualEndDate, 'actualEndDate deve ser preenchido automaticamente ao completar');
+    // 10. Entrar em inspeção final e entregar a obra (gate real: bloquearia se houvesse NC
+    // crítica) — M6-18: a mesma chamada de deliverProject já avança DELIVERED -> WARRANTY.
+    const finalInspection = await projectsService.transitionProject(project.id, 'FINAL_INSPECTION', tenant.userId, transaction);
+    assert.equal(finalInspection.status, 'FINAL_INSPECTION');
+    assert.ok(finalInspection.actualEndDate, 'actualEndDate deve ser preenchido automaticamente ao entrar em inspeção final');
     const delivered = await projectsService.deliverProject(project.id, tenant.userId, transaction);
-    assert.equal(delivered.status, 'DELIVERED');
+    assert.equal(delivered.status, 'WARRANTY');
 
     // 11. Read model de saúde da obra em andamento — confere que reflete o que foi construído.
     // O lançamento gerado pela medição nasce PENDING (ainda não foi pago de fato) —
@@ -168,5 +174,18 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     assert.equal(postObraHealth.closedCases, 1);
     assert.equal(postObraHealth.totalWarrantyActions, 1);
     assert.ok(postObraHealth.totalLaborCost >= 350, 'custo da ação de garantia deve entrar no total');
+
+    // 14. Fechamento definitivo da obra (M6-18: WARRANTY -> CLOSED) — último estágio da máquina
+    // de estados de 8 estágios, só alcançável porque o único caso de garantia já está CLOSED.
+    const closedProject = await projectsService.closeProjectWarranty(project.id, tenant.userId, transaction);
+    assert.equal(closedProject.status, 'CLOSED');
+
+    // 15. NAY Obras (M6-101) — componente nomeado, resumo determinístico real sobre os dados
+    // construídos ao longo de toda a jornada.
+    const nayObrasService = require('../src/features/construction/nayObras.service');
+    const nayPostObraSummary = await nayObrasService.summarizePostObra(project.id, transaction);
+    assert.equal(nayPostObraSummary.component, 'NAY Obras');
+    assert.equal(nayPostObraSummary.summary.closedCases, 1);
+    assert.deepEqual(nayPostObraSummary.decisionsMade, [], 'NAY nunca decide nada sozinha (M6-27)');
   });
 });

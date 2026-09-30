@@ -17,7 +17,9 @@ const { publishProjectDelayDetected } = require('../../features/construction/con
  * atrasada — comportamento desejado para escalonamento, não um bug de duplicação.
  */
 
-const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'];
+// M6-18: uma obra que já saiu de execução (FINAL_INSPECTION em diante) não é mais candidata a
+// "atraso de cronograma" — o atraso só faz sentido enquanto a obra ainda está sendo construída.
+const TERMINAL_STATUSES = ['FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED'];
 
 function todayKey(now) {
   return now.toISOString().slice(0, 10);

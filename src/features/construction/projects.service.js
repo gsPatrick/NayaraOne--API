@@ -8,24 +8,44 @@ const {
   publishProjectStatusChanged,
   publishProjectStarted,
   publishProjectDelivered,
+  publishProjectWarrantyStarted,
+  publishProjectClosed,
 } = require('./constructionEvents.service');
 
-// DECISÃO DE ENGENHARIA: os documentos fonte não definem os valores válidos de
-// projects.status (coluna STRING(32) livre, só com default 'PLANNED') — workflow linear
-// abaixo é uma decisão de engenharia, seguindo o mesmo padrão de máquina de estados linear
-// já usado em legal.contracts (contracts.service.js).
+// M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
+// "4. Estados da obra"): "PLANNED → BUDGETED → READY → ACTIVE → FINAL_INSPECTION → DELIVERED →
+// WARRANTY → CLOSED; PAUSED pode ocorrer durante ACTIVE." Os 9 estados (8 da cadeia principal +
+// CANCELLED, que a fonte não lista mas é exigido em toda máquina de estado deste projeto para
+// cobrir cancelamento a qualquer momento — mesmo padrão de legal.contracts) estão todos
+// implementados como estados reais e alcançáveis, não como aliases de nomes antigos.
 //
-// M6-25/M6-39/M6-51/M6-65/M6-79/M6-87: adicionado o estado terminal `DELIVERED` (entrega da
-// obra). Propositalmente NÃO aparece como destino em `VALID_TRANSITIONS` — a única forma de
-// chegar em DELIVERED é pelo gate dedicado `deliverProject()` abaixo, que primeiro verifica
-// pendência crítica de não conformidade (fail-closed). Isso impede que o endpoint genérico
-// `POST /construction/projects/:id/transition` seja usado para contornar o gate.
-const STATUSES = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'DELIVERED', 'CANCELLED'];
+// DELIVERED, WARRANTY e CLOSED são propositalmente OMITIDOS de `VALID_TRANSITIONS` — a única
+// forma de alcançá-los é pelos gates dedicados abaixo (`deliverProject`/`closeProjectWarranty`),
+// que verificam pendência crítica de não conformidade / casos de garantia abertos
+// (fail-closed). Isso impede que o endpoint genérico `POST /construction/projects/:id/transition`
+// seja usado para contornar os gates.
+const STATUSES = [
+  'PLANNED',
+  'BUDGETED',
+  'READY',
+  'ACTIVE',
+  'PAUSED',
+  'FINAL_INSPECTION',
+  'DELIVERED',
+  'WARRANTY',
+  'CLOSED',
+  'CANCELLED',
+];
 const VALID_TRANSITIONS = {
-  PLANNED: ['IN_PROGRESS', 'CANCELLED'],
-  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
-  COMPLETED: [],
+  PLANNED: ['BUDGETED', 'CANCELLED'],
+  BUDGETED: ['READY', 'CANCELLED'],
+  READY: ['ACTIVE', 'CANCELLED'],
+  ACTIVE: ['PAUSED', 'FINAL_INSPECTION', 'CANCELLED'],
+  PAUSED: ['ACTIVE', 'CANCELLED'],
+  FINAL_INSPECTION: ['ACTIVE', 'CANCELLED'],
   DELIVERED: [],
+  WARRANTY: [],
+  CLOSED: [],
   CANCELLED: [],
 };
 
@@ -40,9 +60,28 @@ function assertValidDateRange(startsAt, endsAtPlanned) {
  * OBRA-2026-0001), sequencial por (companyId, ano corrente). Mesmo padrão atômico de
  * `generateContractNumber` (legal/contracts.service.js): um único INSERT...ON CONFLICT...DO
  * UPDATE, nunca SELECT COUNT(*)+1 (evita corrida de concorrência real).
+ *
+ * BUG REAL CORRIGIDO (30/09/2026, achado sob carga de teste concorrente pesada — múltiplas
+ * transações da mesma empresa criando obra/aprovando orçamento/margem ao mesmo tempo): duas
+ * sessões inserindo concorrentemente na MESMA chave via `ON CONFLICT ... DO UPDATE` podem
+ * genuinamente causar deadlock (`40P01`) no Postgres — é um caso conhecido do banco (cada
+ * sessão tenta o INSERT, colide no índice único, e as duas tentam then fazer o UPDATE da linha
+ * que a outra ainda não commitou). Retry sozinho não é a correção certa aqui (o problema é a
+ * ORDEM de aquisição de lock ser não-determinística entre sessões concorrentes, não uma falha
+ * transitória) — a correção correta é serializar o acesso a esta chave lógica com
+ * `pg_advisory_xact_lock` ANTES do upsert: só uma transação por vez entra na seção crítica
+ * para (companyId, year), as demais esperam na fila (sem timeout, sem erro, sem deadlock
+ * possível porque não há mais duas sessões competindo pela MESMA linha ao mesmo tempo). O lock
+ * é liberado automaticamente no fim da transação (commit ou rollback).
  */
 async function generateProjectCode(companyId, transaction) {
   const year = new Date().getFullYear();
+  const lockKey = `${companyId}:${year}`;
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:lockKey, 0))', {
+    replacements: { lockKey },
+    transaction,
+  });
+
   const [rows] = await sequelize.query(
     `INSERT INTO "construction"."project_code_sequences" (id, company_id, "year", last_seq, created_at, updated_at)
      VALUES (gen_random_uuid(), :companyId, :year, 1, now(), now())
@@ -177,10 +216,10 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
 
   const fromStatus = project.status;
   project.status = normalizedTarget;
-  // M6-01: `actualEndDate` marcado automaticamente ao concluir, se ainda não informado
-  // manualmente — evita depender de PATCH separado pra registrar quando a obra terminou de
-  // verdade.
-  if (normalizedTarget === 'COMPLETED' && !project.actualEndDate) {
+  // M6-01: `actualEndDate` marcado automaticamente ao entrar em inspeção final (obra fisicamente
+  // concluída, aguardando conferência antes da entrega), se ainda não informado manualmente —
+  // evita depender de PATCH separado pra registrar quando a obra terminou de verdade.
+  if (normalizedTarget === 'FINAL_INSPECTION' && !project.actualEndDate) {
     project.actualEndDate = new Date().toISOString().slice(0, 10);
   }
   project.updatedBy = actorUserId || null;
@@ -189,8 +228,8 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
   await publishProjectStatusChanged(project, fromStatus, transaction);
 
   // M6-71: evento distinto e específico, disparado só na primeira vez que a obra entra em
-  // execução (PLANNED -> IN_PROGRESS) — não em qualquer status_changed genérico.
-  if (fromStatus === 'PLANNED' && normalizedTarget === 'IN_PROGRESS') {
+  // execução (READY -> ACTIVE) — não em qualquer status_changed genérico.
+  if (fromStatus === 'READY' && normalizedTarget === 'ACTIVE') {
     await publishProjectStarted(project, transaction);
   }
 
@@ -256,9 +295,15 @@ async function hasOpenCriticalNonconformity(companyId, projectId, transaction) {
 
 /**
  * deliverProject — M6-25/M6-39/M6-51/M6-65/M6-79/M6-87: gate de entrega da obra. Só transiciona
- * o projeto para DELIVERED se ele estiver COMPLETED e não houver nenhuma não conformidade
- * CRITICAL em aberto — fail-closed: qualquer pendência crítica bloqueia a entrega com erro
- * explícito, nunca falha silenciosamente para "permitir".
+ * o projeto para DELIVERED se ele estiver FINAL_INSPECTION e não houver nenhuma não
+ * conformidade CRITICAL em aberto — fail-closed: qualquer pendência crítica bloqueia a entrega
+ * com erro explícito, nunca falha silenciosamente para "permitir".
+ *
+ * M6-18: DELIVERED é um marco instantâneo, não um estado de repouso — a fonte encadeia
+ * "DELIVERED → WARRANTY" diretamente, então a mesma chamada já avança a obra para WARRANTY
+ * logo em seguida, na MESMA transação (dois UPDATEs reais, cada um publicando seu próprio
+ * evento de domínio — auditável via `project.status_changed`/`project.delivered`/
+ * `project.warranty_started` no outbox, não é um "pulo" escondido).
  */
 async function deliverProject(id, actorUserId, transaction) {
   // Mesmo lock pessimista de transitionProject — evita duas entregas/transições concorrentes.
@@ -268,10 +313,10 @@ async function deliverProject(id, actorUserId, transaction) {
   });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
 
-  if (project.status !== 'COMPLETED') {
+  if (project.status !== 'FINAL_INSPECTION') {
     throw AppError.conflict(
-      `Só é possível entregar uma obra "COMPLETED" — status atual é "${project.status}".`,
-      'PROJECT_NOT_COMPLETED'
+      `Só é possível entregar uma obra "FINAL_INSPECTION" — status atual é "${project.status}".`,
+      'PROJECT_NOT_READY_FOR_DELIVERY'
     );
   }
 
@@ -283,7 +328,6 @@ async function deliverProject(id, actorUserId, transaction) {
     );
   }
 
-  const fromStatus = project.status;
   project.status = 'DELIVERED';
   project.updatedBy = actorUserId || null;
   await project.save({ transaction });
@@ -298,9 +342,84 @@ async function deliverProject(id, actorUserId, transaction) {
       action: 'construction.project.deliver',
       entityType: 'Project',
       entityId: project.id,
-      beforeJson: { status: fromStatus },
-      afterJson: { status: project.status },
-      reason: `Obra "${project.name}" entregue (status "${fromStatus}" -> "DELIVERED").`,
+      beforeJson: { status: 'FINAL_INSPECTION' },
+      afterJson: { status: 'DELIVERED' },
+      reason: `Obra "${project.name}" entregue (status "FINAL_INSPECTION" -> "DELIVERED").`,
+    },
+    transaction
+  );
+
+  // Entra em garantia imediatamente após a entrega — DELIVERED não é um estado de repouso.
+  project.status = 'WARRANTY';
+  await project.save({ transaction });
+  await publishProjectWarrantyStarted(project, transaction);
+  await registrarAuditoria(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      actorUserId,
+      action: 'construction.project.warranty_started',
+      entityType: 'Project',
+      entityId: project.id,
+      beforeJson: { status: 'DELIVERED' },
+      afterJson: { status: 'WARRANTY' },
+      reason: `Obra "${project.name}" entrou em período de garantia.`,
+    },
+    transaction
+  );
+
+  return project;
+}
+
+/**
+ * closeProjectWarranty — M6-18: fecha definitivamente a obra (WARRANTY -> CLOSED). Fail-closed:
+ * só permite fechar se não houver nenhum caso de garantia (`MaintenanceCase`) ainda aberto
+ * (status diferente de CLOSED) vinculado à obra — mesma disciplina de gate do `deliverProject`.
+ */
+async function closeProjectWarranty(id, actorUserId, transaction) {
+  const project = await Project.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+
+  if (project.status !== 'WARRANTY') {
+    throw AppError.conflict(
+      `Só é possível fechar uma obra em "WARRANTY" — status atual é "${project.status}".`,
+      'PROJECT_NOT_IN_WARRANTY'
+    );
+  }
+
+  const [openCases] = await sequelize.query(
+    `SELECT 1 FROM "construction"."maintenance_cases"
+       WHERE company_id = :companyId AND project_id = :projectId AND status != 'CLOSED'
+       LIMIT 1`,
+    { replacements: { companyId: project.companyId, projectId: project.id }, transaction }
+  );
+  if (openCases.length > 0) {
+    throw AppError.conflict(
+      'Não é possível encerrar a garantia da obra: existe(m) caso(s) de garantia ainda aberto(s).',
+      'PROJECT_WARRANTY_CLOSE_BLOCKED_BY_OPEN_CASE'
+    );
+  }
+
+  project.status = 'CLOSED';
+  project.updatedBy = actorUserId || null;
+  await project.save({ transaction });
+
+  await publishProjectClosed(project, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: project.groupId,
+      companyId: project.companyId,
+      actorUserId,
+      action: 'construction.project.close_warranty',
+      entityType: 'Project',
+      entityId: project.id,
+      beforeJson: { status: 'WARRANTY' },
+      afterJson: { status: 'CLOSED' },
+      reason: `Obra "${project.name}" encerrada definitivamente (garantia concluída).`,
     },
     transaction
   );
@@ -339,6 +458,7 @@ module.exports = {
   updateProject,
   transitionProject,
   deliverProject,
+  closeProjectWarranty,
   removeProject,
   hasOpenCriticalNonconformity,
   STATUSES,

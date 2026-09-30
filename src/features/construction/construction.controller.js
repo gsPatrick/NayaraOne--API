@@ -2,8 +2,10 @@
 
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
+const AppError = require('../../utils/AppError');
 const projectsService = require('./projects.service');
 const projectHealthService = require('./projectHealth.service');
+const nayObrasService = require('./nayObras.service');
 const postObraHealthService = require('./postObraHealth.service');
 const projectStagesService = require('./projectStages.service');
 const stageMeasurementsService = require('./stageMeasurements.service');
@@ -51,6 +53,11 @@ const removeProject = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => projectsService.removeProject(req.params.id, req.auth.userId, t));
   return success(res, { data: item });
 });
+const closeProjectWarranty = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => projectsService.closeProjectWarranty(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
 const deliverProject = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => projectsService.deliverProject(req.params.id, req.auth.userId, t));
   return success(res, { data: item });
@@ -80,6 +87,15 @@ const getPostObraHealth = catchAsync(async (req, res) => {
   const health = await req.withTenantTransaction((t) => postObraHealthService.getPostObraHealth(req.params.id, t));
   return success(res, { data: health });
 });
+// M6-101: componente "NAY Obras" nomeado — resumo determinístico, nunca decide nada (M6-27).
+const getNayObrasSummary = catchAsync(async (req, res) => {
+  const summary = await req.withTenantTransaction((t) => nayObrasService.summarizeProject(req.params.id, t));
+  return success(res, { data: summary });
+});
+const getNayObrasPostObraSummary = catchAsync(async (req, res) => {
+  const summary = await req.withTenantTransaction((t) => nayObrasService.summarizePostObra(req.params.id, t));
+  return success(res, { data: summary });
+});
 const updateProjectStage = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     projectStagesService.updateProjectStage(req.params.id, req.body, req.auth.userId, t)
@@ -106,6 +122,18 @@ const createStageMeasurement = catchAsync(async (req, res) => {
   );
   return success(res, { statusCode: 201, data: measurement });
 });
+// M6-35: path canônico "POST /projects/:id/measurements" — a etapa vem de `projectStageId` no
+// corpo (o path da fonte é por obra, não por etapa); mesmo service de `createStageMeasurement`.
+const createStageMeasurementByProject = catchAsync(async (req, res) => {
+  const { projectStageId, ...rest } = req.body;
+  if (!projectStageId) {
+    throw AppError.badRequest('"projectStageId" é obrigatório.', 'STAGE_MEASUREMENT_VALIDATION');
+  }
+  const measurement = await req.withTenantTransaction((t) =>
+    stageMeasurementsService.createStageMeasurement(projectStageId, withTenant({ ...rest }), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: measurement });
+});
 const listStageMeasurements = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => stageMeasurementsService.listStageMeasurements(req.params.id, t));
   return success(res, { data: items });
@@ -113,6 +141,14 @@ const listStageMeasurements = catchAsync(async (req, res) => {
 const decideStageMeasurement = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     stageMeasurementsService.decideStageMeasurement(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+// M6-36: path canônico "POST /measurements/:id/approve" — SÓ aprova, o corpo da requisição
+// nunca aceita "decision" (o nome do endpoint já é o verbo executado).
+const approveStageMeasurement = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    stageMeasurementsService.decideStageMeasurement(req.params.id, { decision: 'APPROVED' }, req.auth.userId, t)
   );
   return success(res, { data: item });
 });
@@ -354,9 +390,12 @@ module.exports = {
   updateProject,
   transitionProject,
   deliverProject,
+  closeProjectWarranty,
   removeProject,
   getProjectHealth,
   getPostObraHealth,
+  getNayObrasSummary,
+  getNayObrasPostObraSummary,
   createProjectStage,
   listProjectStages,
   getProjectStage,
@@ -364,12 +403,14 @@ module.exports = {
   createStageDependency,
   listStageDependencies,
   createStageMeasurement,
+  createStageMeasurementByProject,
   listStageMeasurements,
   submitStageMeasurement,
   reviewStageMeasurement,
   reviseStageMeasurement,
   listMeasurementItems,
   decideStageMeasurement,
+  approveStageMeasurement,
   createDailyReport,
   listDailyReports,
   getDailyReport,
