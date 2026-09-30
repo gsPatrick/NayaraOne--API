@@ -198,6 +198,10 @@ const listDailyWorkers = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => dailyReportsService.listDailyWorkers(req.params.id, t));
   return success(res, { data: items });
 });
+const listDailyMaterials = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => dailyReportsService.listDailyMaterials(req.params.id, t));
+  return success(res, { data: items });
+});
 
 // --- Budget lines ---
 const createBudgetLine = catchAsync(async (req, res) => {
@@ -434,6 +438,7 @@ module.exports = {
   getDailyReport,
   updateDailyReport,
   listDailyWorkers,
+  listDailyMaterials,
   createBudgetLine,
   listBudgetLines,
   updateBudgetLine,

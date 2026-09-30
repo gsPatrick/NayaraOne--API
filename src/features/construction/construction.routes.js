@@ -70,6 +70,7 @@ constructionRouter.get('/construction/projects/:id/daily-reports', requirePermis
 constructionRouter.get('/construction/daily-reports/:id', requirePermission('construction:read'), constructionController.getDailyReport);
 constructionRouter.patch('/construction/daily-reports/:id', requirePermission('construction:update'), constructionController.updateDailyReport);
 constructionRouter.get('/construction/daily-reports/:id/workers', requirePermission('construction:read'), constructionController.listDailyWorkers);
+constructionRouter.get('/construction/daily-reports/:id/materials', requirePermission('construction:read'), constructionController.listDailyMaterials);
 
 // Budget lines (orçamento/custos)
 constructionRouter.post('/construction/projects/:id/budget-lines', requirePermission('construction:create'), constructionController.createBudgetLine);

@@ -280,3 +280,28 @@ test('listDailyWorkers devolve a equipe do dia registrada para um RDO', async ()
     assert.equal(workers[0].role, 'Pedreiro');
   });
 });
+
+// Mesmo gap, mesma correção, pro lado de materiais (DailyMaterial) — achado na mesma varredura
+// final do Front do Marco 6.
+test('listDailyMaterials devolve os materiais registrados para um RDO', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+
+    const created = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({
+        reportDate: '2026-09-21',
+        materials: [{ materialDescription: 'Cimento CP-II', quantity: 10, unit: 'SC' }],
+      }),
+      tenant.userId,
+      t
+    );
+
+    const materials = await dailyReportsService.listDailyMaterials(created.id, t);
+    assert.equal(materials.length, 1);
+    assert.equal(materials[0].materialDescription, 'Cimento CP-II');
+    assert.equal(Number(materials[0].quantity), 10);
+    assert.equal(materials[0].unit, 'SC');
+  });
+});

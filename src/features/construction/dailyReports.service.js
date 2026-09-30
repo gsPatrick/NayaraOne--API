@@ -176,6 +176,12 @@ async function listDailyWorkers(dailyReportId, transaction) {
   return DailyWorker.findAll({ where: { dailyReportId }, transaction });
 }
 
+// Mesmo gap, mesma correção, pro lado de materiais (DailyMaterial) — achado na mesma varredura
+// final do Front.
+async function listDailyMaterials(dailyReportId, transaction) {
+  return DailyMaterial.findAll({ where: { dailyReportId }, transaction });
+}
+
 async function getDailyReport(id, transaction) {
   const report = await DailyReport.findByPk(id, { transaction });
   if (!report) throw AppError.notFound('RDO não encontrado.', 'DAILY_REPORT_NOT_FOUND');
@@ -275,4 +281,5 @@ module.exports = {
   correctDailyReport,
   updateDailyReport,
   listDailyWorkers,
+  listDailyMaterials,
 };
