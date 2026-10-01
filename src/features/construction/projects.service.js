@@ -36,6 +36,25 @@ const STATUSES = [
   'CLOSED',
   'CANCELLED',
 ];
+
+// Achado numa auditoria do cliente (30/09/2026): "os erros exibidos pro usuário alguns são em
+// código ou inglês" — mensagens de erro que interpolavam o status cru (ex.: "FINAL_INSPECTION")
+// direto na frase viram rótulo em português, igual ao que a tela já mostra como badge.
+const STATUS_LABELS_PT = {
+  PLANNED: 'Planejada',
+  BUDGETED: 'Orçamento aprovado',
+  READY: 'Pronta para iniciar',
+  ACTIVE: 'Em execução',
+  PAUSED: 'Pausada',
+  FINAL_INSPECTION: 'Inspeção final',
+  DELIVERED: 'Entregue',
+  WARRANTY: 'Em garantia',
+  CLOSED: 'Encerrada',
+  CANCELLED: 'Cancelada',
+};
+function statusLabelPt(status) {
+  return STATUS_LABELS_PT[status] || status;
+}
 // BUG REAL CRÍTICO CORRIGIDO (achado numa auditoria final do Marco 6, 30/09/2026):
 // PLANNED->BUDGETED estava na transição GENÉRICA, permitindo pular pra "orçamento aprovado"
 // via POST /transition sem passar pelo gate de approveBudget() — nenhuma margem mínima
@@ -218,7 +237,7 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
   const allowed = VALID_TRANSITIONS[project.status] || [];
   if (!allowed.includes(normalizedTarget)) {
     throw AppError.conflict(
-      `Não é possível mover a obra de "${project.status}" para "${normalizedTarget}".`,
+      `Não é possível mover a obra de "${statusLabelPt(project.status)}" para "${statusLabelPt(normalizedTarget)}".`,
       'PROJECT_STATUS_TRANSITION_INVALID'
     );
   }
@@ -252,7 +271,7 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
       entityId: project.id,
       beforeJson: { status: fromStatus },
       afterJson: { status: project.status },
-      reason: `Obra "${project.name}" transicionada de "${fromStatus}" para "${project.status}".`,
+      reason: `Obra "${project.name}" transicionada de "${statusLabelPt(fromStatus)}" para "${statusLabelPt(project.status)}".`,
     },
     transaction
   );
@@ -324,7 +343,7 @@ async function deliverProject(id, actorUserId, transaction) {
 
   if (project.status !== 'FINAL_INSPECTION') {
     throw AppError.conflict(
-      `Só é possível entregar uma obra "FINAL_INSPECTION" — status atual é "${project.status}".`,
+      `Só é possível entregar uma obra que esteja em "Inspeção final" — status atual é "${statusLabelPt(project.status)}".`,
       'PROJECT_NOT_READY_FOR_DELIVERY'
     );
   }
@@ -394,7 +413,7 @@ async function closeProjectWarranty(id, actorUserId, transaction) {
 
   if (project.status !== 'WARRANTY') {
     throw AppError.conflict(
-      `Só é possível fechar uma obra em "WARRANTY" — status atual é "${project.status}".`,
+      `Só é possível encerrar uma obra que esteja "Em garantia" — status atual é "${statusLabelPt(project.status)}".`,
       'PROJECT_NOT_IN_WARRANTY'
     );
   }

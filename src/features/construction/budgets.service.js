@@ -79,7 +79,10 @@ async function approveBudget(id, actorUserId, transaction) {
   });
   if (!budget) throw AppError.notFound('Orçamento não encontrado.', 'BUDGET_NOT_FOUND');
   if (budget.status !== 'DRAFT') {
-    throw AppError.conflict(`Orçamento já está em status "${budget.status}" — só é possível aprovar um orçamento em DRAFT.`, 'BUDGET_NOT_DRAFT');
+    // Achado numa auditoria do cliente (30/09/2026): "os erros exibidos pro usuário alguns são
+    // em código ou inglês" — mensagem traduzida por completo, sem enum cru.
+    const statusLabel = budget.status === 'APPROVED' ? 'já aprovado' : 'em rascunho';
+    throw AppError.conflict(`Este orçamento está ${statusLabel} — só é possível aprovar um orçamento ainda em rascunho.`, 'BUDGET_NOT_DRAFT');
   }
 
   // Custo sem dupla digitação (M6-22): o valor congelado vem da SOMA das linhas de orçamento

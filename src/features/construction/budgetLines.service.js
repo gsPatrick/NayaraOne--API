@@ -34,7 +34,7 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
     if (!budget) throw AppError.notFound('Orçamento não encontrado.', 'BUDGET_NOT_FOUND');
     if (budget.status === 'APPROVED') {
       throw AppError.conflict(
-        'Este orçamento já está APPROVED (baseline imutável) — novas linhas de custo só via Change Order aprovado.',
+        'Este orçamento já está aprovado (baseline imutável) — novas linhas de custo só via Change Order aprovado.',
         'BUDGET_LINE_BASELINE_LOCKED'
       );
     }

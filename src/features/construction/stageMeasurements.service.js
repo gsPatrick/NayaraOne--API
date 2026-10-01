@@ -166,10 +166,24 @@ async function getStageMeasurement(id, transaction, { lock = false } = {}) {
   return measurement;
 }
 
+// Achado numa auditoria do cliente (30/09/2026): "os erros exibidos pro usuário alguns são em
+// código ou inglês" — rótulos em português, mesmos usados nos badges da tela, em vez do enum
+// cru interpolado direto na mensagem.
+const MEASUREMENT_STATUS_LABELS_PT = {
+  DRAFT: 'Rascunho',
+  SUBMITTED: 'Enviada para revisão',
+  REVIEWED: 'Revisada',
+  PAYABLE: 'Aprovada',
+  REJECTED: 'Rejeitada',
+  SUPERSEDED: 'Substituída',
+};
+
 function assertTransition(measurement, allowedFrom, actionLabel) {
   if (!allowedFrom.includes(measurement.status)) {
+    const allowedLabels = allowedFrom.map((s) => MEASUREMENT_STATUS_LABELS_PT[s] || s).join(', ');
+    const currentLabel = MEASUREMENT_STATUS_LABELS_PT[measurement.status] || measurement.status;
     throw AppError.conflict(
-      `Só é possível ${actionLabel} uma medição em um dos estados [${allowedFrom.join(', ')}] (atual: "${measurement.status}").`,
+      `Só é possível ${actionLabel} uma medição no estado "${allowedLabels}" — esta está "${currentLabel}".`,
       'STAGE_MEASUREMENT_INVALID_STATUS'
     );
   }
@@ -379,7 +393,7 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
 
   const normalizedDecision = String(decision || '').toUpperCase();
   if (!['APPROVED', 'REJECTED'].includes(normalizedDecision)) {
-    throw AppError.badRequest('"decision" deve ser "APPROVED" ou "REJECTED".', 'STAGE_MEASUREMENT_DECISION_INVALID');
+    throw AppError.badRequest('A decisão precisa ser "aprovar" ou "rejeitar".', 'STAGE_MEASUREMENT_DECISION_INVALID');
   }
 
   const beforeJson = measurement.toJSON();

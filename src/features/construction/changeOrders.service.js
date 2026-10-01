@@ -99,8 +99,11 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
   });
   if (!changeOrder) throw AppError.notFound('Change Order não encontrado.', 'CHANGE_ORDER_NOT_FOUND');
   if (changeOrder.status !== 'PENDING_APPROVAL') {
+    // Achado numa auditoria do cliente (30/09/2026): mensagem sem enum cru em inglês.
+    const labels = { DRAFT: 'rascunho', APPROVED: 'aprovado', REJECTED: 'rejeitado' };
+    const statusLabel = labels[changeOrder.status] || changeOrder.status;
     throw AppError.conflict(
-      `Change Order já está em status "${changeOrder.status}" — só é possível decidir um Change Order em PENDING_APPROVAL.`,
+      `Este Change Order já está ${statusLabel} — só é possível decidir um Change Order ainda aguardando decisão.`,
       'CHANGE_ORDER_NOT_PENDING'
     );
   }

@@ -118,8 +118,10 @@ async function approveLossRecord(id, actorUserId, transaction) {
   });
   if (!lossRecord) throw AppError.notFound('Registro de perda não encontrado.', 'LOSS_RECORD_NOT_FOUND');
   if (lossRecord.status !== 'PENDING_APPROVAL') {
+    // Achado numa auditoria do cliente (30/09/2026): mensagem sem enum cru em inglês.
+    const statusLabel = lossRecord.status === 'APPROVED' ? 'já aprovado' : 'rejeitado';
     throw AppError.conflict(
-      `Só é possível aprovar um registro em "PENDING_APPROVAL" (status atual: "${lossRecord.status}").`,
+      `Só é possível aprovar um registro ainda aguardando aprovação — este já está ${statusLabel}.`,
       'LOSS_RECORD_APPROVAL_INVALID_STATUS'
     );
   }
@@ -161,7 +163,7 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
     throw AppError.badRequest('Só é possível devolver material a partir de um registro do tipo "LOSS".', 'LOSS_RECORD_RETURN_INVALID_SOURCE');
   }
   if (original.status !== 'APPROVED') {
-    throw AppError.conflict('Só é possível devolver material de uma perda já "APPROVED".', 'LOSS_RECORD_RETURN_REQUIRES_APPROVED');
+    throw AppError.conflict('Só é possível devolver material de uma perda já aprovada.', 'LOSS_RECORD_RETURN_REQUIRES_APPROVED');
   }
 
   const returnQuantity = payload && payload.quantity != null ? Number(payload.quantity) : Number(original.quantity);
