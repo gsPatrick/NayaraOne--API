@@ -36,8 +36,15 @@ const STATUSES = [
   'CLOSED',
   'CANCELLED',
 ];
+// BUG REAL CRÍTICO CORRIGIDO (achado numa auditoria final do Marco 6, 30/09/2026):
+// PLANNED->BUDGETED estava na transição GENÉRICA, permitindo pular pra "orçamento aprovado"
+// via POST /transition sem passar pelo gate de approveBudget() — nenhuma margem mínima
+// verificada, nenhuma baseline congelada, nenhum orçamento de verdade por trás do status. Mesmo
+// raciocínio já aplicado a DELIVERED/WARRANTY/CLOSED (de propósito fora daqui, só alcançáveis
+// pelos gates dedicados): BUDGETED só é alcançável de verdade por approveBudget(), que já
+// transiciona o projeto como efeito colateral depois de validar a margem mínima.
 const VALID_TRANSITIONS = {
-  PLANNED: ['BUDGETED', 'CANCELLED'],
+  PLANNED: ['CANCELLED'],
   BUDGETED: ['READY', 'CANCELLED'],
   READY: ['ACTIVE', 'CANCELLED'],
   ACTIVE: ['PAUSED', 'FINAL_INSPECTION', 'CANCELLED'],

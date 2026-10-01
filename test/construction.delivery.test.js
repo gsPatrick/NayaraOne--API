@@ -73,6 +73,20 @@ test('delivery: transitionProject genérico não permite ir direto para DELIVERE
   });
 });
 
+// BUG REAL CRÍTICO CORRIGIDO (achado numa auditoria final do Marco 6, 30/09/2026): a transição
+// genérica permitia pular PLANNED->BUDGETED sem passar pelo gate approveBudget() — nenhuma
+// margem mínima validada, nenhuma baseline congelada. Mesmo raciocínio de DELIVERED/WARRANTY/
+// CLOSED: BUDGETED só é alcançável de verdade aprovando o orçamento agregado.
+test('delivery: transitionProject genérico não permite ir direto para BUDGETED (só via approveBudget)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'PLANNED');
+    await assert.rejects(
+      () => projectsService.transitionProject(project.id, 'BUDGETED', tenant.userId, transaction),
+      rejectsWithCode('PROJECT_STATUS_TRANSITION_INVALID')
+    );
+  });
+});
+
 test('delivery: máquina de estados completa PLANNED->BUDGETED->READY->ACTIVE->PAUSED->ACTIVE->FINAL_INSPECTION funciona de ponta a ponta', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await createTestProject(transaction, 'ACTIVE');

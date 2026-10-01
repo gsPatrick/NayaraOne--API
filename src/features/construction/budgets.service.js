@@ -3,9 +3,8 @@
 const { Budget, BudgetLine, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishBudgetApproved } = require('./constructionEvents.service');
+const { publishBudgetApproved, publishProjectStatusChanged } = require('./constructionEvents.service');
 const marginRulesService = require('./marginRules.service');
-const projectsService = require('./projects.service');
 
 // DECISÃO DE ENGENHARIA (M6-04, ver migração 20260101000182): "construction"."budgets" é o
 // agregado da obra — um por projeto (índice único parcial `budgets_unique_per_project`).
@@ -110,9 +109,20 @@ async function approveBudget(id, actorUserId, transaction) {
   // é exatamente esse o marco que a fonte define pra essa transição. Só dispara se a obra
   // ainda estiver PLANNED (idempotente por natureza: Budget só aprova uma vez, DRAFT->APPROVED
   // é caminho único, então isto roda no máximo uma vez por obra).
+  //
+  // BUG REAL CRÍTICO CORRIGIDO (achado numa auditoria final do Marco 6, 30/09/2026): isto
+  // chamava `transitionProject(id, 'BUDGETED', ...)`, a transição GENÉRICA — o que exigia
+  // manter 'BUDGETED' em VALID_TRANSITIONS[PLANNED], e isso permitia qualquer chamador bater
+  // direto em POST /projects/:id/transition com targetStatus=BUDGETED e pular esta função
+  // inteira (sem validar margem mínima, sem congelar baseline nenhuma). Mesmo padrão já usado
+  // em DELIVERED/WARRANTY/CLOSED: seta o status DIRETO aqui, fora de VALID_TRANSITIONS — só
+  // este gate (approveBudget) pode levar uma obra a BUDGETED.
   const project = await Project.findByPk(budget.projectId, { transaction });
   if (project && project.status === 'PLANNED') {
-    await projectsService.transitionProject(project.id, 'BUDGETED', actorUserId, transaction);
+    project.status = 'BUDGETED';
+    project.updatedBy = actorUserId || null;
+    await project.save({ transaction });
+    await publishProjectStatusChanged(project, 'PLANNED', transaction);
   }
 
   await registrarAuditoria(
