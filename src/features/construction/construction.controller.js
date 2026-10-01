@@ -382,8 +382,21 @@ const createMarginRule = catchAsync(async (req, res) => {
   const rule = await req.withTenantTransaction((t) => marginRulesService.createMarginRule(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: rule });
 });
+// Achado numa auditoria final do Front do Marco 6 (30/09/2026): esta tela chama este GET a cada
+// carregamento de página pra saber se já existe margem configurada — "ainda não configurada" é
+// um estado NORMAL aqui (bem diferente de dentro de approveBudget, onde a ausência é
+// propositalmente fail-closed e vira 422/MARGIN_RULE_NOT_CONFIGURED). Devolver 422 nesta tela
+// de consulta simples poluía o console/log com "erro" em toda carga de página comum. Devolve
+// 200 com data:null quando não há regra ativa, sem alterar o comportamento de
+// marginRulesService.getActiveMarginRule() usado internamente por approveBudget (que continua
+// lançando, de propósito).
 const getActiveMarginRule = catchAsync(async (req, res) => {
-  const rule = await req.withTenantTransaction((t) => marginRulesService.getActiveMarginRule(req.auth.groupId, req.auth.companyId, t));
+  const rule = await req
+    .withTenantTransaction((t) => marginRulesService.getActiveMarginRule(req.auth.groupId, req.auth.companyId, t))
+    .catch((err) => {
+      if (err?.code === 'MARGIN_RULE_NOT_CONFIGURED') return null;
+      throw err;
+    });
   return success(res, { data: rule });
 });
 
