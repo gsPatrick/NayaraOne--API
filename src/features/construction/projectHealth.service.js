@@ -11,6 +11,7 @@ const {
   ChangeOrder,
   LossRecord,
   Nonconformity,
+  MarginRule,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 
@@ -73,6 +74,12 @@ async function getProject(id, transaction) {
  *  8. projectedMargin        — (baselineBudget + approvedChanges) - projectedTotalCost.
  *  9. updatedAt              — timestamp do cálculo (ISO 8601) — é um read model, não uma
  *                               tabela materializada, então "updatedAt" é sempre "agora".
+ *
+ * + marginPct/minMarginPct/belowMinMargin (FIX 01/10/2026): "Margem abaixo da regra gera
+ *   alerta" (fonte, seção 5) — marginPct = projectedMargin / (baselineBudget + approvedChanges)
+ *   * 100; minMarginPct vem da MarginRule ativa da empresa; belowMinMargin = marginPct <
+ *   minMarginPct. Qualquer um fica `null` se faltar base (sem orçamento ainda) ou regra ativa —
+ *   nunca bloqueia o endpoint, é só o sinal pro alerta no front.
  */
 async function getProjectHealth(projectId, transaction) {
   const project = await getProject(projectId, transaction);
@@ -123,6 +130,23 @@ async function getProjectHealth(projectId, transaction) {
   const forecastToComplete = Math.max(committedCost + approvedChanges - actualFinancialCost, 0);
   const projectedTotalCost = round2(actualFinancialCost + forecastToComplete);
   const projectedMargin = round2(baselineBudget + approvedChanges - projectedTotalCost);
+
+  // marginPct/belowMinMargin (FIX 01/10/2026, achado em auditoria): a fonte ("CONSTRUÇÃO +
+  // OBRAS + PÓS-OBRA — BLINDADO v1", seção 5) exige "Margem abaixo da regra gera alerta" — o
+  // relatório de saúde é o lugar documentado para esse alerta (não um bloqueio em
+  // approveBudget, que só precisa existir uma regra ativa e congelar sua versão — já feito em
+  // budgets.service.js). Percentual calculado sobre a receita-base da obra (baseline + changes);
+  // sem receita-base (projeto ainda sem orçamento/linha) ou sem regra ativa configurada, os
+  // campos ficam `null` — nunca inventa denominador nem bloqueia o endpoint (fail-open, é um
+  // read model).
+  const marginBase = baselineBudget + approvedChanges;
+  const marginPct = marginBase > 0 ? round2((projectedMargin / marginBase) * 100) : null;
+  const activeMarginRule = await MarginRule.findOne({
+    where: { groupId: project.groupId, companyId: project.companyId, isActive: true },
+    transaction,
+  });
+  const minMarginPct = activeMarginRule ? Number(activeMarginRule.minMarginPct) : null;
+  const belowMinMargin = marginPct !== null && minMarginPct !== null ? marginPct < minMarginPct : null;
 
   // --- KPIs adicionais (M6-99) — só os que dependem de dados desta fatia (medição/etapa). ---
   const avgMeasuredPct = stages.length
@@ -196,6 +220,9 @@ async function getProjectHealth(projectId, transaction) {
     forecastToComplete: round2(forecastToComplete),
     projectedTotalCost,
     projectedMargin,
+    marginPct,
+    minMarginPct,
+    belowMinMargin,
     updatedAt: new Date().toISOString(),
 
     // --- KPIs adicionais (M6-99) calculáveis só com dados desta fatia ---
