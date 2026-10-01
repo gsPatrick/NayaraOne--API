@@ -45,6 +45,20 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
+  // FIX (auditoria E2E de browser, 01/10/2026): um id de rota com formato inválido (ex.:
+  // /construction/projects/id-que-nao-existe-123, resultado comum de favoritos velhos ou link
+  // direto digitado errado) batia direto no Postgres como SequelizeDatabaseError ("invalid
+  // input syntax for type uuid: ..."), caía no catch-all abaixo e virava 500 com a mensagem
+  // crua do Postgres em INGLÊS exibida ao usuário — um 404/400 amigável é o esperado aqui, não
+  // um erro interno (não é uma falha do servidor, é um identificador que o usuário passou).
+  if (err && err.name === 'SequelizeDatabaseError' && /invalid input syntax for type uuid/i.test(err.message || '')) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'INVALID_ID_FORMAT',
+      message: 'O identificador informado não é válido.',
+    });
+  }
+
   if (err && err.name === 'SequelizeValidationError') {
     return failure(res, {
       statusCode: 400,

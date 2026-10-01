@@ -205,7 +205,10 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
       // devolução expunha o UUID interno cru do registro original direto na tela do usuário
       // ("Devolução do registro de perda <uuid>") — usa a descrição do material (já disponível
       // e legível), não o id interno.
-      reason: (payload && payload.reason) || `Devolução de "${original.materialDescription}" (perda original de ${Number(original.quantity)} un.).`,
+      // FIX (auditoria E2E de browser, 01/10/2026): Number().toString() usa ponto como separador
+      // decimal (padrão JS), aparecendo cru no meio de um texto PT-BR que usa vírgula em todo o
+      // resto da tela (ex.: "perda original de 3.25 un." em vez de "3,25 un.").
+      reason: (payload && payload.reason) || `Devolução de "${original.materialDescription}" (perda original de ${String(Number(original.quantity)).replace('.', ',')} un.).`,
       movementType: 'RETURN',
       relatedLossRecordId: original.id,
       status: 'APPROVED',
