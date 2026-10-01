@@ -57,6 +57,7 @@ async function detectEvidenceReuse(fileIds, companyId, excludeNonconformityId, t
 // projeto (ex.: risk_level de permissões: LOW/MEDIUM/HIGH + CRITICAL adicionado aqui porque
 // M6-25 exige um gate de "NC crítica" para bloquear entrega da obra).
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const SEVERITY_LABELS_PT = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta', CRITICAL: 'Crítica' };
 
 async function createNonconformity(projectId, payload, actorUserId, transaction) {
   const {
@@ -76,7 +77,10 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
   }
   const normalizedSeverity = severity ? String(severity).toUpperCase() : 'MEDIUM';
   if (!SEVERITIES.includes(normalizedSeverity)) {
-    throw AppError.badRequest(`"severity" deve ser um de: ${SEVERITIES.join(', ')}.`, 'NONCONFORMITY_SEVERITY_INVALID');
+    throw AppError.badRequest(
+      `"severity" deve ser um de: ${SEVERITIES.map((s) => SEVERITY_LABELS_PT[s]).join(', ')}.`,
+      'NONCONFORMITY_SEVERITY_INVALID'
+    );
   }
 
   const resolvedBeforeEvidence = Array.isArray(beforeEvidenceFileIds) ? beforeEvidenceFileIds : [];

@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishStageCompleted } = require('./constructionEvents.service');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
+const STATUS_LABELS_PT = { PENDING: 'Pendente', IN_PROGRESS: 'Em andamento', DONE: 'Concluída' };
 
 function assertValidDateRange(startsAt, endsAt) {
   if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
@@ -80,7 +81,10 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!STATUSES.includes(normalizedStatus)) {
-      throw AppError.badRequest(`"status" deve ser um de: ${STATUSES.join(', ')}.`, 'PROJECT_STAGE_STATUS_INVALID');
+      throw AppError.badRequest(
+        `"status" deve ser um de: ${STATUSES.map((s) => STATUS_LABELS_PT[s]).join(', ')}.`,
+        'PROJECT_STAGE_STATUS_INVALID'
+      );
     }
     stage.status = normalizedStatus;
   }

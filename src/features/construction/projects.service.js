@@ -232,7 +232,10 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
   const normalizedTarget = String(targetStatus || '').toUpperCase();
   if (!STATUSES.includes(normalizedTarget)) {
-    throw AppError.badRequest(`"targetStatus" deve ser um de: ${STATUSES.join(', ')}.`, 'PROJECT_STATUS_INVALID');
+    throw AppError.badRequest(
+      `"targetStatus" deve ser um de: ${STATUSES.map((s) => statusLabelPt(s)).join(', ')}.`,
+      'PROJECT_STATUS_INVALID'
+    );
   }
   const allowed = VALID_TRANSITIONS[project.status] || [];
   if (!allowed.includes(normalizedTarget)) {

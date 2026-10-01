@@ -53,6 +53,9 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
   if (Number(quantity) <= 0) {
     throw AppError.badRequest('"quantity" deve ser maior que zero.', 'LOSS_RECORD_QUANTITY_INVALID');
   }
+  if (!Number.isFinite(Number(estimatedValue)) || Number(estimatedValue) < 0) {
+    throw AppError.badRequest('"estimatedValue" deve ser um número maior ou igual a zero.', 'LOSS_RECORD_VALUE_INVALID');
+  }
 
   const threshold = await getApprovalThreshold(groupId, companyId, CONTEXT_MATERIAL_LOSS, transaction);
   const withinThreshold = Number(estimatedValue) <= threshold;
@@ -158,7 +161,11 @@ async function approveLossRecord(id, actorUserId, transaction) {
  * devolução corrige o SALDO calculado (ver `getMaterialBalance`), não o registro histórico.
  */
 async function returnLossRecord(id, payload, actorUserId, transaction) {
-  const original = await getLossRecord(id, transaction);
+  const original = await LossRecord.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!original) throw AppError.notFound('Registro de perda não encontrado.', 'LOSS_RECORD_NOT_FOUND');
   if (original.movementType !== 'LOSS') {
     throw AppError.badRequest('Só é possível devolver material a partir de um registro do tipo "LOSS".', 'LOSS_RECORD_RETURN_INVALID_SOURCE');
   }
@@ -166,10 +173,21 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
     throw AppError.conflict('Só é possível devolver material de uma perda já aprovada.', 'LOSS_RECORD_RETURN_REQUIRES_APPROVED');
   }
 
-  const returnQuantity = payload && payload.quantity != null ? Number(payload.quantity) : Number(original.quantity);
-  if (returnQuantity <= 0 || returnQuantity > Number(original.quantity)) {
+  // FIX (auditoria 01/10/2026): devoluções anteriores do MESMO registro de perda não eram
+  // somadas — cada clique em "Registrar devolução" aceitava até 100% da quantidade original de
+  // novo, inflando o saldo de material indefinidamente. Agora soma todos os RETURN aprovados já
+  // vinculados a este LOSS (relatedLossRecordId) e valida contra o saldo restante.
+  const existingReturns = await LossRecord.findAll({
+    where: { relatedLossRecordId: original.id, movementType: 'RETURN', status: 'APPROVED' },
+    transaction,
+  });
+  const alreadyReturnedQuantity = existingReturns.reduce((sum, r) => sum + Number(r.quantity), 0);
+  const remainingQuantity = Number(original.quantity) - alreadyReturnedQuantity;
+
+  const returnQuantity = payload && payload.quantity != null ? Number(payload.quantity) : remainingQuantity;
+  if (returnQuantity <= 0 || returnQuantity > remainingQuantity) {
     throw AppError.badRequest(
-      `"quantity" da devolução deve ser maior que zero e não pode exceder a quantidade original (${original.quantity}).`,
+      `"quantity" da devolução deve ser maior que zero e não pode exceder a quantidade ainda disponível para devolução (${remainingQuantity} de ${original.quantity}).`,
       'LOSS_RECORD_RETURN_QUANTITY_INVALID'
     );
   }

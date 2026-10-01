@@ -64,12 +64,16 @@ async function getQualityItem(id, transaction) {
 }
 
 const CHECK_STATUSES = ['PENDING', 'OK', 'NOT_OK'];
+const CHECK_STATUS_LABELS_PT = { PENDING: 'Pendente', OK: 'OK', NOT_OK: 'Não conforme' };
 
 async function checkQualityItem(id, { status, notes }, actorUserId, transaction) {
   const item = await getQualityItem(id, transaction);
   const normalizedStatus = String(status || '').toUpperCase();
   if (!CHECK_STATUSES.includes(normalizedStatus)) {
-    throw AppError.badRequest(`"status" deve ser um de: ${CHECK_STATUSES.join(', ')}.`, 'QUALITY_ITEM_STATUS_INVALID');
+    throw AppError.badRequest(
+      `"status" deve ser um de: ${CHECK_STATUSES.map((s) => CHECK_STATUS_LABELS_PT[s]).join(', ')}.`,
+      'QUALITY_ITEM_STATUS_INVALID'
+    );
   }
 
   const beforeJson = item.toJSON();

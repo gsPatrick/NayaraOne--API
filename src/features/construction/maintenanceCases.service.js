@@ -24,6 +24,21 @@ const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const ROOT_CAUSE_CODES = ['MATERIAL_DEFECT', 'WORKMANSHIP', 'DESIGN_FLAW', 'MISUSE', 'NATURAL_WEAR', 'OTHER'];
 const ESCALATION_LEVELS = ['NONE', 'WARNING', 'CRITICAL', 'OVERDUE'];
 
+// Achado em auditoria (01/10/2026): enums acima vazavam crus em inglês nas mensagens de erro do
+// usuário — labels em PT usados só para compor as mensagens abaixo, o valor salvo no banco
+// continua o código em inglês.
+const CATEGORY_LABELS_PT = {
+  STRUCTURAL: 'Estrutural',
+  ELECTRICAL: 'Elétrica',
+  HYDRAULIC: 'Hidráulica',
+  FINISHING: 'Acabamento',
+  WATERPROOFING: 'Impermeabilização',
+  OTHER: 'Outro',
+};
+const SEVERITY_LABELS_PT = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta', CRITICAL: 'Crítica' };
+const STATUS_LABELS_PT = { OPEN: 'Aberto', IN_PROGRESS: 'Em andamento', RESOLVED: 'Resolvido', CLOSED: 'Fechado' };
+const RESOLUTION_TYPE_LABELS_PT = { DISCOUNT: 'Desconto', REIMBURSEMENT: 'Ressarcimento' };
+
 // M6-63/M6-88: prazo de atendimento (em dias) por severidade, usado para calcular `sla_due_at`
 // a partir de `warranty_deadline_at` (quando informado) ou da data de abertura do caso. Decisão
 // de engenharia — nenhum documento fonte define os dias exatos; valores seguem senso comum de
@@ -60,7 +75,10 @@ function validateCategory(category) {
   if (category === undefined || category === null) return null;
   const normalized = String(category).toUpperCase();
   if (!CATEGORIES.includes(normalized)) {
-    throw AppError.badRequest(`"category" deve ser um de: ${CATEGORIES.join(', ')}.`, 'MAINTENANCE_CASE_CATEGORY_INVALID');
+    throw AppError.badRequest(
+      `"category" deve ser um de: ${CATEGORIES.map((c) => CATEGORY_LABELS_PT[c]).join(', ')}.`,
+      'MAINTENANCE_CASE_CATEGORY_INVALID'
+    );
   }
   return normalized;
 }
@@ -68,7 +86,10 @@ function validateCategory(category) {
 function validateSeverity(severity) {
   const normalized = String(severity || 'MEDIUM').toUpperCase();
   if (!SEVERITIES.includes(normalized)) {
-    throw AppError.badRequest(`"severity" deve ser um de: ${SEVERITIES.join(', ')}.`, 'MAINTENANCE_CASE_SEVERITY_INVALID');
+    throw AppError.badRequest(
+      `"severity" deve ser um de: ${SEVERITIES.map((s) => SEVERITY_LABELS_PT[s]).join(', ')}.`,
+      'MAINTENANCE_CASE_SEVERITY_INVALID'
+    );
   }
   return normalized;
 }
@@ -202,7 +223,10 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!STATUSES.includes(normalizedStatus)) {
-      throw AppError.badRequest(`"status" deve ser um de: ${STATUSES.join(', ')}.`, 'MAINTENANCE_CASE_STATUS_INVALID');
+      throw AppError.badRequest(
+        `"status" deve ser um de: ${STATUSES.map((s) => STATUS_LABELS_PT[s]).join(', ')}.`,
+        'MAINTENANCE_CASE_STATUS_INVALID'
+      );
     }
     maintenanceCase.status = normalizedStatus;
   }
@@ -362,7 +386,10 @@ async function proposeWarrantyResolution(id, payload, actorUserId, transaction) 
   const { resolutionType, resolutionAmount } = payload || {};
   const normalizedType = String(resolutionType || '').toUpperCase();
   if (!RESOLUTION_TYPES.includes(normalizedType)) {
-    throw AppError.badRequest(`"resolutionType" deve ser um de: ${RESOLUTION_TYPES.join(', ')}.`, 'WARRANTY_RESOLUTION_VALIDATION');
+    throw AppError.badRequest(
+      `"resolutionType" deve ser um de: ${RESOLUTION_TYPES.map((t) => RESOLUTION_TYPE_LABELS_PT[t]).join(', ')}.`,
+      'WARRANTY_RESOLUTION_VALIDATION'
+    );
   }
   const numericAmount = Number(resolutionAmount);
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
