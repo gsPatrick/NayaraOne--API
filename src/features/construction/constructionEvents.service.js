@@ -45,7 +45,17 @@ function publishProjectStatusChanged(project, fromStatus, transaction) {
       aggregateId: project.id,
       eventType: 'construction.project.status_changed',
       payload: { id: project.id, fromStatus, toStatus: project.status },
-      idempotencyKey: `construction.project.status_changed:${project.id}:${fromStatus}:${project.status}`,
+      // FIX (auditoria E2E de browser, 01/10/2026): a chave anterior
+      // `${project.id}:${fromStatus}:${project.status}` não incluía nada que distinguisse duas
+      // ocorrências LEGÍTIMAS da MESMA transição no mesmo projeto (ex.: ACTIVE -> FINAL_INSPECTION
+      // -> ACTIVE (devolvido pra retrabalho) -> FINAL_INSPECTION de novo — um ciclo real e
+      // esperado, igual PAUSED <-> ACTIVE). A segunda ocorrência colidia com o índice único de
+      // idempotencyKey da outbox, estourando UNIQUE_CONSTRAINT_VIOLATION (409 cru) e revertendo a
+      // transação inteira — a obra nunca saía do status anterior. `lockVersion` incrementa a cada
+      // save() e já reflete o valor pós-save neste ponto, então cada save real vira uma chave
+      // distinta, mantendo a idempotência real (reenvio da MESMA requisição/save colide, uma nova
+      // transição não).
+      idempotencyKey: `construction.project.status_changed:${project.id}:${fromStatus}:${project.status}:${project.lockVersion}`,
     },
     transaction
   );
@@ -156,7 +166,11 @@ function publishWarrantyCaseClosed(maintenanceCase, transaction) {
       aggregateId: maintenanceCase.id,
       eventType: 'warranty.case.closed',
       payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, status: maintenanceCase.status },
-      idempotencyKey: `warranty.case.closed:${maintenanceCase.id}`,
+      // FIX (mesmo achado de publishProjectStatusChanged, 01/10/2026): status de MaintenanceCase
+      // é campo livre (updateMaintenanceCase aceita qualquer STATUSES), então reabrir um chamado
+      // fechado (CLOSED -> OPEN) e fechá-lo de novo é um ciclo legítimo — sem o lockVersion a
+      // segunda chamada colidia com o índice único da outbox e revertia o fechamento inteiro.
+      idempotencyKey: `warranty.case.closed:${maintenanceCase.id}:${maintenanceCase.lockVersion}`,
     },
     transaction
   );
