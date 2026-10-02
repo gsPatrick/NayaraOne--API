@@ -1,6 +1,6 @@
 'use strict';
 
-const { Project, ProjectCodeSequence, sequelize } = require('../../models');
+const { Project, ProjectCodeSequence, Budget, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const {
@@ -187,7 +187,34 @@ async function updateProject(id, payload, actorUserId, transaction) {
   const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId } = payload;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
-  if (budgetAmount !== undefined) project.budgetAmount = budgetAmount;
+  if (budgetAmount !== undefined) {
+    // FIX (auditoria E2E de browser, ciclo 5, 02/10/2026): "Orçamento (R$)" nunca era validado
+    // (qualquer número, incluindo absurdos tipo R$ 61 trilhões digitados por engano, era salvo
+    // sem teto nem checagem de finitude) — e projectHealth.service.js usa este campo como
+    // baselineBudget PREFERENCIAL sobre o Budget aprovado quando presente, então editar isto
+    // DEPOIS da aprovação do orçamento agregado corrompia silenciosamente a baseline imutável
+    // que o resto do sistema trata como congelada. Fail-closed nos dois pontos: valida
+    // número finito/não-negativo/dentro de um teto de sanidade, e bloqueia a edição por completo
+    // quando já existe um Budget APPROVED para esta obra (mesmo espírito de
+    // BUDGET_LINE_BASELINE_LOCKED em budgetLines.service.js).
+    if (budgetAmount !== null) {
+      const numericBudget = Number(budgetAmount);
+      if (!Number.isFinite(numericBudget) || numericBudget < 0) {
+        throw AppError.badRequest('"budgetAmount" deve ser um número não negativo.', 'PROJECT_BUDGET_AMOUNT_INVALID');
+      }
+      if (numericBudget > 1_000_000_000_000) {
+        throw AppError.badRequest('"budgetAmount" excede o limite permitido.', 'PROJECT_BUDGET_AMOUNT_TOO_LARGE');
+      }
+    }
+    const approvedBudget = await Budget.findOne({ where: { projectId: project.id, status: 'APPROVED' }, transaction });
+    if (approvedBudget) {
+      throw AppError.conflict(
+        'O orçamento agregado desta obra já está aprovado (baseline imutável) — "Orçamento (R$)" não pode mais ser alterado por aqui, só via Change Order aprovado.',
+        'PROJECT_BUDGET_AMOUNT_BASELINE_LOCKED'
+      );
+    }
+    project.budgetAmount = budgetAmount;
+  }
   if (startsAt !== undefined) project.startsAt = startsAt;
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
