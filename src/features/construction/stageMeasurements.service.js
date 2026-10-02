@@ -443,6 +443,15 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
 
   const stage = await getProjectStage(measurement.projectStageId, transaction);
   stage.measuredPct = measurement.measuredPct;
+  // FIX (auditoria E2E de browser, ciclo 4, 02/10/2026): aprovar uma medição de 100% nunca
+  // completava a etapa (status ficava para sempre "Pendente"/"Em andamento") — nada aqui setava
+  // status DONE. Consequência real: uma etapa dependente nunca consegue enxergar a predecessora
+  // como concluída, travando o fluxo de dependências indefinidamente mesmo com a obra 100%
+  // medida e paga. Decisão de engenharia (sem detalhe explícito na fonte sobre o gatilho exato):
+  // medição 100% APROVADA é o sinal mais forte disponível de etapa fisicamente concluída.
+  if (Number(stage.measuredPct) >= 100 && stage.status !== 'DONE') {
+    stage.status = 'DONE';
+  }
   stage.updatedBy = actorUserId || null;
   await stage.save({ transaction });
 
