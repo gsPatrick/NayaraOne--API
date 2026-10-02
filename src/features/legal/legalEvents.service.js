@@ -15,7 +15,15 @@ function publishContractStatusChanged(contract, fromStatus, transaction) {
       aggregateId: contract.id,
       eventType: 'legal.contract.status_changed',
       payload: { id: contract.id, fromStatus, toStatus: contract.status },
-      idempotencyKey: `legal.contract.status_changed:${contract.id}:${fromStatus}:${contract.status}`,
+      // FIX (relatado pela Nayara em reteste, 01/10/2026 — mesma causa raiz já achada e
+      // corrigida no módulo de Obras): a chave antiga não incluía nada que distinguisse duas
+      // ocorrências LEGÍTIMAS da mesma transição no mesmo contrato (ex.: contrato volta de
+      // "Em assinatura" pra um status anterior por algum motivo, e depois tenta ir pra "Em
+      // assinatura" de novo). A segunda ocorrência colidia com o índice único de
+      // idempotencyKey da outbox, estourando UNIQUE_CONSTRAINT_VIOLATION (409 cru) e
+      // revertendo a transação inteira. lockVersion incrementa a cada save() e já reflete o
+      // valor pós-save neste ponto, tornando cada save real uma chave distinta.
+      idempotencyKey: `legal.contract.status_changed:${contract.id}:${fromStatus}:${contract.status}:${contract.lockVersion}`,
     },
     transaction
   );
