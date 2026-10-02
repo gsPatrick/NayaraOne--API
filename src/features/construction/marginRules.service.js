@@ -53,8 +53,14 @@ async function createMarginRule(payload, actorUserId, transaction) {
     );
   }
   const numeric = Number(minMarginPct);
-  if (Number.isNaN(numeric) || numeric < 0) {
-    throw AppError.badRequest('"minMarginPct" deve ser um percentual numérico não negativo.', 'MARGIN_RULE_VALIDATION');
+  // FIX (auditoria E2E de browser, ciclo 2, 01/10/2026): coluna min_margin_pct é
+  // DECIMAL(5,2) (máx 999.99) — sem este limite, um valor maior (ex.: campo de edição não
+  // limpo antes de digitar, concatenando "15" + "10,00" = 1510) estourava "numeric field
+  // overflow" cru do Postgres direto na tela do usuário. Também não faz sentido uma margem
+  // mínima >= 100% (custo zero ou negativo), então o limite de negócio é 100, bem abaixo do
+  // limite físico da coluna.
+  if (Number.isNaN(numeric) || numeric < 0 || numeric > 100) {
+    throw AppError.badRequest('"minMarginPct" deve ser um percentual numérico entre 0 e 100.', 'MARGIN_RULE_VALIDATION');
   }
 
   // Desativa a versão ativa anterior (se houver) ANTES de criar a nova — nunca duas versões
