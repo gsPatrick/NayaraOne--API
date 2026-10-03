@@ -73,6 +73,22 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'idempotency_key',
       },
+      responsiblePersonId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'responsible_person_id',
+      },
+      evidenceFileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'evidence_file_id',
+      },
+      reason: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: 'reason',
+        comment: 'EST-008: motivo obrigatório para ADJUSTMENT/LOSS/DISPOSAL.',
+      },
       movedAt: {
         type: DataTypes.DATE,
         allowNull: false,

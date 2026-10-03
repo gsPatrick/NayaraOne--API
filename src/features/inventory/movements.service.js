@@ -12,7 +12,7 @@ const APPROVAL_REQUIRED_TYPES = ['ADJUSTMENT', 'LOSS', 'DISPOSAL'];
 
 // EST-002: saldo é sempre derivado de movimentos, nunca digitável diretamente — esta é a
 // ÚNICA função do sistema que deve escrever em inventory.stock_balances.
-async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, groupId, transaction) {
+async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, groupId, allowNegativeStock, transaction) {
   let balance = await InventoryStockBalance.findOne({
     where: { inventoryItemId, locationId },
     transaction,
@@ -27,8 +27,9 @@ async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, 
   }
 
   const nextQuantity = Number(balance.quantityOnHand) + Number(delta);
-  // EST-001/EST-00x: saldo nunca pode ficar negativo — bloqueia saída maior que o disponível.
-  if (nextQuantity < 0) {
+  // Documento "Banco de Dados Físico BLINDADO": "OUT não pode gerar saldo negativo QUANDO item
+  // não permitir estoque negativo" — regra condicional, não incondicional (allowNegativeStock).
+  if (nextQuantity < 0 && !allowNegativeStock) {
     throw AppError.badRequest(
       `Saldo insuficiente no local informado (disponível: ${balance.quantityOnHand}, solicitado: ${Math.abs(delta)}).`,
       'INVENTORY_INSUFFICIENT_BALANCE'
@@ -54,6 +55,9 @@ async function recordMovement(payload, actor, transaction) {
     sourceId,
     idempotencyKey,
     movedAt,
+    responsiblePersonId,
+    evidenceFileId,
+    reason,
   } = payload;
 
   if (!groupId || !companyId || !inventoryItemId || !movementType || quantity == null) {
@@ -91,6 +95,16 @@ async function recordMovement(payload, actor, transaction) {
   if (movementType === 'ADJUSTMENT' && !sourceLocationId && !destinationLocationId) {
     throw AppError.badRequest('Movimento "ADJUSTMENT" exige "sourceLocationId" ou "destinationLocationId".', 'INVENTORY_MOVEMENT_VALIDATION');
   }
+  // EST-008: ajuste/perda/descarte exigem motivo (evidência é recomendada, mas só obrigatória
+  // quando a política da empresa exigir — isso é regra de negócio do Motor de Regras, fora de
+  // código fixo; aqui garantimos o mínimo "sempre obrigatório" do Caderno, que é o motivo).
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !reason) {
+    throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
+  }
+  // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.
+  if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {
+    throw AppError.badRequest(`Movimento "${movementType}" de ferramenta/ativo exige "responsiblePersonId".`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
 
   // EST-00x: idempotência — reenvio do mesmo payload (ex.: retry de rede) não duplica o movimento.
   if (idempotencyKey) {
@@ -113,28 +127,33 @@ async function recordMovement(payload, actor, transaction) {
       idempotencyKey: idempotencyKey || null,
       movedAt: movedAt || new Date(),
       movedByUserId: actor.userId || null,
+      responsiblePersonId: responsiblePersonId || null,
+      evidenceFileId: evidenceFileId || null,
+      reason: reason || null,
       createdBy: actor.userId || null,
       updatedBy: actor.userId || null,
     },
     { transaction }
   );
 
+  const allowNegative = item.allowNegativeStock;
+
   // Aplica o delta de saldo por local — TRANSFER move entre dois locais na mesma transação,
   // o que garante atomicidade (EST-003): nunca existe estado intermediário com saldo "perdido".
   if (movementType === 'OUT' || movementType === 'LOSS' || movementType === 'DISPOSAL') {
-    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, transaction);
+    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
   } else if (movementType === 'IN' || movementType === 'RETURN') {
-    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, transaction);
+    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
   } else if (movementType === 'TRANSFER') {
-    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, transaction);
-    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, transaction);
+    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
+    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
   } else if (movementType === 'ADJUSTMENT') {
     // Ajuste positivo soma no destino; ajuste negativo subtrai da origem — sinal definido por
     // qual dos dois campos veio preenchido no payload.
     if (destinationLocationId) {
-      await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, transaction);
+      await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
     } else {
-      await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, transaction);
+      await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
     }
   }
 

@@ -59,6 +59,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'minimum_quantity',
       },
+      allowNegativeStock: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'allow_negative_stock',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,
