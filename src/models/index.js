@@ -127,6 +127,17 @@ const modelDefiners = {
   InventoryLossCase: require('./InventoryLossCase'),
   InventoryCount: require('./InventoryCount'),
   InventoryCountItem: require('./InventoryCountItem'),
+  PurchaseRequest: require('./PurchaseRequest'),
+  PurchaseRequestItem: require('./PurchaseRequestItem'),
+  Quotation: require('./Quotation'),
+  SupplierOffer: require('./SupplierOffer'),
+  SupplierOfferItem: require('./SupplierOfferItem'),
+  PurchaseOrder: require('./PurchaseOrder'),
+  PurchaseOrderItem: require('./PurchaseOrderItem'),
+  GoodsReceipt: require('./GoodsReceipt'),
+  GoodsReceiptItem: require('./GoodsReceiptItem'),
+  ReceiptDiscrepancy: require('./ReceiptDiscrepancy'),
+  SupplierEvaluation: require('./SupplierEvaluation'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
@@ -416,6 +427,24 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryCountItem.belongsTo(db.InventoryCount, { foreignKey: 'count_id', as: 'count', constraints: false });
   db.InventoryCountItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryCount.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
+  db.PurchaseRequest.hasMany(db.PurchaseRequestItem, { foreignKey: 'purchase_request_id', as: 'items', constraints: false });
+  db.PurchaseRequestItem.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.Quotation.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.Quotation.hasMany(db.SupplierOffer, { foreignKey: 'quotation_id', as: 'offers', constraints: false });
+  db.SupplierOffer.belongsTo(db.Quotation, { foreignKey: 'quotation_id', as: 'quotation', constraints: false });
+  db.SupplierOffer.hasMany(db.SupplierOfferItem, { foreignKey: 'supplier_offer_id', as: 'items', constraints: false });
+  db.SupplierOfferItem.belongsTo(db.SupplierOffer, { foreignKey: 'supplier_offer_id', as: 'supplierOffer', constraints: false });
+  db.SupplierOfferItem.belongsTo(db.PurchaseRequestItem, { foreignKey: 'purchase_request_item_id', as: 'purchaseRequestItem', constraints: false });
+  db.PurchaseOrder.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.PurchaseOrder.belongsTo(db.SupplierOffer, { foreignKey: 'supplier_offer_id', as: 'supplierOffer', constraints: false });
+  db.PurchaseOrder.hasMany(db.PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items', constraints: false });
+  db.PurchaseOrderItem.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
+  db.GoodsReceipt.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
+  db.GoodsReceipt.hasMany(db.GoodsReceiptItem, { foreignKey: 'goods_receipt_id', as: 'items', constraints: false });
+  db.GoodsReceiptItem.belongsTo(db.GoodsReceipt, { foreignKey: 'goods_receipt_id', as: 'goodsReceipt', constraints: false });
+  db.GoodsReceiptItem.belongsTo(db.PurchaseOrderItem, { foreignKey: 'purchase_order_item_id', as: 'purchaseOrderItem', constraints: false });
+  db.ReceiptDiscrepancy.belongsTo(db.GoodsReceiptItem, { foreignKey: 'goods_receipt_item_id', as: 'goodsReceiptItem', constraints: false });
+  db.SupplierEvaluation.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
   db.AiRun.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });
   db.AiSource.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
   db.AiRecommendation.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
