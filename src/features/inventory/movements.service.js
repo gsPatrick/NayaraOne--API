@@ -106,6 +106,17 @@ async function recordMovement(payload, actor, transaction) {
   if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {
     throw AppError.badRequest(`Movimento "${movementType}" de ferramenta/ativo exige "responsiblePersonId".`, 'INVENTORY_MOVEMENT_VALIDATION');
   }
+  // EST-004: material atribuído à obra (entra/sai de um local PROJECT_SITE) precisa de projectId.
+  const touchedLocationIds = [sourceLocationId, destinationLocationId].filter(Boolean);
+  if (touchedLocationIds.length > 0 && !projectId) {
+    const siteLocations = await InventoryLocation.findAll({
+      where: { id: touchedLocationIds, locationType: 'PROJECT_SITE' },
+      transaction,
+    });
+    if (siteLocations.length > 0) {
+      throw AppError.badRequest('Movimento envolvendo local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
+    }
+  }
 
   // EST-00x: idempotência — reenvio do mesmo payload (ex.: retry de rede) não duplica o movimento.
   if (idempotencyKey) {

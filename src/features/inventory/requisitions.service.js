@@ -148,6 +148,7 @@ async function issueRequisition(requisitionId, actor, transaction) {
           movementType: 'IN',
           quantity: line.quantity,
           destinationLocationId: requisition.projectLocationId,
+          projectId: requisition.projectId,
           sourceType: 'REQUISITION',
           sourceId: requisition.id,
           idempotencyKey: `req:${requisition.id}:item:${line.id}:site-in`,
