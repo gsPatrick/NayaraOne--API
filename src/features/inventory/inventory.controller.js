@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const itemsService = require('./items.service');
 const movementsService = require('./movements.service');
+const receiptsService = require('./receipts.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -41,6 +42,28 @@ const listBalancesByItem = catchAsync(async (req, res) => {
   return success(res, { data: balances });
 });
 
+const createReceipt = catchAsync(async (req, res) => {
+  const receipt = await req.withTenantTransaction((t) => receiptsService.createReceipt(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: receipt });
+});
+const listReceipts = catchAsync(async (req, res) => {
+  const receipts = await req.withTenantTransaction((t) => receiptsService.listReceipts(t, { status: req.query.status }));
+  return success(res, { data: receipts });
+});
+const getReceipt = catchAsync(async (req, res) => {
+  const receipt = await req.withTenantTransaction((t) => receiptsService.getReceipt(req.params.id, t));
+  return success(res, { data: receipt });
+});
+const reviewReceipt = catchAsync(async (req, res) => {
+  const receipt = await req.withTenantTransaction((t) => receiptsService.reviewReceipt(req.params.id, req.auth.userId, t));
+  return success(res, { data: receipt });
+});
+const confirmReceipt = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const receipt = await req.withTenantTransaction((t) => receiptsService.confirmReceipt(req.params.id, actor, t));
+  return success(res, { data: receipt });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -49,4 +72,9 @@ module.exports = {
   listLocations,
   recordMovement,
   listBalancesByItem,
+  createReceipt,
+  listReceipts,
+  getReceipt,
+  reviewReceipt,
+  confirmReceipt,
 };

@@ -21,4 +21,11 @@ inventoryRouter.get('/inventory/locations', requirePermission('inventory:read'),
 // ADJUSTMENT/LOSS/DISPOSAL exigem inventory:approve, validado dentro do service (movements.service.js).
 inventoryRouter.post('/inventory/movements', requirePermission('inventory:create'), inventoryController.recordMovement);
 
+// Receipts/NF (Guia do Marcelo §4) — DRAFT -> REVIEWED -> COMPLETED.
+inventoryRouter.post('/inventory/receipts', requirePermission('inventory:create'), inventoryController.createReceipt);
+inventoryRouter.get('/inventory/receipts', requirePermission('inventory:read'), inventoryController.listReceipts);
+inventoryRouter.get('/inventory/receipts/:id', requirePermission('inventory:read'), inventoryController.getReceipt);
+inventoryRouter.post('/inventory/receipts/:id/review', requirePermission('inventory:update'), inventoryController.reviewReceipt);
+inventoryRouter.post('/inventory/receipts/:id/confirm', requirePermission('inventory:create'), inventoryController.confirmReceipt);
+
 module.exports = inventoryRouter;
