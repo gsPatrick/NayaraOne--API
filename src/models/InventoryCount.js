@@ -15,6 +15,7 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       locationId: { type: DataTypes.UUID, allowNull: false, field: 'location_id' },
+      projectId: { type: DataTypes.UUID, allowNull: true, field: 'project_id' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
       countedAt: { type: DataTypes.DATE, allowNull: true, field: 'counted_at' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },

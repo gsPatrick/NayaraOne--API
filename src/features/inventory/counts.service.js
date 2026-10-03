@@ -10,12 +10,12 @@ const { publishCountCompleted } = require('./inventoryEvents.service');
 // fechamento só trava expected_quantity/divergence; ajuste de verdade é um ato separado e
 // aprovado (applyAdjustment -> movements.service ADJUSTMENT, com reason obrigatório).
 async function openCount(payload, actorUserId, transaction) {
-  const { groupId, companyId, locationId } = payload;
+  const { groupId, companyId, locationId, projectId } = payload;
   if (!groupId || !companyId || !locationId) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "locationId" são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
   }
   const count = await InventoryCount.create(
-    { groupId, companyId, locationId, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
+    { groupId, companyId, locationId, projectId: projectId || null, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
     { transaction }
   );
   await registrarAuditoria(
@@ -120,6 +120,7 @@ async function applyAdjustment(countItemId, actor, transaction) {
       quantity: Math.abs(divergence),
       destinationLocationId: divergence > 0 ? count.locationId : undefined,
       sourceLocationId: divergence < 0 ? count.locationId : undefined,
+      projectId: count.projectId,
       sourceType: 'COUNT',
       sourceId: count.id,
       idempotencyKey: `count-item:${line.id}`,

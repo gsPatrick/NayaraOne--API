@@ -17,6 +17,7 @@ module.exports = (sequelize) => {
       inventoryItemId: { type: DataTypes.UUID, allowNull: true, field: 'inventory_item_id' },
       assetId: { type: DataTypes.UUID, allowNull: true, field: 'asset_id' },
       locationId: { type: DataTypes.UUID, allowNull: true, field: 'location_id' },
+      projectId: { type: DataTypes.UUID, allowNull: true, field: 'project_id' },
       quantity: { type: DataTypes.DECIMAL(14, 6), allowNull: true, field: 'quantity' },
       responsiblePersonId: { type: DataTypes.UUID, allowNull: true, field: 'responsible_person_id' },
       context: { type: DataTypes.TEXT, allowNull: false, field: 'context' },

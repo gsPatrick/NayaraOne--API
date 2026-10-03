@@ -10,7 +10,7 @@ const { publishLossOpened } = require('./inventoryEvents.service');
 // contexto+evidência; decisão humana (approve/reject) é quem efetivamente gera o movimento
 // LOSS/DISPOSAL, nunca a criação do caso em si (EST-TS-10: loss sem evidência é bloqueado).
 async function openLossCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, inventoryItemId, assetId, locationId, quantity, responsiblePersonId, context, evidenceFileIds, estimatedCost } = payload;
+  const { groupId, companyId, inventoryItemId, assetId, locationId, projectId, quantity, responsiblePersonId, context, evidenceFileIds, estimatedCost } = payload;
 
   if (!groupId || !companyId || !context) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "context" são obrigatórios.', 'LOSS_CASE_VALIDATION');
@@ -35,6 +35,7 @@ async function openLossCase(payload, actorUserId, transaction) {
       inventoryItemId: inventoryItemId || null,
       assetId: assetId || null,
       locationId: locationId || null,
+      projectId: projectId || null,
       quantity: inventoryItemId ? quantity : null,
       responsiblePersonId: responsiblePersonId || null,
       context,
@@ -88,6 +89,7 @@ async function decideLossCase(lossCaseId, decision, actor, transaction) {
         movementType: 'LOSS',
         quantity: lossCase.quantity,
         sourceLocationId: lossCase.locationId,
+        projectId: lossCase.projectId,
         sourceType: 'LOSS_CASE',
         sourceId: lossCase.id,
         idempotencyKey: `loss-case:${lossCase.id}`,
