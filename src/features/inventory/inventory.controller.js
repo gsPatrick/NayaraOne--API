@@ -10,6 +10,7 @@ const assetsService = require('./assets.service');
 const toolLoansService = require('./toolLoans.service');
 const maintenanceService = require('./maintenance.service');
 const lossCasesService = require('./lossCases.service');
+const countsService = require('./counts.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -148,6 +149,32 @@ const decideLossCase = catchAsync(async (req, res) => {
   return success(res, { data: lossCase });
 });
 
+const openCount = catchAsync(async (req, res) => {
+  const count = await req.withTenantTransaction((t) => countsService.openCount(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: count });
+});
+const listCounts = catchAsync(async (req, res) => {
+  const counts = await req.withTenantTransaction((t) => countsService.listCounts(t, { status: req.query.status }));
+  return success(res, { data: counts });
+});
+const getCount = catchAsync(async (req, res) => {
+  const count = await req.withTenantTransaction((t) => countsService.getCount(req.params.id, t));
+  return success(res, { data: count });
+});
+const addCountItem = catchAsync(async (req, res) => {
+  const line = await req.withTenantTransaction((t) => countsService.addCountItem(req.params.id, req.body, t));
+  return success(res, { statusCode: 201, data: line });
+});
+const completeCount = catchAsync(async (req, res) => {
+  const count = await req.withTenantTransaction((t) => countsService.completeCount(req.params.id, req.auth.userId, t));
+  return success(res, { data: count });
+});
+const applyCountAdjustment = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const line = await req.withTenantTransaction((t) => countsService.applyAdjustment(req.params.countItemId, actor, t));
+  return success(res, { data: line });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -179,4 +206,10 @@ module.exports = {
   openLossCase,
   listLossCases,
   decideLossCase,
+  openCount,
+  listCounts,
+  getCount,
+  addCountItem,
+  completeCount,
+  applyCountAdjustment,
 };

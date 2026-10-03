@@ -125,6 +125,8 @@ const modelDefiners = {
   InventoryToolLoan: require('./InventoryToolLoan'),
   InventoryMaintenanceOrder: require('./InventoryMaintenanceOrder'),
   InventoryLossCase: require('./InventoryLossCase'),
+  InventoryCount: require('./InventoryCount'),
+  InventoryCountItem: require('./InventoryCountItem'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
@@ -410,6 +412,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryToolLoan.belongsTo(db.User, { foreignKey: 'person_user_id', as: 'person', constraints: false });
   db.InventoryMaintenanceOrder.belongsTo(db.Asset, { foreignKey: 'asset_id', as: 'asset', constraints: false });
   db.InventoryMaintenanceOrder.belongsTo(db.InventoryToolLoan, { foreignKey: 'source_tool_loan_id', as: 'sourceToolLoan', constraints: false });
+  db.InventoryCount.hasMany(db.InventoryCountItem, { foreignKey: 'count_id', as: 'items', constraints: false });
+  db.InventoryCountItem.belongsTo(db.InventoryCount, { foreignKey: 'count_id', as: 'count', constraints: false });
+  db.InventoryCountItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryCount.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
   db.AiRun.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });
   db.AiSource.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
   db.AiRecommendation.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });

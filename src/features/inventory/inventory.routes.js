@@ -56,4 +56,13 @@ inventoryRouter.post('/inventory/loss-cases', requirePermission('inventory:creat
 inventoryRouter.get('/inventory/loss-cases', requirePermission('inventory:read'), inventoryController.listLossCases);
 inventoryRouter.post('/inventory/loss-cases/:id/decide', requirePermission('inventory:approve'), inventoryController.decideLossCase);
 
+// Counts/inventário físico (Guia do Marcelo §8/item 10) — OPEN -> COMPLETED. Fechamento nunca
+// altera saldo (EST-TS-09); ajuste é um ato separado e aprovado por linha divergente.
+inventoryRouter.post('/inventory/counts', requirePermission('inventory:create'), inventoryController.openCount);
+inventoryRouter.get('/inventory/counts', requirePermission('inventory:read'), inventoryController.listCounts);
+inventoryRouter.get('/inventory/counts/:id', requirePermission('inventory:read'), inventoryController.getCount);
+inventoryRouter.post('/inventory/counts/:id/items', requirePermission('inventory:create'), inventoryController.addCountItem);
+inventoryRouter.post('/inventory/counts/:id/complete', requirePermission('inventory:create'), inventoryController.completeCount);
+inventoryRouter.post('/inventory/count-items/:countItemId/apply-adjustment', requirePermission('inventory:approve'), inventoryController.applyCountAdjustment);
+
 module.exports = inventoryRouter;
