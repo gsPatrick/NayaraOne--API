@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem } = require('../../models');
+const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem, InventoryStockBalance } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -122,6 +122,20 @@ async function confirmReceipt(receiptId, actor, transaction) {
   // concorrentemente, o lock de linha acima + o status check (REVIEWED->COMPLETED, não reentrante)
   // garante que só a primeira confirmação produz movimento — EST-TS-01 (mesmo recebimento 2x = uma entrada).
   for (const line of items) {
+    // EST-011: custo médio ponderado, única política de custo do módulo — nenhum outro ponto
+    // do código escreve em InventoryItem.averageCost. Soma ANTES de aplicar o IN desta linha,
+    // senão o próprio recebimento já contaminaria o denominador da média.
+    if (line.unitCost != null) {
+      const item = await InventoryItem.findByPk(line.inventoryItemId, { transaction, lock: transaction.LOCK.UPDATE });
+      const balancesBefore = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId }, transaction });
+      const totalQtyBefore = balancesBefore.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
+      const oldAverage = item.averageCost != null ? Number(item.averageCost) : Number(line.unitCost);
+      const receivedQty = Number(line.quantity);
+      item.averageCost = (totalQtyBefore * oldAverage + receivedQty * Number(line.unitCost)) / (totalQtyBefore + receivedQty);
+      item.updatedBy = actor.userId || null;
+      await item.save({ transaction });
+    }
+
     await recordMovement(
       {
         groupId: receipt.groupId,

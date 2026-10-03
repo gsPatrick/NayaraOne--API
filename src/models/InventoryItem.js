@@ -59,6 +59,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'minimum_quantity',
       },
+      averageCost: {
+        type: DataTypes.DECIMAL(18, 6),
+        allowNull: true,
+        field: 'average_cost',
+      },
       allowNegativeStock: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
