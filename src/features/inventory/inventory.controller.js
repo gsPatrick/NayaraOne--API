@@ -9,6 +9,7 @@ const requisitionsService = require('./requisitions.service');
 const assetsService = require('./assets.service');
 const toolLoansService = require('./toolLoans.service');
 const maintenanceService = require('./maintenance.service');
+const lossCasesService = require('./lossCases.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -133,6 +134,20 @@ const closeMaintenanceOrder = catchAsync(async (req, res) => {
   return success(res, { data: order });
 });
 
+const openLossCase = catchAsync(async (req, res) => {
+  const lossCase = await req.withTenantTransaction((t) => lossCasesService.openLossCase(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: lossCase });
+});
+const listLossCases = catchAsync(async (req, res) => {
+  const lossCases = await req.withTenantTransaction((t) => lossCasesService.listLossCases(t, { status: req.query.status }));
+  return success(res, { data: lossCases });
+});
+const decideLossCase = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const lossCase = await req.withTenantTransaction((t) => lossCasesService.decideLossCase(req.params.id, req.body.decision, actor, t));
+  return success(res, { data: lossCase });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -161,4 +176,7 @@ module.exports = {
   openMaintenanceOrder,
   listMaintenanceOrders,
   closeMaintenanceOrder,
+  openLossCase,
+  listLossCases,
+  decideLossCase,
 };

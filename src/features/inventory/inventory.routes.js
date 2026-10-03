@@ -51,4 +51,9 @@ inventoryRouter.post('/maintenance-orders', requirePermission('inventory:create'
 inventoryRouter.get('/maintenance-orders', requirePermission('inventory:read'), inventoryController.listMaintenanceOrders);
 inventoryRouter.post('/maintenance-orders/:id/close', requirePermission('inventory:update'), inventoryController.closeMaintenanceOrder);
 
+// Loss cases (Guia do Marcelo §11, EST-010) — OPEN -> APPROVED/REJECTED. Decisão exige inventory:approve.
+inventoryRouter.post('/inventory/loss-cases', requirePermission('inventory:create'), inventoryController.openLossCase);
+inventoryRouter.get('/inventory/loss-cases', requirePermission('inventory:read'), inventoryController.listLossCases);
+inventoryRouter.post('/inventory/loss-cases/:id/decide', requirePermission('inventory:approve'), inventoryController.decideLossCase);
+
 module.exports = inventoryRouter;

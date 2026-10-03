@@ -124,6 +124,7 @@ const modelDefiners = {
   AssetMovement: require('./AssetMovement'),
   InventoryToolLoan: require('./InventoryToolLoan'),
   InventoryMaintenanceOrder: require('./InventoryMaintenanceOrder'),
+  InventoryLossCase: require('./InventoryLossCase'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
