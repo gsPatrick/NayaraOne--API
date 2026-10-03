@@ -40,12 +40,38 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(16),
         allowNull: false,
         field: 'movement_type',
-        comment: "IN|OUT|TRANSFER",
+        comment: "IN|OUT|RETURN|TRANSFER|ADJUSTMENT|LOSS|DISPOSAL",
       },
       quantity: {
         type: DataTypes.DECIMAL(9, 6),
         allowNull: false,
         field: 'quantity',
+      },
+      sourceLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'source_location_id',
+      },
+      destinationLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'destination_location_id',
+      },
+      sourceType: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'source_type',
+        comment: 'RECEIPT|REQUISITION|TOOL_LOAN|ADJUSTMENT|COUNT|LOSS_CASE|MANUAL',
+      },
+      sourceId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'source_id',
+      },
+      idempotencyKey: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'idempotency_key',
       },
       movedAt: {
         type: DataTypes.DATE,

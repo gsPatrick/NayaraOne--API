@@ -41,6 +41,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'unit_of_measure',
       },
+      itemType: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'CONSUMABLE',
+        field: 'item_type',
+        comment: 'CONSUMABLE|TOOL|ASSET|SERVICE_ITEM',
+      },
       quantityOnHand: {
         type: DataTypes.DECIMAL(9, 6),
         allowNull: false,
