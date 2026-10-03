@@ -4,6 +4,7 @@ const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
+const { publishReceiptCompleted } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §4: Entrada por NF — DRAFT (cadastro) -> REVIEWED (conferido) ->
 // COMPLETED (confirmado, gera IN e atualiza saldo+custo). EST-TS-01/EST-TS-08: recebimento
@@ -141,6 +142,8 @@ async function confirmReceipt(receiptId, actor, transaction) {
   receipt.status = 'COMPLETED';
   receipt.updatedBy = actor.userId || null;
   await receipt.save({ transaction });
+
+  await publishReceiptCompleted(receipt, transaction);
 
   await registrarAuditoria(
     { groupId: receipt.groupId, companyId: receipt.companyId, actorUserId: actor.userId, action: 'INVENTORY_RECEIPT_COMPLETED', entityType: 'InventoryReceipt', entityId: receipt.id, reason: 'Recebimento confirmado — entrada de estoque gerada.' },

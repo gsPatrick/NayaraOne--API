@@ -4,6 +4,7 @@ const { InventoryLossCase, InventoryItem, InventoryMovement } = require('../../m
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
+const { publishLossOpened } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §11/EST-010: perda/quebra/extravio não é baixa comum — abre loss_case com
 // contexto+evidência; decisão humana (approve/reject) é quem efetivamente gera o movimento
@@ -45,6 +46,8 @@ async function openLossCase(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+
+  await publishLossOpened(lossCase, transaction);
 
   await registrarAuditoria(
     { groupId, companyId, actorUserId, action: 'INVENTORY_LOSS_CASE_OPENED', entityType: 'InventoryLossCase', entityId: lossCase.id, reason: 'Caso de perda/quebra/extravio aberto.' },

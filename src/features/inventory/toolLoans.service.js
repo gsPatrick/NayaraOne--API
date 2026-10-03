@@ -4,6 +4,7 @@ const { Asset, InventoryToolLoan } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { openMaintenanceOrder } = require('./maintenance.service');
+const { publishToolLoanCreated, publishToolReturned } = require('./inventoryEvents.service');
 
 const CONDITION_CODES = ['OK', 'DAMAGED'];
 
@@ -40,6 +41,8 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
   asset.assignedToUserId = personUserId;
   asset.updatedBy = actorUserId || null;
   await asset.save({ transaction });
+
+  await publishToolLoanCreated(loan, transaction);
 
   await registrarAuditoria(
     { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'TOOL_LOAN_CREATED', entityType: 'InventoryToolLoan', entityId: loan.id, reason: 'Empréstimo de ferramenta registrado.' },
@@ -86,6 +89,8 @@ async function returnTool(loanId, payload, actorUserId, transaction) {
       transaction
     );
   }
+
+  await publishToolReturned(loan, transaction);
 
   await registrarAuditoria(
     { groupId: loan.groupId, companyId: loan.companyId, actorUserId, action: 'TOOL_LOAN_RETURNED', entityType: 'InventoryToolLoan', entityId: loan.id, reason: `Ferramenta devolvida (condição: ${conditionCode}).` },

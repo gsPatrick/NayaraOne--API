@@ -3,6 +3,7 @@
 const { Asset, AssetMovement } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishAssetTransferred } = require('./inventoryEvents.service');
 
 // Caderno §9/Guia §9: patrimônio individualizável, asset_tag UNIQUE (EST-TS-04), QR só carrega
 // identificador opaco (GET /assets/by-tag/:tag), toda transferência gera asset_movement.
@@ -87,6 +88,8 @@ async function transferAsset(assetId, payload, actorUserId, transaction) {
   if (destinationCustodianUserId) asset.assignedToUserId = destinationCustodianUserId;
   asset.updatedBy = actorUserId || null;
   await asset.save({ transaction });
+
+  await publishAssetTransferred(movement, transaction);
 
   await registrarAuditoria(
     { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'ASSET_TRANSFERRED', entityType: 'Asset', entityId: asset.id, reason: 'Transferência de patrimônio registrada.' },

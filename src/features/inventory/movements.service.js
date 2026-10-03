@@ -3,6 +3,7 @@
 const { InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
 
 // EST-00x (Caderno Marco 7): 7 tipos de movimento. ADJUSTMENT/LOSS/DISPOSAL exigem
 // inventory:approve (mesmo padrão de alçada já usado em construction:approve/finance:approve)
@@ -137,23 +138,24 @@ async function recordMovement(payload, actor, transaction) {
   );
 
   const allowNegative = item.allowNegativeStock;
+  const touchedBalances = [];
 
   // Aplica o delta de saldo por local — TRANSFER move entre dois locais na mesma transação,
   // o que garante atomicidade (EST-003): nunca existe estado intermediário com saldo "perdido".
   if (movementType === 'OUT' || movementType === 'LOSS' || movementType === 'DISPOSAL') {
-    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
   } else if (movementType === 'IN' || movementType === 'RETURN') {
-    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
   } else if (movementType === 'TRANSFER') {
-    await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
-    await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
   } else if (movementType === 'ADJUSTMENT') {
     // Ajuste positivo soma no destino; ajuste negativo subtrai da origem — sinal definido por
     // qual dos dois campos veio preenchido no payload.
     if (destinationLocationId) {
-      await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction);
+      touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
     } else {
-      await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction);
+      touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
     }
   }
 
@@ -170,6 +172,18 @@ async function recordMovement(payload, actor, transaction) {
     },
     transaction
   );
+
+  await publishMovementRecorded(movement, transaction);
+
+  // EST-012: estoque mínimo — avisa (NAY sugere, nunca efetiva) quando o saldo resultante de
+  // um local tocado por este movimento cruza para abaixo do minimumQuantity do item.
+  if (item.minimumQuantity != null) {
+    for (const balance of touchedBalances) {
+      if (Number(balance.quantityOnHand) < Number(item.minimumQuantity)) {
+        await publishStockLow(item, balance.locationId, balance.quantityOnHand, transaction);
+      }
+    }
+  }
 
   return movement;
 }

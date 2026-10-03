@@ -16,6 +16,7 @@ const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadline
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
 const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
+const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -125,6 +126,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.WARRANTY_ESCALATION_JOB_DISAB
 // do job de escalonamento de garantia acima.
 if (process.env.NODE_ENV !== 'test' && process.env.PROJECT_DELAY_DETECTION_JOB_DISABLED !== 'true') {
   startProjectDelayDetectionJob();
+}
+
+// Escalonamento de empréstimo de ferramenta vencido (Marco 7 — EST-TS-13). Mesmo padrão dos
+// jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.TOOL_LOAN_OVERDUE_JOB_DISABLED !== 'true') {
+  startToolLoanOverdueJob();
 }
 
 module.exports = app;

@@ -2,6 +2,7 @@
 
 const { InventoryItem, InventoryLocation } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { publishItemCreated } = require('./inventoryEvents.service');
 
 const ITEM_TYPES = ['CONSUMABLE', 'TOOL', 'ASSET', 'SERVICE_ITEM'];
 const LOCATION_TYPES = ['WAREHOUSE', 'PROJECT_SITE'];
@@ -18,7 +19,7 @@ async function createItem(payload, actorUserId, transaction) {
     throw AppError.badRequest('"minimumQuantity" precisa ser um número >= 0.', 'INVENTORY_ITEM_VALIDATION');
   }
 
-  return InventoryItem.create(
+  const item = await InventoryItem.create(
     {
       groupId,
       companyId,
@@ -32,6 +33,8 @@ async function createItem(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  await publishItemCreated(item, transaction);
+  return item;
 }
 
 async function listItems(transaction, { itemType } = {}) {

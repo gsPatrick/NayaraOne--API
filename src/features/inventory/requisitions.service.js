@@ -4,6 +4,7 @@ const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, Inven
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
+const { publishRequisitionCreated } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §5: Saída para obra — REQUESTED -> APPROVED/REJECTED -> ISSUED (OUT com
 // project_id/stage_id — EST-004). "Separação gera reserva opcional" do Caderno não é
@@ -58,6 +59,8 @@ async function createRequisition(payload, actorUserId, transaction) {
       { transaction }
     );
   }
+
+  await publishRequisitionCreated(requisition, transaction);
 
   await registrarAuditoria(
     { groupId, companyId, actorUserId, action: 'INVENTORY_REQUISITION_CREATED', entityType: 'InventoryRequisition', entityId: requisition.id, reason: 'Requisição de material criada.' },

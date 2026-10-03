@@ -3,6 +3,7 @@
 const { Asset, InventoryMaintenanceOrder } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishMaintenanceOpened, publishMaintenanceClosed } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §8/item 7: devolução danificada abre manutenção; OS fecha manualmente e
 // libera o asset de volta para AVAILABLE.
@@ -25,6 +26,8 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+
+  await publishMaintenanceOpened(order, transaction);
 
   await registrarAuditoria(
     { groupId, companyId, actorUserId, action: 'MAINTENANCE_ORDER_OPENED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, reason: 'Ordem de manutenção aberta.' },
@@ -59,6 +62,8 @@ async function closeMaintenanceOrder(orderId, actorUserId, transaction) {
   order.closedAt = new Date();
   order.updatedBy = actorUserId || null;
   await order.save({ transaction });
+
+  await publishMaintenanceClosed(order, transaction);
 
   await registrarAuditoria(
     { groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'MAINTENANCE_ORDER_CLOSED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, reason: 'Ordem de manutenção fechada — patrimônio liberado.' },

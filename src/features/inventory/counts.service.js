@@ -4,6 +4,7 @@ const { InventoryCount, InventoryCountItem, InventoryStockBalance } = require('.
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
+const { publishCountCompleted } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §8/item 10 do Caderno: contagem NUNCA altera saldo direto (EST-TS-09) — o
 // fechamento só trava expected_quantity/divergence; ajuste de verdade é um ato separado e
@@ -70,6 +71,8 @@ async function completeCount(countId, actorUserId, transaction) {
   count.countedAt = new Date();
   count.updatedBy = actorUserId || null;
   await count.save({ transaction });
+
+  await publishCountCompleted(count, transaction);
 
   await registrarAuditoria(
     { groupId: count.groupId, companyId: count.companyId, actorUserId, action: 'INVENTORY_COUNT_COMPLETED', entityType: 'InventoryCount', entityId: count.id, reason: 'Inventário físico fechado — divergências calculadas, saldo não alterado.' },
