@@ -118,6 +118,8 @@ const modelDefiners = {
   InventoryStockBalance: require('./InventoryStockBalance'),
   InventoryReceipt: require('./InventoryReceipt'),
   InventoryReceiptItem: require('./InventoryReceiptItem'),
+  InventoryRequisition: require('./InventoryRequisition'),
+  InventoryRequisitionItem: require('./InventoryRequisitionItem'),
   Asset: require('./Asset'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
@@ -389,6 +391,11 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryReceiptItem.belongsTo(db.InventoryReceipt, { foreignKey: 'receipt_id', as: 'receipt', constraints: false });
   db.InventoryReceiptItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryReceipt.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  db.InventoryRequisition.hasMany(db.InventoryRequisitionItem, { foreignKey: 'requisition_id', as: 'items', constraints: false });
+  db.InventoryRequisitionItem.belongsTo(db.InventoryRequisition, { foreignKey: 'requisition_id', as: 'requisition', constraints: false });
+  db.InventoryRequisitionItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryRequisition.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.InventoryRequisition.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
   db.Asset.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
   db.Asset.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.AiRun.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });

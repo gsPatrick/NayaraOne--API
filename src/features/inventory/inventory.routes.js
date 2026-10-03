@@ -28,4 +28,11 @@ inventoryRouter.get('/inventory/receipts/:id', requirePermission('inventory:read
 inventoryRouter.post('/inventory/receipts/:id/review', requirePermission('inventory:update'), inventoryController.reviewReceipt);
 inventoryRouter.post('/inventory/receipts/:id/confirm', requirePermission('inventory:create'), inventoryController.confirmReceipt);
 
+// Requisitions (Guia do Marcelo §5) — REQUESTED -> APPROVED/REJECTED -> ISSUED (OUT com project_id/stage_id, EST-004).
+inventoryRouter.post('/inventory/requisitions', requirePermission('inventory:create'), inventoryController.createRequisition);
+inventoryRouter.get('/inventory/requisitions', requirePermission('inventory:read'), inventoryController.listRequisitions);
+inventoryRouter.get('/inventory/requisitions/:id', requirePermission('inventory:read'), inventoryController.getRequisition);
+inventoryRouter.post('/inventory/requisitions/:id/decide', requirePermission('inventory:approve'), inventoryController.decideRequisition);
+inventoryRouter.post('/inventory/requisitions/:id/issue', requirePermission('inventory:create'), inventoryController.issueRequisition);
+
 module.exports = inventoryRouter;

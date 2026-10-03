@@ -5,6 +5,7 @@ const { success } = require('../../utils/httpResponse');
 const itemsService = require('./items.service');
 const movementsService = require('./movements.service');
 const receiptsService = require('./receipts.service');
+const requisitionsService = require('./requisitions.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -64,6 +65,28 @@ const confirmReceipt = catchAsync(async (req, res) => {
   return success(res, { data: receipt });
 });
 
+const createRequisition = catchAsync(async (req, res) => {
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.createRequisition(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: requisition });
+});
+const listRequisitions = catchAsync(async (req, res) => {
+  const requisitions = await req.withTenantTransaction((t) => requisitionsService.listRequisitions(t, { status: req.query.status, projectId: req.query.projectId }));
+  return success(res, { data: requisitions });
+});
+const getRequisition = catchAsync(async (req, res) => {
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.getRequisition(req.params.id, t));
+  return success(res, { data: requisition });
+});
+const decideRequisition = catchAsync(async (req, res) => {
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.decideRequisition(req.params.id, req.body.decision, req.auth.userId, t));
+  return success(res, { data: requisition });
+});
+const issueRequisition = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.issueRequisition(req.params.id, actor, t));
+  return success(res, { data: requisition });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -77,4 +100,9 @@ module.exports = {
   getReceipt,
   reviewReceipt,
   confirmReceipt,
+  createRequisition,
+  listRequisitions,
+  getRequisition,
+  decideRequisition,
+  issueRequisition,
 };
