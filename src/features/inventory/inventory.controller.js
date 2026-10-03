@@ -7,6 +7,8 @@ const movementsService = require('./movements.service');
 const receiptsService = require('./receipts.service');
 const requisitionsService = require('./requisitions.service');
 const assetsService = require('./assets.service');
+const toolLoansService = require('./toolLoans.service');
+const maintenanceService = require('./maintenance.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -105,6 +107,32 @@ const transferAsset = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: movement });
 });
 
+const loanTool = catchAsync(async (req, res) => {
+  const loan = await req.withTenantTransaction((t) => toolLoansService.loanTool(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: loan });
+});
+const returnTool = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => toolLoansService.returnTool(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: result });
+});
+const listToolLoans = catchAsync(async (req, res) => {
+  const loans = await req.withTenantTransaction((t) => toolLoansService.listToolLoans(t, { status: req.query.status, assetId: req.query.assetId }));
+  return success(res, { data: loans });
+});
+
+const openMaintenanceOrder = catchAsync(async (req, res) => {
+  const order = await req.withTenantTransaction((t) => maintenanceService.openMaintenanceOrder(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: order });
+});
+const listMaintenanceOrders = catchAsync(async (req, res) => {
+  const orders = await req.withTenantTransaction((t) => maintenanceService.listMaintenanceOrders(t, { status: req.query.status, assetId: req.query.assetId }));
+  return success(res, { data: orders });
+});
+const closeMaintenanceOrder = catchAsync(async (req, res) => {
+  const order = await req.withTenantTransaction((t) => maintenanceService.closeMaintenanceOrder(req.params.id, req.auth.userId, t));
+  return success(res, { data: order });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -127,4 +155,10 @@ module.exports = {
   listAssets,
   getAssetByTag,
   transferAsset,
+  loanTool,
+  returnTool,
+  listToolLoans,
+  openMaintenanceOrder,
+  listMaintenanceOrders,
+  closeMaintenanceOrder,
 };

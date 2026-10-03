@@ -41,4 +41,14 @@ inventoryRouter.get('/assets', requirePermission('inventory:read'), inventoryCon
 inventoryRouter.get('/assets/by-tag/:tag', requirePermission('inventory:read'), inventoryController.getAssetByTag);
 inventoryRouter.post('/assets/:id/transfer', requirePermission('inventory:update'), inventoryController.transferAsset);
 
+// Tool loans (Guia do Marcelo §6/§7) — OPEN -> RETURNED. EST-TS-05 bloqueia novo empréstimo de ferramenta já emprestada.
+inventoryRouter.post('/assets/:id/loan', requirePermission('inventory:create'), inventoryController.loanTool);
+inventoryRouter.post('/tool-loans/:id/return', requirePermission('inventory:update'), inventoryController.returnTool);
+inventoryRouter.get('/tool-loans', requirePermission('inventory:read'), inventoryController.listToolLoans);
+
+// Maintenance orders (Guia do Marcelo §8) — OPEN -> CLOSED.
+inventoryRouter.post('/maintenance-orders', requirePermission('inventory:create'), inventoryController.openMaintenanceOrder);
+inventoryRouter.get('/maintenance-orders', requirePermission('inventory:read'), inventoryController.listMaintenanceOrders);
+inventoryRouter.post('/maintenance-orders/:id/close', requirePermission('inventory:update'), inventoryController.closeMaintenanceOrder);
+
 module.exports = inventoryRouter;
