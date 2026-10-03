@@ -35,4 +35,10 @@ inventoryRouter.get('/inventory/requisitions/:id', requirePermission('inventory:
 inventoryRouter.post('/inventory/requisitions/:id/decide', requirePermission('inventory:approve'), inventoryController.decideRequisition);
 inventoryRouter.post('/inventory/requisitions/:id/issue', requirePermission('inventory:create'), inventoryController.issueRequisition);
 
+// Assets/QR (Guia do Marcelo §6/§9) — asset_tag UNIQUE (EST-TS-04), QR só identificador opaco.
+inventoryRouter.post('/assets', requirePermission('inventory:create'), inventoryController.createAsset);
+inventoryRouter.get('/assets', requirePermission('inventory:read'), inventoryController.listAssets);
+inventoryRouter.get('/assets/by-tag/:tag', requirePermission('inventory:read'), inventoryController.getAssetByTag);
+inventoryRouter.post('/assets/:id/transfer', requirePermission('inventory:update'), inventoryController.transferAsset);
+
 module.exports = inventoryRouter;

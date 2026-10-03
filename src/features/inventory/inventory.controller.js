@@ -6,6 +6,7 @@ const itemsService = require('./items.service');
 const movementsService = require('./movements.service');
 const receiptsService = require('./receipts.service');
 const requisitionsService = require('./requisitions.service');
+const assetsService = require('./assets.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -87,6 +88,23 @@ const issueRequisition = catchAsync(async (req, res) => {
   return success(res, { data: requisition });
 });
 
+const createAsset = catchAsync(async (req, res) => {
+  const asset = await req.withTenantTransaction((t) => assetsService.createAsset(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: asset });
+});
+const listAssets = catchAsync(async (req, res) => {
+  const assets = await req.withTenantTransaction((t) => assetsService.listAssets(t, { status: req.query.status }));
+  return success(res, { data: assets });
+});
+const getAssetByTag = catchAsync(async (req, res) => {
+  const asset = await req.withTenantTransaction((t) => assetsService.getAssetByTag(req.params.tag, t));
+  return success(res, { data: asset });
+});
+const transferAsset = catchAsync(async (req, res) => {
+  const movement = await req.withTenantTransaction((t) => assetsService.transferAsset(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: movement });
+});
+
 module.exports = {
   createItem,
   listItems,
@@ -105,4 +123,8 @@ module.exports = {
   getRequisition,
   decideRequisition,
   issueRequisition,
+  createAsset,
+  listAssets,
+  getAssetByTag,
+  transferAsset,
 };

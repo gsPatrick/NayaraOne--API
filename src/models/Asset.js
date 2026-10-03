@@ -48,6 +48,21 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'project_id',
       },
+      inventoryItemId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'inventory_item_id',
+      },
+      currentLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'current_location_id',
+      },
+      warrantyUntil: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'warranty_until',
+      },
       acquisitionValue: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: true,

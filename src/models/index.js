@@ -121,6 +121,7 @@ const modelDefiners = {
   InventoryRequisition: require('./InventoryRequisition'),
   InventoryRequisitionItem: require('./InventoryRequisitionItem'),
   Asset: require('./Asset'),
+  AssetMovement: require('./AssetMovement'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
@@ -398,6 +399,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryRequisition.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
   db.Asset.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
   db.Asset.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Asset.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.Asset.belongsTo(db.InventoryLocation, { foreignKey: 'current_location_id', as: 'currentLocation', constraints: false });
+  db.Asset.hasMany(db.AssetMovement, { foreignKey: 'asset_id', as: 'movements', constraints: false });
+  db.AssetMovement.belongsTo(db.Asset, { foreignKey: 'asset_id', as: 'asset', constraints: false });
   db.AiRun.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });
   db.AiSource.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
   db.AiRecommendation.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
