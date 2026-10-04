@@ -37,8 +37,10 @@ async function createItem(payload, actorUserId, transaction) {
   return item;
 }
 
-async function listItems(transaction, { itemType } = {}) {
+async function listItems(transaction, { itemType, status } = {}) {
   const where = {};
+  if (status && status !== 'ALL') where.status = status;
+  else if (!status) where.status = 'ACTIVE';
   if (itemType) where.itemType = itemType;
   return InventoryItem.findAll({ where, order: [['name', 'ASC']], transaction });
 }
@@ -46,6 +48,17 @@ async function listItems(transaction, { itemType } = {}) {
 async function getItem(itemId, transaction) {
   const item = await InventoryItem.findByPk(itemId, { transaction });
   if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
+  return item;
+}
+
+async function setItemStatus(itemId, status, actorUserId, transaction) {
+  if (!['ACTIVE', 'INACTIVE'].includes(status)) {
+    throw AppError.badRequest('"status" precisa ser "ACTIVE" ou "INACTIVE".', 'INVENTORY_ITEM_VALIDATION');
+  }
+  const item = await getItem(itemId, transaction);
+  item.status = status;
+  item.updatedBy = actorUserId || null;
+  await item.save({ transaction });
   return item;
 }
 
@@ -75,4 +88,4 @@ async function listLocations(transaction) {
   return InventoryLocation.findAll({ where: { isActive: true }, order: [['name', 'ASC']], transaction });
 }
 
-module.exports = { ITEM_TYPES, LOCATION_TYPES, createItem, listItems, getItem, createLocation, listLocations };
+module.exports = { ITEM_TYPES, LOCATION_TYPES, createItem, listItems, getItem, setItemStatus, createLocation, listLocations };

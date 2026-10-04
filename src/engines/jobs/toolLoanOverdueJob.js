@@ -14,15 +14,33 @@ const { publishToolLoanOverdue } = require('../../features/inventory/inventoryEv
  * duplica o evento no outbox (dedupe por idempotencyKey já garantido por publishDomainEvent).
  */
 async function escalateOverdueToolLoans(transaction, now = new Date()) {
+  // BUG REAL CORRIGIDO: a versão anterior republicava tool.loan.overdue em TODO ciclo do job
+  // pra qualquer loan OPEN vencido, sem nenhum marcador de "já avisado" — como o
+  // idempotencyKey incluía só lockVersion (que não muda sozinho), a 2ª execução sempre batia
+  // em "duplicate key value violates unique constraint" e o job falhava pra aquela empresa a
+  // cada 30min, indefinidamente. Fix: transição OPEN -> OVERDUE (status já previsto no schema,
+  // nunca usado) é o marcador — só dispara o evento na transição, nunca de novo pro mesmo loan.
   const candidates = await InventoryToolLoan.findAll({
     where: { status: 'OPEN', dueAt: { [Op.ne]: null, [Op.lt]: now } },
     transaction,
   });
 
+  // Resiliência por item: cada loan é sua própria savepoint implícita via transação aninhada
+  // do Sequelize — se UM loan falhar (ex.: evento órfão de idempotencyKey colidindo por algum
+  // motivo externo), os demais ainda são processados em vez de travar a empresa inteira.
   let escalated = 0;
   for (const loan of candidates) {
-    await publishToolLoanOverdue(loan, transaction);
-    escalated += 1;
+    try {
+      await sequelize.transaction({ transaction }, async (nested) => {
+        await publishToolLoanOverdue(loan, nested);
+        loan.status = 'OVERDUE';
+        await loan.save({ transaction: nested });
+      });
+      escalated += 1;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[ToolLoanOverdueJob] Falha ao escalonar loan ${loan.id}: ${err.message}`);
+    }
   }
 
   return { loansChecked: candidates.length, escalated };

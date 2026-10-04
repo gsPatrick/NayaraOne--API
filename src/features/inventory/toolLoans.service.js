@@ -60,8 +60,10 @@ async function returnTool(loanId, payload, actorUserId, transaction) {
 
   const loan = await InventoryToolLoan.findByPk(loanId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!loan) throw AppError.notFound('Empréstimo não encontrado.', 'TOOL_LOAN_NOT_FOUND');
-  if (loan.status !== 'OPEN') {
-    throw AppError.badRequest(`Só é possível devolver um empréstimo em OPEN (atual: ${loan.status}).`, 'TOOL_LOAN_INVALID_TRANSITION');
+  // OVERDUE é só um estado de alerta do mesmo empréstimo aberto (ver toolLoanOverdueJob.js) —
+  // devolução continua válida depois do vencimento, só não pode repetir sobre um já RETURNED.
+  if (!['OPEN', 'OVERDUE'].includes(loan.status)) {
+    throw AppError.badRequest(`Só é possível devolver um empréstimo em OPEN/OVERDUE (atual: ${loan.status}).`, 'TOOL_LOAN_INVALID_TRANSITION');
   }
 
   loan.status = 'RETURNED';

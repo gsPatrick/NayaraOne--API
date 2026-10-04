@@ -64,6 +64,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'average_cost',
       },
+      status: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'ACTIVE',
+        field: 'status',
+      },
       allowNegativeStock: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

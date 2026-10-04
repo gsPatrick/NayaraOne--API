@@ -13,6 +13,7 @@ inventoryRouter.post('/inventory/items', requirePermission('inventory:create'), 
 inventoryRouter.get('/inventory/items', requirePermission('inventory:read'), inventoryController.listItems);
 inventoryRouter.get('/inventory/items/:id', requirePermission('inventory:read'), inventoryController.getItem);
 inventoryRouter.get('/inventory/items/:id/balances', requirePermission('inventory:read'), inventoryController.listBalancesByItem);
+inventoryRouter.post('/inventory/items/:id/status', requirePermission('inventory:update'), inventoryController.setItemStatus);
 
 inventoryRouter.post('/inventory/locations', requirePermission('inventory:create'), inventoryController.createLocation);
 inventoryRouter.get('/inventory/locations', requirePermission('inventory:read'), inventoryController.listLocations);

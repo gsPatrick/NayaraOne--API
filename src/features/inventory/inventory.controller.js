@@ -21,8 +21,12 @@ const createItem = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: item });
 });
 const listItems = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => itemsService.listItems(t, { itemType: req.query.itemType }));
+  const items = await req.withTenantTransaction((t) => itemsService.listItems(t, { itemType: req.query.itemType, status: req.query.status }));
   return success(res, { data: items });
+});
+const setItemStatus = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => itemsService.setItemStatus(req.params.id, req.body.status, req.auth.userId, t));
+  return success(res, { data: item });
 });
 const getItem = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => itemsService.getItem(req.params.id, t));
@@ -179,6 +183,7 @@ module.exports = {
   createItem,
   listItems,
   getItem,
+  setItemStatus,
   createLocation,
   listLocations,
   recordMovement,
