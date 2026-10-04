@@ -13,6 +13,7 @@ const {
   ReceiptDiscrepancy,
   SupplierEvaluation,
 } = require('../../models');
+const { InventoryStockBalance } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
@@ -39,14 +40,30 @@ async function createPurchaseRequest(payload, actorUserId, transaction) {
     { groupId, companyId, projectId: projectId || null, notes: notes || null, status: 'REQUESTED', requestedByUserId: actorUserId || null, createdBy: actorUserId || null, updatedBy: actorUserId || null },
     { transaction }
   );
+
+  // Caderno Operacional §34: nova requisição de compra deve verificar estoque existente antes
+  // de abrir, pra evitar compra duplicada do que já há em almoxarifado. Implementado como
+  // AVISO (não bloqueio) — pode haver motivo legítimo de comprar mesmo com saldo existente
+  // (ex.: já reservado para outro projeto), mesma lógica de "NAY sugere, nunca decide"
+  // (EST-013) aplicada aqui a uma checagem automática de sistema.
+  const stockWarnings = [];
   for (const line of items) {
     await PurchaseRequestItem.create(
       { groupId, companyId, purchaseRequestId: request.id, inventoryItemId: line.inventoryItemId || null, description: line.description, quantity: line.quantity },
       { transaction }
     );
+    if (line.inventoryItemId) {
+      const balances = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId }, transaction });
+      const totalOnHand = balances.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
+      if (totalOnHand >= Number(line.quantity)) {
+        stockWarnings.push({ inventoryItemId: line.inventoryItemId, description: line.description, requestedQuantity: line.quantity, availableQuantity: totalOnHand });
+      }
+    }
   }
   await registrarAuditoria({ groupId, companyId, actorUserId, action: 'PURCHASE_REQUEST_CREATED', entityType: 'PurchaseRequest', entityId: request.id, reason: 'Requisição de compra criada.' }, transaction);
-  return getPurchaseRequest(request.id, transaction);
+
+  const created = await getPurchaseRequest(request.id, transaction);
+  return { ...created.toJSON(), stockWarnings };
 }
 
 async function getPurchaseRequest(id, transaction) {
