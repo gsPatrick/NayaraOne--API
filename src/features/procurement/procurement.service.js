@@ -102,6 +102,13 @@ async function createQuotation(purchaseRequestId, actorUserId, transaction) {
   if (request.status !== 'APPROVED') {
     throw AppError.badRequest('Só é possível abrir cotação para uma requisição APPROVED.', 'QUOTATION_INVALID_SOURCE');
   }
+  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 5): toda chamada criava uma Quotation
+  // nova, mesmo já existindo uma OPEN para a mesma requisição — ao reabrir a tela (reload,
+  // nova sessão), as ofertas já submetidas na quotation antiga ficavam órfãs (vinculadas a um
+  // quotationId que a UI nunca mais consultava) e sumiam da comparação. Reaproveita a OPEN
+  // existente em vez de criar outra (idempotente por requisição).
+  const existing = await Quotation.findOne({ where: { purchaseRequestId: request.id, status: 'OPEN' }, transaction });
+  if (existing) return existing;
   return Quotation.create(
     { groupId: request.groupId, companyId: request.companyId, purchaseRequestId: request.id, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
     { transaction }
