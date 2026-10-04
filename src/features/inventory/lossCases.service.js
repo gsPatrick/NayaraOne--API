@@ -27,6 +27,13 @@ async function openLossCase(payload, actorUserId, transaction) {
   if (inventoryItemId && (quantity == null || Number(quantity) <= 0)) {
     throw AppError.badRequest('"quantity" > 0 é obrigatório quando "inventoryItemId" é informado.', 'LOSS_CASE_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 4): locationId era opcional aqui, mas
+  // decideLossCase exige sourceLocationId pra gerar o movimento LOSS — sem essa validação na
+  // criação, um caso de perda de item de estoque sem local ficava permanentemente travado em
+  // OPEN (a aprovação sempre falhava), sem nenhuma forma de corrigir o local depois de criado.
+  if (inventoryItemId && !locationId) {
+    throw AppError.badRequest('"locationId" é obrigatório quando "inventoryItemId" é informado (necessário para aprovar a baixa depois).', 'LOSS_CASE_VALIDATION');
+  }
 
   const lossCase = await InventoryLossCase.create(
     {
