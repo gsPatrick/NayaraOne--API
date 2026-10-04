@@ -59,6 +59,18 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
+  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 2): quantidade/valor acima da precisão da
+  // coluna DECIMAL (ex.: "999999" num campo DECIMAL(9,6), que só comporta 3 dígitos inteiros)
+  // batia no Postgres como "numeric field overflow" e vazava cru pro usuário — mesma classe de
+  // vazamento de erro de infraestrutura já corrigida acima pra UUID inválido.
+  if (err && err.name === 'SequelizeDatabaseError' && /numeric field overflow/i.test(err.message || '')) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'VALUE_TOO_LARGE',
+      message: 'O valor informado é grande demais para este campo.',
+    });
+  }
+
   if (err && err.name === 'SequelizeValidationError') {
     return failure(res, {
       statusCode: 400,
