@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryCountItem, InventoryStockBalance } = require('../../models');
+const { InventoryCount, InventoryCountItem, InventoryStockBalance, InventoryLocation } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -13,6 +13,15 @@ async function openCount(payload, actorUserId, transaction) {
   const { groupId, companyId, locationId, projectId } = payload;
   if (!groupId || !companyId || !locationId) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "locationId" são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
+  }
+  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 7): inventário físico aberto num local
+  // PROJECT_SITE sem projectId ficava impossível de ajustar depois — applyAdjustment propaga
+  // count.projectId pro ADJUSTMENT gerado, e recordMovement bloqueia (EST-004) qualquer
+  // movimento tocando local PROJECT_SITE sem projectId. Sem essa validação na abertura, a
+  // contagem era aceita normalmente e só travava, sem solução, na hora de aplicar o ajuste.
+  const location = await InventoryLocation.findByPk(locationId, { transaction });
+  if (location?.locationType === 'PROJECT_SITE' && !projectId) {
+    throw AppError.badRequest('Inventário num local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_COUNT_PROJECT_REQUIRED');
   }
   const count = await InventoryCount.create(
     { groupId, companyId, locationId, projectId: projectId || null, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
