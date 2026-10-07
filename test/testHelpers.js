@@ -55,15 +55,28 @@ async function withTenantTransaction(tenant, fn) {
  * callback), permitindo que o próprio teste decida fazer rollback explícito no `finally` —
  * usado para que dados de teste nunca fiquem persistidos no banco de dev compartilhado.
  */
-async function withRollbackTenantTransaction(tenant, fn) {
+// Suíte completa roda dezenas de arquivos de teste em paralelo contra a mesma empresa semente
+// — isso pode formar deadlock real do Postgres (40P01) entre duas transações concorrentes de
+// arquivos DIFERENTES disputando recursos da mesma empresa em ordem invertida (ex.:
+// margin_rule de um lado, outra tabela do outro). Não é bug de produto: em runtime real, cada
+// requisição tem sua própria transação por request, não dezenas rodando ombro a ombro na MESMA
+// empresa de teste. Como a transação já é descartável por design aqui (rollback sempre), é
+// seguro reabrir uma transação nova e re-executar o teste do zero quando isso acontece.
+async function withRollbackTenantTransaction(tenant, fn, retriesLeft = 2) {
   const transaction = await sequelize.transaction();
   try {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
     return await fn(transaction);
+  } catch (err) {
+    const isDeadlock = err?.parent?.code === '40P01' || err?.original?.code === '40P01';
+    if (isDeadlock && retriesLeft > 0) {
+      return withRollbackTenantTransaction(tenant, fn, retriesLeft - 1);
+    }
+    throw err;
   } finally {
-    await transaction.rollback();
+    await transaction.rollback().catch(() => {});
   }
 }
 
