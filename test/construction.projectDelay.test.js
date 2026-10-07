@@ -45,6 +45,31 @@ test('M6-74: projectDelayDetectionJob detecta obra atrasada e publica project.de
   });
 });
 
+// GAP CORRIGIDO (fechamento de gaps pós-Marco 6, item 4): a seção 11 "Eventos mínimos" do
+// Anexo I exige o nome canônico `project.created` (sem prefixo) — o código publicava
+// `construction.project.created`. Confirma o nome exato publicado na Outbox na criação da obra.
+test('item 4: createProject publica o evento com o nome exato "project.created" (sem prefixo "construction.")', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await projectsService.createProject(
+      withTenant({ name: 'Obra para checar nome do evento item 4' }),
+      tenant.userId,
+      transaction
+    );
+
+    const event = await OutboxEvent.findOne({
+      where: { aggregateId: project.id, eventType: 'project.created' },
+      transaction,
+    });
+    assert.ok(event, 'esperava um evento "project.created" na Outbox, nome exigido pelo contrato (seção 11 "Eventos mínimos")');
+
+    const oldNameEvent = await OutboxEvent.findOne({
+      where: { aggregateId: project.id, eventType: 'construction.project.created' },
+      transaction,
+    });
+    assert.equal(oldNameEvent, null, 'não deve mais publicar o nome antigo "construction.project.created"');
+  });
+});
+
 // Bug real corrigido nesta auditoria (rodada 15, 2026-10-05): project.delay.detected só ia pro
 // outbox (integração externa) — ninguém dentro do app era avisado da obra atrasada. Mesma
 // lacuna já corrigida em R7/R9/R10 pra outros jobs.

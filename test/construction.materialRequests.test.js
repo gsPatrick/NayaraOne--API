@@ -59,6 +59,36 @@ test('material-request: criar requisição publica evento material.requested', a
   });
 });
 
+// Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline do RDO (M6-94):
+// reenviar a mesma `idempotencyKey` (simulando o app sincronizando de novo uma requisição que
+// já tinha ido pro servidor) não cria um segundo registro.
+test('item 3: idempotencyKey de captura offline evita duplicar requisição de material ao ressincronizar', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const idempotencyKey = `offline-material-${uniqueSuffix()}`;
+
+    const first = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Areia média', quantity: 10, unit: 'm3', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    const resynced = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Areia média', quantity: 10, unit: 'm3', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    assert.equal(resynced.id, first.id, 'reenviar a mesma idempotencyKey deve devolver a MESMA requisição, não criar uma segunda');
+
+    const all = await materialRequestsService.listMaterialRequests(project.id, transaction);
+    const matching = all.filter((r) => r.idempotencyKey === idempotencyKey);
+    assert.equal(matching.length, 1, 'só deve existir UMA requisição persistida com esta idempotencyKey');
+  });
+});
+
 test('material-request: validação exige description/quantity/unit', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await createTestProject(transaction);

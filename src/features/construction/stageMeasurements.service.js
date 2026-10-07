@@ -104,7 +104,7 @@ async function createMeasurementItems(measurement, items, actorUserId, transacti
  * (não é possível aprovar uma medição sem valor — ver guarda em `decideStageMeasurement`).
  */
 async function createStageMeasurement(projectStageId, payload, actorUserId, transaction) {
-  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount, costCenterId } = payload;
+  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount, costCenterId, idempotencyKey } = payload;
   if (!groupId || !companyId || measuredPct === undefined || measuredPct === null || !measuredAt) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "measuredPct" e "measuredAt" são obrigatórios.',
@@ -122,6 +122,18 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
     throw AppError.badRequest('"measuredAt" deve ser uma data válida.', 'STAGE_MEASUREMENT_VALIDATION');
   }
 
+  // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline do RDO (M6-94,
+  // ver dailyReports.service.js#createDailyReport): se esta `idempotencyKey` já criou uma
+  // medição, devolve o registro existente em vez de duplicar (o UNIQUE parcial do banco —
+  // migration 20260101000295 — é a garantia final, checamos aqui antes para devolver o
+  // registro certo, não um erro de conflito genérico).
+  if (idempotencyKey) {
+    const existingByIdempotency = await StageMeasurement.findOne({ where: { idempotencyKey }, transaction });
+    if (existingByIdempotency) {
+      return existingByIdempotency;
+    }
+  }
+
   await getProjectStage(projectStageId, transaction);
 
   const measurement = await StageMeasurement.create(
@@ -137,6 +149,7 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
       revisionNumber: 1,
       totalAmount: assertValidManualTotalAmount(totalAmount),
       costCenterId: costCenterId || null,
+      idempotencyKey: idempotencyKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },

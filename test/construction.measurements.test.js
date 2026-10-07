@@ -530,3 +530,34 @@ test('createStageMeasurement/reviseStageMeasurement recusam totalAmount manual "
     );
   });
 });
+
+// Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline do RDO (M6-94):
+// reenviar a mesma `idempotencyKey` (simulando o app sincronizando de novo uma medição que já
+// tinha ido pro servidor) não cria um segundo registro.
+test('item 3: idempotencyKey de captura offline evita duplicar medição ao ressincronizar', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+    const idempotencyKey = `offline-measurement-${suffix}`;
+
+    const first = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 30, measuredAt: '2026-10-01', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    const resynced = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 30, measuredAt: '2026-10-01', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    assert.equal(resynced.id, first.id, 'reenviar a mesma idempotencyKey deve devolver a MESMA medição, não criar uma segunda');
+
+    const all = await stageMeasurementsService.listStageMeasurements(stage.id, transaction);
+    const matching = all.filter((m) => m.idempotencyKey === idempotencyKey);
+    assert.equal(matching.length, 1, 'só deve existir UMA medição persistida com esta idempotencyKey');
+  });
+});

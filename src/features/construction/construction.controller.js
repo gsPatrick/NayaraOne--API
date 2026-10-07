@@ -140,8 +140,19 @@ const createStageMeasurementByProject = catchAsync(async (req, res) => {
   if (!projectStageId) {
     throw AppError.badRequest('"projectStageId" é obrigatório.', 'STAGE_MEASUREMENT_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria HTTP real, item 6 — fechamento de gaps pós-Marco 6):
+  // `withTenant(req)` lê `req.auth.groupId/companyId` — chamá-lo com `{ ...rest }` (um objeto
+  // qualquer, não a requisição) estourava "Cannot read properties of undefined (reading
+  // 'groupId')" porque `{ ...rest }.auth` é `undefined`. O path canônico
+  // "POST /projects/:id/measurements" nunca tinha sido exercitado via HTTP real antes (só
+  // via chamada direta ao service ou via /stages/:id/measurements), por isso o bug sobrevivia.
   const measurement = await req.withTenantTransaction((t) =>
-    stageMeasurementsService.createStageMeasurement(projectStageId, withTenant({ ...rest }), req.auth.userId, t)
+    stageMeasurementsService.createStageMeasurement(
+      projectStageId,
+      { ...rest, groupId: req.auth.groupId, companyId: req.auth.companyId },
+      req.auth.userId,
+      t
+    )
   );
   return success(res, { statusCode: 201, data: measurement });
 });

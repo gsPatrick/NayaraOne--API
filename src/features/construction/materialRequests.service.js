@@ -23,7 +23,7 @@ const { recordMovement } = require('../inventory/movements.service');
 const STATUSES = ['REQUESTED', 'RECEIVED'];
 
 async function createMaterialRequest(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, stageId, description, quantity, unit } = payload;
+  const { groupId, companyId, stageId, description, quantity, unit, idempotencyKey } = payload;
   if (!groupId || !companyId || !description || quantity == null || !unit) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "description", "quantity" e "unit" são obrigatórios.',
@@ -32,6 +32,17 @@ async function createMaterialRequest(projectId, payload, actorUserId, transactio
   }
   if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
     throw AppError.badRequest('"quantity" precisa ser maior que zero.', 'MATERIAL_REQUEST_VALIDATION');
+  }
+
+  // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline do RDO (M6-94,
+  // ver dailyReports.service.js#createDailyReport) e da medição (createStageMeasurement acima
+  // no módulo): se esta `idempotencyKey` já criou uma requisição, devolve o registro existente
+  // em vez de duplicar. O UNIQUE parcial do banco (migration 20260101000295) é a garantia final.
+  if (idempotencyKey) {
+    const existingByIdempotency = await MaterialRequest.findOne({ where: { idempotencyKey }, transaction });
+    if (existingByIdempotency) {
+      return existingByIdempotency;
+    }
   }
 
   const project = await Project.findByPk(projectId, { transaction });
@@ -55,6 +66,7 @@ async function createMaterialRequest(projectId, payload, actorUserId, transactio
       unit,
       status: 'REQUESTED',
       requestedByUserId: actorUserId || null,
+      idempotencyKey: idempotencyKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },

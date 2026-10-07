@@ -7,8 +7,8 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 // sempre dentro da MESMA transação da operação de negócio.
 //
 // CONVENÇÃO OFICIAL DE NOMENCLATURA DO MÓDULO (M6-69/M6-71/M6-72/M6-105/M6-106 — decisão final
-// de resolução de merge): eventos TÉCNICOS de CRUD (created/status_changed/decided/opened)
-// mantêm o prefixo `construction.` (ex.: `construction.project.created`,
+// de resolução de merge): eventos TÉCNICOS de CRUD (status_changed/decided/opened) mantêm o
+// prefixo `construction.` (ex.: `construction.project.status_changed`,
 // `construction.stage_measurement.decided`, `construction.maintenance_case.opened`) — mesmo
 // padrão já usado em `legal.*` e `finance.*`. Já os eventos de NEGÓCIO de alto nível usam o
 // nome CANÔNICO sem prefixo, exigido pela fonte/checklist do Marco 6, porque são os nomes que
@@ -21,6 +21,12 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 //     `construction.maintenance_case.closed`/`publishMaintenanceCaseClosed` duplicado para o
 //     mesmo caso.
 
+// CORREÇÃO (fechamento de gaps pós-Marco 6, item 4): a seção 11 "Eventos mínimos" do Anexo I
+// (CONSTRUÇÃO + OBRAS + PÓS-OBRA — BLINDADO v1) exige literalmente o nome `project.created`
+// (sem prefixo `construction.`) — mesma convenção dos demais eventos de NEGÓCIO de alto nível
+// já publicados sem prefixo neste arquivo (`project.started`, `project.delivered`,
+// `project.stage.completed`, etc. — ver comentário de convenção no topo do arquivo). O código
+// publicava `construction.project.created`, nome que nenhum consumidor externo esperava.
 function publishProjectCreated(project, transaction) {
   return publishDomainEvent(
     {
@@ -28,9 +34,9 @@ function publishProjectCreated(project, transaction) {
       companyId: project.companyId,
       aggregateType: 'Project',
       aggregateId: project.id,
-      eventType: 'construction.project.created',
+      eventType: 'project.created',
       payload: { id: project.id, name: project.name, status: project.status },
-      idempotencyKey: `construction.project.created:${project.id}`,
+      idempotencyKey: `project.created:${project.id}`,
     },
     transaction
   );
@@ -235,9 +241,9 @@ function publishNonconformityClosed(nonconformity, transaction) {
 // M6-25/M6-39/M6-51/M6-65/M6-79/M6-87: evento de entrega da obra, disparado pelo gate dedicado
 // `POST /construction/projects/:id/deliver` (ver projects.service.js#deliverProject). Segue a
 // mesma convenção sem prefixo pedida para `warranty.case.closed` — ambos são eventos "de
-// negócio" de alto nível (fim de garantia / entrega da obra), diferente dos eventos técnicos de
-// CRUD (`construction.project.created`, `construction.project.status_changed`) que continuam
-// prefixados.
+// negócio" de alto nível (fim de garantia / entrega da obra), diferente do evento técnico de
+// CRUD (`construction.project.status_changed`) que continua prefixado. (`project.created`
+// também é canônico sem prefixo — ver publishProjectCreated acima.)
 function publishProjectDelivered(project, transaction) {
   return publishDomainEvent(
     {

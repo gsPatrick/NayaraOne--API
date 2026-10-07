@@ -45,6 +45,11 @@ module.exports = (sequelize) => {
       // M6-97 (reforço): override pontual de centro de custo por medição — se ausente, o
       // lançamento gerado usa o centro de custo padrão da obra (Project.costCenterId).
       costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
+      // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline já usado em
+      // DailyReport (M6-94): o app de campo gera a chave localmente e a envia ao sincronizar;
+      // reenviar a MESMA chave não cria uma segunda medição. UNIQUE parcial via migration
+      // 20260101000295 (só quando não-nulo).
+      idempotencyKey: { type: DataTypes.STRING(128), allowNull: true, field: 'idempotency_key' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

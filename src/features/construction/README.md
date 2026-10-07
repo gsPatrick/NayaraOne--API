@@ -63,8 +63,18 @@ consumidor de Estoque integrar.
 
 ## M6-102 — Backup/restore (Disaster Recovery, Tier 1)
 
-O Anexo I classifica Obras como **TIER 1** de disaster recovery (RPO/RTO intermediário), junto
-com CRM, locação e estoque. **Decisão**: este módulo **não tem um mecanismo de backup/restore
+Citação literal do contrato (seção "HOMOLOGAÇÃO — BLINDADO v1", item 10 "RPO/RTO por classe"):
+"TIER 1 — CRM, locação, obras, estoque: RPO/RTO intermediário." O mesmo bloco (item 9 "Backup")
+exige literalmente: "PostgreSQL: backups automáticos + PITR/WAL conforme infraestrutura" e
+"Backup sem restore testado não conta como backup confiável" — ou seja, a própria fonte trata
+backup/restore/PITR como responsabilidade de **infraestrutura/operação** (nível de banco
+completo), não como uma feature de código por módulo. Nenhuma linha do Anexo I ("CONSTRUÇÃO +
+OBRAS + PÓS-OBRA — BLINDADO v1") pede um endpoint de export/snapshot específico de Obras — a
+revisão deste item (fechamento de gaps pós-Marco 6, item 5) confirmou isso lendo o texto bruto
+do PDF e concluiu que inventar um endpoint de snapshot aqui seria trabalho artificial fora do
+escopo literal, não um requisito real do contrato.
+
+**Decisão**: este módulo **não tem um mecanismo de backup/restore
 próprio/dedicado** — ele é coberto pelo mecanismo geral de backup/restore do banco Postgres
 inteiro (todas as 19 tabelas do schema `construction`, com RLS `ENABLE + FORCE` ativado,
 participam do dump/restore do banco como qualquer outro schema do sistema). Isso é uma decisão

@@ -62,7 +62,7 @@ async function withTenantTransaction(tenant, fn) {
 // requisição tem sua própria transação por request, não dezenas rodando ombro a ombro na MESMA
 // empresa de teste. Como a transação já é descartável por design aqui (rollback sempre), é
 // seguro reabrir uma transação nova e re-executar o teste do zero quando isso acontece.
-async function withRollbackTenantTransaction(tenant, fn, retriesLeft = 2) {
+async function withRollbackTenantTransaction(tenant, fn, retriesLeft = 5) {
   const transaction = await sequelize.transaction();
   try {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });

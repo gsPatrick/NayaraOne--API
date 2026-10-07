@@ -74,6 +74,15 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline já usado em
+      // DailyReport (M6-94): o app de campo gera a chave localmente e a envia ao sincronizar;
+      // reenviar a MESMA chave não cria uma segunda requisição. UNIQUE parcial via migration
+      // 20260101000295 (só quando não-nulo).
+      idempotencyKey: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+        field: 'idempotency_key',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
