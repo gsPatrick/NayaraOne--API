@@ -120,12 +120,32 @@ async function approveBudget(id, actorUserId, transaction) {
   // inteira (sem validar margem mínima, sem congelar baseline nenhuma). Mesmo padrão já usado
   // em DELIVERED/WARRANTY/CLOSED: seta o status DIRETO aqui, fora de VALID_TRANSITIONS — só
   // este gate (approveBudget) pode levar uma obra a BUDGETED.
-  const project = await Project.findByPk(budget.projectId, { transaction });
-  if (project && project.status === 'PLANNED') {
-    project.status = 'BUDGETED';
-    project.updatedBy = actorUserId || null;
-    await project.save({ transaction });
-    await publishProjectStatusChanged(project, 'PLANNED', transaction);
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 10): faltava lock pessimista aqui — todas as
+  // outras transições de Project no módulo (transitionProject/deliverProject/closeProjectWarranty)
+  // travam a linha antes de ler-e-escrever, exatamente para evitar lost update. Sem o lock, uma
+  // transição concorrente do mesmo Project podia ter sua escrita perdida quando esta transação
+  // commitasse depois com um snapshot desatualizado.
+  const project = await Project.findByPk(budget.projectId, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (project) {
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 46, 2026-10-05): o contrato
+    // (TAB-0700) trata `projects.budget_amount` como o orçamento oficial da obra — mas
+    // aprovar o Budget agregado nunca sincronizava esse campo no Project, que ficava para
+    // sempre `null` a menos que alguém editasse manualmente via PATCH. Agora o baseline
+    // aprovado (sem dupla digitação, já calculado acima a partir da soma das linhas) também
+    // vira o budgetAmount oficial da obra.
+    project.budgetAmount = budget.baselineAmount;
+    if (project.status === 'PLANNED') {
+      project.status = 'BUDGETED';
+      project.updatedBy = actorUserId || null;
+      await project.save({ transaction });
+      await publishProjectStatusChanged(project, 'PLANNED', transaction);
+    } else {
+      project.updatedBy = actorUserId || null;
+      await project.save({ transaction });
+    }
   }
 
   await registrarAuditoria(

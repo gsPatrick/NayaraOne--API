@@ -129,7 +129,17 @@ async function getProjectHealth(projectId, transaction) {
 
   const forecastToComplete = Math.max(committedCost + approvedChanges - actualFinancialCost, 0);
   const projectedTotalCost = round2(actualFinancialCost + forecastToComplete);
-  const projectedMargin = round2(baselineBudget + approvedChanges - projectedTotalCost);
+  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): projectedMargin
+  // somava `baselineBudget + approvedChanges`, mas `baselineBudget` (quando vem de
+  // project.budgetAmount) JÁ inclui o impacto dos Change Orders aprovados — changeOrders.
+  // service.js:decideChangeOrder sincroniza project.budgetAmount com o novo baseline no momento
+  // da aprovação (comentário na linha ~177 desse arquivo confirma a intenção). Somar
+  // approvedChanges de novo aqui inflava a margem projetada, podendo mascarar um alerta de
+  // margem abaixo da regra configurada que deveria ter disparado. Base de margem usa
+  // committedCost (soma das linhas de orçamento, nunca tocada por Change Order) + approvedChanges
+  // — mesma base já usada em forecastToComplete, nunca double-counta.
+  const marginBudgetBase = committedCost + approvedChanges;
+  const projectedMargin = round2(marginBudgetBase - projectedTotalCost);
 
   // marginPct/belowMinMargin (FIX 01/10/2026, achado em auditoria): a fonte ("CONSTRUÇÃO +
   // OBRAS + PÓS-OBRA — BLINDADO v1", seção 5) exige "Margem abaixo da regra gera alerta" — o
@@ -139,8 +149,7 @@ async function getProjectHealth(projectId, transaction) {
   // sem receita-base (projeto ainda sem orçamento/linha) ou sem regra ativa configurada, os
   // campos ficam `null` — nunca inventa denominador nem bloqueia o endpoint (fail-open, é um
   // read model).
-  const marginBase = baselineBudget + approvedChanges;
-  const marginPct = marginBase > 0 ? round2((projectedMargin / marginBase) * 100) : null;
+  const marginPct = marginBudgetBase > 0 ? round2((projectedMargin / marginBudgetBase) * 100) : null;
   const activeMarginRule = await MarginRule.findOne({
     where: { groupId: project.groupId, companyId: project.companyId, isActive: true },
     transaction,
@@ -185,12 +194,24 @@ async function getProjectHealth(projectId, transaction) {
 
   // wastagePct (M6-99, fechado 30/09/2026 2ª rodada): soma de LossRecord do tipo LOSS
   // APPROVED desta obra / baselineBudget — desperdício real de material, não estimado.
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 5, releitura do padrão "campo financeiro
+  // somado duas vezes/não sincronizado com correção", 2026-10-06): esta soma considerava só os
+  // registros LOSS, sem nunca abater os RETURN já aprovados que apontam pra eles
+  // (`relatedLossRecordId`) — exatamente o saldo que `lossRecords.service.js#getMaterialBalance`
+  // já calcula líquido (LOSS negativo + RETURN positivo). Material perdido e depois DEVOLVIDO
+  // (RETURN) continuava contando 100% como desperdício aqui, podendo disparar o alerta de
+  // "desperdício acima de 5%" (buildRisks em nayObras.service.js) mesmo quando o saldo real de
+  // perda já tinha sido corrigido pra zero. Agora soma LOSS e abate RETURN, mesmo critério de
+  // saldo líquido usado em getMaterialBalance.
   const lossRecords = await LossRecord.findAll({
-    where: { projectId, movementType: 'LOSS', status: 'APPROVED' },
+    where: { projectId, movementType: { [Op.in]: ['LOSS', 'RETURN'] }, status: 'APPROVED' },
     transaction,
   });
-  const totalLossValue = lossRecords.reduce((acc, l) => acc + toNumber(l.estimatedValue), 0);
-  const wastagePct = baselineBudget > 0 ? round2((totalLossValue / baselineBudget) * 100) : null;
+  const totalLossValue = lossRecords.reduce((acc, l) => {
+    const sign = l.movementType === 'RETURN' ? -1 : 1;
+    return acc + sign * toNumber(l.estimatedValue);
+  }, 0);
+  const wastagePct = baselineBudget > 0 ? round2((Math.max(totalLossValue, 0) / baselineBudget) * 100) : null;
 
   // recurrenceByRootCause (M6-99, fechado 30/09/2026 2ª rodada): agrupa Nonconformity da obra
   // por motivo de perda (LossRecord.reason) e por severidade — a fonte não define uma taxonomia
@@ -202,7 +223,10 @@ async function getProjectHealth(projectId, transaction) {
     const key = nc.severity || 'DESCONHECIDA';
     recurrenceMap.set(key, (recurrenceMap.get(key) || 0) + 1);
   }
+  // `lossRecords` agora inclui RETURN (ver fix do wastagePct acima) — recorrência de causa raiz
+  // é só sobre perdas de fato (LOSS), uma devolução não é uma nova ocorrência de causa.
   for (const l of lossRecords) {
+    if (l.movementType !== 'LOSS') continue;
     const key = l.reason || 'DESCONHECIDA';
     recurrenceMap.set(key, (recurrenceMap.get(key) || 0) + 1);
   }

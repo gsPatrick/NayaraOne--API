@@ -7,7 +7,10 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 function assertNonNegativeAmount(value, fieldName) {
   if (value === undefined || value === null) return;
   const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
+  // FIX (auditoria Marco 6, ciclo 1 novo): só checava Number.isNaN, mas Number('Infinity') não
+  // é NaN — "plannedAmount": "Infinity" passava direto e corrompia o total do orçamento
+  // (mesma classe de bug catalogada na categoria 14: NaN/Infinity passando por guard de sinal).
+  if (!Number.isFinite(numeric)) {
     throw AppError.badRequest(`"${fieldName}" deve ser numérico.`, 'BUDGET_LINE_VALIDATION');
   }
   if (numeric < 0) {
@@ -29,8 +32,17 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
 
   // Baseline imutável (M6-17): não é possível acrescentar linha nova a um orçamento agregado
   // já `APPROVED` — isso aumentaria o custo total sem passar por Change Order.
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 7, 2026-10-06): lia o Budget sem lock
+  // pessimista antes de checar o status — corrida real contra approveBudget (que TRAVA a
+  // linha do Budget antes de aprovar): se createBudgetLine lesse DRAFT e só inserisse a linha
+  // DEPOIS do commit de approveBudget, a linha nova entrava num orçamento que já estava
+  // congelado como baseline imutável, sem passar por Change Order. Mesmo padrão de bug já
+  // corrigido em outras transições de status do módulo (Categoria 1 do catálogo).
   if (budgetId) {
-    const budget = await Budget.findByPk(budgetId, { transaction });
+    const budget = await Budget.findByPk(budgetId, {
+      transaction,
+      lock: transaction ? transaction.LOCK.UPDATE : undefined,
+    });
     if (!budget) throw AppError.notFound('Orçamento não encontrado.', 'BUDGET_NOT_FOUND');
     if (budget.status === 'APPROVED') {
       throw AppError.conflict(
@@ -109,7 +121,13 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
   // (category/description/costCenterId) continuam editáveis livremente.
   const { category, description, plannedAmount, costCenterId } = payload;
   if (plannedAmount !== undefined && line.budgetId) {
-    const budget = await Budget.findByPk(line.budgetId, { transaction });
+    // Mesmo lock pessimista de createBudgetLine (ver comentário acima) — sem isto, a mesma
+    // corrida contra approveBudget permitia editar plannedAmount de uma linha depois que o
+    // orçamento já tinha virado baseline imutável.
+    const budget = await Budget.findByPk(line.budgetId, {
+      transaction,
+      lock: transaction ? transaction.LOCK.UPDATE : undefined,
+    });
     if (budget && budget.status === 'APPROVED') {
       throw AppError.conflict(
         'Esta linha pertence a um orçamento já aprovado (baseline imutável) — altere o valor só via Change Order aprovado.',
@@ -145,4 +163,44 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
   return line;
 }
 
-module.exports = { createBudgetLine, listBudgetLines, getBudgetLine, updateBudgetLine };
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 8, 2026-10-06): não existia NENHUM
+// jeito, via API nem via UI, de remover uma linha de orçamento digitada errada antes da
+// aprovação — só editar. Mesmo padrão de baseline imutável das outras funções: bloqueia
+// fail-closed quando a linha já pertence a um orçamento APPROVED (só Change Order pode mudar
+// valor depois disso).
+async function removeBudgetLine(id, actorUserId, transaction) {
+  const line = await getBudgetLine(id, transaction);
+  if (line.budgetId) {
+    const budget = await Budget.findByPk(line.budgetId, {
+      transaction,
+      lock: transaction ? transaction.LOCK.UPDATE : undefined,
+    });
+    if (budget && budget.status === 'APPROVED') {
+      throw AppError.conflict(
+        'Esta linha pertence a um orçamento já aprovado (baseline imutável) — não pode ser excluída.',
+        'BUDGET_LINE_BASELINE_LOCKED'
+      );
+    }
+  }
+
+  const beforeJson = line.toJSON();
+  line.deletedBy = actorUserId || null;
+  await line.save({ transaction });
+  await line.destroy({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: line.groupId,
+      companyId: line.companyId,
+      actorUserId,
+      action: 'construction.budget_line.remove',
+      entityType: 'BudgetLine',
+      entityId: line.id,
+      beforeJson,
+      reason: `Linha de orçamento ${line.id} excluída.`,
+    },
+    transaction
+  );
+}
+
+module.exports = { createBudgetLine, listBudgetLines, getBudgetLine, updateBudgetLine, removeBudgetLine };

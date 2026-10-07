@@ -60,13 +60,25 @@ async function replaceDailyMaterials(dailyReportId, materials, tenant, actorUser
         'DAILY_MATERIAL_VALIDATION'
       );
     }
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", Categoria 14, ciclo 2): "quantity" nunca
+    // passava por Number.isFinite — só o guard `== null` acima, que é `false` para "NaN"/
+    // "Infinity" (strings) e também para número negativo. Como `daily_materials.quantity` é
+    // DECIMAL(14,4) e o Postgres aceita literalmente o valor especial 'NaN'/'Infinity', o INSERT
+    // nunca falhava e o dado corrompido entrava silenciosamente no banco.
+    const numericQuantity = Number(material.quantity);
+    if (!Number.isFinite(numericQuantity) || numericQuantity < 0) {
+      throw AppError.badRequest(
+        '"quantity" do material deve ser um número maior ou igual a zero.',
+        'DAILY_MATERIAL_VALIDATION'
+      );
+    }
     await DailyMaterial.create(
       {
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         dailyReportId,
         materialDescription: material.materialDescription,
-        quantity: material.quantity,
+        quantity: numericQuantity,
         unit: material.unit,
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
@@ -94,6 +106,11 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   } = payload;
   if (!groupId || !companyId || !reportDate) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "reportDate" são obrigatórios.', 'DAILY_REPORT_VALIDATION');
+  }
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 11): reportDate ia direto pro findOne/create sem
+  // validação de data válida — mesmo padrão já corrigido em createNonconformity/updateMaintenanceCase.
+  if (Number.isNaN(new Date(reportDate).getTime())) {
+    throw AppError.badRequest('"reportDate" deve ser uma data válida.', 'DAILY_REPORT_VALIDATION');
   }
   validateWorkforceCount(workforceCount);
   const normalizedShiftCode = normalizeShiftCode(shiftCode);
@@ -164,8 +181,18 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   return report;
 }
 
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): listDailyReports
+// devolvia TODAS as linhas da cadeia de versões (original + cada revisão de correctDailyReport),
+// não só a atual (HEAD) — como todas as versões têm a mesma reportDate, a ordenação por data não
+// distinguia qual é a mais recente, e o front mostrava versões superadas como linhas separadas
+// na lista. Usuário editando a equipe do dia via uma linha superada via botão "Editar" fazia
+// GET/PATCH contra um id que nunca recebe as edições seguintes, parecendo que a mudança "sumia"
+// ao reabrir. Filtra fora qualquer linha que já tenha sido superada (id presente como
+// supersedesId de outra linha).
 async function listDailyReports(projectId, transaction) {
-  return DailyReport.findAll({ where: { projectId }, order: [['report_date', 'DESC']], transaction });
+  const all = await DailyReport.findAll({ where: { projectId }, order: [['report_date', 'DESC']], transaction });
+  const supersededIds = new Set(all.map((r) => r.supersedesId).filter(Boolean));
+  return all.filter((r) => !supersededIds.has(r.id));
 }
 
 // Achado numa auditoria do FRONT do Marco 6 (30/09/2026): não existia NENHUMA forma de listar
@@ -237,16 +264,31 @@ async function correctDailyReport(id, payload, actorUserId, transaction) {
     { transaction }
   );
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 31, 2026-10-05): um PATCH parcial
+  // que só corrige, por exemplo, "weather"/"occurrences" (sem reenviar workers/materials, uso
+  // natural de um PATCH) criava uma revisão SEM nenhuma linha de DailyWorker/DailyMaterial —
+  // replaceDailyWorkers/replaceDailyMaterials são no-op quando o campo não é array, e a
+  // revisão nova tem um `id` distinto do original, então a equipe/materiais "desapareciam" da
+  // visão atual do RDO (getCurrentDailyReport sempre aponta pra revisão mais nova) mesmo os
+  // dados originais continuando intactos na revisão anterior. Quando o payload não reenvia o
+  // campo, copia as linhas da revisão original pra nova em vez de deixar vazio.
+  const workersToApply = Array.isArray(workers)
+    ? workers
+    : (await listDailyWorkers(original.id, transaction)).map((w) => ({ personId: w.personId, role: w.role, documentFileIds: w.documentFileIds }));
+  const materialsToApply = Array.isArray(materials)
+    ? materials
+    : (await listDailyMaterials(original.id, transaction)).map((m) => ({ materialDescription: m.materialDescription, quantity: m.quantity, unit: m.unit }));
+
   await replaceDailyWorkers(
     revision.id,
-    workers,
+    workersToApply,
     { groupId: original.groupId, companyId: original.companyId },
     actorUserId,
     transaction
   );
   await replaceDailyMaterials(
     revision.id,
-    materials,
+    materialsToApply,
     { groupId: original.groupId, companyId: original.companyId },
     actorUserId,
     transaction

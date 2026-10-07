@@ -14,6 +14,14 @@ const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
 // em finance.approval_requests e crm.opportunities (aberto -> em andamento -> resolvido/fechado).
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+// Grafo de transição válido — mesmo usado no front (app/painel/obras/pos-obra/[id]/page.js,
+// NEXT_STATUS_OPTIONS). CLOSED é terminal: reabertura exige fluxo próprio (fora de escopo aqui).
+const NEXT_STATUS_OPTIONS = {
+  OPEN: ['IN_PROGRESS', 'RESOLVED'],
+  IN_PROGRESS: ['RESOLVED'],
+  RESOLVED: ['CLOSED'],
+  CLOSED: [],
+};
 
 // M6-15/M6-16: WarrantyCase estruturado. `category` e `root_cause_code` são "enum simples
 // configurável" (nenhum documento fonte define lista fechada) — mantidos como STRING livre no
@@ -106,6 +114,22 @@ function validateRootCauseCode(rootCauseCode) {
   return normalized;
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", Categoria 14, ciclo 2): laborCost/
+// materialCost (MaintenanceCase) e cost (WarrantyAction) nunca passavam por nenhuma validação
+// numérica — iam direto do payload pro DECIMAL(14,2)/DECIMAL(14,2) do banco. "NaN"/"Infinity"
+// (string) ou negativo persistiam silenciosamente (Postgres aceita o literal), corrompendo o
+// histórico de custo do chamado e os agregados de totalLaborCost/totalMaterialCost/
+// totalWarrantyCost em postObraHealth.service.js.
+function validateMonetaryCost(value, fieldName) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw AppError.badRequest(`"${fieldName}" deve ser um número maior ou igual a zero.`, 'MAINTENANCE_CASE_COST_INVALID');
+  }
+  return numeric;
+}
+
 function validateMediaFileIds(fileIds, fieldName) {
   if (fileIds === undefined) return undefined;
   if (fileIds === null) return [];
@@ -139,6 +163,13 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
     );
   }
 
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 11): createMaintenanceCase nunca validava
+  // warrantyDeadlineAt — updateMaintenanceCase já valida a mesma data, mas a criação ia direto
+  // pro create/computeSlaDueAt com uma string inválida, estourando erro cru de tipo do Postgres.
+  if (warrantyDeadlineAt !== undefined && warrantyDeadlineAt !== null && Number.isNaN(new Date(warrantyDeadlineAt).getTime())) {
+    throw AppError.badRequest('"warrantyDeadlineAt" precisa ser uma data válida.', 'MAINTENANCE_CASE_WARRANTY_DEADLINE_INVALID');
+  }
+
   const normalizedSeverity = validateSeverity(severity);
   const now = new Date();
   const slaBaseDate = warrantyDeadlineAt || now;
@@ -161,8 +192,8 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
       escalationLevel: computeEscalationLevel(slaDueAt, now),
       rootCauseCode: validateRootCauseCode(rootCauseCode),
       beforeMediaFileIds: validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds') || [],
-      laborCost: laborCost != null ? laborCost : null,
-      materialCost: materialCost != null ? materialCost : null,
+      laborCost: validateMonetaryCost(laborCost, 'laborCost') ?? null,
+      materialCost: validateMonetaryCost(materialCost, 'materialCost') ?? null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -196,14 +227,27 @@ async function listMaintenanceCases(transaction, filters = {}) {
   return MaintenanceCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function getMaintenanceCase(id, transaction) {
-  const maintenanceCase = await MaintenanceCase.findByPk(id, { transaction });
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 42, 2026-10-05): proposeWarrantyResolution
+// e approveWarrantyResolution liam o caso sem lock pessimista antes de decidir resolutionStatus
+// e criar o lançamento financeiro — mesma classe de bug das rodadas 40/41 (payInsurancePolicyInstallment,
+// resolveDiscrepancy). `lock` opcional (default false) preserva o comportamento dos chamadores
+// read-only/não-financeiros deste mesmo helper.
+async function getMaintenanceCase(id, transaction, lock = false) {
+  const maintenanceCase = await MaintenanceCase.findByPk(id, {
+    transaction,
+    lock: lock ? transaction.LOCK.UPDATE : undefined,
+  });
   if (!maintenanceCase) throw AppError.notFound('Chamado de pós-obra não encontrado.', 'MAINTENANCE_CASE_NOT_FOUND');
   return maintenanceCase;
 }
 
 async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
-  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 2 de código, 2026-10-06): mesma classe de bug
+  // das rodadas 40-42 (proposeWarrantyResolution/approveWarrantyResolution) — updateMaintenanceCase
+  // lia o caso sem lock pessimista antes de decidir status/escalationLevel/slaDueAt e salvar. Duas
+  // edições concorrentes do mesmo chamado (ex.: duas mudanças de status simultâneas) causavam
+  // lost-update. Alinhado ao padrão já usado nos demais métodos de escrita deste arquivo.
+  const maintenanceCase = await getMaintenanceCase(id, transaction, true);
   const beforeJson = maintenanceCase.toJSON();
   const {
     status,
@@ -228,6 +272,20 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
         'MAINTENANCE_CASE_STATUS_INVALID'
       );
     }
+    // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 2, 2026-10-06): updateMaintenanceCase
+    // só validava que o valor pertencia à lista de status, sem checar a SEQUÊNCIA — era possível
+    // pular etapas (OPEN->CLOSED direto) ou reabrir um caso já CLOSED via chamada direta à API
+    // (Postman/integração), ignorando a trava que só existia no front (NEXT_STATUS_OPTIONS em
+    // app/painel/obras/pos-obra/[id]/page.js). Isso é grave porque CLOSED dispara
+    // publishWarrantyCaseClosed (evento) e reseta escalationLevel — pular pra lá sem passar pelo
+    // atendimento real, ou reabrir sem justificativa, não deixava rastro nenhum. Grafo replicado
+    // do front, agora também fail-closed no backend.
+    if (normalizedStatus !== previousStatus && !NEXT_STATUS_OPTIONS[previousStatus]?.includes(normalizedStatus)) {
+      throw AppError.conflict(
+        `Transição de status inválida: "${STATUS_LABELS_PT[previousStatus]}" não pode ir direto para "${STATUS_LABELS_PT[normalizedStatus]}".`,
+        'MAINTENANCE_CASE_STATUS_TRANSITION_INVALID'
+      );
+    }
     maintenanceCase.status = normalizedStatus;
   }
   if (description !== undefined) maintenanceCase.description = description;
@@ -238,8 +296,8 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   if (beforeMedia !== undefined) maintenanceCase.beforeMediaFileIds = beforeMedia;
   const afterMedia = validateMediaFileIds(afterMediaFileIds, 'afterMediaFileIds');
   if (afterMedia !== undefined) maintenanceCase.afterMediaFileIds = afterMedia;
-  if (laborCost !== undefined) maintenanceCase.laborCost = laborCost;
-  if (materialCost !== undefined) maintenanceCase.materialCost = materialCost;
+  if (laborCost !== undefined) maintenanceCase.laborCost = validateMonetaryCost(laborCost, 'laborCost');
+  if (materialCost !== undefined) maintenanceCase.materialCost = validateMonetaryCost(materialCost, 'materialCost');
 
   let slaRecalcNeeded = false;
   if (warrantyDeadlineAt !== undefined) {
@@ -267,7 +325,16 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   }
   // Recalcula o nível de escalonamento sempre que o caso é tocado (mesma regra usada pelo job
   // periódico) — evita mostrar um `escalation_level` desatualizado logo após uma edição manual.
-  maintenanceCase.escalationLevel = computeEscalationLevel(maintenanceCase.slaDueAt, now);
+  //
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 13, 2026-10-05): o recálculo rodava
+  // incondicionalmente, mesmo pra um caso que acabou de virar CLOSED — como `slaDueAt` continua
+  // no passado pra sempre, o caso fechado ficava marcado OVERDUE eternamente, poluindo a
+  // agregação `casesByEscalationLevel` de `postObraHealth.service.js` (um caso já resolvido
+  // nunca deveria contar como "atrasado" em nenhum painel). Caso CLOSED sempre zera pra NONE;
+  // caso aberto continua recalculando normalmente.
+  maintenanceCase.escalationLevel = maintenanceCase.status === 'CLOSED'
+    ? 'NONE'
+    : computeEscalationLevel(maintenanceCase.slaDueAt, now);
 
   maintenanceCase.updatedBy = actorUserId || null;
   await maintenanceCase.save({ transaction });
@@ -299,8 +366,32 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   return maintenanceCase;
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 56, 2026-10-06): removeMaintenanceCase
+// (soft delete) não checava WarrantyAction vinculadas — mesmo padrão já corrigido em
+// removeProject (rodada 55). Sem a guarda, dava para excluir um chamado de garantia que já tinha
+// ações/custos registrados, deixando o histórico de WarrantyAction.cost órfão sob um chamado
+// oficialmente excluído.
 async function removeMaintenanceCase(id, actorUserId, transaction) {
   const maintenanceCase = await getMaintenanceCase(id, transaction);
+
+  const actionCount = await WarrantyAction.count({ where: { warrantyCaseId: id }, transaction });
+  if (actionCount > 0) {
+    throw AppError.conflict(
+      'Não é possível excluir um chamado de garantia que já tem ações registradas.',
+      'MAINTENANCE_CASE_DELETE_HAS_DEPENDENTS'
+    );
+  }
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 10): a guarda da rodada 56 só cobria
+  // WarrantyAction — um caso com resolução de garantia já aprovada e lançada no Financeiro
+  // (resolutionFinancialEntryId preenchido) podia ser excluído sem bloqueio nenhum, deixando o
+  // FinancialEntry já criado órfão de um MaintenanceCase oficialmente excluído.
+  if (maintenanceCase.resolutionFinancialEntryId) {
+    throw AppError.conflict(
+      'Não é possível excluir um chamado de garantia que já tem uma resolução financeira lançada.',
+      'MAINTENANCE_CASE_DELETE_HAS_DEPENDENTS'
+    );
+  }
+
   const beforeJson = maintenanceCase.toJSON();
   maintenanceCase.deletedBy = actorUserId || null;
   await maintenanceCase.save({ transaction });
@@ -331,6 +422,16 @@ async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transa
   if (!description) {
     throw AppError.badRequest('O campo "description" é obrigatório.', 'WARRANTY_ACTION_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 10): não havia checagem de status — era
+  // possível registrar nova ação (com custo) em um chamado já CLOSED (estado terminal,
+  // NEXT_STATUS_OPTIONS.CLOSED = []), inflando silenciosamente os totais de custo em
+  // postObraHealth.service.js para um chamado que o painel já trata como encerrado.
+  if (maintenanceCase.status === 'CLOSED') {
+    throw AppError.conflict(
+      'Não é possível registrar uma ação de garantia em um chamado já encerrado.',
+      'WARRANTY_ACTION_CASE_CLOSED'
+    );
+  }
 
   const action = await WarrantyAction.create(
     {
@@ -340,7 +441,7 @@ async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transa
       description,
       performedByUserId: performedByUserId || actorUserId || null,
       performedAt: performedAt || new Date(),
-      cost: cost != null ? cost : null,
+      cost: validateMonetaryCost(cost, 'cost') ?? null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -382,7 +483,7 @@ async function listWarrantyActions(warrantyCaseId, transaction) {
  * `approveWarrantyResolution` explícito antes de gerar qualquer efeito financeiro.
  */
 async function proposeWarrantyResolution(id, payload, actorUserId, transaction) {
-  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  const maintenanceCase = await getMaintenanceCase(id, transaction, true);
   const { resolutionType, resolutionAmount } = payload || {};
   const normalizedType = String(resolutionType || '').toUpperCase();
   if (!RESOLUTION_TYPES.includes(normalizedType)) {
@@ -428,7 +529,7 @@ async function proposeWarrantyResolution(id, payload, actorUserId, transaction) 
 }
 
 async function approveWarrantyResolution(id, actorUserId, transaction) {
-  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  const maintenanceCase = await getMaintenanceCase(id, transaction, true);
   if (maintenanceCase.resolutionStatus !== 'PENDING_APPROVAL') {
     throw AppError.conflict('Não há resolução de garantia pendente de aprovação para este caso.', 'WARRANTY_RESOLUTION_NOT_PENDING');
   }

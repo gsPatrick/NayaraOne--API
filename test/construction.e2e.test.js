@@ -43,7 +43,13 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     // 1. Criar obra (código auto-gerado, M6-01)
     const project = await projectsService.createProject(
-      withTenant({ name: `E2E Obra ${suffix}`, managerUserId: tenant.userId, budgetAmount: 50000 }),
+      withTenant({
+        name: `E2E Obra ${suffix}`,
+        responsibleUserId: tenant.userId,
+        budgetAmount: 50000,
+        startsAt: '2026-10-01',
+        endsAtPlanned: '2027-10-01',
+      }),
       tenant.userId,
       transaction
     );
@@ -166,6 +172,7 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       transaction
     );
     assert.ok(action.id);
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
     const closedCase = await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
     assert.equal(closedCase.status, 'CLOSED');
 

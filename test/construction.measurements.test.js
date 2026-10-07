@@ -344,3 +344,147 @@ test('M6-42 GET .../health não quebra quando Change Orders ainda não existe (t
     assert.equal(typeof health.approvedChanges, 'number');
   });
 });
+
+// Bug real corrigido nesta auditoria (rodada 18, 2026-10-05): a conclusão automática da etapa
+// (ciclo 4) mutava stage.status direto, por fora de updateProjectStage — nunca disparava
+// project.stage.completed (M6-106, evento canônico que Financeiro/BI esperam no barramento) nem
+// auditava a transição da ProjectStage.
+test('M6-106: aprovar medição de 100% completa a etapa E publica project.stage.completed', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 100, measuredAt: '2026-09-01', items: [{ description: 'Entrega final', quantity: 1, unitPrice: 5000 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+    await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+
+    await stage.reload({ transaction });
+    assert.equal(stage.status, 'DONE');
+
+    const { OutboxEvent } = require('../src/models');
+    const events = await OutboxEvent.findAll({ where: { aggregateId: stage.id, eventType: 'project.stage.completed' }, transaction });
+    assert.equal(events.length, 1, 'completar a etapa via aprovação de medição precisa publicar project.stage.completed, não só mudar o status');
+  });
+});
+
+// Bug real corrigido nesta auditoria (rodada 46, 2026-10-05): o contrato (TAB-0701) trata
+// stage_code/planned_cost/planned_start/planned_end como NOT NULL — mas nada impedia uma etapa
+// entrar em execução (IN_PROGRESS) sem nenhum desses campos preenchidos.
+test('M6-TAB0701: iniciar etapa (PENDING -> IN_PROGRESS) exige stageCode/plannedCost/startsAt/endsAt', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { project } = await setupProjectAndStage(transaction, suffix);
+    const stage = await projectStagesService.createProjectStage(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa sem dados ${suffix}`, sequence: 2 },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => projectStagesService.updateProjectStage(stage.id, { status: 'IN_PROGRESS' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'PROJECT_STAGE_MISSING_REQUIRED_FIELDS');
+        return true;
+      }
+    );
+
+    const started = await projectStagesService.updateProjectStage(
+      stage.id,
+      { status: 'IN_PROGRESS', stageCode: `ET-${suffix}`, plannedCost: 1000, startsAt: '2026-10-01', endsAt: '2026-11-01' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(started.status, 'IN_PROGRESS');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 3, 2026-10-06): updateProjectStage aceitava
+// QUALQUER transição de status (pular PENDING->DONE direto, ou regredir DONE->PENDING/
+// IN_PROGRESS->PENDING) via chamada direta à API — só o front nunca mandava "status" fora da
+// sequência, mas o backend não tinha gate. Mesmo ângulo do bug já corrigido em
+// updateMaintenanceCase (ciclo 2).
+test('M6: updateProjectStage recusa transição de status fora da sequência válida', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+    assert.equal(stage.status, 'PENDING');
+
+    // PENDING -> DONE direto (pulando IN_PROGRESS) deve ser recusado.
+    await assert.rejects(
+      () => projectStagesService.updateProjectStage(stage.id, { status: 'DONE' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'PROJECT_STAGE_STATUS_TRANSITION_INVALID');
+        return true;
+      }
+    );
+
+    const started = await projectStagesService.updateProjectStage(
+      stage.id,
+      { status: 'IN_PROGRESS', stageCode: `ET2-${suffix}`, plannedCost: 500, startsAt: '2026-10-01', endsAt: '2026-11-01' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(started.status, 'IN_PROGRESS');
+
+    // IN_PROGRESS -> PENDING (regressão) deve ser recusado.
+    await assert.rejects(
+      () => projectStagesService.updateProjectStage(started.id, { status: 'PENDING' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'PROJECT_STAGE_STATUS_TRANSITION_INVALID');
+        return true;
+      }
+    );
+
+    const done = await projectStagesService.updateProjectStage(started.id, { status: 'DONE' }, tenant.userId, transaction);
+    assert.equal(done.status, 'DONE');
+
+    // DONE -> qualquer coisa (reabrir) deve ser recusado.
+    await assert.rejects(
+      () => projectStagesService.updateProjectStage(done.id, { status: 'IN_PROGRESS' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'PROJECT_STAGE_STATUS_TRANSITION_INVALID');
+        return true;
+      }
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): totalAmount manual
+// (sem items) era persistido sem Number.isFinite — "NaN" passava o guard de decideStageMeasurement
+// e aprovava a medição com totalAmount=NaN, propagando pro payable financeiro real.
+test('createStageMeasurement/reviseStageMeasurement recusam totalAmount manual "NaN"', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+
+    await assert.rejects(
+      () => stageMeasurementsService.createStageMeasurement(
+        stage.id,
+        { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 40, measuredAt: '2026-09-01', totalAmount: 'NaN' },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'STAGE_MEASUREMENT_VALIDATION'); return true; }
+    );
+
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 40, measuredAt: '2026-09-01', totalAmount: 1000 },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => stageMeasurementsService.reviseStageMeasurement(measurement.id, { totalAmount: 'NaN' }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'STAGE_MEASUREMENT_VALIDATION'); return true; }
+    );
+  });
+});

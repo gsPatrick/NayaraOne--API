@@ -177,6 +177,38 @@ test('M6-29: perda de material acima da alçada exige aprovação explícita', a
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): upsertApprovalThreshold
+// não validava Number.isFinite/teto — "Infinity"/"NaN" passava e quebrava a alçada (threshold
+// Infinity faz tudo auto-aprovar).
+test('upsertApprovalThreshold recusa valores Infinity/NaN/negativo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await assert.rejects(
+      () => lossRecordsService.upsertApprovalThreshold(
+        { groupId: tenant.groupId, companyId: tenant.companyId, context: 'MATERIAL_LOSS', maxAutoApproveAmount: Infinity },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'APPROVAL_THRESHOLD_VALIDATION'); return true; }
+    );
+    await assert.rejects(
+      () => lossRecordsService.upsertApprovalThreshold(
+        { groupId: tenant.groupId, companyId: tenant.companyId, context: 'MATERIAL_LOSS', maxAutoApproveAmount: 'NaN' },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'APPROVAL_THRESHOLD_VALIDATION'); return true; }
+    );
+    await assert.rejects(
+      () => lossRecordsService.upsertApprovalThreshold(
+        { groupId: tenant.groupId, companyId: tenant.companyId, context: 'MATERIAL_LOSS', maxAutoApproveAmount: -10 },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'APPROVAL_THRESHOLD_VALIDATION'); return true; }
+    );
+  });
+});
+
 // M6-60: devolução de material gera movimento inverso e corrige o saldo calculado.
 test('M6-60: devolução de material corrige o saldo (movimento inverso real)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
@@ -226,6 +258,17 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
         return true;
       }
     );
+
+    // M6-NOVO-3 (auditoria Marco 6, ciclo 1 novo, categoria 14 do catálogo): "quantity": "NaN"
+    // não satisfaz nem `<= 0` nem `> remainingQuantity` — sem Number.isFinite, passava o guard
+    // e criava um RETURN com quantity/estimatedValue = NaN.
+    await assert.rejects(
+      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 'NaN' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LOSS_RECORD_RETURN_QUANTITY_INVALID');
+        return true;
+      }
+    );
   });
 });
 
@@ -249,5 +292,79 @@ test('RLS: não conformidade de uma empresa não é visível fora do contexto de
       const found = await Nonconformity.findByPk(nc.id, { transaction: rawTransaction });
       assert.equal(found, null);
     });
+  });
+});
+
+// Bug real corrigido nesta auditoria (rodada 19, 2026-10-05): contrato diz "falha abre
+// nonconformity" — checkQualityItem marcando um item NOT_OK precisa abrir a NC automaticamente,
+// não depender de alguém lembrar de criar manualmente.
+test('M6-12: marcar item de checklist de qualidade como NOT_OK abre Nonconformity automaticamente', async () => {
+  const qualityChecklistService = require('../src/features/construction/qualityChecklist.service');
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const item = await qualityChecklistService.createQualityItem(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, item: 'Pintura da fachada sem falhas', category: 'PINTURA' },
+      tenant.userId,
+      transaction
+    );
+
+    const checked = await qualityChecklistService.checkQualityItem(
+      item.id,
+      { status: 'NOT_OK', notes: 'Manchas visíveis na fachada.' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(checked.status, 'NOT_OK');
+
+    const ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
+    assert.equal(ncs.length, 1, 'item reprovado precisa abrir uma Nonconformity de verdade, não só mudar status');
+    assert.match(ncs[0].description, /Pintura da fachada sem falhas/);
+    assert.equal(ncs[0].status, 'OPEN');
+
+    // Marcar OK não pode abrir NC nenhuma.
+    const item2 = await qualityChecklistService.createQualityItem(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, item: 'Piso nivelado', category: 'ACABAMENTO' },
+      tenant.userId,
+      transaction
+    );
+    await qualityChecklistService.checkQualityItem(item2.id, { status: 'OK' }, tenant.userId, transaction);
+    const ncsAfterOk = await nonconformitiesService.listNonconformities(project.id, transaction);
+    assert.equal(ncsAfterOk.length, 1, 'marcar item OK não pode abrir nenhuma nonconformity');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 4, 2026-10-06): reenviar "check" NOT_OK duas
+// vezes em sequência (reenvio de rede, duplo clique sem debounce, retry manual) para o MESMO
+// item já reprovado abria uma SEGUNDA Nonconformity CRITICAL duplicada — como
+// QualityChecklistItem não guarda nenhum vínculo de volta para a Nonconformity criada, as
+// duplicatas nunca eram fechadas junto e ficavam bloqueando o gate de entrega para sempre, até
+// depois do item ser corrigido. Só deve abrir NC nova ao TRANSICIONAR para NOT_OK.
+test('M6-12 (ciclo 4): reenviar NOT_OK para o mesmo item já reprovado não duplica a Nonconformity', async () => {
+  const qualityChecklistService = require('../src/features/construction/qualityChecklist.service');
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const item = await qualityChecklistService.createQualityItem(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, item: 'Tubulação hidráulica sem vazamento', category: 'HIDRAULICA' },
+      tenant.userId,
+      transaction
+    );
+
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão.' }, tenant.userId, transaction);
+    let ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
+    assert.equal(ncs.length, 1, 'primeira reprovação precisa abrir exatamente uma Nonconformity');
+
+    // Reenvio do mesmo "check" (status já era NOT_OK) — não pode abrir uma segunda NC.
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão (reenvio).' }, tenant.userId, transaction);
+    ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
+    assert.equal(ncs.length, 1, 'reenviar NOT_OK para o mesmo item já reprovado não pode duplicar a Nonconformity');
+
+    // Depois de corrigido (OK) e reprovado de novo, uma NOVA NC legítima deve ser aberta.
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'OK' }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Voltou a vazar.' }, tenant.userId, transaction);
+    ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
+    assert.equal(ncs.length, 2, 'uma nova reprovação genuína (após ter sido corrigida) precisa abrir uma NOVA Nonconformity');
   });
 });

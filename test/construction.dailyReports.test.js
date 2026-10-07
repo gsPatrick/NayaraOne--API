@@ -70,6 +70,40 @@ test('M6-56: dependência cíclica entre etapas bloqueia (direta e transitiva)',
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 18): createStageDependency nunca validava que
+// "dependsOnStageId" pertencesse à MESMA obra de "stageId" (nem que existisse de verdade) —
+// só o lado "stageId" tinha findByPk. Uma etapa de uma obra conseguia "depender" de uma etapa
+// de outra obra inteiramente diferente (sem sentido de negócio — sequenciamento é por obra), ou
+// de um UUID inexistente, só estourando a FK crua do banco em vez de um erro de negócio claro.
+test('M6-56b: dependência entre etapas de OBRAS diferentes é bloqueada; UUID inexistente também', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const projectA = await createTestProject(t, `${suffix}-A`);
+    const projectB = await createTestProject(t, `${suffix}-B`);
+    const stageOfA = await createTestStage(projectA.id, t, `Fundação ${suffix}`);
+    const stageOfB = await createTestStage(projectB.id, t, `Estrutura ${suffix}`);
+
+    await assert.rejects(
+      () => stageDependenciesService.createStageDependency(stageOfA.id, withTenant({ dependsOnStageId: stageOfB.id }), tenant.userId, t),
+      (err) => err instanceof AppError && err.code === 'STAGE_DEPENDENCY_CROSS_PROJECT'
+    );
+
+    await assert.rejects(
+      () =>
+        stageDependenciesService.createStageDependency(
+          stageOfA.id,
+          withTenant({ dependsOnStageId: '00000000-0000-0000-0000-000000000000' }),
+          tenant.userId,
+          t
+        ),
+      (err) => err instanceof AppError && err.code === 'STAGE_DEPENDENCY_TARGET_NOT_FOUND'
+    );
+
+    const dependenciesOfA = await stageDependenciesService.listStageDependencies(stageOfA.id, t);
+    assert.equal(dependenciesOfA.length, 0);
+  });
+});
+
 // M6-58 — RDO duplicado na mesma chave lógica (project_id + report_date + shift_code) bloqueia;
 // turnos diferentes no mesmo dia não bloqueiam (M6-07).
 test('M6-58: diário duplicado no mesmo turno bloqueia; turnos diferentes não bloqueiam', async () => {
@@ -163,6 +197,27 @@ test('M6-20: correção de RDO é append-only — original permanece no banco ap
     // deve sempre devolver a revisão mais recente.
     const current = await dailyReportsService.getCurrentDailyReport(original.id, t);
     assert.equal(current.id, revision.id);
+
+    // Bug real corrigido nesta auditoria (rodada 31, 2026-10-05): o PATCH acima é parcial (só
+    // occurrences/workforceCount) — não reenviou workers/materials. A revisão nova precisa
+    // continuar com a equipe/materiais copiados do original, não ficar vazia.
+    const revisionWorkers = await dailyReportsService.listDailyWorkers(revision.id, t);
+    assert.equal(revisionWorkers.length, 1, 'PATCH parcial não pode esvaziar a equipe do dia na revisão');
+    assert.equal(revisionWorkers[0].personId, worker.id);
+
+    const revisionMaterials = await dailyReportsService.listDailyMaterials(revision.id, t);
+    assert.equal(revisionMaterials.length, 1, 'PATCH parcial não pode esvaziar os materiais do dia na revisão');
+    assert.equal(revisionMaterials[0].materialDescription, 'Cimento CP-II');
+
+    // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): listDailyReports
+    // devolvia TODAS as linhas da cadeia de versões (original + cada revisão), não só a HEAD —
+    // como todas têm a mesma reportDate, a UI não conseguia distinguir qual editar, e editar a
+    // linha superada fazia a mudança seguinte "sumir" ao reabrir o modal. Lista só pode conter
+    // a versão atual de cada RDO, nunca as superadas.
+    const list = await dailyReportsService.listDailyReports(project.id, t);
+    const idsInList = list.map((r) => r.id);
+    assert.ok(idsInList.includes(revision.id), 'a lista precisa incluir a revisão atual (HEAD)');
+    assert.ok(!idsInList.includes(original.id), 'a lista NUNCA pode incluir uma versão já superada');
   });
 });
 
@@ -303,5 +358,58 @@ test('listDailyMaterials devolve os materiais registrados para um RDO', async ()
     assert.equal(materials[0].materialDescription, 'Cimento CP-II');
     assert.equal(Number(materials[0].quantity), 10);
     assert.equal(materials[0].unit, 'SC');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", Categoria 14, ciclo 2): "quantity" de
+// DailyMaterial só era checado com `== null` — "NaN"/"Infinity" (string) e número negativo
+// passavam direto pro INSERT, já que `daily_materials.quantity` é DECIMAL(14,4) e o Postgres
+// aceita literalmente esses valores especiais.
+test('Categoria 14: criar RDO com material quantity="NaN"/"Infinity"/negativo rejeita com 400', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+
+    await assert.rejects(
+      () =>
+        dailyReportsService.createDailyReport(
+          project.id,
+          withTenant({
+            reportDate: '2026-09-22',
+            materials: [{ materialDescription: 'Cimento CP-II', quantity: 'NaN', unit: 'SC' }],
+          }),
+          tenant.userId,
+          t
+        ),
+      (err) => err instanceof AppError && err.code === 'DAILY_MATERIAL_VALIDATION'
+    );
+
+    await assert.rejects(
+      () =>
+        dailyReportsService.createDailyReport(
+          project.id,
+          withTenant({
+            reportDate: '2026-09-23',
+            materials: [{ materialDescription: 'Cimento CP-II', quantity: 'Infinity', unit: 'SC' }],
+          }),
+          tenant.userId,
+          t
+        ),
+      (err) => err instanceof AppError && err.code === 'DAILY_MATERIAL_VALIDATION'
+    );
+
+    await assert.rejects(
+      () =>
+        dailyReportsService.createDailyReport(
+          project.id,
+          withTenant({
+            reportDate: '2026-09-24',
+            materials: [{ materialDescription: 'Cimento CP-II', quantity: -5, unit: 'SC' }],
+          }),
+          tenant.userId,
+          t
+        ),
+      (err) => err instanceof AppError && err.code === 'DAILY_MATERIAL_VALIDATION'
+    );
   });
 });

@@ -221,6 +221,10 @@ const updateBudgetLine = catchAsync(async (req, res) => {
   );
   return success(res, { data: item });
 });
+const removeBudgetLine = catchAsync(async (req, res) => {
+  await req.withTenantTransaction((t) => budgetLinesService.removeBudgetLine(req.params.id, req.auth.userId, t));
+  return success(res, { statusCode: 204, data: null });
+});
 
 // --- Budgets (orçamento agregado / baseline / aprovação) ---
 const createBudget = catchAsync(async (req, res) => {
@@ -274,6 +278,10 @@ const checkQualityItem = catchAsync(async (req, res) => {
     qualityChecklistService.checkQualityItem(req.params.id, req.body, req.auth.userId, t)
   );
   return success(res, { data: item });
+});
+const removeQualityItem = catchAsync(async (req, res) => {
+  await req.withTenantTransaction((t) => qualityChecklistService.removeQualityItem(req.params.id, req.auth.userId, t));
+  return success(res, { statusCode: 204, data: null });
 });
 
 // --- Maintenance cases (pós-obra) ---
@@ -468,6 +476,7 @@ module.exports = {
   listDailyWorkers,
   listDailyMaterials,
   createBudgetLine,
+  removeBudgetLine,
   listBudgetLines,
   updateBudgetLine,
   createBudget,
@@ -478,6 +487,7 @@ module.exports = {
   listChangeOrders,
   decideChangeOrder,
   createQualityItem,
+  removeQualityItem,
   listQualityItems,
   checkQualityItem,
   createMaintenanceCase,

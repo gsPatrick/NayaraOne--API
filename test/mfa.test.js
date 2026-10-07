@@ -172,6 +172,27 @@ test('MFA-006 código de recuperação de uso único não pode ser reusado', asy
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): disableMfa fazia
+// soft-delete (paranoid) da MfaCredential, mas user_id tem UNIQUE constraint física (não
+// parcial, ignorando deleted_at) — a linha "fantasma" continuava ocupando o user_id, e QUALQUER
+// setupMfa futuro desse usuário quebrava pra sempre com SequelizeUniqueConstraintError cru.
+test('MFA-008 desabilitar e reconfigurar MFA do mesmo usuário funciona (disableMfa não deixa linha fantasma)', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const userId = await createSecondUser(suffix);
+    const { secret } = await setupAndConfirmMfa(transaction, userId);
+
+    await mfaService.disableMfa(userId, authenticator.generate(secret), tenant, transaction);
+
+    // Sem o fix, isto quebrava com SequelizeUniqueConstraintError (user_id já ocupado pela
+    // linha soft-deletada da credencial anterior).
+    const { otpauthUri } = await mfaService.setupMfa(userId, tenant, transaction);
+    const newSecret = extractSecret(otpauthUri);
+    const { recoveryCodes } = await mfaService.confirmMfa(userId, authenticator.generate(newSecret), tenant, transaction);
+    assert.ok(Array.isArray(recoveryCodes) && recoveryCodes.length > 0);
+  });
+});
+
 test('MFA-007 ação de alto risco sem MFA habilitado é bloqueada pedindo habilitar primeiro', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {

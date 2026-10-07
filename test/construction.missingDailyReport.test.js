@@ -28,7 +28,16 @@ function withTenant(fields) {
 // Mesmo helper usado em construction.delivery.test.js: percorre a máquina de estados real até
 // ACTIVE (a única condição pra entrar no escopo do job — ver "9. Qualidade, entrega e pós-obra").
 async function createActiveProject(transaction) {
-  const project = await projectsService.createProject(withTenant({ name: `Obra RDO ausente ${uniqueSuffix()}` }), tenant.userId, transaction);
+  const project = await projectsService.createProject(
+    withTenant({
+      name: `Obra RDO ausente ${uniqueSuffix()}`,
+      responsibleUserId: tenant.userId,
+      startsAt: '2026-10-01',
+      endsAtPlanned: '2027-10-01',
+    }),
+    tenant.userId,
+    transaction
+  );
   await marginRulesService.createMarginRule(withTenant({ minMarginPct: 10 }), tenant.userId, transaction);
   const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
   await budgetsService.approveBudget(budget.id, tenant.userId, transaction); // PLANNED -> BUDGETED

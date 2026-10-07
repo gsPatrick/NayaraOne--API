@@ -24,6 +24,18 @@ async function upsertApprovalThreshold(payload, actorUserId, transaction) {
       'APPROVAL_THRESHOLD_VALIDATION'
     );
   }
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): maxAutoApproveAmount
+  // era persistido sem Number.isFinite/teto de sanidade — "Infinity"/"1e999" fazia TODA perda ou
+  // garantia auto-aprovar (Number(x) <= Infinity é sempre true), quebrando a alçada de aprovação;
+  // "NaN" também passava (maxAutoApproveAmount == null é falso pra string "NaN").
+  const numericThreshold = Number(maxAutoApproveAmount);
+  if (!Number.isFinite(numericThreshold) || numericThreshold < 0) {
+    throw AppError.badRequest('"maxAutoApproveAmount" deve ser um número não negativo.', 'APPROVAL_THRESHOLD_VALIDATION');
+  }
+  if (numericThreshold > 1_000_000_000_000) {
+    throw AppError.badRequest('"maxAutoApproveAmount" excede o limite permitido.', 'APPROVAL_THRESHOLD_VALIDATION');
+  }
+
   const normalizedContext = context ? String(context).toUpperCase() : CONTEXT_MATERIAL_LOSS;
   const [row] = await ApprovalThreshold.findOrCreate({
     where: { companyId, context: normalizedContext },
@@ -50,7 +62,7 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
       'LOSS_RECORD_VALIDATION'
     );
   }
-  if (Number(quantity) <= 0) {
+  if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
     throw AppError.badRequest('"quantity" deve ser maior que zero.', 'LOSS_RECORD_QUANTITY_INVALID');
   }
   if (!Number.isFinite(Number(estimatedValue)) || Number(estimatedValue) < 0) {
@@ -185,7 +197,10 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
   const remainingQuantity = Number(original.quantity) - alreadyReturnedQuantity;
 
   const returnQuantity = payload && payload.quantity != null ? Number(payload.quantity) : remainingQuantity;
-  if (returnQuantity <= 0 || returnQuantity > remainingQuantity) {
+  // FIX (auditoria Marco 6, ciclo 1 novo): faltava Number.isFinite — "quantity": "NaN" não
+  // satisfaz nem `<= 0` nem `> remainingQuantity` (ambos false pra NaN), passando o guard e
+  // criando um RETURN com quantity/estimatedValue = NaN (categoria 14 do catálogo).
+  if (!Number.isFinite(returnQuantity) || returnQuantity <= 0 || returnQuantity > remainingQuantity) {
     throw AppError.badRequest(
       `"quantity" da devolução deve ser maior que zero e não pode exceder a quantidade ainda disponível para devolução (${remainingQuantity} de ${original.quantity}).`,
       'LOSS_RECORD_RETURN_QUANTITY_INVALID'

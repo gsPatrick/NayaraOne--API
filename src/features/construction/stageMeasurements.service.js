@@ -7,9 +7,24 @@ const {
   publishStageMeasurementDecided,
   publishMeasurementSubmitted,
   publishMeasurementApproved,
+  publishStageCompleted,
 } = require('./constructionEvents.service');
 const { getProjectStage } = require('./projectStages.service');
 const financialEntriesService = require('../finance/financialEntries.service');
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): quando a medição é
+// criada/revisada SEM `items` (totalAmount vem direto do payload do usuário), o valor era
+// persistido sem Number.isFinite — "NaN" passava o guard de decideStageMeasurement
+// (Number(NaN) <= 0 é false) e aprovava a medição com totalAmount=NaN, propagando pro payable
+// financeiro real (createPayableForMeasurement).
+function assertValidManualTotalAmount(totalAmount) {
+  if (totalAmount === undefined || totalAmount === null) return null;
+  const numeric = Number(totalAmount);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw AppError.badRequest('"totalAmount" deve ser um número não negativo.', 'STAGE_MEASUREMENT_VALIDATION');
+  }
+  return numeric;
+}
 
 // M6-10/M6-21 — máquina de estados COMPLETA da medição (substitui o fluxo binário anterior
 // PENDING_APPROVAL -> APPROVED/REJECTED):
@@ -100,6 +115,12 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
   if (!Number.isFinite(numericPct) || numericPct < 0 || numericPct > 100) {
     throw AppError.badRequest('"measuredPct" deve ser um número entre 0 e 100.', 'STAGE_MEASUREMENT_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 12): "measuredAt" ia direto pro create() sem
+  // nenhuma validação de data — mesma classe de bug já corrigida para reportDate/warrantyDeadlineAt
+  // no ciclo 11. Fail-closed: valor inválido não pode virar NaN/Invalid Date salvo no banco.
+  if (Number.isNaN(new Date(measuredAt).getTime())) {
+    throw AppError.badRequest('"measuredAt" deve ser uma data válida.', 'STAGE_MEASUREMENT_VALIDATION');
+  }
 
   await getProjectStage(projectStageId, transaction);
 
@@ -114,7 +135,7 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
       notes: notes || null,
       status: 'DRAFT',
       revisionNumber: 1,
-      totalAmount: totalAmount !== undefined && totalAmount !== null ? totalAmount : null,
+      totalAmount: assertValidManualTotalAmount(totalAmount),
       costCenterId: costCenterId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -145,8 +166,18 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
   return measurement;
 }
 
+// BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 16 — mesmo padrão do bug de listDailyReports no
+// ciclo 15): listStageMeasurements devolvia TODAS as linhas da cadeia de revisões de uma etapa,
+// inclusive as marcadas SUPERSEDED por reviseStageMeasurement. Como a revisão nova nasce em
+// DRAFT com `measuredAt` igual/próximo da original, a ordenação por data não separa qual linha é
+// a atual — o front listava a medição superada ao lado da revisão nova como se fossem duas
+// medições independentes, e qualquer ação (revisar/decidir) tentada contra o id superado batia
+// em STAGE_MEASUREMENT_INVALID_STATUS. Filtra fora qualquer linha cujo id apareça como
+// `parentMeasurementId` de outra linha (ou seja, já foi substituída por uma revisão).
 async function listStageMeasurements(projectStageId, transaction) {
-  return StageMeasurement.findAll({ where: { projectStageId }, order: [['measured_at', 'DESC']], transaction });
+  const all = await StageMeasurement.findAll({ where: { projectStageId }, order: [['measured_at', 'DESC']], transaction });
+  const supersededIds = new Set(all.map((m) => m.parentMeasurementId).filter(Boolean));
+  return all.filter((m) => !supersededIds.has(m.id));
 }
 
 async function listMeasurementItems(measurementId, transaction) {
@@ -274,6 +305,12 @@ async function reviseStageMeasurement(id, payload, actorUserId, transaction) {
   if (!Number.isFinite(numericPct) || numericPct < 0 || numericPct > 100) {
     throw AppError.badRequest('"measuredPct" deve ser um número entre 0 e 100.', 'STAGE_MEASUREMENT_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 12): mesma validação de "measuredAt" ausente em
+  // createStageMeasurement — aqui o campo é opcional (cai no valor original quando omitido), mas
+  // quando informado também nunca era checado antes do create().
+  if (measuredAt !== undefined && measuredAt !== null && Number.isNaN(new Date(measuredAt).getTime())) {
+    throw AppError.badRequest('"measuredAt" deve ser uma data válida.', 'STAGE_MEASUREMENT_VALIDATION');
+  }
 
   const beforeJson = original.toJSON();
   original.status = 'SUPERSEDED';
@@ -292,7 +329,7 @@ async function reviseStageMeasurement(id, payload, actorUserId, transaction) {
       status: 'DRAFT',
       parentMeasurementId: original.id,
       revisionNumber: original.revisionNumber + 1,
-      totalAmount: totalAmount !== undefined && totalAmount !== null ? totalAmount : null,
+      totalAmount: assertValidManualTotalAmount(totalAmount),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -427,7 +464,12 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
   }
 
   // APPROVED — exige valor definido: sem isso não há o que faturar (M6-11/M6-55).
-  if (measurement.totalAmount === null || measurement.totalAmount === undefined || Number(measurement.totalAmount) <= 0) {
+  if (
+    measurement.totalAmount === null ||
+    measurement.totalAmount === undefined ||
+    !Number.isFinite(Number(measurement.totalAmount)) ||
+    Number(measurement.totalAmount) <= 0
+  ) {
     throw AppError.badRequest(
       'Não é possível aprovar uma medição sem "totalAmount" (adicione itens de medição ou informe o valor total antes de aprovar).',
       'STAGE_MEASUREMENT_MISSING_AMOUNT'
@@ -449,11 +491,38 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
   // como concluída, travando o fluxo de dependências indefinidamente mesmo com a obra 100%
   // medida e paga. Decisão de engenharia (sem detalhe explícito na fonte sobre o gatilho exato):
   // medição 100% APROVADA é o sinal mais forte disponível de etapa fisicamente concluída.
-  if (Number(stage.measuredPct) >= 100 && stage.status !== 'DONE') {
+  const stageBeforeJson = stage.toJSON();
+  const stageCompletedNow = Number(stage.measuredPct) >= 100 && stage.status !== 'DONE';
+  if (stageCompletedNow) {
     stage.status = 'DONE';
   }
   stage.updatedBy = actorUserId || null;
   await stage.save({ transaction });
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 18, 2026-10-05): a conclusão
+  // automática da etapa (ciclo 4) mutava `stage.status` direto, por fora de
+  // `updateProjectStage` — o único lugar que de fato dispara `project.stage.completed` (M6-106,
+  // evento canônico documentado em constructionEvents.service.js que Financeiro/BI esperam no
+  // barramento) e audita a transição da ProjectStage. Completar a etapa por aprovação de
+  // medição de 100% é exatamente o caminho real de negócio — precisa dos mesmos efeitos que um
+  // PATCH manual de status já tinha.
+  if (stageCompletedNow) {
+    await publishStageCompleted(stage, transaction);
+    await registrarAuditoria(
+      {
+        groupId: stage.groupId,
+        companyId: stage.companyId,
+        actorUserId,
+        action: 'construction.stage.update',
+        entityType: 'ProjectStage',
+        entityId: stage.id,
+        beforeJson: stageBeforeJson,
+        afterJson: stage.toJSON(),
+        reason: 'Etapa concluída automaticamente por aprovação de medição em 100%.',
+      },
+      transaction
+    );
+  }
 
   const financialEntry = await createPayableForMeasurement(measurement, actorUserId, transaction);
 

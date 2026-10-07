@@ -176,6 +176,27 @@ function publishWarrantyCaseClosed(maintenanceCase, transaction) {
   );
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 9, 2026-10-05): warrantyEscalationJob
+// recalculava e gravava `escalation_level` a cada ciclo, mas nada publicava evento nem
+// notificava o responsável quando um chamado virava CRITICAL/OVERDUE — o nível só aparecia se
+// alguém abrisse o painel agregado de postObraHealth.service.js. Mesmo padrão de
+// publishWarrantyCaseClosed acima: idempotencyKey inclui o nível pra permitir reescalonar
+// (WARNING -> CRITICAL -> OVERDUE) sem colidir com o índice único da outbox.
+function publishWarrantyCaseEscalated(maintenanceCase, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: maintenanceCase.groupId,
+      companyId: maintenanceCase.companyId,
+      aggregateType: 'MaintenanceCase',
+      aggregateId: maintenanceCase.id,
+      eventType: 'warranty.case.escalated',
+      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, escalationLevel: maintenanceCase.escalationLevel },
+      idempotencyKey: `warranty.case.escalated:${maintenanceCase.id}:${maintenanceCase.escalationLevel}`,
+    },
+    transaction
+  );
+}
+
 function publishNonconformityOpened(nonconformity, transaction) {
   return publishDomainEvent(
     {
@@ -388,6 +409,7 @@ module.exports = {
   publishNonconformityOpened,
   publishNonconformityClosed,
   publishWarrantyCaseClosed,
+  publishWarrantyCaseEscalated,
   publishProjectDelivered,
   publishProjectWarrantyStarted,
   publishProjectClosed,

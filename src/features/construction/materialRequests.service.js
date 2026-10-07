@@ -21,7 +21,7 @@ async function createMaterialRequest(projectId, payload, actorUserId, transactio
       'MATERIAL_REQUEST_VALIDATION'
     );
   }
-  if (Number(quantity) <= 0) {
+  if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
     throw AppError.badRequest('"quantity" precisa ser maior que zero.', 'MATERIAL_REQUEST_VALIDATION');
   }
 

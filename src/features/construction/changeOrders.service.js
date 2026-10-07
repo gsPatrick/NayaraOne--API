@@ -30,10 +30,18 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
     );
   }
   const numericImpact = Number(budgetImpact);
-  if (Number.isNaN(numericImpact)) {
+  // FIX (auditoria Marco 6, ciclo 1 novo): só checava Number.isNaN — "budgetImpact": "Infinity"
+  // não é NaN, passava o guard e, ao aprovar o Change Order, corrompia pra sempre
+  // budget.baselineAmount/totalAmount e project.budgetAmount com o valor numérico 'Infinity'
+  // (categoria 14 do catálogo de bugs: NaN/Infinity passando por guard de sinal).
+  if (!Number.isFinite(numericImpact)) {
     throw AppError.badRequest('"budgetImpact" deve ser numérico.', 'CHANGE_ORDER_VALIDATION');
   }
-  if (scheduleImpactDays !== undefined && scheduleImpactDays !== null && Number.isNaN(Number(scheduleImpactDays))) {
+  if (
+    scheduleImpactDays !== undefined &&
+    scheduleImpactDays !== null &&
+    !Number.isFinite(Number(scheduleImpactDays))
+  ) {
     throw AppError.badRequest('"scheduleImpactDays" deve ser numérico.', 'CHANGE_ORDER_VALIDATION');
   }
 
@@ -159,6 +167,23 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
   budget.totalAmount = newBaseline;
   budget.updatedBy = actorUserId || null;
   await budget.save({ transaction });
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 48, 2026-10-05): approveBudget (R46)
+  // já sincroniza project.budgetAmount com o baseline aprovado, porque o contrato (TAB-0700)
+  // trata projects.budget_amount como o orçamento oficial da obra — mas a ÚNICA outra forma de
+  // mudar um baseline já aprovado (Change Order, M6-17) nunca replicava essa sincronização.
+  // Depois do primeiro Change Order aprovado, project.budgetAmount ficava desatualizado em
+  // relação ao baseline real, afetando qualquer leitura (ex.: projectHealth.service.js usa
+  // project.budgetAmount como baselineBudget pra calcular margem/custo projetado).
+  const project = await Project.findByPk(changeOrder.projectId, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (project) {
+    project.budgetAmount = newBaseline;
+    project.updatedBy = actorUserId || null;
+    await project.save({ transaction });
+  }
 
   changeOrder.status = 'APPROVED';
   changeOrder.decidedBy = actorUserId || null;

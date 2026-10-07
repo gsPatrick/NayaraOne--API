@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const { Property } = require('../src/models');
+const { Property, Notification } = require('../src/models');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const { escalateOverdueWarrantyCases } = require('../src/engines/jobs/warrantyEscalationJob');
 const AppError = require('../src/utils/AppError');
@@ -169,6 +169,76 @@ test('warranty: warrantyEscalationJob é idempotente — rodar de novo sem mudan
   });
 });
 
+// Bug real corrigido nesta auditoria (rodada 9, 2026-10-05): o job gravava escalation_level
+// mas nunca notificava o responsável — chamado OVERDUE ficava "silencioso" se ninguém abrisse
+// o painel agregado de pós-obra. Mesmo padrão de insuranceRenewalAlertJob (rodada 7).
+test('warranty: warrantyEscalationJob cria Notification real pro responsável quando o caso vira OVERDUE', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        propertyId: property.id,
+        description: 'Trinca na parede — SLA já vencido, com responsável.',
+        severity: 'LOW',
+      },
+      tenant.userId,
+      transaction
+    );
+    warrantyCase.slaDueAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    warrantyCase.escalationLevel = 'NONE';
+    warrantyCase.responsibleUserId = tenant.userId;
+    await warrantyCase.save({ transaction });
+
+    const result = await escalateOverdueWarrantyCases(transaction);
+    assert.ok(result.notified >= 1, 'escalonar para OVERDUE precisa notificar ao menos um responsável');
+
+    const notification = await Notification.findOne({
+      where: { userId: tenant.userId },
+      order: [['created_at', 'DESC']],
+      transaction,
+    });
+    assert.ok(notification, 'precisa existir uma Notification real, não só o campo escalation_level gravado');
+    assert.match(notification.title, /vencido|crítico/i);
+  });
+});
+
+// Bug real corrigido nesta auditoria (rodada 16, 2026-10-05): cada caso era salvo/notificado
+// direto na transação da empresa, sem savepoint — diferente dos jobs irmãos
+// (toolLoanOverdueJob.js, insuranceRenewalAlertJob.js), que isolam cada item em
+// `sequelize.transaction({ transaction }, ...)` justamente pra um item com problema não abortar
+// o processamento de todos os outros da mesma empresa. Mesma classe de bug corrigido na rodada
+// 15 pra projectDelayDetectionJob. Teste de múltiplos casos no mesmo ciclo confirma que o
+// savepoint por caso não quebra o escalonamento em lote.
+test('warranty: escalona e notifica múltiplos casos vencidos da mesma empresa no mesmo ciclo (savepoint por caso)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const cases = [];
+    for (let i = 0; i < 3; i += 1) {
+      const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+        { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: `Caso vencido ${i}.`, severity: 'LOW' },
+        tenant.userId,
+        transaction
+      );
+      warrantyCase.slaDueAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+      warrantyCase.escalationLevel = 'NONE';
+      warrantyCase.responsibleUserId = tenant.userId;
+      await warrantyCase.save({ transaction });
+      cases.push(warrantyCase);
+    }
+
+    const result = await escalateOverdueWarrantyCases(transaction);
+    assert.ok(result.escalated >= 3);
+    assert.ok(result.notified >= 3);
+
+    for (const warrantyCase of cases) {
+      await warrantyCase.reload({ transaction });
+      assert.equal(warrantyCase.escalationLevel, 'OVERDUE');
+    }
+  });
+});
+
 // --- WarrantyAction (histórico de atendimento com custo) ---
 
 test('warranty: createWarrantyAction registra ação de atendimento vinculada ao chamado', async () => {
@@ -206,6 +276,10 @@ test('warranty: fechar o chamado (status=CLOSED) não lança erro (evento warran
       tenant.userId,
       transaction
     );
+    // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 2, 2026-10-06): updateMaintenanceCase
+    // agora valida a sequência de transição (OPEN->RESOLVED->CLOSED), igual ao grafo do front —
+    // não dá mais pra pular direto OPEN->CLOSED.
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
     const closed = await maintenanceCasesService.updateMaintenanceCase(
       warrantyCase.id,
       { status: 'CLOSED' },
@@ -213,6 +287,64 @@ test('warranty: fechar o chamado (status=CLOSED) não lança erro (evento warran
       transaction
     );
     assert.equal(closed.status, 'CLOSED');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 2, 2026-10-06): updateMaintenanceCase
+// só validava que o status pertencia à lista, sem checar a sequência — era possível pular etapas
+// (OPEN->CLOSED direto) ou reabrir um caso já CLOSED via chamada direta à API, ignorando a trava
+// que só existia no front. CLOSED dispara publishWarrantyCaseClosed e reseta escalationLevel —
+// pular pra lá sem passar pelo atendimento real não deixava rastro nenhum.
+test('warranty: updateMaintenanceCase recusa pular etapa (OPEN->CLOSED direto) e recusa reabrir CLOSED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para teste de transição.' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(warrantyCase.status, 'OPEN');
+
+    await assert.rejects(
+      () => maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'MAINTENANCE_CASE_STATUS_TRANSITION_INVALID'); return true; }
+    );
+
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'OPEN' }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'MAINTENANCE_CASE_STATUS_TRANSITION_INVALID'); return true; }
+    );
+  });
+});
+
+// Bug real corrigido nesta auditoria (rodada 13, 2026-10-05): updateMaintenanceCase recalculava
+// escalation_level incondicionalmente a partir de sla_due_at/now — como sla_due_at continua no
+// passado pra sempre, fechar um caso OVERDUE nunca resetava o nível, e o caso ficava marcado
+// OVERDUE eternamente mesmo já CLOSED, poluindo casesByEscalationLevel do pós-obra.
+test('warranty: fechar um chamado OVERDUE zera escalation_level pra NONE (não fica OVERDUE eternamente)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado vencido a ser fechado.', severity: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    warrantyCase.slaDueAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    warrantyCase.escalationLevel = 'OVERDUE';
+    await warrantyCase.save({ transaction });
+
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
+    const closed = await maintenanceCasesService.updateMaintenanceCase(
+      warrantyCase.id,
+      { status: 'CLOSED' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(closed.status, 'CLOSED');
+    assert.equal(closed.escalationLevel, 'NONE', 'caso fechado não pode continuar contando como OVERDUE em nenhum painel');
   });
 });
 
@@ -298,6 +430,127 @@ test('warranty: proposeWarrantyResolution rejeita resolutionType inválido e amo
     await assert.rejects(
       () => maintenanceCasesService.proposeWarrantyResolution(warrantyCase.id, { resolutionType: 'DISCOUNT', resolutionAmount: 0 }, tenant.userId, transaction),
       rejectsWithCode('WARRANTY_RESOLUTION_VALIDATION')
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 56, 2026-10-06): removeMaintenanceCase
+// não checava WarrantyAction vinculadas antes do soft delete.
+test('warranty: removeMaintenanceCase recusa excluir chamado que já tem ação registrada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado com ação registrada.' },
+      tenant.userId,
+      transaction
+    );
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica realizada.' }, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => maintenanceCasesService.removeMaintenanceCase(warrantyCase.id, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_DELETE_HAS_DEPENDENTS')
+    );
+  });
+});
+
+test('warranty: removeMaintenanceCase exclui normalmente chamado sem nenhuma ação registrada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado sem ação.' },
+      tenant.userId,
+      transaction
+    );
+    await maintenanceCasesService.removeMaintenanceCase(warrantyCase.id, tenant.userId, transaction);
+    await assert.rejects(
+      () => maintenanceCasesService.getMaintenanceCase(warrantyCase.id, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_NOT_FOUND')
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", Categoria 14, ciclo 2): laborCost/
+// materialCost (MaintenanceCase) e cost (WarrantyAction) nunca passavam por Number.isFinite —
+// "NaN"/"Infinity" (string) e negativo persistiam direto no DECIMAL do banco.
+test('Categoria 14: createMaintenanceCase rejeita laborCost/materialCost "NaN"/"Infinity"/negativo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+
+    await assert.rejects(
+      () =>
+        maintenanceCasesService.createMaintenanceCase(
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Teste.', laborCost: 'NaN' },
+          tenant.userId,
+          transaction
+        ),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+
+    await assert.rejects(
+      () =>
+        maintenanceCasesService.createMaintenanceCase(
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Teste.', materialCost: 'Infinity' },
+          tenant.userId,
+          transaction
+        ),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+
+    await assert.rejects(
+      () =>
+        maintenanceCasesService.createMaintenanceCase(
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Teste.', laborCost: -10 },
+          tenant.userId,
+          transaction
+        ),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+  });
+});
+
+test('Categoria 14: updateMaintenanceCase rejeita laborCost/materialCost "NaN"/"Infinity"', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para teste de custo.' },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { laborCost: 'NaN' }, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+
+    await assert.rejects(
+      () => maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { materialCost: 'Infinity' }, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+  });
+});
+
+test('Categoria 14: createWarrantyAction rejeita cost "NaN"/"Infinity"/negativo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para teste de ação.' },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita.', cost: 'NaN' }, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+
+    await assert.rejects(
+      () => maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita.', cost: 'Infinity' }, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
+    );
+
+    await assert.rejects(
+      () => maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita.', cost: -5 }, tenant.userId, transaction),
+      rejectsWithCode('MAINTENANCE_CASE_COST_INVALID')
     );
   });
 });

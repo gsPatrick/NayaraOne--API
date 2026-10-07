@@ -83,6 +83,15 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
     );
   }
 
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 10): slaDueAt ia direto para o create sem
+  // nenhuma validação de data — mesmo padrão já aplicado em
+  // maintenanceCases.service.js#updateMaintenanceCase para warrantyDeadlineAt. Uma string de
+  // data inválida ("abc", "32/13/2026") estourava um erro cru de tipo do Postgres em vez de um
+  // 400 claro em português.
+  if (slaDueAt !== undefined && slaDueAt !== null && Number.isNaN(new Date(slaDueAt).getTime())) {
+    throw AppError.badRequest('"slaDueAt" deve ser uma data válida.', 'NONCONFORMITY_VALIDATION');
+  }
+
   const resolvedBeforeEvidence = Array.isArray(beforeEvidenceFileIds) ? beforeEvidenceFileIds : [];
   const reuse = await detectEvidenceReuse(resolvedBeforeEvidence, companyId, null, transaction);
 

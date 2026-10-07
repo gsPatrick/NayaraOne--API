@@ -1,6 +1,6 @@
 'use strict';
 
-const { Project, ProjectCodeSequence, Budget, sequelize } = require('../../models');
+const { Project, ProjectCodeSequence, Budget, ProjectStage, MaintenanceCase, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const {
@@ -75,7 +75,37 @@ const VALID_TRANSITIONS = {
   CANCELLED: [],
 };
 
+// BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 18): updateProject valida "budgetAmount"
+// rigorosamente (Number.isFinite, não-negativo, teto de sanidade — ver ciclo E2E de browser
+// 02/10/2026 citado abaixo em updateProject), mas createProject NUNCA chamava a mesma validação
+// — o campo ia direto do payload pro INSERT. Como a coluna é NUMERIC(18,2) e o Postgres aceita
+// o literal 'NaN' (ainda que rejeite 'Infinity') para esse tipo, um `budgetAmount: "NaN"` no
+// corpo de "criar obra" persistia silenciosamente corrompido, com o mesmo efeito em cascata já
+// documentado em updateProject (projectHealth.service.js usa este campo como baselineBudget
+// preferencial). Extraída como função compartilhada para as duas validarem exatamente a mesma
+// regra.
+function assertValidBudgetAmount(budgetAmount) {
+  if (budgetAmount === undefined || budgetAmount === null) return;
+  const numericBudget = Number(budgetAmount);
+  if (!Number.isFinite(numericBudget) || numericBudget < 0) {
+    throw AppError.badRequest('"budgetAmount" deve ser um número não negativo.', 'PROJECT_BUDGET_AMOUNT_INVALID');
+  }
+  if (numericBudget > 1_000_000_000_000) {
+    throw AppError.badRequest('"budgetAmount" excede o limite permitido.', 'PROJECT_BUDGET_AMOUNT_TOO_LARGE');
+  }
+}
+
 function assertValidDateRange(startsAt, endsAtPlanned) {
+  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 11): esta função só comparava
+  // new Date(a).getTime() < new Date(b).getTime() — com uma data inválida ("abc"),
+  // getTime() retorna NaN, e NaN < NaN é false, então o guard nunca disparava e a string
+  // inválida ia direto pro INSERT, estourando erro cru de tipo do Postgres em vez de 400 claro.
+  if (startsAt !== undefined && startsAt !== null && Number.isNaN(new Date(startsAt).getTime())) {
+    throw AppError.badRequest('"startsAt" deve ser uma data válida.', 'PROJECT_DATE_RANGE_INVALID');
+  }
+  if (endsAtPlanned !== undefined && endsAtPlanned !== null && Number.isNaN(new Date(endsAtPlanned).getTime())) {
+    throw AppError.badRequest('"endsAtPlanned" deve ser uma data válida.', 'PROJECT_DATE_RANGE_INVALID');
+  }
   if (startsAt && endsAtPlanned && new Date(endsAtPlanned).getTime() < new Date(startsAt).getTime()) {
     throw AppError.badRequest('"endsAtPlanned" não pode ser anterior a "startsAt".', 'PROJECT_DATE_RANGE_INVALID');
   }
@@ -126,6 +156,7 @@ async function createProject(payload, actorUserId, transaction) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
   assertValidDateRange(startsAt, endsAtPlanned);
+  assertValidBudgetAmount(budgetAmount);
 
   const resolvedCode = code || (await generateProjectCode(companyId, transaction));
 
@@ -197,16 +228,20 @@ async function updateProject(id, payload, actorUserId, transaction) {
     // número finito/não-negativo/dentro de um teto de sanidade, e bloqueia a edição por completo
     // quando já existe um Budget APPROVED para esta obra (mesmo espírito de
     // BUDGET_LINE_BASELINE_LOCKED em budgetLines.service.js).
-    if (budgetAmount !== null) {
-      const numericBudget = Number(budgetAmount);
-      if (!Number.isFinite(numericBudget) || numericBudget < 0) {
-        throw AppError.badRequest('"budgetAmount" deve ser um número não negativo.', 'PROJECT_BUDGET_AMOUNT_INVALID');
-      }
-      if (numericBudget > 1_000_000_000_000) {
-        throw AppError.badRequest('"budgetAmount" excede o limite permitido.', 'PROJECT_BUDGET_AMOUNT_TOO_LARGE');
-      }
-    }
-    const approvedBudget = await Budget.findOne({ where: { projectId: project.id, status: 'APPROVED' }, transaction });
+    assertValidBudgetAmount(budgetAmount);
+    // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 7, 2026-10-06): mesma corrida já corrigida em
+    // budgetLines.service.js — lia o Budget sem lock pessimista antes de decidir, podendo
+    // correr contra approveBudget (que trava a linha do Budget). Filtrar por status=APPROVED
+    // no WHERE não trava nada quando o Budget ainda está DRAFT (0 linhas casadas = nenhum
+    // lock adquirido) — por isso o lock precisa ser pego na linha do Budget do projeto
+    // (qualquer status) e só então checar se já está aprovado, serializando de fato contra
+    // approveBudget.
+    const existingBudget = await Budget.findOne({
+      where: { projectId: project.id },
+      transaction,
+      lock: transaction ? transaction.LOCK.UPDATE : undefined,
+    });
+    const approvedBudget = existingBudget && existingBudget.status === 'APPROVED' ? existingBudget : null;
     if (approvedBudget) {
       throw AppError.conflict(
         'O orçamento agregado desta obra já está aprovado (baseline imutável) — "Orçamento (R$)" não pode mais ser alterado por aqui, só via Change Order aprovado.',
@@ -219,7 +254,14 @@ async function updateProject(id, payload, actorUserId, transaction) {
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
   if (unitId !== undefined) project.unitId = unitId;
-  if (actualEndDate !== undefined) project.actualEndDate = actualEndDate;
+  if (actualEndDate !== undefined) {
+    // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 11): actualEndDate nunca passava por nenhuma
+    // validação de data antes do save — mesma classe de bug já corrigida para startsAt/endsAtPlanned.
+    if (actualEndDate !== null && Number.isNaN(new Date(actualEndDate).getTime())) {
+      throw AppError.badRequest('"actualEndDate" deve ser uma data válida.', 'PROJECT_DATE_RANGE_INVALID');
+    }
+    project.actualEndDate = actualEndDate;
+  }
   if (costCenterId !== undefined) project.costCenterId = costCenterId;
   assertValidDateRange(
     startsAt !== undefined ? startsAt : project.startsAt,
@@ -270,6 +312,27 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
       `Não é possível mover a obra de "${statusLabelPt(project.status)}" para "${statusLabelPt(normalizedTarget)}".`,
       'PROJECT_STATUS_TRANSITION_INVALID'
     );
+  }
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 46, 2026-10-05): o contrato
+  // (TAB-0700, "Banco de Dados Físico BLINDADO") trata budget_amount, start_date/
+  // planned_end_date e manager_user_id como NOT NULL — mas nada no sistema impedia uma obra
+  // chegar a ACTIVE (execução real) sem nenhum desses campos preenchidos. Em vez de forçar
+  // NOT NULL na criação (o que quebraria o fluxo real já implementado de
+  // PLANNED -> BUDGETED -> READY, onde esses dados são preenchidos em etapas), o gate certo é
+  // exigir os campos no momento em que a obra de fato começa a ser executada (READY -> ACTIVE).
+  if (project.status === 'READY' && normalizedTarget === 'ACTIVE') {
+    const missing = [];
+    if (project.budgetAmount == null) missing.push('orçamento (budgetAmount)');
+    if (!project.startsAt) missing.push('data de início (startsAt)');
+    if (!project.endsAtPlanned) missing.push('previsão de término (endsAtPlanned)');
+    if (!project.responsibleUserId) missing.push('responsável (responsibleUserId)');
+    if (missing.length > 0) {
+      throw AppError.badRequest(
+        `Não é possível iniciar a execução da obra sem: ${missing.join(', ')}.`,
+        'PROJECT_MISSING_REQUIRED_FIELDS'
+      );
+    }
   }
 
   const fromStatus = project.status;
@@ -331,10 +394,14 @@ async function hasOpenCriticalNonconformity(companyId, projectId, transaction) {
   // transação de `deliverProject` (o UPDATE de status logo depois) continua utilizável.
   await sequelize.query('SAVEPOINT nonconformity_gate_check', { transaction });
   try {
+    // Mesma correção defensiva da rodada 20: Nonconformity também é `paranoid: true` — mesmo
+    // sem rota de exclusão exposta hoje, filtrar deleted_at evita o mesmo bug de
+    // closeProjectWarranty se um DELETE for adicionado no futuro.
     const [rows] = await sequelize.query(
       `SELECT 1 FROM "construction"."nonconformities"
          WHERE company_id = :companyId AND project_id = :projectId
            AND status = 'OPEN' AND severity = 'CRITICAL'
+           AND deleted_at IS NULL
          LIMIT 1`,
       { replacements: { companyId, projectId }, transaction }
     );
@@ -448,9 +515,16 @@ async function closeProjectWarranty(id, actorUserId, transaction) {
     );
   }
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 20, 2026-10-05): MaintenanceCase é
+  // `paranoid: true` (soft delete) — esta query SQL crua não filtrava `deleted_at IS NULL`, então
+  // um caso excluído via DELETE /construction/maintenance-cases/:id (removeMaintenanceCase não
+  // exige status CLOSED pra excluir) continuava contando como "em aberto" aqui pra sempre,
+  // travando o encerramento da garantia contra um registro que nem aparece mais em nenhuma
+  // listagem/UI do sistema.
   const [openCases] = await sequelize.query(
     `SELECT 1 FROM "construction"."maintenance_cases"
        WHERE company_id = :companyId AND project_id = :projectId AND status != 'CLOSED'
+         AND deleted_at IS NULL
        LIMIT 1`,
     { replacements: { companyId: project.companyId, projectId: project.id }, transaction }
   );
@@ -485,8 +559,30 @@ async function closeProjectWarranty(id, actorUserId, transaction) {
   return project;
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 55, 2026-10-05): removeProject
+// (soft delete) não tinha NENHUMA guarda — dava pra excluir uma obra ACTIVE/BUDGETED com
+// orçamento aprovado ou medições em andamento, e o soft delete nunca se propagava pros filhos
+// (ProjectStage/Budget/ChangeOrder/StageMeasurement/MaintenanceCase), que ficavam órfãos mas
+// totalmente VIVOS e operáveis no banco — `GET .../stages`, aprovar orçamento, decidir change
+// order etc. continuavam funcionando sobre uma obra oficialmente excluída. Em vez de tentar
+// cascatear o soft delete (arriscado — MaintenanceCase/garantia tem valor legal mesmo sem a
+// obra), bloqueia a exclusão fail-closed enquanto existir qualquer etapa, orçamento ou chamado
+// de garantia vinculado — nunca deixa órfão vivo.
 async function removeProject(id, actorUserId, transaction) {
   const project = await getProject(id, transaction);
+
+  const [stageCount, budgetCount, warrantyCaseCount] = await Promise.all([
+    ProjectStage.count({ where: { projectId: id }, transaction }),
+    Budget.count({ where: { projectId: id }, transaction }),
+    MaintenanceCase.count({ where: { projectId: id }, transaction }),
+  ]);
+  if (stageCount > 0 || budgetCount > 0 || warrantyCaseCount > 0) {
+    throw AppError.conflict(
+      'Não é possível excluir uma obra que já tem etapas, orçamento ou chamados de garantia vinculados.',
+      'PROJECT_DELETE_HAS_DEPENDENTS'
+    );
+  }
+
   const beforeJson = project.toJSON();
   project.deletedBy = actorUserId || null;
   await project.save({ transaction });

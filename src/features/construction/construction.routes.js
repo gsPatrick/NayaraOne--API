@@ -76,6 +76,7 @@ constructionRouter.get('/construction/daily-reports/:id/materials', requirePermi
 constructionRouter.post('/construction/projects/:id/budget-lines', requirePermission('construction:create'), constructionController.createBudgetLine);
 constructionRouter.get('/construction/projects/:id/budget-lines', requirePermission('construction:read'), constructionController.listBudgetLines);
 constructionRouter.patch('/construction/budget-lines/:id', requirePermission('construction:update'), constructionController.updateBudgetLine);
+constructionRouter.delete('/construction/budget-lines/:id', requirePermission('construction:update'), constructionController.removeBudgetLine);
 
 // Budgets (orçamento agregado / baseline / aprovação — M6-04/M6-17/M6-31/M6-32)
 constructionRouter.post('/construction/projects/:id/budgets', requirePermission('construction:create'), constructionController.createBudget);
@@ -92,6 +93,7 @@ constructionRouter.post('/construction/change-orders/:id/decide', requirePermiss
 constructionRouter.post('/construction/projects/:id/quality-items', requirePermission('construction:create'), constructionController.createQualityItem);
 constructionRouter.get('/construction/projects/:id/quality-items', requirePermission('construction:read'), constructionController.listQualityItems);
 constructionRouter.post('/construction/quality-items/:id/check', requirePermission('construction:update'), constructionController.checkQualityItem);
+constructionRouter.delete('/construction/quality-items/:id', requirePermission('construction:update'), constructionController.removeQualityItem);
 
 // Nonconformities (não conformidades)
 constructionRouter.post('/construction/projects/:id/nonconformities', requirePermission('construction:create'), constructionController.createNonconformity);
@@ -139,9 +141,15 @@ constructionRouter.post(
   requirePermission('construction:update'),
   constructionController.proposeWarrantyResolution
 );
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 36, 2026-10-05): essa rota exigia
+// só 'construction:update' (risco MEDIUM, edição comum) para uma ação que aprova resolução de
+// garantia ACIMA da alçada e dispara lançamento financeiro real (DEBIT/PAYABLE) — mesmo padrão
+// de todas as outras rotas de aprovação deste arquivo (deliver, close-warranty, measurements
+// decide/approve, budgets approve, change-orders decide, loss-records approve), que usam
+// 'construction:approve' (risco HIGH). Quebrava o princípio de menor privilégio.
 constructionRouter.post(
   '/construction/maintenance-cases/:id/resolution/approve',
-  requirePermission('construction:update'),
+  requirePermission('construction:approve'),
   constructionController.approveWarrantyResolution
 );
 
