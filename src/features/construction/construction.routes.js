@@ -9,6 +9,16 @@ const constructionRouter = Router();
 
 constructionRouter.use(authMiddleware, tenantMiddleware);
 
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 1): painéis "Obras"/"Pós-obra" agregados de TODAS
+// as obras — rota declarada ANTES de "/construction/projects/:id" pra "dashboard" nunca ser
+// capturado pelo parâmetro :id de rota dinâmica (mesmo cuidado de ordenação já usado pra
+// "/construction/projects/:id/health" etc, que são sub-rotas, não conflitam).
+// Reaproveita a permissão "construction:read" já existente/concedida aos papéis — uma permissão
+// nova ("construction:dashboard:read", espelhando crm:dashboard:read) exigiria seed de migration
+// pra ser concedida a algum papel, e este ambiente de execução não tem acesso para rodar
+// migrations contra o banco compartilhado (ver limitação documentada em marginRules.service.js).
+constructionRouter.get('/construction/dashboard', requirePermission('construction:read'), constructionController.getConstructionDashboard);
+
 // Projects (obras)
 constructionRouter.post('/construction/projects', requirePermission('construction:create'), constructionController.createProject);
 constructionRouter.get('/construction/projects', requirePermission('construction:read'), constructionController.listProjects);

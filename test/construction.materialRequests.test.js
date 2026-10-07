@@ -8,7 +8,8 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const materialRequestsService = require('../src/features/construction/materialRequests.service');
 const AppError = require('../src/utils/AppError');
-const { OutboxEvent } = require('../src/models');
+const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance } = require('../src/models');
+const inventoryMovementsService = require('../src/features/inventory/movements.service');
 
 // M6-28 — requisição de material mínima do Marco 6 (integração completa com Estoque é do
 // Marco 7, ver src/features/construction/README.md).
@@ -162,6 +163,83 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
         return true;
       }
     );
+  });
+});
+
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 5): "requisição não baixa saldo real do Estoque".
+// Confirma que, quando o recebimento informa inventoryItemId/sourceLocationId, o saldo real do
+// item no Estoque cai pela quantidade da requisição, e um InventoryMovement OUT real é criado
+// vinculado ao projectId da obra.
+test('material-request: receber com vínculo de estoque debita o saldo real (OUT) vinculado ao projectId', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(transaction);
+
+    const location = await InventoryLocation.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        name: `Almoxarifado Teste ${suffix}`,
+        locationType: 'WAREHOUSE',
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+    const item = await InventoryItem.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        name: `Cimento Teste ${suffix}`,
+        unitOfMeasure: 'saco',
+        itemType: 'CONSUMABLE',
+        averageCost: 32.5,
+        allowNegativeStock: true,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+
+    // Entrada inicial no almoxarifado para ter saldo a debitar.
+    await inventoryMovementsService.recordMovement(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        inventoryItemId: item.id,
+        movementType: 'IN',
+        quantity: 200,
+        destinationLocationId: location.id,
+      },
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    const balanceBefore = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balanceBefore, 200);
+
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Cimento CP-II', quantity: 50, unit: 'saco' },
+      tenant.userId,
+      transaction
+    );
+
+    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    assert.equal(received.status, 'RECEIVED');
+
+    const balanceAfter = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balanceAfter, 150, 'saldo real do item deveria ter caído pela quantidade da requisição');
+
+    const movement = await InventoryMovement.findOne({
+      where: { sourceType: 'REQUISITION', sourceId: request.id, movementType: 'OUT' },
+      transaction,
+    });
+    assert.ok(movement, 'deveria existir um InventoryMovement OUT real vinculado à requisição');
+    assert.equal(movement.projectId, project.id, 'movimento precisa estar vinculado ao projectId da obra (EST-004)');
+    assert.equal(Number(movement.quantity), 50);
   });
 });
 

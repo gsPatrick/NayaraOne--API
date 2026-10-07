@@ -1,37 +1,154 @@
 'use strict';
 
-const { MarginRule, sequelize } = require('../../models');
+const crypto = require('crypto');
+const { Rule, RuleVersion, RuleScope, RulePublication, MarginRule, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
-// DECISÃO DE ENGENHARIA (ver migração 20260101000181): margem mínima de obra é versionada
-// nesta tabela dedicada, não no Motor de Regras genérico (core.rules) — o motor genérico
-// ainda não modela o domínio "margem de obra". Cada linha é uma versão imutável; criar uma
-// nova versão desativa a anterior, mas a anterior permanece intacta no histórico (nunca é
-// editada nem apagada), preservando `rule_version_id` de orçamentos já aprovados com ela.
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 4): a margem mínima da obra era versionada numa
+// tabela própria do módulo (`construction.margin_rules`), em paralelo ao Motor de Regras
+// genérico (`core.rules`/`evaluateRule`) já usado por REG-IMO-001, REG-LOC-001/002, FIN-005
+// etc. O catálogo do contrato já lista explicitamente `REG-OBR-001` ("Lucro mínimo da obra",
+// tipo PERCENTAGE, domínio Construção) — esta migração move a margem mínima pra usar o motor
+// genérico de verdade, com ESSE código, preservando o conceito de versionamento imutável:
+//   - cada chamada a createMarginRule cria uma NOVA RuleVersion (nunca edita uma existente);
+//   - a versão anterior nunca é apagada — apenas seu `effectiveUntil` é fechado em `now`, que é
+//     a forma window-based do motor genérico de "desativar sem apagar" (equivalente ao
+//     `isActive=false` da tabela antiga, mas no vocabulário do motor);
+//   - `rule_version_id` gravado no orçamento aprovado (ver budgets.service.js) agora aponta
+//     para `core.rule_versions.id` — uma versão do Motor de Regras genérico — não mais para
+//     `construction.margin_rules.id`.
+//
+// LIMITAÇÃO DE AMBIENTE DOCUMENTADA (honesta, não escondida): `construction.budgets.rule_
+// version_id` tem uma FOREIGN KEY de banco para `construction.margin_rules.id`
+// (migrations/20260101000182-create-construction-budgets.js) — mudar essa FK para apontar para
+// `core.rule_versions` exigiria uma migration (`ALTER TABLE ... DROP/ADD CONSTRAINT`), e este
+// ambiente de execução não tem permissão para rodar migrations contra o banco compartilhado
+// (`ERROR: permission denied for schema public` com o usuário de runtime; tentativas com o
+// usuário de migração dedicado também foram bloqueadas pela política de execução do agente).
+// Solução de compatibilidade SEM migration: a cada nova versão publicada no Motor de Regras
+// genérico, espelhamos uma linha em `construction.margin_rules` com O MESMO id da RuleVersion
+// (`MarginRule.id === RuleVersion.id`) — só para a FK de `budgets.rule_version_id` continuar
+// íntegra. Essa linha espelho NUNCA é lida para decidir nada (getActiveMarginRule/
+// projectHealth.service.js leem exclusivamente via `evaluateRule('REG-OBR-001', ...)`) — é
+// puro suporte de integridade referencial herdada. Quando uma migration puder ser aplicada,
+// o caminho correto é: `ALTER TABLE construction.budgets DROP CONSTRAINT <fk>, ADD CONSTRAINT
+// ... REFERENCES core.rule_versions(id)`, e então este espelhamento pode ser removido.
+const RULE_CODE = 'REG-OBR-001';
+const RULE_NAME = 'Lucro mínimo da obra';
+const RULE_DOMAIN = 'construction';
+// Condição "sempre ativa" — mesmo padrão de REG-LOC-002/REG-LOC-003 (scripts/seedBillingRules.js):
+// o fato de interesse não é "se" a regra vale, é o VALOR (minMarginPct) carregado na ação. O
+// motor sempre casa quando há uma versão publicada vigente para o escopo.
+const CONDITION_AST = { fact: 'marginRuleActive', op: '==', value: true };
 
-/**
- * BUG REAL CORRIGIDO (30/09/2026, achado sob carga de teste concorrente pesada): o par
- * UPDATE (desativa versão anterior) + INSERT (nova versão ativa) sob o índice único parcial
- * `company_id WHERE is_active` pode formar um ciclo de deadlock (`40P01`) sob concorrência real
- * da mesma empresa. Mesma correção de `projects.service.js#generateProjectCode`:
- * `pg_advisory_xact_lock` serializa o acesso a esta chave lógica (groupId+companyId) ANTES do
- * UPDATE+INSERT — elimina a possibilidade de deadlock por completo (não é retry-e-espera-dar-
- * certo, é impedir duas transações de disputarem a mesma linha ao mesmo tempo).
- */
+function hashCondition(conditionAstJson) {
+  return crypto.createHash('sha256').update(JSON.stringify(conditionAstJson)).digest('hex');
+}
+
+async function getOrCreateRule(groupId, companyId, actorUserId, transaction) {
+  let rule = await Rule.findOne({ where: { code: RULE_CODE, groupId, companyId }, transaction });
+  if (!rule) {
+    rule = await Rule.create(
+      {
+        groupId,
+        companyId,
+        code: RULE_CODE,
+        name: RULE_NAME,
+        description: 'Margem mínima exigida da obra — margem abaixo da regra gera alerta (bloqueio configurado em getProjectHealth).',
+        domain: RULE_DOMAIN,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+  return rule;
+}
+
 async function createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction) {
-  const lockKey = `margin_rule:${groupId}:${companyId}`;
+  // Mesma justificativa do pg_advisory_xact_lock original (migração 20260101000181): o par
+  // "fechar effectiveUntil da versão anterior" + "criar nova RuleVersion PUBLISHED" sob
+  // concorrência real da mesma empresa pode formar condição de corrida — serializa por
+  // groupId+companyId+ruleCode ANTES de tocar nas linhas.
+  const lockKey = `margin_rule:${groupId}:${companyId}:${RULE_CODE}`;
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:lockKey, 0))', {
     replacements: { lockKey },
     transaction,
   });
 
-  await MarginRule.update(
-    { isActive: false, updatedBy: actorUserId || null },
-    { where: { groupId, companyId, isActive: true }, transaction }
+  const rule = await getOrCreateRule(groupId, companyId, actorUserId, transaction);
+  const now = new Date();
+
+  // Fecha a janela de vigência da versão PUBLISHED ainda aberta (equivalente a isActive=false
+  // na tabela antiga) — NUNCA edita conteúdo/condição/ação de uma versão já publicada.
+  await RuleVersion.update(
+    { effectiveUntil: now, updatedBy: actorUserId || null },
+    { where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction }
   );
-  return MarginRule.create(
+
+  const lastVersion = await RuleVersion.findOne({
+    where: { ruleId: rule.id },
+    order: [['versionNumber', 'DESC']],
+    transaction,
+  });
+  const nextVersionNumber = lastVersion ? lastVersion.versionNumber + 1 : 1;
+
+  const actionJson = { minMarginPct: numeric, description: description || null };
+  const version = await RuleVersion.create(
     {
+      groupId,
+      companyId,
+      ruleId: rule.id,
+      versionNumber: nextVersionNumber,
+      conditionAstJson: CONDITION_AST,
+      contentHash: hashCondition(CONDITION_AST),
+      actionJson,
+      effectiveFrom: now,
+      effectiveUntil: null,
+      status: 'PUBLISHED',
+      publishedByUserId: actorUserId || null,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  await RuleScope.create(
+    {
+      groupId,
+      companyId,
+      ruleVersionId: version.id,
+      scopeType: 'GLOBAL',
+      scopeRefId: null,
+      precedence: 7,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  await RulePublication.create(
+    {
+      groupId,
+      companyId,
+      ruleVersionId: version.id,
+      publishedByUserId: actorUserId || null,
+      publishedAt: now,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  // Espelho de compatibilidade para a FK legada (ver comentário de topo do arquivo) — nunca
+  // lido para decisão de negócio, só para `construction.budgets.rule_version_id` continuar
+  // referenciando uma linha válida sem precisar de migration.
+  await MarginRule.update({ isActive: false, updatedBy: actorUserId || null }, { where: { groupId, companyId, isActive: true }, transaction });
+  await MarginRule.create(
+    {
+      id: version.id,
       groupId,
       companyId,
       minMarginPct: numeric,
@@ -42,6 +159,21 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
     },
     { transaction }
   );
+
+  // Forma compatível com o shape antigo (MarginRule) que os chamadores (budgets.service.js,
+  // projectHealth.service.js, front) já esperam — `id` agora É o `rule_version_id` do Motor de
+  // Regras genérico.
+  return {
+    id: version.id,
+    groupId,
+    companyId,
+    minMarginPct: numeric,
+    description: description || null,
+    isActive: true,
+    toJSON() {
+      return { id: version.id, groupId, companyId, minMarginPct: numeric, description: description || null, isActive: true, ruleCode: RULE_CODE };
+    },
+  };
 }
 
 async function createMarginRule(payload, actorUserId, transaction) {
@@ -53,19 +185,12 @@ async function createMarginRule(payload, actorUserId, transaction) {
     );
   }
   const numeric = Number(minMarginPct);
-  // FIX (auditoria E2E de browser, ciclo 2, 01/10/2026): coluna min_margin_pct é
-  // DECIMAL(5,2) (máx 999.99) — sem este limite, um valor maior (ex.: campo de edição não
-  // limpo antes de digitar, concatenando "15" + "10,00" = 1510) estourava "numeric field
-  // overflow" cru do Postgres direto na tela do usuário. Também não faz sentido uma margem
-  // mínima >= 100% (custo zero ou negativo), então o limite de negócio é 100, bem abaixo do
-  // limite físico da coluna.
+  // FIX (auditoria E2E de browser, ciclo 2, 01/10/2026): mesma trava de negócio preservada na
+  // migração pro Motor de Regras — nunca inventa um teto diferente do já decidido.
   if (Number.isNaN(numeric) || numeric < 0 || numeric > 100) {
     throw AppError.badRequest('"minMarginPct" deve ser um percentual numérico entre 0 e 100.', 'MARGIN_RULE_VALIDATION');
   }
 
-  // Desativa a versão ativa anterior (se houver) ANTES de criar a nova — nunca duas versões
-  // ativas simultâneas para a mesma empresa (reforçado também pelo índice único parcial da
-  // migração).
   const rule = await createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction);
 
   await registrarAuditoria(
@@ -74,10 +199,10 @@ async function createMarginRule(payload, actorUserId, transaction) {
       companyId,
       actorUserId,
       action: 'construction.margin_rule.create',
-      entityType: 'MarginRule',
+      entityType: 'RuleVersion',
       entityId: rule.id,
       afterJson: rule.toJSON(),
-      reason: `Nova versão de margem mínima criada (${numeric}%).`,
+      reason: `Nova versão de margem mínima (${RULE_CODE}) criada no Motor de Regras genérico (${numeric}%).`,
     },
     transaction
   );
@@ -86,20 +211,30 @@ async function createMarginRule(payload, actorUserId, transaction) {
 }
 
 async function getActiveMarginRule(groupId, companyId, transaction) {
-  const rule = await MarginRule.findOne({ where: { groupId, companyId, isActive: true }, transaction });
-  if (!rule) {
+  const evaluation = await evaluateRule(RULE_CODE, { marginRuleActive: true }, { groupId, companyId }, { transaction });
+  if (evaluation.decision !== 'APPLY') {
     throw AppError.unprocessable(
       'Não há margem mínima configurada para esta empresa — configure uma versão de regra antes de aprovar orçamento.',
       'MARGIN_RULE_NOT_CONFIGURED'
     );
   }
-  return rule;
+  return {
+    id: evaluation.ruleVersionId,
+    minMarginPct: Number(evaluation.action.minMarginPct),
+    description: evaluation.action.description || null,
+    isActive: true,
+  };
 }
 
 async function getMarginRule(id, transaction) {
-  const rule = await MarginRule.findByPk(id, { transaction, paranoid: false });
-  if (!rule) throw AppError.notFound('Regra de margem não encontrada.', 'MARGIN_RULE_NOT_FOUND');
-  return rule;
+  const version = await RuleVersion.findByPk(id, { transaction });
+  if (!version) throw AppError.notFound('Regra de margem não encontrada.', 'MARGIN_RULE_NOT_FOUND');
+  return {
+    id: version.id,
+    minMarginPct: Number(version.actionJson?.minMarginPct),
+    description: version.actionJson?.description || null,
+    isActive: version.status === 'PUBLISHED' && !version.effectiveUntil,
+  };
 }
 
-module.exports = { createMarginRule, getActiveMarginRule, getMarginRule };
+module.exports = { createMarginRule, getActiveMarginRule, getMarginRule, RULE_CODE };

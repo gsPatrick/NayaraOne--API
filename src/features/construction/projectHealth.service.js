@@ -11,9 +11,12 @@ const {
   ChangeOrder,
   LossRecord,
   Nonconformity,
-  MarginRule,
+  InventoryMovement,
+  InventoryItem,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
+const { RULE_CODE: MARGIN_RULE_CODE } = require('./marginRules.service');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
 // banco (nenhum número inventado): tudo aqui é soma/derivação de linhas reais, lida sob o RLS
@@ -31,6 +34,33 @@ function toNumber(value) {
 
 function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * getConsumedInventoryCost — GAP CORRIGIDO (auditoria pós-Marco 6, item 3): o custo de estoque
+ * consumido pela obra ficava hard-coded em 0 porque não havia vínculo projectId nos movimentos
+ * de estoque. Agora `inventory.inventory_movements.project_id` existe (EST-004) e
+ * `inventory.inventory_items.average_cost` já é mantido pelo módulo de Estoque — soma-se o
+ * custo real: saídas (OUT) debitam ao custo médio do item no momento da consulta, devoluções
+ * (RETURN) e perdas revertidas abatem. Não inventa custo unitário por movimento (o schema não
+ * guarda isso): usa o custo médio ATUAL do item, mesma fonte usada no restante do sistema.
+ */
+async function getConsumedInventoryCost(projectId, transaction) {
+  const movements = await InventoryMovement.findAll({
+    where: { projectId, movementType: { [Op.in]: ['OUT', 'RETURN'] } },
+    transaction,
+  });
+  if (movements.length === 0) return 0;
+
+  const itemIds = [...new Set(movements.map((m) => m.inventoryItemId))];
+  const items = await InventoryItem.findAll({ where: { id: { [Op.in]: itemIds } }, transaction });
+  const costById = new Map(items.map((i) => [i.id, toNumber(i.averageCost)]));
+
+  return movements.reduce((acc, m) => {
+    const unitCost = costById.get(m.inventoryItemId) || 0;
+    const sign = m.movementType === 'RETURN' ? -1 : 1;
+    return acc + sign * toNumber(m.quantity) * unitCost;
+  }, 0);
 }
 
 /**
@@ -124,8 +154,8 @@ async function getProjectHealth(projectId, transaction) {
     return acc; // PARTIALLY_SETTLED: soma-se só pelas baixas filhas abaixo
   }, 0) + partialSettlements.reduce((acc, s) => acc + toNumber(s.amount), 0);
 
-  // consumedInventoryCost — TODO documentado acima (schema atual não tem custo unitário).
-  const consumedInventoryCost = 0;
+  // consumedInventoryCost — ver getConsumedInventoryCost() (GAP CORRIGIDO, ver comentário acima).
+  const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
 
   const forecastToComplete = Math.max(committedCost + approvedChanges - actualFinancialCost, 0);
   const projectedTotalCost = round2(actualFinancialCost + forecastToComplete);
@@ -150,11 +180,16 @@ async function getProjectHealth(projectId, transaction) {
   // campos ficam `null` — nunca inventa denominador nem bloqueia o endpoint (fail-open, é um
   // read model).
   const marginPct = marginBudgetBase > 0 ? round2((projectedMargin / marginBudgetBase) * 100) : null;
-  const activeMarginRule = await MarginRule.findOne({
-    where: { groupId: project.groupId, companyId: project.companyId, isActive: true },
-    transaction,
-  });
-  const minMarginPct = activeMarginRule ? Number(activeMarginRule.minMarginPct) : null;
+  // GAP CORRIGIDO (auditoria pós-Marco 6, item 4): minMarginPct vinha de `MarginRule` (tabela
+  // dedicada do módulo), agora vem do Motor de Regras genérico (REG-OBR-001 — ver
+  // marginRules.service.js para a decisão de migração completa).
+  const marginEvaluation = await evaluateRule(
+    MARGIN_RULE_CODE,
+    { marginRuleActive: true },
+    { groupId: project.groupId, companyId: project.companyId },
+    { transaction }
+  );
+  const minMarginPct = marginEvaluation.decision === 'APPLY' ? Number(marginEvaluation.action.minMarginPct) : null;
   const belowMinMargin = marginPct !== null && minMarginPct !== null ? marginPct < minMarginPct : null;
 
   // --- KPIs adicionais (M6-99) — só os que dependem de dados desta fatia (medição/etapa). ---

@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const { Property, Notification } = require('../src/models');
+const { Property, Notification, OutboxEvent } = require('../src/models');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const { escalateOverdueWarrantyCases } = require('../src/engines/jobs/warrantyEscalationJob');
 const AppError = require('../src/utils/AppError');
@@ -263,6 +263,32 @@ test('warranty: createWarrantyAction registra ação de atendimento vinculada ao
     const actions = await maintenanceCasesService.listWarrantyActions(warrantyCase.id, transaction);
     assert.equal(actions.length, 1);
     assert.equal(actions[0].id, action.id);
+  });
+});
+
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 6): o contrato exige o nome canônico
+// `warranty.case.opened` (seção 11/Guia do Marcelo seção 11) — o código publicava
+// `construction.maintenance_case.opened`. Confirma o nome exato publicado na Outbox.
+test('warranty: createMaintenanceCase publica o evento com o nome exato "warranty.case.opened"', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para checar nome do evento.' },
+      tenant.userId,
+      transaction
+    );
+
+    const event = await OutboxEvent.findOne({
+      where: { aggregateId: warrantyCase.id, eventType: 'warranty.case.opened' },
+      transaction,
+    });
+    assert.ok(event, 'esperava um evento "warranty.case.opened" na Outbox, nome exigido pelo contrato');
+
+    const oldNameEvent = await OutboxEvent.findOne({
+      where: { aggregateId: warrantyCase.id, eventType: 'construction.maintenance_case.opened' },
+      transaction,
+    });
+    assert.equal(oldNameEvent, null, 'não deve mais publicar o nome antigo "construction.maintenance_case.opened"');
   });
 });
 

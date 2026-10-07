@@ -20,6 +20,7 @@ const nonconformitiesService = require('./nonconformities.service');
 const lossRecordsService = require('./lossRecords.service');
 const materialRequestsService = require('./materialRequests.service');
 const marginRulesService = require('./marginRules.service');
+const dashboardService = require('./dashboard.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -87,6 +88,15 @@ const getProjectHealth = catchAsync(async (req, res) => {
 const getPostObraHealth = catchAsync(async (req, res) => {
   const health = await req.withTenantTransaction((t) => postObraHealthService.getPostObraHealth(req.params.id, t));
   return success(res, { data: health });
+});
+
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 1): painéis "Obras" e "Pós-obra" agregados de
+// TODAS as obras da empresa (não uma obra específica) — ver dashboard.service.js.
+const getConstructionDashboard = catchAsync(async (req, res) => {
+  const dashboard = await req.withTenantTransaction((t) =>
+    dashboardService.getConstructionDashboard({ groupId: req.auth.groupId, companyId: req.auth.companyId }, t)
+  );
+  return success(res, { data: dashboard });
 });
 // M6-101: componente "NAY Obras" nomeado — resumo determinístico, nunca decide nada (M6-27).
 const getNayObrasSummary = catchAsync(async (req, res) => {
@@ -352,8 +362,12 @@ const listMaterialRequests = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const receiveMaterialRequest = catchAsync(async (req, res) => {
+  // GAP CORRIGIDO (auditoria pós-Marco 6, item 5): quem confirma o recebimento pode informar de
+  // qual item/local real do Estoque o material saiu — quando informado, gera o movimento OUT
+  // real (baixa de saldo). Opcional: requisição sem esse vínculo continua funcionando como antes.
+  const { inventoryItemId, sourceLocationId } = req.body || {};
   const item = await req.withTenantTransaction((t) =>
-    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.userId, t)
+    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.userId, t, { inventoryItemId, sourceLocationId })
   );
   return success(res, { data: item });
 });
@@ -452,6 +466,7 @@ module.exports = {
   removeProject,
   getProjectHealth,
   getPostObraHealth,
+  getConstructionDashboard,
   getNayObrasSummary,
   getNayObrasPostObraSummary,
   createProjectStage,

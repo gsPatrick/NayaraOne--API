@@ -121,6 +121,11 @@ function publishMeasurementApproved(measurement, transaction) {
   );
 }
 
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 6): o contrato (seção 11 "Eventos mínimos" e Guia
+// do Marcelo seção 11) exige o nome CANÔNICO `warranty.case.opened` — o código publicava
+// `construction.maintenance_case.opened` (prefixo técnico de CRUD, igual ao resto do módulo),
+// que nunca era o nome exigido. Segue agora a MESMA convenção já usada para o fechamento
+// (`warranty.case.closed`, sem prefixo `construction.`) — evento de negócio de alto nível.
 function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
   return publishDomainEvent(
     {
@@ -128,9 +133,9 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
       companyId: maintenanceCase.companyId,
       aggregateType: 'MaintenanceCase',
       aggregateId: maintenanceCase.id,
-      eventType: 'construction.maintenance_case.opened',
+      eventType: 'warranty.case.opened',
       payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, status: maintenanceCase.status },
-      idempotencyKey: `construction.maintenance_case.opened:${maintenanceCase.id}`,
+      idempotencyKey: `warranty.case.opened:${maintenanceCase.id}`,
     },
     transaction
   );

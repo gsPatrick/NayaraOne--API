@@ -218,6 +218,63 @@ test('M6-42: projectedMargin não conta o Change Order aprovado duas vezes (base
   });
 });
 
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 3): consumedInventoryCost ficava hard-coded em 0
+// porque não havia vínculo projectId em inventory.inventory_movements. Confirma que, com um
+// movimento OUT real vinculado ao projectId da obra, o read model soma custo real
+// (quantidade * custo médio do item) — e que RETURN abate esse custo.
+test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vinculadas à obra (OUT - RETURN)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { InventoryItem, InventoryLocation } = require('../src/models');
+    const inventoryMovementsService = require('../src/features/inventory/movements.service');
+
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+
+    const location = await InventoryLocation.create(
+      withTenant({ name: `HOMO QA Deposito ${Date.now()}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }),
+      { transaction }
+    );
+    const item = await InventoryItem.create(
+      withTenant({
+        name: `HOMO QA Cimento ${Date.now()}`,
+        unitOfMeasure: 'saco',
+        itemType: 'CONSUMABLE',
+        averageCost: 30,
+        allowNegativeStock: true,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      }),
+      { transaction }
+    );
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 100, destinationLocationId: location.id }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const healthBefore = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthBefore.consumedInventoryCost, 0, 'sem movimento vinculado ao projectId, custo de estoque consumido é 0');
+
+    // Saída de 20 sacos a R$30 = R$600 consumidos pela obra.
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 20, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    const healthAfterOut = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthAfterOut.consumedInventoryCost, 600, 'custo real de estoque consumido deveria ser quantidade * custo médio do item');
+
+    // Devolução de 5 sacos abate o custo consumido: (20 - 5) * 30 = 450.
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'RETURN', quantity: 5, destinationLocationId: location.id, sourceType: 'MANUAL' }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    const healthAfterReturn = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthAfterReturn.consumedInventoryCost, 450, 'devolução deveria abater o custo de estoque consumido pela obra');
+  });
+});
+
 // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 5, 2026-10-06): wastagePct em
 // projectHealth.service.js somava só LossRecord do tipo LOSS, nunca abatendo os RETURN já
 // aprovados que apontam pra eles (relatedLossRecordId) — mesmo padrão de "campo financeiro não
@@ -333,6 +390,36 @@ test('M6-61: rule_version_id gravado no orçamento é preservado mesmo após nov
   });
 });
 
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 4): margem mínima migrada do mecanismo próprio
+// (MarginRule) para o Motor de Regras genérico (REG-OBR-001). Confirma que createMarginRule
+// cria de verdade uma Rule/RuleVersion em core.rules/core.rule_versions com o código do
+// catálogo do contrato, e que rule_version_id do orçamento aponta pra essa RuleVersion real.
+test('M6-61/item 4: margem mínima é avaliada via Motor de Regras genérico com o código REG-OBR-001', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { Rule: RuleModel, RuleVersion: RuleVersionModel } = require('../src/models');
+
+    const marginRule = await marginRulesService.createMarginRule(withTenant({ minMarginPct: 18 }), tenant.userId, transaction);
+
+    const rule = await RuleModel.findOne({ where: { code: 'REG-OBR-001', groupId: tenant.groupId, companyId: tenant.companyId }, transaction });
+    assert.ok(rule, 'esperava uma Rule real com code="REG-OBR-001" no Motor de Regras genérico');
+
+    const version = await RuleVersionModel.findByPk(marginRule.id, { transaction });
+    assert.ok(version, 'marginRule.id deveria ser o id de uma RuleVersion real');
+    assert.equal(version.ruleId, rule.id);
+    assert.equal(Number(version.actionJson.minMarginPct), 18);
+    assert.equal(version.status, 'PUBLISHED');
+
+    const project2 = await projectsService.createProject(withTenant({ name: `HOMO QA Obra REG-OBR-001 ${Date.now()}` }), tenant.userId, transaction);
+    const budget2 = await budgetsService.createBudget(project2.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(project2.id, withTenant({ category: 'X', plannedAmount: 500, budgetId: budget2.id }), tenant.userId, transaction);
+    const approved2 = await budgetsService.approveBudget(budget2.id, tenant.userId, transaction);
+
+    const approvedVersion = await RuleVersionModel.findByPk(approved2.ruleVersionId, { transaction });
+    assert.ok(approvedVersion, 'budget.ruleVersionId precisa apontar pra uma RuleVersion real do Motor de Regras genérico');
+    assert.equal(approvedVersion.ruleId, rule.id);
+  });
+});
+
 // FIX (auditoria do contrato, Marco 6, 2026-10-07): este teste dependia do tenant de SEED nunca
 // ter uma MarginRule configurada — premissa que deixou de valer no momento em que criamos a
 // MarginRule padrão de homologação (15%) para a empresa de seed, pra destravar o teste de
@@ -410,7 +497,19 @@ test('M6-67: duas aprovações concorrentes do mesmo orçamento — só uma venc
     }
   }
 
-  const { MarginRule: MarginRuleModel } = require('../src/models');
+  // GAP item 4 (migração pra Motor de Regras genérico): createMarginRule agora cria uma
+  // RuleVersion real em core.rule_versions (+ RuleScope/RulePublication), espelhando só o id
+  // em construction.margin_rules pra manter a FK legada de budgets.rule_version_id íntegra
+  // (ver comentário de topo de marginRules.service.js). Como este teste COMMITA de verdade
+  // (precisa de duas conexões reais pra testar concorrência), a limpeza abaixo também precisa
+  // apagar as linhas novas do Motor de Regras — senão fica lixo real no banco compartilhado.
+  const {
+    MarginRule: MarginRuleModel,
+    RuleVersion: RuleVersionModel,
+    RuleScope: RuleScopeModel,
+    RulePublication: RulePublicationModel,
+    RuleEvaluationLog: RuleEvaluationLogModel,
+  } = require('../src/models');
   const previouslyActiveRule = await MarginRuleModel.findOne({ where: { groupId: tenant.groupId, companyId: tenant.companyId, isActive: true } });
 
   const { projectId, budgetId, marginRuleId } = await withCommitted(async (t) => {
@@ -452,9 +551,18 @@ test('M6-67: duas aprovações concorrentes do mesmo orçamento — só uma venc
       await BudgetLine.destroy({ where: { projectId }, transaction: t, force: true });
       await Budget.destroy({ where: { id: budgetId }, transaction: t, force: true });
       await Project.destroy({ where: { id: projectId }, transaction: t, force: true });
+      // marginRuleId === RuleVersion.id criado por este teste (createMarginRule espelha o
+      // mesmo id nas duas tabelas) — apaga das duas, inclusive RuleScope/RulePublication.
+      await RuleEvaluationLogModel.destroy({ where: { ruleVersionId: marginRuleId }, transaction: t, force: true });
+      await RuleScopeModel.destroy({ where: { ruleVersionId: marginRuleId }, transaction: t, force: true });
+      await RulePublicationModel.destroy({ where: { ruleVersionId: marginRuleId }, transaction: t, force: true });
+      await RuleVersionModel.destroy({ where: { id: marginRuleId }, transaction: t, force: true });
       await MarginRuleModel.destroy({ where: { id: marginRuleId }, transaction: t, force: true });
       if (previouslyActiveRule) {
         await MarginRuleModel.update({ isActive: true }, { where: { id: previouslyActiveRule.id }, transaction: t });
+        // A versão anterior do Motor de Regras teve effectiveUntil fechado por este teste —
+        // reabre pra devolver o tenant compartilhado ao estado de antes.
+        await RuleVersionModel.update({ effectiveUntil: null }, { where: { id: previouslyActiveRule.id }, transaction: t });
       }
     });
   }

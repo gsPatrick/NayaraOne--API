@@ -4,13 +4,22 @@ const { MaterialRequest, Project, ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaterialRequested, publishMaterialReceived } = require('./constructionEvents.service');
+const { recordMovement } = require('../inventory/movements.service');
 
-// M6-28 — requisição mínima de material nascida da obra/etapa. DECISÃO DE ENGENHARIA: isto é
-// o MÍNIMO esperado para o Marco 6 (registrar a requisição + marcar recebimento + eventos de
-// domínio). A integração real com Estoque/Patrimônio (baixa de saldo, devolução com movimento
-// inverso, perda com alçada de aprovação) é escopo do Marco 7 — ver
-// migrations/20260101000236-create-construction-material_requests.js e a nota de escopo
-// cruzado M6-53 no checklist do Marco 6.
+// M6-28 — requisição de material nascida da obra/etapa.
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 5): a versão anterior só registrava a requisição
+// e marcava status RECEIVED, sem gerar o movimento de saída real no Estoque — o saldo de
+// `inventory.inventory_items`/`inventory.stock_balances` nunca era debitado de fato.
+// `receiveMaterialRequest` agora aceita opcionalmente `inventoryItemId` + `sourceLocationId` no
+// momento do recebimento (quem recebe o material sabe de qual item/local do almoxarifado ele
+// efetivamente saiu) e, quando informados, chama `inventory/movements.service.js#recordMovement`
+// com um OUT real, vinculado ao `projectId` da obra (EST-004), dentro da MESMA transação —
+// `InventoryMovement.sourceType='REQUISITION'`/`sourceId=materialRequest.id` dá a rastreabilidade
+// de volta pra requisição, sem precisar de coluna nova em `construction.material_requests`
+// (decisão de engenharia: evita uma migration de schema para este fix pontual — o vínculo vive
+// no lado do Estoque, que já tem `source_type`/`source_id` para isso). Requisição sem esses
+// dados no recebimento continua funcionando como antes (registro sem movimento), documentado,
+// não escondido.
 const STATUSES = ['REQUESTED', 'RECEIVED'];
 
 async function createMaterialRequest(projectId, payload, actorUserId, transaction) {
@@ -83,7 +92,7 @@ async function getMaterialRequest(id, transaction) {
   return materialRequest;
 }
 
-async function receiveMaterialRequest(id, actorUserId, transaction) {
+async function receiveMaterialRequest(id, actorUserId, transaction, stockLink = {}) {
   // Lock pessimista: mesma justificativa das outras máquinas de estado do módulo (ver
   // transitionProject em projects.service.js) — evita duas confirmações de recebimento
   // concorrentes disparando o evento `material.received` duas vezes para o mesmo registro.
@@ -103,6 +112,31 @@ async function receiveMaterialRequest(id, actorUserId, transaction) {
   materialRequest.updatedBy = actorUserId || null;
   await materialRequest.save({ transaction });
 
+  // Baixa real de saldo no Estoque (gap corrigido — ver comentário de topo do arquivo). Só
+  // dispara quando quem confirmou o recebimento informou de qual item/local do almoxarifado o
+  // material saiu; sem isso, segue como antes (registro sem movimento).
+  let inventoryMovement = null;
+  const { inventoryItemId, sourceLocationId } = stockLink || {};
+  if (inventoryItemId && sourceLocationId) {
+    inventoryMovement = await recordMovement(
+      {
+        groupId: materialRequest.groupId,
+        companyId: materialRequest.companyId,
+        inventoryItemId,
+        projectId: materialRequest.projectId,
+        movementType: 'OUT',
+        quantity: materialRequest.quantity,
+        sourceLocationId,
+        sourceType: 'REQUISITION',
+        sourceId: materialRequest.id,
+        idempotencyKey: `material_request.receive:${materialRequest.id}`,
+        reason: `Consumo da requisição de material "${materialRequest.description}" na obra ${materialRequest.projectId}.`,
+      },
+      { userId: actorUserId, canApprove: false },
+      transaction
+    );
+  }
+
   await publishMaterialReceived(materialRequest, transaction);
 
   await registrarAuditoria(
@@ -114,7 +148,7 @@ async function receiveMaterialRequest(id, actorUserId, transaction) {
       entityType: 'MaterialRequest',
       entityId: materialRequest.id,
       beforeJson,
-      afterJson: materialRequest.toJSON(),
+      afterJson: { ...materialRequest.toJSON(), inventoryMovementId: inventoryMovement ? inventoryMovement.id : null },
       reason: `Requisição de material "${materialRequest.description}" marcada como recebida.`,
     },
     transaction
