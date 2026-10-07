@@ -89,6 +89,43 @@ function publishGuaranteeCreated(guarantee, transaction) {
   );
 }
 
+// Caderno Anexo I "18. Eventos mínimos" / "9. Garantias locatícias": "lease.guarantee.expiring" —
+// "Garantia vencendo gera tarefas/eventos". Disparado por legalGuaranteeExpiryAlertJob.js, uma
+// vez por "rodada em que a severidade muda" (ver idempotencyKey abaixo) — mesmo padrão de
+// publishLegalDeadlineAlert.
+function publishGuaranteeExpiring(guarantee, daysUntilExpiry, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: guarantee.groupId,
+      companyId: guarantee.companyId,
+      aggregateType: 'Guarantee',
+      aggregateId: guarantee.id,
+      eventType: 'lease.guarantee.expiring',
+      payload: { id: guarantee.id, contractId: guarantee.contractId, guaranteeType: guarantee.guaranteeType, endsAt: guarantee.endsAt, daysUntilExpiry },
+      // idempotencyKey inclui o dia corrido (YYYY-MM-DD) do disparo: alerta no máximo uma vez
+      // por dia por garantia, sem silenciar renovações de alerta em dias seguintes enquanto a
+      // garantia continuar vencendo/vencida e sem destravar.
+      idempotencyKey: `lease.guarantee.expiring:${guarantee.id}:${new Date().toISOString().slice(0, 10)}`,
+    },
+    transaction
+  );
+}
+
+function publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: oldGuarantee.groupId,
+      companyId: oldGuarantee.companyId,
+      aggregateType: 'Guarantee',
+      aggregateId: oldGuarantee.id,
+      eventType: 'legal.guarantee.replaced',
+      payload: { id: oldGuarantee.id, contractId: oldGuarantee.contractId, replacedByGuaranteeId: newGuarantee.id },
+      idempotencyKey: `legal.guarantee.replaced:${oldGuarantee.id}:${newGuarantee.id}`,
+    },
+    transaction
+  );
+}
+
 function publishInspectionCompleted(inspection, transaction) {
   return publishDomainEvent(
     {
@@ -114,6 +151,26 @@ function publishKeyDeliveryReleased(keyDelivery, transaction) {
       eventType: 'legal.key_delivery.released',
       payload: { id: keyDelivery.id, contractId: keyDelivery.contractId, deliveredToPersonId: keyDelivery.deliveredToPersonId },
       idempotencyKey: `legal.key_delivery.released:${keyDelivery.id}`,
+    },
+    transaction
+  );
+}
+
+// Caderno Anexo I "10. Entrega de chaves" / "18. Eventos mínimos": "Evento keys.delivered inicia
+// pós-chaves/cadências e obrigações." Mantido como evento DISTINTO de
+// "legal.key_delivery.released" (que já existia e pode ter consumidores próprios) — o nome
+// exato citado no Caderno é publicado também, para que o Motor de Regras de pós-chaves
+// (cadências/obrigações locatícias) tenha o gatilho com o nome literal esperado.
+function publishKeysDelivered(keyDelivery, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: keyDelivery.groupId,
+      companyId: keyDelivery.companyId,
+      aggregateType: 'KeyDelivery',
+      aggregateId: keyDelivery.id,
+      eventType: 'keys.delivered',
+      payload: { id: keyDelivery.id, contractId: keyDelivery.contractId, deliveredToPersonId: keyDelivery.deliveredToPersonId },
+      idempotencyKey: `keys.delivered:${keyDelivery.id}`,
     },
     transaction
   );
@@ -173,8 +230,11 @@ module.exports = {
   publishSignatureRequested,
   publishSignatureSigned,
   publishGuaranteeCreated,
+  publishGuaranteeExpiring,
+  publishGuaranteeReplaced,
   publishInspectionCompleted,
   publishKeyDeliveryReleased,
+  publishKeysDelivered,
   publishLegalCaseCreated,
   publishLegalDeadlineAlert,
   publishEvidencePackageCreated,

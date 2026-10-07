@@ -17,6 +17,16 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
  * documentado — a confirmar com o cliente antes de produção.
  */
 const SETTINGS_SCHEMA = {
+  // FIN-005 (contrato bruto, Centro Financeiro §2 "Princípios constitucionais": "Limites vêm
+  // do Motor de Regras; aprovação usa snapshot/hash.") — o QUANTO (multiplicador/limiar em
+  // R$) é ajustável aqui, mas o SE a regra de antifraude está ativa para o tenant continua
+  // decidido pelo Motor de Regras (evaluateRule('FIN-005', ...), fail-closed) — mesmo padrão
+  // já usado em billing.late_fee_percentage/REG-LOC-001 (collectionCase.service.js).
+  'finance.antifraud_history_multiplier': { type: 'number', min: 1 },
+  'finance.antifraud_new_account_threshold': { type: 'number', min: 0 },
+  // FIN-TS-013 "Conta nova | Pagamento alto imediato | Controle extra" — período de
+  // resfriamento (em horas) de conta bancária nova/alterada, mesma regra FIN-005.
+  'finance.bank_account_cooldown_hours': { type: 'integer', min: 0 },
   'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
   'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
   'billing.grace_period_days': { type: 'integer', min: 0 },

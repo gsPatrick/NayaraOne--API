@@ -150,7 +150,12 @@ test('M4-06 duas baixas parciais fecham o lançamento: soma bate no centavo e o 
   });
 });
 
-test('M4-06 baixa parcial maior que o saldo restante é rejeitada, e liquidar valor <= 0 também', async () => {
+test('M4-06/contrato §10 baixa parcial maior que o saldo restante é ACEITA (nunca rejeitada) e o excedente abre pendência de classificação; liquidar valor <= 0 continua rejeitado', async () => {
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
+  // parcelas"): "Valor excedente nunca é automaticamente tratado como receita; abre pendência
+  // de classificação." O comportamento ANTERIOR deste teste (rejeitar com
+  // FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING) contrariava o contrato — o recebimento acima do
+  // saldo precisa ser ACEITO, nunca bloqueado; só o excedente fica retido.
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
@@ -158,15 +163,7 @@ test('M4-06 baixa parcial maior que o saldo restante é rejeitada, e liquidar va
 
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 70, tenant.userId, transaction);
 
-    await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction),
-      (err) => {
-        assert.equal(err.code, 'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING');
-        return true;
-      },
-      'nem um centavo a mais que o saldo restante'
-    );
-
+    // Liquidar valor <= 0 continua rejeitado (validação de valor, independente do saldo).
     for (const valor of [0, -50]) {
       await assert.rejects(
         () => financialEntriesService.settleFinancialEntryPartial(entry.id, valor, tenant.userId, transaction),
@@ -176,9 +173,35 @@ test('M4-06 baixa parcial maior que o saldo restante é rejeitada, e liquidar va
         }
       );
     }
+    assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '30.00', 'saldo intacto depois das tentativas rejeitadas');
 
-    // Saldo segue intacto depois das tentativas rejeitadas.
-    assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '30.00');
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction);
+    assert.equal(result.remainingAmount, '0.00', 'os 30 que cabiam no saldo fecharam o lançamento original');
+    assert.equal(result.original.status, 'SETTLED');
+    assert.ok(result.classificationPending, 'o centavo excedente (0.01) abriu uma pendência de classificação');
+    assert.equal(String(result.classificationPending.amount), '0.01');
+    assert.equal(result.classificationPending.nature, 'PENDING_CLASSIFICATION');
+    assert.equal(result.classificationPending.status, 'PENDING', 'pendência NUNCA é SETTLED automaticamente — não é receita até alguém classificar');
+    assert.equal(result.classificationPending.parentEntryId, entry.id);
+  });
+});
+
+test('M4-contrato §10 recebimento ANTECIPADO (antes do vencimento) baixa o lançamento normalmente', async () => {
+  // Cenário citado no pedido do auditor como "funciona incidentalmente mas não tem teste
+  // dedicado": dueAt no futuro, baixa parcial/total hoje — nada no código impede/precisa saber
+  // disso, mas precisa ficar coberto por teste explícito (contrato §10: "Recebimento pode ser
+  // total, parcial, antecipado ou excedente.").
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+    const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias no futuro
+    const entry = await createEntry(transaction, { amount: 500, bankAccountId: account.id, dueAt: futureDueAt });
+
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 500, tenant.userId, transaction);
+    assert.equal(result.original.status, 'SETTLED');
+    assert.equal(result.remainingAmount, '0.00');
+    assert.ok(!result.classificationPending, 'recebimento antecipado exato não gera excedente');
+    assert.ok(new Date(result.settlement.settledAt) < futureDueAt, 'settledAt é anterior ao vencimento — recebimento antecipado');
   });
 });
 

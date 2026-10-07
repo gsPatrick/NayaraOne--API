@@ -90,6 +90,19 @@ async function recordMovement(payload, actor, transaction) {
   const item = await InventoryItem.findByPk(inventoryItemId, { transaction });
   if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar" — Ciclo 1, auditor Estoque/Patrimônio,
+  // 2026-10-06): o checklist (MARCO_7_CHECKLIST.md §3) já apontava explicitamente que faltava
+  // "validar o bloqueio 'não movimenta estoque'" de SERVICE_ITEM, mas nenhum código aqui
+  // impedia — um item SERVICE_ITEM (mão de obra/serviço, sem controle físico de saldo) podia
+  // receber IN/OUT/TRANSFER/ADJUSTMENT normalmente e acumular `stock_balances` fantasma, o que
+  // contradiz o próprio tipo (serviço não tem unidade física armazenável).
+  if (item.itemType === 'SERVICE_ITEM') {
+    throw AppError.badRequest(
+      'Item do tipo "SERVICE_ITEM" não movimenta estoque (não possui saldo físico).',
+      'INVENTORY_MOVEMENT_SERVICE_ITEM_FORBIDDEN'
+    );
+  }
+
   if ((movementType === 'OUT' || movementType === 'LOSS' || movementType === 'DISPOSAL') && !sourceLocationId) {
     throw AppError.badRequest(`Movimento "${movementType}" exige "sourceLocationId".`, 'INVENTORY_MOVEMENT_VALIDATION');
   }

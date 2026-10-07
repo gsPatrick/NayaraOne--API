@@ -247,6 +247,34 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser emitida.`, 'INSURANCE_POLICY_INVALID_STATUS');
   }
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", Ciclo 1, Seguros, 2026-10-06): nada validava
+  // a vigência informada na emissão — uma data de vencimento igual, anterior, ou simplesmente
+  // inválida (string não-parseável) à data de início era aceita de cara, gravando uma apólice
+  // "ativa" cuja janela de vigência é vazia ou invertida. Isso também corrompe silenciosamente
+  // `addDaysDateOnly(expiryDate, -30)` (renewal task nasceria com dueDate != esperado) e
+  // `generateInstallments` (parcelas vencendo numa ordem sem sentido). Mesmo padrão de
+  // validação fail-closed já usado no resto do arquivo (ex.: claimAmount em `openClaim`).
+  // Validado ANTES de chamar o adapter — não há motivo pra gastar uma chamada externa (e
+  // possivelmente consumir idempotencyKey do provider real) com uma vigência já sabida inválida.
+  const nextEffectiveDate = issueRequest?.effectiveDate || policy.effectiveDate;
+  const nextExpiryDate = issueRequest?.expiryDate || policy.expiryDate;
+  if (nextEffectiveDate && nextExpiryDate) {
+    const effectiveTime = Date.parse(String(nextEffectiveDate).slice(0, 10));
+    const expiryTime = Date.parse(String(nextExpiryDate).slice(0, 10));
+    if (!Number.isFinite(effectiveTime) || !Number.isFinite(expiryTime)) {
+      throw AppError.badRequest(
+        '"effectiveDate" e "expiryDate" precisam ser datas válidas (YYYY-MM-DD).',
+        'INSURANCE_POLICY_VALIDATION'
+      );
+    }
+    if (expiryTime <= effectiveTime) {
+      throw AppError.badRequest(
+        '"expiryDate" precisa ser posterior a "effectiveDate" — vigência vazia ou invertida não é permitida.',
+        'INSURANCE_POLICY_VALIDATION'
+      );
+    }
+  }
+
   const tenant = { groupId: policy.groupId, companyId: policy.companyId };
   const providerName = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
   const idempotencyKey = `insurance-policy:${policy.id}`;
@@ -257,8 +285,8 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   policy.provider = providerName;
   policy.externalPolicyNumber = issued.policyNumber || policy.externalPolicyNumber;
   policy.status = issued.status === 'ACTIVE' ? 'ACTIVE' : 'ISSUED';
-  policy.effectiveDate = issueRequest?.effectiveDate || policy.effectiveDate;
-  policy.expiryDate = issueRequest?.expiryDate || policy.expiryDate;
+  policy.effectiveDate = nextEffectiveDate;
+  policy.expiryDate = nextExpiryDate;
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
 

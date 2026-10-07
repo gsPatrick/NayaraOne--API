@@ -291,6 +291,46 @@ test('billing: closeout bloqueia com transferência de utilidade pendente', asyn
   });
 });
 
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): closeout sem pendência crítica
+// precisa avançar o Contract até TERMINATED/CLOSED (ver contractLifecycle em closeoutContract).
+test('billing: closeout sem pendências avança o contrato ACTIVE até CLOSED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseContract(transaction);
+    await activateContract(contract, transaction);
+
+    const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
+    assert.equal(result.status, 'COMPLETED');
+    assert.equal(result.contractLifecycle, 'CLOSED');
+
+    const { Contract } = require('../src/models');
+    const reloaded = await Contract.findByPk(contract.id, { transaction });
+    assert.equal(reloaded.status, 'CLOSED');
+  });
+});
+
+test('billing: closeout financeiro OK mas reporta encerramento jurídico bloqueado por garantia ACTIVE pendente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const contract = await createLeaseContract(transaction);
+    await activateContract(contract, transaction);
+    await guaranteesService.createGuarantee(
+      contract.id,
+      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE' },
+      tenant.userId,
+      transaction
+    );
+
+    const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
+    assert.equal(result.status, 'COMPLETED');
+    assert.equal(result.contractLifecycle.blocked, true);
+    assert.equal(result.contractLifecycle.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+
+    const { Contract } = require('../src/models');
+    const reloaded = await Contract.findByPk(contract.id, { transaction });
+    assert.equal(reloaded.status, 'ACTIVE', 'closeout financeiro não força o encerramento jurídico quando o gate bloqueia');
+  });
+});
+
 // --- DoD: carência antes de considerar em atraso, via Motor de Regras ---
 test('billing: caso de cobrança dentro da carência (REG-LOC-002) é bloqueado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {

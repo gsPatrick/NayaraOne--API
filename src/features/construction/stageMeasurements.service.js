@@ -426,11 +426,24 @@ async function createPayableForMeasurement(measurement, actorUserId, transaction
  */
 async function decideStageMeasurement(id, { decision, rejectionReason }, actorUserId, transaction) {
   const measurement = await getStageMeasurement(id, transaction, { lock: true });
+  // BUG REAL CORRIGIDO (auditoria do cliente, Marco 6, achado ao vivo): decideStageMeasurement
+  // aceitava APPROVED direto de SUBMITTED, pulando a etapa de revisão técnica (reviewStageMeasurement)
+  // — o front escondia o botão "Aprovar" em SUBMITTED, mas quem chamasse a API direto (Postman/
+  // integração) aprovava sem revisão nenhuma, com efeito financeiro real (createPayableForMeasurement).
+  // Fail-closed também no backend: REJECTED pode vir de SUBMITTED ou REVIEWED (rejeitar não exige
+  // ter sido revisada antes), mas APPROVED só é aceito a partir de REVIEWED.
   assertTransition(measurement, ['SUBMITTED', 'REVIEWED'], 'decidir');
 
   const normalizedDecision = String(decision || '').toUpperCase();
   if (!['APPROVED', 'REJECTED'].includes(normalizedDecision)) {
     throw AppError.badRequest('A decisão precisa ser "aprovar" ou "rejeitar".', 'STAGE_MEASUREMENT_DECISION_INVALID');
+  }
+
+  if (normalizedDecision === 'APPROVED' && measurement.status !== 'REVIEWED') {
+    throw AppError.conflict(
+      'Só é possível aprovar uma medição que já foi revisada ("Revisada") — esta ainda está "Enviada para revisão". Revise antes de aprovar.',
+      'STAGE_MEASUREMENT_REVIEW_REQUIRED'
+    );
   }
 
   const beforeJson = measurement.toJSON();

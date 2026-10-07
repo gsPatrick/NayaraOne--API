@@ -55,6 +55,21 @@ async function generateContractNumber(companyId, contractType, transaction) {
 // e adicionamos CANCELLED como estado terminal alcançável de qualquer estado não-ACTIVE, já
 // que todo processo de negócio real precisa de uma saída de cancelamento — mas isso NÃO está
 // no doc, é decisão nossa, documentada aqui explicitamente.
+//
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): o Caderno (Anexo I, "5. Estado do
+// contrato") LISTA LITERALMENTE os status SUSPENDED/TERMINATED/CLOSED e a máquina de estados de
+// referência do próprio documento define:
+//   ACTIVE: ['SUSPENDED', 'TERMINATED']
+//   SUSPENDED: ['ACTIVE', 'TERMINATED']
+//   TERMINATED: ['CLOSED']
+// Este código tinha `ACTIVE: []` — nenhuma saída de ACTIVE — e nem os status SUSPENDED/
+// TERMINATED/CLOSED existiam na máquina. Gap REAL confirmado (não é mal-entendido do auditor):
+// um contrato locado em vigor não tinha como ser suspenso (ex.: inadimplência em negociação,
+// decisão judicial) nem encerrado/rescindido formalmente — só "CANCELLED", que semanticamente é
+// para antes da ativação, não para o fim de vida de um contrato ativo. Adicionadas as transições
+// abaixo, com funções dedicadas (suspendContract/reactivateContract/terminateContract/
+// closeContract) que exigem motivo e preservam o histórico (nunca apagam a linha — só mudam
+// `status` com auditoria append-only, mesmo padrão de correctContractData acima).
 const VALID_TRANSITIONS = {
   DRAFT: ['DOCUMENTS_PENDING', 'CANCELLED'],
   DOCUMENTS_PENDING: ['LEGAL_REVIEW', 'CANCELLED'],
@@ -62,7 +77,10 @@ const VALID_TRANSITIONS = {
   APPROVED: ['SIGNING', 'CANCELLED'],
   SIGNING: ['SIGNED', 'CANCELLED'],
   SIGNED: ['ACTIVE'],
-  ACTIVE: [],
+  ACTIVE: ['SUSPENDED', 'TERMINATED'],
+  SUSPENDED: ['ACTIVE', 'TERMINATED'],
+  TERMINATED: ['CLOSED'],
+  CLOSED: [],
   CANCELLED: [],
 };
 
@@ -381,6 +399,139 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   return contract;
 }
 
+/**
+ * Transições dedicadas de fim-de-vida de um contrato ATIVO (SUSPENDED/TERMINATED/CLOSED).
+ *
+ * Diferente da transição genérica `transitionContractStatus` (que só valida a máquina de
+ * estados, sem exigir motivo), estas funções seguem o mesmo padrão de `correctContractData`:
+ * exigem `reason` não vazio, travam a linha (lock pessimista, mesmo motivo documentado no
+ * módulo de Obras — `Project.transitionProject`/`budgets.service.js`: evita lost update em
+ * transições concorrentes do mesmo contrato), NUNCA apagam o registro (`Contract` é `paranoid`
+ * e esta operação é um simples UPDATE de `status`), e gravam auditoria append-only completa
+ * (beforeJson/afterJson/motivo/autor) — o histórico fica inteiro e sem buraco, igual ao padrão
+ * já usado em `transitionContractStatus`/`correctContractData` acima.
+ */
+async function assertReason(reason) {
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest('O campo "reason" é obrigatório para justificar esta transição.', 'LEGAL_CONTRACT_TRANSITION_REASON_REQUIRED');
+  }
+}
+
+async function loadContractForTransition(contractId, transaction) {
+  const contract = await Contract.findByPk(contractId, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!contract) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
+  return contract;
+}
+
+async function applyGatedTransition(contract, targetStatus, actorUserId, reason, action, transaction) {
+  const fromStatus = contract.status;
+  const allowedTargets = VALID_TRANSITIONS[fromStatus] || [];
+  if (!allowedTargets.includes(targetStatus)) {
+    throw AppError.conflict(
+      `Transição de status inválida: "${fromStatus}" -> "${targetStatus}". Transições permitidas a partir de "${fromStatus}": ${allowedTargets.join(', ') || '(nenhuma)'}.`,
+      'LEGAL_CONTRACT_INVALID_TRANSITION'
+    );
+  }
+
+  const beforeJson = contract.toJSON();
+  contract.status = targetStatus;
+  contract.updatedBy = actorUserId || null;
+  await contract.save({ transaction });
+
+  await publishContractStatusChanged(contract, fromStatus, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      actorUserId,
+      action,
+      entityType: 'Contract',
+      entityId: contract.id,
+      beforeJson,
+      afterJson: contract.toJSON(),
+      reason: `Contrato transicionado de "${fromStatus}" para "${targetStatus}": ${reason}`,
+    },
+    transaction
+  );
+
+  return contract;
+}
+
+/**
+ * suspendContract — ACTIVE -> SUSPENDED (Caderno, Anexo I "5. Estado do contrato"). Usado para
+ * suspender um contrato em vigor (ex.: inadimplência em negociação, decisão judicial liminar)
+ * sem perder o fato de que ele já esteve ACTIVE — o histórico de status fica íntegro na
+ * auditoria (`legal.contract.suspend`), nunca é sobrescrito nem apagado.
+ */
+async function suspendContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'SUSPENDED', actorUserId, reason, 'legal.contract.suspend', transaction);
+}
+
+/**
+ * reactivateContract — SUSPENDED -> ACTIVE (Caderno). Reativação depois que a causa da
+ * suspensão foi sanada (ex.: inadimplência regularizada).
+ */
+async function reactivateContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'ACTIVE', actorUserId, reason, 'legal.contract.reactivate', transaction);
+}
+
+/**
+ * terminateContract — ACTIVE -> TERMINATED ou SUSPENDED -> TERMINATED (Caderno).
+ *
+ * GATE DE ENCERRAMENTO (item cobrado pela auditoria da cliente — "encerramento bloqueado
+ * quando há obrigação crítica pendente"): não é possível encerrar um contrato que ainda tenha
+ * (a) alguma Guarantee com status "ACTIVE" (garantia/caução/fiança ainda não devolvida/liberada
+ * nem cancelada) ou (b) algum LegalCase vinculado a este contrato com status diferente de
+ * "CLOSED" (processo jurídico aberto). Isso espelha o mesmo espírito do `assertActivationGate`
+ * acima (reconfere do zero, não confia em estado passado) e fecha exatamente o buraco que a
+ * máquina de estados antiga deixava: antes nem existia TERMINATED, então esse risco nunca tinha
+ * sido modelado.
+ */
+async function terminateContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+
+  const openGuarantees = await Guarantee.findAll({ where: { contractId: contract.id, status: 'ACTIVE' }, transaction });
+  if (openGuarantees.length > 0) {
+    throw AppError.conflict(
+      'Não é possível ENCERRAR o contrato: existem garantias com status "ACTIVE" (não devolvidas/liberadas) — libere ou cancele todas as garantias antes do encerramento.',
+      'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING'
+    );
+  }
+
+  const { LegalCase } = require('../../models');
+  const openCases = await LegalCase.findAll({
+    where: { contractId: contract.id },
+    transaction,
+  });
+  const stillOpen = openCases.filter((c) => c.status !== 'CLOSED');
+  if (stillOpen.length > 0) {
+    throw AppError.conflict(
+      'Não é possível ENCERRAR o contrato: existe(m) processo(s) jurídico(s) vinculado(s) que ainda não está(ão) com status "CLOSED".',
+      'LEGAL_CONTRACT_TERMINATION_LEGAL_CASE_OPEN'
+    );
+  }
+
+  return applyGatedTransition(contract, 'TERMINATED', actorUserId, reason, 'legal.contract.terminate', transaction);
+}
+
+/**
+ * closeContract — TERMINATED -> CLOSED (Caderno: "Arquivado operacionalmente").
+ */
+async function closeContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'CLOSED', actorUserId, reason, 'legal.contract.close', transaction);
+}
+
 async function addContractParty(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
   const { personId, partyRole } = payload;
@@ -515,6 +666,10 @@ module.exports = {
   listContracts,
   getContract,
   transitionContractStatus,
+  suspendContract,
+  reactivateContract,
+  terminateContract,
+  closeContract,
   addContractParty,
   listContractParties,
   correctContractData,

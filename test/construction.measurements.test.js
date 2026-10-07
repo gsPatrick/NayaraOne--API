@@ -127,6 +127,45 @@ test('M6-10 transições inválidas são recusadas (não dá pra decidir uma med
   });
 });
 
+// BUG REAL CORRIGIDO (auditor técnico do contrato, achado ao vivo, Marco 6): decideStageMeasurement
+// aceitava APPROVED direto de SUBMITTED (pulando reviewStageMeasurement) se chamado direto pela API,
+// mesmo com o front escondendo o botão "Aprovar" nesse estado. Garante o bloqueio nas duas camadas.
+test('M6-10/auditoria: aprovar uma medição SUBMITTED (sem passar por REVIEWED) é recusado pelo backend', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        measuredPct: 25,
+        measuredAt: '2026-09-01',
+        items: [{ description: `Pulo de revisão ${suffix}`, quantity: 1, unitPrice: 100 }],
+      },
+      tenant.userId,
+      transaction
+    );
+    const submitted = await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    assert.equal(submitted.status, 'SUBMITTED');
+
+    await assert.rejects(
+      () => stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'STAGE_MEASUREMENT_REVIEW_REQUIRED');
+        return true;
+      }
+    );
+
+    // Depois de revisar, a mesma medição pode ser aprovada normalmente.
+    const reviewed = await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+    assert.equal(reviewed.status, 'REVIEWED');
+    const approved = await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+    assert.equal(approved.status, 'PAYABLE');
+  });
+});
+
 test('M6-10 alteração após SUBMITTED cria uma revisão nova (não sobrescreve a original)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
@@ -215,6 +254,7 @@ test('M6-55/M6-68 medição aprovada gera obrigação financeira real e aprovar 
       t
     );
     await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, t);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, t);
     return { measurementId: measurement.id, projectId: project.id };
   });
 
@@ -292,6 +332,7 @@ test('M6-55 aprovar medição sem valor definido (sem itens/totalAmount) é recu
       transaction
     );
     await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
 
     await assert.rejects(
       () => stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction),
@@ -310,6 +351,7 @@ test('M6-42 GET .../health devolve os 9 campos do read model de custo com valore
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { project, stage } = await setupProjectAndStage(transaction, suffix);
     const measurement = await createSubmittedMeasurement(transaction, stage.id, suffix);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
     await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
 
     const health = await projectHealthService.getProjectHealth(project.id, transaction);

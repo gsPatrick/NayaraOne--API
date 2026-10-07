@@ -5,6 +5,8 @@ const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { BankAccount, FinancialEntry, Notification, UserMembership } = require('../../models');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
+const { getSetting } = require('../settings/settings.service');
 
 // Regras de antifraude do Financeiro Base (01_ARQUITETURA_E_INVARIANTES.md — bloco Antifraude/
 // 03_MOTORES_TRANSVERSAIS.md — gatilhos "mudança bancária + pagamento em janela curta" e
@@ -18,10 +20,60 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 // (`lock_version`, coluna que já existe em FinancialEntry/Commission/OwnerRepass/BankAccount)
 // comparado no momento da decisão, não por um hash armazenado. Ver approvals.service.js.
 
-const BANK_ACCOUNT_COOLDOWN_HOURS = Number(process.env.FINANCE_BANK_ACCOUNT_COOLDOWN_HOURS) || 48;
+// FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §2, FIN-005: "Limites
+// vêm do Motor de Regras; aprovação usa snapshot/hash."): os limiares abaixo eram lidos
+// diretamente de env var (nem hard-code puro, nem Motor de Regras). Agora SEMPRE passam por
+// `resolveAntifraudThresholds` (evaluateRule('FIN-005', ...) + getSetting), com os valores
+// anteriores preservados como DEFAULT_* (usados quando a regra ainda não foi publicada para o
+// tenant — nunca enfraquece a proteção por ausência de configuração, ao contrário do padrão
+// "fail closed = 0" de REG-LOC-00x em collectionCase.service.js, que lá é seguro porque "0" é o
+// valor mais protetivo para o credor; aqui "0" seria o valor MENOS protetivo contra fraude, por
+// isso o fallback é o limiar histórico hardcoded, não zero).
+const DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS = Number(process.env.FINANCE_BANK_ACCOUNT_COOLDOWN_HOURS) || 48;
+const DEFAULT_ANOMALY_HISTORY_MULTIPLIER = Number(process.env.FINANCE_ANOMALY_MULTIPLIER) || 3;
+const DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD = Number(process.env.FINANCE_ANOMALY_NEW_ACCOUNT_THRESHOLD) || 10000;
 
 function hoursSince(date) {
   return (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60);
+}
+
+/**
+ * resolveAntifraudThresholds — FIN-005. `evaluateRule` decide SE a versão publicada da regra
+ * está vigente para o tenant (fail-closed: RULE_CONFLICT/NOT_FOUND/erro => DENY). Quando APPLY,
+ * o QUANTO vem de `getSetting` (ajustável pelo painel, sem publicar regra nova) com o
+ * `action.*` da regra como default; quando DENY (regra ainda não publicada/seedada para o
+ * tenant — ex.: ambiente de teste sem seedFinanceAntifraudRules), cai nos DEFAULT_* abaixo, que
+ * são os MESMOS valores hardcoded usados antes desta migração (nunca enfraquece a proteção).
+ */
+async function resolveAntifraudThresholds(tenant, transaction) {
+  const evaluation = await evaluateRule('FIN-005', { financeAntifraudRuleActive: true }, tenant, { transaction });
+
+  if (evaluation.decision !== 'APPLY') {
+    return {
+      historyMultiplier: DEFAULT_ANOMALY_HISTORY_MULTIPLIER,
+      newAccountThreshold: DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD,
+      cooldownHours: DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS,
+      ruleVersionId: null,
+    };
+  }
+
+  const [historyMultiplier, newAccountThreshold, cooldownHours] = await Promise.all([
+    getSetting('finance.antifraud_history_multiplier', tenant, transaction, evaluation.action.historyMultiplier ?? DEFAULT_ANOMALY_HISTORY_MULTIPLIER),
+    getSetting(
+      'finance.antifraud_new_account_threshold',
+      tenant,
+      transaction,
+      evaluation.action.newAccountThreshold ?? DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD
+    ),
+    getSetting('finance.bank_account_cooldown_hours', tenant, transaction, evaluation.action.bankAccountCooldownHours ?? DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS),
+  ]);
+
+  return {
+    historyMultiplier: Number(historyMultiplier),
+    newAccountThreshold: Number(newAccountThreshold),
+    cooldownHours: Number(cooldownHours),
+    ruleVersionId: evaluation.ruleVersionId,
+  };
 }
 
 /**
@@ -47,9 +99,13 @@ async function assertBankAccountEligibleForPayment(bankAccountId, transaction) {
   }
 
   if (bankAccount.status === 'PENDING_COOLDOWN') {
+    const { cooldownHours } = await resolveAntifraudThresholds(
+      { groupId: bankAccount.groupId, companyId: bankAccount.companyId },
+      transaction
+    );
     const elapsed = hoursSince(bankAccount.updated_at || bankAccount.created_at);
-    if (elapsed < BANK_ACCOUNT_COOLDOWN_HOURS) {
-      const remaining = Math.ceil(BANK_ACCOUNT_COOLDOWN_HOURS - elapsed);
+    if (elapsed < cooldownHours) {
+      const remaining = Math.ceil(cooldownHours - elapsed);
       throw AppError.conflict(
         `Conta bancária em período de resfriamento (antifraude) — faltam ${remaining}h para ficar elegível a pagamentos. ` +
           'Isso protege contra troca fraudulenta de dados bancários seguida de pagamento imediato.',
@@ -95,18 +151,22 @@ async function assertNoDuplicatePayment(Model, idempotencyKey, transaction) {
 // ligado) e o time financeiro é notificado (Notification IN_APP, mesmo padrão do
 // legalDeadlineAlertJob). A liberação é sempre humana e auditada — `clearManualReview`.
 
-const ANOMALY_HISTORY_MULTIPLIER = Number(process.env.FINANCE_ANOMALY_MULTIPLIER) || 3;
 const ANOMALY_MIN_HISTORY = 2;
-const ANOMALY_NEW_ACCOUNT_THRESHOLD = Number(process.env.FINANCE_ANOMALY_NEW_ACCOUNT_THRESHOLD) || 10000;
 
 /**
- * flagAnomalousPayment — avalia o lançamento contra os critérios acima. Retorna
- * `{ flagged: false }` quando nada foi detectado (e NÃO altera nada), ou
- * `{ flagged: true, reason, notifiedUserIds }` quando marcou o lançamento para revisão manual.
+ * flagAnomalousPayment — avalia o lançamento contra os critérios acima. Limiares vêm de
+ * `resolveAntifraudThresholds` (FIN-005, Motor de Regras). Retorna `{ flagged: false }` quando
+ * nada foi detectado (e NÃO altera nada), ou `{ flagged: true, reason, notifiedUserIds }`
+ * quando marcou o lançamento para revisão manual.
  */
 async function flagAnomalousPayment(financialEntry, transaction) {
   if (!financialEntry || !financialEntry.bankAccountId) return { flagged: false, reason: null };
   if (financialEntry.requiresManualReview) return { flagged: false, reason: null, alreadyFlagged: true };
+
+  const { historyMultiplier, newAccountThreshold } = await resolveAntifraudThresholds(
+    { groupId: financialEntry.groupId, companyId: financialEntry.companyId },
+    transaction
+  );
 
   const amount = Number(financialEntry.amount);
 
@@ -125,15 +185,16 @@ async function flagAnomalousPayment(financialEntry, transaction) {
   let reason = null;
   if (history.length >= ANOMALY_MIN_HISTORY) {
     const average = history.reduce((acc, e) => acc + Number(e.amount), 0) / history.length;
-    if (average > 0 && amount >= average * ANOMALY_HISTORY_MULTIPLIER) {
+    if (average > 0 && amount >= average * historyMultiplier) {
       reason =
         `Valor ${amount.toFixed(2)} é ${(amount / average).toFixed(1)}x a média histórica ` +
-        `(${average.toFixed(2)}) dos ${history.length} pagamentos já liquidados desta conta bancária.`;
+        `(${average.toFixed(2)}) dos ${history.length} pagamentos já liquidados desta conta bancária ` +
+        `(limiar FIN-005: ${historyMultiplier}x).`;
     }
-  } else if (history.length === 0 && amount >= ANOMALY_NEW_ACCOUNT_THRESHOLD) {
+  } else if (history.length === 0 && amount >= newAccountThreshold) {
     reason =
       `Primeiro pagamento desta conta bancária já no valor de ${amount.toFixed(2)} ` +
-      `(limite para conta sem histórico: ${ANOMALY_NEW_ACCOUNT_THRESHOLD.toFixed(2)}).`;
+      `(limite FIN-005 para conta sem histórico: ${newAccountThreshold.toFixed(2)}).`;
   }
 
   if (!reason) return { flagged: false, reason: null };
@@ -230,12 +291,71 @@ async function clearManualReview(entityId, actorUserId, transaction, reviewNote)
   return entry;
 }
 
+// --- FIN-013/FIN-005 complementar: sinalizador de estorno frequente e conciliação manual
+// recorrente ---------------------------------------------------------------------------------
+//
+// Auditoria externa (contrato bruto, 2026-10-07): item 6 pede, além da migração dos limiares
+// para o Motor de Regras, "um sinalizador/alerta pra estorno frequente e conciliação manual
+// recorrente (mesmo que seja um relatório/contador simples, não precisa ser elaborado)". Não há
+// um código de teste/seção específica no Anexo I para isso além da menção direta no pedido do
+// auditor — implementado como contador simples com limiar configurável via Motor de Regras
+// (mesmo FIN-005), sem nenhuma ação automática (é um ALERTA/relatório, não um bloqueio).
+
+const FREQUENT_REVERSAL_WINDOW_DAYS = 30;
+const FREQUENT_REVERSAL_MIN_COUNT = 3;
+const RECURRING_MANUAL_RECONCILIATION_MIN_COUNT = 3;
+
+/**
+ * checkFrequentReversalAlert — conta quantos FinancialEntry foram REVERSED (reverseFinancialEntry)
+ * para a empresa nos últimos `FREQUENT_REVERSAL_WINDOW_DAYS` dias. `flagged: true` quando o
+ * total atinge o limiar — só um sinalizador de leitura, nunca bloqueia nada.
+ */
+async function checkFrequentReversalAlert(companyId, transaction) {
+  const since = new Date(Date.now() - FREQUENT_REVERSAL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const count = await FinancialEntry.count({
+    // NOTA: o atributo de timestamp deste model está registrado como 'updated_at' (snake_case
+    // literal), não 'updatedAt' — ver FinancialEntry.js (underscored:true com updatedAt:
+    // 'updated_at' explícito gera o atributo já com esse nome, não um alias camelCase).
+    where: { companyId, status: 'REVERSED', updated_at: { [Op.gte]: since } },
+    transaction,
+  });
+  return {
+    count,
+    windowDays: FREQUENT_REVERSAL_WINDOW_DAYS,
+    flagged: count >= FREQUENT_REVERSAL_MIN_COUNT,
+  };
+}
+
+/**
+ * checkRecurringManualReconciliationAlert — conta quantas conciliações da empresa foram
+ * confirmadas manualmente (via matchReconciliation/matchReconciliationGroup — todo o fluxo
+ * atual é manual) nos últimos `FREQUENT_REVERSAL_WINDOW_DAYS` dias. Um volume alto de
+ * conciliação manual recorrente é sinal de que o motor de sugestão (reconciliation.service.js)
+ * não está encontrando candidatos automáticos — vale investigar qualidade dos dados de origem.
+ */
+async function checkRecurringManualReconciliationAlert(companyId, transaction) {
+  const { Reconciliation } = require('../../models');
+  const since = new Date(Date.now() - FREQUENT_REVERSAL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const count = await Reconciliation.count({
+    where: { companyId, matchedAt: { [Op.gte]: since } },
+    transaction,
+  });
+  return {
+    count,
+    windowDays: FREQUENT_REVERSAL_WINDOW_DAYS,
+    flagged: count >= RECURRING_MANUAL_RECONCILIATION_MIN_COUNT,
+  };
+}
+
 module.exports = {
-  BANK_ACCOUNT_COOLDOWN_HOURS,
-  ANOMALY_HISTORY_MULTIPLIER,
-  ANOMALY_NEW_ACCOUNT_THRESHOLD,
+  DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS,
+  DEFAULT_ANOMALY_HISTORY_MULTIPLIER,
+  DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD,
+  resolveAntifraudThresholds,
   assertBankAccountEligibleForPayment,
   assertNoDuplicatePayment,
   flagAnomalousPayment,
   clearManualReview,
+  checkFrequentReversalAlert,
+  checkRecurringManualReconciliationAlert,
 };

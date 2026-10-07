@@ -16,7 +16,14 @@ const { assertPeriodOpenForEntry } = require('./periodClosures.service');
 // o original.
 
 const ENTRY_TYPES = ['DEBIT', 'CREDIT'];
-const NATURES = ['PAYABLE', 'RECEIVABLE', 'TRANSFER', 'ADJUSTMENT'];
+// PENDING_CLASSIFICATION (auditoria externa 2026-10-07, contrato bruto, Centro Financeiro §10):
+// "Valor excedente nunca é automaticamente tratado como receita; abre pendência de
+// classificação." Natureza usada EXCLUSIVAMENTE para o lançamento-filho que representa o valor
+// excedente de uma baixa parcial acima do saldo restante — nunca é RECEIVABLE/PAYABLE (não é
+// receita/despesa própria até um humano classificar) e fica PENDING até alguém decidir o
+// destino (ex.: reclassificar para RECEIVABLE de outro contrato, devolver, etc. — fora do
+// escopo desta função, que só ABRE a pendência).
+const NATURES = ['PAYABLE', 'RECEIVABLE', 'TRANSFER', 'ADJUSTMENT', 'PENDING_CLASSIFICATION'];
 // PARTIALLY_SETTLED (M4-06): lançamento que já recebeu uma ou mais baixas parciais mas ainda
 // tem saldo em aberto. Continua "vivo" (aceita novas baixas) até a soma fechar o total.
 const STATUSES = ['PENDING', 'PARTIALLY_SETTLED', 'SETTLED', 'REVERSED', 'CANCELLED'];
@@ -417,12 +424,19 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
 
   const partialCents = toCents(partialAmount);
   const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
-  if (partialCents > remainingCents) {
-    throw AppError.badRequest(
-      `Valor da baixa parcial (${fromCents(partialCents)}) é maior que o saldo restante do lançamento (${fromCents(remainingCents)}).`,
-      'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING'
-    );
-  }
+
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
+  // parcelas"): "Recebimento pode ser total, parcial, antecipado ou excedente" e "Valor
+  // excedente nunca é automaticamente tratado como receita; abre pendência de classificação."
+  // O comportamento ANTERIOR rejeitava (400 FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING) qualquer
+  // baixa acima do saldo restante — isso é o CONTRÁRIO do que o contrato pede: o recebimento
+  // precisa ser ACEITO (nunca é bloqueio), e é o EXCEDENTE que precisa ficar retido como
+  // pendência (nunca reconhecido automaticamente como receita/despesa própria). Agora: a parte
+  // que cabe no saldo restante baixa o lançamento normalmente; a parte excedente (se houver)
+  // cria um lançamento-filho separado, nature=PENDING_CLASSIFICATION, status PENDING — não
+  // SETTLED, porque não é receita até alguém classificar.
+  const appliedCents = Math.min(partialCents, remainingCents);
+  const excessCents = partialCents - appliedCents;
 
   if (entry.bankAccountId) {
     await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
@@ -440,8 +454,8 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       contractId: entry.contractId,
       entryType: entry.entryType,
       nature: entry.nature,
-      amount: fromCents(partialCents),
-      description: `Baixa parcial de ${fromCents(partialCents)} do lançamento ${entry.id}.`,
+      amount: fromCents(appliedCents),
+      description: `Baixa parcial de ${fromCents(appliedCents)} do lançamento ${entry.id}.`,
       dueAt: entry.dueAt,
       // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
       // mesma; o que mudou foi só o momento do caixa).
@@ -457,7 +471,37 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
     { transaction }
   );
 
-  const newRemainingCents = remainingCents - partialCents;
+  let classificationPending = null;
+  if (excessCents > 0) {
+    classificationPending = await FinancialEntry.create(
+      {
+        groupId: entry.groupId,
+        companyId: entry.companyId,
+        bankAccountId: entry.bankAccountId,
+        costCenterId: null,
+        resultCenterId: null,
+        contractId: entry.contractId,
+        entryType: entry.entryType,
+        nature: 'PENDING_CLASSIFICATION',
+        amount: fromCents(excessCents),
+        description:
+          `Excedente de ${fromCents(excessCents)} recebido acima do saldo restante do lançamento ${entry.id} ` +
+          '— pendência de classificação (FIN: valor excedente nunca é automaticamente receita).',
+        dueAt: null,
+        competenceMonth: entry.competenceMonth,
+        settledAt: null,
+        status: 'PENDING',
+        idempotencyKey: null,
+        reversalOfEntryId: null,
+        parentEntryId: entry.id,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+
+  const newRemainingCents = remainingCents - appliedCents;
   entry.status = newRemainingCents === 0 ? 'SETTLED' : 'PARTIALLY_SETTLED';
   if (newRemainingCents === 0) entry.settledAt = new Date();
   entry.updatedBy = actorUserId || null;
@@ -477,17 +521,87 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       afterJson: {
         original: entry.toJSON(),
         settlementEntryId: settlement.id,
-        partialAmount: fromCents(partialCents),
+        appliedAmount: fromCents(appliedCents),
         remainingAmount: fromCents(newRemainingCents),
+        excessAmount: excessCents > 0 ? fromCents(excessCents) : '0.00',
+        classificationPendingEntryId: classificationPending ? classificationPending.id : null,
       },
       reason:
-        `Baixa parcial de ${fromCents(partialCents)} registrada no lançamento de ${entry.amount} ` +
-        `(saldo restante ${fromCents(newRemainingCents)}).`,
+        excessCents > 0
+          ? `Recebimento de ${fromCents(partialCents)} processado: ${fromCents(appliedCents)} baixou o ` +
+            `lançamento de ${entry.amount} (saldo restante ${fromCents(newRemainingCents)}) e ${fromCents(excessCents)} ` +
+            `excedente abriu pendência de classificação ${classificationPending.id} — nunca tratado como receita.`
+          : `Baixa parcial de ${fromCents(appliedCents)} registrada no lançamento de ${entry.amount} ` +
+            `(saldo restante ${fromCents(newRemainingCents)}).`,
     },
     transaction
   );
 
-  return { original: entry, settlement, remainingAmount: fromCents(newRemainingCents) };
+  return {
+    original: entry,
+    settlement,
+    remainingAmount: fromCents(newRemainingCents),
+    classificationPending,
+  };
+}
+
+/**
+ * listClassificationPendings — pendências de classificação abertas (M4-contrato §10):
+ * lançamentos-filhos nature=PENDING_CLASSIFICATION ainda PENDING, agrupados pelo lançamento
+ * original que gerou o excedente.
+ */
+async function listClassificationPendings(transaction, filters = {}) {
+  const where = { nature: 'PENDING_CLASSIFICATION' };
+  if (filters.status) where.status = String(filters.status).toUpperCase();
+  if (filters.parentEntryId) where.parentEntryId = filters.parentEntryId;
+  return FinancialEntry.findAll({ where, order: [['created_at', 'DESC']], transaction });
+}
+
+/**
+ * resolveClassificationPending — fecha a pendência: um humano decide a classificação final do
+ * excedente, convertendo a nature para a definitiva (ex.: RECEIVABLE de outro contrato,
+ * ADJUSTMENT, devolução). NUNCA automático (é exatamente o oposto do que o contrato proíbe).
+ */
+async function resolveClassificationPending(id, finalNature, actorUserId, transaction) {
+  const pending = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!pending) throw AppError.notFound('Pendência de classificação não encontrada.', 'FINANCE_CLASSIFICATION_PENDING_NOT_FOUND');
+  if (pending.nature !== 'PENDING_CLASSIFICATION') {
+    throw AppError.conflict('Este lançamento não é uma pendência de classificação.', 'FINANCE_CLASSIFICATION_PENDING_INVALID');
+  }
+  if (pending.status !== 'PENDING') {
+    throw AppError.conflict('Esta pendência já foi resolvida.', 'FINANCE_CLASSIFICATION_PENDING_ALREADY_RESOLVED');
+  }
+  const normalizedNature = String(finalNature || '').toUpperCase();
+  if (!['RECEIVABLE', 'PAYABLE', 'ADJUSTMENT'].includes(normalizedNature)) {
+    throw AppError.badRequest(
+      'O campo "finalNature" deve ser um de: RECEIVABLE, PAYABLE, ADJUSTMENT.',
+      'FINANCE_CLASSIFICATION_PENDING_VALIDATION'
+    );
+  }
+
+  const beforeJson = pending.toJSON();
+  pending.nature = normalizedNature;
+  pending.status = 'SETTLED';
+  pending.settledAt = new Date();
+  pending.updatedBy = actorUserId || null;
+  await pending.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: pending.groupId,
+      companyId: pending.companyId,
+      actorUserId,
+      action: 'finance.entry.classification_pending.resolve',
+      entityType: 'FinancialEntry',
+      entityId: pending.id,
+      beforeJson,
+      afterJson: pending.toJSON(),
+      reason: `Pendência de classificação resolvida manualmente como ${normalizedNature}.`,
+    },
+    transaction
+  );
+
+  return pending;
 }
 
 /**
@@ -571,6 +685,8 @@ module.exports = {
   updateFinancialEntry,
   settleFinancialEntry,
   settleFinancialEntryPartial,
+  listClassificationPendings,
+  resolveClassificationPending,
   computeRemainingAmount,
   resolveCompetenceMonth,
   reverseFinancialEntry,

@@ -107,7 +107,15 @@ async function decidePurchaseRequest(id, decision, actorUserId, transaction) {
 
 // --- 3. RFQ ---
 async function createQuotation(purchaseRequestId, actorUserId, transaction) {
-  const request = await PurchaseRequest.findByPk(purchaseRequestId, { transaction });
+  // BUG REAL CORRIGIDO (auditoria "loop até secar" ciclo 1 paralelo, 2026-10-06): sem lock
+  // pessimista aqui, duas chamadas concorrentes (duplo clique, 2 abas) liam ambas "nenhuma
+  // OPEN existente" (TOCTOU — não há constraint única em `quotations(purchase_request_id,
+  // status)`) e cada uma criava sua própria Quotation OPEN. As ofertas de fornecedores
+  // submetidas depois ficavam espalhadas entre as duas cotações-irmãs, quebrando compareOffers
+  // (só olha uma quotationId por vez) e permitindo adjudicar a mesma requisição duas vezes via
+  // awardSupplierOffer em cotações diferentes. Lock FOR UPDATE na PurchaseRequest serializa as
+  // duas chamadas: a segunda só lê depois do commit da primeira e reaproveita a OPEN já criada.
+  const request = await PurchaseRequest.findByPk(purchaseRequestId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   if (request.status !== 'APPROVED') {
     throw AppError.badRequest('Só é possível abrir cotação para uma requisição APPROVED.', 'QUOTATION_INVALID_SOURCE');

@@ -12,6 +12,7 @@ const rolesRouter = require('../features/roles/roles.routes');
 const peopleRouter = require('../features/people/people.routes');
 const propertiesRouter = require('../features/properties/properties.routes');
 const crmRouter = require('../features/crm/crm.routes');
+const crmController = require('../features/crm/crm.controller');
 const radarRouter = require('../features/radar/radar.routes');
 const financeRouter = require('../features/finance/finance.routes');
 const legalRouter = require('../features/legal/legal.routes');
@@ -55,6 +56,11 @@ router.post('/v1/finance/webhooks/bank-payment', financeController.bankPaymentPu
 // Mesmo motivo acima, pro webhook de seguradora (Insurance Hub, Marco 7) — resolve o tenant via
 // InsuranceProviderSubmission (sem RLS).
 router.post('/v1/procurement/webhooks/insurance', insuranceController.insurancePublicWebhook);
+// Carrinho de imóveis compartilhável (crm.carts, item 3) — link PÚBLICO, sem JWT (quem recebe
+// o link é um lead/cliente final, não um usuário do sistema). Resolve o tenant via
+// CartShareRouting (sem RLS), mesmo padrão dos webhooks acima.
+router.get('/v1/crm/carts/public/:token', crmController.getPublicCart);
+router.post('/v1/crm/carts/public/:token/properties/:propertyId/click', crmController.clickPublicCartProperty);
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);

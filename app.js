@@ -14,6 +14,7 @@ const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob')
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
+const { startCrmTaskOverdueJob } = require('./src/engines/jobs/crmTaskOverdueJob');
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
 const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
@@ -115,6 +116,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_DEADLINE_ALERT_JOB_DISA
 // Escalonamento de reclamações/elogios/conflitos com SLA vencido (M3-20, 18/09/2026).
 if (process.env.NODE_ENV !== 'test' && process.env.FEEDBACK_CASE_ALERT_JOB_DISABLED !== 'true') {
   startFeedbackCaseAlertJob();
+}
+
+// Escalonamento de tarefas de CRM vencidas (crm.task.overdue) — item 5 do ciclo de auditoria
+// externa Marco 3 (Guia do Marcelo §11 "Tarefa vencida escala conforme regra.").
+if (process.env.NODE_ENV !== 'test' && process.env.CRM_TASK_OVERDUE_JOB_DISABLED !== 'true') {
+  startCrmTaskOverdueJob();
 }
 
 // Escalonamento de SLA dos chamados de garantia/pós-obra (M6-63/M6-88). Roda a cada 30 min

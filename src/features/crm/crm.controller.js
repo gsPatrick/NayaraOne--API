@@ -11,6 +11,8 @@ const feedbackCasesService = require('./feedbackCases.service');
 const opportunitiesExportService = require('./opportunitiesExport.service');
 const opportunityTasksService = require('./opportunityTasks.service');
 const opportunityTimelineService = require('./opportunityTimeline.service');
+const cartsService = require('./carts.service');
+const { sequelize } = require('../../models');
 
 // --- Opportunities ---
 
@@ -273,6 +275,39 @@ const exportOpportunities = catchAsync(async (req, res) => {
   return res.status(200).send(result.content);
 });
 
+// --- Carrinho de imóveis compartilhável (crm.carts, item 3) ---
+
+const createCart = catchAsync(async (req, res) => {
+  const cart = await req.withTenantTransaction((transaction) =>
+    cartsService.createCart(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { statusCode: 201, data: cart });
+});
+
+const updateCartItems = catchAsync(async (req, res) => {
+  const cart = await req.withTenantTransaction((transaction) =>
+    cartsService.updateCartItems(req.params.cartId, req.body.propertyIds, req.auth.userId, transaction)
+  );
+  return success(res, { data: cart });
+});
+
+const generateCartShareLink = catchAsync(async (req, res) => {
+  const routing = await req.withTenantTransaction((transaction) => cartsService.generateShareLink(req.params.cartId, transaction));
+  return success(res, { data: { token: routing.token } });
+});
+
+// Endpoints PÚBLICOS (sem authMiddleware/tenantMiddleware — ver src/routes/index.js, mesmo
+// padrão de clicksignPublicWebhook): resolvem o tenant via CartShareRouting (sem RLS).
+const getPublicCart = catchAsync(async (req, res) => {
+  const data = await cartsService.getPublicCartByToken(req.params.token, sequelize);
+  return success(res, { data });
+});
+
+const clickPublicCartProperty = catchAsync(async (req, res) => {
+  const data = await cartsService.recordPublicCartClick(req.params.token, req.params.propertyId, sequelize);
+  return success(res, { data });
+});
+
 module.exports = {
   createOpportunity,
   listOpportunities,
@@ -302,4 +337,9 @@ module.exports = {
   resolveFeedbackCase,
   escalateFeedbackCase,
   exportOpportunities,
+  createCart,
+  updateCartItems,
+  generateCartShareLink,
+  getPublicCart,
+  clickPublicCartProperty,
 };

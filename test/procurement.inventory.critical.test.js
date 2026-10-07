@@ -960,3 +960,46 @@ test('Procurement: decideSupplierDueDiligence recusa aprovar fornecedor que não
     );
   });
 });
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar" — Ciclo 1, auditor Estoque/Patrimônio,
+// 2026-10-06): MARCO_7_CHECKLIST.md §3 já registrava que faltava "validar explicitamente o
+// bloqueio 'não movimenta estoque'" para SERVICE_ITEM, mas recordMovement nunca checava
+// item.itemType — um SERVICE_ITEM (serviço/mão de obra, sem controle físico) conseguia receber
+// IN/OUT/TRANSFER/ADJUSTMENT normalmente e acumular stock_balances fantasma. Corrigido:
+// recordMovement agora bloqueia qualquer movimento sobre item SERVICE_ITEM.
+test('inventory: SERVICE_ITEM não pode movimentar estoque (IN/OUT/ADJUSTMENT bloqueados)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { item, location } = await createItemAndWarehouse(transaction, { itemType: 'SERVICE_ITEM' });
+    assert.equal(item.itemType, 'SERVICE_ITEM');
+
+    await assert.rejects(
+      () =>
+        movementsService.recordMovement(
+          withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 10, destinationLocationId: location.id }),
+          actorOf(),
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'INVENTORY_MOVEMENT_SERVICE_ITEM_FORBIDDEN');
+        return true;
+      }
+    );
+
+    await assert.rejects(
+      () =>
+        movementsService.recordMovement(
+          withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 1, sourceLocationId: location.id }),
+          actorOf(),
+          transaction
+        ),
+      (err) => {
+        assert.equal(err.code, 'INVENTORY_MOVEMENT_SERVICE_ITEM_FORBIDDEN');
+        return true;
+      }
+    );
+
+    const balance = await movementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balance, 0, 'SERVICE_ITEM nunca deve acumular saldo físico');
+  });
+});

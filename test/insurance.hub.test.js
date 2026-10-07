@@ -382,3 +382,71 @@ test('Insurance Hub: InsuranceRenewalTask.dueDate é exatamente expiryDate - 30 
     assert.equal(String(task.dueDate), '2026-12-01', 'dueDate precisa ser exatamente 30 dias antes de 2026-12-31, nunca um dia a menos por causa do fuso');
   });
 });
+
+// Bug real corrigido nesta auditoria (Ciclo 1 "loop até secar", Seguros, 2026-10-06): issuePolicy
+// nunca validava a vigência informada — expiryDate igual/anterior a effectiveDate (ou uma data
+// não-parseável) era aceita de cara, deixando a apólice "ativa" com janela de vigência vazia ou
+// invertida, o que corrompe silenciosamente o cálculo de dueDate da renewal task (expiryDate -
+// 30 dias) e a geração de parcelas.
+test('Insurance Hub: issuePolicy rejeita vigência inválida (expiryDate <= effectiveDate)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+
+    await assert.rejects(
+      () => insuranceService.issuePolicy(
+        policy.id,
+        { effectiveDate: '2026-12-31', expiryDate: '2026-12-01' },
+        { userId: tenant.userId },
+        transaction
+      ),
+      (err) => {
+        assert.equal(err.code, 'INSURANCE_POLICY_VALIDATION');
+        return true;
+      },
+      'expiryDate anterior a effectiveDate precisa ser rejeitado'
+    );
+
+    await assert.rejects(
+      () => insuranceService.issuePolicy(
+        policy.id,
+        { effectiveDate: '2026-12-01', expiryDate: '2026-12-01' },
+        { userId: tenant.userId },
+        transaction
+      ),
+      (err) => {
+        assert.equal(err.code, 'INSURANCE_POLICY_VALIDATION');
+        return true;
+      },
+      'expiryDate igual a effectiveDate (vigência vazia) precisa ser rejeitado'
+    );
+
+    await assert.rejects(
+      () => insuranceService.issuePolicy(
+        policy.id,
+        { effectiveDate: '2026-12-01', expiryDate: 'data-invalida' },
+        { userId: tenant.userId },
+        transaction
+      ),
+      (err) => {
+        assert.equal(err.code, 'INSURANCE_POLICY_VALIDATION');
+        return true;
+      },
+      'expiryDate não-parseável precisa ser rejeitado'
+    );
+
+    // Confirma que a apólice não foi corrompida por nenhuma das tentativas rejeitadas: ainda
+    // DRAFT, sem vigência gravada, e emitir com vigência válida continua funcionando no mesmo
+    // registro.
+    const stillDraft = await insuranceService.getPolicy(policy.id, transaction);
+    assert.equal(stillDraft.status, 'DRAFT');
+    assert.equal(stillDraft.effectiveDate, null);
+
+    const issued = await insuranceService.issuePolicy(
+      policy.id,
+      { effectiveDate: '2026-12-01', expiryDate: '2026-12-31' },
+      { userId: tenant.userId },
+      transaction
+    );
+    assert.ok(['ISSUED', 'ACTIVE'].includes(issued.status));
+  });
+});

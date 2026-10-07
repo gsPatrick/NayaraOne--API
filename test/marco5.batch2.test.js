@@ -605,7 +605,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED');
         return true;
@@ -627,7 +627,12 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     assert.equal(inspectionSignatures.length, 3);
 
     // 12) Agora a chave sai — com quem entregou, quem recebeu e quando.
-    const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: lessee.id },
+      tenant.userId,
+      transaction
+    );
     assert.equal(released.status, 'RELEASED');
     assert.equal(released.deliveredToPersonId, lessee.id);
     assert.equal(released.deliveredByUserId, tenant.userId);

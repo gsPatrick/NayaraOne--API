@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { Company } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
@@ -332,14 +333,34 @@ test('M6-61: rule_version_id gravado no orçamento é preservado mesmo após nov
   });
 });
 
+// FIX (auditoria do contrato, Marco 6, 2026-10-07): este teste dependia do tenant de SEED nunca
+// ter uma MarginRule configurada — premissa que deixou de valer no momento em que criamos a
+// MarginRule padrão de homologação (15%) para a empresa de seed, pra destravar o teste de
+// aprovação de orçamento do auditor. A regra de negócio (bloquear aprovação sem margem
+// configurada) continua intacta e fail-closed — só o cenário de teste precisa de uma empresa
+// nova, de verdade sem NENHUMA MarginRule, em vez de reusar a empresa de seed compartilhada.
 test('Aprovar orçamento sem nenhuma margem mínima configurada é bloqueado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const freshCompany = await Company.create(
+      {
+        groupId: tenant.groupId,
+        name: `HOMO QA Empresa sem margem ${Date.now()}${Math.floor(Math.random() * 10000)}`,
+        status: 'ACTIVE',
+      },
+      { transaction }
+    );
+    await sequelize.query('SET LOCAL app.company_id = :companyId', {
+      replacements: { companyId: freshCompany.id },
+      transaction,
+    });
+
+    const freshTenant = { ...withTenant({}), groupId: tenant.groupId, companyId: freshCompany.id };
     const project = await projectsService.createProject(
-      withTenant({ name: `HOMO QA Obra sem regra ${Date.now()}` }),
+      { ...freshTenant, name: `HOMO QA Obra sem regra ${Date.now()}` },
       tenant.userId,
       transaction
     );
-    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    const budget = await budgetsService.createBudget(project.id, freshTenant, tenant.userId, transaction);
     await assert.rejects(
       () => budgetsService.approveBudget(budget.id, tenant.userId, transaction),
       (err) => {

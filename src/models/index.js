@@ -51,6 +51,9 @@ const modelDefiners = {
   PropertyInternalOccurrence: require('./PropertyInternalOccurrence'),
   Opportunity: require('./Opportunity'),
   PropertyRadar: require('./PropertyRadar'),
+  Cart: require('./Cart'),
+  CartVersion: require('./CartVersion'),
+  CartShareRouting: require('./CartShareRouting'),
   Proposal: require('./Proposal'),
   FeedbackCase: require('./FeedbackCase'),
   Visit: require('./Visit'),
@@ -73,6 +76,8 @@ const modelDefiners = {
   InspectionSignature: require('./InspectionSignature'),
   Guarantee: require('./Guarantee'),
   KeyDelivery: require('./KeyDelivery'),
+  ContractRequirement: require('./ContractRequirement'),
+  Notice: require('./Notice'),
   EvidencePackage: require('./EvidencePackage'),
   EvidencePackageAccessLog: require('./EvidencePackageAccessLog'),
   InsuranceCase: require('./InsuranceCase'),
@@ -301,6 +306,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.Inspection.belongsTo(db.User, { foreignKey: 'inspector_user_id', as: 'inspectorUser', constraints: false });
   db.InspectionItem.belongsTo(db.Inspection, { foreignKey: 'inspection_id', as: 'inspection', constraints: false });
   db.Guarantee.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.ContractRequirement.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.Contract.hasMany(db.ContractRequirement, { foreignKey: 'contract_id', as: 'requirements', constraints: false });
+  db.Notice.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.Notice.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
   db.Guarantee.belongsTo(db.Person, { foreignKey: 'guarantor_person_id', as: 'guarantorPerson', constraints: false });
   db.KeyDelivery.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.KeyDelivery.belongsTo(db.Inspection, { foreignKey: 'inspection_id', as: 'inspection', constraints: false });

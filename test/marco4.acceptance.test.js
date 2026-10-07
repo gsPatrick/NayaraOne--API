@@ -70,7 +70,12 @@ test('M4-11 conta bancária nova fica em cooldown, bloqueia pagamento, e libera 
 });
 
 // --- M4-15: repasses de proprietário segregados da receita própria ---
-test('M4-15 createOwnerRepasse calcula líquido = bruto - deduções, nunca editável diretamente', async () => {
+test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto elegível) - deduções, nunca editável diretamente', async () => {
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §12 "Repasses de
+  // proprietários"): "Repasse não pode ser maior que valor elegível recebido, salvo ajuste
+  // formal." createOwnerRepasse agora EXIGE `sourceEntryIds` (lançamentos de recebimento reais,
+  // SETTLED, RECEIVABLE) e recalcula o teto a partir deles — grossAmount livre não é mais
+  // aceito sem vínculo com recebimento real.
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const owner = await Person.create(
@@ -88,13 +93,74 @@ test('M4-15 createOwnerRepasse calcula líquido = bruto - deduções, nunca edit
       transaction
     );
 
+    // Recebimento real do locatário (aluguel), já liquidado — é isso que forma o teto elegível.
+    const recebimento = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `M4-15 aluguel recebido ${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+
     const repasse = await ownerRepassesService.createOwnerRepasse(
-      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id, grossAmount: 1000, deductionsAmount: 80, referenceMonth: '2026-09' },
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        propertyId: property.id,
+        ownerPersonId: owner.id,
+        bankAccountId: account.id,
+        sourceEntryIds: [recebimento.id],
+        grossAmount: 1000,
+        deductionsAmount: 80,
+        referenceMonth: '2026-09',
+      },
       tenant.userId,
       transaction
     );
     assert.equal(Number(repasse.netAmount), 920, 'líquido precisa ser sempre bruto - deduções, calculado no servidor');
     assert.equal(repasse.status, 'PENDING');
+
+    const composicao = await ownerRepassesService.getOwnerRepasseComposition(repasse.id, transaction);
+    assert.equal(composicao.eligibleAmount, 1000);
+    assert.equal(composicao.composition.length, 1);
+    assert.equal(composicao.composition[0].financialEntryId, recebimento.id);
+
+    // Tentar repasse SEM lançamento de recebimento real é bloqueado.
+    await assert.rejects(
+      () =>
+        ownerRepassesService.createOwnerRepasse(
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id, grossAmount: 500 },
+          tenant.userId,
+          transaction
+        ),
+      (err) => { assert.equal(err.code, 'FINANCE_OWNER_REPASSE_VALIDATION'); return true; },
+      'sourceEntryIds é obrigatório — não existe mais repasse "livre"'
+    );
+
+    // Tentar repasse acima do teto elegível (sem formalAdjustment) é bloqueado.
+    const outroRecebimento = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 200, description: `M4-15 aluguel 2 ${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(outroRecebimento.id, tenant.userId, transaction);
+    await assert.rejects(
+      () =>
+        ownerRepassesService.createOwnerRepasse(
+          {
+            groupId: tenant.groupId,
+            companyId: tenant.companyId,
+            propertyId: property.id,
+            ownerPersonId: owner.id,
+            bankAccountId: account.id,
+            sourceEntryIds: [outroRecebimento.id],
+            grossAmount: 1000, // teto elegível real é só 200
+          },
+          tenant.userId,
+          transaction
+        ),
+      (err) => { assert.equal(err.code, 'FINANCE_OWNER_REPASSE_EXCEEDS_ELIGIBLE_CAP'); return true; },
+      'repasse não pode exceder o valor elegível recebido, salvo ajuste formal'
+    );
 
     // Sem exigir cooldown vencido, o pagamento deve ser bloqueado (mesma trava do M4-11).
     await assert.rejects(

@@ -25,11 +25,39 @@ legalRouter.post('/legal/contracts', requirePermission('legal:create'), legalCon
 legalRouter.get('/legal/contracts', requirePermission('legal:read'), legalController.listContracts);
 legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalController.getContract);
 legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), legalController.transitionContract);
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): fim-de-vida do contrato (Caderno,
+// Anexo I "5. Estado do contrato") — SUSPENDED/TERMINATED/CLOSED. Ações HIGH, exigem motivo
+// (ver assertReason em contracts.service.js) e permissão de aprovação jurídica, mesmo padrão de
+// "/transition" acima (não é correção de dado — é máquina de estados).
+legalRouter.post('/legal/contracts/:id/suspend', requirePermission('legal:approve'), legalController.suspendContract);
+legalRouter.post('/legal/contracts/:id/reactivate', requirePermission('legal:approve'), legalController.reactivateContract);
+legalRouter.post('/legal/contracts/:id/terminate', requirePermission('legal:approve'), legalController.terminateContract);
+legalRouter.post('/legal/contracts/:id/close', requirePermission('legal:approve'), legalController.closeContract);
 legalRouter.post('/legal/contracts/:id/parties', requirePermission('legal:create'), legalController.addContractParty);
 legalRouter.get('/legal/contracts/:id/parties', requirePermission('legal:read'), legalController.listContractParties);
 // AUD-004: correção auditada de dados já gravados (não é a máquina de estados) — ação HIGH,
 // exige MFA recente e motivo obrigatório (ver correctContractData em contracts.service.js).
 legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:update'), requireRecentMfa, legalController.correctContractData);
+
+// Contract requirements (checklist documental por tipo — Caderno Anexo I "7. Checklist
+// documental"). NOTA DE AMBIENTE: depende de "legal"."contract_requirements" (migration
+// 20260101000291, pendente de rodar em ambiente com credencial de DDL — ver requirements.service.js).
+legalRouter.post('/legal/contracts/:id/requirements/generate', requirePermission('legal:create'), legalController.generateContractRequirements);
+legalRouter.get('/legal/contracts/:id/requirements', requirePermission('legal:read'), legalController.listContractRequirements);
+legalRouter.patch('/legal/requirements/:requirementId', requirePermission('legal:update'), legalController.satisfyContractRequirement);
+
+// Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). NOTA DE
+// AMBIENTE: depende de "legal"."notices" (migration 20260101000292, pendente de rodar em
+// ambiente com credencial de DDL — ver notices.service.js).
+legalRouter.post('/legal/notices', requirePermission('legal:create'), legalController.createNotice);
+legalRouter.get('/legal/notices', requirePermission('legal:read'), legalController.listNotices);
+legalRouter.get('/legal/notices/:id', requirePermission('legal:read'), legalController.getNotice);
+legalRouter.post('/legal/notices/:id/submit-for-review', requirePermission('legal:update'), legalController.submitNoticeForReview);
+legalRouter.post('/legal/notices/:id/approve', requirePermission('legal:approve'), legalController.approveNotice);
+legalRouter.post('/legal/notices/:id/reject', requirePermission('legal:approve'), legalController.rejectNotice);
+// Envio é ação HIGH (notificação formal, pode ter efeito jurídico) — exige MFA recente.
+legalRouter.post('/legal/notices/:id/send', requirePermission('legal:update'), requireRecentMfa, legalController.sendNotice);
+legalRouter.post('/legal/notices/:id/delivery-evidence', requirePermission('legal:update'), legalController.registerNoticeDeliveryEvidence);
 
 // Contract versions
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);

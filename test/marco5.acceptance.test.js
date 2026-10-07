@@ -163,7 +163,7 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED'); return true; },
       'sem vistoria de entrada concluída, a entrega de chaves precisa ser bloqueada mesmo com contrato SIGNED'
     );
@@ -176,19 +176,24 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'vistoria CONCLUÍDA mas SEM assinatura de locador/locatário ainda tem que bloquear a liberação'
     );
     await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'assinatura-locador-m522' }, tenant.userId, transaction);
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'só o locador ter assinado ainda não basta — falta o locatário'
     );
     await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'assinatura-locatario-m522' }, tenant.userId, transaction);
 
-    const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      tenant.userId,
+      transaction
+    );
     assert.equal(released.status, 'RELEASED');
     assert.ok(released.deliveredAt, 'precisa registrar QUANDO as chaves foram entregues');
     assert.equal(released.deliveredByUserId, tenant.userId, 'precisa registrar QUEM entregou');
@@ -266,7 +271,7 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => {
         assert.equal(
           err.code,
@@ -283,7 +288,12 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
     // simplesmente bloqueando tudo.
     await inspectionsService.signInspection(newInspection.id, { partyRole: 'LANDLORD', signaturePayload: 'nova-locador' }, tenant.userId, transaction);
     await inspectionsService.signInspection(newInspection.id, { partyRole: 'TENANT', signaturePayload: 'nova-locatario' }, tenant.userId, transaction);
-    const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      tenant.userId,
+      transaction
+    );
     assert.equal(released.status, 'RELEASED');
   });
 });
