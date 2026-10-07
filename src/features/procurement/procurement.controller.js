@@ -55,14 +55,53 @@ const confirmGoodsReceipt = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) => service.confirmGoodsReceipt(req.params.id, req.body, actor, t));
   return success(res, { statusCode: 201, data: result });
 });
+const listGoodsReceipts = catchAsync(async (req, res) => {
+  const receipts = await req.withTenantTransaction((t) => service.listGoodsReceipts(t, { purchaseOrderId: req.params.id }));
+  return success(res, { data: receipts });
+});
+
 const listDiscrepancies = catchAsync(async (req, res) => {
   const discrepancies = await req.withTenantTransaction((t) => service.listDiscrepancies(t, { status: req.query.status }));
   return success(res, { data: discrepancies });
 });
 
+const resolveDiscrepancy = catchAsync(async (req, res) => {
+  const discrepancy = await req.withTenantTransaction((t) =>
+    service.resolveDiscrepancy(req.params.id, req.body, { userId: req.auth.userId }, t)
+  );
+  return success(res, { data: discrepancy });
+});
+
 const evaluateSupplier = catchAsync(async (req, res) => {
   const evaluation = await req.withTenantTransaction((t) => service.evaluateSupplier(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: evaluation });
+});
+
+const listSupplierEvaluations = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => service.listSupplierEvaluations(t, { supplierPersonId: req.query.supplierPersonId }));
+  return success(res, { data: result });
+});
+
+const cancelPurchaseOrder = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => service.cancelPurchaseOrder(req.params.id, req.body, { userId: req.auth.userId }, t));
+  return success(res, { data: result });
+});
+
+const upsertSupplierQualification = catchAsync(async (req, res) => {
+  const qualification = await req.withTenantTransaction((t) => service.upsertSupplierQualification(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: qualification });
+});
+
+const decideSupplierDueDiligence = catchAsync(async (req, res) => {
+  const qualification = await req.withTenantTransaction((t) =>
+    service.decideSupplierDueDiligence(req.params.id, req.body, { userId: req.auth.userId }, t)
+  );
+  return success(res, { data: qualification });
+});
+
+const listSupplierQualifications = catchAsync(async (req, res) => {
+  const qualifications = await req.withTenantTransaction((t) => service.listSupplierQualifications(t, { supplierPersonId: req.query.supplierPersonId }));
+  return success(res, { data: qualifications });
 });
 
 module.exports = {
@@ -77,6 +116,13 @@ module.exports = {
   listPurchaseOrders,
   getPurchaseOrder,
   confirmGoodsReceipt,
+  listGoodsReceipts,
   listDiscrepancies,
+  resolveDiscrepancy,
   evaluateSupplier,
+  listSupplierEvaluations,
+  cancelPurchaseOrder,
+  upsertSupplierQualification,
+  decideSupplierDueDiligence,
+  listSupplierQualifications,
 };

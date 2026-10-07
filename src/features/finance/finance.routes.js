@@ -77,6 +77,7 @@ financeRouter.get('/finance/payment-intents', requirePermission('finance:read'),
 financeRouter.post('/finance/payment-intents/:id/approve', requirePermission('finance:approve'), financeController.approvePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/execute', requirePermission('finance:settle'), requireRecentMfa, financeController.executePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/cancel', requirePermission('finance:update'), financeController.cancelPaymentIntent);
+financeRouter.post('/finance/payment-intents/:id/submit-to-bank', requirePermission('finance:settle'), requireRecentMfa, financeController.submitPaymentIntentToBank);
 
 // Intercompany transfers (M4-18) — criar move dinheiro entre empresas: step-up MFA.
 financeRouter.post('/finance/intercompany-transfers', requirePermission('finance:settle'), requireRecentMfa, financeController.createIntercompanyTransfer);

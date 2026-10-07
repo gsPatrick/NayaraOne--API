@@ -39,6 +39,43 @@ const SETTINGS_SCHEMA = {
   'legal.zapsign_webhook_secret': { type: 'string', encrypted: true },
   'billing.igpm_mode': { type: 'string', enum: ['manual', 'automatic'] },
   'billing.fgv_api_token': { type: 'string', encrypted: true },
+  // Provider bancário (PaymentProvider/BankAdapter) — mesmo padrão de legal.signature_provider.
+  // Ver PROVIDER_BANCARIO.md. "sandbox" é o default seguro: sem credencial configurada, o
+  // resolver cai pra SandboxBankAdapter e nenhum fluxo de negócio trava.
+  'finance.payment_provider': { type: 'string', enum: ['sandbox', 'santander'] },
+  'finance.santander_environment': { type: 'string', enum: ['sandbox', 'production'] },
+  'finance.santander_workspace_id': { type: 'string' },
+  'finance.santander_client_id': { type: 'string', encrypted: true },
+  'finance.santander_client_secret': { type: 'string', encrypted: true },
+  // Certificado A1 mTLS exigido pela API do Santander — par chave/certificado, ambos em texto
+  // PEM, criptografados em repouso como qualquer outro segredo de provider.
+  'finance.santander_cert_pem': { type: 'string', encrypted: true },
+  'finance.santander_key_pem': { type: 'string', encrypted: true },
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 38, 2026-10-05): mesma falha de
+  // segurança do webhook de seguro (corrigida na R37) — bankPaymentPublicWebhook nunca validava
+  // assinatura nenhuma, permitindo forjar confirmação de pagamento bancário real. Mesmo esquema
+  // HMAC-SHA256 por tenant, fail-closed quando há provider real configurado.
+  'finance.bank_payment_webhook_secret': { type: 'string', encrypted: true },
+  // Insurance Hub (Marco 7 — "COMPRAS/PROCUREMENT + SEGUROS", InsuranceAdapter). Mesmo padrão:
+  // "sandbox" é o default seguro, resolver cai pra SandboxInsuranceAdapter sem credencial.
+  // "junto_seguros" fica como enum válido (selecionável no front, documentado como "pendente de
+  // parceria de corretora") mas NUNCA tem settings de credencial aqui — não há documentação
+  // técnica pública pra essa seguradora, então não existe campo real pra pedir (ver
+  // InsuranceAdapter.js — JuntoSegurosInsuranceAdapter lança sempre que instanciada).
+  'procurement.insurance_provider': { type: 'string', enum: ['sandbox', 'porto_seguro', 'junto_seguros', 'yelum'] },
+  // Porto Seguro: OAuth2 client_credentials CONFIRMADO (dev.portoseguro.com.br/api-portal/
+  // content/autorizacao) — client_id/client_secret, não um api_key único.
+  'procurement.porto_seguro_environment': { type: 'string', enum: ['sandbox', 'production'] },
+  'procurement.porto_seguro_client_id': { type: 'string', encrypted: true },
+  'procurement.porto_seguro_client_secret': { type: 'string', encrypted: true },
+  'procurement.yelum_environment': { type: 'string', enum: ['sandbox', 'production'] },
+  'procurement.yelum_api_key': { type: 'string', encrypted: true },
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 37, 2026-10-05): o webhook público
+  // de seguradora (insurancePublicWebhook) não validava assinatura nenhuma — qualquer
+  // requisição que conhecesse o externalSubmissionId conseguia forjar liquidação de sinistro e
+  // lançamento financeiro arbitrário. Mesmo padrão já usado pro Clicksign
+  // (legal.clicksign_webhook_secret) — um secret por tenant, HMAC-SHA256 do corpo bruto.
+  'procurement.insurance_webhook_secret': { type: 'string', encrypted: true },
 };
 
 function validateAgainstSchema(key, value) {
@@ -254,6 +291,8 @@ async function getIntegrationsStatus(tenant, transaction) {
     clicksign: { configured: false, connected: false, checkedAt },
     zapsign: { configured: false, connected: false, checkedAt },
     igpm: { configured: false, connected: false, checkedAt },
+    bankPayment: { configured: false, connected: false, checkedAt },
+    insurance: { configured: false, connected: false, checkedAt },
   };
 
   const signatureProvider = await getSetting('legal.signature_provider', tenant, transaction, 'sandbox');
@@ -304,6 +343,50 @@ async function getIntegrationsStatus(tenant, transaction) {
     }
   } else {
     result.igpm = { configured: true, connected: true, checkedAt };
+  }
+
+  // Santander (PROVIDER_BANCARIO.md): autenticação exige mTLS (certificado A1) + OAuth2, não um
+  // simples bearer token, então aqui só confirmamos que as 5 credenciais necessárias estão
+  // salvas — resolveBankAdapter.js já usa essa mesma lista pra decidir entre o adapter real e o
+  // Sandbox. Não há "ping" de rede real (não vale abrir uma conexão mTLS só pra health-check
+  // deste painel); "Conectado" aqui significa "configurado por completo", não "testado contra o
+  // banco" — a mesma distinção que já vale pro resto desta função quando não há chamada de rede.
+  const bankPaymentProvider = await getSetting('finance.payment_provider', tenant, transaction, 'sandbox');
+  if (bankPaymentProvider === 'santander') {
+    const [clientId, clientSecret, certPem, keyPem, workspaceId] = await Promise.all([
+      getDecryptedSetting('finance.santander_client_id', tenant, transaction, null),
+      getDecryptedSetting('finance.santander_client_secret', tenant, transaction, null),
+      getDecryptedSetting('finance.santander_cert_pem', tenant, transaction, null),
+      getDecryptedSetting('finance.santander_key_pem', tenant, transaction, null),
+      getSetting('finance.santander_workspace_id', tenant, transaction, null),
+    ]);
+    const complete = Boolean(clientId && clientSecret && certPem && keyPem && workspaceId);
+    result.bankPayment = { configured: complete, connected: complete, checkedAt };
+  } else {
+    result.bankPayment = { configured: true, connected: true, checkedAt };
+  }
+
+  // Insurance Hub (Marco 7): mesma distinção do Santander acima — nenhuma seguradora foi
+  // testada contra credencial real, então "Conectado" aqui significa "configurado por
+  // completo", não "testado contra a seguradora".
+  const insuranceProvider = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
+  if (insuranceProvider === 'porto_seguro') {
+    const [clientId, clientSecret] = await Promise.all([
+      getDecryptedSetting('procurement.porto_seguro_client_id', tenant, transaction, null),
+      getDecryptedSetting('procurement.porto_seguro_client_secret', tenant, transaction, null),
+    ]);
+    const complete = Boolean(clientId && clientSecret);
+    result.insurance = { configured: complete, connected: complete, checkedAt };
+  } else if (insuranceProvider === 'yelum') {
+    const apiKey = await getDecryptedSetting('procurement.yelum_api_key', tenant, transaction, null);
+    result.insurance = { configured: Boolean(apiKey), connected: Boolean(apiKey), checkedAt };
+  } else if (insuranceProvider === 'junto_seguros') {
+    // Nunca "configurado" de verdade — não existe credencial real pra essa seguradora ainda
+    // (ver nota em InsuranceAdapter.js/resolveInsuranceAdapter.js). Selecionar essa opção no
+    // painel cai no Sandbox silenciosamente; aqui refletimos isso como "não configurado".
+    result.insurance = { configured: false, connected: false, checkedAt };
+  } else {
+    result.insurance = { configured: true, connected: true, checkedAt };
   }
 
   return result;

@@ -26,7 +26,7 @@ async function createRequisition(payload, actorUserId, transaction) {
     throw AppError.badRequest('Requisição vinculada a obra exige "projectLocationId" (local de destino no canteiro).', 'INVENTORY_REQUISITION_VALIDATION');
   }
   for (const line of items) {
-    if (!line.inventoryItemId || line.quantity == null || Number(line.quantity) <= 0) {
+    if (!line.inventoryItemId || line.quantity == null || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
       throw AppError.badRequest('Cada item precisa de "inventoryItemId" e "quantity" > 0.', 'INVENTORY_REQUISITION_VALIDATION');
     }
   }
@@ -79,11 +79,20 @@ async function getRequisition(requisitionId, transaction) {
   return requisition;
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 53, 2026-10-05): listRequisitions
+// nunca incluía os itens (só getRequisition incluía) — a tela de lista só conseguia mostrar o
+// status agregado, nunca quais itens/quantidades foram solicitados, mesmo padrão de bug já
+// corrigido em R52 pra comparação de cotações (só total, nunca item a item).
 async function listRequisitions(transaction, { status, projectId } = {}) {
   const where = {};
   if (status) where.status = status;
   if (projectId) where.projectId = projectId;
-  return InventoryRequisition.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return InventoryRequisition.findAll({
+    where,
+    include: [{ model: InventoryRequisitionItem, as: 'items' }],
+    order: [['created_at', 'DESC']],
+    transaction,
+  });
 }
 
 async function decideRequisition(requisitionId, decision, actorUserId, transaction) {

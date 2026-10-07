@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
       assetId: { type: DataTypes.UUID, allowNull: false, field: 'asset_id' },
       personUserId: { type: DataTypes.UUID, allowNull: false, field: 'person_user_id' },
       destinationLocationId: { type: DataTypes.UUID, allowNull: true, field: 'destination_location_id' },
+      sourceLocationId: { type: DataTypes.UUID, allowNull: true, field: 'source_location_id' },
       dueAt: { type: DataTypes.DATE, allowNull: true, field: 'due_at' },
       returnedAt: { type: DataTypes.DATE, allowNull: true, field: 'returned_at' },
       conditionCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_code' },

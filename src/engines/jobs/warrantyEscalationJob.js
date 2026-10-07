@@ -1,8 +1,11 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Group, Company, MaintenanceCase } = require('../../models');
+const { sequelize, Group, Company, MaintenanceCase, Notification } = require('../../models');
 const { computeEscalationLevel } = require('../../features/construction/maintenanceCases.service');
+const { publishWarrantyCaseEscalated } = require('../../features/construction/constructionEvents.service');
+
+const NOTIFIABLE_LEVELS = ['CRITICAL', 'OVERDUE'];
 
 /**
  * warrantyEscalationJob (M6-63/M6-88) — recalcula periodicamente o `escalation_level` de todo
@@ -36,17 +39,61 @@ async function escalateOverdueWarrantyCases(transaction, now = new Date()) {
     transaction,
   });
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 16, 2026-10-05): cada caso era
+  // salvo/notificado direto na transação da empresa, sem savepoint — diferente dos jobs irmãos
+  // (toolLoanOverdueJob.js, insuranceRenewalAlertJob.js), que isolam cada item em
+  // `sequelize.transaction({ transaction }, ...)` exatamente pra evitar que UM caso com
+  // problema (ex.: responsibleUserId órfão, violando a FK de Notification) aborte a transação
+  // inteira e trave o escalonamento de TODOS os chamados de garantia da empresa a cada ciclo.
   let escalated = 0;
+  let notified = 0;
   for (const warrantyCase of candidates) {
     const newLevel = computeEscalationLevel(warrantyCase.slaDueAt, now);
-    if (newLevel !== warrantyCase.escalationLevel) {
-      warrantyCase.escalationLevel = newLevel;
-      await warrantyCase.save({ transaction });
+    if (newLevel === warrantyCase.escalationLevel) continue;
+
+    try {
+      await sequelize.transaction({ transaction }, async (nested) => {
+        // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): a varredura
+        // inicial não trava as linhas — em deploy multi-réplica, dois processos podiam
+        // selecionar o mesmo caso antes de qualquer UPDATE comitar e ambos criarem Notification
+        // duplicada. Re-busca com lock e recalcula o nível DENTRO da transação aninhada.
+        const locked = await MaintenanceCase.findByPk(warrantyCase.id, { transaction: nested, lock: nested.LOCK.UPDATE });
+        if (!locked) return;
+        const confirmedLevel = computeEscalationLevel(locked.slaDueAt, now);
+        if (confirmedLevel === locked.escalationLevel) return;
+
+        locked.escalationLevel = confirmedLevel;
+        await locked.save({ transaction: nested });
+
+        // BUG REAL CORRIGIDO (rodada 9): o nível só era gravado no banco, sem notificar o
+        // responsável nem publicar evento de domínio. Só CRITICAL/OVERDUE geram alerta de
+        // verdade (WARNING é só um aviso prévio, não precisa interromper ninguém).
+        if (NOTIFIABLE_LEVELS.includes(confirmedLevel)) {
+          await publishWarrantyCaseEscalated(locked, nested);
+          if (locked.responsibleUserId) {
+            await Notification.create(
+              {
+                groupId: locked.groupId,
+                companyId: locked.companyId,
+                userId: locked.responsibleUserId,
+                channel: 'IN_APP',
+                title: confirmedLevel === 'OVERDUE' ? 'Chamado de garantia vencido' : 'Chamado de garantia crítico',
+                body: `O chamado ${locked.id} está ${confirmedLevel === 'OVERDUE' ? 'com o SLA vencido' : 'próximo do vencimento do SLA'} — verifique o pós-obra.`,
+              },
+              { transaction: nested }
+            );
+            notified += 1;
+          }
+        }
+      });
       escalated += 1;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[WarrantyEscalationJob] Falha ao escalonar caso ${warrantyCase.id}: ${err.message}`);
     }
   }
 
-  return { casesChecked: candidates.length, escalated };
+  return { casesChecked: candidates.length, escalated, notified };
 }
 
 async function processCompany(group, company) {
@@ -59,7 +106,7 @@ async function processCompany(group, company) {
 
 async function runWarrantyEscalationJob() {
   const groups = await Group.findAll();
-  const summary = { groupsChecked: 0, companiesChecked: 0, casesChecked: 0, escalated: 0, errors: 0 };
+  const summary = { groupsChecked: 0, companiesChecked: 0, casesChecked: 0, escalated: 0, notified: 0, errors: 0 };
 
   for (const group of groups) {
     summary.groupsChecked += 1;
@@ -74,6 +121,7 @@ async function runWarrantyEscalationJob() {
         const result = await processCompany(group, company);
         summary.casesChecked += result.casesChecked;
         summary.escalated += result.escalated;
+        summary.notified += result.notified;
       } catch (err) {
         summary.errors += 1;
         // eslint-disable-next-line no-console

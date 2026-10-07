@@ -23,7 +23,10 @@ const { isApprovalRequestApproved, getApprovalRequest } = require('./approvals.s
 // a aprovação é RECUSADA — mesmo espírito do FINANCE_APPROVAL_STALE, mas com prova do que
 // mudou (o snapshot fica gravado).
 
-const STATUSES = ['PENDING', 'APPROVED', 'EXECUTED', 'CANCELLED'];
+// SUBMITTED/FAILED fazem parte do ciclo de vida desde o adapter bancário (PROVIDER_BANCARIO.md,
+// bankPayments.service.js) — faltavam aqui e qualquer validação futura que use STATUSES.includes()
+// rejeitaria esses dois valores como inválidos.
+const STATUSES = ['PENDING', 'APPROVED', 'SUBMITTED', 'EXECUTED', 'FAILED', 'CANCELLED'];
 
 /**
  * buildEntrySnapshot — extrai do lançamento exatamente os campos que, se mudarem, mudam o
@@ -292,7 +295,12 @@ async function executePaymentIntent(id, actorUserId, transaction) {
 
 async function cancelPaymentIntent(id, reasonText, actorUserId, transaction) {
   const intent = await getPaymentIntentForUpdate(id, transaction);
-  if (['EXECUTED', 'CANCELLED'].includes(intent.status)) {
+  // SUBMITTED também é bloqueado: o pagamento já foi enviado ao banco (PROVIDER_BANCARIO.md),
+  // pode estar em processamento real naquele momento. Cancelar aqui e deixar o webhook do banco
+  // confirmar depois criaria uma divergência silenciosa — confirmBankPayment só liquida quando
+  // o status ainda é SUBMITTED, então um CANCELLED prematuro faz a confirmação real ser
+  // descartada sem rastro (dinheiro sai do banco, lançamento nunca liquida no ERP).
+  if (['SUBMITTED', 'EXECUTED', 'CANCELLED'].includes(intent.status)) {
     throw AppError.conflict(
       `Intenção com status "${intent.status}" não pode ser cancelada.`,
       'FINANCE_PAYMENT_INTENT_INVALID_STATUS'
@@ -337,6 +345,7 @@ module.exports = {
   cancelPaymentIntent,
   listPaymentIntents,
   getPaymentIntent,
+  getPaymentIntentForUpdate,
   buildEntrySnapshot,
   computeSnapshotHash,
   STATUSES,

@@ -185,7 +185,12 @@ async function login({ email, password, companyId }, meta = {}) {
       accessToken,
       refreshToken,
       sessionId: session.id,
-      user: { id: user.id, name: user.name, email: user.email },
+      // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 6, 2026-10-06): login nunca
+      // devolvia mfaEnabled — o front (app/painel/perfil/page.js) só inicializa o badge de
+      // segurança a partir deste objeto cacheado no login, nunca refaz fetch depois. Resultado:
+      // após qualquer login novo, "MFA não configurado" aparecia mesmo pra quem JÁ tinha MFA
+      // habilitado, e clicar em "Configurar" gerava o erro confuso "MFA já está habilitado".
+      user: { id: user.id, name: user.name, email: user.email, mfaEnabled: Boolean(user.mfaEnabled) },
       groupId: claims.group_id,
       companyId: claims.company_id,
       roles: claims.roles,

@@ -34,9 +34,13 @@ async function openCount(payload, actorUserId, transaction) {
   return count;
 }
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 58, 2026-10-06): guard usava
+// `Number(countedQuantity) < 0`, falso para NaN — countedQuantity:"NaN" passava (Postgres NUMERIC
+// aceita o literal 'NaN'), persistindo divergence=NaN sem caminho de correção via API (todo
+// applyAdjustment subsequente falhava sem apontar a causa real).
 async function addCountItem(countId, payload, transaction) {
   const { inventoryItemId, countedQuantity } = payload;
-  if (!inventoryItemId || countedQuantity == null || Number(countedQuantity) < 0) {
+  if (!inventoryItemId || countedQuantity == null || !Number.isFinite(Number(countedQuantity)) || Number(countedQuantity) < 0) {
     throw AppError.badRequest('"inventoryItemId" e "countedQuantity" (>= 0) são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
   }
   const count = await InventoryCount.findByPk(countId, { transaction });

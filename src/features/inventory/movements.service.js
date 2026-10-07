@@ -67,6 +67,12 @@ async function recordMovement(payload, actor, transaction) {
       'INVENTORY_MOVEMENT_VALIDATION'
     );
   }
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 47, 2026-10-05): TAB-0751 trata
+  // created_by como NOT NULL — "Movimentações imutáveis de estoque" sem autor registrado
+  // quebra a rastreabilidade exigida de um ledger. Nunca aceitar null aqui.
+  if (!actor?.userId) {
+    throw AppError.badRequest('Movimento de estoque exige um usuário autenticado ("actor.userId") — ledger imutável não pode ter autor nulo.', 'INVENTORY_MOVEMENT_ACTOR_REQUIRED');
+  }
   if (!MOVEMENT_TYPES.includes(movementType)) {
     throw AppError.badRequest(`"movementType" precisa ser um de: ${MOVEMENT_TYPES.join(', ')}.`, 'INVENTORY_MOVEMENT_VALIDATION');
   }

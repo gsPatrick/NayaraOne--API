@@ -21,8 +21,15 @@ async function createReceipt(payload, actorUserId, transaction) {
     );
   }
   for (const line of items) {
-    if (!line.inventoryItemId || line.quantity == null || Number(line.quantity) <= 0) {
+    if (!line.inventoryItemId || line.quantity == null || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
       throw AppError.badRequest('Cada item precisa de "inventoryItemId" e "quantity" > 0.', 'INVENTORY_RECEIPT_VALIDATION');
+    }
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 57, 2026-10-06): unitCost não era
+    // validado — um valor negativo corrompe o cálculo de averageCost ponderado abaixo, afetando
+    // toda valoração futura do item (diferente do fluxo PO-driven, que já valida unitPrice>=0 na
+    // origem — este endpoint de recebimento direto de inventário não passa por lá).
+    if (line.unitCost != null && (!Number.isFinite(Number(line.unitCost)) || Number(line.unitCost) < 0)) {
+      throw AppError.badRequest('"unitCost" do item deve ser um número maior ou igual a zero.', 'INVENTORY_RECEIPT_VALIDATION');
     }
   }
 

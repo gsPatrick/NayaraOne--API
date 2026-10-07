@@ -42,8 +42,10 @@ module.exports = (sequelize) => {
         field: 'movement_type',
         comment: "IN|OUT|RETURN|TRANSFER|ADJUSTMENT|LOSS|DISPOSAL",
       },
+      // BUG REAL CORRIGIDO (rodada 47): TAB-0751 exige numeric(18,4) — DECIMAL(9,6) dava
+      // overflow em movimentos acima de ~999 unidades.
       quantity: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: false,
         field: 'quantity',
       },
@@ -99,9 +101,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'moved_by_user_id',
       },
+      // BUG REAL CORRIGIDO (rodada 47): TAB-0751 trata created_by como NOT NULL — ledger
+      // imutável de estoque sem autor quebra rastreabilidade. Validação fail-closed em
+      // movements.service.js#recordMovement garante que nunca chega null aqui.
       createdBy: {
         type: DataTypes.UUID,
-        allowNull: true,
+        allowNull: false,
         field: 'created_by',
       },
       updatedBy: {

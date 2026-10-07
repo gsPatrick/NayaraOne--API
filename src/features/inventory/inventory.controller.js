@@ -108,9 +108,18 @@ const getAssetByTag = catchAsync(async (req, res) => {
   const asset = await req.withTenantTransaction((t) => assetsService.getAssetByTag(req.params.tag, t));
   return success(res, { data: asset });
 });
+const updateAsset = catchAsync(async (req, res) => {
+  const asset = await req.withTenantTransaction((t) => assetsService.updateAsset(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: asset });
+});
 const transferAsset = catchAsync(async (req, res) => {
   const movement = await req.withTenantTransaction((t) => assetsService.transferAsset(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: movement });
+});
+
+const listAssetMovements = catchAsync(async (req, res) => {
+  const movements = await req.withTenantTransaction((t) => assetsService.listAssetMovements(req.params.id, t));
+  return success(res, { data: movements });
 });
 
 const loanTool = catchAsync(async (req, res) => {
@@ -200,8 +209,10 @@ module.exports = {
   issueRequisition,
   createAsset,
   listAssets,
+  updateAsset,
   getAssetByTag,
   transferAsset,
+  listAssetMovements,
   loanTool,
   returnTool,
   listToolLoans,

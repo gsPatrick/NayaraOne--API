@@ -16,9 +16,11 @@ const radarRouter = require('../features/radar/radar.routes');
 const financeRouter = require('../features/finance/finance.routes');
 const legalRouter = require('../features/legal/legal.routes');
 const legalController = require('../features/legal/legal.controller');
+const financeController = require('../features/finance/finance.controller');
 const constructionRouter = require('../features/construction/construction.routes');
 const inventoryRouter = require('../features/inventory/inventory.routes');
 const procurementRouter = require('../features/procurement/procurement.routes');
+const insuranceController = require('../features/procurement/insurance.controller');
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
@@ -47,6 +49,12 @@ router.use('/', healthRouter);
 // legal.controller.js), validado contra o segredo por-tenant resolvido via a tabela de
 // roteamento sem RLS (migration 20260101000172).
 router.post('/v1/legal/webhooks/clicksign', legalController.clicksignPublicWebhook);
+// Mesmo motivo acima, pro webhook do provider bancário (PROVIDER_BANCARIO.md) — resolve o
+// tenant via BankPaymentProviderRouting (sem RLS), nunca via JWT (o banco não tem um).
+router.post('/v1/finance/webhooks/bank-payment', financeController.bankPaymentPublicWebhook);
+// Mesmo motivo acima, pro webhook de seguradora (Insurance Hub, Marco 7) — resolve o tenant via
+// InsuranceProviderSubmission (sem RLS).
+router.post('/v1/procurement/webhooks/insurance', insuranceController.insurancePublicWebhook);
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);

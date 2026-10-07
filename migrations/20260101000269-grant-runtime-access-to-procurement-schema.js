@@ -13,6 +13,18 @@
 module.exports = {
   up: async (queryInterface) => {
     const sequelize = queryInterface.sequelize;
+    // nayara_migration é o role usado localmente para rodar migrations com privilégio de DDL;
+    // em ambientes provisionados fora do fluxo local (ex.: Easypanel) ele pode não existir
+    // ainda — criado aqui, idempotente, só pra não quebrar o ALTER DEFAULT PRIVILEGES abaixo.
+    await sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_migration') THEN
+          CREATE ROLE nayara_migration;
+        END IF;
+      END
+      $$;
+    `);
     await sequelize.query('GRANT USAGE ON SCHEMA "procurement" TO nayara_runtime;');
     await sequelize.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "procurement" TO nayara_runtime;');
     await sequelize.query('ALTER DEFAULT PRIVILEGES FOR ROLE nayara_migration IN SCHEMA "procurement" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nayara_runtime;');

@@ -48,14 +48,16 @@ module.exports = (sequelize) => {
         field: 'item_type',
         comment: 'CONSUMABLE|TOOL|ASSET|SERVICE_ITEM',
       },
+      // BUG REAL CORRIGIDO (rodada 47): contrato (TAB-0750) exige numeric(18,4) — DECIMAL(9,6)
+      // dava overflow em qualquer item com estoque acima de ~999 unidades.
       quantityOnHand: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: false,
         defaultValue: 0,
         field: 'quantity_on_hand',
       },
       minimumQuantity: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: true,
         field: 'minimum_quantity',
       },

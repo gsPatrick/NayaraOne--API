@@ -39,8 +39,10 @@ inventoryRouter.post('/inventory/requisitions/:id/issue', requirePermission('inv
 // Assets/QR (Guia do Marcelo §6/§9) — asset_tag UNIQUE (EST-TS-04), QR só identificador opaco.
 inventoryRouter.post('/assets', requirePermission('inventory:create'), inventoryController.createAsset);
 inventoryRouter.get('/assets', requirePermission('inventory:read'), inventoryController.listAssets);
+inventoryRouter.patch('/assets/:id', requirePermission('inventory:update'), inventoryController.updateAsset);
 inventoryRouter.get('/assets/by-tag/:tag', requirePermission('inventory:read'), inventoryController.getAssetByTag);
 inventoryRouter.post('/assets/:id/transfer', requirePermission('inventory:update'), inventoryController.transferAsset);
+inventoryRouter.get('/assets/:id/movements', requirePermission('inventory:read'), inventoryController.listAssetMovements);
 
 // Tool loans (Guia do Marcelo §6/§7) — OPEN -> RETURNED. EST-TS-05 bloqueia novo empréstimo de ferramenta já emprestada.
 inventoryRouter.post('/assets/:id/loan', requirePermission('inventory:create'), inventoryController.loanTool);

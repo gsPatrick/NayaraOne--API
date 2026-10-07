@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Group, Company, InventoryToolLoan } = require('../../models');
+const { sequelize, Group, Company, InventoryToolLoan, Notification } = require('../../models');
 const { publishToolLoanOverdue } = require('../../features/inventory/inventoryEvents.service');
 
 /**
@@ -29,12 +29,41 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
   // do Sequelize — se UM loan falhar (ex.: evento órfão de idempotencyKey colidindo por algum
   // motivo externo), os demais ainda são processados em vez de travar a empresa inteira.
   let escalated = 0;
+  let notified = 0;
   for (const loan of candidates) {
     try {
       await sequelize.transaction({ transaction }, async (nested) => {
-        await publishToolLoanOverdue(loan, nested);
-        loan.status = 'OVERDUE';
-        await loan.save({ transaction: nested });
+        // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): a varredura
+        // inicial (findAll acima) não trava as linhas — em deploy com múltiplas réplicas do
+        // mesmo processo Node, dois processos podem selecionar o MESMO loan OPEN antes de
+        // qualquer UPDATE comitar, e ambos criariam uma Notification duplicada (o outbox é
+        // protegido por idempotencyKey, mas a notificação IN_APP não era). Re-busca com lock
+        // pessimista e reconfirma o status DENTRO da transação aninhada — se outro processo já
+        // escalonou este loan nesse intervalo, o status não será mais OPEN e este processo pula
+        // silenciosamente, sem duplicar nada.
+        const locked = await InventoryToolLoan.findByPk(loan.id, { transaction: nested, lock: nested.LOCK.UPDATE });
+        if (!locked || locked.status !== 'OPEN') return;
+
+        await publishToolLoanOverdue(locked, nested);
+        locked.status = 'OVERDUE';
+        await locked.save({ transaction: nested });
+        // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 10, 2026-10-05): o job só
+        // publicava tool.loan.overdue (evento de integração externa via outbox) e mudava o
+        // status — ninguém DENTRO do app era avisado que está com a ferramenta atrasada.
+        // Mesma lacuna já corrigida nas rodadas 7 (insuranceRenewalAlertJob) e 9
+        // (warrantyEscalationJob): evento publicado não é o mesmo que alerta recebido.
+        await Notification.create(
+          {
+            groupId: locked.groupId,
+            companyId: locked.companyId,
+            userId: locked.personUserId,
+            channel: 'IN_APP',
+            title: 'Ferramenta com devolução atrasada',
+            body: `A ferramenta do empréstimo ${locked.id} está atrasada (previsto para ${locked.dueAt}) — devolva ou regularize.`,
+          },
+          { transaction: nested }
+        );
+        notified += 1;
       });
       escalated += 1;
     } catch (err) {
@@ -43,7 +72,7 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
     }
   }
 
-  return { loansChecked: candidates.length, escalated };
+  return { loansChecked: candidates.length, escalated, notified };
 }
 
 async function processCompany(group, company) {
@@ -56,7 +85,7 @@ async function processCompany(group, company) {
 
 async function runToolLoanOverdueJob() {
   const groups = await Group.findAll();
-  const summary = { groupsChecked: 0, companiesChecked: 0, loansChecked: 0, escalated: 0, errors: 0 };
+  const summary = { groupsChecked: 0, companiesChecked: 0, loansChecked: 0, escalated: 0, notified: 0, errors: 0 };
 
   for (const group of groups) {
     summary.groupsChecked += 1;
@@ -71,6 +100,7 @@ async function runToolLoanOverdueJob() {
         const result = await processCompany(group, company);
         summary.loansChecked += result.loansChecked;
         summary.escalated += result.escalated;
+        summary.notified += result.notified;
       } catch (err) {
         summary.errors += 1;
         // eslint-disable-next-line no-console

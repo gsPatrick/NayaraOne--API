@@ -7,10 +7,24 @@ const { publishItemCreated } = require('./inventoryEvents.service');
 const ITEM_TYPES = ['CONSUMABLE', 'TOOL', 'ASSET', 'SERVICE_ITEM'];
 const LOCATION_TYPES = ['WAREHOUSE', 'PROJECT_SITE'];
 
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 47, 2026-10-05): o contrato (TAB-0750)
+// trata "sku" e "unit_code" (unit_of_measure) como NOT NULL, com UNIQUE(company_id, sku) — mas
+// nada no sistema exigia esses campos, permitindo catálogo sem SKU e sem unidade de medida
+// (quebra qualquer cálculo/relatório que dependa deles).
 async function createItem(payload, actorUserId, transaction) {
   const { groupId, companyId, name, unitOfMeasure, itemType, sku, minimumQuantity } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'INVENTORY_ITEM_VALIDATION');
+  }
+  if (!sku) {
+    throw AppError.badRequest('O campo "sku" é obrigatório (TAB-0750).', 'INVENTORY_ITEM_VALIDATION');
+  }
+  if (!unitOfMeasure) {
+    throw AppError.badRequest('O campo "unitOfMeasure" é obrigatório (TAB-0750).', 'INVENTORY_ITEM_VALIDATION');
+  }
+  const existing = await InventoryItem.findOne({ where: { companyId, sku }, transaction });
+  if (existing) {
+    throw AppError.badRequest(`Já existe um item com o SKU "${sku}" nesta empresa.`, 'INVENTORY_ITEM_DUPLICATE_SKU');
   }
   if (itemType && !ITEM_TYPES.includes(itemType)) {
     throw AppError.badRequest(`"itemType" precisa ser um de: ${ITEM_TYPES.join(', ')}.`, 'INVENTORY_ITEM_VALIDATION');
@@ -23,9 +37,9 @@ async function createItem(payload, actorUserId, transaction) {
     {
       groupId,
       companyId,
-      sku: sku || null,
+      sku,
       name,
-      unitOfMeasure: unitOfMeasure || null,
+      unitOfMeasure,
       itemType: itemType || 'CONSUMABLE',
       minimumQuantity: minimumQuantity != null ? minimumQuantity : null,
       createdBy: actorUserId || null,

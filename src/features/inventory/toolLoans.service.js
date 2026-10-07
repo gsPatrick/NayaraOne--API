@@ -22,6 +22,12 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
     throw AppError.badRequest(`Ferramenta indisponível para empréstimo (status atual: ${asset.status}) — EST-TS-05.`, 'TOOL_LOAN_ASSET_UNAVAILABLE');
   }
 
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 22, 2026-10-05): EST-006 exige que a
+  // saída registre o destino, e EST-014 que o Asset tenha localização condizente com a
+  // realidade — mas `destinationLocationId` só era gravado no empréstimo, nunca propagado para
+  // `asset.currentLocationId`. `sourceLocationId` guarda de onde a ferramenta saiu, pra
+  // returnTool poder restaurá-lo depois (mesma classe de bug da R21, campo que não era
+  // mantido numa transição, mas em `currentLocationId` em vez de `assignedToUserId`).
   const loan = await InventoryToolLoan.create(
     {
       groupId: asset.groupId,
@@ -29,6 +35,7 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
       assetId: asset.id,
       personUserId,
       destinationLocationId: destinationLocationId || null,
+      sourceLocationId: asset.currentLocationId || null,
       dueAt: dueAt || null,
       status: 'OPEN',
       createdBy: actorUserId || null,
@@ -39,6 +46,7 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
 
   asset.status = 'LOANED';
   asset.assignedToUserId = personUserId;
+  if (destinationLocationId) asset.currentLocationId = destinationLocationId;
   asset.updatedBy = actorUserId || null;
   await asset.save({ transaction });
 
@@ -73,7 +81,22 @@ async function returnTool(loanId, payload, actorUserId, transaction) {
   await loan.save({ transaction });
 
   const asset = await Asset.findByPk(loan.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  // Defesa em profundidade (rodada 30): decideLossCase já fecha o loan como 'LOST' ao aprovar
+  // a perda do asset (o que já bloqueia este returnTool pela whitelist OPEN/OVERDUE acima), mas
+  // esta checagem direta no asset garante que nenhum caminho de dados legado/futuro consiga
+  // reverter uma perda formalizada sobrescrevendo o status aqui.
+  if (asset.status === 'LOST') {
+    throw AppError.conflict('Patrimônio declarado perdido/extraviado — não pode ser devolvido como se estivesse em circulação.', 'TOOL_LOAN_ASSET_LOST');
+  }
   asset.status = conditionCode === 'DAMAGED' ? 'MAINTENANCE' : 'AVAILABLE';
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 21, 2026-10-05): devolver a
+  // ferramenta nunca limpava `assignedToUserId` (custodiante, EST-014 — "Asset possui
+  // aquisição, valor, localização, custodiante, garantia, status e manutenção") — o custodiante
+  // ficava "preso" no último tomador mesmo depois da devolução, inclusive durante toda a
+  // manutenção subsequente, e corrompia `sourceCustodianUserId` numa transferência futura
+  // (assets.service.js#transferAsset lê `asset.assignedToUserId` como "de quem estava saindo").
+  asset.assignedToUserId = null;
+  if (loan.sourceLocationId) asset.currentLocationId = loan.sourceLocationId;
   asset.updatedBy = actorUserId || null;
   await asset.save({ transaction });
 

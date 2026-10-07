@@ -76,12 +76,21 @@ const modelDefiners = {
   EvidencePackage: require('./EvidencePackage'),
   EvidencePackageAccessLog: require('./EvidencePackageAccessLog'),
   InsuranceCase: require('./InsuranceCase'),
+  InsurancePolicy: require('./InsurancePolicy'),
+  InsurancePolicyParty: require('./InsurancePolicyParty'),
+  InsuranceCoverage: require('./InsuranceCoverage'),
+  InsuranceInstallment: require('./InsuranceInstallment'),
+  InsuranceClaim: require('./InsuranceClaim'),
+  InsuranceClaimEvent: require('./InsuranceClaimEvent'),
+  InsuranceRenewalTask: require('./InsuranceRenewalTask'),
+  InsuranceProviderSubmission: require('./InsuranceProviderSubmission'),
   BankAccount: require('./BankAccount'),
   CostCenter: require('./CostCenter'),
   ResultCenter: require('./ResultCenter'),
   FinancialEntry: require('./FinancialEntry'),
   ChartOfAccount: require('./ChartOfAccount'),
   PaymentIntent: require('./PaymentIntent'),
+  BankPaymentProviderRouting: require('./BankPaymentProviderRouting'),
   IntercompanyTransfer: require('./IntercompanyTransfer'),
   PeriodClosure: require('./PeriodClosure'),
   BankTransaction: require('./BankTransaction'),
@@ -138,6 +147,7 @@ const modelDefiners = {
   GoodsReceiptItem: require('./GoodsReceiptItem'),
   ReceiptDiscrepancy: require('./ReceiptDiscrepancy'),
   SupplierEvaluation: require('./SupplierEvaluation'),
+  SupplierQualification: require('./SupplierQualification'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
@@ -299,6 +309,26 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.EvidencePackage.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
   db.InsuranceCase.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
   db.InsuranceCase.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+
+  // Insurance Hub (Marco 7 — procurement.insurance_*)
+  db.InsurancePolicy.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
+  db.InsurancePolicy.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.InsurancePolicy.hasMany(db.InsurancePolicyParty, { foreignKey: 'policy_id', as: 'parties' });
+  db.InsurancePolicyParty.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsurancePolicy.hasMany(db.InsuranceCoverage, { foreignKey: 'policy_id', as: 'coverages' });
+  db.InsuranceCoverage.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsurancePolicy.hasMany(db.InsuranceInstallment, { foreignKey: 'policy_id', as: 'installments' });
+  db.InsuranceInstallment.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceInstallment.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.InsurancePolicy.hasMany(db.InsuranceClaim, { foreignKey: 'policy_id', as: 'claims' });
+  db.InsuranceClaim.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceClaim.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.InsuranceClaim.hasMany(db.InsuranceClaimEvent, { foreignKey: 'claim_id', as: 'events' });
+  db.InsuranceClaimEvent.belongsTo(db.InsuranceClaim, { foreignKey: 'claim_id', as: 'claim' });
+  db.InsurancePolicy.hasMany(db.InsuranceRenewalTask, { foreignKey: 'policy_id', as: 'renewalTasks' });
+  db.InsuranceRenewalTask.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceProviderSubmission.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy', constraints: false });
+  db.InsuranceProviderSubmission.belongsTo(db.InsuranceClaim, { foreignKey: 'claim_id', as: 'claim', constraints: false });
   db.BankAccount.belongsTo(db.Person, { foreignKey: 'owner_person_id', as: 'ownerPerson', constraints: false });
   db.FinancialEntry.belongsTo(db.BankAccount, { foreignKey: 'bank_account_id', as: 'bankAccount', constraints: false });
   db.FinancialEntry.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });

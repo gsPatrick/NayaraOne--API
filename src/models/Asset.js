@@ -26,10 +26,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'company_id',
       },
+      // BUG REAL CORRIGIDO (rodada 47): unicidade precisa ser por empresa (TAB-0760:
+      // UNIQUE(company_id, asset_tag)), não global — índice composto criado via migration.
       assetTag: {
         type: DataTypes.STRING(64),
         allowNull: true,
-        unique: true,
         field: 'asset_tag',
         comment: "Código impresso no QR Code",
       },

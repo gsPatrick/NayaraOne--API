@@ -547,6 +547,15 @@ test('TEC-19 healthcheck não trava quando a operação termina normalmente dent
   assert.equal(result, 'ok');
 });
 
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 6, 2026-10-06): login nunca devolvia
+// mfaEnabled — o front só inicializa o badge de segurança a partir deste objeto cacheado no
+// login, nunca refaz fetch depois. "MFA não configurado" aparecia mesmo pra quem já tinha MFA
+// habilitado, e configurar de novo gerava erro confuso de "já habilitado".
+test('login devolve user.mfaEnabled refletindo o estado real do usuário', async () => {
+  const loggedIn = await authService.login({ email: 'admin@nayaraone.dev', password: 'DevAdmin#2026' });
+  assert.equal(typeof loggedIn.user.mfaEnabled, 'boolean');
+});
+
 // --- ADV-12: sessão revogada não pode mais chamar a API, nem com o access token já emitido ---
 function fakeReqRes(token) {
   const req = { header: (name) => (name.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined) };

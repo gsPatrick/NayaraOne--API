@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Group, Company, Project } = require('../../models');
+const { sequelize, Group, Company, Project, Notification } = require('../../models');
 const { publishProjectDelayDetected } = require('../../features/construction/constructionEvents.service');
 
 /**
@@ -35,12 +35,62 @@ async function detectDelayedProjects(transaction, now = new Date()) {
   });
 
   let detected = 0;
+  let notified = 0;
   for (const project of candidates) {
-    await publishProjectDelayDetected(project, todayKey(now), transaction);
-    detected += 1;
+    try {
+      // BUG REAL CORRIGIDO (rodada 15): o comentário deste arquivo já prometia que "rodar o job
+      // várias vezes seguidas não duplica o evento", mas isso dependia só da constraint UNIQUE
+      // do banco — sem savepoint, a 2ª chamada no mesmo dia lançava SequelizeUniqueConstraintError
+      // e abortava a transação INTEIRA da empresa (Postgres marca a transação como abortada após
+      // qualquer erro não tratado via savepoint — toda query seguinte, incluindo a Notification
+      // abaixo, falharia também). `sequelize.transaction({ transaction }, ...)` abre um SAVEPOINT
+      // real — o rollback do savepoint em caso de conflito não afeta a transação externa.
+      await sequelize.transaction({ transaction }, (nested) => publishProjectDelayDetected(project, todayKey(now), nested));
+      detected += 1;
+    } catch (err) {
+      if (err?.name !== 'SequelizeUniqueConstraintError') throw err;
+    }
+
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 15, 2026-10-05): o evento
+    // project.delay.detected só ia pro outbox (integração externa) — ninguém DENTRO do app era
+    // avisado. Mesma lacuna já corrigida em R7/R9/R10 pra outros jobs. Como este evento se
+    // repete todo dia enquanto a obra continuar atrasada (de propósito, pra escalonamento),
+    // a notificação também é por dia — uma checagem simples evita duplicar se o job rodar mais
+    // de uma vez no mesmo dia.
+    if (project.responsibleUserId) {
+      const title = 'Obra atrasada';
+      // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): dedupe
+      // check-then-create sem lock — em deploy multi-réplica, dois processos podiam ambos ler
+      // "ainda não notificado hoje" antes de qualquer INSERT comitar. pg_advisory_xact_lock
+      // serializa por projeto+dia (liberado automaticamente no fim da transação).
+      await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+        replacements: { key: `project-delay-notify:${project.id}:${todayKey(now)}` },
+        transaction,
+      });
+      const alreadyNotifiedToday = await Notification.findOne({
+        where: { userId: project.responsibleUserId, title },
+        order: [['created_at', 'DESC']],
+        transaction,
+      });
+      const sameDay = alreadyNotifiedToday && todayKey(new Date(alreadyNotifiedToday.created_at)) === todayKey(now);
+      if (!sameDay) {
+        await Notification.create(
+          {
+            groupId: project.groupId,
+            companyId: project.companyId,
+            userId: project.responsibleUserId,
+            channel: 'IN_APP',
+            title,
+            body: `A obra ${project.name || project.id} está atrasada (previsão: ${project.endsAtPlanned}) — verifique o cronograma.`,
+          },
+          { transaction }
+        );
+        notified += 1;
+      }
+    }
   }
 
-  return { projectsChecked: candidates.length, detected };
+  return { projectsChecked: candidates.length, detected, notified };
 }
 
 async function processCompany(group, company) {
@@ -53,7 +103,7 @@ async function processCompany(group, company) {
 
 async function runProjectDelayDetectionJob() {
   const groups = await Group.findAll();
-  const summary = { groupsChecked: 0, companiesChecked: 0, projectsChecked: 0, detected: 0, errors: 0 };
+  const summary = { groupsChecked: 0, companiesChecked: 0, projectsChecked: 0, detected: 0, notified: 0, errors: 0 };
 
   for (const group of groups) {
     summary.groupsChecked += 1;
@@ -68,6 +118,7 @@ async function runProjectDelayDetectionJob() {
         const result = await processCompany(group, company);
         summary.projectsChecked += result.projectsChecked;
         summary.detected += result.detected;
+        summary.notified += result.notified;
       } catch (err) {
         summary.errors += 1;
         // eslint-disable-next-line no-console

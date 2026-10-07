@@ -14,6 +14,9 @@ module.exports = (sequelize) => {
       expectedValue: { type: DataTypes.DECIMAL(18, 6), allowNull: true, field: 'expected_value' },
       receivedValue: { type: DataTypes.DECIMAL(18, 6), allowNull: true, field: 'received_value' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
+      resolutionNotes: { type: DataTypes.TEXT, allowNull: true, field: 'resolution_notes' },
+      resolvedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'resolved_by_user_id' },
+      resolvedAt: { type: DataTypes.DATE, allowNull: true, field: 'resolved_at' },
     },
     { schema: 'procurement', tableName: 'receipt_discrepancies', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at', underscored: true }
   );

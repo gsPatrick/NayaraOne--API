@@ -1,6 +1,7 @@
 'use strict';
 
-const { InventoryLossCase, InventoryItem, InventoryMovement } = require('../../models');
+const { InventoryLossCase, InventoryItem, Asset, InventoryToolLoan, InventoryMovement } = require('../../models');
+const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -24,7 +25,7 @@ async function openLossCase(payload, actorUserId, transaction) {
   if (!Array.isArray(evidenceFileIds) || evidenceFileIds.length === 0) {
     throw AppError.badRequest('Pelo menos um arquivo de evidência ("evidenceFileIds") é obrigatório (EST-TS-10).', 'LOSS_CASE_EVIDENCE_REQUIRED');
   }
-  if (inventoryItemId && (quantity == null || Number(quantity) <= 0)) {
+  if (inventoryItemId && (quantity == null || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0)) {
     throw AppError.badRequest('"quantity" > 0 é obrigatório quando "inventoryItemId" é informado.', 'LOSS_CASE_VALIDATION');
   }
   // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 4): locationId era opcional aqui, mas
@@ -108,6 +109,33 @@ async function decideLossCase(lossCaseId, decision, actor, transaction) {
       transaction
     );
     lossCase.resultingMovementId = movement.id;
+  }
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 28, 2026-10-05): aprovar um loss_case
+  // de Asset/ferramenta (assetId, em vez de inventoryItemId) nunca tocava o próprio Asset — o
+  // mesmo cuidado já aplicado em toolLoans.service.js (R21/R22, status/custodiante/localização
+  // sincronizados a cada transição) nunca foi estendido ao fluxo de perda. Resultado: um ativo
+  // declarado perdido/quebrado e aprovado continuava AVAILABLE/LOANED, podia ser emprestado de
+  // novo, e mantinha o custodiante antigo mesmo após a perda ser formalizada (EST-010).
+  if (decision === 'APPROVED' && lossCase.assetId) {
+    const asset = await Asset.findByPk(lossCase.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (asset) {
+      asset.status = 'LOST';
+      asset.assignedToUserId = null;
+      asset.updatedBy = actor.userId || null;
+      await asset.save({ transaction });
+    }
+
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 30, 2026-10-05): aprovar a perda
+    // de um Asset que ainda tinha um InventoryToolLoan OPEN/OVERDUE deixava esse empréstimo
+    // "esquecido" — qualquer returnTool posterior sobre ele reescrevia asset.status de volta
+    // pra AVAILABLE/MAINTENANCE, revertendo a perda formalizada sem controle nenhum (mesma
+    // classe de bug da R29, aqui no caminho returnTool em vez de openMaintenanceOrder). Fecha
+    // o(s) empréstimo(s) aberto(s) como LOST — status terminal, nunca mais aceito por returnTool.
+    await InventoryToolLoan.update(
+      { status: 'LOST', updatedBy: actor.userId || null },
+      { where: { assetId: lossCase.assetId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction }
+    );
   }
 
   lossCase.status = decision;

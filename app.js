@@ -17,6 +17,7 @@ const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAl
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
 const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
+const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -132,6 +133,13 @@ if (process.env.NODE_ENV !== 'test' && process.env.PROJECT_DELAY_DETECTION_JOB_D
 // jobs acima.
 if (process.env.NODE_ENV !== 'test' && process.env.TOOL_LOAN_OVERDUE_JOB_DISABLED !== 'true') {
   startToolLoanOverdueJob();
+}
+
+// Alerta de renovação de apólice de seguro (Marco 7 — Insurance Hub, "renovação alerta" no
+// contrato). Gap real achado em auditoria 2026-10-05: a tarefa era criada mas nunca lida por
+// nada. Mesmo padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_RENEWAL_ALERT_JOB_DISABLED !== 'true') {
+  startInsuranceRenewalAlertJob();
 }
 
 module.exports = app;

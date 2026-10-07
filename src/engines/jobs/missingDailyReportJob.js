@@ -48,6 +48,17 @@ async function detectMissingDailyReports(transaction, now = new Date()) {
     });
     if (hasReport) continue;
 
+    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): o dedupe era
+    // "check-then-create" puro, sem nenhum lock — em deploy multi-réplica, dois processos
+    // podiam ambos checar "não existe Task ainda" antes de qualquer INSERT comitar e criar
+    // duas tarefas duplicadas pro mesmo projeto/dia. `pg_advisory_xact_lock` (mesmo mecanismo
+    // já usado em marginRules.service.js) serializa esse check-then-create por projeto+dia —
+    // o lock é liberado automaticamente no commit/rollback da transação.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+      replacements: { key: `missing-daily-report:${project.id}:${checkDate}` },
+      transaction,
+    });
+
     const taskTitle = `RDO ausente em ${project.name} (${checkDate})`;
     const existingTask = await Task.findOne({
       where: {

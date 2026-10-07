@@ -71,6 +71,19 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
+  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): upload de arquivo
+  // acima do limite do body parser (`express.json({ limit: '28mb' })` em app.js) é interceptado
+  // ANTES de chegar no check limpo de MAX_BYTES em files.service.js, batendo como
+  // PayloadTooLargeError cru e vazando "request entity too large" com 500 INTERNAL_ERROR em vez
+  // de um 400 amigável — mesma classe de vazamento de erro de infraestrutura já corrigida acima.
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'FILE_UPLOAD_TOO_LARGE',
+      message: 'O arquivo enviado é grande demais.',
+    });
+  }
+
   if (err && err.name === 'SequelizeValidationError') {
     return failure(res, {
       statusCode: 400,
