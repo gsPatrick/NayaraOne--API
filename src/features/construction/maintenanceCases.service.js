@@ -7,6 +7,7 @@ const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./c
 const { getApprovalThreshold } = require('./lossRecords.service');
 const financialEntriesService = require('../finance/financialEntries.service');
 const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
+const { getActiveSlaDaysMap, DEFAULT_SLA_DAYS } = require('./slaRules.service');
 
 const RESOLUTION_TYPES = ['DISCOUNT', 'REIMBURSEMENT'];
 const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
@@ -49,15 +50,22 @@ const STATUS_LABELS_PT = { OPEN: 'Aberto', IN_PROGRESS: 'Em andamento', RESOLVED
 const RESOLUTION_TYPE_LABELS_PT = { DISCOUNT: 'Desconto', REIMBURSEMENT: 'Ressarcimento' };
 
 // M6-63/M6-88: prazo de atendimento (em dias) por severidade, usado para calcular `sla_due_at`
-// a partir de `warranty_deadline_at` (quando informado) ou da data de abertura do caso. Decisão
-// de engenharia — nenhum documento fonte define os dias exatos; valores seguem senso comum de
-// SLA de garantia decrescente conforme a severidade sobe.
-const SEVERITY_SLA_DAYS = { CRITICAL: 2, HIGH: 5, MEDIUM: 15, LOW: 30 };
+// a partir de `warranty_deadline_at` (quando informado) ou da data de abertura do caso.
+//
+// GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o mapa de dias por severidade era uma
+// constante fixa aqui (`SEVERITY_SLA_DAYS`) — o catálogo do contrato lista `REG-OBR-002`
+// ("Prazo padrão de pós-obra") como regra do Motor de Regras genérico. Movido para
+// slaRules.service.js (mesmo padrão de REG-OBR-001/marginRules.service.js — Rule/RuleVersion
+// versionado, fail-closed, com seed automático do valor default no primeiro uso de cada
+// tenant). `SEVERITY_SLA_DAYS` continua exportado abaixo (== DEFAULT_SLA_DAYS) só por
+// compatibilidade de quem importava a constante antes desta migração.
+const SEVERITY_SLA_DAYS = DEFAULT_SLA_DAYS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function computeSlaDueAt(baseDate, severity) {
+async function computeSlaDueAt(baseDate, severity, groupId, companyId, transaction, actorUserId) {
   const base = baseDate ? new Date(baseDate) : new Date();
-  const days = SEVERITY_SLA_DAYS[severity] != null ? SEVERITY_SLA_DAYS[severity] : SEVERITY_SLA_DAYS.MEDIUM;
+  const { slaDays } = await getActiveSlaDaysMap(groupId, companyId, transaction, actorUserId);
+  const days = slaDays[severity] != null ? slaDays[severity] : slaDays.MEDIUM;
   return new Date(base.getTime() + days * DAY_MS);
 }
 
@@ -174,7 +182,7 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
   const normalizedSeverity = validateSeverity(severity);
   const now = new Date();
   const slaBaseDate = warrantyDeadlineAt || now;
-  const slaDueAt = computeSlaDueAt(slaBaseDate, normalizedSeverity);
+  const slaDueAt = await computeSlaDueAt(slaBaseDate, normalizedSeverity, groupId, companyId, transaction, actorUserId);
 
   const maintenanceCase = await MaintenanceCase.create(
     {
@@ -322,7 +330,14 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
     // `warrantyDeadlineAt` não estava definido (caía direto em `now`, calculando o SLA a partir
     // do momento da EDIÇÃO em vez da criação do caso).
     const slaBaseDate = maintenanceCase.warrantyDeadlineAt || maintenanceCase.created_at || now;
-    maintenanceCase.slaDueAt = computeSlaDueAt(slaBaseDate, maintenanceCase.severity);
+    maintenanceCase.slaDueAt = await computeSlaDueAt(
+      slaBaseDate,
+      maintenanceCase.severity,
+      maintenanceCase.groupId,
+      maintenanceCase.companyId,
+      transaction,
+      actorUserId
+    );
   }
   // Recalcula o nível de escalonamento sempre que o caso é tocado (mesma regra usada pelo job
   // periódico) — evita mostrar um `escalation_level` desatualizado logo após uma edição manual.
