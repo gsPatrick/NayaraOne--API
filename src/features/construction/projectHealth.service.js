@@ -99,9 +99,12 @@ async function getProject(id, transaction) {
  *                               schema atual (InventoryItem/InventoryMovement não carregam
  *                               unit_cost) — sem uma fatia de custeio de estoque, este valor
  *                               fica 0 (documentado, não inventado).
- *  6. forecastToComplete     — max(committedCost + approvedChanges - actualFinancialCost, 0).
- *  7. projectedTotalCost     — actualFinancialCost + forecastToComplete.
- *  8. projectedMargin        — (baselineBudget + approvedChanges) - projectedTotalCost.
+ *  6. forecastToComplete     — max(committedCost + approvedChanges - (actualFinancialCost +
+ *                               consumedInventoryCost), 0). GAP CORRIGIDO (item 1, auditoria
+ *                               pós-Marco 6): custo realizado = Financeiro + Estoque já consumido
+ *                               ("Custo realizado vem de Financeiro/Estoque", seção 5 do contrato).
+ *  7. projectedTotalCost     — (actualFinancialCost + consumedInventoryCost) + forecastToComplete.
+ *  8. projectedMargin        — (committedCost + approvedChanges) - projectedTotalCost.
  *  9. updatedAt              — timestamp do cálculo (ISO 8601) — é um read model, não uma
  *                               tabela materializada, então "updatedAt" é sempre "agora".
  *
@@ -157,8 +160,18 @@ async function getProjectHealth(projectId, transaction) {
   // consumedInventoryCost — ver getConsumedInventoryCost() (GAP CORRIGIDO, ver comentário acima).
   const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
 
-  const forecastToComplete = Math.max(committedCost + approvedChanges - actualFinancialCost, 0);
-  const projectedTotalCost = round2(actualFinancialCost + forecastToComplete);
+  // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): `consumedInventoryCost` era calculado e
+  // devolvido no JSON, mas nunca entrava em forecastToComplete/projectedTotalCost/
+  // projectedMargin — a fonte diz "Custo realizado vem de Financeiro/Estoque" (seção 5), ou
+  // seja, o custo JÁ realizado da obra é a soma do que saiu pelo Financeiro (actualFinancialCost)
+  // E do que já foi consumido do Estoque (consumedInventoryCost), não só o primeiro. Uma obra
+  // pode consumir material (saída de estoque vinculada ao projeto) antes de qualquer lançamento
+  // financeiro ter sido feito (ex.: material já em almoxarifado, baixado fisicamente, pago depois)
+  // — sem somar consumedInventoryCost aqui, forecastToComplete/projectedTotalCost ficavam
+  // subestimados e projectedMargin inflado, mascarando o alerta de margem.
+  const realizedCost = actualFinancialCost + consumedInventoryCost;
+  const forecastToComplete = Math.max(committedCost + approvedChanges - realizedCost, 0);
+  const projectedTotalCost = round2(realizedCost + forecastToComplete);
   // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): projectedMargin
   // somava `baselineBudget + approvedChanges`, mas `baselineBudget` (quando vem de
   // project.budgetAmount) JÁ inclui o impacto dos Change Orders aprovados — changeOrders.

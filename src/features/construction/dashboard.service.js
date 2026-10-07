@@ -13,6 +13,7 @@ const {
   MaintenanceCase,
   WarrantyAction,
 } = require('../../models');
+const { getTeamAndMaterialByActionIds } = require('./warrantyActionTeamMaterialColumns');
 
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o contrato ("CONSTRUÇÃO + OBRAS + PÓS-OBRA —
 // BLINDADO v1", seção "Painéis principais" e "9. KPIs Obras" do caderno de BI) exige DOIS
@@ -136,8 +137,7 @@ async function getConstructionDashboard(filters, transaction) {
   const postObraTotalCost = round2(postObraLaborCost + postObraMaterialCost);
 
   // Recorrência por causa (rootCauseCode do chamado de garantia) — KPI "recorrência por causa/
-  // equipe/material" exigido pelo caderno de BI (seção 9). Equipe/material específico de ação
-  // de garantia não tem campo dedicado no schema atual (lacuna documental, não inventada aqui).
+  // equipe/material" exigido pelo caderno de BI (seção 9).
   const recurrenceByRootCause = Object.entries(
     warrantyCases.reduce((acc, c) => {
       const key = c.rootCauseCode || 'DESCONHECIDA';
@@ -146,6 +146,33 @@ async function getConstructionDashboard(filters, transaction) {
     }, {})
   )
     .map(([cause, count]) => ({ cause, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // GAP CORRIGIDO (auditoria pós-Marco 6, item 2): equipe/material agora têm coluna dedicada em
+  // `construction.warranty_actions` (`assigned_team`/`material_used`, migration
+  // 20260101000296, pendente de aplicação por credencial de admin — ver
+  // warrantyActionTeamMaterialColumns.js). Recorrência contada por AÇÃO de garantia (não por
+  // chamado, já que é nela que mora equipe/material), igual critério já usado pra causa. Antes
+  // da migration ser aplicada, o map vem vazio (fail-open) e os dois campos ficam `[]`.
+  const teamMaterialByActionId = await getTeamAndMaterialByActionIds(warrantyActions.map((a) => a.id), transaction);
+  const recurrenceByTeam = Object.entries(
+    warrantyActions.reduce((acc, a) => {
+      const key = teamMaterialByActionId.get(a.id)?.assignedTeam || 'DESCONHECIDA';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([team, count]) => ({ team, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const recurrenceByMaterial = Object.entries(
+    warrantyActions.reduce((acc, a) => {
+      const key = teamMaterialByActionId.get(a.id)?.materialUsed || 'DESCONHECIDA';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([material, count]) => ({ material, count }))
     .sort((a, b) => b.count - a.count);
 
   return {
@@ -177,6 +204,8 @@ async function getConstructionDashboard(filters, transaction) {
       totalMaterialCost: round2(postObraMaterialCost),
       totalWarrantyCost: postObraTotalCost,
       recurrenceByRootCause,
+      recurrenceByTeam,
+      recurrenceByMaterial,
     },
     updatedAt: new Date().toISOString(),
   };

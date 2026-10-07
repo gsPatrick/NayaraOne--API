@@ -254,6 +254,11 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     const projectHealthService = require('../src/features/construction/projectHealth.service');
     const healthBefore = await projectHealthService.getProjectHealth(project.id, transaction);
     assert.equal(healthBefore.consumedInventoryCost, 0, 'sem movimento vinculado ao projectId, custo de estoque consumido é 0');
+    // Sem consumo e sem custo financeiro lançado: forecastToComplete = committedCost (1000),
+    // projectedTotalCost = 1000, projectedMargin = committedCost - projectedTotalCost = 0.
+    assert.equal(healthBefore.forecastToComplete, 1000);
+    assert.equal(healthBefore.projectedTotalCost, 1000);
+    assert.equal(healthBefore.projectedMargin, 0);
 
     // Saída de 20 sacos a R$30 = R$600 consumidos pela obra.
     await inventoryMovementsService.recordMovement(
@@ -264,14 +269,44 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     const healthAfterOut = await projectHealthService.getProjectHealth(project.id, transaction);
     assert.equal(healthAfterOut.consumedInventoryCost, 600, 'custo real de estoque consumido deveria ser quantidade * custo médio do item');
 
-    // Devolução de 5 sacos abate o custo consumido: (20 - 5) * 30 = 450.
+    // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): consumedInventoryCost agora É considerado
+    // custo real da obra em forecastToComplete/projectedTotalCost/projectedMargin, mesmo sem
+    // NENHUM FinancialEntry lançado ainda — "Custo realizado vem de Financeiro/Estoque"
+    // (contrato, seção 5). committedCost=1000, consumedInventoryCost=600, actualFinancialCost=0:
+    // forecastToComplete = max(1000 + 0 - (0 + 600), 0) = 400; projectedTotalCost = 600 + 400 =
+    // 1000; projectedMargin = 1000 (committedCost) - 1000 (projectedTotalCost) = 0... mas o
+    // ponto crucial é que a margem JÁ REFLETE o consumo: se a obra consumir MAIS do que o
+    // orçado (ver abaixo), a margem cai mesmo sem Financeiro.
+    assert.equal(healthAfterOut.forecastToComplete, 400, 'forecastToComplete precisa abater o estoque já consumido do que falta');
+    assert.equal(healthAfterOut.projectedTotalCost, 1000, 'projectedTotalCost precisa refletir o estoque consumido como parte do custo real');
+    assert.equal(healthAfterOut.projectedMargin, 0, 'margem projetada sem Financeiro ainda reflete o consumo de estoque');
+
+    // Consumo extra (mais 25 sacos, R$750) ultrapassa o committedCost total só com estoque —
+    // SEM nenhum lançamento financeiro. Isso precisa fazer a margem CAIR (ficar negativa) e o
+    // custo total projetado SUBIR acima do orçado — prova de que consumedInventoryCost está de
+    // fato integrado, não só exposto no JSON sem efeito.
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 25, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    const healthAfterExtraOut = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthAfterExtraOut.consumedInventoryCost, 1350, '45 sacos * 30 = 1350');
+    assert.equal(healthAfterExtraOut.forecastToComplete, 0, 'já consumiu mais do que o committedCost+approvedChanges, nada falta prever');
+    assert.equal(healthAfterExtraOut.projectedTotalCost, 1350, 'custo total projetado sobe acima do orçamento só com o consumo de estoque');
+    assert.ok(healthAfterExtraOut.projectedMargin < healthAfterOut.projectedMargin, 'margem precisa cair conforme o estoque consumido sobe');
+    assert.equal(healthAfterExtraOut.projectedMargin, -350, 'committedCost (1000) - projectedTotalCost (1350) = -350, margem negativa sem nenhum FinancialEntry lançado');
+
+    // Devolução de 5 sacos abate o custo consumido: (45 - 5) * 30 = 1200.
     await inventoryMovementsService.recordMovement(
       withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'RETURN', quantity: 5, destinationLocationId: location.id, sourceType: 'MANUAL' }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );
     const healthAfterReturn = await projectHealthService.getProjectHealth(project.id, transaction);
-    assert.equal(healthAfterReturn.consumedInventoryCost, 450, 'devolução deveria abater o custo de estoque consumido pela obra');
+    assert.equal(healthAfterReturn.consumedInventoryCost, 1200, 'devolução deveria abater o custo de estoque consumido pela obra');
+    assert.equal(healthAfterReturn.projectedTotalCost, 1200);
+    assert.ok(healthAfterReturn.projectedMargin > healthAfterExtraOut.projectedMargin, 'devolução de material melhora a margem projetada');
   });
 });
 

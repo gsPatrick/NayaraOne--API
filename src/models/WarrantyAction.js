@@ -53,6 +53,10 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'cost',
       },
+      // Nota (item 2): assigned_team/material_used ainda não são atributos deste model porque a
+      // migration que cria essas colunas ainda não foi aplicada no banco neste momento. Veja
+      // warrantyActionTeamMaterialColumns.js — leitura/escrita feita por SQL direto, guardada
+      // por checagem de existência, até a migration ser aplicada.
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
 const { getApprovalThreshold } = require('./lossRecords.service');
 const financialEntriesService = require('../finance/financialEntries.service');
+const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
 
 const RESOLUTION_TYPES = ['DISCOUNT', 'REIMBURSEMENT'];
 const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
@@ -418,7 +419,7 @@ async function removeMaintenanceCase(id, actorUserId, transaction) {
 
 async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transaction) {
   const maintenanceCase = await getMaintenanceCase(warrantyCaseId, transaction);
-  const { description, performedByUserId, performedAt, cost } = payload;
+  const { description, performedByUserId, performedAt, cost, assignedTeam, materialUsed } = payload;
   if (!description) {
     throw AppError.badRequest('O campo "description" é obrigatório.', 'WARRANTY_ACTION_VALIDATION');
   }
@@ -447,6 +448,12 @@ async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transa
     },
     { transaction }
   );
+
+  // GAP CORRIGIDO (auditoria pós-Marco 6, item 2): equipe/material (fail-open até a migration
+  // 20260101000296 ser aplicada — ver warrantyActionTeamMaterialColumns.js).
+  await setTeamAndMaterial(action.id, assignedTeam, materialUsed, transaction);
+  if (assignedTeam) action.assignedTeam = assignedTeam;
+  if (materialUsed) action.materialUsed = materialUsed;
 
   await registrarAuditoria(
     {
