@@ -3,6 +3,7 @@
 const { InventoryItem, InventoryLocation } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishItemCreated } = require('./inventoryEvents.service');
+const { createMinStockRule } = require('./minStockRules.service');
 
 const ITEM_TYPES = ['CONSUMABLE', 'TOOL', 'ASSET', 'SERVICE_ITEM'];
 const LOCATION_TYPES = ['WAREHOUSE', 'PROJECT_SITE'];
@@ -32,6 +33,9 @@ async function createItem(payload, actorUserId, transaction) {
   if (minimumQuantity != null && (!Number.isFinite(Number(minimumQuantity)) || Number(minimumQuantity) < 0)) {
     throw AppError.badRequest('"minimumQuantity" precisa ser um número >= 0.', 'INVENTORY_ITEM_VALIDATION');
   }
+  if (minimumQuantity != null && itemType === 'SERVICE_ITEM') {
+    throw AppError.badRequest('Item do tipo "SERVICE_ITEM" não tem saldo físico — não admite estoque mínimo.', 'INVENTORY_ITEM_VALIDATION');
+  }
 
   const item = await InventoryItem.create(
     {
@@ -48,6 +52,16 @@ async function createItem(payload, actorUserId, transaction) {
     { transaction }
   );
   await publishItemCreated(item, transaction);
+  // EST-012: o estoque mínimo informado no cadastro não é mais "a regra" — vira a versão 1 da
+  // política REG-EST-001 do item no Motor de Regras (minStockRules.service.js); a coluna
+  // minimum_quantity gravada acima é só o espelho de compatibilidade.
+  if (minimumQuantity != null) {
+    await createMinStockRule(
+      { groupId, companyId, inventoryItemId: item.id, minimumQuantity, description: 'Definido no cadastro do item.' },
+      actorUserId,
+      transaction
+    );
+  }
   return item;
 }
 

@@ -67,7 +67,9 @@ function publishMovementRecorded(movement, transaction) {
   );
 }
 
-function publishStockLow(item, locationId, quantityOnHand, transaction) {
+// `policy` = limiar resolvido pelo Motor de Regras (REG-EST-001, minStockRules.service.js) —
+// nunca mais a coluna estática item.minimumQuantity (EST-012).
+function publishStockLow(item, locationId, quantityOnHand, transaction, policy = {}) {
   return publishDomainEvent(
     {
       groupId: item.groupId,
@@ -75,7 +77,15 @@ function publishStockLow(item, locationId, quantityOnHand, transaction) {
       aggregateType: 'InventoryItem',
       aggregateId: item.id,
       eventType: 'inventory.stock.low',
-      payload: { id: item.id, locationId, quantityOnHand, minimumQuantity: item.minimumQuantity },
+      payload: {
+        id: item.id,
+        locationId,
+        quantityOnHand,
+        minimumQuantity: policy.minimumQuantity ?? null,
+        reorderQuantity: policy.reorderQuantity ?? null,
+        ruleCode: policy.ruleCode || null,
+        ruleVersionId: policy.ruleVersionId || null,
+      },
       // EST-TS-12: o mesmo item pode cruzar o mínimo várias vezes — a chave inclui o saldo
       // resultante para não colidir indefinidamente enquanto o estoque permanecer baixo, mas
       // também não duplicar o MESMO cruzamento reprocessado (ex.: retry do job).

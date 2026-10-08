@@ -11,6 +11,7 @@ const toolLoansService = require('./toolLoans.service');
 const maintenanceService = require('./maintenance.service');
 const lossCasesService = require('./lossCases.service');
 const countsService = require('./counts.service');
+const minStockRulesService = require('./minStockRules.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -27,6 +28,17 @@ const listItems = catchAsync(async (req, res) => {
 const setItemStatus = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => itemsService.setItemStatus(req.params.id, req.body.status, req.auth.userId, t));
   return success(res, { data: item });
+});
+// EST-012 — política de estoque mínimo/reposição (REG-EST-001, Motor de Regras).
+const getItemMinStockRule = catchAsync(async (req, res) => {
+  const policy = await req.withTenantTransaction((t) => minStockRulesService.getMinStockPolicyByItemId(req.params.id, t, req.auth.userId));
+  return success(res, { data: policy });
+});
+const createItemMinStockRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) =>
+    minStockRulesService.createMinStockRule({ ...withTenant(req), inventoryItemId: req.params.id }, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: rule });
 });
 const getItem = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => itemsService.getItem(req.params.id, t));
@@ -234,6 +246,8 @@ module.exports = {
   openLossCase,
   listLossCases,
   decideLossCase,
+  getItemMinStockRule,
+  createItemMinStockRule,
   openCount,
   listCounts,
   getCount,

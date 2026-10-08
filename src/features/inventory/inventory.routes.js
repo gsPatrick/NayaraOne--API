@@ -13,6 +13,10 @@ inventoryRouter.post('/inventory/items', requirePermission('inventory:create'), 
 inventoryRouter.get('/inventory/items', requirePermission('inventory:read'), inventoryController.listItems);
 inventoryRouter.get('/inventory/items/:id', requirePermission('inventory:read'), inventoryController.getItem);
 inventoryRouter.get('/inventory/items/:id/balances', requirePermission('inventory:read'), inventoryController.listBalancesByItem);
+// EST-012 — estoque mínimo/reposição vêm do Motor de Regras (REG-EST-001): política por item,
+// com sobreposição opcional por local (minStockRules.service.js).
+inventoryRouter.get('/inventory/items/:id/min-stock-rule', requirePermission('inventory:read'), inventoryController.getItemMinStockRule);
+inventoryRouter.post('/inventory/items/:id/min-stock-rule', requirePermission('inventory:update'), inventoryController.createItemMinStockRule);
 inventoryRouter.post('/inventory/items/:id/status', requirePermission('inventory:update'), inventoryController.setItemStatus);
 
 inventoryRouter.post('/inventory/locations', requirePermission('inventory:create'), inventoryController.createLocation);

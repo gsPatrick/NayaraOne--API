@@ -4,6 +4,7 @@ const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, Inv
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
+const { getMinStockPolicy, resolveMinimumForLocation } = require('./minStockRules.service');
 
 // EST-00x (Caderno Marco 7): 7 tipos de movimento. ADJUSTMENT/LOSS/DISPOSAL exigem
 // inventory:approve (mesmo padrão de alçada já usado em construction:approve/finance:approve)
@@ -253,12 +254,21 @@ async function recordMovement(payload, actor, transaction) {
   await publishMovementRecorded(movement, transaction);
 
   // EST-012: estoque mínimo — avisa (NAY sugere, nunca efetiva) quando o saldo resultante de
-  // um local tocado por este movimento cruza para abaixo do minimumQuantity do item.
-  if (item.minimumQuantity != null) {
-    for (const balance of touchedBalances) {
-      if (Number(balance.quantityOnHand) < Number(item.minimumQuantity)) {
-        await publishStockLow(item, balance.locationId, balance.quantityOnHand, transaction);
-      }
+  // um local tocado por este movimento cruza para abaixo do mínimo do item NAQUELE local.
+  // GAP CORRIGIDO (auditoria de conformidade Marco 7, EST-012 "Estoque mínimo e reposição vêm
+  // do Motor de Regras"): o limiar vinha da coluna estática `item.minimumQuantity`; agora vem
+  // exclusivamente da regra REG-EST-001 do Motor de Regras genérico (minStockRules.service.js),
+  // com política por item e sobreposição opcional por local. A coluna virou só espelho legado.
+  const minStockPolicy = await getMinStockPolicy(item, transaction, actor.userId);
+  for (const balance of touchedBalances) {
+    const threshold = resolveMinimumForLocation(minStockPolicy, balance.locationId);
+    if (threshold != null && Number(balance.quantityOnHand) < threshold) {
+      await publishStockLow(item, balance.locationId, balance.quantityOnHand, transaction, {
+        minimumQuantity: threshold,
+        reorderQuantity: minStockPolicy.reorderQuantity,
+        ruleCode: minStockPolicy.ruleCode,
+        ruleVersionId: minStockPolicy.ruleVersionId,
+      });
     }
   }
 
