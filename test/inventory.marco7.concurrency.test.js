@@ -170,7 +170,7 @@ test('EST-TS-02: duas saídas concorrentes disputando o último saldo — uma ve
 
     // Estado final consistente, lido numa transação nova.
     await withCommitted(async (t) => {
-      const balance = await movementsService.getBalance(itemId, locationId, t);
+      const balance = await movementsService.getBalance(itemId, locationId, tenant.groupId, tenant.companyId, t);
       assert.equal(balance, 3, 'saldo final = 10 - 7 (nunca negativo, nunca -4)');
       const outs = await InventoryMovement.count({ where: { inventoryItemId: itemId, movementType: 'OUT' }, transaction: t });
       assert.equal(outs, 1, 'só o movimento da vencedora fica no ledger (o da perdedora sofreu rollback junto com a transação)');
@@ -211,23 +211,27 @@ test('EST-TS-15: duas transferências concorrentes do mesmo asset serializam via
     assetId = fixture.assetId;
 
     const barrier = createBarrier(2);
-    const originalFindByPk = Asset.findByPk;
+    // BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): transferAsset passou a
+    // usar Asset.findOne({ where: { id, groupId, companyId } }) em vez de Asset.findByPk(id) —
+    // a instrumentação deste teste intercepta o ponto do lock pessimista, então precisa seguir
+    // o mesmo método que o service passou a usar de verdade.
+    const originalFindOne = Asset.findOne;
     let lockedReads = 0;
-    Asset.findByPk = async function interceptedFindByPk(pk, options = {}, ...rest) {
-      if (pk === assetId && options?.lock) {
+    Asset.findOne = async function interceptedFindOne(options = {}, ...rest) {
+      if (options?.where?.id === assetId && options?.lock) {
         lockedReads += 1;
         await barrier.arrive();
       }
-      return originalFindByPk.call(this, pk, options, ...rest);
+      return originalFindOne.call(this, options, ...rest);
     };
 
-    const transferir = (dest) => withCommitted((t) => assetsService.transferAsset(assetId, { destinationLocationId: dest }, tenant.userId, t));
+    const transferir = (dest) => withCommitted((t) => assetsService.transferAsset(assetId, tenant.groupId, tenant.companyId, { destinationLocationId: dest }, tenant.userId, t));
 
     let results;
     try {
       results = await Promise.allSettled([transferir(fixture.destA), transferir(fixture.destB)]);
     } finally {
-      Asset.findByPk = originalFindByPk;
+      Asset.findOne = originalFindOne;
       barrier.dispose();
     }
 

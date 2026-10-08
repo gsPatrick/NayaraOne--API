@@ -150,8 +150,8 @@ test('EST-TS-11 RLS Estoque/Patrimônio: leitura e escrita cross-company bloquea
     const requisitionItemId = await firstId('inventory.requisition_items', 'requisition_id', requisition.id, transaction);
 
     const asset = await assetsService.createAsset(withTenant({ name: `HOMO QA RLS M7 Asset ${suffix}`, assetTag: `RLSM7-${suffix}`, currentLocationId: warehouse.id }), tenant.userId, transaction);
-    const assetMovement = await assetsService.transferAsset(asset.id, { destinationLocationId: otherLoc.id }, tenant.userId, transaction);
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: otherLoc.id }, tenant.userId, transaction);
+    const assetMovement = await assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: otherLoc.id }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: otherLoc.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia-rls.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA-RLS').toString('base64'), category: 'generic' }),
@@ -165,7 +165,7 @@ test('EST-TS-11 RLS Estoque/Patrimônio: leitura e escrita cross-company bloquea
     );
 
     const count = await countsService.openCount(withTenant({ locationId: warehouse.id }), tenant.userId, transaction);
-    const countItem = await countsService.addCountItem(count.id, { inventoryItemId: item.id, countedQuantity: 3 }, transaction);
+    const countItem = await countsService.addCountItem(count.id, tenant.groupId, tenant.companyId, { inventoryItemId: item.id, countedQuantity: 3 }, transaction);
 
     const specs = [
       { table: 'inventory.inventory_movements', id: movement.id, column: 'quantity', hostileValue: 99999 },
@@ -203,17 +203,17 @@ test('EST-TS-11 RLS Compras: leitura e escrita cross-company bloqueadas em todas
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, 'APPROVED', tenant.userId, transaction);
-    const quotation = await procurementService.createQuotation(request.id, tenant.userId, transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
-      quotation.id,
+      quotation.id, tenant.groupId, tenant.companyId,
       { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
-    const order = await procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction);
+    const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     // Over-receipt (15 > 10) para também gerar uma receipt_discrepancy.
     const { goodsReceipt, discrepancies } = await procurementService.confirmGoodsReceipt(
-      order.id,
+      order.id, tenant.groupId, tenant.companyId,
       { destinationLocationId: warehouse.id, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity: 15 }] },
       actor,
       transaction

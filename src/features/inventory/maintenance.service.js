@@ -23,7 +23,7 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "assetId" são obrigatórios.', 'MAINTENANCE_VALIDATION');
   }
 
-  const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (asset.status === 'LOANED') {
     throw AppError.conflict('Ferramenta emprestada não pode entrar em manutenção — devolva primeiro.', 'MAINTENANCE_ASSET_LOANED');
@@ -84,15 +84,15 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
   return order;
 }
 
-async function listMaintenanceOrders(transaction, { status, assetId } = {}) {
-  const where = {};
+async function listMaintenanceOrders(groupId, companyId, transaction, { status, assetId } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   if (assetId) where.assetId = assetId;
   return InventoryMaintenanceOrder.findAll({ where, order: [['opened_at', 'DESC']], transaction });
 }
 
-async function closeMaintenanceOrder(orderId, actorUserId, transaction) {
-  const order = await InventoryMaintenanceOrder.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
+async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, transaction) {
+  const order = await InventoryMaintenanceOrder.findOne({ where: { id: orderId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!order) throw AppError.notFound('Ordem de manutenção não encontrada.', 'MAINTENANCE_NOT_FOUND');
   if (order.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível fechar uma OS em OPEN (atual: ${order.status}).`, 'MAINTENANCE_INVALID_TRANSITION');
@@ -103,7 +103,7 @@ async function closeMaintenanceOrder(orderId, actorUserId, transaction) {
   order.updatedBy = actorUserId || null;
   await order.save({ transaction });
 
-  const asset = await Asset.findByPk(order.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: order.assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (asset && asset.status === 'MAINTENANCE') {
     // BUG REAL CORRIGIDO (rodada 23): liberar o asset incondicionalmente ao fechar QUALQUER OS
     // ignorava a possibilidade de existir outra OS ainda OPEN pro mesmo asset — agora só libera

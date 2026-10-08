@@ -43,7 +43,7 @@ function addDays(dateOnly, days) {
 
 async function issuedPolicy(transaction, effectiveDate, expiryDate) {
   const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-  const issued = await insuranceService.issuePolicy(policy.id, { effectiveDate, expiryDate }, { userId: tenant.userId }, transaction);
+  const issued = await insuranceService.issuePolicy(policy.id, { effectiveDate, expiryDate }, withTenant({ userId: tenant.userId }), transaction);
   assert.equal(issued.status, 'ACTIVE');
   return issued;
 }
@@ -66,12 +66,12 @@ test('Vigência: apólice ACTIVE com expiryDate no passado (backdate direto no b
     assert.equal(reloaded.status, 'ACTIVE', 'pré-condição: status gravado ainda ACTIVE');
 
     await assert.rejects(
-      () => insuranceService.openClaim(policy.id, { description: 'sinistro pós-vigência', claimAmount: 100 }, { userId: tenant.userId }, transaction),
+      () => insuranceService.openClaim(policy.id, { description: 'sinistro pós-vigência', claimAmount: 100 }, withTenant({ userId: tenant.userId }), transaction),
       assertExpiredError
     );
 
     // Leitura expõe o derivado pro front, mesmo antes do job.
-    const fetched = await insuranceService.getPolicy(policy.id, transaction);
+    const fetched = await insuranceService.getPolicy(policy.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(fetched.toJSON().isExpired, true);
   });
 });
@@ -83,20 +83,20 @@ test('Vigência: emitida já com vigência passada também bloqueia; último dia
     // 30/06 23:30 em São Paulo = 01/07 02:30 UTC — ainda é o último dia de cobertura no Brasil.
     const lastMinuteOfCoverage = new Date('2026-07-01T02:30:00Z');
     const claim = await insuranceService.openClaim(
-      policy.id, { description: 'último dia', claimAmount: 50 }, { userId: tenant.userId }, transaction, lastMinuteOfCoverage
+      policy.id, { description: 'último dia', claimAmount: 50 }, withTenant({ userId: tenant.userId }), transaction, lastMinuteOfCoverage
     );
     assert.equal(claim.status, 'OPEN');
 
     // 01/07 00:30 em São Paulo — vigência encerrada.
     const afterCoverage = new Date('2026-07-01T03:30:00Z');
     await assert.rejects(
-      () => insuranceService.openClaim(policy.id, { description: 'dia seguinte', claimAmount: 50 }, { userId: tenant.userId }, transaction, afterCoverage),
+      () => insuranceService.openClaim(policy.id, { description: 'dia seguinte', claimAmount: 50 }, withTenant({ userId: tenant.userId }), transaction, afterCoverage),
       assertExpiredError
     );
 
     // Sem `now` explícito (relógio real, hoje > 2026-06-30) também bloqueia.
     await assert.rejects(
-      () => insuranceService.openClaim(policy.id, { description: 'hoje' }, { userId: tenant.userId }, transaction),
+      () => insuranceService.openClaim(policy.id, { description: 'hoje' }, withTenant({ userId: tenant.userId }), transaction),
       assertExpiredError
     );
   });
@@ -109,17 +109,17 @@ test('Vigência: job expira a apólice, sinistro aberto ANTES do vencimento segu
     const afterCoverage = new Date('2026-07-02T15:00:00Z');
 
     const claim = await insuranceService.openClaim(
-      policy.id, { description: 'aberto durante a vigência', claimAmount: 1200 }, { userId: tenant.userId }, transaction, duringCoverage
+      policy.id, { description: 'aberto durante a vigência', claimAmount: 1200 }, withTenant({ userId: tenant.userId }), transaction, duringCoverage
     );
 
     const result = await expireDuePolicies(transaction, afterCoverage);
     assert.ok(result.expired >= 1);
-    const expired = await insuranceService.getPolicy(policy.id, transaction);
+    const expired = await insuranceService.getPolicy(policy.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(expired.status, 'EXPIRED');
     assert.equal(expired.toJSON().isExpired, true);
 
     // Sinistro em andamento NÃO é quebrado retroativamente.
-    const submitted = await insuranceService.submitClaim(claim.id, { userId: tenant.userId }, transaction);
+    const submitted = await insuranceService.submitClaim(claim.id, withTenant({ userId: tenant.userId }), transaction);
     assert.equal(submitted.status, 'SUBMITTED');
     const settled = await insuranceService.confirmClaimSettlement(submitted.externalClaimId, 'SETTLED', 1200, transaction);
     assert.equal(settled.status, 'SETTLED');
@@ -128,12 +128,12 @@ test('Vigência: job expira a apólice, sinistro aberto ANTES do vencimento segu
     // Sinistro novo: bloqueado mesmo se o chamador "mentir" a data pra dentro da vigência — o
     // status EXPIRED gravado é terminal.
     await assert.rejects(
-      () => insuranceService.openClaim(policy.id, { description: 'novo' }, { userId: tenant.userId }, transaction, duringCoverage),
+      () => insuranceService.openClaim(policy.id, { description: 'novo' }, withTenant({ userId: tenant.userId }), transaction, duringCoverage),
       assertExpiredError
     );
 
     // Filtro por status no list continua funcionando com o status novo.
-    const listed = await insuranceService.listPolicies({ status: 'EXPIRED' }, transaction);
+    const listed = await insuranceService.listPolicies({ status: 'EXPIRED' }, tenant.groupId, tenant.companyId, transaction);
     assert.ok(listed.some((p) => p.id === policy.id));
   });
 });

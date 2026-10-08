@@ -58,8 +58,8 @@ async function receive(transaction, item, location, quantity, unitCost) {
     tenant.userId,
     transaction
   );
-  await receiptsService.reviewReceipt(receipt.id, tenant.userId, transaction);
-  await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, transaction);
+  await receiptsService.reviewReceipt(receipt.id, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+  await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, transaction);
 }
 
 async function createFile(transaction) {
@@ -174,17 +174,17 @@ test('REG-EST-002: ajuste de contagem (counts.service.js#applyAdjustment) de alt
 
     const count = await countsService.openCount(withTenant({ locationId: location.id }), tenant.userId, transaction);
     // saldo esperado 100, contado 80 -> divergência -20, valor estimado 20*80=R$1600 (> limiar)
-    await countsService.addCountItem(count.id, { inventoryItemId: item.id, countedQuantity: 80 }, transaction);
-    const completed = await countsService.completeCount(count.id, tenant.userId, transaction);
+    await countsService.addCountItem(count.id, tenant.groupId, tenant.companyId, { inventoryItemId: item.id, countedQuantity: 80 }, transaction);
+    const completed = await countsService.completeCount(count.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const line = completed.items.find((l) => l.inventoryItemId === item.id);
 
     await assert.rejects(
-      () => countsService.applyAdjustment(line.id, actor(), transaction),
+      () => countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, actor(), transaction),
       (err) => err instanceof AppError && err.code === 'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
     );
 
     const file = await createFile(transaction);
-    const adjusted = await countsService.applyAdjustment(line.id, actor(), transaction, file.id);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, actor(), transaction, file.id);
     assert.ok(adjusted.adjustmentMovementId, 'ajuste aplicado com sucesso ao informar evidenceFileId');
   });
 });

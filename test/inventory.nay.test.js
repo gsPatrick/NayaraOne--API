@@ -105,8 +105,8 @@ test('EST-013/§12: NAY sugere compra a partir de consumo, obra ativa, lead time
       tenant.userId,
       transaction
     );
-    await requisitionsService.decideRequisition(issued.id, 'APPROVED', tenant.userId, transaction);
-    await requisitionsService.issueRequisition(issued.id, actor(), transaction);
+    await requisitionsService.decideRequisition(issued.id, 'APPROVED', tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await requisitionsService.issueRequisition(issued.id, actor(), tenant.groupId, tenant.companyId, transaction);
     // Demanda comprometida da obra ativa ainda não baixada.
     await requisitionsService.createRequisition(
       withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, projectId: project.id, items: [{ inventoryItemId: item.id, quantity: 20 }] }),
@@ -148,7 +148,7 @@ test('EST-013/§12: NAY sugere compra a partir de consumo, obra ativa, lead time
     assert.equal(again.suggestions.find((s) => s.inventoryItemId === item.id).id, suggestion.id);
     assert.equal((await suggestionsForItem(item.id, transaction)).length, 1);
 
-    const listed = await nay.listPurchaseSuggestions(transaction, { inventoryItemId: item.id });
+    const listed = await nay.listPurchaseSuggestions(tenant.groupId, tenant.companyId, transaction, { inventoryItemId: item.id });
     assert.equal(listed.length, 1);
     assert.equal(listed[0].id, suggestion.id);
   });
@@ -167,7 +167,7 @@ test('EST-013: só a aprovação HUMANA abre a requisição de compra (REQUESTED
     assert.equal(suggestion.riskLevel, 'MEDIUM');
 
     // Humano ajusta a quantidade e aprova.
-    const { suggestion: accepted, purchaseRequest } = await nay.approvePurchaseSuggestion(suggestion.id, { quantity: 12, notes: 'Comprar lote fechado.' }, { userId: tenant.userId }, transaction);
+    const { suggestion: accepted, purchaseRequest } = await nay.approvePurchaseSuggestion(suggestion.id, tenant.groupId, tenant.companyId, { quantity: 12, notes: 'Comprar lote fechado.' }, { userId: tenant.userId }, transaction);
     assert.equal(purchaseRequest.status, 'REQUESTED', 'nasce como requisição, ainda precisa ser aprovada no fluxo de Compras');
     assert.equal(purchaseRequest.items.length, 1);
     assert.equal(purchaseRequest.items[0].inventoryItemId, item.id);
@@ -182,13 +182,13 @@ test('EST-013: só a aprovação HUMANA abre a requisição de compra (REQUESTED
 
     // Não reaplica: uma sugestão decidida não pode ser aprovada de novo (sem pedido duplicado).
     await assert.rejects(
-      () => nay.approvePurchaseSuggestion(suggestion.id, {}, { userId: tenant.userId }, transaction),
+      () => nay.approvePurchaseSuggestion(suggestion.id, tenant.groupId, tenant.companyId, {}, { userId: tenant.userId }, transaction),
       (err) => err instanceof AppError && err.code === 'INVENTORY_NAY_SUGGESTION_INVALID_TRANSITION'
     );
     assert.equal(await PurchaseRequestItem.count({ where: { inventoryItemId: item.id }, transaction }), 1);
 
     await assert.rejects(
-      () => nay.approvePurchaseSuggestion('00000000-0000-0000-0000-000000000000', {}, { userId: tenant.userId }, transaction),
+      () => nay.approvePurchaseSuggestion('00000000-0000-0000-0000-000000000000', tenant.groupId, tenant.companyId, {}, { userId: tenant.userId }, transaction),
       (err) => err instanceof AppError && err.code === 'INVENTORY_NAY_SUGGESTION_NOT_FOUND'
     );
   });
@@ -203,7 +203,7 @@ test('NAY Estoque: quantidade inválida na aprovação é recusada sem abrir com
     const suggestion = suggestions.find((s) => s.inventoryItemId === item.id);
 
     await assert.rejects(
-      () => nay.approvePurchaseSuggestion(suggestion.id, { quantity: -3 }, { userId: tenant.userId }, transaction),
+      () => nay.approvePurchaseSuggestion(suggestion.id, tenant.groupId, tenant.companyId, { quantity: -3 }, { userId: tenant.userId }, transaction),
       (err) => err instanceof AppError && err.code === 'INVENTORY_NAY_VALIDATION'
     );
     assert.equal(await PurchaseRequestItem.count({ where: { inventoryItemId: item.id }, transaction }), 0);
@@ -218,7 +218,7 @@ test('NAY Estoque: rejeição humana é respeitada (não reaparece no recálculo
 
     let { suggestions } = await nay.generatePurchaseSuggestions(withTenant({ inventoryItemId: item.id }), tenant.userId, transaction);
     const first = suggestions.find((s) => s.inventoryItemId === item.id);
-    const rejected = await nay.rejectPurchaseSuggestion(first.id, { reason: 'Item será descontinuado.' }, { userId: tenant.userId }, transaction);
+    const rejected = await nay.rejectPurchaseSuggestion(first.id, tenant.groupId, tenant.companyId, { reason: 'Item será descontinuado.' }, { userId: tenant.userId }, transaction);
     assert.equal(rejected.status, 'REJECTED');
     assert.equal(rejected.decision.reason, 'Item será descontinuado.');
 
@@ -248,13 +248,13 @@ test('NAY Estoque: lead time OBSERVADO no histórico real de Compras (pedido -> 
     const warehouse = await createWarehouse(transaction);
 
     const request = await procurementService.createPurchaseRequest(withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity: 10 }] }), tenant.userId, transaction);
-    await procurementService.decidePurchaseRequest(request.id, 'APPROVED', tenant.userId, transaction);
-    const quotation = await procurementService.createQuotation(request.id, tenant.userId, transaction);
-    const offer = await procurementService.submitSupplierOffer(quotation.id, { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] }, transaction);
-    const order = await procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] }, transaction);
+    const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     // Fixture: o pedido foi emitido 12 dias antes do recebimento.
     await sequelize.query("UPDATE procurement.purchase_orders SET created_at = NOW() - INTERVAL '12 days' WHERE id = :id", { replacements: { id: order.id }, transaction });
-    await procurementService.confirmGoodsReceipt(order.id, { destinationLocationId: warehouse.id, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity: 10 }] }, actor(), transaction);
+    await procurementService.confirmGoodsReceipt(order.id, tenant.groupId, tenant.companyId, { destinationLocationId: warehouse.id, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity: 10 }] }, actor(), transaction);
     await movementsService.recordMovement(
       withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 8, sourceLocationId: warehouse.id, sourceType: 'MANUAL' }),
       actor(),
@@ -336,13 +336,13 @@ test('EST-TS-14: NAY sinaliza recorrência/valor anômalo em loss_cases SEM deci
     assert.equal(await InventoryMovement.count({ where: { sourceType: 'LOSS_CASE', sourceId: ids }, transaction }), 0);
 
     // A decisão humana continua soberana: rejeitar um caso tira ele da evidência de recorrência.
-    await lossCasesService.decideLossCase(a.id, 'REJECTED', actor(), transaction);
+    await lossCasesService.decideLossCase(a.id, tenant.groupId, tenant.companyId, 'REJECTED', actor(), transaction);
     const afterReject = await nay.analyzeLossCaseAnomalies(tenant, { lossCaseId: b.id }, transaction);
     assert.equal(afterReject.cases.length, 1);
     assert.ok(!afterReject.cases[0].flags.some((f) => f.code.startsWith('RECURRENCE_')), 'com só 2 casos válidos não há recorrência');
 
     // E só a decisão humana (inventory:approve) gera baixa.
-    const approved = await lossCasesService.decideLossCase(c.id, 'APPROVED', actor(), transaction);
+    const approved = await lossCasesService.decideLossCase(c.id, tenant.groupId, tenant.companyId, 'APPROVED', actor(), transaction);
     assert.equal(approved.status, 'APPROVED');
     assert.ok(approved.resultingMovementId);
 

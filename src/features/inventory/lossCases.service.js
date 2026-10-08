@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryLossCase, InventoryItem, Asset, InventoryToolLoan, InventoryMovement, File, FinancialEntry, Person } = require('../../models');
+const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, InventoryMovement, File, FinancialEntry, Person } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -109,10 +109,19 @@ async function openLossCase(payload, actorUserId, transaction) {
   // perda sobre ele sobrescreveria DISPOSED com LOST, apagando a baixa formalizada. Lock no
   // asset serializa com disposeAsset (que trava o mesmo asset e recusa baixa com perda OPEN).
   if (assetId) {
-    const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+    const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
     if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
     if (asset.status === 'DISPOSED') {
       throw AppError.conflict('Patrimônio já baixado (venda/descarte/doação) não pode ter caso de perda aberto.', 'LOSS_CASE_ASSET_DISPOSED');
+    }
+    // GAP REAL CORRIGIDO (auditoria Marco 7, 2026-10-08): mesmo padrão de disposeAsset — um
+    // patrimônio com OS de manutenção OPEN está em processo de reparo em andamento; abrir um
+    // caso de perda sobre ele agora (e aprová-lo depois) sobrescreveria o asset pra LOST sem
+    // nunca encerrar a OS, deixando-a "esquecida" aberta sobre um ativo que já saiu de
+    // circulação por perda.
+    const openOrder = await InventoryMaintenanceOrder.findOne({ where: { assetId, status: 'OPEN' }, transaction });
+    if (openOrder) {
+      throw AppError.conflict('Patrimônio com ordem de manutenção aberta não pode ter caso de perda aberto — feche a OS primeiro.', 'LOSS_CASE_MAINTENANCE_OPEN');
     }
   }
 
@@ -157,8 +166,8 @@ async function attachChargeEntries(lossCases, transaction) {
   return lossCases;
 }
 
-async function listLossCases(transaction, { status } = {}) {
-  const where = {};
+async function listLossCases(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   const lossCases = await InventoryLossCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
   return attachChargeEntries(lossCases, transaction);
@@ -207,7 +216,7 @@ async function createLossChargeFinancialEntry(lossCase, person, amount, dueAt, a
  *   - chargeAmount: número > 0 — valor cobrado; default = estimatedCost do caso;
  *   - chargeDueAt: data de vencimento do lançamento a receber (opcional).
  */
-async function decideLossCase(lossCaseId, decision, actor, transaction, options = {}) {
+async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, transaction, options = {}) {
   if (!['APPROVED', 'REJECTED'].includes(decision)) {
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'LOSS_CASE_VALIDATION');
   }
@@ -219,7 +228,7 @@ async function decideLossCase(lossCaseId, decision, actor, transaction, options 
     throw AppError.badRequest('Só é possível cobrar o responsável de uma perda APROVADA — caso rejeitado não tem perda confirmada a ressarcir.', 'LOSS_CASE_CHARGE_REQUIRES_APPROVAL');
   }
 
-  const lossCase = await InventoryLossCase.findByPk(lossCaseId, { transaction, lock: transaction.LOCK.UPDATE });
+  const lossCase = await InventoryLossCase.findOne({ where: { id: lossCaseId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!lossCase) throw AppError.notFound('Caso de perda não encontrado.', 'LOSS_CASE_NOT_FOUND');
   if (lossCase.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível decidir um caso em OPEN (atual: ${lossCase.status}).`, 'LOSS_CASE_INVALID_TRANSITION');
@@ -289,11 +298,32 @@ async function decideLossCase(lossCaseId, decision, actor, transaction, options 
   // declarado perdido/quebrado e aprovado continuava AVAILABLE/LOANED, podia ser emprestado de
   // novo, e mantinha o custodiante antigo mesmo após a perda ser formalizada (EST-010).
   if (decision === 'APPROVED' && lossCase.assetId) {
-    const asset = await Asset.findByPk(lossCase.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+    const asset = await Asset.findOne({ where: { id: lossCase.assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
     if (asset?.status === 'DISPOSED') {
       throw AppError.conflict('Patrimônio já baixado (venda/descarte/doação) — a perda não pode sobrescrever a baixa.', 'LOSS_CASE_ASSET_DISPOSED');
     }
     if (asset) {
+      // GAP REAL CORRIGIDO (auditoria Marco 7, 2026-10-08): aprovar a perda de um Asset mudava
+      // o status pra LOST, mas nunca gerava o AssetMovement correspondente — mesmo padrão que
+      // disposeAsset SEMPRE usa pra documentar a saída de circulação. Sem este movimento, o
+      // histórico de patrimônio (listAssetMovements) nunca mostrava a perda formalizada.
+      const lossMovement = await AssetMovement.create(
+        {
+          groupId: asset.groupId,
+          companyId: asset.companyId,
+          assetId: asset.id,
+          sourceLocationId: asset.currentLocationId,
+          destinationLocationId: null,
+          sourceCustodianUserId: asset.assignedToUserId,
+          destinationCustodianUserId: null,
+          idempotencyKey: `loss-case:${lossCase.id}`,
+          movedAt: new Date(),
+          movedByUserId: actor.userId || null,
+        },
+        { transaction }
+      );
+      void lossMovement;
+
       asset.status = 'LOST';
       asset.assignedToUserId = null;
       asset.updatedBy = actor.userId || null;

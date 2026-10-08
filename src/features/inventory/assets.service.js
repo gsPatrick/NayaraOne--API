@@ -88,19 +88,24 @@ async function createAsset(payload, actorUserId, transaction) {
   );
 }
 
-async function listAssets(transaction, { status } = {}) {
-  const where = {};
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): nenhuma função deste arquivo
+// filtrava por groupId/companyId — qualquer tenant conseguia ler, transferir, editar ou listar
+// o patrimônio de OUTRA empresa só adivinhando o UUID. Projeto não usa RLS real do Postgres —
+// isolamento é 100% a cargo do filtro manual no where, que faltava aqui (mesmo padrão já
+// corrigido em materialRequests.service.js/adjustmentRiskRules.service.js).
+async function listAssets(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   return Asset.findAll({ where, order: [['name', 'ASC']], transaction });
 }
 
-async function getAssetByTag(assetTag, transaction) {
-  const asset = await Asset.findOne({ where: { assetTag }, transaction });
+async function getAssetByTag(assetTag, groupId, companyId, transaction) {
+  const asset = await Asset.findOne({ where: { assetTag, groupId, companyId }, transaction });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado para este QR Code.', 'ASSET_NOT_FOUND');
   return asset;
 }
 
-async function transferAsset(assetId, payload, actorUserId, transaction) {
+async function transferAsset(assetId, groupId, companyId, payload, actorUserId, transaction) {
   const { destinationLocationId, destinationCustodianUserId, idempotencyKey } = payload;
   if (!destinationLocationId && !destinationCustodianUserId) {
     throw AppError.badRequest('Informe "destinationLocationId" e/ou "destinationCustodianUserId".', 'ASSET_TRANSFER_VALIDATION');
@@ -110,16 +115,27 @@ async function transferAsset(assetId, payload, actorUserId, transaction) {
   }
 
   if (idempotencyKey) {
-    const existing = await AssetMovement.findOne({ where: { idempotencyKey }, transaction });
+    const existing = await AssetMovement.findOne({ where: { idempotencyKey, groupId, companyId }, transaction });
     if (existing) return existing;
   }
 
   // EST-TS-15: transferência concorrente usa lock otimista (lockVersion do Asset) — o save()
   // abaixo falha com erro de versão se outra transação já alterou o asset no meio do caminho.
-  const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (TERMINAL_ASSET_STATUSES.includes(asset.status)) {
     throw AppError.conflict(`Patrimônio com status ${asset.status} não pode ser transferido (já saiu de circulação).`, 'ASSET_NOT_IN_CIRCULATION');
+  }
+  // GAP REAL CORRIGIDO (auditoria Marco 7, 2026-10-08): transferAsset só bloqueava os status
+  // terminais (LOST/DISPOSED) — uma ferramenta emprestada (LOANED, com InventoryToolLoan
+  // OPEN/OVERDUE) podia ser "transferida" de local/custodiante por fora do fluxo de empréstimo,
+  // deixando o InventoryToolLoan aberto apontando para um local/custodiante que não é mais o
+  // currentLocationId/assignedToUserId real do asset. Mesmo padrão de guarda já usado por
+  // disposeAsset/openMaintenanceOrder: bloqueia pelo status E pelo registro (defesa em
+  // profundidade, caso o status esteja dessincronizado de um loan legado).
+  const openLoan = await InventoryToolLoan.findOne({ where: { assetId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction });
+  if (asset.status === 'LOANED' || openLoan) {
+    throw AppError.conflict('Ferramenta emprestada não pode ser transferida — registre a devolução primeiro.', 'ASSET_TRANSFER_ASSET_LOANED');
   }
 
   const movement = await AssetMovement.create(
@@ -159,9 +175,9 @@ async function transferAsset(assetId, payload, actorUserId, transaction) {
 // depois da criação (nem endpoint, nem função de service). Um patrimônio cadastrado sem essa
 // informação (comum — a nota fiscal/garantia muitas vezes chega depois) nunca podia ser
 // corrigido.
-async function updateAsset(id, payload, actorUserId, transaction) {
+async function updateAsset(id, groupId, companyId, payload, actorUserId, transaction) {
   const { name, acquisitionValue, acquiredAt, warrantyUntil } = payload;
-  const asset = await Asset.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
 
   if (acquisitionValue !== undefined) assertNonNegativeAcquisitionValue(acquisitionValue);
@@ -186,8 +202,8 @@ async function updateAsset(id, payload, actorUserId, transaction) {
 // (inventory.asset_movements — "Transferências/localização") exige rastrear o histórico de
 // movimentações do patrimônio, e toda transferência já gera um AssetMovement (transferAsset
 // acima) — mas não existia NENHUMA forma de ler esse histórico de volta, nem endpoint nem tela.
-async function listAssetMovements(assetId, transaction) {
-  const movements = await AssetMovement.findAll({ where: { assetId }, order: [['moved_at', 'DESC']], transaction });
+async function listAssetMovements(assetId, groupId, companyId, transaction) {
+  const movements = await AssetMovement.findAll({ where: { assetId, groupId, companyId }, order: [['moved_at', 'DESC']], transaction });
   // asset_movements não tem coluna de tipo — a baixa é identificada pelo prefixo reservado da
   // idempotencyKey (ver DISPOSAL_KEY_PREFIX), pra tela distinguir transferência de baixa.
   return movements.map((m) => ({
@@ -227,7 +243,7 @@ function parseDisposalValue(value) {
 //    asset vai pra DISPOSED (terminal) e perde local/custodiante.
 // 6. Auditoria (registro canônico da baixa: tipo, valor, motivo, evidências, lançamento) +
 //    evento de domínio asset.disposed.
-async function disposeAsset(assetId, payload, actor, transaction) {
+async function disposeAsset(assetId, groupId, companyId, payload, actor, transaction) {
   if (!actor?.canApprove) {
     throw AppError.forbidden('Baixa de patrimônio (venda/descarte/doação) exige a permissão inventory:approve.', 'ASSET_DISPOSAL_APPROVAL_REQUIRED');
   }
@@ -255,7 +271,7 @@ async function disposeAsset(assetId, payload, actor, transaction) {
     throw AppError.badRequest('Doação não pode ter "disposalValue" — doação não gera receita. Use SALE para venda.', 'ASSET_DISPOSAL_VALIDATION');
   }
 
-  const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (asset.status === 'DISPOSED') {
     throw AppError.conflict('Este patrimônio já foi baixado (venda/descarte/doação).', 'ASSET_ALREADY_DISPOSED');
@@ -279,7 +295,7 @@ async function disposeAsset(assetId, payload, actor, transaction) {
     throw AppError.conflict('Existe um caso de perda aberto para este patrimônio — decida-o antes de baixar.', 'ASSET_DISPOSAL_LOSS_CASE_OPEN');
   }
 
-  const files = await File.findAll({ where: { id: uniqueEvidenceIds }, attributes: ['id'], transaction });
+  const files = await File.findAll({ where: { id: uniqueEvidenceIds, companyId: asset.companyId }, attributes: ['id'], transaction });
   if (files.length !== uniqueEvidenceIds.length) {
     throw AppError.badRequest('Um ou mais arquivos de evidência não foram encontrados.', 'ASSET_DISPOSAL_EVIDENCE_NOT_FOUND');
   }

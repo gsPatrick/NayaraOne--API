@@ -65,7 +65,7 @@ async function createReceipt(payload, actorUserId, transaction) {
   );
 
   for (const line of items) {
-    const item = await InventoryItem.findByPk(line.inventoryItemId, { transaction });
+    const item = await InventoryItem.findOne({ where: { id: line.inventoryItemId, groupId, companyId }, transaction });
     if (!item) throw AppError.notFound(`Item de estoque "${line.inventoryItemId}" não encontrado.`, 'INVENTORY_ITEM_NOT_FOUND');
     await InventoryReceiptItem.create(
       {
@@ -85,11 +85,12 @@ async function createReceipt(payload, actorUserId, transaction) {
     transaction
   );
 
-  return getReceipt(receipt.id, transaction);
+  return getReceipt(receipt.id, groupId, companyId, transaction);
 }
 
-async function getReceipt(receiptId, transaction) {
-  const receipt = await InventoryReceipt.findByPk(receiptId, {
+async function getReceipt(receiptId, groupId, companyId, transaction) {
+  const receipt = await InventoryReceipt.findOne({
+    where: { id: receiptId, groupId, companyId },
     include: [{ model: InventoryReceiptItem, as: 'items' }],
     transaction,
   });
@@ -97,14 +98,14 @@ async function getReceipt(receiptId, transaction) {
   return receipt;
 }
 
-async function listReceipts(transaction, { status } = {}) {
-  const where = {};
+async function listReceipts(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   return InventoryReceipt.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function reviewReceipt(receiptId, actorUserId, transaction) {
-  const receipt = await InventoryReceipt.findByPk(receiptId, { transaction, lock: transaction.LOCK.UPDATE });
+async function reviewReceipt(receiptId, actorUserId, groupId, companyId, transaction) {
+  const receipt = await InventoryReceipt.findOne({ where: { id: receiptId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!receipt) throw AppError.notFound('Recebimento não encontrado.', 'INVENTORY_RECEIPT_NOT_FOUND');
   if (receipt.status !== 'DRAFT') {
     throw AppError.badRequest(`Só é possível revisar um recebimento em DRAFT (atual: ${receipt.status}).`, 'INVENTORY_RECEIPT_INVALID_TRANSITION');
@@ -115,15 +116,15 @@ async function reviewReceipt(receiptId, actorUserId, transaction) {
   return receipt;
 }
 
-async function confirmReceipt(receiptId, actor, transaction) {
+async function confirmReceipt(receiptId, actor, groupId, companyId, transaction) {
   // Postgres rejeita FOR UPDATE combinado com include de hasMany (outer join nullable) — o lock
   // é feito só na linha do receipt; os itens (já imutáveis depois de criados) são lidos depois.
-  const receipt = await InventoryReceipt.findByPk(receiptId, { transaction, lock: transaction.LOCK.UPDATE });
+  const receipt = await InventoryReceipt.findOne({ where: { id: receiptId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!receipt) throw AppError.notFound('Recebimento não encontrado.', 'INVENTORY_RECEIPT_NOT_FOUND');
   if (receipt.status !== 'REVIEWED') {
     throw AppError.badRequest(`Só é possível confirmar um recebimento em REVIEWED (atual: ${receipt.status}).`, 'INVENTORY_RECEIPT_INVALID_TRANSITION');
   }
-  const items = await InventoryReceiptItem.findAll({ where: { receiptId: receipt.id }, transaction });
+  const items = await InventoryReceiptItem.findAll({ where: { receiptId: receipt.id, groupId, companyId }, transaction });
 
   // EST-TS-08 (segunda barreira): mesmo se dois agentes tentarem confirmar o mesmo invoiceFingerprint
   // concorrentemente, o lock de linha acima + o status check (REVIEWED->COMPLETED, não reentrante)
@@ -133,8 +134,8 @@ async function confirmReceipt(receiptId, actor, transaction) {
     // do código escreve em InventoryItem.averageCost. Soma ANTES de aplicar o IN desta linha,
     // senão o próprio recebimento já contaminaria o denominador da média.
     if (line.unitCost != null) {
-      const item = await InventoryItem.findByPk(line.inventoryItemId, { transaction, lock: transaction.LOCK.UPDATE });
-      const balancesBefore = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId }, transaction });
+      const item = await InventoryItem.findOne({ where: { id: line.inventoryItemId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+      const balancesBefore = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId, groupId, companyId }, transaction });
       const totalQtyBefore = balancesBefore.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
       const oldAverage = item.averageCost != null ? Number(item.averageCost) : Number(line.unitCost);
       const receivedQty = Number(line.quantity);

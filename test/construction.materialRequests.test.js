@@ -269,7 +269,7 @@ test('material-request: devolução de material recebido credita o saldo de volt
       inventoryItemId: item.id,
       sourceLocationId: location.id,
     });
-    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReceive, 80);
 
     const { returnMovement } = await materialRequestsService.returnMaterialRequest(
@@ -282,7 +282,7 @@ test('material-request: devolução de material recebido credita o saldo de volt
     );
     assert.equal(returnMovement.movementType, 'RETURN');
 
-    const balanceAfterReturn = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    const balanceAfterReturn = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReturn, 85, 'devolução precisa creditar de volta o saldo real do item');
 
     // Devolver de novo com a mesma requisição é idempotente — não duplica o crédito.
@@ -295,7 +295,7 @@ test('material-request: devolução de material recebido credita o saldo de volt
       transaction
     );
     assert.equal(replay.id, returnMovement.id);
-    const balanceAfterReplay = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    const balanceAfterReplay = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReplay, 85, 'reenviar a devolução não pode creditar duas vezes');
   });
 });
@@ -375,7 +375,7 @@ test('material-request: receber com vínculo de estoque debita o saldo real (OUT
       { userId: tenant.userId, canApprove: true },
       transaction
     );
-    const balanceBefore = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    const balanceBefore = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceBefore, 200);
 
     const request = await materialRequestsService.createMaterialRequest(
@@ -391,7 +391,7 @@ test('material-request: receber com vínculo de estoque debita o saldo real (OUT
     });
     assert.equal(received.status, 'RECEIVED');
 
-    const balanceAfter = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    const balanceAfter = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfter, 150, 'saldo real do item deveria ter caído pela quantidade da requisição');
 
     const movement = await InventoryMovement.findOne({

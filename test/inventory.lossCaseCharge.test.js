@@ -65,7 +65,7 @@ test('§11: aprovar perda cobrando o responsável cria FinancialEntry RECEIVABLE
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 450.75 });
 
-    const decided = await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, { chargeResponsible: true });
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true });
     assert.equal(decided.status, 'APPROVED');
 
     const key = lossCasesService.lossChargeIdempotencyKey(lossCase.id);
@@ -85,7 +85,7 @@ test('§11: aprovar perda cobrando o responsável cria FinancialEntry RECEIVABLE
     assert.equal(json.chargeFinancialEntry.id, entry.id);
     assert.equal(json.chargeFinancialEntry.amount, 450.75);
 
-    const listed = await lossCasesService.listLossCases(transaction, {});
+    const listed = await lossCasesService.listLossCases(tenant.groupId, tenant.companyId, transaction, {});
     const row = listed.find((lc) => lc.id === lossCase.id).toJSON();
     assert.equal(row.chargeFinancialEntry.id, entry.id, 'listagem expõe o vínculo caso→lançamento');
   });
@@ -109,7 +109,7 @@ test('§11: aprovador ajusta o valor e atribui o responsável na própria decis�
     );
     const person = await employee(transaction);
 
-    const decided = await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, {
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, {
       chargeResponsible: true,
       responsiblePersonId: person.id,
       chargeAmount: 60,
@@ -126,7 +126,7 @@ test('§11: aprovar SEM cobrança ("ninguém teve culpa") não cria lançamento 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 300 });
-    const decided = await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, { chargeResponsible: false });
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: false });
     assert.equal(decided.status, 'APPROVED');
     const count = await FinancialEntry.count({ where: { idempotencyKey: lossCasesService.lossChargeIdempotencyKey(lossCase.id) }, transaction });
     assert.equal(count, 0);
@@ -140,27 +140,27 @@ test('§11: cobrança exige perda aprovada, responsável real e valor > 0', asyn
 
     const { lossCase: rejected } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(rejected.id, 'REJECTED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(rejected.id, tenant.groupId, tenant.companyId, 'REJECTED', approver(), transaction, { chargeResponsible: true }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_REQUIRES_APPROVAL'
     );
 
     const { lossCase: noResponsible } = await openAssetLossCase(transaction, { estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noResponsible.id, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_RESPONSIBLE_REQUIRED'
     );
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noResponsible.id, 'APPROVED', approver(), transaction, { chargeResponsible: true, responsiblePersonId: '00000000-0000-4000-8000-000000000000' }),
+      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, responsiblePersonId: '00000000-0000-4000-8000-000000000000' }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_RESPONSIBLE_NOT_FOUND'
     );
 
     const { lossCase: noEstimate } = await openAssetLossCase(transaction, { responsiblePersonId: person.id });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noEstimate.id, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_AMOUNT_REQUIRED'
     );
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noEstimate.id, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeAmount: -5 }),
+      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeAmount: -5 }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_AMOUNT_INVALID'
     );
 
@@ -175,7 +175,7 @@ test('§11: cobrança exige inventory:approve (mesma alçada da decisão)', asyn
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(lossCase.id, 'APPROVED', { userId: tenant.userId, canApprove: false }, transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: false }, transaction, { chargeResponsible: true }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_APPROVAL_REQUIRED'
     );
   });
@@ -185,11 +185,11 @@ test('§11: cobrança é idempotente por caso — redecidir/reprocessar nunca du
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 80 });
-    await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, { chargeResponsible: true });
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true });
 
     // Segunda decisão do mesmo caso é bloqueada pela máquina de estados...
     await assert.rejects(
-      () => lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_INVALID_TRANSITION'
     );
     // ...e a chave de idempotência é única no Financeiro.
@@ -237,7 +237,7 @@ test('§11: aprovar sem cobrança mantendo o responsável da abertura não reval
     // responsiblePersonId legado que não é uma Person (dado anterior a esta correção).
     const legacyId = '00000000-0000-4000-8000-0000000000aa';
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: legacyId, estimatedCost: 10 });
-    const decided = await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', approver(), transaction, { responsiblePersonId: legacyId });
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { responsiblePersonId: legacyId });
     assert.equal(decided.status, 'APPROVED');
     assert.equal(decided.responsiblePersonId, legacyId);
   });

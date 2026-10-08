@@ -84,14 +84,14 @@ async function createAwardedOrder(transaction, supplierPersonId, quantity = 10, 
     tenant.userId,
     transaction
   );
-  await procurementService.decidePurchaseRequest(request.id, 'APPROVED', tenant.userId, transaction);
-  const quotation = await procurementService.createQuotation(request.id, tenant.userId, transaction);
+  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+  const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   const offer = await procurementService.submitSupplierOffer(
-    quotation.id,
+    quotation.id, tenant.groupId, tenant.companyId,
     { supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
     transaction
   );
-  const order = await procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction);
+  const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   return { order, location };
 }
 
@@ -99,7 +99,7 @@ async function createAwardedOrder(transaction, supplierPersonId, quantity = 10, 
 // gerou, já apontado para a conta bancária do fornecedor.
 async function receiveAndPointPayableTo(transaction, order, location, receivedQuantity, bankAccountId) {
   const { goodsReceipt } = await procurementService.confirmGoodsReceipt(
-    order.id,
+    order.id, tenant.groupId, tenant.companyId,
     { destinationLocationId: location.id, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity }] },
     actorOf(),
     transaction

@@ -43,50 +43,56 @@ function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
 }
 
+function actorWithTenant(req) {
+  return { userId: req.auth.userId, groupId: req.auth.groupId, companyId: req.auth.companyId };
+}
+
 const createPolicy = catchAsync(async (req, res) => {
   const policy = await req.withTenantTransaction((t) => service.createPolicy(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: policy });
 });
 
 const listPolicies = catchAsync(async (req, res) => {
-  const policies = await req.withTenantTransaction((t) => service.listPolicies({ status: req.query.status, propertyId: req.query.propertyId }, t));
+  const policies = await req.withTenantTransaction((t) =>
+    service.listPolicies({ status: req.query.status, propertyId: req.query.propertyId }, req.auth.groupId, req.auth.companyId, t)
+  );
   return success(res, { data: policies });
 });
 
 const getPolicy = catchAsync(async (req, res) => {
-  const policy = await req.withTenantTransaction((t) => service.getPolicy(req.params.id, t));
+  const policy = await req.withTenantTransaction((t) => service.getPolicy(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: policy });
 });
 
 const quotePolicy = catchAsync(async (req, res) => {
-  const policy = await req.withTenantTransaction((t) => service.quotePolicy(req.params.id, req.body, { userId: req.auth.userId }, t));
+  const policy = await req.withTenantTransaction((t) => service.quotePolicy(req.params.id, req.body, actorWithTenant(req), t));
   return success(res, { data: policy });
 });
 
 const issuePolicy = catchAsync(async (req, res) => {
-  const policy = await req.withTenantTransaction((t) => service.issuePolicy(req.params.id, req.body, { userId: req.auth.userId }, t));
+  const policy = await req.withTenantTransaction((t) => service.issuePolicy(req.params.id, req.body, actorWithTenant(req), t));
   return success(res, { data: policy });
 });
 
 const openClaim = catchAsync(async (req, res) => {
-  const claim = await req.withTenantTransaction((t) => service.openClaim(req.params.id, req.body, { userId: req.auth.userId }, t));
+  const claim = await req.withTenantTransaction((t) => service.openClaim(req.params.id, req.body, actorWithTenant(req), t));
   return success(res, { statusCode: 201, data: claim });
 });
 
 const submitClaim = catchAsync(async (req, res) => {
-  const claim = await req.withTenantTransaction((t) => service.submitClaim(req.params.id, { userId: req.auth.userId }, t));
+  const claim = await req.withTenantTransaction((t) => service.submitClaim(req.params.id, actorWithTenant(req), t));
   return success(res, { data: claim });
 });
 
 const attachPolicyDocument = catchAsync(async (req, res) => {
   const link = await req.withTenantTransaction((t) =>
-    service.attachPolicyDocument(req.params.id, req.body.fileId, { userId: req.auth.userId }, t)
+    service.attachPolicyDocument(req.params.id, req.body.fileId, actorWithTenant(req), t)
   );
   return success(res, { statusCode: 201, data: link });
 });
 
 const listPolicyDocuments = catchAsync(async (req, res) => {
-  const links = await req.withTenantTransaction((t) => service.listPolicyDocuments(req.params.id, t));
+  const links = await req.withTenantTransaction((t) => service.listPolicyDocuments(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: links });
 });
 
@@ -97,7 +103,7 @@ const listPolicyInstallments = catchAsync(async (req, res) => {
 
 const payPolicyInstallment = catchAsync(async (req, res) => {
   const installment = await req.withTenantTransaction((t) =>
-    service.payInsurancePolicyInstallment(req.params.installmentId, req.body.financialEntryId, { userId: req.auth.userId }, t)
+    service.payInsurancePolicyInstallment(req.params.installmentId, req.body.financialEntryId, actorWithTenant(req), t)
   );
   return success(res, { data: installment });
 });

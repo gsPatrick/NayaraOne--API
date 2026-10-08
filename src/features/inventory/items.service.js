@@ -65,25 +65,25 @@ async function createItem(payload, actorUserId, transaction) {
   return item;
 }
 
-async function listItems(transaction, { itemType, status } = {}) {
-  const where = {};
+async function listItems(groupId, companyId, transaction, { itemType, status } = {}) {
+  const where = { groupId, companyId };
   if (status && status !== 'ALL') where.status = status;
   else if (!status) where.status = 'ACTIVE';
   if (itemType) where.itemType = itemType;
   return InventoryItem.findAll({ where, order: [['name', 'ASC']], transaction });
 }
 
-async function getItem(itemId, transaction) {
-  const item = await InventoryItem.findByPk(itemId, { transaction });
+async function getItem(itemId, groupId, companyId, transaction) {
+  const item = await InventoryItem.findOne({ where: { id: itemId, groupId, companyId }, transaction });
   if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
   return item;
 }
 
-async function setItemStatus(itemId, status, actorUserId, transaction) {
+async function setItemStatus(itemId, status, actorUserId, groupId, companyId, transaction) {
   if (!['ACTIVE', 'INACTIVE'].includes(status)) {
     throw AppError.badRequest('"status" precisa ser "ACTIVE" ou "INACTIVE".', 'INVENTORY_ITEM_VALIDATION');
   }
-  const item = await getItem(itemId, transaction);
+  const item = await getItem(itemId, groupId, companyId, transaction);
   item.status = status;
   item.updatedBy = actorUserId || null;
   await item.save({ transaction });
@@ -112,8 +112,8 @@ async function createLocation(payload, actorUserId, transaction) {
   );
 }
 
-async function listLocations(transaction) {
-  return InventoryLocation.findAll({ where: { isActive: true }, order: [['name', 'ASC']], transaction });
+async function listLocations(groupId, companyId, transaction) {
+  return InventoryLocation.findAll({ where: { groupId, companyId, isActive: true }, order: [['name', 'ASC']], transaction });
 }
 
 module.exports = { ITEM_TYPES, LOCATION_TYPES, createItem, listItems, getItem, setItemStatus, createLocation, listLocations };

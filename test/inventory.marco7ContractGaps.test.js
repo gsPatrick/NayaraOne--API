@@ -92,7 +92,7 @@ test('Gap 1 (EST-006): loanTool sem destinationLocationId é recusado', async ()
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction),
+      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('TOOL_LOAN_VALIDATION')
     );
     await asset.reload({ transaction });
@@ -104,7 +104,7 @@ test('Gap 1 (EST-006): loanTool com destino inexistente é recusado com erro de 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: '00000000-0000-4000-8000-000000000000' }, tenant.userId, transaction),
+      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: '00000000-0000-4000-8000-000000000000' }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('INVENTORY_LOCATION_NOT_FOUND')
     );
   });
@@ -117,7 +117,7 @@ test('Gap 1 (EST-006): loanTool registra responsável, destino e data prevista, 
     const asset = await createAsset(transaction, { currentLocationId: origin.id });
     const dueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id, dueAt }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id, dueAt }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.equal(loan.personUserId, tenant.userId);
     assert.equal(loan.destinationLocationId, destination.id);
     assert.equal(loan.sourceLocationId, origin.id);
@@ -203,6 +203,8 @@ test('Gap 3 (§9): venda de patrimônio baixa o asset, gera RECEIVABLE com centr
 
     const result = await assetsService.disposeAsset(
       asset.id,
+      tenant.groupId,
+      tenant.companyId,
       { disposalType: 'SALE', disposalValue: '1250.50', reason: 'Equipamento obsoleto vendido.', evidenceFileIds: [evidence.id], counterpartyName: 'Comprador Ltda' },
       approver,
       transaction
@@ -225,7 +227,7 @@ test('Gap 3 (§9): venda de patrimônio baixa o asset, gera RECEIVABLE com centr
     assert.equal(entry.idempotencyKey, `asset-disposal:${asset.id}`);
 
     // Movimento documentando a saída — origem = local atual, destino = nenhum.
-    const movements = await assetsService.listAssetMovements(asset.id, transaction);
+    const movements = await assetsService.listAssetMovements(asset.id, tenant.groupId, tenant.companyId, transaction);
     const disposalMovement = movements.find((m) => m.movementType === 'DISPOSAL');
     assert.ok(disposalMovement, 'baixa precisa gerar AssetMovement tipo DISPOSAL no histórico');
     assert.equal(disposalMovement.id, result.movement.id);
@@ -259,7 +261,7 @@ test('Gap 3 (§9): descarte sem valor baixa o asset sem lançamento financeiro',
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     const evidence = await createEvidence(transaction);
-    const result = await assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'Quebrado sem conserto (laudo).', evidenceFileIds: [evidence.id] }, approver, transaction);
+    const result = await assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'Quebrado sem conserto (laudo).', evidenceFileIds: [evidence.id] }, approver, transaction);
     assert.equal(result.financialEntry, null);
     assert.equal(result.disposal.financialEntryId, null);
     await asset.reload({ transaction });
@@ -273,7 +275,7 @@ test('Gap 3 (§9): descarte com valor de sucata também gera vínculo financeiro
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     const evidence = await createEvidence(transaction);
-    const result = await assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', disposalValue: 80, reason: 'Vendido como sucata.', evidenceFileIds: [evidence.id] }, approver, transaction);
+    const result = await assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', disposalValue: 80, reason: 'Vendido como sucata.', evidenceFileIds: [evidence.id] }, approver, transaction);
     assert.ok(result.financialEntry);
     assert.equal(Number(result.financialEntry.amount), 80);
   });
@@ -285,18 +287,18 @@ test('Gap 3 (§9): validações do processo de baixa (alçada, tipo, valor, moti
     const evidence = await createEvidence(transaction);
     const base = { disposalType: 'SALE', disposalValue: 100, reason: 'Venda.', evidenceFileIds: [evidence.id] };
 
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, base, operator, transaction), expectCode('ASSET_DISPOSAL_APPROVAL_REQUIRED'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalType: 'SOLD' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalValue: undefined }, approver, transaction), expectCode('ASSET_DISPOSAL_VALUE_REQUIRED'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalValue: 0 }, approver, transaction), expectCode('ASSET_DISPOSAL_VALUE_REQUIRED'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalValue: 'NaN' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalValue: -5 }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, disposalType: 'DONATION' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, reason: '   ' }, approver, transaction), expectCode('ASSET_DISPOSAL_REASON_REQUIRED'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, evidenceFileIds: [] }, approver, transaction), expectCode('ASSET_DISPOSAL_EVIDENCE_REQUIRED'));
-    await assert.rejects(() => assetsService.disposeAsset(asset.id, { ...base, evidenceFileIds: ['nao-e-uuid'] }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, base, operator, transaction), expectCode('ASSET_DISPOSAL_APPROVAL_REQUIRED'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalType: 'SOLD' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalValue: undefined }, approver, transaction), expectCode('ASSET_DISPOSAL_VALUE_REQUIRED'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalValue: 0 }, approver, transaction), expectCode('ASSET_DISPOSAL_VALUE_REQUIRED'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalValue: 'NaN' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalValue: -5 }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, disposalType: 'DONATION' }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, reason: '   ' }, approver, transaction), expectCode('ASSET_DISPOSAL_REASON_REQUIRED'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, evidenceFileIds: [] }, approver, transaction), expectCode('ASSET_DISPOSAL_EVIDENCE_REQUIRED'));
+    await assert.rejects(() => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, evidenceFileIds: ['nao-e-uuid'] }, approver, transaction), expectCode('ASSET_DISPOSAL_VALIDATION'));
     await assert.rejects(
-      () => assetsService.disposeAsset(asset.id, { ...base, evidenceFileIds: ['00000000-0000-4000-8000-000000000000'] }, approver, transaction),
+      () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { ...base, evidenceFileIds: ['00000000-0000-4000-8000-000000000000'] }, approver, transaction),
       expectCode('ASSET_DISPOSAL_EVIDENCE_NOT_FOUND')
     );
 
@@ -309,7 +311,7 @@ test('Gap 3 (§9): doação sem valor é aceita', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     const evidence = await createEvidence(transaction);
-    const result = await assetsService.disposeAsset(asset.id, { disposalType: 'DONATION', reason: 'Doado à ONG X (termo anexo).', evidenceFileIds: [evidence.id] }, approver, transaction);
+    const result = await assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DONATION', reason: 'Doado à ONG X (termo anexo).', evidenceFileIds: [evidence.id] }, approver, transaction);
     assert.equal(result.asset.status, 'DISPOSED');
     assert.equal(result.financialEntry, null);
   });
@@ -320,9 +322,9 @@ test('Gap 3 (§9): não baixa ferramenta emprestada — exige devolução antes'
     const asset = await createAsset(transaction);
     const destination = await createLocation(transaction);
     const evidence = await createEvidence(transaction);
-    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, transaction);
+    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await assert.rejects(
-      () => assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
+      () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
       expectCode('ASSET_DISPOSAL_ASSET_LOANED')
     );
   });
@@ -334,11 +336,11 @@ test('Gap 3 (§9): não baixa patrimônio com OS de manutenção OPEN — exige 
     const evidence = await createEvidence(transaction);
     const order = await maintenanceService.openMaintenanceOrder(withTenant({ assetId: asset.id, description: 'Revisão.' }), tenant.userId, transaction);
     await assert.rejects(
-      () => assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
+      () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
       expectCode('ASSET_DISPOSAL_MAINTENANCE_OPEN')
     );
-    await maintenanceService.closeMaintenanceOrder(order.id, tenant.userId, transaction);
-    const result = await assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'Sem conserto.', evidenceFileIds: [evidence.id] }, approver, transaction);
+    await maintenanceService.closeMaintenanceOrder(order.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    const result = await assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'Sem conserto.', evidenceFileIds: [evidence.id] }, approver, transaction);
     assert.equal(result.asset.status, 'DISPOSED', 'depois de fechar a OS, a baixa é permitida');
   });
 });
@@ -349,7 +351,7 @@ test('Gap 3 (§9): não baixa patrimônio com caso de perda OPEN', async () => {
     const evidence = await createEvidence(transaction);
     await lossCasesService.openLossCase(withTenant({ assetId: asset.id, context: 'Sumiu do canteiro.', evidenceFileIds: [evidence.id] }), tenant.userId, transaction);
     await assert.rejects(
-      () => assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
+      () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
       expectCode('ASSET_DISPOSAL_LOSS_CASE_OPEN')
     );
   });
@@ -360,18 +362,18 @@ test('Gap 3 (§9): patrimônio baixado é terminal — não pode ser baixado de 
     const asset = await createAsset(transaction);
     const destination = await createLocation(transaction);
     const evidence = await createEvidence(transaction);
-    await assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'Fim de vida útil.', evidenceFileIds: [evidence.id] }, approver, transaction);
+    await assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'Fim de vida útil.', evidenceFileIds: [evidence.id] }, approver, transaction);
 
     await assert.rejects(
-      () => assetsService.disposeAsset(asset.id, { disposalType: 'DISCARD', reason: 'de novo', evidenceFileIds: [evidence.id] }, approver, transaction),
+      () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'de novo', evidenceFileIds: [evidence.id] }, approver, transaction),
       expectCode('ASSET_ALREADY_DISPOSED')
     );
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, transaction),
+      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('TOOL_LOAN_ASSET_UNAVAILABLE')
     );
     await assert.rejects(
-      () => assetsService.transferAsset(asset.id, { destinationLocationId: destination.id }, tenant.userId, transaction),
+      () => assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: destination.id }, tenant.userId, transaction),
       expectCode('ASSET_NOT_IN_CIRCULATION')
     );
     await assert.rejects(
@@ -390,7 +392,7 @@ test('Gap 3 (§9): transferAsset recusa idempotencyKey com o prefixo reservado d
     const asset = await createAsset(transaction);
     const destination = await createLocation(transaction);
     await assert.rejects(
-      () => assetsService.transferAsset(asset.id, { destinationLocationId: destination.id, idempotencyKey: `asset-disposal:${asset.id}` }, tenant.userId, transaction),
+      () => assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: destination.id, idempotencyKey: `asset-disposal:${asset.id}` }, tenant.userId, transaction),
       expectCode('ASSET_TRANSFER_VALIDATION')
     );
   });
@@ -429,17 +431,17 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
     await movementsService.recordMovement(withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 2, sourceLocationId: other.id }), approver, transaction);
 
     // Esperado no fechamento == saldo na abertura (10), divergência só reflete a contagem.
-    await countsService.addCountItem(count.id, { inventoryItemId: item.id, countedQuantity: 8 }, transaction);
-    const completed = await countsService.completeCount(count.id, tenant.userId, transaction);
+    await countsService.addCountItem(count.id, tenant.groupId, tenant.companyId, { inventoryItemId: item.id, countedQuantity: 8 }, transaction);
+    const completed = await countsService.completeCount(count.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const line = completed.items.find((l) => l.inventoryItemId === item.id);
     assert.equal(Number(line.expectedQuantity), 10);
     assert.equal(Number(line.divergence), -2);
 
     // Fechada a contagem, o local volta a aceitar movimentos (incluindo o ajuste da divergência).
-    const adjusted = await countsService.applyAdjustment(line.id, approver, transaction);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver, transaction);
     assert.ok(adjusted.adjustmentMovementId);
     await movementsService.recordMovement(withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 1, destinationLocationId: frozen.id }), approver, transaction);
-    assert.equal(await movementsService.getBalance(item.id, frozen.id, transaction), 9);
+    assert.equal(await movementsService.getBalance(item.id, frozen.id, tenant.groupId, tenant.companyId, transaction), 9);
   });
 });
 
@@ -453,11 +455,11 @@ test('Gap 4 (§10): baixa de requisição a partir de almoxarifado em contagem �
       tenant.userId,
       transaction
     );
-    await requisitionsService.decideRequisition(requisition.id, 'APPROVED', tenant.userId, transaction);
+    await requisitionsService.decideRequisition(requisition.id, 'APPROVED', tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await countsService.openCount(withTenant({ locationId: warehouse.id }), tenant.userId, transaction);
 
-    await assert.rejects(() => requisitionsService.issueRequisition(requisition.id, approver, transaction), expectCode('INVENTORY_LOCATION_FROZEN_BY_COUNT'));
-    assert.equal(await movementsService.getBalance(item.id, warehouse.id, transaction), 10);
+    await assert.rejects(() => requisitionsService.issueRequisition(requisition.id, approver, tenant.groupId, tenant.companyId, transaction), expectCode('INVENTORY_LOCATION_FROZEN_BY_COUNT'));
+    assert.equal(await movementsService.getBalance(item.id, warehouse.id, tenant.groupId, tenant.companyId, transaction), 10);
   });
 });
 
@@ -471,7 +473,7 @@ test('Gap 4 (§10): reenvio idempotente de movimento gravado ANTES da contagem d
     await countsService.openCount(withTenant({ locationId: location.id }), tenant.userId, transaction);
     const replay = await movementsService.recordMovement(payload, approver, transaction);
     assert.equal(replay.id, original.id);
-    assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 4);
+    assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 4);
   });
 });
 

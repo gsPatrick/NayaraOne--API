@@ -46,6 +46,7 @@ test('inventory: toolLoanOverdueJob cria Notification real pro responsável quan
       asset.id,
       { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       tenant.userId,
+      tenant.groupId, tenant.companyId,
       transaction
     );
     assert.equal(loan.status, 'OPEN');
@@ -79,6 +80,7 @@ test('inventory: toolLoanOverdueJob é idempotente — rodar de novo não duplic
       asset.id,
       { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       tenant.userId,
+      tenant.groupId, tenant.companyId,
       transaction
     );
 

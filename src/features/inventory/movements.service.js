@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance } = require('../../models');
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -17,7 +17,7 @@ const APPROVAL_REQUIRED_TYPES = ['ADJUSTMENT', 'LOSS', 'DISPOSAL'];
 // ÚNICA função do sistema que deve escrever em inventory.stock_balances.
 async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, groupId, allowNegativeStock, transaction) {
   let balance = await InventoryStockBalance.findOne({
-    where: { inventoryItemId, locationId },
+    where: { inventoryItemId, locationId, groupId, companyId },
     transaction,
     lock: transaction.LOCK.UPDATE,
   });
@@ -65,17 +65,17 @@ async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, 
 // abertura espera o commit dela e, ao destravar, enxerga a contagem OPEN (READ COMMITTED:
 // cada statement vê o que já foi comitado) e é bloqueado. Locais travados em ordem de id pra
 // dois movimentos TRANSFER cruzados nunca formarem deadlock com uma abertura de contagem.
-async function assertLocationsNotFrozenByCount(locationIds, transaction) {
+async function assertLocationsNotFrozenByCount(locationIds, groupId, companyId, transaction) {
   const ids = [...new Set(locationIds.filter(Boolean))].sort();
   if (ids.length === 0) return;
   await InventoryLocation.findAll({
-    where: { id: ids },
+    where: { id: ids, groupId, companyId },
     attributes: ['id'],
     order: [['id', 'ASC']],
     lock: transaction.LOCK.SHARE,
     transaction,
   });
-  const openCount = await InventoryCount.findOne({ where: { locationId: ids, status: 'OPEN' }, transaction });
+  const openCount = await InventoryCount.findOne({ where: { locationId: ids, groupId, companyId, status: 'OPEN' }, transaction });
   if (openCount) {
     throw AppError.conflict(
       `Local em inventário físico (contagem ${openCount.id} aberta) — movimentações neste local ficam bloqueadas até a contagem ser concluída (freeze lógico).`,
@@ -130,7 +130,7 @@ async function recordMovement(payload, actor, transaction) {
     );
   }
 
-  const item = await InventoryItem.findByPk(inventoryItemId, { transaction });
+  const item = await InventoryItem.findOne({ where: { id: inventoryItemId, groupId, companyId }, transaction });
   if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar" — Ciclo 1, auditor Estoque/Patrimônio,
@@ -179,7 +179,17 @@ async function recordMovement(payload, actor, transaction) {
   // evidência nenhuma. Custo desconhecido é RISCO, não ausência de risco: trata averageCost
   // null/0 como "valor não determinável" e aplica o limiar por QUANTIDADE (mesma ordem de
   // grandeza do limiar de valor padrão, na ausência de custo) em vez de pular a checagem.
-  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !evidenceFileId) {
+  // GAP GRAVE CORRIGIDO (auditoria RLS/multi-tenant, 2026-10-08): `evidenceFileId` nunca era
+  // validado contra a tabela File — qualquer string (UUID inventado, ou de OUTRA empresa) era
+  // aceita como "evidência válida" pro REG-EST-002, esvaziando a exigência de comprovação visual.
+  // Mesmo padrão já usado em `lossCases.service.js#openLossCase` (File.findOne/findAll com
+  // companyId no where): se o File não existe (ou não pertence a este tenant), trata como se
+  // evidência não tivesse sido fornecida — reaproveita a mesma validação de alto valor abaixo.
+  let evidenceFile = null;
+  if (evidenceFileId) {
+    evidenceFile = await File.findOne({ where: { id: evidenceFileId, groupId, companyId }, transaction });
+  }
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !evidenceFile) {
     const hasKnownCost = item.averageCost != null && Number(item.averageCost) > 0;
     const estimatedValue = qty * Number(item.averageCost || 0);
     const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
@@ -202,7 +212,7 @@ async function recordMovement(payload, actor, transaction) {
   const touchedLocationIds = [sourceLocationId, destinationLocationId].filter(Boolean);
   if (touchedLocationIds.length > 0 && !projectId) {
     const siteLocations = await InventoryLocation.findAll({
-      where: { id: touchedLocationIds, locationType: 'PROJECT_SITE' },
+      where: { id: touchedLocationIds, groupId, companyId, locationType: 'PROJECT_SITE' },
       transaction,
     });
     if (siteLocations.length > 0) {
@@ -219,7 +229,7 @@ async function recordMovement(payload, actor, transaction) {
   // Caderno §10: freeze lógico durante inventário físico (ver assertLocationsNotFrozenByCount).
   // Depois do retorno idempotente acima: reenvio de um movimento JÁ gravado antes da contagem
   // abrir não é um movimento novo, então devolve o original em vez de falhar.
-  await assertLocationsNotFrozenByCount(touchedLocationIds, transaction);
+  await assertLocationsNotFrozenByCount(touchedLocationIds, groupId, companyId, transaction);
 
   const movement = await InventoryMovement.create(
     {
@@ -238,7 +248,7 @@ async function recordMovement(payload, actor, transaction) {
       movedAt: movedAt || new Date(),
       movedByUserId: actor.userId || null,
       responsiblePersonId: responsiblePersonId || null,
-      evidenceFileId: evidenceFileId || null,
+      evidenceFileId: evidenceFile ? evidenceFile.id : null,
       reason: reason || null,
       createdBy: actor.userId || null,
       updatedBy: actor.userId || null,
@@ -306,14 +316,14 @@ async function recordMovement(payload, actor, transaction) {
   return movement;
 }
 
-async function getBalance(inventoryItemId, locationId, transaction) {
-  const balance = await InventoryStockBalance.findOne({ where: { inventoryItemId, locationId }, transaction });
+async function getBalance(inventoryItemId, locationId, groupId, companyId, transaction) {
+  const balance = await InventoryStockBalance.findOne({ where: { inventoryItemId, locationId, groupId, companyId }, transaction });
   return balance ? Number(balance.quantityOnHand) : 0;
 }
 
-async function listBalancesByItem(inventoryItemId, transaction) {
+async function listBalancesByItem(inventoryItemId, groupId, companyId, transaction) {
   return InventoryStockBalance.findAll({
-    where: { inventoryItemId },
+    where: { inventoryItemId, groupId, companyId },
     include: [{ model: InventoryLocation, as: 'location' }],
     transaction,
   });

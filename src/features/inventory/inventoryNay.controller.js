@@ -19,20 +19,20 @@ const generatePurchaseSuggestions = catchAsync(async (req, res) => {
 
 const listPurchaseSuggestions = catchAsync(async (req, res) => {
   const rows = await req.withTenantTransaction((t) =>
-    inventoryNayService.listPurchaseSuggestions(t, { status: req.query.status, inventoryItemId: req.query.inventoryItemId })
+    inventoryNayService.listPurchaseSuggestions(req.auth.groupId, req.auth.companyId, t, { status: req.query.status, inventoryItemId: req.query.inventoryItemId })
   );
   return success(res, { data: rows });
 });
 
 const approvePurchaseSuggestion = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId };
-  const result = await req.withTenantTransaction((t) => inventoryNayService.approvePurchaseSuggestion(req.params.id, req.body, actor, t));
+  const result = await req.withTenantTransaction((t) => inventoryNayService.approvePurchaseSuggestion(req.params.id, req.auth.groupId, req.auth.companyId, req.body, actor, t));
   return success(res, { statusCode: 201, data: result });
 });
 
 const rejectPurchaseSuggestion = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId };
-  const result = await req.withTenantTransaction((t) => inventoryNayService.rejectPurchaseSuggestion(req.params.id, req.body, actor, t));
+  const result = await req.withTenantTransaction((t) => inventoryNayService.rejectPurchaseSuggestion(req.params.id, req.auth.groupId, req.auth.companyId, req.body, actor, t));
   return success(res, { data: result });
 });
 

@@ -406,8 +406,11 @@ function resolveMinimumForLocation(policy, locationId) {
   return policy.minimumQuantity == null ? null : Number(policy.minimumQuantity);
 }
 
-async function getMinStockPolicyByItemId(inventoryItemId, transaction, actorUserId) {
-  const item = await InventoryItem.findByPk(inventoryItemId, { transaction });
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): findByPk(id) sem filtro de
+// groupId/companyId deixava qualquer tenant resolver (e, por efeito colateral, semear) a
+// política de estoque mínimo de um item de OUTRA empresa só adivinhando o UUID.
+async function getMinStockPolicyByItemId(inventoryItemId, groupId, companyId, transaction, actorUserId) {
+  const item = await InventoryItem.findOne({ where: { id: inventoryItemId, groupId, companyId }, transaction });
   if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
   return getMinStockPolicy(item, transaction, actorUserId);
 }

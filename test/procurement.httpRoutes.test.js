@@ -109,14 +109,14 @@ async function createOpenOrder(supplierPersonId) {
       transaction
     );
     created.requestIds.push(request.id);
-    await procurementService.decidePurchaseRequest(request.id, 'APPROVED', tenant.userId, transaction);
-    const quotation = await procurementService.createQuotation(request.id, tenant.userId, transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
-      quotation.id,
+      quotation.id, tenant.groupId, tenant.companyId,
       { supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 12 }] },
       transaction
     );
-    return procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction);
+    return procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   });
   created.orderIds.push(order.id);
   return order;

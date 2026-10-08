@@ -134,7 +134,7 @@ test('OCR NF: sugestão estruturada casa itens por SKU/nome, marca o que não le
 
     // Nada lançado ainda.
     assert.equal(await countReceipts(transaction), receiptsBefore);
-    const balancesBefore = await movementsService.listBalancesByItem(cimento.id, transaction);
+    const balancesBefore = await movementsService.listBalancesByItem(cimento.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balancesBefore.filter((b) => Number(b.quantityOnHand) !== 0).length, 0, 'sugestão de OCR não mexe em saldo');
 
     // Usuário confere/edita (corrige a quantidade do cimento, descarta a linha não reconhecida)
@@ -158,9 +158,9 @@ test('OCR NF: sugestão estruturada casa itens por SKU/nome, marca o que não le
     assert.equal(receipt.invoiceFileId, result.invoiceFileId);
     assert.equal(Number(receipt.items.find((i) => i.inventoryItemId === cimento.id).quantity), 19, 'vale o que o usuário conferiu, não o que o OCR leu');
 
-    await receiptsService.reviewReceipt(receipt.id, tenant.userId, transaction);
-    await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, transaction);
-    const balances = await movementsService.listBalancesByItem(cimento.id, transaction);
+    await receiptsService.reviewReceipt(receipt.id, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, transaction);
+    const balances = await movementsService.listBalancesByItem(cimento.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(Number(balances.find((b) => b.locationId === warehouse.id).quantityOnHand), 19);
 
     // Reenviar a mesma NF: a sugestão avisa a duplicidade (e o createReceipt continua bloqueando).

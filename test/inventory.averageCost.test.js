@@ -48,8 +48,8 @@ async function receive(transaction, item, location, quantity, unitCost) {
     tenant.userId,
     transaction
   );
-  await receiptsService.reviewReceipt(receipt.id, tenant.userId, transaction);
-  await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, transaction);
+  await receiptsService.reviewReceipt(receipt.id, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+  await receiptsService.confirmReceipt(receipt.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, transaction);
 }
 
 test('EST-011: custo médio ponderado acumula corretamente ao longo de 3 recebimentos com custos diferentes', async () => {

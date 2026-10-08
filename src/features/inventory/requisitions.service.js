@@ -65,7 +65,7 @@ async function createRequisition(payload, actorUserId, transaction) {
   );
 
   for (const line of items) {
-    const item = await InventoryItem.findByPk(line.inventoryItemId, { transaction });
+    const item = await InventoryItem.findOne({ where: { id: line.inventoryItemId, groupId, companyId }, transaction });
     if (!item) throw AppError.notFound(`Item de estoque "${line.inventoryItemId}" não encontrado.`, 'INVENTORY_ITEM_NOT_FOUND');
     await InventoryRequisitionItem.create(
       { groupId, companyId, requisitionId: requisition.id, inventoryItemId: line.inventoryItemId, quantity: line.quantity },
@@ -80,11 +80,12 @@ async function createRequisition(payload, actorUserId, transaction) {
     transaction
   );
 
-  return getRequisition(requisition.id, transaction);
+  return getRequisition(requisition.id, groupId, companyId, transaction);
 }
 
-async function getRequisition(requisitionId, transaction) {
-  const requisition = await InventoryRequisition.findByPk(requisitionId, {
+async function getRequisition(requisitionId, groupId, companyId, transaction) {
+  const requisition = await InventoryRequisition.findOne({
+    where: { id: requisitionId, groupId, companyId },
     include: [{ model: InventoryRequisitionItem, as: 'items' }],
     transaction,
   });
@@ -96,8 +97,8 @@ async function getRequisition(requisitionId, transaction) {
 // nunca incluía os itens (só getRequisition incluía) — a tela de lista só conseguia mostrar o
 // status agregado, nunca quais itens/quantidades foram solicitados, mesmo padrão de bug já
 // corrigido em R52 pra comparação de cotações (só total, nunca item a item).
-async function listRequisitions(transaction, { status, projectId } = {}) {
-  const where = {};
+async function listRequisitions(groupId, companyId, transaction, { status, projectId } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   if (projectId) where.projectId = projectId;
   return InventoryRequisition.findAll({
@@ -108,11 +109,11 @@ async function listRequisitions(transaction, { status, projectId } = {}) {
   });
 }
 
-async function decideRequisition(requisitionId, decision, actorUserId, transaction) {
+async function decideRequisition(requisitionId, decision, actorUserId, groupId, companyId, transaction) {
   if (!['APPROVED', 'REJECTED'].includes(decision)) {
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'INVENTORY_REQUISITION_VALIDATION');
   }
-  const requisition = await InventoryRequisition.findByPk(requisitionId, { transaction, lock: transaction.LOCK.UPDATE });
+  const requisition = await InventoryRequisition.findOne({ where: { id: requisitionId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!requisition) throw AppError.notFound('Requisição não encontrada.', 'INVENTORY_REQUISITION_NOT_FOUND');
   if (requisition.status !== 'REQUESTED') {
     throw AppError.badRequest(`Só é possível decidir uma requisição em REQUESTED (atual: ${requisition.status}).`, 'INVENTORY_REQUISITION_INVALID_TRANSITION');
@@ -124,13 +125,13 @@ async function decideRequisition(requisitionId, decision, actorUserId, transacti
   return requisition;
 }
 
-async function issueRequisition(requisitionId, actor, transaction) {
-  const requisition = await InventoryRequisition.findByPk(requisitionId, { transaction, lock: transaction.LOCK.UPDATE });
+async function issueRequisition(requisitionId, actor, groupId, companyId, transaction) {
+  const requisition = await InventoryRequisition.findOne({ where: { id: requisitionId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!requisition) throw AppError.notFound('Requisição não encontrada.', 'INVENTORY_REQUISITION_NOT_FOUND');
   if (requisition.status !== 'APPROVED') {
     throw AppError.badRequest(`Só é possível entregar uma requisição em APPROVED (atual: ${requisition.status}).`, 'INVENTORY_REQUISITION_INVALID_TRANSITION');
   }
-  const items = await InventoryRequisitionItem.findAll({ where: { requisitionId: requisition.id }, transaction });
+  const items = await InventoryRequisitionItem.findAll({ where: { requisitionId: requisition.id, groupId, companyId }, transaction });
 
   for (const line of items) {
     await recordMovement(

@@ -23,16 +23,16 @@ const createItem = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: item });
 });
 const listItems = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => itemsService.listItems(t, { itemType: req.query.itemType, status: req.query.status }));
+  const items = await req.withTenantTransaction((t) => itemsService.listItems(req.auth.groupId, req.auth.companyId, t, { itemType: req.query.itemType, status: req.query.status }));
   return success(res, { data: items });
 });
 const setItemStatus = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => itemsService.setItemStatus(req.params.id, req.body.status, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => itemsService.setItemStatus(req.params.id, req.body.status, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: item });
 });
 // EST-012 — política de estoque mínimo/reposição (REG-EST-001, Motor de Regras).
 const getItemMinStockRule = catchAsync(async (req, res) => {
-  const policy = await req.withTenantTransaction((t) => minStockRulesService.getMinStockPolicyByItemId(req.params.id, t, req.auth.userId));
+  const policy = await req.withTenantTransaction((t) => minStockRulesService.getMinStockPolicyByItemId(req.params.id, req.auth.groupId, req.auth.companyId, t, req.auth.userId));
   return success(res, { data: policy });
 });
 const createItemMinStockRule = catchAsync(async (req, res) => {
@@ -56,7 +56,7 @@ const createAdjustmentRiskRule = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: rule });
 });
 const getItem = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => itemsService.getItem(req.params.id, t));
+  const item = await req.withTenantTransaction((t) => itemsService.getItem(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: item });
 });
 
@@ -65,7 +65,7 @@ const createLocation = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: location });
 });
 const listLocations = catchAsync(async (req, res) => {
-  const locations = await req.withTenantTransaction((t) => itemsService.listLocations(t));
+  const locations = await req.withTenantTransaction((t) => itemsService.listLocations(req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: locations });
 });
 
@@ -75,7 +75,7 @@ const recordMovement = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: movement });
 });
 const listBalancesByItem = catchAsync(async (req, res) => {
-  const balances = await req.withTenantTransaction((t) => movementsService.listBalancesByItem(req.params.id, t));
+  const balances = await req.withTenantTransaction((t) => movementsService.listBalancesByItem(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: balances });
 });
 
@@ -84,20 +84,20 @@ const createReceipt = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: receipt });
 });
 const listReceipts = catchAsync(async (req, res) => {
-  const receipts = await req.withTenantTransaction((t) => receiptsService.listReceipts(t, { status: req.query.status }));
+  const receipts = await req.withTenantTransaction((t) => receiptsService.listReceipts(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: receipts });
 });
 const getReceipt = catchAsync(async (req, res) => {
-  const receipt = await req.withTenantTransaction((t) => receiptsService.getReceipt(req.params.id, t));
+  const receipt = await req.withTenantTransaction((t) => receiptsService.getReceipt(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: receipt });
 });
 const reviewReceipt = catchAsync(async (req, res) => {
-  const receipt = await req.withTenantTransaction((t) => receiptsService.reviewReceipt(req.params.id, req.auth.userId, t));
+  const receipt = await req.withTenantTransaction((t) => receiptsService.reviewReceipt(req.params.id, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: receipt });
 });
 const confirmReceipt = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const receipt = await req.withTenantTransaction((t) => receiptsService.confirmReceipt(req.params.id, actor, t));
+  const receipt = await req.withTenantTransaction((t) => receiptsService.confirmReceipt(req.params.id, actor, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: receipt });
 });
 
@@ -106,20 +106,20 @@ const createRequisition = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: requisition });
 });
 const listRequisitions = catchAsync(async (req, res) => {
-  const requisitions = await req.withTenantTransaction((t) => requisitionsService.listRequisitions(t, { status: req.query.status, projectId: req.query.projectId }));
+  const requisitions = await req.withTenantTransaction((t) => requisitionsService.listRequisitions(req.auth.groupId, req.auth.companyId, t, { status: req.query.status, projectId: req.query.projectId }));
   return success(res, { data: requisitions });
 });
 const getRequisition = catchAsync(async (req, res) => {
-  const requisition = await req.withTenantTransaction((t) => requisitionsService.getRequisition(req.params.id, t));
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.getRequisition(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: requisition });
 });
 const decideRequisition = catchAsync(async (req, res) => {
-  const requisition = await req.withTenantTransaction((t) => requisitionsService.decideRequisition(req.params.id, req.body.decision, req.auth.userId, t));
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.decideRequisition(req.params.id, req.body.decision, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: requisition });
 });
 const issueRequisition = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const requisition = await req.withTenantTransaction((t) => requisitionsService.issueRequisition(req.params.id, actor, t));
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.issueRequisition(req.params.id, actor, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: requisition });
 });
 
@@ -128,30 +128,30 @@ const createAsset = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: asset });
 });
 const listAssets = catchAsync(async (req, res) => {
-  const assets = await req.withTenantTransaction((t) => assetsService.listAssets(t, { status: req.query.status }));
+  const assets = await req.withTenantTransaction((t) => assetsService.listAssets(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: assets });
 });
 const getAssetByTag = catchAsync(async (req, res) => {
-  const asset = await req.withTenantTransaction((t) => assetsService.getAssetByTag(req.params.tag, t));
+  const asset = await req.withTenantTransaction((t) => assetsService.getAssetByTag(req.params.tag, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: asset });
 });
 const updateAsset = catchAsync(async (req, res) => {
-  const asset = await req.withTenantTransaction((t) => assetsService.updateAsset(req.params.id, req.body, req.auth.userId, t));
+  const asset = await req.withTenantTransaction((t) => assetsService.updateAsset(req.params.id, req.auth.groupId, req.auth.companyId, req.body, req.auth.userId, t));
   return success(res, { data: asset });
 });
 const transferAsset = catchAsync(async (req, res) => {
-  const movement = await req.withTenantTransaction((t) => assetsService.transferAsset(req.params.id, req.body, req.auth.userId, t));
+  const movement = await req.withTenantTransaction((t) => assetsService.transferAsset(req.params.id, req.auth.groupId, req.auth.companyId, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: movement });
 });
 
 const listAssetMovements = catchAsync(async (req, res) => {
-  const movements = await req.withTenantTransaction((t) => assetsService.listAssetMovements(req.params.id, t));
+  const movements = await req.withTenantTransaction((t) => assetsService.listAssetMovements(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: movements });
 });
 
 const disposeAsset = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const result = await req.withTenantTransaction((t) => assetsService.disposeAsset(req.params.id, req.body, actor, t));
+  const result = await req.withTenantTransaction((t) => assetsService.disposeAsset(req.params.id, req.auth.groupId, req.auth.companyId, req.body, actor, t));
   return success(res, { statusCode: 201, data: result });
 });
 const getAssetDisposal = catchAsync(async (req, res) => {
@@ -160,15 +160,15 @@ const getAssetDisposal = catchAsync(async (req, res) => {
 });
 
 const loanTool = catchAsync(async (req, res) => {
-  const loan = await req.withTenantTransaction((t) => toolLoansService.loanTool(req.params.id, req.body, req.auth.userId, t));
+  const loan = await req.withTenantTransaction((t) => toolLoansService.loanTool(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
   return success(res, { statusCode: 201, data: loan });
 });
 const returnTool = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => toolLoansService.returnTool(req.params.id, req.body, req.auth.userId, t));
+  const result = await req.withTenantTransaction((t) => toolLoansService.returnTool(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: result });
 });
 const listToolLoans = catchAsync(async (req, res) => {
-  const loans = await req.withTenantTransaction((t) => toolLoansService.listToolLoans(t, { status: req.query.status, assetId: req.query.assetId }));
+  const loans = await req.withTenantTransaction((t) => toolLoansService.listToolLoans(req.auth.groupId, req.auth.companyId, t, { status: req.query.status, assetId: req.query.assetId }));
   return success(res, { data: loans });
 });
 
@@ -177,11 +177,11 @@ const openMaintenanceOrder = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: order });
 });
 const listMaintenanceOrders = catchAsync(async (req, res) => {
-  const orders = await req.withTenantTransaction((t) => maintenanceService.listMaintenanceOrders(t, { status: req.query.status, assetId: req.query.assetId }));
+  const orders = await req.withTenantTransaction((t) => maintenanceService.listMaintenanceOrders(req.auth.groupId, req.auth.companyId, t, { status: req.query.status, assetId: req.query.assetId }));
   return success(res, { data: orders });
 });
 const closeMaintenanceOrder = catchAsync(async (req, res) => {
-  const order = await req.withTenantTransaction((t) => maintenanceService.closeMaintenanceOrder(req.params.id, req.auth.userId, t));
+  const order = await req.withTenantTransaction((t) => maintenanceService.closeMaintenanceOrder(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
   return success(res, { data: order });
 });
 
@@ -190,7 +190,7 @@ const openLossCase = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: lossCase });
 });
 const listLossCases = catchAsync(async (req, res) => {
-  const lossCases = await req.withTenantTransaction((t) => lossCasesService.listLossCases(t, { status: req.query.status }));
+  const lossCases = await req.withTenantTransaction((t) => lossCasesService.listLossCases(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: lossCases });
 });
 const decideLossCase = catchAsync(async (req, res) => {
@@ -199,7 +199,7 @@ const decideLossCase = catchAsync(async (req, res) => {
   // (lançamento a receber no Financeiro) — ver lossCases.service.js.
   const { chargeResponsible, responsiblePersonId, chargeAmount, chargeDueAt } = req.body || {};
   const lossCase = await req.withTenantTransaction((t) =>
-    lossCasesService.decideLossCase(req.params.id, req.body.decision, actor, t, { chargeResponsible, responsiblePersonId, chargeAmount, chargeDueAt })
+    lossCasesService.decideLossCase(req.params.id, req.auth.groupId, req.auth.companyId, req.body.decision, actor, t, { chargeResponsible, responsiblePersonId, chargeAmount, chargeDueAt })
   );
   return success(res, { data: lossCase });
 });
@@ -209,24 +209,24 @@ const openCount = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: count });
 });
 const listCounts = catchAsync(async (req, res) => {
-  const counts = await req.withTenantTransaction((t) => countsService.listCounts(t, { status: req.query.status }));
+  const counts = await req.withTenantTransaction((t) => countsService.listCounts(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: counts });
 });
 const getCount = catchAsync(async (req, res) => {
-  const count = await req.withTenantTransaction((t) => countsService.getCount(req.params.id, t));
+  const count = await req.withTenantTransaction((t) => countsService.getCount(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: count });
 });
 const addCountItem = catchAsync(async (req, res) => {
-  const line = await req.withTenantTransaction((t) => countsService.addCountItem(req.params.id, req.body, t));
+  const line = await req.withTenantTransaction((t) => countsService.addCountItem(req.params.id, req.auth.groupId, req.auth.companyId, req.body, t));
   return success(res, { statusCode: 201, data: line });
 });
 const completeCount = catchAsync(async (req, res) => {
-  const count = await req.withTenantTransaction((t) => countsService.completeCount(req.params.id, req.auth.userId, t));
+  const count = await req.withTenantTransaction((t) => countsService.completeCount(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
   return success(res, { data: count });
 });
 const applyCountAdjustment = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const line = await req.withTenantTransaction((t) => countsService.applyAdjustment(req.params.countItemId, actor, t, req.body?.evidenceFileId));
+  const line = await req.withTenantTransaction((t) => countsService.applyAdjustment(req.params.countItemId, req.auth.groupId, req.auth.companyId, actor, t, req.body?.evidenceFileId));
   return success(res, { data: line });
 });
 

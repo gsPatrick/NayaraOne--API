@@ -48,14 +48,19 @@ async function openCount(payload, actorUserId, transaction) {
 // `Number(countedQuantity) < 0`, falso para NaN — countedQuantity:"NaN" passava (Postgres NUMERIC
 // aceita o literal 'NaN'), persistindo divergence=NaN sem caminho de correção via API (todo
 // applyAdjustment subsequente falhava sem apontar a causa real).
-async function addCountItem(countId, payload, transaction) {
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): findByPk(id) sem filtro de
+// groupId/companyId em addCountItem/completeCount/getCount/applyAdjustment deixava qualquer
+// tenant ler ou agir sobre o inventário de OUTRA empresa só adivinhando o UUID. Projeto não usa
+// RLS real do Postgres — isolamento é 100% a cargo do filtro manual no where, que faltava aqui
+// (mesmo padrão já corrigido em materialRequests.service.js/adjustmentRiskRules.service.js).
+async function addCountItem(countId, groupId, companyId, payload, transaction) {
   const { inventoryItemId, countedQuantity } = payload;
   if (!inventoryItemId || countedQuantity == null || !Number.isFinite(Number(countedQuantity)) || Number(countedQuantity) < 0) {
     throw AppError.badRequest('"inventoryItemId" e "countedQuantity" (>= 0) são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
   }
   // FOR SHARE: serializa com completeCount (FOR UPDATE na mesma linha) — uma linha contada não
   // pode entrar depois do fechamento já ter calculado as divergências.
-  const count = await InventoryCount.findByPk(countId, { transaction, lock: transaction.LOCK.SHARE });
+  const count = await InventoryCount.findOne({ where: { id: countId, groupId, companyId }, transaction, lock: transaction.LOCK.SHARE });
   if (!count) throw AppError.notFound('Inventário não encontrado.', 'INVENTORY_COUNT_NOT_FOUND');
   if (count.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível contar itens em um inventário OPEN (atual: ${count.status}).`, 'INVENTORY_COUNT_INVALID_TRANSITION');
@@ -73,8 +78,8 @@ async function addCountItem(countId, payload, transaction) {
   return line;
 }
 
-async function completeCount(countId, actorUserId, transaction) {
-  const count = await InventoryCount.findByPk(countId, { transaction, lock: transaction.LOCK.UPDATE });
+async function completeCount(countId, groupId, companyId, actorUserId, transaction) {
+  const count = await InventoryCount.findOne({ where: { id: countId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!count) throw AppError.notFound('Inventário não encontrado.', 'INVENTORY_COUNT_NOT_FOUND');
   if (count.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível fechar um inventário OPEN (atual: ${count.status}).`, 'INVENTORY_COUNT_INVALID_TRANSITION');
@@ -107,17 +112,17 @@ async function completeCount(countId, actorUserId, transaction) {
     transaction
   );
 
-  return getCount(count.id, transaction);
+  return getCount(count.id, groupId, companyId, transaction);
 }
 
-async function getCount(countId, transaction) {
-  const count = await InventoryCount.findByPk(countId, { include: [{ model: InventoryCountItem, as: 'items' }], transaction });
+async function getCount(countId, groupId, companyId, transaction) {
+  const count = await InventoryCount.findOne({ where: { id: countId, groupId, companyId }, include: [{ model: InventoryCountItem, as: 'items' }], transaction });
   if (!count) throw AppError.notFound('Inventário não encontrado.', 'INVENTORY_COUNT_NOT_FOUND');
   return count;
 }
 
-async function listCounts(transaction, { status } = {}) {
-  const where = {};
+async function listCounts(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   return InventoryCount.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
@@ -131,18 +136,18 @@ async function listCounts(transaction, { status } = {}) {
 // informar evidência, o que quebraria todo ajuste de contagem de alto valor. evidenceFileId
 // agora é opcional aqui (continua sendo exigido só quando o valor estimado cruzar o limiar,
 // validação feita dentro de recordMovement) e propagado pro controller/rota/front.
-async function applyAdjustment(countItemId, actor, transaction, evidenceFileId) {
+async function applyAdjustment(countItemId, groupId, companyId, actor, transaction, evidenceFileId) {
   if (!actor.canApprove) {
     throw AppError.forbidden('Aplicar ajuste de inventário exige a permissão inventory:approve.', 'INVENTORY_COUNT_APPROVAL_REQUIRED');
   }
-  const line = await InventoryCountItem.findByPk(countItemId, { transaction, lock: transaction.LOCK.UPDATE });
+  const line = await InventoryCountItem.findOne({ where: { id: countItemId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!line) throw AppError.notFound('Linha de contagem não encontrada.', 'INVENTORY_COUNT_ITEM_NOT_FOUND');
   if (line.adjustmentMovementId) return line;
   if (line.divergence == null || Number(line.divergence) === 0) {
     throw AppError.badRequest('Esta linha não tem divergência a ajustar.', 'INVENTORY_COUNT_NO_DIVERGENCE');
   }
 
-  const count = await InventoryCount.findByPk(line.countId, { transaction });
+  const count = await InventoryCount.findOne({ where: { id: line.countId, groupId, companyId }, transaction });
   const divergence = Number(line.divergence);
 
   const movement = await recordMovement(

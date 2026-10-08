@@ -534,8 +534,8 @@ function serializeSuggestion(rec) {
   };
 }
 
-async function listPurchaseSuggestions(transaction, { status, inventoryItemId } = {}) {
-  const where = { recommendationType: RECOMMENDATION_TYPE_PURCHASE };
+async function listPurchaseSuggestions(groupId, companyId, transaction, { status, inventoryItemId } = {}) {
+  const where = { groupId, companyId, recommendationType: RECOMMENDATION_TYPE_PURCHASE };
   if (status && status !== 'ALL') where.status = status;
   else if (!status) where.status = 'PENDING';
   if (inventoryItemId) where.relatedEntityId = inventoryItemId;
@@ -547,8 +547,12 @@ async function listPurchaseSuggestions(transaction, { status, inventoryItemId } 
   return rows.map(serializeSuggestion).sort((a, b) => rank(a) - rank(b));
 }
 
-async function lockPendingSuggestion(suggestionId, transaction) {
-  const rec = await AiRecommendation.findByPk(suggestionId, { transaction, lock: transaction.LOCK.UPDATE });
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): findByPk(id) sem filtro de
+// groupId/companyId deixava qualquer tenant aprovar/rejeitar a sugestão de compra de OUTRA
+// empresa (e, via approvePurchaseSuggestion, abrir uma requisição de compra real nela) só
+// adivinhando o UUID. Isolamento é 100% manual aqui (sem RLS real do Postgres).
+async function lockPendingSuggestion(suggestionId, groupId, companyId, transaction) {
+  const rec = await AiRecommendation.findOne({ where: { id: suggestionId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!rec || rec.recommendationType !== RECOMMENDATION_TYPE_PURCHASE) {
     throw AppError.notFound('Sugestão de compra não encontrada.', 'INVENTORY_NAY_SUGGESTION_NOT_FOUND');
   }
@@ -564,9 +568,9 @@ async function lockPendingSuggestion(suggestionId, transaction) {
  * service de Compras já existente — que segue o próprio workflow de aprovação antes de virar
  * cotação/pedido. O humano pode ajustar a quantidade sugerida.
  */
-async function approvePurchaseSuggestion(suggestionId, payload, actor, transaction) {
+async function approvePurchaseSuggestion(suggestionId, groupId, companyId, payload, actor, transaction) {
   const { quantity, notes, projectId } = payload || {};
-  const rec = await lockPendingSuggestion(suggestionId, transaction);
+  const rec = await lockPendingSuggestion(suggestionId, groupId, companyId, transaction);
   const data = rec.payloadJson || {};
 
   const finalQuantity = quantity != null && quantity !== '' ? Number(quantity) : Number(data.suggestedQuantity);
@@ -633,9 +637,9 @@ async function approvePurchaseSuggestion(suggestionId, payload, actor, transacti
   return { suggestion: serializeSuggestion(rec), purchaseRequest };
 }
 
-async function rejectPurchaseSuggestion(suggestionId, payload, actor, transaction) {
+async function rejectPurchaseSuggestion(suggestionId, groupId, companyId, payload, actor, transaction) {
   const { reason } = payload || {};
-  const rec = await lockPendingSuggestion(suggestionId, transaction);
+  const rec = await lockPendingSuggestion(suggestionId, groupId, companyId, transaction);
   rec.status = 'REJECTED';
   rec.decidedByUserId = actor.userId || null;
   rec.updatedBy = actor.userId || null;

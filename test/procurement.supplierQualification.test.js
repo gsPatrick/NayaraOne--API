@@ -41,17 +41,17 @@ async function offerFromApprovedHighRiskSupplier(transaction, validUntil) {
     tenant.userId,
     transaction
   );
-  await procurementService.decideSupplierDueDiligence(qualification.id, { decision: 'APPROVED' }, { userId: tenant.userId }, transaction);
+  await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: tenant.userId }, transaction);
 
   const request = await procurementService.createPurchaseRequest(
     withTenant({ items: [{ description: `QA vigência item ${uniqueSuffix()}`, quantity: 2 }] }),
     tenant.userId,
     transaction
   );
-  await procurementService.decidePurchaseRequest(request.id, 'APPROVED', tenant.userId, transaction);
-  const quotation = await procurementService.createQuotation(request.id, tenant.userId, transaction);
+  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+  const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   return procurementService.submitSupplierOffer(
-    quotation.id,
+    quotation.id, tenant.groupId, tenant.companyId,
     { supplierPersonId: supplier.id, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 10 }] },
     transaction
   );
@@ -60,7 +60,7 @@ async function offerFromApprovedHighRiskSupplier(transaction, validUntil) {
 test('Due diligence: vigência que termina HOJE ainda permite adjudicar (último dia incluso)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const offer = await offerFromApprovedHighRiskSupplier(transaction, saoPauloDate(0));
-    const order = await procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction);
+    const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     assert.equal(order.status, 'OPEN');
   });
 });
@@ -69,7 +69,7 @@ test('Due diligence: vigência que terminou ONTEM bloqueia a adjudicação mesmo
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const offer = await offerFromApprovedHighRiskSupplier(transaction, saoPauloDate(-1));
     await assert.rejects(
-      () => procurementService.awardSupplierOffer(offer.id, tenant.userId, transaction),
+      () => procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'SUPPLIER_DUE_DILIGENCE_REQUIRED'); return true; }
     );
   });

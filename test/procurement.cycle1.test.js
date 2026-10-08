@@ -59,7 +59,7 @@ test('CICLO1-COMPRAS-01: duas chamadas concorrentes de createQuotation para a me
     );
     requestId = request.id;
 
-    await withCommittedTenantTransaction((t) => procurementService.decidePurchaseRequest(requestId, 'APPROVED', tenant.userId, t));
+    await withCommittedTenantTransaction((t) => procurementService.decidePurchaseRequest(requestId, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, t));
 
     // Barreira: força as duas transações a terminarem a leitura (findByPk + lock) antes de
     // qualquer uma seguir para a criação — reproduz a corrida de verdade independentemente da
@@ -90,7 +90,7 @@ test('CICLO1-COMPRAS-01: duas chamadas concorrentes de createQuotation para a me
     };
 
     const chamada = async () =>
-      withCommittedTenantTransaction((t) => procurementService.createQuotation(requestId, tenant.userId, t));
+      withCommittedTenantTransaction((t) => procurementService.createQuotation(requestId, tenant.groupId, tenant.companyId, tenant.userId, t));
 
     let resultados;
     try {

@@ -58,7 +58,7 @@ test('RLS Insurance Hub: UPDATE direta em apólice de outra empresa é bloqueada
       replacements: { companyId: tenant.companyId },
       transaction,
     });
-    const reloaded = await insuranceService.getPolicy(policy.id, transaction);
+    const reloaded = await insuranceService.getPolicy(policy.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(reloaded.status, 'DRAFT', 'status original precisa continuar intacto após a tentativa de escrita cross-tenant');
   });
 });

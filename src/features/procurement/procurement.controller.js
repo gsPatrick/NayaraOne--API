@@ -13,61 +13,61 @@ const createPurchaseRequest = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: request });
 });
 const listPurchaseRequests = catchAsync(async (req, res) => {
-  const requests = await req.withTenantTransaction((t) => service.listPurchaseRequests(t, { status: req.query.status }));
+  const requests = await req.withTenantTransaction((t) => service.listPurchaseRequests(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: requests });
 });
 const getPurchaseRequest = catchAsync(async (req, res) => {
-  const request = await req.withTenantTransaction((t) => service.getPurchaseRequest(req.params.id, t));
+  const request = await req.withTenantTransaction((t) => service.getPurchaseRequest(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: request });
 });
 const decidePurchaseRequest = catchAsync(async (req, res) => {
-  const request = await req.withTenantTransaction((t) => service.decidePurchaseRequest(req.params.id, req.body.decision, req.auth.userId, t));
+  const request = await req.withTenantTransaction((t) => service.decidePurchaseRequest(req.params.id, req.auth.groupId, req.auth.companyId, req.body.decision, req.auth.userId, t));
   return success(res, { data: request });
 });
 
 const createQuotation = catchAsync(async (req, res) => {
-  const quotation = await req.withTenantTransaction((t) => service.createQuotation(req.params.id, req.auth.userId, t));
+  const quotation = await req.withTenantTransaction((t) => service.createQuotation(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
   return success(res, { statusCode: 201, data: quotation });
 });
 const submitSupplierOffer = catchAsync(async (req, res) => {
-  const offer = await req.withTenantTransaction((t) => service.submitSupplierOffer(req.params.id, req.body, t));
+  const offer = await req.withTenantTransaction((t) => service.submitSupplierOffer(req.params.id, req.auth.groupId, req.auth.companyId, req.body, t));
   return success(res, { statusCode: 201, data: offer });
 });
 const compareOffers = catchAsync(async (req, res) => {
-  const offers = await req.withTenantTransaction((t) => service.compareOffers(req.params.id, t));
+  const offers = await req.withTenantTransaction((t) => service.compareOffers(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: offers });
 });
 const awardSupplierOffer = catchAsync(async (req, res) => {
-  const order = await req.withTenantTransaction((t) => service.awardSupplierOffer(req.params.id, req.auth.userId, t));
+  const order = await req.withTenantTransaction((t) => service.awardSupplierOffer(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
   return success(res, { statusCode: 201, data: order });
 });
 
 const listPurchaseOrders = catchAsync(async (req, res) => {
-  const orders = await req.withTenantTransaction((t) => service.listPurchaseOrders(t, { status: req.query.status }));
+  const orders = await req.withTenantTransaction((t) => service.listPurchaseOrders(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: orders });
 });
 const getPurchaseOrder = catchAsync(async (req, res) => {
-  const order = await req.withTenantTransaction((t) => service.getPurchaseOrder(req.params.id, t));
+  const order = await req.withTenantTransaction((t) => service.getPurchaseOrder(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: order });
 });
 const confirmGoodsReceipt = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const result = await req.withTenantTransaction((t) => service.confirmGoodsReceipt(req.params.id, req.body, actor, t));
+  const result = await req.withTenantTransaction((t) => service.confirmGoodsReceipt(req.params.id, req.auth.groupId, req.auth.companyId, req.body, actor, t));
   return success(res, { statusCode: 201, data: result });
 });
 const listGoodsReceipts = catchAsync(async (req, res) => {
-  const receipts = await req.withTenantTransaction((t) => service.listGoodsReceipts(t, { purchaseOrderId: req.params.id }));
+  const receipts = await req.withTenantTransaction((t) => service.listGoodsReceipts(req.auth.groupId, req.auth.companyId, t, { purchaseOrderId: req.params.id }));
   return success(res, { data: receipts });
 });
 
 const listDiscrepancies = catchAsync(async (req, res) => {
-  const discrepancies = await req.withTenantTransaction((t) => service.listDiscrepancies(t, { status: req.query.status }));
+  const discrepancies = await req.withTenantTransaction((t) => service.listDiscrepancies(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
   return success(res, { data: discrepancies });
 });
 
 const resolveDiscrepancy = catchAsync(async (req, res) => {
   const discrepancy = await req.withTenantTransaction((t) =>
-    service.resolveDiscrepancy(req.params.id, req.body, { userId: req.auth.userId }, t)
+    service.resolveDiscrepancy(req.params.id, req.auth.groupId, req.auth.companyId, req.body, { userId: req.auth.userId }, t)
   );
   return success(res, { data: discrepancy });
 });
@@ -83,7 +83,7 @@ const listSupplierEvaluations = catchAsync(async (req, res) => {
 });
 
 const cancelPurchaseOrder = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => service.cancelPurchaseOrder(req.params.id, req.body, { userId: req.auth.userId }, t));
+  const result = await req.withTenantTransaction((t) => service.cancelPurchaseOrder(req.params.id, req.auth.groupId, req.auth.companyId, req.body, { userId: req.auth.userId }, t));
   return success(res, { data: result });
 });
 
@@ -94,13 +94,13 @@ const upsertSupplierQualification = catchAsync(async (req, res) => {
 
 const decideSupplierDueDiligence = catchAsync(async (req, res) => {
   const qualification = await req.withTenantTransaction((t) =>
-    service.decideSupplierDueDiligence(req.params.id, req.body, { userId: req.auth.userId }, t)
+    service.decideSupplierDueDiligence(req.params.id, req.auth.groupId, req.auth.companyId, req.body, { userId: req.auth.userId }, t)
   );
   return success(res, { data: qualification });
 });
 
 const listSupplierQualifications = catchAsync(async (req, res) => {
-  const qualifications = await req.withTenantTransaction((t) => service.listSupplierQualifications(t, { supplierPersonId: req.query.supplierPersonId }));
+  const qualifications = await req.withTenantTransaction((t) => service.listSupplierQualifications(req.auth.groupId, req.auth.companyId, t, { supplierPersonId: req.query.supplierPersonId }));
   return success(res, { data: qualifications });
 });
 

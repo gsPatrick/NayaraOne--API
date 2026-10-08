@@ -41,7 +41,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA').toString('base64'), category: 'generic' }),
@@ -56,7 +56,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
     );
     assert.equal(lossCase.status, 'OPEN');
 
-    const decided = await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
     assert.equal(decided.status, 'APPROVED');
 
     await asset.reload({ transaction });
@@ -64,7 +64,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
     assert.equal(asset.assignedToUserId, null, 'custodiante precisa ser limpo — a perda já foi formalizada');
 
     await assert.rejects(
-      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction),
+      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_ASSET_UNAVAILABLE');
@@ -96,7 +96,7 @@ test('inventory: REJECTAR um loss_case de Asset não altera o status do patrimô
       transaction
     );
 
-    await lossCasesService.decideLossCase(lossCase.id, 'REJECTED', { userId: tenant.userId, canApprove: true }, transaction);
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'REJECTED', { userId: tenant.userId, canApprove: true }, transaction);
 
     await asset.reload({ transaction });
     assert.equal(asset.status, 'AVAILABLE', 'rejeitar o caso não pode alterar o asset');
@@ -115,7 +115,7 @@ test('inventory: aprovar a perda de um Asset ainda emprestado fecha o loan e blo
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.equal(loan.status, 'OPEN');
 
     const file = await filesService.uploadFile(
@@ -128,13 +128,13 @@ test('inventory: aprovar a perda de um Asset ainda emprestado fecha o loan e blo
       tenant.userId,
       transaction
     );
-    await lossCasesService.decideLossCase(lossCase.id, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
 
     await loan.reload({ transaction });
     assert.equal(loan.status, 'LOST', 'empréstimo aberto precisa ser fechado (não fica "esquecido" OPEN) quando a perda do asset é aprovada');
 
     await assert.rejects(
-      () => toolLoansService.returnTool(loan.id, { conditionCode: 'OK' }, tenant.userId, transaction),
+      () => toolLoansService.returnTool(loan.id, { conditionCode: 'OK' }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_INVALID_TRANSITION');

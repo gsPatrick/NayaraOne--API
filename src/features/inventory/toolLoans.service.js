@@ -1,6 +1,6 @@
 'use strict';
 
-const { Asset, InventoryLocation, InventoryToolLoan } = require('../../models');
+const { Asset, InventoryLocation, InventoryLossCase, InventoryToolLoan } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { openMaintenanceOrder } = require('./maintenance.service');
@@ -10,7 +10,7 @@ const CONDITION_CODES = ['OK', 'DAMAGED'];
 
 // Guia do Marcelo §6/§7: loanTool exige asset AVAILABLE (EST-TS-05: ferramenta já emprestada
 // não pode sair de novo); returnTool exige condition_code e abre manutenção se DAMAGED.
-async function loanTool(assetId, payload, actorUserId, transaction) {
+async function loanTool(assetId, payload, actorUserId, groupId, companyId, transaction) {
   const { personUserId, destinationLocationId, dueAt } = payload;
   if (!personUserId) {
     throw AppError.badRequest('"personUserId" é obrigatório (EST-006: responsável pela saída).', 'TOOL_LOAN_VALIDATION');
@@ -22,15 +22,23 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
   if (!destinationLocationId) {
     throw AppError.badRequest('"destinationLocationId" é obrigatório (EST-006: destino da saída).', 'TOOL_LOAN_VALIDATION');
   }
-  const destination = await InventoryLocation.findByPk(destinationLocationId, { transaction });
+  const destination = await InventoryLocation.findOne({ where: { id: destinationLocationId, groupId, companyId }, transaction });
   if (!destination) {
     throw AppError.notFound('Local de destino não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
   }
 
-  const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (asset.status !== 'AVAILABLE') {
     throw AppError.badRequest(`Ferramenta indisponível para empréstimo (status atual: ${asset.status}) — EST-TS-05.`, 'TOOL_LOAN_ASSET_UNAVAILABLE');
+  }
+  // GAP REAL CORRIGIDO (auditoria Marco 7, 2026-10-08): mesmo padrão de guarda que disposeAsset
+  // já usa pra bloquear baixa com loss case aberto — um asset com InventoryLossCase OPEN está em
+  // apuração de perda/extravio; emprestá-lo de novo antes da decisão humana contradiria o
+  // próprio caso em andamento (o item "perdido" sairia de novo pra campo).
+  const openLossCase = await InventoryLossCase.findOne({ where: { assetId, status: 'OPEN' }, transaction });
+  if (openLossCase) {
+    throw AppError.conflict('Existe um caso de perda aberto para este patrimônio — decida-o antes de emprestar.', 'TOOL_LOAN_LOSS_CASE_OPEN');
   }
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 22, 2026-10-05): EST-006 exige que a
@@ -71,13 +79,13 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
   return loan;
 }
 
-async function returnTool(loanId, payload, actorUserId, transaction) {
+async function returnTool(loanId, payload, actorUserId, groupId, companyId, transaction) {
   const { conditionCode } = payload;
   if (!conditionCode || !CONDITION_CODES.includes(conditionCode)) {
     throw AppError.badRequest(`"conditionCode" precisa ser um de: ${CONDITION_CODES.join(', ')}.`, 'TOOL_LOAN_VALIDATION');
   }
 
-  const loan = await InventoryToolLoan.findByPk(loanId, { transaction, lock: transaction.LOCK.UPDATE });
+  const loan = await InventoryToolLoan.findOne({ where: { id: loanId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!loan) throw AppError.notFound('Empréstimo não encontrado.', 'TOOL_LOAN_NOT_FOUND');
   // OVERDUE é só um estado de alerta do mesmo empréstimo aberto (ver toolLoanOverdueJob.js) —
   // devolução continua válida depois do vencimento, só não pode repetir sobre um já RETURNED.
@@ -91,7 +99,7 @@ async function returnTool(loanId, payload, actorUserId, transaction) {
   loan.updatedBy = actorUserId || null;
   await loan.save({ transaction });
 
-  const asset = await Asset.findByPk(loan.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+  const asset = await Asset.findOne({ where: { id: loan.assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   // Defesa em profundidade (rodada 30): decideLossCase já fecha o loan como 'LOST' ao aprovar
   // a perda do asset (o que já bloqueia este returnTool pela whitelist OPEN/OVERDUE acima), mas
   // esta checagem direta no asset garante que nenhum caminho de dados legado/futuro consiga
@@ -136,8 +144,8 @@ async function returnTool(loanId, payload, actorUserId, transaction) {
   return { loan, maintenanceOrder };
 }
 
-async function listToolLoans(transaction, { status, assetId } = {}) {
-  const where = {};
+async function listToolLoans(groupId, companyId, transaction, { status, assetId } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   if (assetId) where.assetId = assetId;
   return InventoryToolLoan.findAll({ where, order: [['created_at', 'DESC']], transaction });

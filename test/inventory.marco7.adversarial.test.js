@@ -98,7 +98,7 @@ for (const movementType of ['ADJUSTMENT', 'LOSS', 'DISPOSAL']) {
 
         const count = await InventoryMovement.count({ where: { inventoryItemId: item.id, movementType }, transaction });
         assert.equal(count, 0, 'nenhum movimento pode ter sido gravado');
-        assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 10, 'saldo intacto');
+        assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 10, 'saldo intacto');
       });
     });
   }
@@ -113,7 +113,7 @@ test('EST-TS-07 (controle positivo): ADJUSTMENT com motivo e inventory:approve �
       transaction
     );
     assert.equal(movement.reason, 'Sobra encontrada na conferência');
-    assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 12);
+    assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 12);
   });
 });
 
@@ -144,12 +144,12 @@ test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só 
     const movementsBefore = await InventoryMovement.count({ where: { inventoryItemId: item.id }, transaction });
 
     const count = await countsService.openCount(withTenant({ locationId: location.id }), tenant.userId, transaction);
-    const line = await countsService.addCountItem(count.id, { inventoryItemId: item.id, countedQuantity: 7 }, transaction);
+    const line = await countsService.addCountItem(count.id, tenant.groupId, tenant.companyId, { inventoryItemId: item.id, countedQuantity: 7 }, transaction);
 
     const balanceBefore = await readBalanceRow(item.id, location.id, transaction);
     assert.equal(balanceBefore.qty, 10);
 
-    const completed = await countsService.completeCount(count.id, tenant.userId, transaction);
+    const completed = await countsService.completeCount(count.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     assert.equal(completed.status, 'COMPLETED');
     const completedLine = completed.items.find((l) => l.id === line.id);
     assert.equal(Number(completedLine.expectedQuantity), 10, 'expected travado no saldo do sistema');
@@ -165,13 +165,13 @@ test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só 
     );
 
     // Sem alçada: proposta continua proposta.
-    await assert.rejects(() => countsService.applyAdjustment(line.id, operator(), transaction), expectCode('INVENTORY_COUNT_APPROVAL_REQUIRED'));
+    await assert.rejects(() => countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, operator(), transaction), expectCode('INVENTORY_COUNT_APPROVAL_REQUIRED'));
     assert.deepEqual(await readBalanceRow(item.id, location.id, transaction), balanceBefore, 'applyAdjustment sem inventory:approve não altera o saldo');
 
     // Com alçada: ajuste efetivado via ledger.
-    const adjusted = await countsService.applyAdjustment(line.id, approver(), transaction);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver(), transaction);
     assert.ok(adjusted.adjustmentMovementId, 'linha fica vinculada ao movimento de ajuste');
-    assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 7, 'saldo só muda aqui, para o valor contado');
+    assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 7, 'saldo só muda aqui, para o valor contado');
 
     const movement = await InventoryMovement.findByPk(adjusted.adjustmentMovementId, { transaction });
     assert.equal(movement.movementType, 'ADJUSTMENT');
@@ -182,8 +182,8 @@ test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só 
     assert.ok(movement.reason && movement.reason.trim().length > 0, 'ajuste de contagem leva motivo');
 
     // Re-aplicar é idempotente (não debita de novo).
-    await countsService.applyAdjustment(line.id, approver(), transaction);
-    assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 7, 're-aplicar o mesmo ajuste não duplica');
+    await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver(), transaction);
+    assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 7, 're-aplicar o mesmo ajuste não duplica');
     assert.equal(await InventoryMovement.count({ where: { inventoryItemId: item.id, movementType: 'ADJUSTMENT' }, transaction }), 1);
   });
 });
@@ -201,7 +201,7 @@ for (const [label, evidenceFileIds] of [['ausente', undefined], ['array vazio', 
 
       await assert.rejects(() => lossCasesService.openLossCase(withTenant(payload), tenant.userId, transaction), expectCode('LOSS_CASE_EVIDENCE_REQUIRED'));
       assert.equal(await InventoryLossCase.count({ where: { inventoryItemId: item.id }, transaction }), 0, 'nenhum loss_case gravado');
-      assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 5, 'saldo intacto');
+      assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 5, 'saldo intacto');
     });
   });
 }
@@ -220,7 +220,7 @@ test('EST-TS-10 (controle positivo): openLossCase com evidência real (arquivo e
       transaction
     );
     assert.equal(lossCase.status, 'OPEN');
-    assert.equal(await movementsService.getBalance(item.id, location.id, transaction), 5, 'abrir o caso não baixa estoque (só a decisão aprovada)');
+    assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 5, 'abrir o caso não baixa estoque (só a decisão aprovada)');
   });
 });
 

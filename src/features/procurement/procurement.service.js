@@ -1,5 +1,6 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const {
   PurchaseRequest,
   PurchaseRequestItem,
@@ -13,12 +14,13 @@ const {
   ReceiptDiscrepancy,
   SupplierEvaluation,
   SupplierQualification,
+  FinancialEntry,
 } = require('../../models');
 const { InventoryStockBalance, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): o payable de recebimento de
@@ -33,6 +35,19 @@ function round2(value) {
 // "YYYY-MM-DD" do dia corrente em America/Sao_Paulo (locale en-CA formata nesse padrão).
 function todayInSaoPaulo() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+// DATEONLY ("YYYY-MM-DD") válida — mesmo cuidado documentado em insurance.service.js: nunca usar
+// `new Date(str)` cru pra validar uma string DATEONLY (motores diferentes de parsing/timezone
+// podem "corrigir" uma data inválida tipo "2026-02-30" pra outra data válida silenciosamente).
+// Valida o formato por regex e depois confere se os componentes realmente formam aquela data.
+function isValidDateOnly(value) {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [, y, m, d] = match.map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
 // Tolerância de 1 centavo pra diferença de arredondamento entre soma de linhas e total da NF —
@@ -83,28 +98,33 @@ async function createPurchaseRequest(payload, actorUserId, transaction) {
   }
   await registrarAuditoria({ groupId, companyId, actorUserId, action: 'PURCHASE_REQUEST_CREATED', entityType: 'PurchaseRequest', entityId: request.id, reason: 'Requisição de compra criada.' }, transaction);
 
-  const created = await getPurchaseRequest(request.id, transaction);
+  const created = await getPurchaseRequest(request.id, groupId, companyId, transaction);
   return { ...created.toJSON(), stockWarnings };
 }
 
-async function getPurchaseRequest(id, transaction) {
-  const request = await PurchaseRequest.findByPk(id, { include: [{ model: PurchaseRequestItem, as: 'items' }], transaction });
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): o projeto não usa RLS real do
+// Postgres (SET LOCAL app.group_id/company_id em tenant.middleware.js não tem CREATE POLICY
+// correspondente) — isolamento é 100% a cargo do filtro manual no where. `findByPk(id)` sem
+// groupId/companyId deixava qualquer tenant ler/decidir/adjudicar/cancelar sobre o registro de
+// OUTRA empresa só adivinhando o UUID. Mesmo padrão já corrigido em materialRequests.service.js.
+async function getPurchaseRequest(id, groupId, companyId, transaction) {
+  const request = await PurchaseRequest.findOne({ where: { id, groupId, companyId }, include: [{ model: PurchaseRequestItem, as: 'items' }], transaction });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   return request;
 }
 
-async function listPurchaseRequests(transaction, { status } = {}) {
-  const where = {};
+async function listPurchaseRequests(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   return PurchaseRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
 // --- 2. APPROVAL ---
-async function decidePurchaseRequest(id, decision, actorUserId, transaction) {
+async function decidePurchaseRequest(id, groupId, companyId, decision, actorUserId, transaction) {
   if (!['APPROVED', 'REJECTED'].includes(decision)) {
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'PURCHASE_REQUEST_VALIDATION');
   }
-  const request = await PurchaseRequest.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  const request = await PurchaseRequest.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   if (request.status !== 'REQUESTED') {
     throw AppError.badRequest(`Só é possível decidir uma requisição em REQUESTED (atual: ${request.status}).`, 'PURCHASE_REQUEST_INVALID_TRANSITION');
@@ -117,7 +137,7 @@ async function decidePurchaseRequest(id, decision, actorUserId, transaction) {
 }
 
 // --- 3. RFQ ---
-async function createQuotation(purchaseRequestId, actorUserId, transaction) {
+async function createQuotation(purchaseRequestId, groupId, companyId, actorUserId, transaction) {
   // BUG REAL CORRIGIDO (auditoria "loop até secar" ciclo 1 paralelo, 2026-10-06): sem lock
   // pessimista aqui, duas chamadas concorrentes (duplo clique, 2 abas) liam ambas "nenhuma
   // OPEN existente" (TOCTOU — não há constraint única em `quotations(purchase_request_id,
@@ -126,7 +146,7 @@ async function createQuotation(purchaseRequestId, actorUserId, transaction) {
   // (só olha uma quotationId por vez) e permitindo adjudicar a mesma requisição duas vezes via
   // awardSupplierOffer em cotações diferentes. Lock FOR UPDATE na PurchaseRequest serializa as
   // duas chamadas: a segunda só lê depois do commit da primeira e reaproveita a OPEN já criada.
-  const request = await PurchaseRequest.findByPk(purchaseRequestId, { transaction, lock: transaction.LOCK.UPDATE });
+  const request = await PurchaseRequest.findOne({ where: { id: purchaseRequestId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   if (request.status !== 'APPROVED') {
     throw AppError.badRequest('Só é possível abrir cotação para uma requisição APPROVED.', 'QUOTATION_INVALID_SOURCE');
@@ -144,12 +164,12 @@ async function createQuotation(purchaseRequestId, actorUserId, transaction) {
   );
 }
 
-async function submitSupplierOffer(quotationId, payload, transaction) {
+async function submitSupplierOffer(quotationId, groupId, companyId, payload, transaction) {
   const { supplierPersonId, items } = payload;
   if (!supplierPersonId || !Array.isArray(items) || items.length === 0) {
     throw AppError.badRequest('"supplierPersonId" e "items" (não vazio) são obrigatórios.', 'SUPPLIER_OFFER_VALIDATION');
   }
-  const quotation = await Quotation.findByPk(quotationId, { transaction });
+  const quotation = await Quotation.findOne({ where: { id: quotationId, groupId, companyId }, transaction });
   if (!quotation) throw AppError.notFound('Cotação não encontrada.', 'QUOTATION_NOT_FOUND');
   if (quotation.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível submeter oferta para uma cotação OPEN (atual: ${quotation.status}).`, 'QUOTATION_INVALID_TRANSITION');
@@ -167,7 +187,7 @@ async function submitSupplierOffer(quotationId, payload, transaction) {
     if (!line.purchaseRequestItemId || line.unitPrice == null || !Number.isFinite(Number(line.unitPrice)) || Number(line.unitPrice) < 0) {
       throw AppError.badRequest('Cada item precisa de "purchaseRequestItemId" e "unitPrice" >= 0.', 'SUPPLIER_OFFER_VALIDATION');
     }
-    const prItem = await PurchaseRequestItem.findByPk(line.purchaseRequestItemId, { transaction });
+    const prItem = await PurchaseRequestItem.findOne({ where: { id: line.purchaseRequestItemId, groupId: quotation.groupId, companyId: quotation.companyId }, transaction });
     if (!prItem) throw AppError.notFound(`Item de requisição "${line.purchaseRequestItemId}" não encontrado.`, 'PURCHASE_REQUEST_ITEM_NOT_FOUND');
     await SupplierOfferItem.create(
       { groupId: quotation.groupId, companyId: quotation.companyId, supplierOfferId: offer.id, purchaseRequestItemId: line.purchaseRequestItemId, unitPrice: line.unitPrice },
@@ -181,8 +201,9 @@ async function submitSupplierOffer(quotationId, payload, transaction) {
 }
 
 // --- 4. COMPARISON (read-only) ---
-async function compareOffers(quotationId, transaction) {
-  const quotation = await Quotation.findByPk(quotationId, {
+async function compareOffers(quotationId, groupId, companyId, transaction) {
+  const quotation = await Quotation.findOne({
+    where: { id: quotationId, groupId, companyId },
     include: [{ model: SupplierOffer, as: 'offers', include: [{ model: SupplierOfferItem, as: 'items' }] }],
     transaction,
   });
@@ -208,17 +229,17 @@ async function compareOffers(quotationId, transaction) {
 }
 
 // --- 5. AWARD -> 6. PO ---
-async function awardSupplierOffer(offerId, actorUserId, transaction) {
+async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, transaction) {
   // Postgres rejeita FOR UPDATE combinado com include de hasMany (outer join nullable) — lock
   // só na linha da oferta; os itens (imutáveis após submissão) são lidos separadamente.
-  const offer = await SupplierOffer.findByPk(offerId, { transaction, lock: transaction.LOCK.UPDATE });
+  const offer = await SupplierOffer.findOne({ where: { id: offerId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!offer) throw AppError.notFound('Oferta de fornecedor não encontrada.', 'SUPPLIER_OFFER_NOT_FOUND');
   if (offer.status !== 'RECEIVED') {
     throw AppError.badRequest(`Só é possível adjudicar uma oferta RECEIVED (atual: ${offer.status}).`, 'SUPPLIER_OFFER_INVALID_TRANSITION');
   }
   offer.items = await SupplierOfferItem.findAll({ where: { supplierOfferId: offer.id }, transaction });
-  const quotation = await Quotation.findByPk(offer.quotationId, { transaction, lock: transaction.LOCK.UPDATE });
-  const request = await PurchaseRequest.findByPk(quotation.purchaseRequestId, { transaction, lock: transaction.LOCK.UPDATE });
+  const quotation = await Quotation.findOne({ where: { id: offer.quotationId, groupId: offer.groupId, companyId: offer.companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  const request = await PurchaseRequest.findOne({ where: { id: quotation.purchaseRequestId, groupId: offer.groupId, companyId: offer.companyId }, transaction, lock: transaction.LOCK.UPDATE });
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 57, 2026-10-06): awardSupplierOffer só
   // validava o status da SupplierOffer, nunca o da Quotation — uma cotação com 2+ ofertas RECEIVED
@@ -232,7 +253,8 @@ async function awardSupplierOffer(offerId, actorUserId, transaction) {
   // Contrato (Anexo I, "Fornecedores: documentos/vigência; due diligence para alto risco") —
   // fornecedor marcado como alto risco só pode ser adjudicado com due diligence APPROVED e
   // ainda dentro da vigência (validUntil). Fail-closed: sem registro de qualificação nenhum,
-  // trata como ainda não qualificado (nunca assume "ok" por omissão).
+  // trata como ainda não qualificado (nunca assume "ok" por omissão). CUIDADO: esta checagem
+  // usa `offer.companyId` (já validado como do tenant acima) — não trocar por outra variável.
   const qualification = await SupplierQualification.findOne({
     where: { companyId: offer.companyId, supplierPersonId: offer.supplierPersonId },
     transaction,
@@ -265,7 +287,7 @@ async function awardSupplierOffer(offerId, actorUserId, transaction) {
     { transaction }
   );
   for (const offerItem of offer.items) {
-    const prItem = await PurchaseRequestItem.findByPk(offerItem.purchaseRequestItemId, { transaction });
+    const prItem = await PurchaseRequestItem.findOne({ where: { id: offerItem.purchaseRequestItemId, groupId: offer.groupId, companyId: offer.companyId }, transaction });
     await PurchaseOrderItem.create(
       {
         groupId: offer.groupId,
@@ -290,7 +312,7 @@ async function awardSupplierOffer(offerId, actorUserId, transaction) {
 
   await registrarAuditoria({ groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'PURCHASE_ORDER_CREATED', entityType: 'PurchaseOrder', entityId: order.id, reason: `PO gerada a partir da oferta ${offer.id} — custo comprometido ${order.committedAmount}.` }, transaction);
 
-  return getPurchaseOrder(order.id, transaction);
+  return getPurchaseOrder(order.id, order.groupId, order.companyId, transaction);
 }
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 62, 2026-10-06): PurchaseOrder só tem
@@ -307,15 +329,15 @@ async function attachSupplierPersonNames(orders, transaction) {
   return orders.map((order) => ({ ...order.toJSON(), supplierPersonName: nameById.get(order.supplierPersonId) || null }));
 }
 
-async function getPurchaseOrder(id, transaction) {
-  const order = await PurchaseOrder.findByPk(id, { include: [{ model: PurchaseOrderItem, as: 'items' }], transaction });
+async function getPurchaseOrder(id, groupId, companyId, transaction) {
+  const order = await PurchaseOrder.findOne({ where: { id, groupId, companyId }, include: [{ model: PurchaseOrderItem, as: 'items' }], transaction });
   if (!order) throw AppError.notFound('Pedido de compra não encontrado.', 'PURCHASE_ORDER_NOT_FOUND');
   const [withName] = await attachSupplierPersonNames([order], transaction);
   return withName;
 }
 
-async function listPurchaseOrders(transaction, { status } = {}) {
-  const where = {};
+async function listPurchaseOrders(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   const orders = await PurchaseOrder.findAll({ where, order: [['created_at', 'DESC']], transaction });
   return attachSupplierPersonNames(orders, transaction);
@@ -325,23 +347,37 @@ async function listPurchaseOrders(transaction, { status } = {}) {
 // EST-TS/Caderno "goods_receipts": over-receipt/invoice sem receipt tratados aqui. O recebimento
 // FÍSICO real é delegado a inventory.receipts (nunca duplicamos a lógica de IN/saldo) — este
 // serviço só cria o receipt de inventário com os itens do PO e abre discrepâncias.
-async function confirmGoodsReceipt(purchaseOrderId, payload, actor, transaction) {
+async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload, actor, transaction) {
   const { destinationLocationId, invoiceFingerprint, invoiceTotalAmount, items, idempotencyKey } = payload;
   if (!destinationLocationId || !Array.isArray(items) || items.length === 0) {
     throw AppError.badRequest('"destinationLocationId" e "items" (não vazio) são obrigatórios.', 'GOODS_RECEIPT_VALIDATION');
   }
 
-  if (invoiceFingerprint) {
-    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint }, transaction });
-    if (existing) throw AppError.badRequest(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
+  // BUG REAL CORRIGIDO (auditoria RLS/concorrência, 2026-10-08): `invoiceTotalAmount` nunca era
+  // validado com Number.isFinite — um valor NaN/Infinity/negativo passava direto pro three-way
+  // match e pro cálculo do payable (payableAmount), corrompendo o contas a pagar gerado. Fail
+  // closed: valida antes de usar em qualquer cálculo.
+  if (invoiceTotalAmount != null && (!Number.isFinite(Number(invoiceTotalAmount)) || Number(invoiceTotalAmount) < 0)) {
+    throw AppError.badRequest('"invoiceTotalAmount" precisa ser um número maior ou igual a zero.', 'GOODS_RECEIPT_VALIDATION');
   }
 
-  const order = await PurchaseOrder.findByPk(purchaseOrderId, { transaction, lock: transaction.LOCK.UPDATE });
+  const order = await PurchaseOrder.findOne({ where: { id: purchaseOrderId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!order) throw AppError.notFound('Pedido de compra não encontrado.', 'PURCHASE_ORDER_NOT_FOUND');
   if (order.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível receber um PO OPEN (atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
   }
   order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
+
+  // BUG REAL CORRIGIDO (reauditoria "loop até secar", 2026-10-08): a checagem de NF duplicada
+  // rodava ANTES do lock FOR UPDATE do PO — duas requisições concorrentes (sem idempotencyKey)
+  // liam ambas "nenhum GoodsReceipt com este invoiceFingerprint" antes de qualquer commit (TOCTOU)
+  // e as duas seguiam criando recebimento + payable duplicados. Agora a checagem roda DEPOIS do
+  // lock do PO: a segunda chamada concorrente só lê este GoodsReceipt.findOne depois do commit da
+  // primeira (serializada pela trava pessimista na linha do PO), encontrando o registro já criado.
+  if (invoiceFingerprint) {
+    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint, groupId: order.groupId, companyId: order.companyId }, transaction });
+    if (existing) throw AppError.badRequest(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
+  }
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 64, 2026-10-06): a única proteção
   // real contra duplo-processamento era o status do PO virar != OPEN, que só acontece no
@@ -434,8 +470,8 @@ async function confirmGoodsReceipt(purchaseOrderId, payload, actor, transaction)
       transaction
     );
     const { reviewReceipt } = require('../inventory/receipts.service');
-    await reviewReceipt(inventoryReceipt.id, actor.userId, transaction);
-    await confirmInventoryReceipt(inventoryReceipt.id, actor, transaction);
+    await reviewReceipt(inventoryReceipt.id, actor.userId, order.groupId, order.companyId, transaction);
+    await confirmInventoryReceipt(inventoryReceipt.id, actor, order.groupId, order.companyId, transaction);
     goodsReceipt.inventoryReceiptId = inventoryReceipt.id;
   }
 
@@ -484,14 +520,14 @@ async function confirmGoodsReceipt(purchaseOrderId, payload, actor, transaction)
 // NENHUM endpoint pra listar/consultar recebimentos depois — o front não tinha como mostrar o
 // payable gerado nem o histórico de recebimentos de um PO, mesmo o dado estando correto no
 // banco (mesma família de bug da R24, mas "não exposto" em vez de "não exibido").
-async function listGoodsReceipts(transaction, { purchaseOrderId } = {}) {
-  const where = {};
+async function listGoodsReceipts(groupId, companyId, transaction, { purchaseOrderId } = {}) {
+  const where = { groupId, companyId };
   if (purchaseOrderId) where.purchaseOrderId = purchaseOrderId;
   return GoodsReceipt.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function listDiscrepancies(transaction, { status } = {}) {
-  const where = {};
+async function listDiscrepancies(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
   if (status) where.status = status;
   return ReceiptDiscrepancy.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
@@ -503,7 +539,7 @@ const DISCREPANCY_RESOLUTIONS = ['ACCEPTED', 'REJECTED'];
 // `status` tinha DEFAULT 'OPEN' na migration/model exatamente pra existir uma transição, só
 // que nenhum serviço/endpoint fazia essa escrita. Mesma família de bug de R7/R9/R10/R11
 // ("tabela/campo criado mas nunca manipulado depois da escrita inicial").
-async function resolveDiscrepancy(discrepancyId, payload, actor, transaction) {
+async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, actor, transaction) {
   const { resolution, notes } = payload || {};
   const normalized = String(resolution || '').toUpperCase();
   if (!DISCREPANCY_RESOLUTIONS.includes(normalized)) {
@@ -516,7 +552,7 @@ async function resolveDiscrepancy(discrepancyId, payload, actor, transaction) {
   // decisões concorrentes (ex.: ACCEPTED e REJECTED quase simultâneas) podiam ambas ler
   // status OPEN antes de qualquer commit e gravar decisões conflitantes (lost update), sem
   // nenhuma delas ser bloqueada com RECEIPT_DISCREPANCY_INVALID_STATUS como deveria.
-  const discrepancy = await ReceiptDiscrepancy.findByPk(discrepancyId, { transaction, lock: transaction.LOCK.UPDATE });
+  const discrepancy = await ReceiptDiscrepancy.findOne({ where: { id: discrepancyId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!discrepancy) throw AppError.notFound('Divergência não encontrada.', 'RECEIPT_DISCREPANCY_NOT_FOUND');
   if (discrepancy.status !== 'OPEN') {
     throw AppError.conflict(`Divergência com status "${discrepancy.status}" já foi resolvida.`, 'RECEIPT_DISCREPANCY_INVALID_STATUS');
@@ -540,7 +576,6 @@ async function resolveDiscrepancy(discrepancyId, payload, actor, transaction) {
     const grItem = await GoodsReceiptItem.findByPk(discrepancy.goodsReceiptItemId, { transaction });
     const goodsReceipt = grItem ? await GoodsReceipt.findByPk(grItem.goodsReceiptId, { transaction, lock: transaction.LOCK.UPDATE }) : null;
     if (goodsReceipt && goodsReceipt.financialEntryId) {
-      const { reverseFinancialEntry } = require('../finance/financialEntries.service');
       await reverseFinancialEntry(
         goodsReceipt.financialEntryId,
         `Divergência de preço rejeitada — valor da NF (${discrepancy.receivedValue}) não confere com o esperado (${discrepancy.expectedValue}).`,
@@ -619,11 +654,12 @@ async function listSupplierEvaluations(transaction, { supplierPersonId } = {}) {
 // mesmo espírito fail-closed/auditável de OVER_RECEIPT e PRICE_MISMATCH já existentes. O que já
 // foi fisicamente recebido/pago não é revertido aqui (reversão de estoque/financeiro já
 // recebido é uma devolução de verdade, fora do mínimo contratual de "cancel/return = registrar
-// a compensação", que é o que este fluxo cobre).
+// a compensação", que é o que este fluxo cobre) — EXCETO o payable: ver fix abaixo (reauditoria
+// 2026-10-08) para o caso RECEIVED com financialEntryId já criado.
 const CANCELABLE_STATUSES = ['OPEN', 'RECEIVED'];
 
-async function cancelPurchaseOrder(id, payload, actor, transaction) {
-  const order = await PurchaseOrder.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, transaction) {
+  const order = await PurchaseOrder.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!order) throw AppError.notFound('Pedido de compra não encontrado.', 'PURCHASE_ORDER_NOT_FOUND');
   if (!CANCELABLE_STATUSES.includes(order.status)) {
     throw AppError.conflict(`Pedido de compra com status "${order.status}" não pode ser cancelado.`, 'PURCHASE_ORDER_INVALID_TRANSITION');
@@ -656,6 +692,27 @@ async function cancelPurchaseOrder(id, payload, actor, transaction) {
     }
   }
 
+  // BUG REAL CORRIGIDO (reauditoria contratual/financeira, 2026-10-08): cancelar um PO que já
+  // está RECEIVED (tem GoodsReceipt com financialEntryId criado, possivelmente já SETTLED) não
+  // estornava o payable gerado em confirmGoodsReceipt — cancelar a PO não podia deixar a empresa
+  // com um contas a pagar de uma compra que o próprio sistema está marcando como cancelada.
+  // Mesmo padrão de estorno já usado em resolveDiscrepancy (PRICE_MISMATCH rejeitado): nunca edita
+  // o valor de um FinancialEntry existente (FIN-010) — estorna via reverseFinancialEntry.
+  const reversedFinancialEntryIds = [];
+  const goodsReceipts = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, financialEntryId: { [Op.ne]: null } }, transaction });
+  for (const goodsReceipt of goodsReceipts) {
+    const entry = await FinancialEntry.findByPk(goodsReceipt.financialEntryId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (entry && entry.status !== 'REVERSED' && entry.status !== 'CANCELLED') {
+      await reverseFinancialEntry(
+        entry.id,
+        `Pedido de compra ${order.id} cancelado — estorno do payable gerado no recebimento ${goodsReceipt.id}.`,
+        actor.userId,
+        transaction
+      );
+      reversedFinancialEntryIds.push(entry.id);
+    }
+  }
+
   order.status = 'CANCELED';
   order.updatedBy = actor.userId || null;
   await order.save({ transaction });
@@ -664,7 +721,7 @@ async function cancelPurchaseOrder(id, payload, actor, transaction) {
     {
       groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId,
       action: 'PURCHASE_ORDER_CANCELED', entityType: 'PurchaseOrder', entityId: order.id,
-      reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada).`,
+      reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada)${reversedFinancialEntryIds.length > 0 ? `; payable(s) estornado(s): ${reversedFinancialEntryIds.join(', ')}` : ''}.`,
     },
     transaction
   );
@@ -680,6 +737,13 @@ async function upsertSupplierQualification(payload, actorUserId, transaction) {
   const { groupId, companyId, supplierPersonId, documentFileIds, validUntil, highRisk } = payload || {};
   if (!groupId || !companyId || !supplierPersonId) {
     throw AppError.badRequest('"groupId", "companyId" e "supplierPersonId" são obrigatórios.', 'SUPPLIER_QUALIFICATION_VALIDATION');
+  }
+  // BUG REAL CORRIGIDO (reauditoria contratual, 2026-10-08): `validUntil` nunca era validado como
+  // data — uma string inválida ("2026-13-40", "amanhã", etc.) era persistida sem checagem e só
+  // quebrava depois, no momento de comparar com `todayInSaoPaulo()` em awardSupplierOffer
+  // (comparação de string "válida" contra lixo nunca dá o resultado fail-closed esperado).
+  if (validUntil != null && validUntil !== '' && !isValidDateOnly(validUntil)) {
+    throw AppError.badRequest('"validUntil" precisa ser uma data válida no formato "YYYY-MM-DD".', 'SUPPLIER_QUALIFICATION_VALIDATION');
   }
 
   let qualification = await SupplierQualification.findOne({ where: { companyId, supplierPersonId }, transaction, lock: transaction.LOCK.UPDATE });
@@ -717,17 +781,28 @@ async function upsertSupplierQualification(payload, actorUserId, transaction) {
   return qualification;
 }
 
-async function decideSupplierDueDiligence(id, payload, actor, transaction) {
+async function decideSupplierDueDiligence(id, groupId, companyId, payload, actor, transaction) {
   const { decision, notes } = payload || {};
   const normalized = String(decision || '').toUpperCase();
   if (!['APPROVED', 'REJECTED'].includes(normalized)) {
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'SUPPLIER_QUALIFICATION_VALIDATION');
   }
 
-  const qualification = await SupplierQualification.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  const qualification = await SupplierQualification.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!qualification) throw AppError.notFound('Qualificação de fornecedor não encontrada.', 'SUPPLIER_QUALIFICATION_NOT_FOUND');
   if (!qualification.highRisk) {
     throw AppError.badRequest('Fornecedor não está marcado como alto risco — não exige due diligence.', 'SUPPLIER_QUALIFICATION_NOT_HIGH_RISK');
+  }
+  // BUG REAL CORRIGIDO (reauditoria contratual, 2026-10-08): não havia whitelist do status DE
+  // ORIGEM — era possível re-decidir uma due diligence já decidida (APPROVED -> REJECTED ou
+  // vice-versa) sem nenhuma trava, inclusive revertendo silenciosamente uma aprovação já usada
+  // para adjudicar um PO. Só permite decidir a partir de PENDING, igual ao padrão de máquina de
+  // estado do resto do módulo (decidePurchaseRequest, resolveDiscrepancy).
+  if (qualification.dueDiligenceStatus !== 'PENDING') {
+    throw AppError.conflict(
+      `Due diligence já foi decidida (status atual: ${qualification.dueDiligenceStatus}) — não pode ser decidida novamente.`,
+      'SUPPLIER_DUE_DILIGENCE_ALREADY_DECIDED'
+    );
   }
 
   qualification.dueDiligenceStatus = normalized;
@@ -745,8 +820,8 @@ async function decideSupplierDueDiligence(id, payload, actor, transaction) {
   return qualification;
 }
 
-async function listSupplierQualifications(transaction, { supplierPersonId } = {}) {
-  const where = {};
+async function listSupplierQualifications(groupId, companyId, transaction, { supplierPersonId } = {}) {
+  const where = { groupId, companyId };
   if (supplierPersonId) where.supplierPersonId = supplierPersonId;
   return SupplierQualification.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
