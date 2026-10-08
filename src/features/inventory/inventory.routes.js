@@ -17,6 +17,8 @@ inventoryRouter.get('/inventory/items/:id/balances', requirePermission('inventor
 // com sobreposição opcional por local (minStockRules.service.js).
 inventoryRouter.get('/inventory/items/:id/min-stock-rule', requirePermission('inventory:read'), inventoryController.getItemMinStockRule);
 inventoryRouter.post('/inventory/items/:id/min-stock-rule', requirePermission('inventory:update'), inventoryController.createItemMinStockRule);
+inventoryRouter.get('/inventory/adjustment-risk-rule', requirePermission('inventory:read'), inventoryController.getAdjustmentRiskRule);
+inventoryRouter.post('/inventory/adjustment-risk-rule', requirePermission('inventory:approve'), inventoryController.createAdjustmentRiskRule);
 inventoryRouter.post('/inventory/items/:id/status', requirePermission('inventory:update'), inventoryController.setItemStatus);
 
 inventoryRouter.post('/inventory/locations', requirePermission('inventory:create'), inventoryController.createLocation);

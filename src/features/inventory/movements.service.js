@@ -172,16 +172,26 @@ async function recordMovement(payload, actor, transaction) {
   // (REG-EST-002, Motor de Regras — ver adjustmentRiskRules.service.js), evidência deixa de
   // ser opcional e passa a ser obrigatória, igual o "ajuste de alto valor" exige comprovação
   // visual, não só uma linha de texto.
+  // BUG REAL CORRIGIDO (reauditoria adversarial da própria correção EST-008, 2026-10-08): item
+  // nunca recebido formalmente (averageCost null/0, ex.: cadastrado direto ou só movimentado via
+  // ADJUSTMENT) fazia estimatedValue=0 e pulava o limiar de valor/risco INTEIRO, não importa a
+  // quantidade — um ajuste de 100.000 unidades de um item de custo desconhecido passava sem
+  // evidência nenhuma. Custo desconhecido é RISCO, não ausência de risco: trata averageCost
+  // null/0 como "valor não determinável" e aplica o limiar por QUANTIDADE (mesma ordem de
+  // grandeza do limiar de valor padrão, na ausência de custo) em vez de pular a checagem.
   if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !evidenceFileId) {
+    const hasKnownCost = item.averageCost != null && Number(item.averageCost) > 0;
     const estimatedValue = qty * Number(item.averageCost || 0);
-    if (estimatedValue > 0) {
-      const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
-      if (estimatedValue >= highValueThreshold) {
-        throw AppError.badRequest(
-          `Movimento "${movementType}" de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${highValueThreshold.toFixed(2)} (REG-EST-002) — exige "evidenceFileId".`,
-          'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
-        );
-      }
+    const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
+    const unknownCostHighQuantity = !hasKnownCost && qty >= highValueThreshold;
+    if ((hasKnownCost && estimatedValue >= highValueThreshold) || unknownCostHighQuantity) {
+      const detail = hasKnownCost
+        ? `de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${highValueThreshold.toFixed(2)}`
+        : `de quantidade ${qty} (custo médio do item desconhecido/zerado) está acima do limite de ${highValueThreshold}`;
+      throw AppError.badRequest(
+        `Movimento "${movementType}" ${detail} (REG-EST-002) — exige "evidenceFileId".`,
+        'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      );
     }
   }
   // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.

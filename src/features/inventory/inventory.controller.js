@@ -12,6 +12,7 @@ const maintenanceService = require('./maintenance.service');
 const lossCasesService = require('./lossCases.service');
 const countsService = require('./counts.service');
 const minStockRulesService = require('./minStockRules.service');
+const adjustmentRiskRulesService = require('./adjustmentRiskRules.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -38,6 +39,20 @@ const createItemMinStockRule = catchAsync(async (req, res) => {
   const rule = await req.withTenantTransaction((t) =>
     minStockRulesService.createMinStockRule({ ...withTenant(req), inventoryItemId: req.params.id }, req.auth.userId, t)
   );
+  return success(res, { statusCode: 201, data: rule });
+});
+// GAP REAL CORRIGIDO (reauditoria adversarial da correção EST-008, 2026-10-08): REG-EST-002
+// (limiar de valor/risco pra evidência obrigatória em ajuste/perda/descarte) só era alcançável
+// chamando o service direto — sem rota HTTP, nenhum admin em produção conseguia configurar o
+// limiar (ficava travado no default R$1000 pra sempre). Mesmo padrão de min-stock-rule acima.
+const getAdjustmentRiskRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) =>
+    adjustmentRiskRulesService.getActiveHighValueThreshold(req.auth.groupId, req.auth.companyId, t, req.auth.userId)
+  );
+  return success(res, { data: rule });
+});
+const createAdjustmentRiskRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) => adjustmentRiskRulesService.createAdjustmentRiskRule(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: rule });
 });
 const getItem = catchAsync(async (req, res) => {
@@ -253,6 +268,8 @@ module.exports = {
   decideLossCase,
   getItemMinStockRule,
   createItemMinStockRule,
+  getAdjustmentRiskRule,
+  createAdjustmentRiskRule,
   openCount,
   listCounts,
   getCount,
