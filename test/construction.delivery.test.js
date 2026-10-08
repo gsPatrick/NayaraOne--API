@@ -182,7 +182,7 @@ test('delivery: deliverProject BLOQUEIA entrega quando há não conformidade CRI
     const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await nonconformitiesService.createNonconformity(
       project.id,
-      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL' }),
+      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -212,7 +212,7 @@ test('delivery: reprovar item de checklist ESTRUTURA abre NC CRITICAL e BLOQUEIA
     );
     await qualityChecklistService.checkQualityItem(
       item.id,
-      { status: 'NOT_OK', notes: 'Fissura visível na viga.' },
+      { status: 'NOT_OK', notes: 'Fissura visível na viga.', evidenceFileIds: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'] },
       tenant.userId,
       transaction
     );
