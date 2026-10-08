@@ -30,6 +30,11 @@ function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+// "YYYY-MM-DD" do dia corrente em America/Sao_Paulo (locale en-CA formata nesse padrão).
+function todayInSaoPaulo() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
 // Tolerância de 1 centavo pra diferença de arredondamento entre soma de linhas e total da NF —
 // mesmo espírito de `generateInstallments`/`confirmClaimSettlement` já usados no projeto.
 const INVOICE_AMOUNT_TOLERANCE = 0.01;
@@ -233,7 +238,10 @@ async function awardSupplierOffer(offerId, actorUserId, transaction) {
     transaction,
   });
   if (qualification?.highRisk) {
-    const expired = qualification.validUntil && new Date(qualification.validUntil) < new Date();
+    // validUntil é DATEONLY e a vigência INCLUI o último dia. `new Date('YYYY-MM-DD') < new Date()`
+    // ancorava em meia-noite UTC — "válido até 31/12" já contava como vencido no próprio dia 31
+    // (desde 21h do dia 30 em São Paulo). Compara por data de calendário de São Paulo.
+    const expired = qualification.validUntil && String(qualification.validUntil) < todayInSaoPaulo();
     if (qualification.dueDiligenceStatus !== 'APPROVED' || expired) {
       throw AppError.badRequest(
         'Fornecedor de alto risco precisa de due diligence aprovada e dentro da vigência antes de receber uma PO.',
@@ -678,7 +686,10 @@ async function upsertSupplierQualification(payload, actorUserId, transaction) {
   const isHighRisk = Boolean(highRisk);
   const fields = {
     documentFileIds: Array.isArray(documentFileIds) ? documentFileIds : (qualification?.documentFileIds || []),
-    validUntil: validUntil || qualification?.validUntil || null,
+    // `undefined` (campo ausente) mantém a vigência atual; `null`/"" explícito LIMPA a vigência —
+    // antes, `validUntil || atual` tornava impossível remover uma vigência já cadastrada pela
+    // tela de qualificação (o valor antigo voltava sempre).
+    validUntil: validUntil !== undefined ? (validUntil || null) : (qualification?.validUntil || null),
     highRisk: isHighRisk,
     updatedBy: actorUserId || null,
   };
