@@ -46,7 +46,14 @@ jobs:
       JWT_REFRESH_TTL: 7d
       PII_HASH_SECRET: ci-pii-hash-secret-not-for-production
       MFA_ENCRYPTION_KEY: 47f62af2f91a7ac9bb6ca3db95498c3ab311d033dd97f7e101b062a84c4781e0
-      APP_API_PREFIX: /api/v1
+      # GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): com "/api/v1" aqui, o app monta as rotas
+      # versionadas (router.use('/v1', ...) dentro de src/routes/index.js) sob
+      # "/api/v1" + "/v1" = "/api/v1/v1/...". Os testes HTTP reais que sobem o app numa porta
+      # alternativa (construction.httpRoutes, inventory.nay.httpRoutes, procurement.httpRoutes)
+      # batem direto em "/api/v1/..." (mesmo valor usado em produção/.env local, que é "/api"),
+      # então toda rota dava 404. Alinhado com .env/.env.example ("/api"), igual ao ambiente que
+      # roda localmente e em produção.
+      APP_API_PREFIX: /api
       PORT: 3011
 
     steps:

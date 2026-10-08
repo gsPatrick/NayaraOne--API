@@ -51,6 +51,14 @@ const ADMIN_PERMISSIONS = [
   'billing:create', 'billing:read', 'billing:update', 'billing:approve',
   // Configurações por tenant (nomes conferidos em src/features/settings/settings.routes.js)
   'settings:read', 'settings:update',
+  // GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): Marco 7 — Estoque/Patrimônio/Compras/Seguros
+  // (nomes conferidos em src/features/inventory/*.routes.js e
+  // src/features/procurement/*.routes.js) nunca tinha sido adicionado aqui. No banco de dev
+  // compartilhado essas role_permissions já existiam (criadas manualmente fora deste script
+  // durante o trabalho do Marco 7), por isso o teste "inventory: o responsável notificado...
+  // consegue agir (returnTool)" passava sempre em dev e só quebrava no banco fresh do CI.
+  'inventory:create', 'inventory:read', 'inventory:update', 'inventory:approve',
+  'procurement:create', 'procurement:read', 'procurement:approve',
 ];
 
 async function upsertPermissions() {
