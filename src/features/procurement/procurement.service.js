@@ -138,7 +138,19 @@ async function decidePurchaseRequest(id, groupId, companyId, decision, actorUser
   if (request.status !== 'REQUESTED') {
     throw AppError.badRequest(`Só é possível decidir uma requisição em REQUESTED (atual: ${request.status}).`, 'PURCHASE_REQUEST_INVALID_TRANSITION');
   }
-  if (request.requestedByUserId && actorUserId && String(request.requestedByUserId) === String(actorUserId)) {
+  // BUG REAL CORRIGIDO (auditoria rodada 3, 2026-10-08): a checagem anterior era fail-open
+  // quando `requestedByUserId` estava null/undefined — a trava de segregação era simplesmente
+  // PULADA em vez de ativada, permitindo autoaprovação sempre que o dado estivesse ausente.
+  // `requestedByUserId` é SEMPRE preenchido em createPurchaseRequest (ver acima), então um valor
+  // null aqui só pode vir de dado legado/corrompido — tratamos isso como anômalo e bloqueamos a
+  // decisão (fail-closed) em vez de permitir a autoaprovação silenciosamente.
+  if (!request.requestedByUserId) {
+    throw AppError.conflict(
+      'Requisição de compra sem criador registrado (dado anômalo) — não é possível garantir a segregação "quem cria não aprova".',
+      'PURCHASE_REQUEST_MISSING_REQUESTER'
+    );
+  }
+  if (actorUserId && String(request.requestedByUserId) === String(actorUserId)) {
     throw AppError.forbidden(
       'Quem cria uma requisição de compra não pode aprová-la/rejeitá-la — peça a decisão de outro aprovador.',
       'PURCHASE_REQUEST_SELF_APPROVAL_FORBIDDEN'
@@ -305,7 +317,13 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
   // aprovou a PurchaseRequest original (segundo aprovador).
   const { secondApprovalThreshold } = await getActiveSecondApprovalThreshold(offer.groupId, offer.companyId, transaction, actorUserId);
   if (Number(offer.totalAmount) >= secondApprovalThreshold) {
-    if (request.approvedByUserId && actorUserId && String(request.approvedByUserId) === String(actorUserId)) {
+    // BUG REAL CORRIGIDO (auditoria rodada 3, 2026-10-08): mesmo padrão fail-open do bug de
+    // decidePurchaseRequest — quando `request.approvedByUserId` está null/undefined (dado
+    // legado/corrompido, já que decidePurchaseRequest sempre preenche esse campo ao aprovar), a
+    // exigência de segundo aprovador (REG-COM-001) era simplesmente PULADA. Se não é possível
+    // confirmar que existe um segundo aprovador distinto, trata como fail-closed: exige a
+    // segunda aprovação mesmo assim, bloqueando com o mesmo erro.
+    if (!request.approvedByUserId || (actorUserId && String(request.approvedByUserId) === String(actorUserId))) {
       throw AppError.forbidden(
         `Oferta de valor R$ ${Number(offer.totalAmount).toFixed(2)} (>= limiar de R$ ${secondApprovalThreshold.toFixed(2)} para segunda aprovação) não pode ser adjudicada pelo mesmo ator que aprovou a requisição de compra original — é exigido um segundo aprovador.`,
         'PURCHASE_ORDER_SECOND_APPROVAL_REQUIRED_HIGH_VALUE'

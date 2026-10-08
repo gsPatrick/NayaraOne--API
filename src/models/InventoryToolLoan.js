@@ -21,6 +21,9 @@ module.exports = (sequelize) => {
       returnedAt: { type: DataTypes.DATE, allowNull: true, field: 'returned_at' },
       conditionCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_code' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
+      // EST-TS-13: nível de escalonamento calculado por quantos dias já passaram do dueAt
+      // (NONE/WARNING/CRITICAL/OVERDUE), mesmo padrão de construction.maintenance_cases.
+      escalationLevel: { type: DataTypes.STRING(16), allowNull: true, defaultValue: 'NONE', field: 'escalation_level' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const procurementService = require('../src/features/procurement/procurement.service');
 const approvalThresholdRulesService = require('../src/features/procurement/approvalThresholdRules.service');
-const { User } = require('../src/models');
+const { User, PurchaseRequest } = require('../src/models');
 
 let tenant;
 
@@ -150,6 +150,61 @@ test('TAREFA 2 — REG-COM-001: abaixo do limiar, o mesmo aprovador da PurchaseR
     // a exigência de um SEGUNDO aprovador só nasce acima do limiar de valor).
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, approver.id, transaction);
     assert.equal(order.status, 'OPEN');
+  });
+});
+
+test('BUG 2 (fail-closed): decidePurchaseRequest bloqueia com PURCHASE_REQUEST_MISSING_REQUESTER quando requestedByUserId está null (dado legado/corrompido)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const request = await procurementService.createPurchaseRequest(
+      withTenant({ items: [{ description: `QA SEGREGACAO bug2 item ${uniqueSuffix()}`, quantity: 1 }] }),
+      tenant.userId,
+      transaction
+    );
+    // Simula dado legado/corrompido — requestedByUserId forçado a null diretamente no banco,
+    // dentro da MESMA transação de teste (nunca acontece via createPurchaseRequest normal).
+    await PurchaseRequest.update({ requestedByUserId: null }, { where: { id: request.id }, transaction });
+
+    const approver = await createSecondUser(transaction, 'bug2');
+
+    // Antes da correção: a checagem `request.requestedByUserId && ...` era fail-open e deixava
+    // QUALQUER ator (inclusive o próprio criador original) aprovar sem bloqueio nenhum.
+    await assert.rejects(
+      () => procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', approver.id, transaction),
+      (err) => {
+        assert.equal(err.code, 'PURCHASE_REQUEST_MISSING_REQUESTER');
+        return true;
+      }
+    );
+  });
+});
+
+test('BUG 3 (fail-closed): awardSupplierOffer acima do limiar EXIGE segunda aprovação quando approvedByUserId está null (dado legado/corrompido)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await approvalThresholdRulesService.createApprovalThresholdRule(
+      withTenant({ secondApprovalThreshold: 100, description: 'QA SEGREGACAO — bug3' }),
+      tenant.userId,
+      transaction
+    );
+
+    const { request, offer } = await openRequestWithQuotationAndOffer(transaction, { quantity: 10, unitPrice: 50 }); // totalAmount = 500 >= 100
+
+    // Simula dado legado/corrompido — approvedByUserId forçado a null diretamente no banco,
+    // dentro da MESMA transação de teste (decidePurchaseRequest sempre preenche esse campo no
+    // fluxo normal).
+    await PurchaseRequest.update({ approvedByUserId: null }, { where: { id: request.id }, transaction });
+
+    // Antes da correção: a checagem `request.approvedByUserId && ...` era fail-open e pulava a
+    // exigência de segundo aprovador (REG-COM-001) sempre que approvedByUserId estivesse ausente
+    // — qualquer ator, mesmo o criador original, conseguia adjudicar uma oferta de alto valor
+    // sem segunda aprovação nenhuma.
+    await assert.rejects(
+      () => procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.statusCode, 403);
+        assert.equal(err.code, 'PURCHASE_ORDER_SECOND_APPROVAL_REQUIRED_HIGH_VALUE');
+        return true;
+      }
+    );
   });
 });
 

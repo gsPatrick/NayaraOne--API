@@ -301,6 +301,12 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
       transaction
     );
     lossCase.resultingMovementId = movement.id;
+    // BUG REAL CORRIGIDO (auditoria rodada 3, 2026-10-08): resultingMovementId era setado só em
+    // memória aqui — só era persistido no banco se o bloco de responsiblePerson/chargeResponsible
+    // mais abaixo chamasse lossCase.save() de novo. No caminho mais comum (aprovar sem cobrar e
+    // sem trocar o responsável), aquele save nunca rodava e resultingMovementId ficava NULL no
+    // banco para sempre. Persiste aqui, logo após setar, independente do que vier depois.
+    await lossCase.save({ transaction });
   }
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 28, 2026-10-05): aprovar um loss_case
