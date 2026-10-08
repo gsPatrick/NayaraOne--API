@@ -244,6 +244,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
           sourceLocationId: location.id,
           reason: 'Ajuste de alto valor com evidência inventada.',
           evidenceFileId: fakeFileId,
+          idempotencyKey: `test-item8-${fakeFileId}`,
         }),
         actor({ canApprove: true }),
         transaction
@@ -315,6 +316,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
         sourceLocationId: location.id,
         reason: 'Ajuste de alto valor com evidência válida.',
         evidenceFileId: ownFile.id,
+        idempotencyKey: `test-item8-valid-${ownFile.id}`,
       }),
       actor({ canApprove: true }),
       transaction
