@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
 const { getMinStockPolicy, resolveMinimumForLocation } = require('./minStockRules.service');
+const { getActiveHighValueThreshold } = require('./adjustmentRiskRules.service');
 
 // EST-00x (Caderno Marco 7): 7 tipos de movimento. ADJUSTMENT/LOSS/DISPOSAL exigem
 // inventory:approve (mesmo padrão de alçada já usado em construction:approve/finance:approve)
@@ -164,6 +165,24 @@ async function recordMovement(payload, actor, transaction) {
   // no `!reason`, gravando um ajuste/perda/descarte no ledger imutável sem motivo de verdade.
   if (APPROVAL_REQUIRED_TYPES.includes(movementType) && (!reason || !String(reason).trim())) {
     throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
+  }
+  // GAP REAL CORRIGIDO (reauditoria externa Nayara, 3ª rodada, 2026-10-08; EST-008: "...
+  // evidência... conforme valor/risco"): motivo e aprovação (canApprove, acima) já eram sempre
+  // obrigatórios pros 3 tipos — faltava o eixo "valor": acima de um limiar configurável
+  // (REG-EST-002, Motor de Regras — ver adjustmentRiskRules.service.js), evidência deixa de
+  // ser opcional e passa a ser obrigatória, igual o "ajuste de alto valor" exige comprovação
+  // visual, não só uma linha de texto.
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !evidenceFileId) {
+    const estimatedValue = qty * Number(item.averageCost || 0);
+    if (estimatedValue > 0) {
+      const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
+      if (estimatedValue >= highValueThreshold) {
+        throw AppError.badRequest(
+          `Movimento "${movementType}" de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${highValueThreshold.toFixed(2)} (REG-EST-002) — exige "evidenceFileId".`,
+          'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+        );
+      }
+    }
   }
   // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.
   if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {

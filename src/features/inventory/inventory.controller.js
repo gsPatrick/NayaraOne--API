@@ -211,7 +211,7 @@ const completeCount = catchAsync(async (req, res) => {
 });
 const applyCountAdjustment = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const line = await req.withTenantTransaction((t) => countsService.applyAdjustment(req.params.countItemId, actor, t));
+  const line = await req.withTenantTransaction((t) => countsService.applyAdjustment(req.params.countItemId, actor, t, req.body?.evidenceFileId));
   return success(res, { data: line });
 });
 

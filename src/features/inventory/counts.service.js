@@ -125,7 +125,13 @@ async function listCounts(transaction, { status } = {}) {
 // EST-TS-09: divergência vira "proposal" — só este endpoint, com approve explícito e reason,
 // efetiva o ADJUSTMENT. Chamar de novo sobre a mesma linha é idempotente (idempotencyKey por
 // count_item) e, de qualquer forma, bloqueado pelo check adjustmentMovementId != null.
-async function applyAdjustment(countItemId, actor, transaction) {
+// GAP REAL CORRIGIDO (EST-008/REG-EST-002, 2026-10-08): movements.service.js#recordMovement
+// passou a exigir evidenceFileId para ADJUSTMENT acima do limiar de valor/risco configurado
+// (Motor de Regras) — este fluxo era o único gerador de ADJUSTMENT sem nenhum jeito de
+// informar evidência, o que quebraria todo ajuste de contagem de alto valor. evidenceFileId
+// agora é opcional aqui (continua sendo exigido só quando o valor estimado cruzar o limiar,
+// validação feita dentro de recordMovement) e propagado pro controller/rota/front.
+async function applyAdjustment(countItemId, actor, transaction, evidenceFileId) {
   if (!actor.canApprove) {
     throw AppError.forbidden('Aplicar ajuste de inventário exige a permissão inventory:approve.', 'INVENTORY_COUNT_APPROVAL_REQUIRED');
   }
@@ -153,6 +159,7 @@ async function applyAdjustment(countItemId, actor, transaction) {
       sourceId: count.id,
       idempotencyKey: `count-item:${line.id}`,
       reason: `Ajuste de inventário físico ${count.id} — divergência de ${divergence}.`,
+      evidenceFileId: evidenceFileId || undefined,
     },
     actor,
     transaction
