@@ -95,6 +95,12 @@ jobs:
           node scripts/seedBillingRules.js
           node scripts/seedRealEstateRules.js
 
+      # GAP REAL CORRIGIDO (auditoria de entrega Marco 6/7, 08/10/2026): o schema "procurement"
+      # (migration 20260101000267, Compras/Seguros) nunca estava nesta lista — toda a suíte de
+      # procurement/insurance falharia aqui com "permission denied for schema procurement" por
+      # faltar GRANT, mesmo com migrations/seed corretos. Mesma classe de bug já documentada
+      # acima pro usuário superuser do Postgres: um schema novo só existe de verdade no CI
+      # depois de entrar nesta lista.
       - name: Criar usuário de privilégio mínimo (nayara_ci_app)
         env:
           PGPASSWORD: nayara_ci_password
@@ -107,7 +113,7 @@ jobs:
               END IF;
             END $$;
           SQL
-          for schema in ai audit construction core crm finance integration inventory legal people real_estate; do
+          for schema in ai audit construction core crm finance integration inventory legal people procurement real_estate; do
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"
