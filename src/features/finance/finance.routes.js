@@ -39,6 +39,7 @@ financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'),
 // pagamento" — liquidar é o ato que efetivamente movimenta o pagamento).
 financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntry);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
+financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 
 // Bank transactions (extrato)
 financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), financeController.createBankTransaction);

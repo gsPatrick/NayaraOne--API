@@ -12,6 +12,7 @@ const financialEntriesService = require('./financialEntries.service');
 const bankTransactionsService = require('./bankTransactions.service');
 const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
+const { clearManualReview } = require('./financeAntifraud.service');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
 const chartOfAccountsService = require('./chartOfAccounts.service');
@@ -122,6 +123,16 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
     financialEntriesService.reverseFinancialEntry(req.params.id, req.body.reason, req.auth.userId, t)
   );
   return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7): clearManualReview
+// (financeAntifraud.service.js) já existia e era usada internamente, mas nunca foi exposta por
+// rota nenhuma — um lançamento retido por antifraude não tinha como ser liberado pela API/tela,
+// só direto no banco.
+const clearFinancialEntryManualReview = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    clearManualReview(req.params.id, req.auth.userId, t, req.body?.reviewNote)
+  );
+  return success(res, { data: item });
 });
 
 // --- Bank transactions (extrato) ---
@@ -387,6 +398,7 @@ module.exports = {
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
+  clearFinancialEntryManualReview,
   createBankTransaction, listBankTransactions,
   matchReconciliation, listReconciliations,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,

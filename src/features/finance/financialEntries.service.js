@@ -300,12 +300,27 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   if (competenceMonth !== undefined) {
     entry.competenceMonth = resolveCompetenceMonth(competenceMonth, dueAt !== undefined ? dueAt : entry.dueAt);
   }
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7/Procurement): trocar o
+  // beneficiário (bankAccountId) de um lançamento PENDING não passava por nenhuma checagem
+  // extra — dava pra redirecionar um payable pra uma conta diferente, já fora do cooldown
+  // antifraude, e liquidar sem nenhum alerta. Troca de conta bancária é exatamente o padrão de
+  // fraude que o módulo já defende em outro lugar (reabertura de cooldown quando os DADOS da
+  // conta mudam — ver bankAccounts.service.js); aqui o "dado que muda" é qual conta o
+  // lançamento aponta, não precisa reabrir cooldown da conta em si (ela pode já estar ACTIVE há
+  // meses), mas precisa de revisão humana antes de poder ser liquidado.
+  const isBankAccountRedirect = bankAccountId !== undefined && entry.bankAccountId && bankAccountId && bankAccountId !== entry.bankAccountId;
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;
   if (dueAt !== undefined) entry.dueAt = dueAt;
   if (description !== undefined) entry.description = description;
   entry.updatedBy = actorUserId || null;
+  if (isBankAccountRedirect) {
+    entry.requiresManualReview = true;
+    entry.manualReviewReason = `Beneficiário alterado após a criação do lançamento (conta bancária redirecionada) — revisão manual obrigatória antes de liquidar.`;
+    entry.manualReviewClearedAt = null;
+    entry.manualReviewClearedBy = null;
+  }
   await entry.save({ transaction });
 
   await registrarAuditoria(
