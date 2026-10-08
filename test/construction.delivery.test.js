@@ -9,6 +9,7 @@ const budgetsService = require('../src/features/construction/budgets.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
+const propertiesService = require('../src/features/properties/properties.service');
 const AppError = require('../src/utils/AppError');
 
 function rejectsWithCode(expectedCode) {
@@ -31,6 +32,22 @@ after(async () => {
 
 function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
+}
+
+// GAP REAL CORRIGIDO (CI quebrado, fresh DB sem seeds de real_estate.properties, 08/10/2026):
+// antes dependia de uma property incidental já existente no banco (SELECT ... LIMIT 1), que só
+// "funcionava" no banco de dev compartilhado (dados acumulados de testes manuais).
+async function createProperty(transaction) {
+  const suffix = uniqueSuffix();
+  return propertiesService.createProperty(
+    withTenant({
+      title: `Imóvel entrega ${suffix}`,
+      internalCode: `ENTREGA-${suffix}`,
+      propertyType: 'RESIDENTIAL',
+    }),
+    tenant.userId,
+    transaction
+  );
 }
 
 // M6-18: percorre a máquina de estados EXATA da fonte até o status pedido — cada etapa via o
@@ -240,7 +257,7 @@ test('closeProjectWarranty: bloqueia fechar com caso de garantia ainda aberto', 
     const delivered = await projectsService.deliverProject(project.id, tenant.userId, transaction);
     assert.equal(delivered.status, 'WARRANTY');
 
-    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const property = await createProperty(transaction);
     await maintenanceCasesService.createMaintenanceCase(
       withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração', severity: 'MEDIUM' }),
       tenant.userId,
@@ -263,7 +280,7 @@ test('closeProjectWarranty: caso de garantia excluído (soft delete) não bloque
     const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await projectsService.deliverProject(project.id, tenant.userId, transaction);
 
-    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const property = await createProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       withTenant({ propertyId: property.id, projectId: project.id, description: 'Caso aberto por engano', severity: 'LOW' }),
       tenant.userId,
@@ -282,7 +299,7 @@ test('closeProjectWarranty: fecha a obra quando todos os casos de garantia estã
     const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await projectsService.deliverProject(project.id, tenant.userId, transaction);
 
-    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const property = await createProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração', severity: 'MEDIUM' }),
       tenant.userId,
@@ -333,7 +350,7 @@ test('removeProject: recusa excluir obra que já tem orçamento vinculado (PROJE
 test('removeProject: recusa excluir obra que já tem chamado de garantia vinculado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await createTestProject(transaction, 'PLANNED');
-    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const property = await createProperty(transaction);
     await maintenanceCasesService.createMaintenanceCase(
       withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração', severity: 'LOW' }),
       tenant.userId,

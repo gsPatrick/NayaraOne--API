@@ -24,6 +24,7 @@ const marginRulesService = require('../src/features/construction/marginRules.ser
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const projectHealthService = require('../src/features/construction/projectHealth.service');
 const postObraHealthService = require('../src/features/construction/postObraHealth.service');
+const propertiesService = require('../src/features/properties/properties.service');
 const { FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -38,6 +39,20 @@ after(async () => {
 
 function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
+}
+
+// GAP REAL CORRIGIDO (CI quebrado, fresh DB sem seeds de real_estate.properties, 08/10/2026).
+async function createProperty(transaction) {
+  const suffix = uniqueSuffix();
+  return propertiesService.createProperty(
+    withTenant({
+      title: `Imóvel E2E ${suffix}`,
+      internalCode: `E2E-${suffix}`,
+      propertyType: 'RESIDENTIAL',
+    }),
+    tenant.userId,
+    transaction
+  );
 }
 
 test('M6-98: jornada E2E completa — orçamento→material→diário→medição→pagamento→qualidade→entrega→pós-obra', async () => {
@@ -178,7 +193,7 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     assert.ok(health.kpis.payablePendingTotal > 0, 'valor a pagar pendente deve refletir a medição aprovada');
 
     // 12. Pós-obra: abrir caso de garantia vinculado à obra ENTREGUE, registrar atendimento, fechar
-    const [[property]] = await sequelize.query('SELECT id FROM real_estate.properties LIMIT 1', { transaction });
+    const property = await createProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração pós-entrega', severity: 'MEDIUM' }),
       tenant.userId,
