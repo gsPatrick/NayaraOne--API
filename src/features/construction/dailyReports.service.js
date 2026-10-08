@@ -232,6 +232,26 @@ async function getCurrentDailyReport(id, transaction) {
 }
 
 /**
+ * GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): o backend sempre preservou o
+ * conteúdo original de um RDO corrigido (cadeia `supersedesId`, nunca UPDATE in-place — ver
+ * `correctDailyReport` abaixo), mas não existia NENHUM endpoint que devolvesse essa cadeia —
+ * a tela não tinha de onde buscar "a versão anterior" para mostrar, então na prática o
+ * histórico ficava inacessível para quem usa o sistema (mesmo intacto no banco). Segue a
+ * cadeia nos dois sentidos (supersedesId para trás) a partir de QUALQUER revisão e devolve
+ * todas, da mais antiga para a mais recente.
+ */
+async function getDailyReportHistory(id, transaction) {
+  const current = await getCurrentDailyReport(id, transaction);
+  const chain = [current];
+  let cursor = current;
+  while (cursor.supersedesId) {
+    cursor = await getDailyReport(cursor.supersedesId, transaction);
+    chain.push(cursor);
+  }
+  return chain.reverse();
+}
+
+/**
  * M6-20 (BUG CORRIGIDO) — "corrigir" um RDO já criado NUNCA sobrescreve a linha original.
  * Em vez de UPDATE in-place, cria uma NOVA linha com `supersedesId` apontando para o registro
  * anterior. O registro original permanece intacto no banco, preservando o histórico completo
@@ -320,6 +340,7 @@ module.exports = {
   listDailyReports,
   getDailyReport,
   getCurrentDailyReport,
+  getDailyReportHistory,
   correctDailyReport,
   updateDailyReport,
   listDailyWorkers,

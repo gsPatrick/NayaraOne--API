@@ -218,6 +218,21 @@ test('M6-20: correção de RDO é append-only — original permanece no banco ap
     const idsInList = list.map((r) => r.id);
     assert.ok(idsInList.includes(revision.id), 'a lista precisa incluir a revisão atual (HEAD)');
     assert.ok(!idsInList.includes(original.id), 'a lista NUNCA pode incluir uma versão já superada');
+
+    // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): o conteúdo original sempre
+    // sobreviveu no banco (ver asserts acima), mas não existia nenhuma função/endpoint que
+    // devolvesse a cadeia inteira — a tela não tinha de onde buscar "a versão anterior" pra
+    // mostrar. getDailyReportHistory precisa devolver as duas revisões, da mais antiga pra mais
+    // nova, a partir de QUALQUER ponto da cadeia (tanto do id original quanto da revisão atual).
+    const historyFromOriginal = await dailyReportsService.getDailyReportHistory(original.id, t);
+    assert.equal(historyFromOriginal.length, 2);
+    assert.equal(historyFromOriginal[0].id, original.id);
+    assert.equal(historyFromOriginal[0].occurrences, 'Nenhuma ocorrência.');
+    assert.equal(historyFromOriginal[1].id, revision.id);
+    assert.equal(historyFromOriginal[1].occurrences, 'Correção: houve atraso na entrega de material.');
+
+    const historyFromRevision = await dailyReportsService.getDailyReportHistory(revision.id, t);
+    assert.deepEqual(historyFromRevision.map((r) => r.id), historyFromOriginal.map((r) => r.id));
   });
 });
 

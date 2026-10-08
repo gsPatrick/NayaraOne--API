@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -38,6 +38,15 @@ after(async () => {
 });
 
 async function createEntry(transaction, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  let resultCenterId = overrides.resultCenterId;
+  const nature = overrides.nature || 'PAYABLE';
+  if (!costCenterId && nature === 'PAYABLE') {
+    costCenterId = (await createTestCostCenter(tenant, transaction)).id;
+  }
+  if (!resultCenterId && nature === 'RECEIVABLE') {
+    resultCenterId = (await createTestResultCenter(tenant, transaction)).id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -46,6 +55,8 @@ async function createEntry(transaction, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'QA contract gaps',
+      costCenterId,
+      resultCenterId,
       ...overrides,
     },
     tenant.userId,

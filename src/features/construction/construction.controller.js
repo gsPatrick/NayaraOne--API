@@ -210,6 +210,10 @@ const getDailyReport = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => dailyReportsService.getDailyReport(req.params.id, t));
   return success(res, { data: item });
 });
+const getDailyReportHistory = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => dailyReportsService.getDailyReportHistory(req.params.id, t));
+  return success(res, { data: items });
+});
 const updateDailyReport = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     dailyReportsService.updateDailyReport(req.params.id, req.body, req.auth.userId, t)
@@ -498,6 +502,7 @@ module.exports = {
   createDailyReport,
   listDailyReports,
   getDailyReport,
+  getDailyReportHistory,
   updateDailyReport,
   listDailyWorkers,
   listDailyMaterials,

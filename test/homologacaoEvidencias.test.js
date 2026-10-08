@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
@@ -298,6 +298,7 @@ test('AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra po
     );
 
     // Data plausível continua funcionando normalmente.
+    const costCenter = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -306,6 +307,7 @@ test('AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra po
         nature: 'PAYABLE',
         amount: 100,
         dueAt: '2026-09-20',
+        costCenterId: costCenter.id,
       },
       tenant.userId,
       transaction
@@ -382,13 +384,16 @@ test('HOMO-05 verificação MFA de origem/dispositivo diferente é sinalizada (i
 // --- TEC-09: concorrência real em liquidação de lançamento financeiro ---
 test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem sucesso (lockVersion otimista)', async () => {
   const tenantCtx = tenant;
-  const entry = await withCommittedTenantTransaction(tenantCtx, (t) =>
-    financialEntriesService.createFinancialEntry(
-      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)' },
+  let resultCenterId;
+  const entry = await withCommittedTenantTransaction(tenantCtx, async (t) => {
+    const resultCenter = await createTestResultCenter(tenantCtx, t);
+    resultCenterId = resultCenter.id;
+    return financialEntriesService.createFinancialEntry(
+      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)', resultCenterId },
       tenantCtx.userId,
       t
-    )
-  );
+    );
+  });
 
   try {
     const results = await Promise.allSettled([
@@ -404,6 +409,9 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
     // Limpeza: este teste precisa de commit real (concorrência de verdade não é simulável numa
     // única transação), então remove explicitamente o registro criado — nunca fica no banco.
     await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entry.id } });
+    if (resultCenterId) {
+      await sequelize.query('DELETE FROM finance.result_centers WHERE id = :id', { replacements: { id: resultCenterId } });
+    }
   }
 });
 

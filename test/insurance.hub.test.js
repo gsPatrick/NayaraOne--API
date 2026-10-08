@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const { FinancialEntry, InsuranceRenewalTask, Notification, File, FileLink } = require('../src/models');
 const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
@@ -121,8 +121,9 @@ test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments
     // Pagar uma parcela exige um FinancialEntry real, SETTLED, com o mesmo valor — mesmo padrão
     // fail-closed de commissions.service.js#markInstallmentPaid.
     const firstInstallment = installments[0];
+    const costCenter1 = await createTestCostCenter(tenant, transaction);
     const entry = await createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(firstInstallment.amount), description: 'Pagamento de parcela de seguro (teste)' }),
+      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(firstInstallment.amount), description: 'Pagamento de parcela de seguro (teste)', costCenterId: costCenter1.id }),
       tenant.userId,
       transaction
     );
@@ -340,8 +341,9 @@ test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo fina
     assert.equal(installments.length, 2);
     const [first, second] = installments;
 
+    const costCenter2 = await createTestCostCenter(tenant, transaction);
     const entry = await createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(first.amount), description: 'Pagamento (teste concorrência)' }),
+      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(first.amount), description: 'Pagamento (teste concorrência)', costCenterId: costCenter2.id }),
       tenant.userId,
       transaction
     );

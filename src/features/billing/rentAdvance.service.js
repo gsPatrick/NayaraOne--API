@@ -4,6 +4,12 @@ const { RentAdvance, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
+const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
+const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
 
 // PRODUTO SEPARADO de guaranteed_rent_contracts (ver guaranteedRent.service.js) — tabela e
@@ -162,6 +168,13 @@ async function payRentAdvance(id, actorUserId, transaction) {
   }
   const beforeJson = rentAdvance.toJSON();
 
+  const principalCostCenter = await getOrCreateDefaultCostCenter(
+    rentAdvance.groupId,
+    rentAdvance.companyId,
+    RENT_ADVANCE_COST_CENTER_CODE,
+    'Locação — antecipação de aluguel',
+    transaction
+  );
   const principalEntry = await createFinancialEntry(
     {
       groupId: rentAdvance.groupId,
@@ -173,6 +186,7 @@ async function payRentAdvance(id, actorUserId, transaction) {
       description: `Antecipação de aluguel — principal, contrato ${rentAdvance.contractId}.`,
       dueAt: new Date(),
       idempotencyKey: `rent_advance.principal:${rentAdvance.id}`,
+      costCenterId: principalCostCenter.id,
     },
     actorUserId,
     transaction
@@ -180,6 +194,13 @@ async function payRentAdvance(id, actorUserId, transaction) {
 
   let costEntry = null;
   if (Number(rentAdvance.costAmount) > 0) {
+    const costResultCenter = await getOrCreateDefaultResultCenter(
+      rentAdvance.groupId,
+      rentAdvance.companyId,
+      RENT_ADVANCE_RESULT_CENTER_CODE,
+      'Locação — antecipação de aluguel',
+      transaction
+    );
     costEntry = await createFinancialEntry(
       {
         groupId: rentAdvance.groupId,
@@ -191,6 +212,7 @@ async function payRentAdvance(id, actorUserId, transaction) {
         description: `Antecipação de aluguel — custo/juros, contrato ${rentAdvance.contractId}.`,
         dueAt: new Date(),
         idempotencyKey: `rent_advance.cost:${rentAdvance.id}`,
+        resultCenterId: costResultCenter.id,
       },
       actorUserId,
       transaction

@@ -10,7 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -31,6 +31,15 @@ after(async () => {
 });
 
 async function createEntry(transaction, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  let resultCenterId = overrides.resultCenterId;
+  const nature = overrides.nature || 'PAYABLE';
+  if (!costCenterId && nature === 'PAYABLE') {
+    costCenterId = (await createTestCostCenter(tenant, transaction)).id;
+  }
+  if (!resultCenterId && nature === 'RECEIVABLE') {
+    resultCenterId = (await createTestResultCenter(tenant, transaction)).id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -39,6 +48,8 @@ async function createEntry(transaction, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'QA M4 batch3',
+      costCenterId,
+      resultCenterId,
       ...overrides,
     },
     tenant.userId,
@@ -445,6 +456,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     // 1) Conta bancária do beneficiário + lançamento a pagar com competência explícita.
     const account = await createActiveBankAccount(transaction, suffix);
+    const costCenterM428 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -457,6 +469,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
         dueAt: new Date(Date.UTC(2026, 9, 5)),
         competenceMonth: '2026-09',
         idempotencyKey: `qa-m428-${suffix}`,
+        costCenterId: costCenterM428.id,
       },
       tenant.userId,
       transaction

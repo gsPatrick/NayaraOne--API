@@ -78,6 +78,7 @@ constructionRouter.post('/construction/projects/:id/daily-reports', requirePermi
 constructionRouter.post('/construction/projects/:id/daily-logs', requirePermission('construction:create'), constructionController.createDailyReport);
 constructionRouter.get('/construction/projects/:id/daily-reports', requirePermission('construction:read'), constructionController.listDailyReports);
 constructionRouter.get('/construction/daily-reports/:id', requirePermission('construction:read'), constructionController.getDailyReport);
+constructionRouter.get('/construction/daily-reports/:id/history', requirePermission('construction:read'), constructionController.getDailyReportHistory);
 constructionRouter.patch('/construction/daily-reports/:id', requirePermission('construction:update'), constructionController.updateDailyReport);
 constructionRouter.get('/construction/daily-reports/:id/workers', requirePermission('construction:read'), constructionController.listDailyWorkers);
 constructionRouter.get('/construction/daily-reports/:id/materials', requirePermission('construction:read'), constructionController.listDailyMaterials);

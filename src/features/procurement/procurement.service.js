@@ -19,6 +19,12 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): o payable de recebimento de
+// materiais nasce de um fluxo automático (confirmação de goods receipt) sem nenhum centro de
+// custo informado — ver getOrCreateDefaultCostCenter em costCenters.service.js.
+const PROCUREMENT_COST_CENTER_CODE = 'COMPRAS-RECEBIMENTOS';
 
 function round2(value) {
   return Math.round(Number(value) * 100) / 100;
@@ -441,6 +447,7 @@ async function confirmGoodsReceipt(purchaseOrderId, payload, actor, transaction)
   // goodsReceipt garante que reprocessar nunca duplica o payable.
   const payableAmount = invoiceTotalAmount != null ? round2(invoiceTotalAmount) : expectedAmount;
   if (payableAmount > 0) {
+    const costCenter = await getOrCreateDefaultCostCenter(order.groupId, order.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
     const payable = await createFinancialEntry(
       {
         groupId: order.groupId,
@@ -450,6 +457,7 @@ async function confirmGoodsReceipt(purchaseOrderId, payload, actor, transaction)
         amount: payableAmount,
         description: `Recebimento de materiais — PO ${order.id}${invoiceFingerprint ? ` (NF ${invoiceFingerprint})` : ''}.`,
         idempotencyKey: `goods-receipt:${goodsReceipt.id}`,
+        costCenterId: costCenter.id,
       },
       actor.userId,
       transaction
@@ -531,6 +539,7 @@ async function resolveDiscrepancy(discrepancyId, payload, actor, transaction) {
         actor.userId,
         transaction
       );
+      const correctionCostCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
       const correctedPayable = await createFinancialEntry(
         {
           groupId: goodsReceipt.groupId,
@@ -540,6 +549,7 @@ async function resolveDiscrepancy(discrepancyId, payload, actor, transaction) {
           amount: Number(discrepancy.expectedValue),
           description: `Recebimento de materiais (corrigido após rejeição de divergência de preço) — recebimento ${goodsReceipt.id}.`,
           idempotencyKey: `goods-receipt:${goodsReceipt.id}:price-corrected:${discrepancy.id}`,
+          costCenterId: correctionCostCenter.id,
         },
         actor.userId,
         transaction

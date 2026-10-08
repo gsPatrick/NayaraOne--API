@@ -6,6 +6,10 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
 const { getApprovalThreshold } = require('./lossRecords.service');
 const financialEntriesService = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em costCenters.service.js.
+const WARRANTY_COST_CENTER_CODE = 'OBRAS-GARANTIA';
 const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
 const { getActiveSlaDaysMap, DEFAULT_SLA_DAYS } = require('./slaRules.service');
 
@@ -584,6 +588,13 @@ async function approveWarrantyResolution(id, actorUserId, transaction) {
  * aprovar a MESMA resolução mais de uma vez nunca cria dois lançamentos.
  */
 async function createWarrantyResolutionFinancialEntry(maintenanceCase, actorUserId, transaction) {
+  const costCenter = await getOrCreateDefaultCostCenter(
+    maintenanceCase.groupId,
+    maintenanceCase.companyId,
+    WARRANTY_COST_CENTER_CODE,
+    'Pós-obra — garantia',
+    transaction
+  );
   const entry = await financialEntriesService.createFinancialEntry(
     {
       groupId: maintenanceCase.groupId,
@@ -594,6 +605,7 @@ async function createWarrantyResolutionFinancialEntry(maintenanceCase, actorUser
       description: `${maintenanceCase.resolutionType === 'DISCOUNT' ? 'Desconto' : 'Ressarcimento'} de garantia — caso ${maintenanceCase.id}`,
       idempotencyKey: `warranty.resolution:${maintenanceCase.id}`,
       constructionProjectId: maintenanceCase.projectId || null,
+      costCenterId: costCenter.id,
     },
     actorUserId,
     transaction

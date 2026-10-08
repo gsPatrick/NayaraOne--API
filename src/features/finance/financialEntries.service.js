@@ -145,6 +145,25 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   assertReasonableDueDate(dueAt);
   const resolvedCompetenceMonth = resolveCompetenceMonth(competenceMonth, dueAt);
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+  // BLINDADO v1, §4 "Plano de contas e dimensões"): "Centro de custo obrigatório para
+  // despesa. Centro de resultado obrigatório para receita e análise de margem." A API aceitava
+  // PAYABLE (despesa) sem costCenterId e RECEIVABLE (receita) sem resultCenterId. TRANSFER/
+  // ADJUSTMENT/PENDING_CLASSIFICATION não são despesa nem receita própria (ver nota acima sobre
+  // PENDING_CLASSIFICATION), por isso ficam de fora desta exigência.
+  if (normalizedNature === 'PAYABLE' && !costCenterId) {
+    throw AppError.badRequest(
+      'Lançamento de despesa (nature "PAYABLE") exige "costCenterId".',
+      'FINANCE_ENTRY_COST_CENTER_REQUIRED'
+    );
+  }
+  if (normalizedNature === 'RECEIVABLE' && !resultCenterId) {
+    throw AppError.badRequest(
+      'Lançamento de receita (nature "RECEIVABLE") exige "resultCenterId".',
+      'FINANCE_ENTRY_RESULT_CENTER_REQUIRED'
+    );
+  }
+
   // M4-16 — dinheiro de terceiro (caução, depósito de garantia, valores que só transitam pela
   // imobiliária) só pode ser marcado como tal se vier com a referência de a QUEM pertence.
   // Sem isso, a marcação seria uma flag solta: dá pra tirar o valor da receita própria, mas não

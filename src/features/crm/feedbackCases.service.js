@@ -169,10 +169,31 @@ async function resolveFeedbackCase(id, payload, actorUserId, transaction) {
     throw AppError.unprocessable('Este caso já está resolvido.', 'FEEDBACK_CASE_ALREADY_RESOLVED', { id });
   }
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): o contrato (seção "Reclamações,
+  // elogios e conflitos") exige que toda ocorrência tenha "responsável, SLA, severidade e
+  // conclusão" — SLA e severidade já eram obrigatórios na criação, mas nada aqui impedia
+  // resolver um caso sem responsável atribuído nem sem texto de conclusão. Fail closed: exige
+  // os dois antes de permitir a transição para RESOLVED.
+  const resolutionNotes = payload && typeof payload.resolutionNotes === 'string' ? payload.resolutionNotes.trim() : '';
+  if (!resolutionNotes) {
+    throw AppError.badRequest(
+      'O campo "resolutionNotes" (conclusão) é obrigatório para resolver um caso de feedback.',
+      'FEEDBACK_CASE_RESOLUTION_REQUIRED'
+    );
+  }
+  const assignedToUserId = (payload && payload.assignedToUserId) || feedbackCase.assignedToUserId;
+  if (!assignedToUserId) {
+    throw AppError.badRequest(
+      'Este caso não tem responsável atribuído. Informe "assignedToUserId" antes de resolver.',
+      'FEEDBACK_CASE_ASSIGNEE_REQUIRED'
+    );
+  }
+
   const resolvedAt = new Date();
   feedbackCase.status = 'RESOLVED';
   feedbackCase.resolvedAt = resolvedAt;
-  feedbackCase.resolutionNotes = (payload && payload.resolutionNotes) || null;
+  feedbackCase.resolutionNotes = resolutionNotes;
+  feedbackCase.assignedToUserId = assignedToUserId;
   feedbackCase.updatedBy = actorUserId || null;
   await feedbackCase.save({ transaction });
 

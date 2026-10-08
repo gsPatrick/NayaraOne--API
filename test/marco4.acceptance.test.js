@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const { assertBankAccountEligibleForPayment } = require('../src/features/finance/financeAntifraud.service');
@@ -27,8 +27,9 @@ after(async () => {
 // --- M4-05: proibição de edição destrutiva de lançamento já liquidado ---
 test('M4-05 updateFinancialEntry bloqueia edição de lançamento SETTLED — ledger imutável (FIN-003)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const costCenterM405 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 150 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 150, costCenterId: costCenterM405.id },
       tenant.userId,
       transaction
     );
@@ -94,8 +95,9 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
     );
 
     // Recebimento real do locatário (aluguel), já liquidado — é isso que forma o teto elegível.
+    const resultCenterM415 = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `M4-15 aluguel recebido ${suffix}` },
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `M4-15 aluguel recebido ${suffix}`, resultCenterId: resultCenterM415.id },
       tenant.userId,
       transaction
     );
@@ -138,7 +140,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
 
     // Tentar repasse acima do teto elegível (sem formalAdjustment) é bloqueado.
     const outroRecebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 200, description: `M4-15 aluguel 2 ${suffix}` },
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 200, description: `M4-15 aluguel 2 ${suffix}`, resultCenterId: resultCenterM415.id },
       tenant.userId,
       transaction
     );

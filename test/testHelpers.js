@@ -84,10 +84,32 @@ function uniqueSuffix() {
   return `${Date.now()}${Math.floor(Math.random() * 100000)}`;
 }
 
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): createFinancialEntry agora exige costCenterId para despesa (PAYABLE) e
+// resultCenterId para receita (RECEIVABLE). Helpers de conveniência para os muitos testes que
+// já criavam lançamentos antes dessa exigência existir.
+async function createTestCostCenter(tenant, transaction, suffix = uniqueSuffix()) {
+  const { CostCenter } = require('../src/models');
+  return CostCenter.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, code: `CC-TEST-${suffix}`, name: `Centro de custo de teste ${suffix}` },
+    { transaction }
+  );
+}
+
+async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix()) {
+  const { ResultCenter } = require('../src/models');
+  return ResultCenter.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, code: `RC-TEST-${suffix}`, name: `Centro de resultado de teste ${suffix}` },
+    { transaction }
+  );
+}
+
 module.exports = {
   sequelize,
   getSeedTenant,
   withTenantTransaction,
   withRollbackTenantTransaction,
   uniqueSuffix,
+  createTestCostCenter,
+  createTestResultCenter,
 };

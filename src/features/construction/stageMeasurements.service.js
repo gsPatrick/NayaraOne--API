@@ -11,6 +11,13 @@ const {
 } = require('./constructionEvents.service');
 const { getProjectStage } = require('./projectStages.service');
 const financialEntriesService = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): a validação transversal "centro de custo obrigatório para despesa" virou
+// fail-closed em createFinancialEntry — o fallback previsto no comentário abaixo (medição sem
+// centro de custo configurado nem na medição nem na obra) agora precisa de um valor, não mais
+// opcional. Ver getOrCreateDefaultCostCenter em costCenters.service.js.
+const MEASUREMENT_COST_CENTER_CODE = 'OBRAS-MEDICOES';
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): quando a medição é
 // criada/revisada SEM `items` (totalAmount vem direto do payload do usuário), o valor era
@@ -400,15 +407,23 @@ async function createPayableForMeasurement(measurement, actorUserId, transaction
   const stage = await getProjectStage(measurement.projectStageId, transaction);
   const project = await Project.findByPk(stage.projectId, { transaction });
 
-  // M6-97 (reforço — achado em nova rodada de verificação de integrações, 30/09/2026): a fonte
-  // (Centro Financeiro BLINDADO) exige "Centro de custo obrigatório para despesa" como regra
-  // transversal do Financeiro. A obrigação gerada aqui é uma despesa (DEBIT/PAYABLE) — resolve
+  // M6-97 (reforço — achado em nova rodada de verificação de integrações, 30/09/2026, fail-
+  // closed desde 2026-10-07): a obrigação gerada aqui é uma despesa (DEBIT/PAYABLE) — resolve
   // o centro de custo da medição (override pontual) ou, na ausência, o centro de custo padrão
-  // da obra. Se nenhum dos dois estiver configurado, o lançamento ainda é criado sem centro de
-  // custo (o Financeiro trata isso hoje como opcional na validação, não fail-closed) — decisão
-  // de engenharia: reforçar essa regra como fail-closed é uma mudança transversal ao módulo
-  // Financeiro inteiro, fora do escopo do Marco 6, não só desta integração pontual.
-  const resolvedCostCenterId = measurement.costCenterId || (project ? project.costCenterId : null) || null;
+  // da obra; se nenhum dos dois estiver configurado, usa (criando se necessário) um centro de
+  // custo padrão para medições de obra — createFinancialEntry agora é fail-closed e nunca mais
+  // aceita PAYABLE sem costCenterId.
+  let resolvedCostCenterId = measurement.costCenterId || (project ? project.costCenterId : null) || null;
+  if (!resolvedCostCenterId) {
+    const defaultCostCenter = await getOrCreateDefaultCostCenter(
+      measurement.groupId,
+      measurement.companyId,
+      MEASUREMENT_COST_CENTER_CODE,
+      'Obras — medições',
+      transaction
+    );
+    resolvedCostCenterId = defaultCostCenter.id;
+  }
 
   const entry = await financialEntriesService.createFinancialEntry(
     {

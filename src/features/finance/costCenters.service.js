@@ -92,4 +92,25 @@ async function deleteCostCenter(id, actorUserId, transaction) {
   return { id };
 }
 
-module.exports = { createCostCenter, listCostCenters, getCostCenter, updateCostCenter, deleteCostCenter };
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): várias origens automáticas de
+// despesa (recebimento de materiais, custos de pós-obra, utilidades, etc.) criavam lançamentos
+// PAYABLE sem nenhum centro de custo — a validação nova em createFinancialEntry passou a
+// bloquear todas elas. Em vez de exigir que cada módulo colete esse dado de um fluxo que não
+// tem como pedir (webhook, job automático), resolve/cria (uma única vez por empresa, lazy) um
+// centro de custo dedicado por domínio — mesmo padrão de auto-seed já usado em
+// slaRules.service.js (getActiveSlaDaysMap) e marginRules.service.js.
+async function getOrCreateDefaultCostCenter(groupId, companyId, code, name, transaction) {
+  const existing = await CostCenter.findOne({ where: { groupId, companyId, code }, transaction });
+  if (existing) return existing;
+  return CostCenter.create({ groupId, companyId, code, name }, { transaction });
+}
+
+module.exports = {
+  createCostCenter,
+  listCostCenters,
+  getCostCenter,
+  updateCostCenter,
+  deleteCostCenter,
+  getOrCreateDefaultCostCenter,
+};

@@ -17,6 +17,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
 const { getSetting } = require('../settings/settings.service');
 const filesService = require('../files/files.service');
 
@@ -550,6 +551,13 @@ async function submitClaim(claimId, actor, transaction) {
 // Chamado por webhook do provedor OU por confirmação manual — idempotente: reprocessar o mesmo
 // status num claim que já saiu de SUBMITTED/UNDER_REVIEW é no-op. "Indenização confirmada
 // integra Financeiro" (contrato) — só AQUI, na confirmação real, nunca na submissão.
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4: "Centro de resultado obrigatório para receita"): confirmClaimSettlement
+// criava um lançamento RECEIVABLE (indenização de sinistro) sem nenhum resultCenterId — a
+// confirmação chega por webhook da seguradora, que não tem como informar essa dimensão. Usa
+// getOrCreateDefaultResultCenter (ver resultCenters.service.js) com um código dedicado.
+const INSURANCE_RESULT_CENTER_CODE = 'SEGUROS-INDENIZACOES';
+
 async function confirmClaimSettlement(externalSubmissionId, externalStatus, settledAmount, transaction) {
   const submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction });
   if (!submission || !submission.claimId) {
@@ -595,6 +603,13 @@ async function confirmClaimSettlement(externalSubmissionId, externalStatus, sett
 
   if (externalStatus === 'SETTLED' || externalStatus === 'APPROVED') {
     const policy = await InsurancePolicy.findByPk(claim.policyId, { transaction });
+    const resultCenter = await getOrCreateDefaultResultCenter(
+      claim.groupId,
+      claim.companyId,
+      INSURANCE_RESULT_CENTER_CODE,
+      'Indenizações de seguro',
+      transaction
+    );
     const entry = await createFinancialEntry(
       {
         groupId: claim.groupId,
@@ -605,6 +620,7 @@ async function confirmClaimSettlement(externalSubmissionId, externalStatus, sett
         amount: resolvedAmount,
         description: `Indenização de sinistro de seguro — apólice ${policy?.externalPolicyNumber || policy?.id}`,
         dueAt: new Date(),
+        resultCenterId: resultCenter.id,
       },
       null,
       transaction

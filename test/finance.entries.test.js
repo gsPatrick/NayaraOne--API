@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -36,6 +36,11 @@ after(async () => {
 });
 
 async function createEntry(transaction, actorUserId, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  if (!costCenterId && (overrides.nature || 'PAYABLE') === 'PAYABLE') {
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    costCenterId = costCenter.id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -44,6 +49,7 @@ async function createEntry(transaction, actorUserId, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'HOMO QA — lançamento de teste',
+      costCenterId,
       ...overrides,
     },
     actorUserId,
