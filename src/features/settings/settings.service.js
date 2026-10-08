@@ -27,6 +27,10 @@ const SETTINGS_SCHEMA = {
   // FIN-TS-013 "Conta nova | Pagamento alto imediato | Controle extra" — período de
   // resfriamento (em horas) de conta bancária nova/alterada, mesma regra FIN-005.
   'finance.bank_account_cooldown_hours': { type: 'integer', min: 0 },
+  // EST-013 / Guia §12 (NAY Estoque, inventoryNay.service.js): lead time padrão (dias) usado
+  // pela sugestão de compra quando o item ainda não tem histórico real de reposição
+  // (pedido de compra -> recebimento) para medir o prazo observado.
+  'inventory.nay_default_lead_time_days': { type: 'integer', min: 0, max: 365 },
   'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
   'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
   'billing.grace_period_days': { type: 'integer', min: 0 },
