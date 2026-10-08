@@ -36,6 +36,15 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'project_id',
       },
+      // BUG REAL CORRIGIDO (reauditoria externa Nayara, 2026-10-08; EST-004: "Material consumido
+      // precisa de project_id/stage_id quando atribuído à obra"): stageId era validado na
+      // requisição mas nunca gravado no ledger real — propagado agora pelos chamadores
+      // (requisitions.service.js/counts.service.js/lossCases.service.js).
+      stageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'stage_id',
+      },
       movementType: {
         type: DataTypes.STRING(16),
         allowNull: false,
