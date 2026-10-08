@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryLossCase, InventoryItem, Asset, InventoryToolLoan, InventoryMovement } = require('../../models');
+const { InventoryLossCase, InventoryItem, Asset, InventoryToolLoan, InventoryMovement, File } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -22,8 +22,17 @@ async function openLossCase(payload, actorUserId, transaction) {
   // EST-TS-10: loss sem evidência é bloqueado quando o item for CONSUMABLE/TOOL de alto valor —
   // como o Caderno não fixa o limiar de valor em código (regra pertence ao Motor de Regras),
   // aplicamos aqui o mínimo seguro do próprio EST-TS-10: ao menos uma evidência é sempre exigida.
-  if (!Array.isArray(evidenceFileIds) || evidenceFileIds.length === 0) {
+  // BUG REAL CORRIGIDO (auditoria Marco 7, EST-TS-10, 2026-10-07): `[null]`/ids inventados
+  // passavam no `length > 0`, abrindo um caso de perda "com evidência" sem nenhum arquivo real
+  // por trás. Exige que todo id seja uma string não vazia E que cada um aponte pra um File
+  // de verdade, da mesma empresa (nunca de outro tenant).
+  if (!Array.isArray(evidenceFileIds) || evidenceFileIds.length === 0 || evidenceFileIds.some((id) => !id || typeof id !== 'string')) {
     throw AppError.badRequest('Pelo menos um arquivo de evidência ("evidenceFileIds") é obrigatório (EST-TS-10).', 'LOSS_CASE_EVIDENCE_REQUIRED');
+  }
+  const uniqueEvidenceFileIds = [...new Set(evidenceFileIds)];
+  const evidenceFiles = await File.findAll({ where: { id: { [Op.in]: uniqueEvidenceFileIds }, companyId }, transaction });
+  if (evidenceFiles.length !== uniqueEvidenceFileIds.length) {
+    throw AppError.badRequest('Um ou mais arquivos de evidência ("evidenceFileIds") não existem ou não pertencem a esta empresa.', 'LOSS_CASE_EVIDENCE_FILE_NOT_FOUND');
   }
   if (inventoryItemId && (quantity == null || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0)) {
     throw AppError.badRequest('"quantity" > 0 é obrigatório quando "inventoryItemId" é informado.', 'LOSS_CASE_VALIDATION');

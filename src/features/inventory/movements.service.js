@@ -118,7 +118,9 @@ async function recordMovement(payload, actor, transaction) {
   // EST-008: ajuste/perda/descarte exigem motivo (evidência é recomendada, mas só obrigatória
   // quando a política da empresa exigir — isso é regra de negócio do Motor de Regras, fora de
   // código fixo; aqui garantimos o mínimo "sempre obrigatório" do Caderno, que é o motivo).
-  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !reason) {
+  // BUG REAL CORRIGIDO (auditoria Marco 7, EST-TS-07, 2026-10-07): "   " (só espaços) passava
+  // no `!reason`, gravando um ajuste/perda/descarte no ledger imutável sem motivo de verdade.
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && (!reason || !String(reason).trim())) {
     throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
   }
   // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.
