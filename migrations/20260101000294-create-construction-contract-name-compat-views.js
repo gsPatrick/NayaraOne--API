@@ -49,10 +49,16 @@ module.exports = {
 
     // Mesmo privilégio mínimo (SELECT) já concedido à role de runtime nas tabelas físicas —
     // só leitura, nenhuma escrita passa pelas views (ver decisão de engenharia acima).
-    await queryInterface.sequelize.query('GRANT SELECT ON "construction"."budget_items" TO nayara_runtime;');
-    await queryInterface.sequelize.query('GRANT SELECT ON "construction"."daily_logs" TO nayara_runtime;');
-    await queryInterface.sequelize.query('GRANT SELECT ON "construction"."measurements" TO nayara_runtime;');
-    await queryInterface.sequelize.query('GRANT SELECT ON "construction"."warranty_cases" TO nayara_runtime;');
+    // GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): "nayara_runtime" só existe em produção.
+    const [[{ exists: runtimeExists }]] = await queryInterface.sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+    );
+    if (runtimeExists) {
+      await queryInterface.sequelize.query('GRANT SELECT ON "construction"."budget_items" TO nayara_runtime;');
+      await queryInterface.sequelize.query('GRANT SELECT ON "construction"."daily_logs" TO nayara_runtime;');
+      await queryInterface.sequelize.query('GRANT SELECT ON "construction"."measurements" TO nayara_runtime;');
+      await queryInterface.sequelize.query('GRANT SELECT ON "construction"."warranty_cases" TO nayara_runtime;');
+    }
   },
 
   down: async (queryInterface) => {

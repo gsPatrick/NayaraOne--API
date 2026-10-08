@@ -52,7 +52,13 @@ module.exports = {
       CREATE POLICY tenant_isolation ON "legal"."contract_requirements"
         USING (company_id = NULLIF(current_setting('app.company_id', true), '')::uuid);
     `);
-    await queryInterface.sequelize.query('GRANT SELECT, INSERT, UPDATE, DELETE ON "legal"."contract_requirements" TO nayara_runtime;');
+    // GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): "nayara_runtime" só existe em produção.
+    const [[{ exists: runtimeExists }]] = await queryInterface.sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+    );
+    if (runtimeExists) {
+      await queryInterface.sequelize.query('GRANT SELECT, INSERT, UPDATE, DELETE ON "legal"."contract_requirements" TO nayara_runtime;');
+    }
   },
 
   down: async (queryInterface) => {

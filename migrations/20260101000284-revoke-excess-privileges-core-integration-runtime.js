@@ -23,8 +23,18 @@ const AFFECTED = {
   integration: ['domain_events', 'integration_inbox', 'outbox_events'],
 };
 
+// GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): "nayara_runtime" só existe em produção —
+// ausente no CI, quebrando `npm run migrate` com "role ... does not exist".
+async function runtimeRoleExists(queryInterface) {
+  const [[{ exists }]] = await queryInterface.sequelize.query(
+    "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+  );
+  return exists;
+}
+
 module.exports = {
   async up(queryInterface) {
+    if (!(await runtimeRoleExists(queryInterface))) return;
     for (const [schema, tables] of Object.entries(AFFECTED)) {
       for (const table of tables) {
         await queryInterface.sequelize.query(
@@ -35,6 +45,7 @@ module.exports = {
   },
 
   async down(queryInterface) {
+    if (!(await runtimeRoleExists(queryInterface))) return;
     for (const [schema, tables] of Object.entries(AFFECTED)) {
       for (const table of tables) {
         await queryInterface.sequelize.query(

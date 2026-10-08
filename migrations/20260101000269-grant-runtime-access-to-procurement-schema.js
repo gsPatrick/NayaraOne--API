@@ -25,15 +25,33 @@ module.exports = {
       END
       $$;
     `);
-    await sequelize.query('GRANT USAGE ON SCHEMA "procurement" TO nayara_runtime;');
-    await sequelize.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "procurement" TO nayara_runtime;');
-    await sequelize.query('ALTER DEFAULT PRIVILEGES FOR ROLE nayara_migration IN SCHEMA "procurement" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nayara_runtime;');
+    // GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): esta migration assumia que "nayara_runtime"
+    // sempre existe — verdade em produção (role provisionado manualmente fora de migration,
+    // ver comentário acima), mas falso no CI (usa nayara_ci/nayara_ci_app, nunca
+    // nayara_runtime) — toda execução de `npm run migrate` no GitHub Actions quebrava aqui
+    // com "role nayara_runtime does not exist", derrubando a suíte inteira antes mesmo dela
+    // rodar. Os GRANTs agora só executam se o role existir; no CI, o grant equivalente pro
+    // usuário de teste (nayara_ci_app) já é feito à parte, no próprio workflow
+    // (.github/workflows/test.yml).
+    const [[{ exists }]] = await sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+    );
+    if (exists) {
+      await sequelize.query('GRANT USAGE ON SCHEMA "procurement" TO nayara_runtime;');
+      await sequelize.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "procurement" TO nayara_runtime;');
+      await sequelize.query('ALTER DEFAULT PRIVILEGES FOR ROLE nayara_migration IN SCHEMA "procurement" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nayara_runtime;');
+    }
   },
 
   down: async (queryInterface) => {
     const sequelize = queryInterface.sequelize;
-    await sequelize.query('ALTER DEFAULT PRIVILEGES FOR ROLE nayara_migration IN SCHEMA "procurement" REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM nayara_runtime;');
-    await sequelize.query('REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "procurement" FROM nayara_runtime;');
-    await sequelize.query('REVOKE USAGE ON SCHEMA "procurement" FROM nayara_runtime;');
+    const [[{ exists }]] = await sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+    );
+    if (exists) {
+      await sequelize.query('ALTER DEFAULT PRIVILEGES FOR ROLE nayara_migration IN SCHEMA "procurement" REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM nayara_runtime;');
+      await sequelize.query('REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "procurement" FROM nayara_runtime;');
+      await sequelize.query('REVOKE USAGE ON SCHEMA "procurement" FROM nayara_runtime;');
+    }
   },
 };

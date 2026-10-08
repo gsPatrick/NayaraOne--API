@@ -19,8 +19,19 @@ const AFFECTED_TABLES = [
   'quality_checklist_items', 'stage_dependencies', 'stage_measurements',
 ];
 
+// GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): "nayara_runtime" só existe em produção —
+// ausente no CI (GitHub Actions usa nayara_ci/nayara_ci_app), quebrando `npm run migrate` com
+// "role ... does not exist". REVOKE/GRANT condicionados à existência do role.
+async function runtimeRoleExists(queryInterface) {
+  const [[{ exists }]] = await queryInterface.sequelize.query(
+    "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+  );
+  return exists;
+}
+
 module.exports = {
   async up(queryInterface) {
+    if (!(await runtimeRoleExists(queryInterface))) return;
     for (const table of AFFECTED_TABLES) {
       await queryInterface.sequelize.query(
         `REVOKE TRUNCATE, TRIGGER, REFERENCES ON TABLE "construction"."${table}" FROM nayara_runtime;`
@@ -29,6 +40,7 @@ module.exports = {
   },
 
   async down(queryInterface) {
+    if (!(await runtimeRoleExists(queryInterface))) return;
     for (const table of AFFECTED_TABLES) {
       await queryInterface.sequelize.query(
         `GRANT TRUNCATE, TRIGGER, REFERENCES ON TABLE "construction"."${table}" TO nayara_runtime;`

@@ -202,15 +202,24 @@ module.exports = {
     // Se a separação de roles documentada em `.env.migration.local` for ativada algum dia, isso
     // quebra com "permission denied for table insurance_*". GRANT explícito aqui, mesmo padrão
     // de 20260101000269, elimina a dependência do ALTER DEFAULT PRIVILEGES que nunca dispara.
-    const insuranceTables = [
-      'insurance_policies', 'insurance_policy_parties', 'insurance_coverages',
-      'insurance_installments', 'insurance_claims', 'insurance_claim_events',
-      'insurance_renewal_tasks', 'insurance_provider_submissions',
-    ];
-    for (const table of insuranceTables) {
-      await queryInterface.sequelize.query(
-        `GRANT SELECT, INSERT, UPDATE, DELETE ON "procurement"."${table}" TO nayara_runtime;`
-      );
+    // GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): "nayara_runtime" só existe em produção
+    // (provisionado manualmente, não por migration) — ausente no CI (GitHub Actions usa
+    // nayara_ci/nayara_ci_app), quebrando `npm run migrate` ali com "role ... does not exist"
+    // antes mesmo da suíte rodar. GRANT condicionado à existência do role.
+    const [[{ exists: runtimeExists }]] = await queryInterface.sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
+    );
+    if (runtimeExists) {
+      const insuranceTables = [
+        'insurance_policies', 'insurance_policy_parties', 'insurance_coverages',
+        'insurance_installments', 'insurance_claims', 'insurance_claim_events',
+        'insurance_renewal_tasks', 'insurance_provider_submissions',
+      ];
+      for (const table of insuranceTables) {
+        await queryInterface.sequelize.query(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON "procurement"."${table}" TO nayara_runtime;`
+        );
+      }
     }
   },
 
