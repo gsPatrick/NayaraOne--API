@@ -306,9 +306,15 @@ test('warranty: fechar o chamado (status=CLOSED) não lança erro (evento warran
     // agora valida a sequência de transição (OPEN->RESOLVED->CLOSED), igual ao grafo do front —
     // não dá mais pra pular direto OPEN->CLOSED.
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica realizada.' }, tenant.userId, transaction);
     const closed = await maintenanceCasesService.updateMaintenanceCase(
       warrantyCase.id,
-      { status: 'CLOSED' },
+      {
+        status: 'CLOSED',
+        rootCauseCode: 'MATERIAL_DEFECT',
+        beforeMediaFileIds: ['11111111-1111-1111-1111-111111111111'],
+        afterMediaFileIds: ['22222222-2222-2222-2222-222222222222'],
+      },
       tenant.userId,
       transaction
     );
@@ -337,7 +343,18 @@ test('warranty: updateMaintenanceCase recusa pular etapa (OPEN->CLOSED direto) e
     );
 
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
-    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica realizada.' }, tenant.userId, transaction);
+    await maintenanceCasesService.updateMaintenanceCase(
+      warrantyCase.id,
+      {
+        status: 'CLOSED',
+        rootCauseCode: 'MATERIAL_DEFECT',
+        beforeMediaFileIds: ['33333333-3333-3333-3333-333333333333'],
+        afterMediaFileIds: ['44444444-4444-4444-4444-444444444444'],
+      },
+      tenant.userId,
+      transaction
+    );
 
     await assert.rejects(
       () => maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'OPEN' }, tenant.userId, transaction),
@@ -363,9 +380,15 @@ test('warranty: fechar um chamado OVERDUE zera escalation_level pra NONE (não f
     await warrantyCase.save({ transaction });
 
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica realizada.' }, tenant.userId, transaction);
     const closed = await maintenanceCasesService.updateMaintenanceCase(
       warrantyCase.id,
-      { status: 'CLOSED' },
+      {
+        status: 'CLOSED',
+        rootCauseCode: 'MATERIAL_DEFECT',
+        beforeMediaFileIds: ['55555555-5555-5555-5555-555555555555'],
+        afterMediaFileIds: ['66666666-6666-6666-6666-666666666666'],
+      },
       tenant.userId,
       transaction
     );

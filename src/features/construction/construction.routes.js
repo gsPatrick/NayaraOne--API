@@ -169,5 +169,6 @@ constructionRouter.post(
 constructionRouter.post('/construction/projects/:id/material-requests', requirePermission('construction:create'), constructionController.createMaterialRequest);
 constructionRouter.get('/construction/projects/:id/material-requests', requirePermission('construction:read'), constructionController.listMaterialRequests);
 constructionRouter.post('/construction/material-requests/:id/receive', requirePermission('construction:update'), constructionController.receiveMaterialRequest);
+constructionRouter.post('/construction/material-requests/:id/return', requirePermission('construction:update'), constructionController.returnMaterialRequest);
 
 module.exports = constructionRouter;

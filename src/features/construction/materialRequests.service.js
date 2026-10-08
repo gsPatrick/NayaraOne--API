@@ -119,35 +119,43 @@ async function receiveMaterialRequest(id, actorUserId, transaction, stockLink = 
     throw AppError.conflict('Esta requisição de material já foi marcada como recebida.', 'MATERIAL_REQUEST_ALREADY_RECEIVED');
   }
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato §7/§8: "Requisição nasce
+  // da obra/etapa; recebimento integra Estoque" / "OUT vincula project_id/stage_id e
+  // responsável"): item/local do estoque eram opcionais no recebimento, permitindo marcar uma
+  // requisição como "recebida" sem nenhuma baixa real de saldo, custo ou rastreabilidade —
+  // exatamente o cenário reproduzido no reteste (2 unidades "recebidas" sem vínculo nenhum).
+  // Fail closed: agora são obrigatórios.
+  const { inventoryItemId, sourceLocationId } = stockLink || {};
+  if (!inventoryItemId || !sourceLocationId) {
+    throw AppError.badRequest(
+      'Confirmar o recebimento exige "inventoryItemId" e "sourceLocationId" (de qual item/local do estoque o material saiu).',
+      'MATERIAL_REQUEST_STOCK_LINK_REQUIRED'
+    );
+  }
+
   materialRequest.status = 'RECEIVED';
   materialRequest.receivedAt = new Date();
   materialRequest.updatedBy = actorUserId || null;
   await materialRequest.save({ transaction });
 
-  // Baixa real de saldo no Estoque (gap corrigido — ver comentário de topo do arquivo). Só
-  // dispara quando quem confirmou o recebimento informou de qual item/local do almoxarifado o
-  // material saiu; sem isso, segue como antes (registro sem movimento).
-  let inventoryMovement = null;
-  const { inventoryItemId, sourceLocationId } = stockLink || {};
-  if (inventoryItemId && sourceLocationId) {
-    inventoryMovement = await recordMovement(
-      {
-        groupId: materialRequest.groupId,
-        companyId: materialRequest.companyId,
-        inventoryItemId,
-        projectId: materialRequest.projectId,
-        movementType: 'OUT',
-        quantity: materialRequest.quantity,
-        sourceLocationId,
-        sourceType: 'REQUISITION',
-        sourceId: materialRequest.id,
-        idempotencyKey: `material_request.receive:${materialRequest.id}`,
-        reason: `Consumo da requisição de material "${materialRequest.description}" na obra ${materialRequest.projectId}.`,
-      },
-      { userId: actorUserId, canApprove: false },
-      transaction
-    );
-  }
+  // Baixa real de saldo no Estoque — vincula item/local informados pelo recebimento.
+  const inventoryMovement = await recordMovement(
+    {
+      groupId: materialRequest.groupId,
+      companyId: materialRequest.companyId,
+      inventoryItemId,
+      projectId: materialRequest.projectId,
+      movementType: 'OUT',
+      quantity: materialRequest.quantity,
+      sourceLocationId,
+      sourceType: 'REQUISITION',
+      sourceId: materialRequest.id,
+      idempotencyKey: `material_request.receive:${materialRequest.id}`,
+      reason: `Consumo da requisição de material "${materialRequest.description}" na obra ${materialRequest.projectId}.`,
+    },
+    { userId: actorUserId, canApprove: false },
+    transaction
+  );
 
   await publishMaterialReceived(materialRequest, transaction);
 
@@ -169,10 +177,77 @@ async function receiveMaterialRequest(id, actorUserId, transaction, stockLink = 
   return materialRequest;
 }
 
+/**
+ * returnMaterialRequest — devolução de material já recebido (contrato §8: "Devolução/
+ * reaproveitamento gera movimento inverso"). Gera um movimento RETURN real no Estoque,
+ * creditando de volta o saldo do item/local de onde ele tinha saído — nunca ajusta o saldo
+ * "na mão", sempre pelo ledger (mesmo princípio EST-002/EST-003 usado no resto do módulo).
+ * Idempotente por requisição: devolver a mesma requisição duas vezes não duplica o crédito.
+ */
+async function returnMaterialRequest(id, payload, actorUserId, transaction) {
+  const materialRequest = await MaterialRequest.findByPk(id, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!materialRequest) throw AppError.notFound('Requisição de material não encontrada.', 'MATERIAL_REQUEST_NOT_FOUND');
+  if (materialRequest.status !== 'RECEIVED') {
+    throw AppError.conflict('Só é possível devolver material de uma requisição já recebida.', 'MATERIAL_REQUEST_RETURN_REQUIRES_RECEIVED');
+  }
+
+  const { inventoryItemId, destinationLocationId, quantity, reason } = payload || {};
+  if (!inventoryItemId || !destinationLocationId) {
+    throw AppError.badRequest(
+      'A devolução exige "inventoryItemId" e "destinationLocationId" (para onde o material volta no estoque).',
+      'MATERIAL_REQUEST_RETURN_VALIDATION'
+    );
+  }
+  const returnQuantity = quantity != null ? Number(quantity) : Number(materialRequest.quantity);
+  if (!Number.isFinite(returnQuantity) || returnQuantity <= 0 || returnQuantity > Number(materialRequest.quantity)) {
+    throw AppError.badRequest('"quantity" da devolução precisa ser maior que zero e não pode exceder a quantidade recebida.', 'MATERIAL_REQUEST_RETURN_VALIDATION');
+  }
+
+  const beforeJson = materialRequest.toJSON();
+  const inventoryMovement = await recordMovement(
+    {
+      groupId: materialRequest.groupId,
+      companyId: materialRequest.companyId,
+      inventoryItemId,
+      projectId: materialRequest.projectId,
+      movementType: 'RETURN',
+      quantity: returnQuantity,
+      destinationLocationId,
+      sourceType: 'REQUISITION',
+      sourceId: materialRequest.id,
+      idempotencyKey: `material_request.return:${materialRequest.id}`,
+      reason: reason || `Devolução de material da requisição "${materialRequest.description}" (obra ${materialRequest.projectId}).`,
+    },
+    { userId: actorUserId, canApprove: false },
+    transaction
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: materialRequest.groupId,
+      companyId: materialRequest.companyId,
+      actorUserId,
+      action: 'construction.material_request.return',
+      entityType: 'MaterialRequest',
+      entityId: materialRequest.id,
+      beforeJson,
+      afterJson: { ...materialRequest.toJSON(), returnMovementId: inventoryMovement.id },
+      reason: `Devolução de ${returnQuantity} ${materialRequest.unit} da requisição "${materialRequest.description}".`,
+    },
+    transaction
+  );
+
+  return { materialRequest, returnMovement: inventoryMovement };
+}
+
 module.exports = {
   createMaterialRequest,
   listMaterialRequests,
   getMaterialRequest,
   receiveMaterialRequest,
+  returnMaterialRequest,
   STATUSES,
 };

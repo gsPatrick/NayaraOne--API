@@ -24,6 +24,38 @@ after(async () => {
   await sequelize.close();
 });
 
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): receiveMaterialRequest agora exige
+// item/local do estoque — helper cria um item+local real com saldo pra todos os testes que
+// precisam disso.
+async function createTestStockLink(transaction, qty = 200) {
+  const suffix = uniqueSuffix();
+  const location = await InventoryLocation.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, name: `HOMO QA MR Local ${suffix}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  const item = await InventoryItem.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      sku: `HOMO-MR-${suffix}`,
+      name: `HOMO QA MR Item ${suffix}`,
+      unitOfMeasure: 'UN',
+      itemType: 'CONSUMABLE',
+      averageCost: 10,
+      allowNegativeStock: true,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
+  );
+  await inventoryMovementsService.recordMovement(
+    { groupId: tenant.groupId, companyId: tenant.companyId, inventoryItemId: item.id, movementType: 'IN', quantity: qty, destinationLocationId: location.id },
+    { userId: tenant.userId, canApprove: true },
+    transaction
+  );
+  return { item, location };
+}
+
 async function createTestProject(transaction) {
   const suffix = uniqueSuffix();
   return projectsService.createProject(
@@ -174,7 +206,11 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
       transaction
     );
 
-    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction);
+    const { item, location } = await createTestStockLink(transaction, 5000);
+    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
     assert.equal(received.status, 'RECEIVED');
     assert.ok(received.receivedAt);
 
@@ -187,9 +223,94 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
     // Confirmar recebimento uma segunda vez tem que bloquear — não pode disparar o evento de
     // novo nem voltar silenciosamente sem erro (mesmo padrão de "não duplicar" do módulo).
     await assert.rejects(
-      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction),
+      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id }),
       (err) => {
         assert.equal(err.code, 'MATERIAL_REQUEST_ALREADY_RECEIVED');
+        return true;
+      }
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato §7/§8): confirmar
+// recebimento sem item/local do estoque agora é bloqueado — antes passava silenciosamente.
+test('material-request: receber sem inventoryItemId/sourceLocationId é bloqueado (contrato exige vínculo com o Estoque)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Areia', quantity: 10, unit: 'm3' },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'MATERIAL_REQUEST_STOCK_LINK_REQUIRED');
+        return true;
+      }
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato §8: "Devolução/
+// reaproveitamento gera movimento inverso"): não existia nenhum caminho de devolução.
+test('material-request: devolução de material recebido credita o saldo de volta (movimento RETURN)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item, location } = await createTestStockLink(transaction, 100);
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Tubo PVC', quantity: 20, unit: 'unidade' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balanceAfterReceive, 80);
+
+    const { returnMovement } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 5 },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(returnMovement.movementType, 'RETURN');
+
+    const balanceAfterReturn = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balanceAfterReturn, 85, 'devolução precisa creditar de volta o saldo real do item');
+
+    // Devolver de novo com a mesma requisição é idempotente — não duplica o crédito.
+    const { returnMovement: replay } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 5 },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(replay.id, returnMovement.id);
+    const balanceAfterReplay = await inventoryMovementsService.getBalance(item.id, location.id, transaction);
+    assert.equal(balanceAfterReplay, 85, 'reenviar a devolução não pode creditar duas vezes');
+  });
+});
+
+// Devolução exige requisição já RECEIVED — devolver uma requisição ainda REQUESTED é bloqueado.
+test('material-request: devolução de requisição ainda não recebida é bloqueada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item, location } = await createTestStockLink(transaction, 50);
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Fio elétrico', quantity: 5, unit: 'rolo' },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => materialRequestsService.returnMaterialRequest(request.id, { inventoryItemId: item.id, destinationLocationId: location.id }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'MATERIAL_REQUEST_RETURN_REQUIRES_RECEIVED');
         return true;
       }
     );
@@ -288,7 +409,8 @@ test('material-request: listMaterialRequests filtra por status', async () => {
       tenant.userId,
       transaction
     );
-    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.userId, transaction);
+    const { item, location } = await createTestStockLink(transaction, 50);
+    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id });
 
     const received = await materialRequestsService.listMaterialRequests(project.id, transaction, { status: 'RECEIVED' });
     assert.equal(received.length, 1);

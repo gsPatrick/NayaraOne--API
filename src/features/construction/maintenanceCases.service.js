@@ -299,6 +299,29 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
         'MAINTENANCE_CASE_STATUS_TRANSITION_INVALID'
       );
     }
+    // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, "Construção + Obras +
+    // Pós-obra — BLINDADO v1" §2/§9: "Pós-obra possui SLA, causa, materiais, mão de obra, custo
+    // e evidências" / "WarrantyCase contém categoria, severidade, SLA, responsável, antes/depois,
+    // custos e causa."): CLOSED não exigia causa raiz, fotos antes/depois nem nenhuma ação de
+    // atendimento registrada — dava pra fechar um chamado OPEN→IN_PROGRESS→RESOLVED→CLOSED sem
+    // nenhum desses dados. Fail closed: exige os três (usando o estado final do caso após os
+    // outros campos deste mesmo payload serem aplicados, para permitir enviar tudo numa única
+    // chamada "resolver e fechar").
+    if (normalizedStatus === 'CLOSED' && previousStatus !== 'CLOSED') {
+      const finalRootCauseCode = rootCauseCode !== undefined ? validateRootCauseCode(rootCauseCode) : maintenanceCase.rootCauseCode;
+      if (!finalRootCauseCode) {
+        throw AppError.badRequest('Não é possível fechar o chamado sem "rootCauseCode" (causa raiz).', 'MAINTENANCE_CASE_CLOSE_REQUIRES_ROOT_CAUSE');
+      }
+      const finalBeforeMedia = beforeMediaFileIds !== undefined ? validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds') : maintenanceCase.beforeMediaFileIds;
+      const finalAfterMedia = afterMediaFileIds !== undefined ? validateMediaFileIds(afterMediaFileIds, 'afterMediaFileIds') : maintenanceCase.afterMediaFileIds;
+      if (!Array.isArray(finalBeforeMedia) || finalBeforeMedia.length === 0 || !Array.isArray(finalAfterMedia) || finalAfterMedia.length === 0) {
+        throw AppError.badRequest('Não é possível fechar o chamado sem evidências "antes" e "depois" ("beforeMediaFileIds"/"afterMediaFileIds").', 'MAINTENANCE_CASE_CLOSE_REQUIRES_EVIDENCE');
+      }
+      const actionCountForClose = await WarrantyAction.count({ where: { warrantyCaseId: id }, transaction });
+      if (actionCountForClose === 0) {
+        throw AppError.badRequest('Não é possível fechar o chamado sem nenhuma ação de atendimento registrada.', 'MAINTENANCE_CASE_CLOSE_REQUIRES_ACTION');
+      }
+    }
     maintenanceCase.status = normalizedStatus;
   }
   if (description !== undefined) maintenanceCase.description = description;

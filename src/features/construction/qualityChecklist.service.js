@@ -78,7 +78,7 @@ function severityForQualityCategory(category) {
   return CRITICAL_QUALITY_CATEGORIES.includes(category) ? 'CRITICAL' : 'MEDIUM';
 }
 
-async function checkQualityItem(id, { status, notes }, actorUserId, transaction) {
+async function checkQualityItem(id, { status, notes, evidenceFileIds, responsibleUserId }, actorUserId, transaction) {
   // BUG REAL CORRIGIDO (rodada 42): sem lock, duplo clique/corrida concorrente podia abrir duas
   // Nonconformity pro mesmo item NOT_OK (R19).
   const item = await QualityChecklistItem.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
@@ -133,7 +133,21 @@ async function checkQualityItem(id, { status, notes }, actorUserId, transaction)
   // (hasOpenCriticalNonconformity) mesmo depois de uma delas ser fechada. Só abre NC nova quando
   // o item está TRANSICIONANDO para NOT_OK (de PENDING/OK) — reafirmar um item que já está
   // NOT_OK não duplica o registro.
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): a abertura automática de NC a
+  // partir de um item de qualidade reprovado não coletava responsável nem evidência "antes" —
+  // createNonconformity agora exige os dois (contrato, invariante "Não conformidade exige
+  // severidade, responsável, SLA, evidência antes/depois..."). Reaproveita quem está marcando o
+  // item (actorUserId) como responsável por padrão, e exige evidência de verdade: quem reprova
+  // um item agora precisa anexar ao menos uma foto/arquivo, assim como já é exigido em todo
+  // outro fluxo de abertura de NC (tela de Qualidade).
   if (normalizedStatus === 'NOT_OK' && previousStatus !== 'NOT_OK') {
+    const resolvedEvidenceFileIds = Array.isArray(evidenceFileIds) ? evidenceFileIds.filter(Boolean) : [];
+    if (resolvedEvidenceFileIds.length === 0) {
+      throw AppError.badRequest(
+        'Reprovar um item de qualidade exige ao menos uma evidência ("evidenceFileIds") — a reprovação abre automaticamente uma não conformidade.',
+        'QUALITY_ITEM_EVIDENCE_REQUIRED'
+      );
+    }
     await createNonconformity(
       item.projectId,
       {
@@ -142,6 +156,8 @@ async function checkQualityItem(id, { status, notes }, actorUserId, transaction)
         projectStageId: item.projectStageId,
         severity: severityForQualityCategory(item.category),
         description: `Checklist de qualidade reprovado: "${item.item}"${notes ? ` — ${notes}` : ''}.`,
+        responsibleUserId: responsibleUserId || actorUserId,
+        beforeEvidenceFileIds: resolvedEvidenceFileIds,
       },
       actorUserId,
       transaction

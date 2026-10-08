@@ -14,6 +14,8 @@ const projectStagesService = require('../src/features/construction/projectStages
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
 const materialRequestsService = require('../src/features/construction/materialRequests.service');
+const inventoryMovementsService = require('../src/features/inventory/movements.service');
+const { InventoryItem, InventoryLocation } = require('../src/models');
 const dailyReportsService = require('../src/features/construction/dailyReports.service');
 const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
 const qualityChecklistService = require('../src/features/construction/qualityChecklist.service');
@@ -78,7 +80,25 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       transaction
     );
     assert.equal(materialRequest.status, 'REQUESTED');
-    const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.userId, transaction);
+    // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): receber agora exige item/local
+    // real do Estoque — cria um item+local mínimo com saldo pra este E2E.
+    const stockLocation = await InventoryLocation.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, name: `HOMO QA E2E Local ${suffix}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    const stockItem = await InventoryItem.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, sku: `HOMO-E2E-${suffix}`, name: `HOMO QA E2E Item ${suffix}`, unitOfMeasure: 'UN', itemType: 'CONSUMABLE', averageCost: 10, allowNegativeStock: true, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await inventoryMovementsService.recordMovement(
+      { groupId: tenant.groupId, companyId: tenant.companyId, inventoryItemId: stockItem.id, movementType: 'IN', quantity: 500, destinationLocationId: stockLocation.id },
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.userId, transaction, {
+      inventoryItemId: stockItem.id,
+      sourceLocationId: stockLocation.id,
+    });
     assert.equal(receivedRequest.status, 'RECEIVED');
 
     // 4. Iniciar obra — o orçamento aprovado no passo 2 já avançou PLANNED -> BUDGETED
@@ -173,7 +193,17 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     );
     assert.ok(action.id);
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
-    const closedCase = await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
+    const closedCase = await maintenanceCasesService.updateMaintenanceCase(
+      warrantyCase.id,
+      {
+        status: 'CLOSED',
+        rootCauseCode: 'WORKMANSHIP',
+        beforeMediaFileIds: ['99999999-9999-9999-9999-999999999999'],
+        afterMediaFileIds: ['aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'],
+      },
+      tenant.userId,
+      transaction
+    );
     assert.equal(closedCase.status, 'CLOSED');
 
     // 13. Read model separado de pós-obra (M6-100) — confirma que enxerga o caso fechado

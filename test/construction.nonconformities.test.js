@@ -40,6 +40,7 @@ test('M6-62: fechar não conformidade sem after_evidence_file_ids bloqueia', asy
         companyId: tenant.companyId,
         severity: 'HIGH',
         description: 'Infiltração no banheiro da suíte 2.',
+        responsibleUserId: tenant.userId,
         beforeEvidenceFileIds: ['11111111-1111-1111-1111-111111111111'],
       },
       tenant.userId,
@@ -75,6 +76,8 @@ test('M6-24: fechar NC com requiresAcceptance=true sem acceptedByUserId bloqueia
         severity: 'CRITICAL',
         description: 'Trinca estrutural na viga do 2º pavimento.',
         requiresAcceptance: true,
+        responsibleUserId: tenant.userId,
+        beforeEvidenceFileIds: ['22222222-2222-2222-2222-222222222222'],
       },
       tenant.userId,
       transaction
@@ -113,7 +116,7 @@ test('NC fecha normalmente quando after_evidence_file_ids está preenchido e nã
     const project = await createTestProject(transaction);
     const nc = await nonconformitiesService.createNonconformity(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'Pintura com respingo na sala.' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'Pintura com respingo na sala.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['33333333-3333-3333-3333-333333333334'] },
       tenant.userId,
       transaction
     );
@@ -280,7 +283,7 @@ test('RLS: não conformidade de uma empresa não é visível fora do contexto de
     const project = await createTestProject(transaction);
     const nc = await nonconformitiesService.createNonconformity(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'RLS smoke test.' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'RLS smoke test.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['44444444-4444-4444-4444-444444444444'] },
       tenant.userId,
       transaction
     );
@@ -311,7 +314,7 @@ test('M6-12: marcar item de checklist de qualidade como NOT_OK abre Nonconformit
 
     const checked = await qualityChecklistService.checkQualityItem(
       item.id,
-      { status: 'NOT_OK', notes: 'Manchas visíveis na fachada.' },
+      { status: 'NOT_OK', notes: 'Manchas visíveis na fachada.', evidenceFileIds: ['55555555-5555-5555-5555-555555555555'] },
       tenant.userId,
       transaction
     );
@@ -352,18 +355,18 @@ test('M6-12 (ciclo 4): reenviar NOT_OK para o mesmo item já reprovado não dupl
       transaction
     );
 
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão.' }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão.', evidenceFileIds: ['66666666-6666-6666-6666-666666666666'] }, tenant.userId, transaction);
     let ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 1, 'primeira reprovação precisa abrir exatamente uma Nonconformity');
 
     // Reenvio do mesmo "check" (status já era NOT_OK) — não pode abrir uma segunda NC.
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão (reenvio).' }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão (reenvio).', evidenceFileIds: ['77777777-7777-7777-7777-777777777777'] }, tenant.userId, transaction);
     ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 1, 'reenviar NOT_OK para o mesmo item já reprovado não pode duplicar a Nonconformity');
 
     // Depois de corrigido (OK) e reprovado de novo, uma NOVA NC legítima deve ser aberta.
     await qualityChecklistService.checkQualityItem(item.id, { status: 'OK' }, tenant.userId, transaction);
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Voltou a vazar.' }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Voltou a vazar.', evidenceFileIds: ['88888888-8888-8888-8888-888888888888'] }, tenant.userId, transaction);
     ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 2, 'uma nova reprovação genuína (após ter sido corrigida) precisa abrir uma NOVA Nonconformity');
   });

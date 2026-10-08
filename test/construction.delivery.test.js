@@ -289,7 +289,18 @@ test('closeProjectWarranty: fecha a obra quando todos os casos de garantia estã
       transaction
     );
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, transaction);
-    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'CLOSED' }, tenant.userId, transaction);
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Reparo da infiltração.' }, tenant.userId, transaction);
+    await maintenanceCasesService.updateMaintenanceCase(
+      warrantyCase.id,
+      {
+        status: 'CLOSED',
+        rootCauseCode: 'WORKMANSHIP',
+        beforeMediaFileIds: ['77777777-7777-7777-7777-777777777777'],
+        afterMediaFileIds: ['88888888-8888-8888-8888-888888888888'],
+      },
+      tenant.userId,
+      transaction
+    );
 
     const closed = await projectsService.closeProjectWarranty(project.id, tenant.userId, transaction);
     assert.equal(closed.status, 'CLOSED');

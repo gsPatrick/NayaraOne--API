@@ -42,7 +42,7 @@ test('M6-59: evidência reutilizada entre duas não conformidades gera alerta, s
 
     const nc1 = await nonconformitiesService.createNonconformity(
       project1.id,
-      withTenant({ description: 'Rachadura na fundação', severity: 'HIGH', beforeEvidenceFileIds: [fileA.id] }),
+      withTenant({ description: 'Rachadura na fundação', severity: 'HIGH', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [fileA.id] }),
       tenant.userId,
       transaction
     );
@@ -53,7 +53,7 @@ test('M6-59: evidência reutilizada entre duas não conformidades gera alerta, s
     const fileB = await uploadTestFile(transaction, sharedContent, 'rachadura-reaproveitada.jpg');
     const nc2 = await nonconformitiesService.createNonconformity(
       project2.id,
-      withTenant({ description: 'Rachadura em outra obra (evidência suspeita)', severity: 'HIGH', beforeEvidenceFileIds: [fileB.id] }),
+      withTenant({ description: 'Rachadura em outra obra (evidência suspeita)', severity: 'HIGH', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [fileB.id] }),
       tenant.userId,
       transaction
     );
@@ -71,7 +71,7 @@ test('M6-59: arquivos genuinamente distintos não geram alerta falso-positivo', 
     const fileA = await uploadTestFile(transaction, Buffer.from('foto-real-1').toString('base64'), 'foto1.jpg');
     const nc1 = await nonconformitiesService.createNonconformity(
       project.id,
-      withTenant({ description: 'NC 1', severity: 'LOW', beforeEvidenceFileIds: [fileA.id] }),
+      withTenant({ description: 'NC 1', severity: 'LOW', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [fileA.id] }),
       tenant.userId,
       transaction
     );
@@ -80,7 +80,7 @@ test('M6-59: arquivos genuinamente distintos não geram alerta falso-positivo', 
     const fileB = await uploadTestFile(transaction, Buffer.from('foto-real-2-diferente').toString('base64'), 'foto2.jpg');
     const nc2 = await nonconformitiesService.createNonconformity(
       project.id,
-      withTenant({ description: 'NC 2', severity: 'LOW', beforeEvidenceFileIds: [fileB.id] }),
+      withTenant({ description: 'NC 2', severity: 'LOW', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [fileB.id] }),
       tenant.userId,
       transaction
     );

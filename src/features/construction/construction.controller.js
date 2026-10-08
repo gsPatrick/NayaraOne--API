@@ -377,14 +377,19 @@ const listMaterialRequests = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const receiveMaterialRequest = catchAsync(async (req, res) => {
-  // GAP CORRIGIDO (auditoria pós-Marco 6, item 5): quem confirma o recebimento pode informar de
-  // qual item/local real do Estoque o material saiu — quando informado, gera o movimento OUT
-  // real (baixa de saldo). Opcional: requisição sem esse vínculo continua funcionando como antes.
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): item/local do Estoque agora são
+  // obrigatórios pra confirmar o recebimento — ver materialRequests.service.js.
   const { inventoryItemId, sourceLocationId } = req.body || {};
   const item = await req.withTenantTransaction((t) =>
     materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.userId, t, { inventoryItemId, sourceLocationId })
   );
   return success(res, { data: item });
+});
+const returnMaterialRequest = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    materialRequestsService.returnMaterialRequest(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: result });
 });
 
 // --- Loss records (perda de material) ---
@@ -544,4 +549,5 @@ module.exports = {
   createMaterialRequest,
   listMaterialRequests,
   receiveMaterialRequest,
+  returnMaterialRequest,
 };

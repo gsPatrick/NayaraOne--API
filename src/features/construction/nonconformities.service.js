@@ -5,6 +5,7 @@ const { Nonconformity, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishNonconformityOpened, publishNonconformityClosed } = require('./constructionEvents.service');
+const { getActiveSlaDaysMap } = require('./slaRules.service');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -92,8 +93,31 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
     throw AppError.badRequest('"slaDueAt" deve ser uma data válida.', 'NONCONFORMITY_VALIDATION');
   }
 
-  const resolvedBeforeEvidence = Array.isArray(beforeEvidenceFileIds) ? beforeEvidenceFileIds : [];
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, "Construção + Obras +
+  // Pós-obra — BLINDADO v1" §2, invariante obrigatória): "Não conformidade exige severidade,
+  // responsável, SLA, evidência antes/depois e aceite quando aplicável." `responsibleUserId` e
+  // `beforeEvidenceFileIds` eram inteiramente opcionais — dava pra abrir e preservar uma NC sem
+  // nenhum dos dois. Fail closed: exige os dois já na abertura.
+  if (!responsibleUserId) {
+    throw AppError.badRequest('"responsibleUserId" é obrigatório para abrir uma não conformidade.', 'NONCONFORMITY_RESPONSIBLE_REQUIRED');
+  }
+  if (!Array.isArray(beforeEvidenceFileIds) || beforeEvidenceFileIds.length === 0) {
+    throw AppError.badRequest('Pelo menos uma evidência "antes" ("beforeEvidenceFileIds") é obrigatória para abrir uma não conformidade.', 'NONCONFORMITY_BEFORE_EVIDENCE_REQUIRED');
+  }
+
+  const resolvedBeforeEvidence = beforeEvidenceFileIds;
   const reuse = await detectEvidenceReuse(resolvedBeforeEvidence, companyId, null, transaction);
+
+  // BUG REAL CORRIGIDO (mesma auditoria): "SLA" do invariante acima nunca era calculado — o
+  // campo ficava null a menos que o cliente mandasse manualmente. Mesmo padrão de SLA por
+  // severidade já usado em warranty_cases (REG-OBR-002/slaRules.service.js, mesmas 4
+  // severidades) — reaproveitado aqui em vez de duplicar a regra.
+  let resolvedSlaDueAt = slaDueAt ? new Date(slaDueAt) : null;
+  if (!resolvedSlaDueAt) {
+    const { slaDays } = await getActiveSlaDaysMap(groupId, companyId, transaction, actorUserId);
+    const days = slaDays[normalizedSeverity] != null ? slaDays[normalizedSeverity] : slaDays.MEDIUM;
+    resolvedSlaDueAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
 
   const nonconformity = await Nonconformity.create(
     {
@@ -103,8 +127,8 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
       projectStageId: projectStageId || null,
       severity: normalizedSeverity,
       description,
-      responsibleUserId: responsibleUserId || null,
-      slaDueAt: slaDueAt || null,
+      responsibleUserId,
+      slaDueAt: resolvedSlaDueAt,
       status: 'OPEN',
       beforeEvidenceFileIds: resolvedBeforeEvidence,
       afterEvidenceFileIds: [],
