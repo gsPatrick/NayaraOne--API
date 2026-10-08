@@ -708,3 +708,123 @@ test('M6-NOVO-3: createProject rejeita budgetAmount "NaN"/"Infinity"/negativo/ab
     assert.equal(Number(ok.budgetAmount), 15000.5);
   });
 });
+
+// TAREFA 2 (auditoria externa Nayara, fechamento Marco 6): "economia" (economyPct) e
+// "comissão" (commissionPct) da obra — campos opcionais da regra de margem, persistidos via
+// Motor de Regras genérico (core.rule_versions.action_json, ver marginRules.service.js),
+// recuperados via getActiveMarginRule, com a MESMA validação já existente pra minMarginPct
+// (NaN/Infinity/negativo/>100 rejeitados).
+test('TAREFA 2: economyPct e commissionPct são salvos e recuperados em createMarginRule/getActiveMarginRule', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const created = await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 15, economyPct: 8.5, commissionPct: 3.25 }),
+      tenant.userId,
+      transaction
+    );
+    assert.equal(created.economyPct, 8.5);
+    assert.equal(created.commissionPct, 3.25);
+
+    const active = await marginRulesService.getActiveMarginRule(tenant.groupId, tenant.companyId, transaction);
+    assert.equal(active.id, created.id);
+    assert.equal(active.minMarginPct, 15);
+    assert.equal(active.economyPct, 8.5);
+    assert.equal(active.commissionPct, 3.25);
+
+    // Confirma persistência real na fonte da verdade (core.rule_versions.action_json), não só
+    // no objeto em memória devolvido pelo service.
+    const { RuleVersion: RuleVersionModel } = require('../src/models');
+    const version = await RuleVersionModel.findByPk(created.id, { transaction });
+    assert.equal(Number(version.actionJson.economyPct), 8.5);
+    assert.equal(Number(version.actionJson.commissionPct), 3.25);
+  });
+});
+
+test('TAREFA 2: economyPct/commissionPct são opcionais (ausentes = null, não quebra criação)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const created = await marginRulesService.createMarginRule(withTenant({ minMarginPct: 11 }), tenant.userId, transaction);
+    assert.equal(created.economyPct, null);
+    assert.equal(created.commissionPct, null);
+
+    const active = await marginRulesService.getActiveMarginRule(tenant.groupId, tenant.companyId, transaction);
+    assert.equal(active.economyPct, null);
+    assert.equal(active.commissionPct, null);
+  });
+});
+
+test('TAREFA 2: economyPct/commissionPct rejeitam NaN/Infinity/negativo/>100 (mesma validação de minMarginPct)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    for (const badValue of ['NaN', 'Infinity', -1, 101]) {
+      await assert.rejects(
+        () => marginRulesService.createMarginRule(withTenant({ minMarginPct: 10, economyPct: badValue }), tenant.userId, transaction),
+        (err) => {
+          assert.ok(err instanceof AppError);
+          assert.equal(err.code, 'MARGIN_RULE_VALIDATION');
+          return true;
+        }
+      );
+      await assert.rejects(
+        () => marginRulesService.createMarginRule(withTenant({ minMarginPct: 10, commissionPct: badValue }), tenant.userId, transaction),
+        (err) => {
+          assert.ok(err instanceof AppError);
+          assert.equal(err.code, 'MARGIN_RULE_VALIDATION');
+          return true;
+        }
+      );
+    }
+  });
+});
+
+// TAREFA 3 (auditoria externa Nayara, fechamento Marco 6): projectHealth.service.js já calcula
+// `belowMinMargin` (linhas ~196-206), mas não tinha teste dedicado forçando esse caminho a
+// true. Cria obra com margem mínima configurada ALTA (30%) e orçamento com custo que deixa a
+// margem projetada abaixo disso (custo realizado alto o suficiente pra corroer a margem),
+// chama getProjectHealth real e confirma belowMinMargin === true.
+test('TAREFA 3: getProjectHealth retorna belowMinMargin=true quando a margem projetada fica abaixo da regra mínima', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const { FinancialEntry } = require('../src/models');
+
+    // Margem mínima exigida bem alta (30%) — qualquer margem projetada abaixo disso deve
+    // disparar o alerta.
+    await marginRulesService.createMarginRule(withTenant({ minMarginPct: 30 }), tenant.userId, transaction);
+
+    const project = await projectsService.createProject(
+      withTenant({ name: `HOMO QA Obra belowMinMargin ${Date.now()}${Math.floor(Math.random() * 10000)}` }),
+      tenant.userId,
+      transaction
+    );
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    // Base orçada de 1000 (committedCost); custo realizado via Financeiro de 950 — margem
+    // projetada fica em torno de 5%, bem abaixo dos 30% mínimos exigidos.
+    await budgetLinesService.createBudgetLine(
+      project.id,
+      withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget.id }),
+      tenant.userId,
+      transaction
+    );
+    await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+
+    await FinancialEntry.create(
+      withTenant({
+        entryType: 'DEBIT',
+        nature: 'PAYABLE',
+        status: 'SETTLED',
+        amount: 950,
+        constructionProjectId: project.id,
+        description: 'Custo realizado alto — força margem abaixo do mínimo (TAREFA 3)',
+        dueAt: new Date(),
+        settledAt: new Date(),
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      }),
+      { transaction }
+    );
+
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+
+    assert.equal(health.minMarginPct, 30);
+    assert.ok(health.marginPct !== null, 'marginPct não deveria ser null com orçamento aprovado');
+    assert.ok(health.marginPct < 30, `esperava marginPct < 30, recebeu ${health.marginPct}`);
+    assert.equal(health.belowMinMargin, true);
+  });
+});

@@ -4,6 +4,47 @@ const { DailyReport, DailyWorker, DailyMaterial } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDailyLogCreated } = require('./constructionEvents.service');
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): a checagem de reuso suspeito de
+// evidência por hash (`detectEvidenceReuse`, nonconformities.service.js — M6-59) nunca tinha sido
+// conectada ao Diário de Obra, apesar do RDO também gravar `evidenceFileIds`. Reusa o MESMO
+// helper de comparação por `File.checksumSha256` (`resolveSameContentFileIds`, extraído de
+// detectEvidenceReuse) em vez de duplicar a lógica de hash — só a consulta de "quem mais já usou
+// esses arquivos" muda (aqui é `DailyReport.evidenceFileIds`, não
+// `Nonconformity.before/afterEvidenceFileIds`).
+const { resolveSameContentFileIds } = require('./evidenceReuse.service');
+const { Op } = require('sequelize');
+
+/**
+ * detectDailyReportEvidenceReuse — mesmo padrão/comportamento de
+ * nonconformities.service.js#detectEvidenceReuse: NUNCA bloqueia, só sinaliza (flag +
+ * referência + detalhes) quando algum arquivo de `evidenceFileIds` do RDO (ou um reupload do
+ * mesmo conteúdo, checksum idêntico) já aparece em `evidenceFileIds` de outro RDO qualquer da
+ * mesma empresa.
+ */
+async function detectDailyReportEvidenceReuse(fileIds, companyId, excludeDailyReportId, transaction) {
+  if (!Array.isArray(fileIds) || !fileIds.length) return { flagged: false, referenceId: null, details: null };
+
+  const sameContentFileIds = await resolveSameContentFileIds(fileIds, companyId, transaction);
+  if (!sameContentFileIds.length) return { flagged: false, referenceId: null, details: null };
+
+  const where = {
+    companyId,
+    evidenceFileIds: { [Op.overlap]: sameContentFileIds },
+  };
+  if (excludeDailyReportId) where.id = { [Op.ne]: excludeDailyReportId };
+
+  const priorMatches = await DailyReport.findAll({ where, transaction, order: [['created_at', 'ASC']] });
+  if (!priorMatches.length) return { flagged: false, referenceId: null, details: null };
+
+  const reference = priorMatches[0];
+  const overlappingFileIds = reference.evidenceFileIds.filter((id) => sameContentFileIds.includes(id));
+
+  return {
+    flagged: true,
+    referenceId: reference.id,
+    details: { overlappingFileIds, matchedAt: new Date().toISOString() },
+  };
+}
 
 const DEFAULT_SHIFT_CODE = 'UNICO';
 
@@ -135,6 +176,13 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
     throw AppError.conflict('Já existe um RDO para esta obra nesta data e turno.', 'DAILY_REPORT_DUPLICATE');
   }
 
+  const resolvedEvidenceFileIds = Array.isArray(evidenceFileIds) ? evidenceFileIds : [];
+
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): checagem de reuso suspeito de
+  // evidência por hash, mesmo padrão do M6-59 (nonconformities.service.js) — gera alerta, nunca
+  // bloqueia a criação do RDO.
+  const reuse = await detectDailyReportEvidenceReuse(resolvedEvidenceFileIds, companyId, null, transaction);
+
   const report = await DailyReport.create(
     {
       groupId,
@@ -146,7 +194,10 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
       workforceCount: workforceCount != null ? workforceCount : null,
       occurrences: occurrences || null,
       servicesPerformed: servicesPerformed || null,
-      evidenceFileIds: Array.isArray(evidenceFileIds) ? evidenceFileIds : [],
+      evidenceFileIds: resolvedEvidenceFileIds,
+      evidenceReuseFlagged: reuse.flagged,
+      evidenceReuseReferenceId: reuse.referenceId,
+      evidenceReuseDetails: reuse.details,
       reportedByUserId: actorUserId || null,
       clientLocalId: clientLocalId || null,
       idempotencyKey: idempotencyKey || null,
@@ -337,6 +388,7 @@ const updateDailyReport = correctDailyReport;
 
 module.exports = {
   createDailyReport,
+  detectDailyReportEvidenceReuse,
   listDailyReports,
   getDailyReport,
   getCurrentDailyReport,

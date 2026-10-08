@@ -67,7 +67,7 @@ async function getOrCreateRule(groupId, companyId, actorUserId, transaction) {
   return rule;
 }
 
-async function createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction) {
+async function createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction, economyPct, commissionPct) {
   // Mesma justificativa do pg_advisory_xact_lock original (migração 20260101000181): o par
   // "fechar effectiveUntil da versão anterior" + "criar nova RuleVersion PUBLISHED" sob
   // concorrência real da mesma empresa pode formar condição de corrida — serializa por
@@ -95,7 +95,12 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
   });
   const nextVersionNumber = lastVersion ? lastVersion.versionNumber + 1 : 1;
 
-  const actionJson = { minMarginPct: numeric, description: description || null };
+  const actionJson = {
+    minMarginPct: numeric,
+    description: description || null,
+    economyPct: economyPct === undefined ? null : economyPct,
+    commissionPct: commissionPct === undefined ? null : commissionPct,
+  };
   const version = await RuleVersion.create(
     {
       groupId,
@@ -169,15 +174,41 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
     companyId,
     minMarginPct: numeric,
     description: description || null,
+    economyPct: actionJson.economyPct,
+    commissionPct: actionJson.commissionPct,
     isActive: true,
     toJSON() {
-      return { id: version.id, groupId, companyId, minMarginPct: numeric, description: description || null, isActive: true, ruleCode: RULE_CODE };
+      return {
+        id: version.id,
+        groupId,
+        companyId,
+        minMarginPct: numeric,
+        description: description || null,
+        economyPct: actionJson.economyPct,
+        commissionPct: actionJson.commissionPct,
+        isActive: true,
+        ruleCode: RULE_CODE,
+      };
     },
   };
 }
 
+// TAREFA 2 (auditoria externa Nayara, fechamento Marco 6): valida "economyPct"/"commissionPct"
+// com a MESMA regra já usada pra "minMarginPct" (campo opcional — null/undefined é válido e
+// significa "regra não configurada"; quando informado, tem que ser um percentual numérico
+// finito entre 0 e 100 — nunca NaN/Infinity/negativo/acima de 100, mesma classe de bug já
+// catalogada na categoria 14 do catálogo de auditoria).
+function validateOptionalPct(value, fieldName) {
+  if (value === undefined || value === null) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
+    throw AppError.badRequest(`"${fieldName}" deve ser um percentual numérico entre 0 e 100.`, 'MARGIN_RULE_VALIDATION');
+  }
+  return numeric;
+}
+
 async function createMarginRule(payload, actorUserId, transaction) {
-  const { groupId, companyId, minMarginPct, description } = payload;
+  const { groupId, companyId, minMarginPct, description, economyPct, commissionPct } = payload;
   if (!groupId || !companyId || minMarginPct === undefined || minMarginPct === null) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId" e "minMarginPct" são obrigatórios.',
@@ -190,8 +221,19 @@ async function createMarginRule(payload, actorUserId, transaction) {
   if (Number.isNaN(numeric) || numeric < 0 || numeric > 100) {
     throw AppError.badRequest('"minMarginPct" deve ser um percentual numérico entre 0 e 100.', 'MARGIN_RULE_VALIDATION');
   }
+  const economyNumeric = validateOptionalPct(economyPct, 'economyPct');
+  const commissionNumeric = validateOptionalPct(commissionPct, 'commissionPct');
 
-  const rule = await createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction);
+  const rule = await createMarginRuleAttempt(
+    groupId,
+    companyId,
+    numeric,
+    description,
+    actorUserId,
+    transaction,
+    economyNumeric,
+    commissionNumeric
+  );
 
   await registrarAuditoria(
     {
@@ -222,6 +264,12 @@ async function getActiveMarginRule(groupId, companyId, transaction) {
     id: evaluation.ruleVersionId,
     minMarginPct: Number(evaluation.action.minMarginPct),
     description: evaluation.action.description || null,
+    economyPct: evaluation.action.economyPct !== undefined && evaluation.action.economyPct !== null
+      ? Number(evaluation.action.economyPct)
+      : null,
+    commissionPct: evaluation.action.commissionPct !== undefined && evaluation.action.commissionPct !== null
+      ? Number(evaluation.action.commissionPct)
+      : null,
     isActive: true,
   };
 }
@@ -233,6 +281,12 @@ async function getMarginRule(id, transaction) {
     id: version.id,
     minMarginPct: Number(version.actionJson?.minMarginPct),
     description: version.actionJson?.description || null,
+    economyPct: version.actionJson?.economyPct !== undefined && version.actionJson?.economyPct !== null
+      ? Number(version.actionJson.economyPct)
+      : null,
+    commissionPct: version.actionJson?.commissionPct !== undefined && version.actionJson?.commissionPct !== null
+      ? Number(version.actionJson.commissionPct)
+      : null,
     isActive: version.status === 'PUBLISHED' && !version.effectiveUntil,
   };
 }

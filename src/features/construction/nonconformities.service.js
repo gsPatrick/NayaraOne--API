@@ -1,11 +1,12 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Nonconformity, File } = require('../../models');
+const { Nonconformity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishNonconformityOpened, publishNonconformityClosed } = require('./constructionEvents.service');
 const { getActiveSlaDaysMap } = require('./slaRules.service');
+const { resolveSameContentFileIds } = require('./evidenceReuse.service');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -18,15 +19,7 @@ const { getActiveSlaDaysMap } = require('./slaRules.service');
 async function detectEvidenceReuse(fileIds, companyId, excludeNonconformityId, transaction) {
   if (!fileIds.length) return { flagged: false, referenceId: null, details: null };
 
-  const attachedFiles = await File.findAll({ where: { id: { [Op.in]: fileIds }, companyId }, transaction });
-  const checksums = [...new Set(attachedFiles.map((f) => f.checksumSha256).filter(Boolean))];
-  if (!checksums.length) return { flagged: false, referenceId: null, details: null };
-
-  // Todo File (de qualquer registro/obra da empresa) que compartilha um desses checksums —
-  // inclui tanto reuso do MESMO arquivo (mesmo id) quanto reupload do mesmo conteúdo (id
-  // diferente, bytes idênticos).
-  const sameContentFiles = await File.findAll({ where: { checksumSha256: { [Op.in]: checksums }, companyId }, transaction });
-  const sameContentFileIds = sameContentFiles.map((f) => f.id);
+  const sameContentFileIds = await resolveSameContentFileIds(fileIds, companyId, transaction);
   if (!sameContentFileIds.length) return { flagged: false, referenceId: null, details: null };
 
   const where = {

@@ -1,7 +1,8 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Group, Company, Project, DailyReport, Task } = require('../../models');
+const { sequelize, Group, Company, Project, DailyReport, DailyWorker, Task } = require('../../models');
+const { toDateOnlyString, previousBusinessDay } = require('./businessDays.helper');
 
 /**
  * missingDailyReportJob — achado numa rodada de verificação de integrações (30/09/2026): a
@@ -21,19 +22,10 @@ const { sequelize, Group, Company, Project, DailyReport, Task } = require('../..
 
 const ACTIVE_STATUS = 'ACTIVE';
 
-function toDateOnlyString(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function previousBusinessDay(now) {
-  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  date.setUTCDate(date.getUTCDate() - 1);
-  // Sábado (6) e domingo (0) não são dia útil — volta para a sexta-feira anterior.
-  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
-    date.setUTCDate(date.getUTCDate() - 1);
-  }
-  return date;
-}
+// GAP 1 (auditoria externa Nayara, Marco 6/NAY Obras): `toDateOnlyString`/`previousBusinessDay`
+// foram extraídos para `businessDays.helper.js` porque `nayObras.service.js#summarizeProject`
+// precisa da MESMA definição de "dia útil" para contar dias sem RDO no resumo da NAY — nunca
+// duas implementações divergentes da mesma regra.
 
 async function detectMissingDailyReports(transaction, now = new Date()) {
   const checkDate = toDateOnlyString(previousBusinessDay(now));
@@ -91,11 +83,91 @@ async function detectMissingDailyReports(transaction, now = new Date()) {
   return { projectsChecked: activeProjects.length, checkDate, tasksCreated };
 }
 
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): o job só cobria a ausência do
+// DIÁRIO em si — a fonte também exige rastrear a ausência de DOCUMENTOS do trabalhador
+// (DailyWorker.documentFileIds, ver M6 "documentação correspondente ao prestador"). Reaproveita
+// a MESMA infraestrutura (janela de dias úteis, lock advisory por projeto+chave, dedupe por
+// Task aberta) em vez de duplicar o mecanismo — só muda O QUE é verificado e o
+// `relatedEntityType` da Task gerada, para não se confundir com a tarefa de "RDO ausente".
+const MISSING_WORKER_DOCUMENTS_WINDOW_DAYS = 7;
+const MISSING_WORKER_DOCUMENTS_ENTITY_TYPE = 'construction.daily_workers';
+
+async function detectMissingWorkerDocuments(transaction, now = new Date()) {
+  const windowEnd = toDateOnlyString(previousBusinessDay(now));
+  const windowStartDate = new Date(`${windowEnd}T00:00:00.000Z`);
+  windowStartDate.setUTCDate(windowStartDate.getUTCDate() - MISSING_WORKER_DOCUMENTS_WINDOW_DAYS);
+  const windowStart = toDateOnlyString(windowStartDate);
+
+  const activeProjects = await Project.findAll({ where: { status: ACTIVE_STATUS }, transaction });
+
+  let tasksCreated = 0;
+  for (const project of activeProjects) {
+    const reportsInWindow = await DailyReport.findAll({
+      where: { projectId: project.id, reportDate: { [Op.between]: [windowStart, windowEnd] } },
+      transaction,
+    });
+    if (!reportsInWindow.length) continue;
+
+    const workersMissingDocs = await DailyWorker.findAll({
+      where: {
+        dailyReportId: { [Op.in]: reportsInWindow.map((r) => r.id) },
+        [Op.or]: [{ documentFileIds: [] }, { documentFileIds: null }],
+      },
+      transaction,
+    });
+    if (!workersMissingDocs.length) continue;
+
+    // Mesmo lock advisory já usado para "RDO ausente" (serializa check-then-create por
+    // projeto+janela), com chave própria para não colidir com o lock da outra verificação.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+      replacements: { key: `missing-worker-documents:${project.id}:${windowEnd}` },
+      transaction,
+    });
+
+    const taskTitle = `Documentação de trabalhador(es) pendente em ${project.name} (até ${windowEnd})`;
+    const existingTask = await Task.findOne({
+      where: {
+        relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
+        relatedEntityId: project.id,
+        title: taskTitle,
+        status: { [Op.ne]: 'CANCELED' },
+      },
+      transaction,
+    });
+    if (existingTask) continue;
+
+    await Task.create(
+      {
+        groupId: project.groupId,
+        companyId: project.companyId,
+        assignedToUserId: project.responsibleUserId || null,
+        title: taskTitle,
+        description:
+          `${workersMissingDocs.length} trabalhador(es) sem documentação ("documentFileIds") registrada nos RDOs ` +
+          `da obra "${project.name}" entre ${windowStart} e ${windowEnd}. Verifique e anexe a documentação pendente.`,
+        relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
+        relatedEntityId: project.id,
+        status: 'OPEN',
+        priority: 'MEDIUM',
+      },
+      { transaction }
+    );
+    tasksCreated += 1;
+  }
+
+  return { projectsChecked: activeProjects.length, windowStart, windowEnd, tasksCreated };
+}
+
 async function processCompany(group, company) {
   return sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-    return detectMissingDailyReports(transaction);
+    const missingReports = await detectMissingDailyReports(transaction);
+    const missingDocuments = await detectMissingWorkerDocuments(transaction);
+    return {
+      projectsChecked: missingReports.projectsChecked,
+      tasksCreated: missingReports.tasksCreated + missingDocuments.tasksCreated,
+    };
   });
 }
 
@@ -155,6 +227,7 @@ module.exports = {
   runMissingDailyReportJob,
   startMissingDailyReportJob,
   detectMissingDailyReports,
+  detectMissingWorkerDocuments,
   processMissingDailyReportJobForCompany: processCompany,
   previousBusinessDay,
 };

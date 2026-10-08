@@ -1,10 +1,18 @@
 'use strict';
 
-const { MaterialRequest, Project, ProjectStage } = require('../../models');
+const { MaterialRequest, Project, ProjectStage, InventoryItem } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaterialRequested, publishMaterialReceived } = require('./constructionEvents.service');
 const { recordMovement } = require('../inventory/movements.service');
+const { setReturnCondition } = require('../inventory/returnConditionColumns');
+
+// GAP 2 (fechamento de auditoria externa Nayara, Marco 6): condição aceita na devolução —
+// REUSABLE (volta ao estoque normal, reaproveitável), DAMAGED (volta danificado — custo de
+// devolução distinto do custo original do item), LOST (não volta de fato — registrado só para
+// fins de conferência/trilha, sem crédito de saldo adicional além do movimento RETURN já
+// existente, que é quem credita o saldo físico).
+const RETURN_CONDITION_CODES = ['REUSABLE', 'DAMAGED', 'LOST'];
 
 // M6-28 — requisição de material nascida da obra/etapa.
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 5): a versão anterior só registrava a requisição
@@ -215,6 +223,30 @@ async function returnMaterialRequest(id, groupId, companyId, payload, actorUserI
     throw AppError.badRequest('"quantity" da devolução precisa ser maior que zero e não pode exceder a quantidade recebida.', 'MATERIAL_REQUEST_RETURN_VALIDATION');
   }
 
+  // GAP 2 (fechamento de auditoria externa Nayara, Marco 6) — "reaproveitamento de materiais" +
+  // "custo de devolução distinto do custo original": `reusable` (default true, mesmo
+  // comportamento anterior preservado — devolução sempre creditava saldo normal) e
+  // `conditionCode`/`returnCost` (opcionais) documentam EM QUE CONDIÇÃO o material voltou.
+  const reusable = payload && payload.reusable != null ? Boolean(payload.reusable) : true;
+  const conditionCode = payload && payload.conditionCode ? String(payload.conditionCode).toUpperCase() : 'REUSABLE';
+  if (!RETURN_CONDITION_CODES.includes(conditionCode)) {
+    throw AppError.badRequest(`"conditionCode" precisa ser um de: ${RETURN_CONDITION_CODES.join(', ')}.`, 'MATERIAL_REQUEST_RETURN_VALIDATION');
+  }
+  // Custo de devolução distinto do custo ORIGINAL do item (inventory_items.average_cost):
+  // quando a condição é DAMAGED, o material voltou com valor reduzido — default 0 (perda total
+  // de valor) se nenhum `returnCost` explícito for informado pelo conferente.
+  let returnCost = null;
+  if (payload && payload.returnCost != null) {
+    returnCost = Number(payload.returnCost);
+    if (!Number.isFinite(returnCost) || returnCost < 0) {
+      throw AppError.badRequest('"returnCost" precisa ser um número não negativo.', 'MATERIAL_REQUEST_RETURN_VALIDATION');
+    }
+  } else if (conditionCode === 'DAMAGED') {
+    returnCost = 0;
+  }
+  const inventoryItem = await InventoryItem.findByPk(inventoryItemId, { transaction });
+  const originalUnitCost = inventoryItem && inventoryItem.averageCost != null ? Number(inventoryItem.averageCost) : null;
+
   const beforeJson = materialRequest.toJSON();
   const inventoryMovement = await recordMovement(
     {
@@ -229,11 +261,21 @@ async function returnMaterialRequest(id, groupId, companyId, payload, actorUserI
       sourceType: 'REQUISITION',
       sourceId: materialRequest.id,
       idempotencyKey: `material_request.return:${materialRequest.id}`,
-      reason: reason || `Devolução de material da requisição "${materialRequest.description}" (obra ${materialRequest.projectId}).`,
+      reason: reason || `Devolução de material da requisição "${materialRequest.description}" (obra ${materialRequest.projectId}) — condição: ${conditionCode}.`,
     },
     { userId: actorUserId, canApprove: false },
     transaction
   );
+
+  // Persiste reusable/conditionCode/returnCost nas 3 colunas reais de
+  // "inventory"."inventory_movements" assim que a migration 20260101000303 (criada junto com
+  // este gap) rodar neste ambiente — ver doc completo em
+  // src/features/inventory/returnConditionColumns.js. Até lá, fail-open (não quebra a
+  // devolução) e o dado fica garantido via o registro de auditoria abaixo (tabela
+  // "audit"."audit_log", já existente/aplicada, consultável por entityId=materialRequest.id).
+  await setReturnCondition(inventoryMovement.id, { reusable, conditionCode, returnCost }, transaction);
+
+  const returnDetails = { reusable, conditionCode, returnCost, originalUnitCost };
 
   await registrarAuditoria(
     {
@@ -244,13 +286,13 @@ async function returnMaterialRequest(id, groupId, companyId, payload, actorUserI
       entityType: 'MaterialRequest',
       entityId: materialRequest.id,
       beforeJson,
-      afterJson: { ...materialRequest.toJSON(), returnMovementId: inventoryMovement.id },
-      reason: `Devolução de ${returnQuantity} ${materialRequest.unit} da requisição "${materialRequest.description}".`,
+      afterJson: { ...materialRequest.toJSON(), returnMovementId: inventoryMovement.id, ...returnDetails },
+      reason: `Devolução de ${returnQuantity} ${materialRequest.unit} da requisição "${materialRequest.description}" — condição ${conditionCode}${conditionCode === 'DAMAGED' ? `, custo de devolução ${returnCost} (custo original do item: ${originalUnitCost == null ? 'desconhecido' : originalUnitCost})` : ''}.`,
     },
     transaction
   );
 
-  return { materialRequest, returnMovement: inventoryMovement };
+  return { materialRequest, returnMovement: inventoryMovement, returnDetails };
 }
 
 module.exports = {

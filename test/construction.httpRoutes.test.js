@@ -34,14 +34,23 @@ const {
   StageMeasurement,
   MaintenanceCase,
   Property,
+  Budget,
+  BudgetLine,
 } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
+const budgetsService = require('../src/features/construction/budgets.service');
+const budgetLinesService = require('../src/features/construction/budgetLines.service');
+const marginRulesService = require('../src/features/construction/marginRules.service');
 
 let tenant;
 let baseUrl;
 let token;
+// GAP 1 (fechamento de auditoria externa Nayara, Marco 6): token de um ator SEM
+// "construction:approve" — usado para provar que a rota realmente bloqueia com 403, e não só
+// "existe a chamada requirePermission" lida no código-fonte sem nenhum teste HTTP end-to-end.
+let tokenWithoutApprove;
 
 // IDs criados por este arquivo, para limpeza garantida no `after()`.
 const createdProjectIds = [];
@@ -49,6 +58,8 @@ const createdStageIds = [];
 const createdMeasurementIds = [];
 const createdMaintenanceCaseIds = [];
 const createdPropertyIds = [];
+const createdBudgetIds = [];
+const createdBudgetLineIds = [];
 
 before(async () => {
   tenant = await getSeedTenant();
@@ -59,6 +70,14 @@ before(async () => {
     company_id: tenant.companyId,
     roles: ['admin'],
     permissions: ['construction:create', 'construction:read', 'construction:update', 'construction:approve'],
+  });
+
+  tokenWithoutApprove = signAccessToken({
+    sub: tenant.userId,
+    group_id: tenant.groupId,
+    company_id: tenant.companyId,
+    roles: ['field'],
+    permissions: ['construction:create', 'construction:read'],
   });
 
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
@@ -74,6 +93,12 @@ after(async () => {
   }
   if (createdMaintenanceCaseIds.length > 0) {
     await MaintenanceCase.destroy({ where: { id: createdMaintenanceCaseIds }, force: true });
+  }
+  if (createdBudgetLineIds.length > 0) {
+    await BudgetLine.destroy({ where: { id: createdBudgetLineIds }, force: true });
+  }
+  if (createdBudgetIds.length > 0) {
+    await Budget.destroy({ where: { id: createdBudgetIds }, force: true });
   }
   if (createdStageIds.length > 0) {
     await ProjectStage.destroy({ where: { id: createdStageIds }, force: true });
@@ -97,6 +122,17 @@ function authFetch(method, path, body) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+function authFetchAs(bearerToken, method, path, body) {
+  return fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${bearerToken}`,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -189,6 +225,47 @@ test('HTTP real: POST /construction/measurements/:id/approve aprova a medição 
   assert.equal(body.data.status, 'PAYABLE', 'medição aprovada deve avançar até PAYABLE (obrigação financeira criada)');
 });
 
+// GAP 1 (auditoria externa Nayara, fechamento Marco 6): a trava de permissão em
+// `/construction/measurements/:id/approve` (construction.routes.js, requirePermission
+// 'construction:approve') nunca tinha um teste HTTP real dedicado — só era "lida" no código-
+// fonte. Este teste prova, com uma requisição HTTP de verdade (mesmo app real, mesmo JWT real),
+// que um ator autenticado SEM "construction:approve" recebe 403 e NÃO consegue aprovar a
+// medição, mesmo ela já estando REVIEWED (única coisa faltando pra aprovação final).
+test('HTTP real: POST /construction/measurements/:id/approve SEM permissão construction:approve é bloqueado (403)', async () => {
+  const { stage } = await createTestProjectAndStage();
+
+  const measurement = await sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+    const created = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 60, measuredAt: '2026-10-01', totalAmount: 600 },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(created.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(created.id, {}, tenant.userId, transaction);
+    return created;
+  });
+  createdMeasurementIds.push(measurement.id);
+
+  const response = await authFetchAs(tokenWithoutApprove, 'POST', `/construction/measurements/${measurement.id}/approve`, {});
+
+  assert.equal(response.status, 403, `esperava 403, recebeu ${response.status}`);
+  const body = await response.json();
+  assert.equal(body.success, false);
+
+  // Confirma que o bloqueio é real — a medição continua REVIEWED, nunca avançou pra PAYABLE.
+  const stillReviewed = await sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+    return StageMeasurement.findByPk(measurement.id, { transaction });
+  });
+  assert.equal(stillReviewed.status, 'REVIEWED');
+});
+
 // --- POST /construction/warranty-cases (path canônico exigido pela fonte) ---
 
 test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-obra (201)', async () => {
@@ -225,4 +302,59 @@ test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-
   assert.equal(body.data.propertyId, property.id);
   assert.equal(body.data.status, 'OPEN');
   createdMaintenanceCaseIds.push(body.data.id);
+});
+
+// --- TAREFA 1 (auditoria Marco 6, fechamento de gap): imutabilidade de baseline aprovada,
+// exercitada via HTTP real (PATCH /construction/budget-lines/:id), não só via chamada direta
+// ao service. Cria obra + orçamento + linha + aprova (baseline congela) tudo comitado de
+// verdade, bate PATCH HTTP real tentando mudar `plannedAmount` e confirma 400/422 com o código
+// BUDGET_LINE_BASELINE_LOCKED que o service já lança, E que o valor no banco não mudou.
+test('HTTP real: PATCH /construction/budget-lines/:id com baseline APPROVED é bloqueado (400/422 BUDGET_LINE_BASELINE_LOCKED)', async () => {
+  const { project } = await createTestProjectAndStage();
+
+  const { budget, line } = await sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+
+    await marginRulesService.createMarginRule(
+      { groupId: tenant.groupId, companyId: tenant.companyId, minMarginPct: 10 },
+      tenant.userId,
+      transaction
+    );
+    const createdBudget = await budgetsService.createBudget(project.id, { groupId: tenant.groupId, companyId: tenant.companyId }, tenant.userId, transaction);
+    const createdLine = await budgetLinesService.createBudgetLine(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, category: 'FUNDACAO', plannedAmount: 5000, budgetId: createdBudget.id },
+      tenant.userId,
+      transaction
+    );
+    const approvedBudget = await budgetsService.approveBudget(createdBudget.id, tenant.userId, transaction);
+    return { budget: approvedBudget, line: createdLine };
+  });
+  createdBudgetIds.push(budget.id);
+  createdBudgetLineIds.push(line.id);
+
+  const response = await authFetch('PATCH', `/construction/budget-lines/${line.id}`, {
+    plannedAmount: 9999,
+  });
+
+  // O service lança AppError.conflict (409) pra BUDGET_LINE_BASELINE_LOCKED — o teste valida
+  // o CÓDIGO estável de erro (contrato real do client), aceitando qualquer status de erro de
+  // cliente (400/409/422) que o service já usa pra essa família de bloqueio de baseline.
+  assert.ok(
+    [400, 409, 422].includes(response.status),
+    `esperava 400, 409 ou 422, recebeu ${response.status}`
+  );
+  const body = await response.json();
+  assert.equal(body.success, false);
+  assert.equal(body.error?.code || body.code, 'BUDGET_LINE_BASELINE_LOCKED');
+
+  const persisted = await sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+    return BudgetLine.findByPk(line.id, { transaction });
+  });
+  assert.equal(Number(persisted.plannedAmount), 5000, 'plannedAmount no banco não pode ter mudado');
 });

@@ -8,7 +8,7 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const materialRequestsService = require('../src/features/construction/materialRequests.service');
 const AppError = require('../src/utils/AppError');
-const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance } = require('../src/models');
+const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance, AuditLog } = require('../src/models');
 const inventoryMovementsService = require('../src/features/inventory/movements.service');
 
 // M6-28 — requisição de material mínima do Marco 6 (integração completa com Estoque é do
@@ -428,5 +428,125 @@ test('material-request: listMaterialRequests filtra por status', async () => {
 
     const requested = await materialRequestsService.listMaterialRequests(project.id, transaction, { status: 'REQUESTED' });
     assert.equal(requested.length, 1);
+  });
+});
+
+// GAP 2 (fechamento de auditoria externa Nayara, Marco 6): "Conferência detalhada dos
+// movimentos e custos de devolução" + "Reaproveitamento de materiais". Devolve material
+// REUSABLE: saldo sobe igual ao fluxo normal, e `reusable: true`/`conditionCode: 'REUSABLE'`
+// ficam persistidos e consultáveis depois (via audit log, entityId = materialRequest.id).
+test('material-request: devolução REUSABLE credita o saldo e persiste reusable=true/conditionCode consultável', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item, location } = await createTestStockLink(transaction, 100);
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Telha cerâmica', quantity: 20, unit: 'unidade' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterReceive, 80);
+
+    const { returnMovement, returnDetails } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 6, conditionCode: 'REUSABLE', reusable: true },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(returnMovement.movementType, 'RETURN');
+    assert.equal(returnDetails.reusable, true);
+    assert.equal(returnDetails.conditionCode, 'REUSABLE');
+    assert.equal(returnDetails.returnCost, null, 'devolução REUSABLE não precisa de custo de devolução distinto');
+
+    const balanceAfterReturn = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterReturn, 86, 'devolução REUSABLE precisa creditar o saldo normalmente');
+
+    // Consultável depois — mesma trilha de auditoria real (audit.audit_log) usada no resto do
+    // sistema, filtrável por entityId=materialRequest.id (sem precisar reprocessar nada).
+    const auditEntry = await AuditLog.findOne({
+      where: { entityType: 'MaterialRequest', entityId: request.id, action: 'construction.material_request.return' },
+      order: [['created_at', 'DESC']],
+      transaction,
+    });
+    assert.ok(auditEntry, 'devolução precisa deixar rastro de auditoria consultável');
+    assert.equal(auditEntry.afterJson.reusable, true);
+    assert.equal(auditEntry.afterJson.conditionCode, 'REUSABLE');
+  });
+});
+
+// Devolução DAMAGED: saldo sobe igual (material fisicamente voltou ao local), mas o registro
+// grava um `returnCost` distinto do custo ORIGINAL do item (averageCost=10 no fixture de
+// `createTestStockLink`), consultável depois via auditoria.
+test('material-request: devolução DAMAGED credita o saldo e persiste returnCost distinto do custo original', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item, location } = await createTestStockLink(transaction, 100); // averageCost = 10
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Porcelanato', quantity: 20, unit: 'caixa' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterReceive, 80);
+
+    const { returnMovement, returnDetails } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 4, conditionCode: 'DAMAGED', returnCost: 3.5 },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(returnMovement.movementType, 'RETURN');
+    assert.equal(returnDetails.conditionCode, 'DAMAGED');
+    assert.equal(returnDetails.returnCost, 3.5);
+    assert.equal(returnDetails.originalUnitCost, 10, 'custo original do item precisa continuar disponível pra comparação');
+    assert.notEqual(returnDetails.returnCost, returnDetails.originalUnitCost, 'custo de devolução precisa ser distinto do custo original');
+
+    // Saldo físico volta igual — o material voltou fisicamente ao local, só com valor reduzido.
+    const balanceAfterReturn = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterReturn, 84, 'material danificado ainda ocupa espaço físico — saldo de unidades sobe igual');
+
+    const auditEntry = await AuditLog.findOne({
+      where: { entityType: 'MaterialRequest', entityId: request.id, action: 'construction.material_request.return' },
+      order: [['created_at', 'DESC']],
+      transaction,
+    });
+    assert.ok(auditEntry);
+    assert.equal(Number(auditEntry.afterJson.returnCost), 3.5);
+    assert.equal(auditEntry.afterJson.conditionCode, 'DAMAGED');
+
+    // DAMAGED sem "returnCost" explícito usa o default documentado (0 — perda total de valor).
+    const requestB = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Porcelanato B', quantity: 5, unit: 'caixa' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(requestB.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    const { returnDetails: defaultDetails } = await materialRequestsService.returnMaterialRequest(
+      requestB.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 2, conditionCode: 'DAMAGED' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(defaultDetails.returnCost, 0);
   });
 });

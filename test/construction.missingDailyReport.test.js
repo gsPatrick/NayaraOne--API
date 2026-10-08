@@ -8,7 +8,8 @@ const projectsService = require('../src/features/construction/projects.service')
 const budgetsService = require('../src/features/construction/budgets.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
 const dailyReportsService = require('../src/features/construction/dailyReports.service');
-const { detectMissingDailyReports, previousBusinessDay } = require('../src/engines/jobs/missingDailyReportJob');
+const peopleService = require('../src/features/people/people.service');
+const { detectMissingDailyReports, detectMissingWorkerDocuments, previousBusinessDay } = require('../src/engines/jobs/missingDailyReportJob');
 const { Task } = require('../src/models');
 
 let tenant;
@@ -100,6 +101,106 @@ test('missingDailyReportJob: idempotente — rodar duas vezes no mesmo dia não 
 
     const tasks = await Task.findAll({
       where: { relatedEntityType: 'construction.projects', relatedEntityId: project.id },
+      transaction,
+    });
+    assert.equal(tasks.length, 1);
+  });
+});
+
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): missingDailyReportJob só cobria
+// ausência de DIÁRIO — a fonte também exige detectar ausência de DOCUMENTOS do trabalhador
+// (DailyWorker.documentFileIds). Confirma que um trabalhador sem documentFileIds num RDO da
+// obra gera uma Task distinta (relatedEntityType = 'construction.daily_workers').
+test('missingDailyReportJob: trabalhador sem documentFileIds em RDO recente gera tarefa de documentação pendente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createActiveProject(transaction);
+    const checkDate = toDateOnlyString(previousBusinessDay(new Date()));
+    const worker = await peopleService.createPerson(
+      withTenant({ personType: 'PF', legalName: `Pedreiro sem doc ${uniqueSuffix()}` }),
+      tenant.userId,
+      transaction
+    );
+
+    await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({
+        reportDate: checkDate,
+        workers: [{ personId: worker.id, role: 'Pedreiro' }], // sem documentFileIds
+      }),
+      tenant.userId,
+      transaction
+    );
+
+    const result = await detectMissingWorkerDocuments(transaction, new Date());
+    assert.ok(result.tasksCreated >= 1);
+
+    const tasks = await Task.findAll({
+      where: { relatedEntityType: 'construction.daily_workers', relatedEntityId: project.id },
+      transaction,
+    });
+    assert.equal(tasks.length, 1);
+    assert.match(tasks[0].title, /Documentação/);
+    assert.equal(tasks[0].status, 'OPEN');
+  });
+});
+
+// Trabalhador COM documentFileIds preenchido não deve gerar tarefa nenhuma.
+test('missingDailyReportJob: trabalhador com documentFileIds preenchido não gera tarefa de documentação', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createActiveProject(transaction);
+    const checkDate = toDateOnlyString(previousBusinessDay(new Date()));
+    const worker = await peopleService.createPerson(
+      withTenant({ personType: 'PF', legalName: `Pedreiro com doc ${uniqueSuffix()}` }),
+      tenant.userId,
+      transaction
+    );
+
+    await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({
+        reportDate: checkDate,
+        workers: [{ personId: worker.id, role: 'Pedreiro', documentFileIds: ['11111111-1111-1111-1111-111111111111'] }],
+      }),
+      tenant.userId,
+      transaction
+    );
+
+    const result = await detectMissingWorkerDocuments(transaction, new Date());
+    assert.equal(result.tasksCreated, 0);
+
+    const tasks = await Task.findAll({
+      where: { relatedEntityType: 'construction.daily_workers', relatedEntityId: project.id },
+      transaction,
+    });
+    assert.equal(tasks.length, 0);
+  });
+});
+
+// Idempotência: rodar a verificação de documentação duas vezes na mesma janela não duplica a tarefa.
+test('missingDailyReportJob: verificação de documentação é idempotente — rodar 2x não duplica a tarefa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createActiveProject(transaction);
+    const checkDate = toDateOnlyString(previousBusinessDay(new Date()));
+    const worker = await peopleService.createPerson(
+      withTenant({ personType: 'PF', legalName: `Pedreiro idempotente ${uniqueSuffix()}` }),
+      tenant.userId,
+      transaction
+    );
+
+    await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: checkDate, workers: [{ personId: worker.id, role: 'Pedreiro' }] }),
+      tenant.userId,
+      transaction
+    );
+
+    const now = new Date();
+    await detectMissingWorkerDocuments(transaction, now);
+    const secondRun = await detectMissingWorkerDocuments(transaction, now);
+    assert.equal(secondRun.tasksCreated, 0, 'segunda execução não deveria criar tarefa duplicada');
+
+    const tasks = await Task.findAll({
+      where: { relatedEntityType: 'construction.daily_workers', relatedEntityId: project.id },
       transaction,
     });
     assert.equal(tasks.length, 1);

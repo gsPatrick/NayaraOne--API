@@ -9,6 +9,7 @@ const projectStagesService = require('../src/features/construction/projectStages
 const stageDependenciesService = require('../src/features/construction/stageDependencies.service');
 const dailyReportsService = require('../src/features/construction/dailyReports.service');
 const peopleService = require('../src/features/people/people.service');
+const filesService = require('../src/features/files/files.service');
 const { DailyReport } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -373,6 +374,77 @@ test('listDailyMaterials devolve os materiais registrados para um RDO', async ()
     assert.equal(materials[0].materialDescription, 'Cimento CP-II');
     assert.equal(Number(materials[0].quantity), 10);
     assert.equal(materials[0].unit, 'SC');
+  });
+});
+
+async function uploadTestFile(transaction, contentBase64, fileName) {
+  return filesService.uploadFile(
+    withTenant({ fileName, mimeType: 'image/jpeg', contentBase64, category: 'CONSTRUCTION_EVIDENCE' }),
+    tenant.userId,
+    transaction
+  );
+}
+
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): detectEvidenceReuse (M6-59) já
+// existia em nonconformities.service.js, mas nunca tinha sido conectada ao Diário de Obra (RDO),
+// apesar do RDO também gravar `evidenceFileIds`. Mesmo padrão de teste de
+// test/construction.evidenceReuse.test.js — upload real de 2 arquivos (mesmo conteúdo em dois
+// uploads distintos) usados como evidência em dois RDOs diferentes da MESMA obra, e confirma
+// que o alerta de reuso é detectado, sem bloquear a criação.
+test('GAP M6-59 (RDO): evidência reutilizada entre dois RDOs da mesma obra gera alerta, sem bloquear', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+
+    const sharedContent = Buffer.from(`foto-de-obra-rdo-${suffix}`).toString('base64');
+    const fileA = await uploadTestFile(t, sharedContent, 'rdo-foto-a.jpg');
+
+    const firstReport = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-25', shiftCode: 'MANHA', evidenceFileIds: [fileA.id] }),
+      tenant.userId,
+      t
+    );
+    assert.equal(firstReport.evidenceReuseFlagged, false, 'primeiro RDO a usar o arquivo não deve ser flagrado');
+
+    // Reupload do MESMO conteúdo (bytes idênticos, id de arquivo diferente) — o alerta usa
+    // checksum de conteúdo, não o id do arquivo.
+    const fileB = await uploadTestFile(t, sharedContent, 'rdo-foto-reaproveitada.jpg');
+    const secondReport = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-26', shiftCode: 'MANHA', evidenceFileIds: [fileB.id] }),
+      tenant.userId,
+      t
+    );
+
+    assert.equal(secondReport.evidenceReuseFlagged, true, 'segundo RDO deve ser flagrado por reuso de evidência');
+    assert.equal(secondReport.evidenceReuseReferenceId, firstReport.id, 'deve apontar para o RDO original');
+    assert.ok(secondReport.evidenceReuseDetails, 'deve carregar detalhes do reuso');
+  });
+});
+
+test('GAP M6-59 (RDO): evidências genuinamente distintas entre RDOs não geram alerta falso-positivo', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+
+    const fileA = await uploadTestFile(t, Buffer.from(`foto-rdo-1-${suffix}`).toString('base64'), 'foto1.jpg');
+    const firstReport = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-27', shiftCode: 'MANHA', evidenceFileIds: [fileA.id] }),
+      tenant.userId,
+      t
+    );
+    assert.equal(firstReport.evidenceReuseFlagged, false);
+
+    const fileB = await uploadTestFile(t, Buffer.from(`foto-rdo-2-diferente-${suffix}`).toString('base64'), 'foto2.jpg');
+    const secondReport = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({ reportDate: '2026-09-28', shiftCode: 'MANHA', evidenceFileIds: [fileB.id] }),
+      tenant.userId,
+      t
+    );
+    assert.equal(secondReport.evidenceReuseFlagged, false, 'arquivos com conteúdo distinto não devem gerar alerta');
   });
 });
 

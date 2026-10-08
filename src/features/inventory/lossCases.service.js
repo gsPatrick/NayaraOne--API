@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, InventoryMovement, File, FinancialEntry, Person } = require('../../models');
+const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, InventoryMovement, File, FinancialEntry, Person, ApprovalThreshold } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
@@ -8,6 +8,18 @@ const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
 const financialEntriesService = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+// GAP 3 (fechamento de auditoria externa Nayara, Marco 6): alçada por VALOR, mesmo padrão já
+// aprovado/testado em construction/lossRecords.service.js (M6-14/M6-29/M6-60) — perda de
+// item/asset de Estoque hoje só tinha alçada por PERMISSÃO fixa (inventory:approve, igual pra
+// qualquer valor). Reaproveita a MESMA tabela genérica "construction"."approval_thresholds"
+// (companyId+context, já com UNIQUE nessa combinação e RLS aplicada — ver migration
+// 20260101000217, comentário "extensível a outros contextos") em vez de criar uma tabela
+// paralela em `inventory`: o mecanismo (valor-limite configurável por empresa, acima do qual
+// exige aprovação explícita) é idêntico, só muda o contexto ('INVENTORY_LOSS' em vez de
+// 'MATERIAL_LOSS') — nenhuma migration nova precisa rodar pra isso funcionar (tabela já
+// existe e já está aplicada neste ambiente, diferente de outros gaps deste pacote que
+// precisaram de migration ainda pendente de DDL).
+const INVENTORY_LOSS_APPROVAL_CONTEXT = 'INVENTORY_LOSS';
 
 // GAP CORRIGIDO (auditoria de conformidade Marco 7 contra o contrato bruto, §11): "loss_case
 // registra item/asset, quantidade, responsável, contexto, fotos e estimativa de custo...
@@ -165,6 +177,38 @@ async function openLossCase(payload, actorUserId, transaction) {
     transaction
   );
 
+  // GAP 3 (fechamento de auditoria externa Nayara, Marco 6) — alçada por VALOR, mesmo padrão de
+  // construction/lossRecords.service.js#createLossRecord. BACKWARD-COMPAT DELIBERADA: a alçada
+  // só é avaliada quando a EMPRESA já configurou explicitamente uma linha em
+  // "construction"."approval_thresholds" para o contexto INVENTORY_LOSS (via
+  // upsertApprovalThreshold) — nunca pelo valor-padrão de fallback (DEFAULT_MAX_AUTO_APPROVE_AMOUNT,
+  // pensado para MATERIAL_LOSS). Sem essa configuração explícita, todo caso continua nascendo
+  // OPEN e exigindo decisão humana explícita via inventory:approve, EXATAMENTE como antes deste
+  // gap (toda a suíte existente — inventory.lossCaseCharge.test.js, cenários de Asset/Ferramenta
+  // — abre casos com `estimatedCost` e sempre decide explicitamente depois; nenhuma empresa de
+  // teste tinha configurado alçada de INVENTORY_LOSS antes deste gap, então autoaprovar por um
+  // fallback numérico quebraria esse fluxo já aprovado). Só avalia, além disso, quando
+  // `estimatedCost` foi informado (sem estimativa, não há valor pra comparar).
+  const thresholdRow = estimatedCost != null
+    ? await ApprovalThreshold.findOne({ where: { companyId, context: INVENTORY_LOSS_APPROVAL_CONTEXT }, transaction })
+    : null;
+  if (thresholdRow) {
+    const threshold = Number(thresholdRow.maxAutoApproveAmount);
+    const withinThreshold = Number(estimatedCost) <= threshold;
+    if (withinThreshold) {
+      // Autoaprovação: reaproveita o MESMO caminho de decisão (decideLossCase) que já gera o
+      // movimento LOSS/atualiza o Asset — actor sintético com canApprove:true representa a
+      // regra de negócio decidindo (valor dentro da alçada), não um bypass de permissão de um
+      // usuário real (o ator que ABRIU o caso nunca precisou de inventory:approve pra isso).
+      const approved = await decideLossCase(lossCase.id, groupId, companyId, 'APPROVED', { userId: actorUserId, canApprove: true }, transaction);
+      return approved;
+    }
+    // Acima da alçada: nasce PENDING_APPROVAL (em vez de OPEN) — deixa explícito que falta uma
+    // decisão humana via inventory:approve antes de qualquer movimento ser gerado.
+    lossCase.status = 'PENDING_APPROVAL';
+    await lossCase.save({ transaction });
+  }
+
   return lossCase;
 }
 
@@ -256,8 +300,11 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
 
   const lossCase = await InventoryLossCase.findOne({ where: { id: lossCaseId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!lossCase) throw AppError.notFound('Caso de perda não encontrado.', 'LOSS_CASE_NOT_FOUND');
-  if (lossCase.status !== 'OPEN') {
-    throw AppError.badRequest(`Só é possível decidir um caso em OPEN (atual: ${lossCase.status}).`, 'LOSS_CASE_INVALID_TRANSITION');
+  // GAP 3 (alçada por valor): um caso acima da alçada nasce PENDING_APPROVAL em vez de OPEN —
+  // ambos os status são "ainda não decididos" e aceitos aqui; só não aceita decidir de novo um
+  // caso já APPROVED/REJECTED.
+  if (lossCase.status !== 'OPEN' && lossCase.status !== 'PENDING_APPROVAL') {
+    throw AppError.badRequest(`Só é possível decidir um caso em OPEN/PENDING_APPROVAL (atual: ${lossCase.status}).`, 'LOSS_CASE_INVALID_TRANSITION');
   }
 
   // "Investigação e decisão humana determinam responsabilidade" (§11): a decisão pode atribuir

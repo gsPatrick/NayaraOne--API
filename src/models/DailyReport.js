@@ -37,6 +37,13 @@ module.exports = (sequelize) => {
       // M6-94: captura offline — ID local do app + chave de idempotência de sincronização.
       clientLocalId: { type: DataTypes.STRING(128), allowNull: true, field: 'client_local_id' },
       idempotencyKey: { type: DataTypes.STRING(128), allowNull: true, field: 'idempotency_key' },
+      // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): mesmos campos de alerta de
+      // reuso suspeito de evidência já usados em Nonconformity (detectEvidenceReuse), agora
+      // conectados ao RDO — a checagem por hash (`File.checksumSha256`) nunca tinha sido
+      // estendida para `evidenceFileIds` do Diário de Obra.
+      evidenceReuseFlagged: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'evidence_reuse_flagged' },
+      evidenceReuseReferenceId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_reuse_reference_id' },
+      evidenceReuseDetails: { type: DataTypes.JSONB, allowNull: true, field: 'evidence_reuse_details' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
