@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBudgetApproved, publishProjectStatusChanged } = require('./constructionEvents.service');
 const marginRulesService = require('./marginRules.service');
+const { computeMarginProjection } = require('./projectHealth.service');
 
 // DECISÃO DE ENGENHARIA (M6-04, ver migração 20260101000182): "construction"."budgets" é o
 // agregado da obra — um por projeto (índice único parcial `budgets_unique_per_project`).
@@ -95,6 +96,23 @@ async function approveBudget(id, actorUserId, transaction) {
   // se a regra mudar depois, este orçamento continua apontando para a versão que estava
   // vigente no momento da aprovação.
   const marginRule = await marginRulesService.getActiveMarginRule(budget.groupId, budget.companyId, transaction);
+
+  // TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161 seção 5): "Margem abaixo da
+  // regra gera alerta ou bloqueio, conforme configurado" — quando a empresa configurou
+  // enforcementMode='BLOCK' na margem mínima vigente, a aprovação do orçamento é RECUSADA se a
+  // margem projetada (mesma fórmula de projectHealth.service.js, via computeMarginProjection —
+  // committedCost já reflete a soma das linhas deste orçamento, independente do status ainda ser
+  // DRAFT) ficar abaixo do minMarginPct configurado. Com enforcementMode='ALERT' (ou ausente,
+  // default) preserva 100% o comportamento anterior — só o alerta (belowMinMargin) no health.
+  if (marginRule.enforcementMode === 'BLOCK') {
+    const projection = await computeMarginProjection(budget.projectId, transaction);
+    if (projection.belowMinMargin) {
+      throw AppError.unprocessable(
+        `Aprovação bloqueada: a margem projetada (${projection.marginPct}%) ficaria abaixo da margem mínima configurada (${marginRule.minMarginPct}%).`,
+        'BUDGET_APPROVAL_BLOCKED_BY_MARGIN_RULE'
+      );
+    }
+  }
 
   const beforeJson = budget.toJSON();
   budget.status = 'APPROVED';

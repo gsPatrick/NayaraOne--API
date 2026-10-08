@@ -36,6 +36,19 @@ async function createReceipt(payload, actorUserId, transaction) {
   const location = await InventoryLocation.findByPk(destinationLocationId, { transaction });
   if (!location) throw AppError.notFound('Local de destino não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
 
+  // GAP REAL CORRIGIDO (auditoria Marco 7, Caderno §6 EST-TS-08, 2026-10-08): a checagem de
+  // duplicidade por invoiceFingerprint só rodava SE o chamador decidisse mandar o campo — um
+  // recebimento vinculado a uma NF real (invoiceNumber e/ou supplierPersonId informados) podia
+  // simplesmente omitir invoiceFingerprint e pular a detecção de duplicidade inteira. Recebimento
+  // manual sem NF associada (sem invoiceNumber nem supplierPersonId) continua podendo não ter
+  // fingerprint — não há documento pra "impressão digital".
+  if ((invoiceNumber || supplierPersonId) && !invoiceFingerprint) {
+    throw AppError.badRequest(
+      'Recebimento vinculado a nota fiscal ("invoiceNumber" e/ou "supplierPersonId" informados) exige "invoiceFingerprint" para detecção de duplicidade (EST-TS-08).',
+      'INVENTORY_RECEIPT_FINGERPRINT_REQUIRED'
+    );
+  }
+
   // EST-TS-08: NF duplicada por fingerprint é detectada já na criação, não só na confirmação.
   if (invoiceFingerprint) {
     const existing = await InventoryReceipt.findOne({ where: { companyId, invoiceFingerprint }, transaction });

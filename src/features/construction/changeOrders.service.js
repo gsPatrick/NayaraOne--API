@@ -3,6 +3,8 @@
 const { ChangeOrder, Budget, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const marginRulesService = require('./marginRules.service');
+const { computeMarginProjection } = require('./projectHealth.service');
 
 const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'];
 
@@ -163,6 +165,27 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
   if (newBaseline < 0) {
     throw AppError.badRequest('Aplicar este Change Order deixaria o orçamento com valor negativo.', 'CHANGE_ORDER_NEGATIVE_RESULT');
   }
+
+  // TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161 seção 5): mesmo gate de
+  // bloqueio configurável de approveBudget (budgets.service.js), aplicado aqui antes de
+  // confirmar a aprovação do Change Order. `extraApprovedChanges: changeOrder.budgetImpact`
+  // projeta o efeito de APROVAR ESTE Change Order especificamente — ele ainda está
+  // PENDING_APPROVAL neste ponto (só vira APPROVED/entra em getApprovedChangeOrdersTotal mais
+  // abaixo), então sem o delta a margem projetada ficaria subestimada em relação ao que
+  // realmente vai acontecer caso a aprovação siga adiante.
+  const marginRule = await marginRulesService.getActiveMarginRule(changeOrder.groupId, changeOrder.companyId, transaction);
+  if (marginRule.enforcementMode === 'BLOCK') {
+    const projection = await computeMarginProjection(changeOrder.projectId, transaction, {
+      extraApprovedChanges: changeOrder.budgetImpact,
+    });
+    if (projection.belowMinMargin) {
+      throw AppError.unprocessable(
+        `Aprovação bloqueada: a margem projetada (${projection.marginPct}%) ficaria abaixo da margem mínima configurada (${marginRule.minMarginPct}%).`,
+        'CHANGE_ORDER_APPROVAL_BLOCKED_BY_MARGIN_RULE'
+      );
+    }
+  }
+
   budget.baselineAmount = newBaseline;
   budget.totalAmount = newBaseline;
   budget.updatedBy = actorUserId || null;

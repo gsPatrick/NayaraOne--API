@@ -27,7 +27,9 @@ const decidePurchaseRequest = catchAsync(async (req, res) => {
 });
 
 const createQuotation = catchAsync(async (req, res) => {
-  const quotation = await req.withTenantTransaction((t) => service.createQuotation(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
+  const quotation = await req.withTenantTransaction((t) =>
+    service.createQuotation(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t, { invitedSupplierIds: req.body?.invitedSupplierIds })
+  );
   return success(res, { statusCode: 201, data: quotation });
 });
 const submitSupplierOffer = catchAsync(async (req, res) => {

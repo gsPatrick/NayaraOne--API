@@ -87,6 +87,7 @@ test('REG-EST-002: ajuste de baixo valor não exige evidenceFileId', async () =>
         quantity: 5,
         sourceLocationId: location.id,
         reason: 'Ajuste de baixo valor de teste.',
+        idempotencyKey: `adj-risk-low-${uniqueSuffix()}`,
       }),
       actor(),
       transaction
@@ -108,6 +109,7 @@ test('REG-EST-002: ajuste de alto valor sem evidenceFileId é bloqueado com INVE
           quantity: 30,
           sourceLocationId: location.id,
           reason: 'Ajuste de alto valor de teste, sem evidência.',
+          idempotencyKey: `adj-risk-high-no-evidence-${uniqueSuffix()}`,
         }),
         actor(),
         transaction
@@ -131,6 +133,7 @@ test('REG-EST-002: ajuste de alto valor COM evidenceFileId passa normalmente', a
         sourceLocationId: location.id,
         reason: 'Ajuste de alto valor de teste, com evidência.',
         evidenceFileId: file.id,
+        idempotencyKey: `adj-risk-high-with-evidence-${uniqueSuffix()}`,
       }),
       actor(),
       transaction
@@ -147,7 +150,7 @@ test('REG-EST-002: limiar é configurável via Motor de Regras (nova versão fec
 
     // Limiar padrão R$1000: R$500 passa sem evidência.
     const low = await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Abaixo do limiar padrão.' }),
+      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Abaixo do limiar padrão.', idempotencyKey: `adj-risk-threshold-low-${uniqueSuffix()}` }),
       actor(),
       transaction
     );
@@ -158,7 +161,7 @@ test('REG-EST-002: limiar é configurável via Motor de Regras (nova versão fec
 
     await assert.rejects(
       () => movementsService.recordMovement(
-        withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Acima do novo limiar.' }),
+        withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Acima do novo limiar.', idempotencyKey: `adj-risk-threshold-high-${uniqueSuffix()}` }),
         actor(),
         transaction
       ),

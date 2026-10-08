@@ -119,6 +119,7 @@ test('Gap 2 (EST-010): movimento LOSS direto (sem loss case) é recusado', async
           sourceLocationId: warehouse.id,
           reason: 'Perda sem caso',
           evidenceFileId: evidence.id,
+          idempotencyKey: `gap2-loss-no-case-${uniqueSuffix()}`,
         }),
         approver,
         transaction
@@ -157,6 +158,7 @@ test('Gap 2 (EST-010): movimento LOSS é recusado se o loss case referenciado n�
           sourceId: lossCase.id,
           reason: 'Perda com caso ainda OPEN',
           evidenceFileId: evidence.id,
+          idempotencyKey: `gap2-loss-not-approved-${uniqueSuffix()}`,
         }),
         approver,
         transaction

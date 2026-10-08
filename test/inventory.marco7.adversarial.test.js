@@ -108,7 +108,7 @@ test('EST-TS-07 (controle positivo): ADJUSTMENT com motivo e inventory:approve �
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item, location } = await createItemAndLocation(transaction, 10);
     const movement = await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 2, destinationLocationId: location.id, reason: 'Sobra encontrada na conferência' }),
+      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 2, destinationLocationId: location.id, reason: 'Sobra encontrada na conferência', idempotencyKey: `adversarial-adj-positivo-${uniqueSuffix()}` }),
       approver(),
       transaction
     );

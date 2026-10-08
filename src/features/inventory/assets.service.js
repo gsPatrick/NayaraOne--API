@@ -96,13 +96,66 @@ async function createAsset(payload, actorUserId, transaction) {
 async function listAssets(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return Asset.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
+  const assets = await Asset.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
+  // GAP 2 (Caderno §9): inclui a depreciação informativa também na listagem, pro mesmo dado
+  // ficar disponível sem precisar abrir a ficha individual de cada patrimônio.
+  return assets.map((asset) => {
+    const json = asset.toJSON();
+    json.estimatedCurrentValue = computeEstimatedCurrentValue(asset);
+    return json;
+  });
 }
 
+// GAP 1 REAL CORRIGIDO (auditoria Marco 7, 2026-10-08, Caderno §8): "Leitura do QR abre ficha:
+// item, serial, status, local, responsável, último movimento e manutenção" — getAssetByTag
+// devolvia só a linha crua do Asset, sem nenhum dos dados de circulação que o Caderno exige
+// aparecerem na ficha aberta pelo QR (último movimento, manutenção aberta, empréstimo ativo).
 async function getAssetByTag(assetTag, groupId, companyId, transaction) {
   const asset = await Asset.findOne({ where: { assetTag, groupId, companyId }, transaction });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado para este QR Code.', 'ASSET_NOT_FOUND');
-  return asset;
+
+  const [lastMovement, openMaintenance, activeLoan] = await Promise.all([
+    AssetMovement.findOne({ where: { assetId: asset.id, groupId, companyId }, order: [['moved_at', 'DESC']], transaction }),
+    InventoryMaintenanceOrder.findOne({ where: { assetId: asset.id, groupId, companyId, status: 'OPEN' }, order: [['opened_at', 'DESC']], transaction }),
+    InventoryToolLoan.findOne({ where: { assetId: asset.id, groupId, companyId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction }),
+  ]);
+
+  return {
+    asset,
+    lastMovement: lastMovement || null,
+    openMaintenance: openMaintenance || null,
+    activeLoan: activeLoan || null,
+    // GAP 2 (Caderno §9): depreciação informativa — ver computeEstimatedCurrentValue.
+    estimatedCurrentValue: computeEstimatedCurrentValue(asset),
+  };
+}
+
+// GAP 2 (Caderno Técnico, Anexo I, seção 9 — "Depreciação pode ser informativa/contábil
+// conforme regra futura; não improvisar cálculo fiscal sem validação contábil"): depreciação
+// LINEAR SIMPLES, EXCLUSIVAMENTE INFORMATIVA — não substitui cálculo contábil/fiscal real
+// (decisão de engenharia conforme Caderno seção 9; nenhuma regra fiscal foi validada com
+// contabilidade). Fórmula: valor estimado = acquisitionValue * max(0, 1 - meses/vidaÚtil).
+// Quando o asset não tem acquisitionValue/acquiredAt, não há base pra calcular — retorna null.
+// DECISÃO DE ENGENHARIA: o contrato (TAB-0760/Asset) não tem NENHUM campo de vida útil por
+// item/categoria hoje, e esta auditoria optou por NÃO criar uma coluna nova só para isso agora
+// (evita migração/alteração de schema para um dado só informativo, sem validação contábil) —
+// usa-se sempre o default documentado abaixo. `usefulLifeMonthsOverride` existe apenas para
+// permitir, no futuro, plugar uma config por categoria sem mudar a assinatura da função.
+const DEFAULT_USEFUL_LIFE_MONTHS = 60; // default informativo — não fiscal/contábil.
+const AVERAGE_DAYS_PER_MONTH = 30.44;
+
+function computeEstimatedCurrentValue(asset, usefulLifeMonthsOverride) {
+  if (asset == null) return null;
+  const acquisitionValue = asset.acquisitionValue != null ? Number(asset.acquisitionValue) : null;
+  if (acquisitionValue == null || !Number.isFinite(acquisitionValue) || asset.acquiredAt == null) return null;
+
+  const usefulLifeMonths = usefulLifeMonthsOverride != null ? Number(usefulLifeMonthsOverride) : DEFAULT_USEFUL_LIFE_MONTHS;
+  if (!Number.isFinite(usefulLifeMonths) || usefulLifeMonths <= 0) return acquisitionValue;
+
+  const acquiredAt = new Date(asset.acquiredAt);
+  const monthsSinceAcquisition = (Date.now() - acquiredAt.getTime()) / (1000 * 60 * 60 * 24 * AVERAGE_DAYS_PER_MONTH);
+  const remainingFraction = Math.max(0, 1 - monthsSinceAcquisition / usefulLifeMonths);
+  return Math.round(acquisitionValue * remainingFraction * 100) / 100;
 }
 
 async function transferAsset(assetId, groupId, companyId, payload, actorUserId, transaction) {
@@ -498,4 +551,5 @@ module.exports = {
   listAssetMovements,
   disposeAsset,
   getAssetDisposal,
+  computeEstimatedCurrentValue,
 };

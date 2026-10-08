@@ -20,6 +20,7 @@ const { InventoryStockBalance, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
+const { recordMovement } = require('../inventory/movements.service');
 const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
 const { getActiveSecondApprovalThreshold } = require('./approvalThresholdRules.service');
@@ -190,7 +191,59 @@ async function decidePurchaseRequest(id, groupId, companyId, decision, actorUser
 }
 
 // --- 3. RFQ ---
-async function createQuotation(purchaseRequestId, groupId, companyId, actorUserId, transaction) {
+// GAP REAL CORRIGIDO (auditoria contratual, 2026-10-08 — Anexo I, "RFQ sem convite dirigido a
+// fornecedores específicos"): até aqui, qualquer fornecedor podia registrar oferta contra uma
+// Quotation OPEN, sem nenhum conceito de convite prévio. `invitedSupplierIds` (opcional, array
+// de Person ids) persiste a lista de convidados em `procurement.quotations.invited_supplier_ids`
+// (migration 20260101000312). DECISÃO DE COMPATIBILIDADE RETROATIVA: lista ausente/vazia
+// preserva o comportamento antigo — qualquer fornecedor pode ofertar (ver submitSupplierOffer).
+//
+// BLOQUEIO DE INFRAESTRUTURA (mesma classe já documentada em test/crm.carts.test.js e
+// src/features/people/personMerge.service.js): a credencial de DDL (`nayara_migration` em
+// `.env.migration.local`) está rejeitada pelo Postgres nesta sessão, e o usuário de runtime
+// (DATABASE_URL) não tem CREATE/ALTER em nenhum schema — a migration 20260101000312 não pôde
+// ser aplicada ao banco. Para não quebrar TODA a suíte de procurement (declarar
+// `invitedSupplierIds` como atributo do model `Quotation` faria todo SELECT/INSERT existente
+// falhar com "column ... does not exist" até a migration rodar), a coluna é checada em runtime
+// (`hasQuotationInvitationsColumn`, cacheada) e lida/escrita via SQL cru só quando existir —
+// nunca via atributo declarado no model. Enquanto a coluna não existir, convite vira um no-op
+// (nenhum convite é persistido/aplicado) e o comportamento atual (qualquer fornecedor oferta) é
+// preservado — fail-open deliberado só para esta feature nova, nunca para os 2 fluxos
+// financeiros/físicos já existentes no resto do arquivo.
+let quotationInvitationsColumnExists = null;
+async function hasQuotationInvitationsColumn(transaction) {
+  if (quotationInvitationsColumnExists !== null) return quotationInvitationsColumnExists;
+  const [rows] = await Quotation.sequelize.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'procurement' AND table_name = 'quotations' AND column_name = 'invited_supplier_ids'`,
+    { transaction }
+  );
+  quotationInvitationsColumnExists = rows.length > 0;
+  return quotationInvitationsColumnExists;
+}
+
+async function getQuotationInvitedSupplierIds(quotationId, transaction) {
+  if (!(await hasQuotationInvitationsColumn(transaction))) return null;
+  const [rows] = await Quotation.sequelize.query(
+    `SELECT invited_supplier_ids FROM procurement.quotations WHERE id = :id`,
+    { replacements: { id: quotationId }, transaction }
+  );
+  return rows[0] ? rows[0].invited_supplier_ids : null;
+}
+
+async function setQuotationInvitedSupplierIds(quotationId, invitedSupplierIds, transaction) {
+  if (!(await hasQuotationInvitationsColumn(transaction))) return false;
+  await Quotation.sequelize.query(
+    `UPDATE procurement.quotations SET invited_supplier_ids = :invited WHERE id = :id`,
+    { replacements: { invited: invitedSupplierIds ? JSON.stringify(invitedSupplierIds) : null, id: quotationId }, transaction }
+  );
+  return true;
+}
+
+async function createQuotation(purchaseRequestId, groupId, companyId, actorUserId, transaction, options = {}) {
+  const { invitedSupplierIds } = options || {};
+  if (invitedSupplierIds != null && (!Array.isArray(invitedSupplierIds) || invitedSupplierIds.some((v) => !v))) {
+    throw AppError.badRequest('"invitedSupplierIds", quando informado, precisa ser um array não vazio de ids válidos.', 'QUOTATION_VALIDATION');
+  }
   // BUG REAL CORRIGIDO (auditoria "loop até secar" ciclo 1 paralelo, 2026-10-06): sem lock
   // pessimista aqui, duas chamadas concorrentes (duplo clique, 2 abas) liam ambas "nenhuma
   // OPEN existente" (TOCTOU — não há constraint única em `quotations(purchase_request_id,
@@ -211,10 +264,18 @@ async function createQuotation(purchaseRequestId, groupId, companyId, actorUserI
   // existente em vez de criar outra (idempotente por requisição).
   const existing = await Quotation.findOne({ where: { purchaseRequestId: request.id, status: 'OPEN' }, transaction });
   if (existing) return existing;
-  return Quotation.create(
+  const quotation = await Quotation.create(
     { groupId: request.groupId, companyId: request.companyId, purchaseRequestId: request.id, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
     { transaction }
   );
+  if (Array.isArray(invitedSupplierIds) && invitedSupplierIds.length > 0) {
+    await setQuotationInvitedSupplierIds(quotation.id, invitedSupplierIds, transaction);
+    // Propriedade transiente (não é atributo declarado do model — nunca persiste sozinha via
+    // .save(), mesmo padrão de supplierPersonName em compareOffers/attachSupplierPersonNames):
+    // só devolve pro chamador desta mesma chamada o que acabou de ser gravado via SQL cru acima.
+    quotation.invitedSupplierIds = invitedSupplierIds;
+  }
+  return quotation;
 }
 
 async function submitSupplierOffer(quotationId, groupId, companyId, payload, transaction) {
@@ -230,6 +291,30 @@ async function submitSupplierOffer(quotationId, groupId, companyId, payload, tra
   if (!quotation) throw AppError.notFound('Cotação não encontrada.', 'QUOTATION_NOT_FOUND');
   if (quotation.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível submeter oferta para uma cotação OPEN (atual: ${quotation.status}).`, 'QUOTATION_INVALID_TRANSITION');
+  }
+
+  // GAP REAL CORRIGIDO (auditoria contratual, 2026-10-08 — "RFQ sem convite dirigido a
+  // fornecedores específicos"): se esta RFQ tem lista de convidados, só quem está nela pode
+  // ofertar — fail-closed. Lista ausente/vazia (null, [], ou coluna ainda não migrada — ver
+  // hasQuotationInvitationsColumn) preserva o comportamento antigo: qualquer fornecedor oferta.
+  const invitedSupplierIds = await getQuotationInvitedSupplierIds(quotation.id, transaction);
+  if (Array.isArray(invitedSupplierIds) && invitedSupplierIds.length > 0 && !invitedSupplierIds.includes(supplierPersonId)) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: quotation.groupId,
+        companyId: quotation.companyId,
+        actorUserId: null,
+        action: 'procurement.supplier_offer.submit',
+        entityType: 'Quotation',
+        entityId: quotation.id,
+        reason: `Fornecedor ${supplierPersonId} tentou ofertar numa RFQ com convite dirigido sem estar na lista de convidados.`,
+      },
+      transaction
+    );
+    throw AppError.forbidden(
+      'Este fornecedor não foi convidado para esta cotação (RFQ com convite dirigido) — só fornecedores convidados podem ofertar.',
+      'PROCUREMENT_SUPPLIER_NOT_INVITED'
+    );
   }
 
   let totalAmount = 0;
@@ -857,6 +942,47 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
     }
   }
 
+  // GAP REAL CORRIGIDO (auditoria contratual, 2026-10-08 — Anexo I, "Integração: cancel/return =
+  // compensação"): cancelar uma PO só estornava o payable financeiro — se o material JÁ tinha
+  // sido recebido (GoodsReceipt CONFIRMADO, saldo físico já somado ao estoque em
+  // confirmGoodsReceipt), o material ficava fisicamente no estoque mesmo com a compra cancelada.
+  // Gera um movimento OUT real (reaproveitando movements.service — nunca escreve em
+  // stock_balances direto, EST-002) por item/local de CADA recebimento confirmado deste PO,
+  // revertendo exatamente a quantidade FÍSICA recebida (receivedQuantity do GoodsReceiptItem,
+  // não a quantidade do PO — difere em recebimento parcial), vinculado ao PO cancelado via
+  // sourceType/sourceId. OUT (não ADJUSTMENT/LOSS) porque há origem física rastreável de sobra
+  // (o próprio GoodsReceiptItem que gerou a entrada) — não é um ajuste discricionário sem
+  // lastro, então não exige inventory:approve nem reason obrigatório (idempotencyKey ainda
+  // garante que reprocessar o cancelamento nunca duplica o estorno). Se não há recebimento
+  // confirmado (PO só OPEN sem nenhum GoodsReceipt, ou itens sem inventoryItemId — descrição
+  // livre, sem controle físico), nada é estornado no estoque, como já era o comportamento.
+  const reversedStockMovementIds = [];
+  const confirmedReceiptsForStock = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, status: 'CONFIRMED' }, transaction });
+  for (const goodsReceipt of confirmedReceiptsForStock) {
+    const grItems = await GoodsReceiptItem.findAll({ where: { goodsReceiptId: goodsReceipt.id }, transaction });
+    for (const grItem of grItems) {
+      const poItem = items.find((i) => i.id === grItem.purchaseOrderItemId);
+      if (!poItem || !poItem.inventoryItemId) continue;
+      const reversalMovement = await recordMovement(
+        {
+          groupId: order.groupId,
+          companyId: order.companyId,
+          inventoryItemId: poItem.inventoryItemId,
+          movementType: 'OUT',
+          quantity: Number(grItem.receivedQuantity),
+          sourceLocationId: goodsReceipt.destinationLocationId,
+          sourceType: 'PURCHASE_ORDER_CANCEL',
+          sourceId: order.id,
+          reason: `Estorno de estoque — pedido de compra ${order.id} cancelado após recebimento confirmado (${goodsReceipt.id}).`,
+          idempotencyKey: `po-cancel-stock-reversal:${order.id}:${grItem.id}`,
+        },
+        actor,
+        transaction
+      );
+      reversedStockMovementIds.push(reversalMovement.id);
+    }
+  }
+
   order.status = 'CANCELED';
   order.updatedBy = actor.userId || null;
   await order.save({ transaction });
@@ -865,12 +991,12 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
     {
       groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId,
       action: 'PURCHASE_ORDER_CANCELED', entityType: 'PurchaseOrder', entityId: order.id,
-      reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada)${reversedFinancialEntryIds.length > 0 ? `; payable(s) estornado(s): ${reversedFinancialEntryIds.join(', ')}` : ''}.`,
+      reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada)${reversedFinancialEntryIds.length > 0 ? `; payable(s) estornado(s): ${reversedFinancialEntryIds.join(', ')}` : ''}${reversedStockMovementIds.length > 0 ? `; estoque estornado via movimento(s): ${reversedStockMovementIds.join(', ')}` : ''}.`,
     },
     transaction
   );
 
-  return { order, discrepancies };
+  return { order, discrepancies, reversedStockMovementIds, reversedFinancialEntryIds };
 }
 
 // --- Due diligence / qualificação de fornecedor ---

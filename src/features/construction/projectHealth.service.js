@@ -86,6 +86,88 @@ async function getProject(id, transaction) {
 }
 
 /**
+ * computeMarginProjection — TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161
+ * seção 5: "Margem abaixo da regra gera alerta ou bloqueio, conforme configurado"). Extrai a
+ * MESMA fórmula de projectedMargin/marginPct/belowMinMargin já usada em getProjectHealth (ver
+ * comentários detalhados logo abaixo, linhas ~138-206 originais) para ser reaproveitada nos
+ * pontos de decisão real (budgets.service.js#approveBudget, changeOrders.service.js#
+ * decideChangeOrder) — NUNCA duplica a fórmula.
+ *
+ * `extraApprovedChanges` permite projetar o efeito de uma aprovação AINDA NÃO commitada: ao
+ * decidir um Change Order (ainda PENDING_APPROVAL, portanto fora de getApprovedChangeOrdersTotal
+ * até a transação commitar), passamos o `budgetImpact` dele aqui para calcular a margem COMO
+ * FICARIA se esta aprovação específica fosse confirmada — sem gravar nada ainda. Em
+ * approveBudget, nenhum delta é necessário: committedCost já vem da soma das BudgetLine
+ * existentes (independente do status do Budget agregado), e approvedChanges já reflete os
+ * Change Orders já aprovados anteriormente.
+ */
+async function computeMarginProjection(projectId, transaction, { extraApprovedChanges = 0 } = {}) {
+  const project = await getProject(projectId, transaction);
+
+  const [budgetLines, settledEntries] = await Promise.all([
+    BudgetLine.findAll({ where: { projectId }, transaction }),
+    FinancialEntry.findAll({
+      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
+      transaction,
+    }),
+  ]);
+
+  const committedCost = budgetLines.reduce((acc, line) => acc + toNumber(line.plannedAmount), 0);
+  const approvedChangesBase = await getApprovedChangeOrdersTotal(projectId, transaction);
+  const approvedChanges = approvedChangesBase + toNumber(extraApprovedChanges);
+
+  const settledIds = settledEntries.map((e) => e.id);
+  const partialSettlements = settledIds.length
+    ? await FinancialEntry.findAll({
+        where: { parentEntryId: { [Op.in]: settledIds }, status: 'SETTLED' },
+        transaction,
+      })
+    : [];
+  const actualFinancialCost = settledEntries.reduce((acc, entry) => {
+    if (entry.status === 'SETTLED') return acc + toNumber(entry.amount);
+    return acc;
+  }, 0) + partialSettlements.reduce((acc, s) => acc + toNumber(s.amount), 0);
+
+  const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
+
+  const realizedCost = actualFinancialCost + consumedInventoryCost;
+  const forecastToComplete = Math.max(committedCost + approvedChanges - realizedCost, 0);
+  const projectedTotalCost = round2(realizedCost + forecastToComplete);
+  const marginBudgetBase = committedCost + approvedChanges;
+  const projectedMargin = round2(marginBudgetBase - projectedTotalCost);
+  const marginPct = marginBudgetBase > 0 ? round2((projectedMargin / marginBudgetBase) * 100) : null;
+
+  const marginEvaluation = await evaluateRule(
+    MARGIN_RULE_CODE,
+    { marginRuleActive: true },
+    { groupId: project.groupId, companyId: project.companyId },
+    { transaction }
+  );
+  const minMarginPct = marginEvaluation.decision === 'APPLY' ? Number(marginEvaluation.action.minMarginPct) : null;
+  const enforcementMode = marginEvaluation.decision === 'APPLY'
+    ? (marginEvaluation.action.enforcementMode || 'ALERT')
+    : 'ALERT';
+  const belowMinMargin = marginPct !== null && minMarginPct !== null ? marginPct < minMarginPct : null;
+
+  return {
+    project,
+    committedCost,
+    approvedChanges,
+    actualFinancialCost,
+    consumedInventoryCost,
+    realizedCost,
+    forecastToComplete,
+    projectedTotalCost,
+    marginBudgetBase,
+    projectedMargin,
+    marginPct,
+    minMarginPct,
+    belowMinMargin,
+    enforcementMode,
+  };
+}
+
+/**
  * getProjectHealth — os 9 campos do M6-42 + KPIs adicionais do M6-99.
  *
  *  1. baselineBudget         — construction.projects.budget_amount (orçamento base aprovado da
@@ -115,15 +197,30 @@ async function getProject(id, transaction) {
  *   nunca bloqueia o endpoint, é só o sinal pro alerta no front.
  */
 async function getProjectHealth(projectId, transaction) {
-  const project = await getProject(projectId, transaction);
+  // Fórmula de margem (committedCost/approvedChanges/forecastToComplete/projectedMargin/
+  // marginPct/minMarginPct/belowMinMargin/enforcementMode) extraída pra computeMarginProjection()
+  // acima — reaproveitada tal e qual aqui e nos pontos de bloqueio (budgets.service.js/
+  // changeOrders.service.js), NUNCA duplicada (TAREFA auditoria externa Nayara, item A9).
+  const {
+    project,
+    committedCost,
+    approvedChanges,
+    actualFinancialCost,
+    consumedInventoryCost,
+    forecastToComplete,
+    projectedTotalCost,
+    projectedMargin,
+    marginPct,
+    minMarginPct,
+    belowMinMargin,
+  } = await computeMarginProjection(projectId, transaction);
 
-  const [stages, budgetLines, settledEntries, pendingEntries] = await Promise.all([
+  const baselineBudget = project.budgetAmount !== null && project.budgetAmount !== undefined
+    ? toNumber(project.budgetAmount)
+    : committedCost;
+
+  const [stages, pendingEntries] = await Promise.all([
     ProjectStage.findAll({ where: { projectId }, transaction }),
-    BudgetLine.findAll({ where: { projectId }, transaction }),
-    FinancialEntry.findAll({
-      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
-      transaction,
-    }),
     FinancialEntry.findAll({
       where: { constructionProjectId: projectId, nature: 'PAYABLE', status: 'PENDING' },
       transaction,
@@ -134,76 +231,6 @@ async function getProjectHealth(projectId, transaction) {
   const measurements = stageIds.length
     ? await StageMeasurement.findAll({ where: { projectStageId: { [Op.in]: stageIds } }, transaction })
     : [];
-
-  const committedCost = budgetLines.reduce((acc, line) => acc + toNumber(line.plannedAmount), 0);
-  const baselineBudget = project.budgetAmount !== null && project.budgetAmount !== undefined
-    ? toNumber(project.budgetAmount)
-    : committedCost;
-
-  const approvedChanges = await getApprovedChangeOrdersTotal(projectId, transaction);
-
-  // actualFinancialCost: valor JÁ pago. Baixas parciais (status PARTIALLY_SETTLED) contam só a
-  // fração já liquidada, nunca o valor total do lançamento pai — buscamos as baixas (linhas
-  // filhas SETTLED com parent_entry_id) para não superestimar o que já saiu.
-  const settledIds = settledEntries.map((e) => e.id);
-  const partialSettlements = settledIds.length
-    ? await FinancialEntry.findAll({
-        where: { parentEntryId: { [Op.in]: settledIds }, status: 'SETTLED' },
-        transaction,
-      })
-    : [];
-  const actualFinancialCost = settledEntries.reduce((acc, entry) => {
-    if (entry.status === 'SETTLED') return acc + toNumber(entry.amount);
-    return acc; // PARTIALLY_SETTLED: soma-se só pelas baixas filhas abaixo
-  }, 0) + partialSettlements.reduce((acc, s) => acc + toNumber(s.amount), 0);
-
-  // consumedInventoryCost — ver getConsumedInventoryCost() (GAP CORRIGIDO, ver comentário acima).
-  const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
-
-  // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): `consumedInventoryCost` era calculado e
-  // devolvido no JSON, mas nunca entrava em forecastToComplete/projectedTotalCost/
-  // projectedMargin — a fonte diz "Custo realizado vem de Financeiro/Estoque" (seção 5), ou
-  // seja, o custo JÁ realizado da obra é a soma do que saiu pelo Financeiro (actualFinancialCost)
-  // E do que já foi consumido do Estoque (consumedInventoryCost), não só o primeiro. Uma obra
-  // pode consumir material (saída de estoque vinculada ao projeto) antes de qualquer lançamento
-  // financeiro ter sido feito (ex.: material já em almoxarifado, baixado fisicamente, pago depois)
-  // — sem somar consumedInventoryCost aqui, forecastToComplete/projectedTotalCost ficavam
-  // subestimados e projectedMargin inflado, mascarando o alerta de margem.
-  const realizedCost = actualFinancialCost + consumedInventoryCost;
-  const forecastToComplete = Math.max(committedCost + approvedChanges - realizedCost, 0);
-  const projectedTotalCost = round2(realizedCost + forecastToComplete);
-  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): projectedMargin
-  // somava `baselineBudget + approvedChanges`, mas `baselineBudget` (quando vem de
-  // project.budgetAmount) JÁ inclui o impacto dos Change Orders aprovados — changeOrders.
-  // service.js:decideChangeOrder sincroniza project.budgetAmount com o novo baseline no momento
-  // da aprovação (comentário na linha ~177 desse arquivo confirma a intenção). Somar
-  // approvedChanges de novo aqui inflava a margem projetada, podendo mascarar um alerta de
-  // margem abaixo da regra configurada que deveria ter disparado. Base de margem usa
-  // committedCost (soma das linhas de orçamento, nunca tocada por Change Order) + approvedChanges
-  // — mesma base já usada em forecastToComplete, nunca double-counta.
-  const marginBudgetBase = committedCost + approvedChanges;
-  const projectedMargin = round2(marginBudgetBase - projectedTotalCost);
-
-  // marginPct/belowMinMargin (FIX 01/10/2026, achado em auditoria): a fonte ("CONSTRUÇÃO +
-  // OBRAS + PÓS-OBRA — BLINDADO v1", seção 5) exige "Margem abaixo da regra gera alerta" — o
-  // relatório de saúde é o lugar documentado para esse alerta (não um bloqueio em
-  // approveBudget, que só precisa existir uma regra ativa e congelar sua versão — já feito em
-  // budgets.service.js). Percentual calculado sobre a receita-base da obra (baseline + changes);
-  // sem receita-base (projeto ainda sem orçamento/linha) ou sem regra ativa configurada, os
-  // campos ficam `null` — nunca inventa denominador nem bloqueia o endpoint (fail-open, é um
-  // read model).
-  const marginPct = marginBudgetBase > 0 ? round2((projectedMargin / marginBudgetBase) * 100) : null;
-  // GAP CORRIGIDO (auditoria pós-Marco 6, item 4): minMarginPct vinha de `MarginRule` (tabela
-  // dedicada do módulo), agora vem do Motor de Regras genérico (REG-OBR-001 — ver
-  // marginRules.service.js para a decisão de migração completa).
-  const marginEvaluation = await evaluateRule(
-    MARGIN_RULE_CODE,
-    { marginRuleActive: true },
-    { groupId: project.groupId, companyId: project.companyId },
-    { transaction }
-  );
-  const minMarginPct = marginEvaluation.decision === 'APPLY' ? Number(marginEvaluation.action.minMarginPct) : null;
-  const belowMinMargin = marginPct !== null && minMarginPct !== null ? marginPct < minMarginPct : null;
 
   // --- KPIs adicionais (M6-99) — só os que dependem de dados desta fatia (medição/etapa). ---
   const avgMeasuredPct = stages.length
@@ -313,4 +340,4 @@ async function getProjectHealth(projectId, transaction) {
   };
 }
 
-module.exports = { getProjectHealth };
+module.exports = { getProjectHealth, computeMarginProjection };

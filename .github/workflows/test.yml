@@ -74,6 +74,20 @@ jobs:
       - name: Scanner de hard-code (Obras/Construction)
         run: node scripts/scanConstructionHardcode.js
 
+      # Caderno Técnico, página 165, item 13 ("segurança/antifraude do módulo de Obras") — a
+      # auditora externa pediu evidência de "security scan" pro Marco 6. Dois steps novos:
+      # SAST simples (regex sobre src/, sem AST, mesma filosofia do scanner de hard-code acima)
+      # e scan de dependências (npm audit contra prod deps apenas — devDependencies não vão pro
+      # runtime). Resultado real documentado em scripts/README-security.md.
+      - name: SAST simples (padrões perigosos conhecidos em src/)
+        run: node scripts/sastScan.js
+
+      # securityScan.js falha o build (exit 1) só para HIGH/CRITICAL com fix disponível
+      # ignorado — moderate/low viram warning no log, não bloqueiam (ver comentário no topo do
+      # script pro motivo da escolha e o resultado real rodado em 08/10/2026).
+      - name: Security scan (npm audit — dependências de produção)
+        run: node scripts/securityScan.js
+
       # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
       # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
       # cluster — que o Postgres sempre cria como SUPERUSER, com BYPASSRLS implícito. Isso

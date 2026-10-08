@@ -67,7 +67,7 @@ async function getOrCreateRule(groupId, companyId, actorUserId, transaction) {
   return rule;
 }
 
-async function createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction, economyPct, commissionPct) {
+async function createMarginRuleAttempt(groupId, companyId, numeric, description, actorUserId, transaction, economyPct, commissionPct, enforcementMode) {
   // Mesma justificativa do pg_advisory_xact_lock original (migração 20260101000181): o par
   // "fechar effectiveUntil da versão anterior" + "criar nova RuleVersion PUBLISHED" sob
   // concorrência real da mesma empresa pode formar condição de corrida — serializa por
@@ -100,6 +100,7 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
     description: description || null,
     economyPct: economyPct === undefined ? null : economyPct,
     commissionPct: commissionPct === undefined ? null : commissionPct,
+    enforcementMode: enforcementMode || DEFAULT_ENFORCEMENT_MODE,
   };
   const version = await RuleVersion.create(
     {
@@ -176,6 +177,7 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
     description: description || null,
     economyPct: actionJson.economyPct,
     commissionPct: actionJson.commissionPct,
+    enforcementMode: actionJson.enforcementMode,
     isActive: true,
     toJSON() {
       return {
@@ -186,6 +188,7 @@ async function createMarginRuleAttempt(groupId, companyId, numeric, description,
         description: description || null,
         economyPct: actionJson.economyPct,
         commissionPct: actionJson.commissionPct,
+        enforcementMode: actionJson.enforcementMode,
         isActive: true,
         ruleCode: RULE_CODE,
       };
@@ -207,8 +210,31 @@ function validateOptionalPct(value, fieldName) {
   return numeric;
 }
 
+// TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161 seção 5): "Margem abaixo da
+// regra gera alerta ou bloqueio, conforme configurado" — até aqui só existia o ALERTA
+// (belowMinMargin em projectHealth.service.js, nunca bloqueava nada). `enforcementMode`
+// determina se a margem projetada abaixo de `minMarginPct` apenas sinaliza (ALERT, default —
+// preserva 100% o comportamento anterior) ou IMPEDE a aprovação (BLOCK) nos pontos de decisão
+// reais (budgets.service.js#approveBudget, changeOrders.service.js#decideChangeOrder). Mesmo
+// padrão de validação/persistência de economyPct/commissionPct: campo plano dentro do MESMO
+// actionJson da RuleVersion do Motor de Regras genérico — nenhum mecanismo novo.
+const ENFORCEMENT_MODES = ['ALERT', 'BLOCK'];
+const DEFAULT_ENFORCEMENT_MODE = 'ALERT';
+
+function validateEnforcementMode(value) {
+  if (value === undefined || value === null || value === '') return DEFAULT_ENFORCEMENT_MODE;
+  const normalized = String(value).toUpperCase();
+  if (!ENFORCEMENT_MODES.includes(normalized)) {
+    throw AppError.badRequest(
+      `"enforcementMode" deve ser um dos valores: ${ENFORCEMENT_MODES.join(', ')}.`,
+      'MARGIN_RULE_VALIDATION'
+    );
+  }
+  return normalized;
+}
+
 async function createMarginRule(payload, actorUserId, transaction) {
-  const { groupId, companyId, minMarginPct, description, economyPct, commissionPct } = payload;
+  const { groupId, companyId, minMarginPct, description, economyPct, commissionPct, enforcementMode } = payload;
   if (!groupId || !companyId || minMarginPct === undefined || minMarginPct === null) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId" e "minMarginPct" são obrigatórios.',
@@ -223,6 +249,7 @@ async function createMarginRule(payload, actorUserId, transaction) {
   }
   const economyNumeric = validateOptionalPct(economyPct, 'economyPct');
   const commissionNumeric = validateOptionalPct(commissionPct, 'commissionPct');
+  const enforcementModeValidated = validateEnforcementMode(enforcementMode);
 
   const rule = await createMarginRuleAttempt(
     groupId,
@@ -232,7 +259,8 @@ async function createMarginRule(payload, actorUserId, transaction) {
     actorUserId,
     transaction,
     economyNumeric,
-    commissionNumeric
+    commissionNumeric,
+    enforcementModeValidated
   );
 
   await registrarAuditoria(
@@ -270,6 +298,7 @@ async function getActiveMarginRule(groupId, companyId, transaction) {
     commissionPct: evaluation.action.commissionPct !== undefined && evaluation.action.commissionPct !== null
       ? Number(evaluation.action.commissionPct)
       : null,
+    enforcementMode: evaluation.action.enforcementMode || DEFAULT_ENFORCEMENT_MODE,
     isActive: true,
   };
 }
@@ -287,8 +316,16 @@ async function getMarginRule(id, transaction) {
     commissionPct: version.actionJson?.commissionPct !== undefined && version.actionJson?.commissionPct !== null
       ? Number(version.actionJson.commissionPct)
       : null,
+    enforcementMode: version.actionJson?.enforcementMode || DEFAULT_ENFORCEMENT_MODE,
     isActive: version.status === 'PUBLISHED' && !version.effectiveUntil,
   };
 }
 
-module.exports = { createMarginRule, getActiveMarginRule, getMarginRule, RULE_CODE };
+module.exports = {
+  createMarginRule,
+  getActiveMarginRule,
+  getMarginRule,
+  RULE_CODE,
+  ENFORCEMENT_MODES,
+  DEFAULT_ENFORCEMENT_MODE,
+};

@@ -166,6 +166,21 @@ async function recordMovement(payload, actor, transaction) {
   if (APPROVAL_REQUIRED_TYPES.includes(movementType) && (!reason || !String(reason).trim())) {
     throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
   }
+  // GAP REAL CORRIGIDO (auditoria Marco 7, Caderno §6 EST-TS-12, 2026-10-08): "evento repetido
+  // não pode criar segunda obrigação" já era garantido POR CONSTRUÇÃO nos fluxos automatizados
+  // (recebimento/requisição geram a idempotencyKey internamente antes de chamar recordMovement),
+  // mas o endpoint genérico de movimento manual deixava idempotencyKey opcional — um ADJUSTMENT/
+  // LOSS/DISPOSAL disparado manualmente (os mesmos tipos reexecutáveis que já exigem reason/
+  // aprovação acima) podia ser reenviado (retry, duplo clique) sem key e criar uma segunda
+  // obrigação de verdade. IN/OUT/TRANSFER continuam sem exigência aqui porque são chamados
+  // internamente por outros services que já constroem a key (ex.: receipts.service.js linha
+  // ~157: `receipt:${receipt.id}:item:${line.id}`) — exigir aqui quebraria esses fluxos.
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !idempotencyKey) {
+    throw AppError.badRequest(
+      `Movimento "${movementType}" exige "idempotencyKey" (evento reexecutável não pode criar segunda obrigação — EST-TS-12).`,
+      'INVENTORY_MOVEMENT_IDEMPOTENCY_KEY_REQUIRED'
+    );
+  }
   // GAP REAL CORRIGIDO (reauditoria externa Nayara, 3ª rodada, 2026-10-08; EST-008: "...
   // evidência... conforme valor/risco"): motivo e aprovação (canApprove, acima) já eram sempre
   // obrigatórios pros 3 tipos — faltava o eixo "valor": acima de um limiar configurável

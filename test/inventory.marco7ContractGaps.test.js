@@ -418,7 +418,7 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
       { movementType: 'OUT', quantity: 1, sourceLocationId: frozen.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: frozen.id, destinationLocationId: other.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: other.id, destinationLocationId: frozen.id },
-      { movementType: 'ADJUSTMENT', quantity: 1, destinationLocationId: frozen.id, reason: 'ajuste manual' },
+      { movementType: 'ADJUSTMENT', quantity: 1, destinationLocationId: frozen.id, reason: 'ajuste manual', idempotencyKey: `gap4-frozen-adj-${uniqueSuffix()}` },
     ]) {
       await assert.rejects(
         () => movementsService.recordMovement(withTenant({ inventoryItemId: item.id, ...payload }), approver, transaction),

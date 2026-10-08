@@ -136,8 +136,9 @@ test('EST-TS-11 RLS Estoque/Patrimônio: leitura e escrita cross-company bloquea
     );
     const balanceId = await firstId('inventory.stock_balances', 'inventory_item_id', item.id, transaction);
 
+    // invoiceFingerprint agora é obrigatório junto de invoiceNumber (GAP 1, EST-TS-08).
     const receipt = await receiptsService.createReceipt(
-      withTenant({ destinationLocationId: warehouse.id, invoiceNumber: `NF-RLS-${suffix}`, items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 2 }] }),
+      withTenant({ destinationLocationId: warehouse.id, invoiceNumber: `NF-RLS-${suffix}`, invoiceFingerprint: `fp-rls-${suffix}`, items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 2 }] }),
       tenant.userId,
       transaction
     );

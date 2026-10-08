@@ -828,3 +828,211 @@ test('TAREFA 3: getProjectHealth retorna belowMinMargin=true quando a margem pro
     assert.equal(health.belowMinMargin, true);
   });
 });
+
+// TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161 seção 5): "Margem abaixo da
+// regra gera alerta ou bloqueio, conforme configurado" — até esta auditoria só existia o
+// ALERTA (belowMinMargin, nunca bloqueava nada). Estes testes cobrem o novo `enforcementMode`
+// ('ALERT' default preserva o comportamento antigo / 'BLOCK' impede a aprovação de verdade) nos
+// dois pontos de decisão reais: approveBudget (budgets.service.js) e decideChangeOrder
+// (changeOrders.service.js). Mesma fórmula de margem do TAREFA 3 acima: sem nenhum custo
+// realizado/estoque consumido ainda, projectedMargin fica em 0 (forecastToComplete cobre
+// exatamente o que falta) — ou seja, qualquer minMarginPct > 0 já configura "abaixo da regra" na
+// aprovação; minMarginPct = 0 é o caso-limite "margem acima/igual ao mínimo", usado para provar
+// que o BLOCK não bloqueia à toa.
+
+test('ENFORCEMENT: enforcementMode=BLOCK recusa approveBudget quando a margem projetada fica abaixo do mínimo configurado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 30, enforcementMode: 'BLOCK' }),
+      tenant.userId,
+      transaction
+    );
+
+    const project = await projectsService.createProject(
+      withTenant({ name: `HOMO QA Obra enforcement block budget ${Date.now()}${Math.floor(Math.random() * 10000)}` }),
+      tenant.userId,
+      transaction
+    );
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(
+      project.id,
+      withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget.id }),
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => budgetsService.approveBudget(budget.id, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'BUDGET_APPROVAL_BLOCKED_BY_MARGIN_RULE');
+        return true;
+      }
+    );
+
+    const reloaded = await budgetsService.getBudget(budget.id, transaction);
+    assert.equal(reloaded.status, 'DRAFT', 'orçamento não pode ter sido aprovado quando o bloqueio dispara');
+  });
+});
+
+test('ENFORCEMENT: enforcementMode=ALERT (explícito) ou ausente (default) aprova o orçamento normalmente e só sinaliza belowMinMargin no health', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // Explícito 'ALERT'.
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 30, enforcementMode: 'ALERT' }),
+      tenant.userId,
+      transaction
+    );
+
+    const project = await projectsService.createProject(
+      withTenant({ name: `HOMO QA Obra enforcement alert budget ${Date.now()}${Math.floor(Math.random() * 10000)}` }),
+      tenant.userId,
+      transaction
+    );
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(
+      project.id,
+      withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget.id }),
+      tenant.userId,
+      transaction
+    );
+
+    const approved = await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+    assert.equal(approved.status, 'APPROVED', 'enforcementMode ALERT nunca pode bloquear a aprovação');
+
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(health.minMarginPct, 30);
+    assert.equal(health.belowMinMargin, true, 'alerta continua ativo mesmo sem bloquear');
+
+    // Default (campo ausente) — mesmo resultado: nunca bloqueia.
+    await marginRulesService.createMarginRule(withTenant({ minMarginPct: 30 }), tenant.userId, transaction);
+
+    const project2 = await projectsService.createProject(
+      withTenant({ name: `HOMO QA Obra enforcement default budget ${Date.now()}${Math.floor(Math.random() * 10000)}` }),
+      tenant.userId,
+      transaction
+    );
+    const budget2 = await budgetsService.createBudget(project2.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(
+      project2.id,
+      withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget2.id }),
+      tenant.userId,
+      transaction
+    );
+    const approved2 = await budgetsService.approveBudget(budget2.id, tenant.userId, transaction);
+    assert.equal(approved2.status, 'APPROVED', 'default (sem enforcementMode) precisa continuar sendo ALERT, nunca bloqueia');
+  });
+});
+
+test('ENFORCEMENT: enforcementMode=BLOCK não bloqueia à toa quando a margem projetada está acima/igual ao mínimo configurado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // minMarginPct=0: sem nenhum custo realizado ainda, projectedMargin=0 (ver comentário acima)
+    // — 0 não é "abaixo de 0", então o BLOCK não pode disparar.
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 0, enforcementMode: 'BLOCK' }),
+      tenant.userId,
+      transaction
+    );
+
+    const project = await projectsService.createProject(
+      withTenant({ name: `HOMO QA Obra enforcement block ok ${Date.now()}${Math.floor(Math.random() * 10000)}` }),
+      tenant.userId,
+      transaction
+    );
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(
+      project.id,
+      withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget.id }),
+      tenant.userId,
+      transaction
+    );
+
+    const approved = await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+    assert.equal(approved.status, 'APPROVED', 'margem igual/acima do mínimo não pode ser bloqueada');
+  });
+});
+
+test('ENFORCEMENT: enforcementMode=BLOCK recusa decideChangeOrder(APPROVE) quando a margem projetada fica abaixo do mínimo configurado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // Orçamento aprovado com a regra default (ALERT) do helper — sem bloqueio na aprovação do
+    // orçamento em si.
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+
+    // Troca a regra vigente para BLOCK/minMarginPct alto ANTES de decidir o Change Order —
+    // decideChangeOrder sempre lê a regra ATIVA no momento da decisão (getActiveMarginRule),
+    // nunca uma versão congelada.
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 30, enforcementMode: 'BLOCK' }),
+      tenant.userId,
+      transaction
+    );
+
+    const changeOrder = await changeOrdersService.createChangeOrder(
+      project.id,
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => changeOrdersService.decideChangeOrder(changeOrder.id, { decision: 'APPROVE' }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'CHANGE_ORDER_APPROVAL_BLOCKED_BY_MARGIN_RULE');
+        return true;
+      }
+    );
+
+    const reloaded = await changeOrdersService.getChangeOrder(changeOrder.id, transaction);
+    assert.equal(reloaded.status, 'PENDING_APPROVAL', 'Change Order não pode ter sido aprovado quando o bloqueio dispara');
+  });
+});
+
+test('ENFORCEMENT: enforcementMode=ALERT permite decideChangeOrder(APPROVE) normalmente mesmo com margem abaixo do mínimo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 30, enforcementMode: 'ALERT' }),
+      tenant.userId,
+      transaction
+    );
+
+    const changeOrder = await changeOrdersService.createChangeOrder(
+      project.id,
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      tenant.userId,
+      transaction
+    );
+
+    const decided = await changeOrdersService.decideChangeOrder(changeOrder.id, { decision: 'APPROVE' }, tenant.userId, transaction);
+    assert.equal(decided.status, 'APPROVED', 'enforcementMode ALERT nunca pode bloquear a aprovação de Change Order');
+
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(health.belowMinMargin, true, 'alerta continua ativo mesmo sem bloquear');
+  });
+});
+
+test('ENFORCEMENT: enforcementMode=BLOCK não bloqueia decideChangeOrder(APPROVE) quando a margem projetada está acima/igual ao mínimo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+
+    await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 0, enforcementMode: 'BLOCK' }),
+      tenant.userId,
+      transaction
+    );
+
+    const changeOrder = await changeOrdersService.createChangeOrder(
+      project.id,
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      tenant.userId,
+      transaction
+    );
+
+    const decided = await changeOrdersService.decideChangeOrder(changeOrder.id, { decision: 'APPROVE' }, tenant.userId, transaction);
+    assert.equal(decided.status, 'APPROVED', 'margem igual/acima do mínimo não pode ser bloqueada');
+  });
+});
