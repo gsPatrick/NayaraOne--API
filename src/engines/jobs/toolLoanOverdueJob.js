@@ -129,6 +129,10 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
         // Mantém a Notification original (NÃO removida): dispara ao transicionar pra OVERDUE
         // na primeira vez, independente do nível de escalonamento calculado.
         if (wasOpen) {
+          // GAP REAL CORRIGIDO (auditoria contrato "Alertas: criticidade, responsável, canal e
+          // prazo de resposta", 2026-10-08): o corpo citava o empréstimo e a data prevista, mas
+          // não o ativo (assetId) nem a criticidade — `confirmedLevel` já é calculado aqui mesmo
+          // (linha 89), só não chegava no texto da Notification.
           await Notification.create(
             {
               groupId: locked.groupId,
@@ -136,7 +140,7 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
               userId: locked.personUserId,
               channel: 'IN_APP',
               title: 'Ferramenta com devolução atrasada',
-              body: `A ferramenta do empréstimo ${locked.id} está atrasada (previsto para ${locked.dueAt}) — devolva ou regularize.`,
+              body: `[${confirmedLevel}] A ferramenta (ativo ${locked.assetId}) do empréstimo ${locked.id} está atrasada — devolução prevista para ${locked.dueAt}. Prazo de resposta: devolva ou regularize hoje.`,
             },
             { transaction: nested }
           );

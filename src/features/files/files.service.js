@@ -5,6 +5,7 @@ const { File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const diskStorage = require('../../utils/diskStorage');
+const { resolveAntivirusAdapter } = require('../people/adapters/resolveDocumentAdapters');
 
 // 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -88,6 +89,21 @@ async function uploadFile(payload, actorUserId, transaction) {
       `O arquivo excede o limite de ${MAX_BYTES / (1024 * 1024)}MB.`,
       'FILE_UPLOAD_TOO_LARGE'
     );
+  }
+
+  // GAP REAL CORRIGIDO (auditoria 2026-10-08): este era o ÚNICO ponto de upload (POST /files
+  // genérico, usado por qualquer feature que apenas vincula um fileId depois — ex.
+  // procurement/insurance.service.js#attachPolicyDocument) que NUNCA passava por scan de
+  // antivírus. O scan existia só "espalhado" nos chamadores que decidiram chamá-lo manualmente
+  // antes de uploadFile (ex. inventory/receiptOcr.service.js), não dentro do próprio
+  // uploadFile — então qualquer outra tela que suba um arquivo e depois só vincule o fileId
+  // (Seguros, Jurídico, etc.) nunca scaneava nada. Centralizando aqui, com o MESMO adapter
+  // plugável (resolveAntivirusAdapter, people/adapters/resolveDocumentAdapters.js) já usado no
+  // Estoque, nenhum arquivo entra no sistema por QUALQUER caminho sem passar pelo antivírus.
+  const antivirus = await resolveAntivirusAdapter({ groupId, companyId }, transaction);
+  const scan = await antivirus.scan(buffer);
+  if (!scan.clean) {
+    throw AppError.unprocessable('Arquivo rejeitado pelo antivírus: assinatura de malware detectada.', 'FILE_UPLOAD_MALWARE_DETECTED', { signature: scan.signature });
   }
 
   const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');

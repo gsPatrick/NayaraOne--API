@@ -48,6 +48,15 @@ async function expireDuePolicies(transaction, now = new Date()) {
         await policy.save({ transaction: nested });
 
         if (policy.createdBy) {
+          // GAP REAL CORRIGIDO (auditoria contrato "Alertas: criticidade, responsável, canal e
+          // prazo de resposta", 2026-10-08): o corpo tinha item/data, mas nenhuma criticidade
+          // explícita nem prazo de resposta — quem recebe não sabe se é urgente nem até quando
+          // agir. `daysOverdue` (sempre >= 1, já que o job só roda em apólices com expiryDate no
+          // passado) e o rótulo CRÍTICO deixam a gravidade e o prazo explícitos no texto.
+          const daysOverdue = Math.max(
+            1,
+            Math.round((new Date(today).getTime() - new Date(policy.expiryDate).getTime()) / (24 * 60 * 60 * 1000))
+          );
           await Notification.create(
             {
               groupId: policy.groupId,
@@ -55,7 +64,7 @@ async function expireDuePolicies(transaction, now = new Date()) {
               userId: policy.createdBy,
               channel: 'IN_APP',
               title: 'Apólice de seguro vencida',
-              body: `A apólice ${policy.externalPolicyNumber || policy.id} teve a vigência encerrada em ${policy.expiryDate} — novos sinistros estão bloqueados até a renovação.`,
+              body: `[CRÍTICO] A apólice ${policy.externalPolicyNumber || policy.id} teve a vigência encerrada em ${policy.expiryDate} (há ${daysOverdue} dia(s)) — novos sinistros estão bloqueados até a renovação. Prazo de resposta: imediato, renove ou substitua a apólice hoje.`,
             },
             { transaction: nested }
           );

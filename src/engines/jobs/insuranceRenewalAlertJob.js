@@ -39,6 +39,21 @@ async function alertDueRenewals(transaction, now = new Date()) {
         const policy = task.policy;
         const targetUserId = locked.assignedToUserId || policy?.createdBy;
         if (targetUserId) {
+          // GAP REAL CORRIGIDO (auditoria contrato "Alertas: criticidade, responsável, canal e
+          // prazo de resposta", 2026-10-08): o corpo citava a apólice/data mas não dizia quantos
+          // dias faltam nem qual o prazo de resposta — a tarefa só é alertada quando dueDate já
+          // chegou (30 dias antes do vencimento), então `daysUntilExpiry` comunica a urgência
+          // real (pode já estar negativo se o job atrasar, nesse caso já está vencida).
+          const daysUntilExpiry = policy?.expiryDate
+            ? Math.round((new Date(policy.expiryDate).getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+            : null;
+          const severity = daysUntilExpiry != null && daysUntilExpiry <= 0 ? 'CRÍTICO' : 'ATENÇÃO';
+          const prazo =
+            daysUntilExpiry == null
+              ? 'inicie a renovação assim que possível'
+              : daysUntilExpiry <= 0
+              ? `vigência já vencida — regularize hoje`
+              : `prazo de resposta: inicie a renovação em até ${daysUntilExpiry} dia(s)`;
           await Notification.create(
             {
               groupId: locked.groupId,
@@ -46,7 +61,7 @@ async function alertDueRenewals(transaction, now = new Date()) {
               userId: targetUserId,
               channel: 'IN_APP',
               title: 'Apólice de seguro vencendo',
-              body: `A apólice ${policy?.externalPolicyNumber || policy?.id} vence em ${policy?.expiryDate || 'breve'} — inicie a renovação.`,
+              body: `[${severity}] A apólice ${policy?.externalPolicyNumber || policy?.id} vence em ${policy?.expiryDate || 'breve'} — ${prazo}.`,
             },
             { transaction: nested }
           );
