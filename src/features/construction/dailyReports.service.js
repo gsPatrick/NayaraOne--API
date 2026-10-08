@@ -240,10 +240,36 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
 // GET/PATCH contra um id que nunca recebe as edições seguintes, parecendo que a mudança "sumia"
 // ao reabrir. Filtra fora qualquer linha que já tenha sido superada (id presente como
 // supersedesId de outra linha).
-async function listDailyReports(projectId, transaction) {
-  const all = await DailyReport.findAll({ where: { projectId }, order: [['report_date', 'DESC']], transaction });
-  const supersededIds = new Set(all.map((r) => r.supersedesId).filter(Boolean));
-  return all.filter((r) => !supersededIds.has(r.id));
+// GAP REAL CORRIGIDO (load test real, 08/10/2026 — GATE-DB-09/DB-TS-015, meta p95 < 300ms):
+// hidratava TODOS os RDOs da obra pra filtrar em memória os superados — contra 1.800 RDOs numa
+// única obra (meio a 151.800 no tenant), isso media p95 ~853ms. Agora busca só os ids superados
+// (query leve, só a coluna supersedes_id) e pagina o restante no banco.
+const DAILY_REPORT_DEFAULT_PAGE_SIZE = 50;
+const DAILY_REPORT_MAX_PAGE_SIZE = 200;
+
+async function listDailyReports(projectId, transaction, { page, pageSize } = {}) {
+  const pg = Math.max(1, Number.parseInt(page, 10) || 1);
+  const size = Math.min(DAILY_REPORT_MAX_PAGE_SIZE, Math.max(1, Number.parseInt(pageSize, 10) || DAILY_REPORT_DEFAULT_PAGE_SIZE));
+
+  const supersededRows = await DailyReport.findAll({
+    where: { projectId, supersedesId: { [Op.ne]: null } },
+    attributes: ['supersedesId'],
+    transaction,
+  });
+  const supersededIds = supersededRows.map((r) => r.supersedesId).filter(Boolean);
+
+  const where = { projectId };
+  if (supersededIds.length > 0) where.id = { [Op.notIn]: supersededIds };
+
+  const { rows, count } = await DailyReport.findAndCountAll({
+    where,
+    order: [['report_date', 'DESC']],
+    limit: size,
+    offset: (pg - 1) * size,
+    transaction,
+  });
+
+  return { data: rows, pagination: { page: pg, pageSize: size, total: count } };
 }
 
 // Achado numa auditoria do FRONT do Marco 6 (30/09/2026): não existia NENHUMA forma de listar

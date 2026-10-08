@@ -32,10 +32,15 @@ const createProject = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: project });
 });
 const listProjects = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) =>
-    projectsService.listProjects(t, { status: req.query.status, propertyId: req.query.propertyId })
+  const { data, pagination } = await req.withTenantTransaction((t) =>
+    projectsService.listProjects(t, {
+      status: req.query.status,
+      propertyId: req.query.propertyId,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    })
   );
-  return success(res, { data: items });
+  return success(res, { data, pagination });
 });
 const getProject = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => projectsService.getProject(req.params.id, t));
@@ -203,8 +208,10 @@ const createDailyReport = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: report });
 });
 const listDailyReports = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => dailyReportsService.listDailyReports(req.params.id, t));
-  return success(res, { data: items });
+  const { data, pagination } = await req.withTenantTransaction((t) =>
+    dailyReportsService.listDailyReports(req.params.id, t, { page: req.query.page, pageSize: req.query.pageSize })
+  );
+  return success(res, { data, pagination });
 });
 const getDailyReport = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => dailyReportsService.getDailyReport(req.params.id, t));

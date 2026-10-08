@@ -199,11 +199,32 @@ async function createProject(payload, actorUserId, transaction) {
   return project;
 }
 
+// GAP REAL CORRIGIDO (load test real, 08/10/2026 — GATE-DB-09/DB-TS-015, meta p95 < 300ms):
+// sem paginação, listProjects hidratava TODAS as linhas da empresa de uma vez — medido contra
+// 300.000 obras sintéticas, isso sozinho respondia por ~13,8s de p95 (hidratação de objetos
+// Sequelize), muito além do Seq Scan+Sort que o índice novo (migration 20260101000313) já
+// resolve no SQL cru. Paginação real, com teto de sanidade (nunca devolve mais que
+// MAX_PAGE_SIZE mesmo que o chamador peça), fecha a lacuna de fato.
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
 async function listProjects(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.propertyId) where.propertyId = filters.propertyId;
-  return Project.findAll({ where, order: [['created_at', 'DESC']], transaction });
+
+  const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(filters.pageSize, 10) || DEFAULT_PAGE_SIZE));
+
+  const { rows, count } = await Project.findAndCountAll({
+    where,
+    order: [['created_at', 'DESC']],
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    transaction,
+  });
+
+  return { data: rows, pagination: { page, pageSize, total: count } };
 }
 
 async function getProject(id, transaction) {

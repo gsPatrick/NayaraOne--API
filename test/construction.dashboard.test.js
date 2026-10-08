@@ -77,7 +77,7 @@ test('dashboard: getConstructionDashboard agrega baseline/committed de MÚLTIPLA
     );
     // Reconstrução independente do total esperado, via query direta na MESMA transação/
     // visibilidade do dashboard — nunca um "antes vs depois" global.
-    const allCompanyProjects = await projectsService.listProjects(transaction, {});
+    const { data: allCompanyProjects } = await projectsService.listProjects(transaction, { pageSize: 200 });
     const allCompanyLines = await BudgetLine.findAll({
       where: { projectId: { [Op.in]: allCompanyProjects.map((p) => p.id) } },
       transaction,

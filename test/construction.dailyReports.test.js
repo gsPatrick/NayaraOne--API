@@ -215,7 +215,7 @@ test('M6-20: correção de RDO é append-only — original permanece no banco ap
     // como todas têm a mesma reportDate, a UI não conseguia distinguir qual editar, e editar a
     // linha superada fazia a mudança seguinte "sumir" ao reabrir o modal. Lista só pode conter
     // a versão atual de cada RDO, nunca as superadas.
-    const list = await dailyReportsService.listDailyReports(project.id, t);
+    const { data: list } = await dailyReportsService.listDailyReports(project.id, t);
     const idsInList = list.map((r) => r.id);
     assert.ok(idsInList.includes(revision.id), 'a lista precisa incluir a revisão atual (HEAD)');
     assert.ok(!idsInList.includes(original.id), 'a lista NUNCA pode incluir uma versão já superada');
