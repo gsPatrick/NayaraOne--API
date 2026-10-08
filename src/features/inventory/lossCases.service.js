@@ -266,6 +266,18 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
     chargeAmount = Math.round(chargeAmount * 100) / 100;
   }
 
+  // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): recordMovement agora exige que o
+  // InventoryLossCase referenciado por sourceId já esteja APROVADO (ver
+  // movements.service.js#recordMovement) — então a transição de status/decidedBy precisa ser
+  // persistida ANTES de chamar recordMovement abaixo, e não só no final da função como antes.
+  // Mesma transação: a escrita abaixo fica visível para a leitura feita dentro de recordMovement.
+  if (responsiblePerson) lossCase.responsiblePersonId = responsiblePerson.id;
+  lossCase.status = decision;
+  lossCase.decidedByUserId = actor.userId || null;
+  lossCase.decidedAt = new Date();
+  lossCase.updatedBy = actor.userId || null;
+  await lossCase.save({ transaction });
+
   let movement = null;
   if (decision === 'APPROVED' && lossCase.inventoryItemId) {
     const item = await InventoryItem.findByPk(lossCase.inventoryItemId, { transaction });
@@ -347,12 +359,12 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
     chargeEntry = await createLossChargeFinancialEntry(lossCase, responsiblePerson, chargeAmount, options.chargeDueAt, actor.userId, transaction);
   }
 
-  if (responsiblePerson) lossCase.responsiblePersonId = responsiblePerson.id;
-  lossCase.status = decision;
-  lossCase.decidedByUserId = actor.userId || null;
-  lossCase.decidedAt = new Date();
-  lossCase.updatedBy = actor.userId || null;
-  await lossCase.save({ transaction });
+  // Status/responsável/decidedBy já persistidos acima (antes de recordMovement). Se a cobrança
+  // atualizou responsiblePersonId depois dessa gravação inicial, persiste de novo aqui.
+  if (responsiblePerson && lossCase.responsiblePersonId !== responsiblePerson.id) {
+    lossCase.responsiblePersonId = responsiblePerson.id;
+    await lossCase.save({ transaction });
+  }
 
   await registrarAuditoria(
     {

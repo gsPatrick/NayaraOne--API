@@ -839,6 +839,47 @@ async function confirmClaimSettlement(externalSubmissionId, externalStatus, sett
   return claim;
 }
 
+// BUG REAL CORRIGIDO (gap contratual, 2026-10-08): o enum de status (migration
+// 20260101000272) já previa 'CANCELED', mas não existia NENHUMA função/rota pra cancelar uma
+// apólice — uma vez DRAFT/QUOTED/ISSUED/ACTIVE, a apólice nunca podia ser formalmente encerrada
+// fora do fluxo de vencimento natural (EXPIRED, via insurancePolicyExpiryJob.js). Mesmo padrão
+// das outras transições deste arquivo: `getPolicyForUpdate` (tenant + lock), exige "reason",
+// bloqueia se já terminal (CANCELED/EXPIRED), grava status + auditoria com beforeJson/afterJson.
+// O model não tem colunas dedicadas `canceledAt`/`canceledReason` (nenhuma outra transição deste
+// módulo tem colunas de timestamp/motivo próprias — ex.: `cancelPurchaseOrder` em
+// procurement.service.js usa só `status` + o `reason` no log de auditoria) — segue o mesmo
+// padrão já estabelecido em vez de introduzir uma migration isolada só para esta função.
+const POLICY_STATUSES_TERMINAL = ['CANCELED', 'EXPIRED'];
+
+async function cancelPolicy(policyId, payload, actor, transaction) {
+  const policy = await getPolicyForUpdate(policyId, actor.groupId, actor.companyId, transaction);
+  if (POLICY_STATUSES_TERMINAL.includes(policy.status)) {
+    throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser cancelada.`, 'INSURANCE_POLICY_INVALID_STATUS');
+  }
+  const reason = payload?.reason;
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest('O campo "reason" é obrigatório para cancelar uma apólice.', 'INSURANCE_POLICY_CANCEL_REASON_REQUIRED');
+  }
+
+  const beforeJson = policy.toJSON();
+  policy.status = 'CANCELED';
+  policy.updatedBy = actor.userId || null;
+  await policy.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_policy.cancel',
+      entityType: 'InsurancePolicy', entityId: policy.id,
+      beforeJson, afterJson: policy.toJSON(),
+      reason: `Apólice cancelada — ${String(reason).trim()}.`,
+    },
+    transaction
+  );
+
+  return policy;
+}
+
 async function listPolicies(filters, groupId, companyId, transaction) {
   const where = { groupId, companyId };
   if (filters?.status) where.status = filters.status;
@@ -880,6 +921,7 @@ module.exports = {
   createPolicy,
   quotePolicy,
   issuePolicy,
+  cancelPolicy,
   openClaim,
   submitClaim,
   confirmClaimSettlement,

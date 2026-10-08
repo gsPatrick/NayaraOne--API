@@ -26,7 +26,7 @@ const procurementService = require('../src/features/procurement/procurement.serv
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
-const { Person, BankAccount, FinancialEntry } = require('../src/models');
+const { Person, BankAccount, FinancialEntry, User } = require('../src/models');
 
 let tenant;
 
@@ -84,7 +84,14 @@ async function createAwardedOrder(transaction, supplierPersonId, quantity = 10, 
     tenant.userId,
     transaction
   );
-  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+  // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+  // agora rejeita quando o ator é o mesmo que criou a requisição — segundo usuário criado dentro
+  // da própria transação (rollback no fim do teste, mesmo padrão de marco4.acceptance.batch2).
+  const secondApprover = await User.create(
+    { name: `QA Forn Banco segundo aprovador ${s}`, email: `qa-forn-banco-approver-${s}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
+  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
   const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   const offer = await procurementService.submitSupplierOffer(
     quotation.id, tenant.groupId, tenant.companyId,

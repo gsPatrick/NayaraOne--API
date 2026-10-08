@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const procurementService = require('../src/features/procurement/procurement.service');
-const { Person } = require('../src/models');
+const { Person, User } = require('../src/models');
 
 let tenant;
 
@@ -39,6 +39,7 @@ async function offerFromApprovedHighRiskSupplier(transaction, validUntil) {
   const qualification = await procurementService.upsertSupplierQualification(
     withTenant({ supplierPersonId: supplier.id, highRisk: true, validUntil }),
     tenant.userId,
+    { canApprove: true },
     transaction
   );
   await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: tenant.userId }, transaction);
@@ -48,7 +49,14 @@ async function offerFromApprovedHighRiskSupplier(transaction, validUntil) {
     tenant.userId,
     transaction
   );
-  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+  // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+  // agora rejeita quando o ator é o mesmo que criou a requisição — segundo usuário criado dentro
+  // da própria transação (rollback no fim do teste, mesmo padrão de marco4.acceptance.batch2).
+  const secondApprover = await User.create(
+    { name: `QA Vigência segundo aprovador ${uniqueSuffix()}`, email: `qa-vigencia-approver-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
+  await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
   const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   return procurementService.submitSupplierOffer(
     quotation.id, tenant.groupId, tenant.companyId,

@@ -32,14 +32,20 @@ const {
   PurchaseOrder,
   PurchaseOrderItem,
   SupplierQualification,
+  User,
 } = require('../src/models');
 
 let tenant;
 let baseUrl;
 let approverToken;
 let buyerToken;
+// GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+// agora rejeita quando o ator é o mesmo que criou a requisição — createOpenOrder usava
+// tenant.userId para criar E decidir. Segundo usuário, persistido de verdade (requisição HTTP
+// comita a própria transação) e limpo no after(), mesmo padrão de personIds/requestIds abaixo.
+let secondApprover;
 
-const created = { personIds: [], requestIds: [], orderIds: [], qualificationIds: [] };
+const created = { personIds: [], requestIds: [], orderIds: [], qualificationIds: [], userIds: [] };
 
 before(async () => {
   tenant = await getSeedTenant();
@@ -48,6 +54,13 @@ before(async () => {
   // Comprador sem poder de aprovação — o mesmo perfil para o qual a UI esconde Cancelar/Aprovar/Reprovar.
   buyerToken = signAccessToken({ ...base, roles: ['buyer'], permissions: ['procurement:read', 'procurement:create'] });
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
+  secondApprover = await User.create({
+    name: `QA HTTP segundo aprovador ${uniqueSuffix()}`,
+    email: `qa-http-approver-${uniqueSuffix()}@nayaraone.dev`,
+    passwordHash: 'x',
+    status: 'ACTIVE',
+  });
+  created.userIds.push(secondApprover.id);
   await new Promise((resolve) => setTimeout(resolve, 300));
 });
 
@@ -78,6 +91,7 @@ after(async () => {
     // Limpeza best-effort: não mascarar o resultado dos testes por causa dela.
     console.error('[procurement.httpRoutes] limpeza falhou:', err.message);
   });
+  if (created.userIds.length) await User.destroy({ where: { id: created.userIds }, force: true }).catch(() => {});
   await sequelize.close();
   process.exit(0);
 });
@@ -109,7 +123,7 @@ async function createOpenOrder(supplierPersonId) {
       transaction
     );
     created.requestIds.push(request.id);
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,

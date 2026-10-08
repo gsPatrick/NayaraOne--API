@@ -74,6 +74,11 @@ const issuePolicy = catchAsync(async (req, res) => {
   return success(res, { data: policy });
 });
 
+const cancelPolicy = catchAsync(async (req, res) => {
+  const policy = await req.withTenantTransaction((t) => service.cancelPolicy(req.params.id, req.body, actorWithTenant(req), t));
+  return success(res, { data: policy });
+});
+
 const openClaim = catchAsync(async (req, res) => {
   const claim = await req.withTenantTransaction((t) => service.openClaim(req.params.id, req.body, actorWithTenant(req), t));
   return success(res, { statusCode: 201, data: claim });
@@ -149,7 +154,7 @@ const insurancePublicWebhook = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createPolicy, listPolicies, getPolicy, quotePolicy, issuePolicy,
+  createPolicy, listPolicies, getPolicy, quotePolicy, issuePolicy, cancelPolicy,
   openClaim, submitClaim, insurancePublicWebhook,
   attachPolicyDocument, listPolicyDocuments,
   listPolicyInstallments, payPolicyInstallment,

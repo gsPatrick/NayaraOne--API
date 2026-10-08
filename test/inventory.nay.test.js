@@ -13,7 +13,7 @@ const projectsService = require('../src/features/construction/projects.service')
 const settingsService = require('../src/features/settings/settings.service');
 const filesService = require('../src/features/files/files.service');
 const nay = require('../src/features/inventory/inventoryNay.service');
-const { AiRecommendation, AiRun, PurchaseRequestItem, InventoryMovement, InventoryLossCase, Project, Person } = require('../src/models');
+const { AiRecommendation, AiRun, PurchaseRequestItem, InventoryMovement, InventoryLossCase, Project, Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 // NAY Estoque — EST-013 ("NAY pode sugerir compra, risco de falta ou anomalia, mas não efetiva
@@ -248,7 +248,14 @@ test('NAY Estoque: lead time OBSERVADO no histórico real de Compras (pedido -> 
     const warehouse = await createWarehouse(transaction);
 
     const request = await procurementService.createPurchaseRequest(withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity: 10 }] }), tenant.userId, transaction);
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+    // agora rejeita quando o ator é o mesmo que criou a requisição — segundo usuário criado
+    // dentro da própria transação (rollback no fim do teste).
+    const secondApprover = await User.create(
+      { name: `QA NAY segundo aprovador ${Date.now()}${Math.floor(Math.random() * 100000)}`, email: `qa-nay-approver-${Date.now()}${Math.floor(Math.random() * 100000)}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] }, transaction);
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);

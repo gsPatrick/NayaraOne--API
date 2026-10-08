@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const procurementService = require('../src/features/procurement/procurement.service');
-const { Quotation, PurchaseRequest, PurchaseRequestItem } = require('../src/models');
+const { Quotation, PurchaseRequest, PurchaseRequestItem, User } = require('../src/models');
 
 let tenant;
 
@@ -45,6 +45,15 @@ async function withCommittedTenantTransaction(fn) {
 test('CICLO1-COMPRAS-01: duas chamadas concorrentes de createQuotation para a mesma PurchaseRequest resultam em uma única Quotation OPEN', async () => {
   const suffix = uniqueSuffix();
   let requestId = null;
+  // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+  // agora rejeita quando o ator é o mesmo que criou a requisição — segundo usuário real
+  // (transação comitada), removido no finally junto com o resto do fixture deste teste.
+  const secondApprover = await User.create({
+    name: `QA CICLO1 segundo aprovador ${suffix}`,
+    email: `qa-ciclo1-approver-${suffix}@nayaraone.dev`,
+    passwordHash: 'x',
+    status: 'ACTIVE',
+  });
   try {
     const request = await withCommittedTenantTransaction((t) =>
       procurementService.createPurchaseRequest(
@@ -59,7 +68,7 @@ test('CICLO1-COMPRAS-01: duas chamadas concorrentes de createQuotation para a me
     );
     requestId = request.id;
 
-    await withCommittedTenantTransaction((t) => procurementService.decidePurchaseRequest(requestId, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, t));
+    await withCommittedTenantTransaction((t) => procurementService.decidePurchaseRequest(requestId, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, t));
 
     // Barreira: força as duas transações a terminarem a leitura (findByPk + lock) antes de
     // qualquer uma seguir para a criação — reproduz a corrida de verdade independentemente da
@@ -114,5 +123,6 @@ test('CICLO1-COMPRAS-01: duas chamadas concorrentes de createQuotation para a me
         await PurchaseRequest.destroy({ where: { id: requestId }, transaction: t, force: true });
       });
     }
+    await User.destroy({ where: { id: secondApprover.id }, force: true }).catch(() => {});
   }
 });

@@ -47,6 +47,24 @@ async function createRequisition(payload, actorUserId, transaction) {
   const warehouse = await InventoryLocation.findByPk(warehouseLocationId, { transaction });
   if (!warehouse) throw AppError.notFound('Local de origem (almoxarifado) não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
 
+  // GAP REAL CORRIGIDO (auditoria de conformidade EST-004, 2026-10-08): a validação acima só
+  // cobria a direção "projectId informado sem projectLocationId" — faltava a direção simétrica.
+  // Sem ela, uma requisição apontando "projectLocationId" para um InventoryLocation
+  // PROJECT_SITE sem informar projectId/stageId era aceita normalmente, e o OUT gerado depois em
+  // issueRequisition saía com projectId: null — um movimento tocando local de obra sem vínculo
+  // de obra, quebrando a rastreabilidade exigida pelo EST-004 (mesmo padrão já corrigido em
+  // movements.service.js#recordMovement e counts.service.js#openCount).
+  if (projectLocationId && !projectId) {
+    const projectLocation = await InventoryLocation.findOne({ where: { id: projectLocationId, groupId, companyId }, transaction });
+    if (!projectLocation) throw AppError.notFound('Local de destino no canteiro (projectLocationId) não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
+    if (projectLocation.locationType === 'PROJECT_SITE') {
+      throw AppError.badRequest(
+        'Local de destino é de obra (PROJECT_SITE) — informe "projectId" (e, se aplicável, "stageId") para vincular a requisição à obra (EST-004).',
+        'REQUISITION_PROJECT_LOCATION_REQUIRES_PROJECT'
+      );
+    }
+  }
+
   const requisition = await InventoryRequisition.create(
     {
       groupId,

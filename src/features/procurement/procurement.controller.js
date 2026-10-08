@@ -3,6 +3,7 @@
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const service = require('./procurement.service');
+const approvalThresholdRulesService = require('./approvalThresholdRules.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -88,7 +89,8 @@ const cancelPurchaseOrder = catchAsync(async (req, res) => {
 });
 
 const upsertSupplierQualification = catchAsync(async (req, res) => {
-  const qualification = await req.withTenantTransaction((t) => service.upsertSupplierQualification(withTenant(req), req.auth.userId, t));
+  const actor = { canApprove: req.auth.permissions?.includes('procurement:approve') };
+  const qualification = await req.withTenantTransaction((t) => service.upsertSupplierQualification(withTenant(req), req.auth.userId, actor, t));
   return success(res, { statusCode: 201, data: qualification });
 });
 
@@ -102,6 +104,19 @@ const decideSupplierDueDiligence = catchAsync(async (req, res) => {
 const listSupplierQualifications = catchAsync(async (req, res) => {
   const qualifications = await req.withTenantTransaction((t) => service.listSupplierQualifications(req.auth.groupId, req.auth.companyId, t, { supplierPersonId: req.query.supplierPersonId }));
   return success(res, { data: qualifications });
+});
+
+// REG-COM-001 — limite de valor para segunda aprovação de pedido de compra (mesmo padrão de
+// rota de inventory/adjustment-risk-rule).
+const getApprovalThresholdRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) =>
+    approvalThresholdRulesService.getActiveSecondApprovalThreshold(req.auth.groupId, req.auth.companyId, t, req.auth.userId)
+  );
+  return success(res, { data: rule });
+});
+const createApprovalThresholdRule = catchAsync(async (req, res) => {
+  const rule = await req.withTenantTransaction((t) => approvalThresholdRulesService.createApprovalThresholdRule(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: rule });
 });
 
 module.exports = {
@@ -125,4 +140,6 @@ module.exports = {
   upsertSupplierQualification,
   decideSupplierDueDiligence,
   listSupplierQualifications,
+  getApprovalThresholdRule,
+  createApprovalThresholdRule,
 };

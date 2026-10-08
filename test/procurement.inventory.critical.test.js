@@ -10,7 +10,7 @@ const movementsService = require('../src/features/inventory/movements.service');
 const assetsService = require('../src/features/inventory/assets.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const countsService = require('../src/features/inventory/counts.service');
-const { Person } = require('../src/models');
+const { Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -29,6 +29,19 @@ function withTenant(fields) {
 
 function actorOf(extra) {
   return { userId: tenant.userId, canApprove: true, ...extra };
+}
+
+// GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+// agora rejeita quando quem decide é o mesmo que criou a requisição (tenant.userId, usado por
+// quase todo o resto da suíte pra criar). Cria um segundo usuário/aprovador dentro da própria
+// transação (rollback no fim do teste, mesmo padrão já usado em marco4.acceptance.batch2.test.js)
+// pra decidir as requisições deste arquivo sem violar a nova regra de negócio.
+async function createSecondApprover(transaction) {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  return User.create(
+    { name: `QA PROC segundo aprovador ${suffix}`, email: `qa-proc-approver-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
 }
 
 async function createItemAndWarehouse(transaction, extra = {}) {
@@ -195,7 +208,8 @@ test('Three-way match: over-receipt no recebimento de um PO abre ReceiptDiscrepa
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -234,7 +248,8 @@ test('Procurement: submitSupplierOffer recusa unitPrice "NaN" (literal numérico
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     await assert.rejects(
       () => procurementService.submitSupplierOffer(
@@ -276,7 +291,8 @@ test('Procurement: compareOffers inclui o nome do fornecedor (supplierPersonName
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -305,7 +321,8 @@ test('Procurement: listPurchaseOrders/getPurchaseOrder incluem supplierPersonNam
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -335,7 +352,8 @@ test('Procurement: awardSupplierOffer recusa adjudicar uma segunda oferta da mes
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offerA = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -367,7 +385,8 @@ test('Three-way match: confirmGoodsReceipt recusa receivedQuantity <= 0', async 
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -400,7 +419,8 @@ test('Three-way match: confirmGoodsReceipt com idempotencyKey repetida em recebi
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -444,7 +464,8 @@ test('Three-way match: resolveDiscrepancy fecha o case (ACCEPTED/REJECTED) e rej
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -500,7 +521,8 @@ test('Recebimento contra PO que não está OPEN é bloqueado', async () => {
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -584,7 +606,8 @@ test('Invoice match: valor da NF igual ao esperado confirma o recebimento e cria
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -618,7 +641,8 @@ test('Invoice match: valor da NF diferente do esperado abre ReceiptDiscrepancy P
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -652,7 +676,8 @@ test('Invoice match: rejeitar PRICE_MISMATCH estorna o payable errado e cria um 
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -695,7 +720,8 @@ test('listGoodsReceipts lê os recebimentos de um PO, incluindo o payable vincul
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -825,7 +851,8 @@ test('Procurement: cancelPurchaseOrder com recebimento parcial abre UNDER_RECEIP
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -860,7 +887,8 @@ test('Procurement: cancelPurchaseOrder recusa cancelar PO já CANCELED', async (
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -894,6 +922,7 @@ test('Procurement: awardSupplierOffer bloqueia fornecedor de alto risco sem due 
     await procurementService.upsertSupplierQualification(
       withTenant({ supplierPersonId: supplier.id, highRisk: true }),
       tenant.userId,
+      { canApprove: true },
       transaction
     );
 
@@ -902,7 +931,8 @@ test('Procurement: awardSupplierOffer bloqueia fornecedor de alto risco sem due 
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -924,6 +954,7 @@ test('Procurement: awardSupplierOffer libera fornecedor de alto risco com due di
     const qualification = await procurementService.upsertSupplierQualification(
       withTenant({ supplierPersonId: supplier.id, highRisk: true, validUntil: '2099-12-31' }),
       tenant.userId,
+      { canApprove: true },
       transaction
     );
     await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, actorOf(), transaction);
@@ -933,7 +964,8 @@ test('Procurement: awardSupplierOffer libera fornecedor de alto risco com due di
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    const secondApprover = await createSecondApprover(transaction);
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
@@ -952,6 +984,7 @@ test('Procurement: decideSupplierDueDiligence recusa aprovar fornecedor que não
     const qualification = await procurementService.upsertSupplierQualification(
       withTenant({ supplierPersonId: supplier.id, highRisk: false }),
       tenant.userId,
+      { canApprove: true },
       transaction
     );
     await assert.rejects(

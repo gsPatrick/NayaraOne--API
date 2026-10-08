@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File } = require('../../models');
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -207,6 +207,29 @@ async function recordMovement(payload, actor, transaction) {
   // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.
   if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {
     throw AppError.badRequest(`Movimento "${movementType}" de ferramenta/ativo exige "responsiblePersonId".`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): o endpoint genérico de movimentos
+  // aceitava "movementType: LOSS" direto (com motivo/aprovação/evidência por valor já exigidos
+  // acima), mas sem NENHUM vínculo obrigatório com um InventoryLossCase — permitindo registrar
+  // perda/quebra/extravio sem nunca passar pela investigação/decisão humana que
+  // lossCases.service.js implementa (abertura -> decisão -> só então o movimento). Exige que o
+  // LOSS venha de um loss_case já APROVADO deste tenant, com o mesmo inventoryItemId.
+  // DISPOSAL (baixa deliberada de item, não perda) continua sem essa exigência de propósito —
+  // o contrato (EST-010) é especificamente sobre perda/quebra/extravio.
+  if (movementType === 'LOSS') {
+    if (sourceType !== 'LOSS_CASE' || !sourceId) {
+      throw AppError.badRequest(
+        'Movimento "LOSS" exige vínculo com um caso de perda aprovado ("sourceType": "LOSS_CASE" e "sourceId" do caso) — registre e decida em lossCases antes.',
+        'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
+      );
+    }
+    const lossCase = await InventoryLossCase.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!lossCase || lossCase.status !== 'APPROVED' || lossCase.inventoryItemId !== inventoryItemId) {
+      throw AppError.badRequest(
+        'O caso de perda informado ("sourceId") não existe, não pertence a este item, ou não está APROVADO.',
+        'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
+      );
+    }
   }
   // EST-004: material atribuído à obra (entra/sai de um local PROJECT_SITE) precisa de projectId.
   const touchedLocationIds = [sourceLocationId, destinationLocationId].filter(Boolean);

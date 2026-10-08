@@ -38,6 +38,7 @@ const lossCasesService = require('../src/features/inventory/lossCases.service');
 const countsService = require('../src/features/inventory/counts.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const filesService = require('../src/features/files/files.service');
+const { User } = require('../src/models');
 
 let tenant;
 let otherCompanyId;
@@ -203,7 +204,14 @@ test('EST-TS-11 RLS Compras: leitura e escrita cross-company bloqueadas em todas
       tenant.userId,
       transaction
     );
-    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', tenant.userId, transaction);
+    // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
+    // agora rejeita quando o ator é o mesmo que criou a requisição — segundo usuário criado
+    // dentro da própria transação (rollback no fim do teste).
+    const secondApprover = await User.create(
+      { name: `QA RLS PROC segundo aprovador ${suffix}`, email: `qa-rlsproc-approver-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
+    await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,

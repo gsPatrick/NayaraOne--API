@@ -22,6 +22,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
 const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { getActiveSecondApprovalThreshold } = require('./approvalThresholdRules.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): o payable de recebimento de
 // materiais nasce de um fluxo automático (confirmação de goods receipt) sem nenhum centro de
@@ -120,6 +121,14 @@ async function listPurchaseRequests(groupId, companyId, transaction, { status } 
 }
 
 // --- 2. APPROVAL ---
+// GAP REAL CORRIGIDO (auditoria contratual, 2026-10-08 — Anexo "Arquitetura Técnica Blindada",
+// princípio constitucional "quem cria não aprova; quem aprova não altera; quem executa valida o
+// hash aprovado"): nada impedia o MESMO usuário que criou a PurchaseRequest
+// (`requestedByUserId`) de também decidir (aprovar/rejeitar) ela própria — qualquer ator com
+// `procurement:approve` podia se autoaprovar. Fail-closed: bloqueia sempre que
+// `actorUserId === request.requestedByUserId`, mesmo que ele também tenha a permissão de
+// aprovação (a permissão concede a CAPACIDADE de aprovar pedidos; a segregação aqui decide QUAL
+// pedido ele pode aprovar — nunca o próprio).
 async function decidePurchaseRequest(id, groupId, companyId, decision, actorUserId, transaction) {
   if (!['APPROVED', 'REJECTED'].includes(decision)) {
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'PURCHASE_REQUEST_VALIDATION');
@@ -128,6 +137,12 @@ async function decidePurchaseRequest(id, groupId, companyId, decision, actorUser
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   if (request.status !== 'REQUESTED') {
     throw AppError.badRequest(`Só é possível decidir uma requisição em REQUESTED (atual: ${request.status}).`, 'PURCHASE_REQUEST_INVALID_TRANSITION');
+  }
+  if (request.requestedByUserId && actorUserId && String(request.requestedByUserId) === String(actorUserId)) {
+    throw AppError.forbidden(
+      'Quem cria uma requisição de compra não pode aprová-la/rejeitá-la — peça a decisão de outro aprovador.',
+      'PURCHASE_REQUEST_SELF_APPROVAL_FORBIDDEN'
+    );
   }
   request.status = decision;
   request.approvedByUserId = actorUserId || null;
@@ -169,7 +184,11 @@ async function submitSupplierOffer(quotationId, groupId, companyId, payload, tra
   if (!supplierPersonId || !Array.isArray(items) || items.length === 0) {
     throw AppError.badRequest('"supplierPersonId" e "items" (não vazio) são obrigatórios.', 'SUPPLIER_OFFER_VALIDATION');
   }
-  const quotation = await Quotation.findOne({ where: { id: quotationId, groupId, companyId }, transaction });
+  // BUG REAL CORRIGIDO (auditoria concorrência, 2026-10-08): leitura sem lock permitia uma
+  // adjudicação concorrente (awardSupplierOffer, que trava a Quotation com FOR UPDATE) fechar a
+  // cotação entre esta leitura e a criação da oferta — gerando uma SupplierOffer "órfã" presa a
+  // uma Quotation já AWARDED/CANCELLED. Mesmo padrão de lock já usado em awardSupplierOffer.
+  const quotation = await Quotation.findOne({ where: { id: quotationId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!quotation) throw AppError.notFound('Cotação não encontrada.', 'QUOTATION_NOT_FOUND');
   if (quotation.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível submeter oferta para uma cotação OPEN (atual: ${quotation.status}).`, 'QUOTATION_INVALID_TRANSITION');
@@ -268,6 +287,28 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
       throw AppError.badRequest(
         'Fornecedor de alto risco precisa de due diligence aprovada e dentro da vigência antes de receber uma PO.',
         'SUPPLIER_DUE_DILIGENCE_REQUIRED'
+      );
+    }
+  }
+
+  // GAP REAL CORRIGIDO (auditoria contratual, 2026-10-08 — mesmo princípio constitucional de
+  // decidePurchaseRequest acima): decidimos NÃO aplicar aqui uma checagem de "quem cria não
+  // aprova" comparando o ator que adjudica contra um "criador" da SupplierOffer/Quotation —
+  // SupplierOffer é submetida pelo FORNECEDOR (supplierPersonId), não tem nenhum createdBy de
+  // ator interno (ver model), e Quotation.createdBy é só quem abriu a RFQ (procurement:create),
+  // um papel operacional sem relação de autoria com a decisão de adjudicar (procurement:approve)
+  // — comparar actorUserId com quotation.createdBy geraria falso-positivo toda vez que o mesmo
+  // comprador abre a cotação E adjudica a oferta vencedora, fluxo legítimo e comum no projeto.
+  // O ponto de autoria que de fato importa aqui — "quem decidiu a PurchaseRequest" — já é
+  // tratado em decidePurchaseRequest (não pode ser quem criou a request) e, abaixo, na alçada
+  // por VALOR (REG-COM-001): acima do limiar, a adjudicação exige um ator diferente de quem
+  // aprovou a PurchaseRequest original (segundo aprovador).
+  const { secondApprovalThreshold } = await getActiveSecondApprovalThreshold(offer.groupId, offer.companyId, transaction, actorUserId);
+  if (Number(offer.totalAmount) >= secondApprovalThreshold) {
+    if (request.approvedByUserId && actorUserId && String(request.approvedByUserId) === String(actorUserId)) {
+      throw AppError.forbidden(
+        `Oferta de valor R$ ${Number(offer.totalAmount).toFixed(2)} (>= limiar de R$ ${secondApprovalThreshold.toFixed(2)} para segunda aprovação) não pode ser adjudicada pelo mesmo ator que aprovou a requisição de compra original — é exigido um segundo aprovador.`,
+        'PURCHASE_ORDER_SECOND_APPROVAL_REQUIRED_HIGH_VALUE'
       );
     }
   }
@@ -421,7 +462,16 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
       throw AppError.badRequest(`"receivedQuantity" do item "${line.purchaseOrderItemId}" deve ser um número maior que zero.`, 'GOODS_RECEIPT_INVALID_QUANTITY');
     }
     const remaining = Number(poItem.quantity) - Number(poItem.receivedQuantity);
-    expectedAmount += receivedQty * Number(poItem.unitPrice);
+    // BUG REAL CORRIGIDO (over-receipt sem cap, 2026-10-08): quando `receivedQty > remaining`,
+    // uma ReceiptDiscrepancy OVER_RECEIPT já era aberta, MAS o valor financeiro (expectedAmount,
+    // base do payableAmount abaixo) somava a quantidade TOTAL recebida — incluindo o excedente —
+    // criando o payable pelo valor cheio na MESMA transação, antes de qualquer resolução humana
+    // do case. Capa a contribuição financeira no saldo do PO (`Math.min(receivedQty, remaining)`,
+    // nunca negativo): o excedente fica registrado só como o OVER_RECEIPT, e só entra no payable
+    // se `resolveDiscrepancy` aceitar o excedente como válido (ver fix lá). A ENTRADA DE ESTOQUE
+    // (abaixo, `inventoryReceiptItems`) continua usando a quantidade física cheia — já aconteceu.
+    const cappedQtyForAmount = Math.min(receivedQty, Math.max(remaining, 0));
+    expectedAmount += cappedQtyForAmount * Number(poItem.unitPrice);
 
     const grItem = await GoodsReceiptItem.create(
       { groupId: order.groupId, companyId: order.companyId, goodsReceiptId: goodsReceipt.id, purchaseOrderItemId: poItem.id, receivedQuantity: receivedQty },
@@ -603,6 +653,43 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
     }
   }
 
+  // BUG REAL CORRIGIDO (over-receipt sem cap, 2026-10-08): `confirmGoodsReceipt` agora capa o
+  // payable no saldo do PO (`expectedValue` aqui) quando `receivedQty > remaining` — o excedente
+  // (`receivedValue - expectedValue`) nunca entra automaticamente no contas a pagar. Só quando o
+  // excedente é ACEITO aqui (reconhecendo-o como válido — ex.: PO estava com saldo cadastrado
+  // errado) é que o valor correspondente é lançado; se REJEITADO, nada financeiro é feito — o
+  // excedente nunca é pago. Mesmo padrão de idempotência (idempotencyKey por discrepancy, nunca
+  // duplica em retry) e de nunca editar `amount` de um FinancialEntry existente (FIN-010) já
+  // usado acima para PRICE_MISMATCH.
+  if (discrepancy.discrepancyType === 'OVER_RECEIPT' && normalized === 'ACCEPTED') {
+    const grItem = await GoodsReceiptItem.findByPk(discrepancy.goodsReceiptItemId, { transaction });
+    const goodsReceipt = grItem ? await GoodsReceipt.findByPk(grItem.goodsReceiptId, { transaction, lock: transaction.LOCK.UPDATE }) : null;
+    const poItem = grItem ? await PurchaseOrderItem.findByPk(grItem.purchaseOrderItemId, { transaction }) : null;
+    if (goodsReceipt && poItem) {
+      const overQuantity = Number(discrepancy.receivedValue) - Number(discrepancy.expectedValue);
+      const overAmount = round2(overQuantity * Number(poItem.unitPrice));
+      if (overAmount > 0) {
+        const costCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
+        const overReceiptPayable = await createFinancialEntry(
+          {
+            groupId: goodsReceipt.groupId,
+            companyId: goodsReceipt.companyId,
+            entryType: 'DEBIT',
+            nature: 'PAYABLE',
+            amount: overAmount,
+            description: `Excedente de recebimento aceito (over-receipt) — recebimento ${goodsReceipt.id}, PO item ${poItem.id}.`,
+            idempotencyKey: `goods-receipt:${goodsReceipt.id}:over-receipt-accepted:${discrepancy.id}`,
+            costCenterId: costCenter.id,
+          },
+          actor.userId,
+          transaction
+        );
+        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[payable ${overReceiptPayable.id} criado para o excedente de ${overAmount}]`;
+        await discrepancy.save({ transaction });
+      }
+    }
+  }
+
   await registrarAuditoria(
     {
       groupId: discrepancy.groupId, companyId: discrepancy.companyId, actorUserId: actor.userId,
@@ -733,7 +820,15 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
 // Contrato (Anexo I): "Fornecedores: documentos/vigência; due diligence para alto risco".
 const DUE_DILIGENCE_STATUSES = ['NOT_REQUIRED', 'PENDING', 'APPROVED', 'REJECTED'];
 
-async function upsertSupplierQualification(payload, actorUserId, transaction) {
+// BUG REAL CORRIGIDO (reauditoria contratual, 2026-10-08 — due diligence bypass): com
+// `highRisk:false`, o código recalculava `dueDiligenceStatus` pra 'NOT_REQUIRED'
+// incondicionalmente — mesmo se o status atual fosse 'REJECTED' (decidido via
+// `decideSupplierDueDiligence`, que exige `procurement:approve`). Isso permitia que um usuário
+// com só `procurement:create` (esta rota exige apenas isso) rebaixasse `highRisk` e "desligasse"
+// uma reprovação de due diligence sem nenhuma aprovação. Agora, downgrade de uma qualification
+// REJECTED pra um estado que resultaria em NOT_REQUIRED só é aceito se `actor.canApprove`
+// (mesmo padrão `canApprove` já usado em confirmGoodsReceipt/resolveDiscrepancy).
+async function upsertSupplierQualification(payload, actorUserId, actor, transaction) {
   const { groupId, companyId, supplierPersonId, documentFileIds, validUntil, highRisk } = payload || {};
   if (!groupId || !companyId || !supplierPersonId) {
     throw AppError.badRequest('"groupId", "companyId" e "supplierPersonId" são obrigatórios.', 'SUPPLIER_QUALIFICATION_VALIDATION');
@@ -769,6 +864,20 @@ async function upsertSupplierQualification(payload, actorUserId, transaction) {
     if (isHighRisk && qualification.dueDiligenceStatus !== 'APPROVED') fields.dueDiligenceStatus = 'PENDING';
     if (isHighRisk && !qualification.highRisk) fields.dueDiligenceStatus = 'PENDING';
     if (!isHighRisk) fields.dueDiligenceStatus = 'NOT_REQUIRED';
+
+    // BUG REAL CORRIGIDO (due diligence bypass, 2026-10-08): se a qualification já estava
+    // REJECTED (decisão só tomada por quem tem `procurement:approve`, via
+    // `decideSupplierDueDiligence`) e esta chamada resultaria em NOT_REQUIRED (ou qualquer
+    // mudança que não seja um simples update de documentos mantendo o highRisk=true), exige a
+    // mesma alçada de aprovação — nunca permite que um `procurement:create` "desligue" uma
+    // reprovação só mandando highRisk:false.
+    if (qualification.dueDiligenceStatus === 'REJECTED' && fields.dueDiligenceStatus === 'NOT_REQUIRED' && !actor?.canApprove) {
+      throw AppError.conflict(
+        'Esta qualificação de fornecedor foi REJEITADA em due diligence — rebaixar "highRisk" para desligar essa exigência requer permissão "procurement:approve".',
+        'SUPPLIER_QUALIFICATION_DOWNGRADE_REQUIRES_APPROVAL'
+      );
+    }
+
     Object.assign(qualification, fields);
     await qualification.save({ transaction });
   }

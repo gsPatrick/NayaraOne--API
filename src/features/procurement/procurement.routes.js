@@ -35,6 +35,11 @@ procurementRouter.post('/procurement/supplier-qualifications', requirePermission
 procurementRouter.get('/procurement/supplier-qualifications', requirePermission('procurement:read'), controller.listSupplierQualifications);
 procurementRouter.post('/procurement/supplier-qualifications/:id/decide', requirePermission('procurement:approve'), controller.decideSupplierDueDiligence);
 
+// REG-COM-001 — limite de valor para segunda aprovação de pedido de compra (mesmo padrão de
+// GET/POST /inventory/adjustment-risk-rule).
+procurementRouter.get('/procurement/approval-threshold-rule', requirePermission('procurement:read'), controller.getApprovalThresholdRule);
+procurementRouter.post('/procurement/approval-threshold-rule', requirePermission('procurement:approve'), controller.createApprovalThresholdRule);
+
 // Insurance Hub (Marco 7 — "COMPRAS/PROCUREMENT + SEGUROS"). Emitir apólice e submeter sinistro
 // movimentam dinheiro/compromisso real — mesma permissão de aprovação do resto do Compras.
 procurementRouter.post('/procurement/insurance-policies', requirePermission('procurement:create'), insuranceController.createPolicy);
@@ -42,6 +47,7 @@ procurementRouter.get('/procurement/insurance-policies', requirePermission('proc
 procurementRouter.get('/procurement/insurance-policies/:id', requirePermission('procurement:read'), insuranceController.getPolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/quote', requirePermission('procurement:create'), insuranceController.quotePolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/issue', requirePermission('procurement:approve'), insuranceController.issuePolicy);
+procurementRouter.post('/procurement/insurance-policies/:id/cancel', requirePermission('procurement:approve'), insuranceController.cancelPolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/claims', requirePermission('procurement:create'), insuranceController.openClaim);
 procurementRouter.post('/procurement/insurance-claims/:id/submit', requirePermission('procurement:approve'), insuranceController.submitClaim);
 procurementRouter.post('/procurement/insurance-policies/:id/documents', requirePermission('procurement:create'), insuranceController.attachPolicyDocument);
