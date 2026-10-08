@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem } = require('../../models');
+const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -28,6 +28,19 @@ async function createRequisition(payload, actorUserId, transaction) {
   for (const line of items) {
     if (!line.inventoryItemId || line.quantity == null || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
       throw AppError.badRequest('Cada item precisa de "inventoryItemId" e "quantity" > 0.', 'INVENTORY_REQUISITION_VALIDATION');
+    }
+  }
+
+  // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-004 exige
+  // project_id/stage_id — stageId era gravado sem nenhuma validação (aceitava etapa de OUTRA obra
+  // ou etapa sem obra nenhuma). Mesmo padrão de materialRequests.service.js#createMaterialRequest.
+  if (stageId) {
+    if (!projectId) {
+      throw AppError.badRequest('"stageId" exige "projectId" (a etapa pertence a uma obra — EST-004).', 'INVENTORY_REQUISITION_VALIDATION');
+    }
+    const stage = await ProjectStage.findOne({ where: { id: stageId, projectId }, transaction });
+    if (!stage) {
+      throw AppError.badRequest('"stageId" não corresponde a uma etapa desta obra.', 'INVENTORY_REQUISITION_STAGE_INVALID');
     }
   }
 
