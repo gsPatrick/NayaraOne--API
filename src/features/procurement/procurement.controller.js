@@ -103,7 +103,18 @@ const decideSupplierDueDiligence = catchAsync(async (req, res) => {
 
 const listSupplierQualifications = catchAsync(async (req, res) => {
   const qualifications = await req.withTenantTransaction((t) => service.listSupplierQualifications(req.auth.groupId, req.auth.companyId, t, { supplierPersonId: req.query.supplierPersonId }));
-  return success(res, { data: qualifications });
+  // SEC — dueDiligenceNotes guarda achados sigilosos da investigação (processos judiciais,
+  // restrições financeiras, dados bancários indiretos do fornecedor); quem só tem
+  // procurement:read não deve ver o conteúdo, só o status, senão qualquer leitor básico acessa
+  // informação que deveria ficar restrita a quem aprova due diligence (procurement:approve).
+  const canSeeDueDiligenceNotes = req.auth.permissions?.includes('procurement:approve');
+  const sanitized = canSeeDueDiligenceNotes
+    ? qualifications
+    : qualifications.map((q) => {
+        const plain = typeof q.toJSON === 'function' ? q.toJSON() : q;
+        return { ...plain, dueDiligenceNotes: null };
+      });
+  return success(res, { data: sanitized });
 });
 
 // REG-COM-001 — limite de valor para segunda aprovação de pedido de compra (mesmo padrão de
