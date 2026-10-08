@@ -2,7 +2,7 @@
 
 const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
 const { getMinStockPolicy, resolveMinimumForLocation } = require('./minStockRules.service');
 const { getActiveHighValueThreshold } = require('./adjustmentRiskRules.service');
@@ -198,6 +198,19 @@ async function recordMovement(payload, actor, transaction) {
       const detail = hasKnownCost
         ? `de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${highValueThreshold.toFixed(2)}`
         : `de quantidade ${qty} (custo médio do item desconhecido/zerado) está acima do limite de ${highValueThreshold}`;
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, estimatedValue, highValueThreshold },
+          reason: 'Tentativa de registrar movimento de alto valor sem evidência (REG-EST-002).',
+        },
+        transaction
+      );
       throw AppError.badRequest(
         `Movimento "${movementType}" ${detail} (REG-EST-002) — exige "evidenceFileId".`,
         'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
@@ -218,6 +231,19 @@ async function recordMovement(payload, actor, transaction) {
   // o contrato (EST-010) é especificamente sobre perda/quebra/extravio.
   if (movementType === 'LOSS') {
     if (sourceType !== 'LOSS_CASE' || !sourceId) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, sourceType, sourceId },
+          reason: 'Tentativa de registrar movimento LOSS sem vínculo com caso de perda (EST-010).',
+        },
+        transaction
+      );
       throw AppError.badRequest(
         'Movimento "LOSS" exige vínculo com um caso de perda aprovado ("sourceType": "LOSS_CASE" e "sourceId" do caso) — registre e decida em lossCases antes.',
         'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
@@ -225,6 +251,19 @@ async function recordMovement(payload, actor, transaction) {
     }
     const lossCase = await InventoryLossCase.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
     if (!lossCase || lossCase.status !== 'APPROVED' || lossCase.inventoryItemId !== inventoryItemId) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, sourceId, lossCase: lossCase ? lossCase.toJSON() : null },
+          reason: 'Tentativa de registrar movimento LOSS com caso de perda inválido/não aprovado/de outro item (EST-010).',
+        },
+        transaction
+      );
       throw AppError.badRequest(
         'O caso de perda informado ("sourceId") não existe, não pertence a este item, ou não está APROVADO.',
         'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'

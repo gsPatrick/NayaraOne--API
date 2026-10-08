@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, InventoryToolLoan, Notification, Task } = require('../../models');
 const { publishToolLoanOverdue } = require('../../features/inventory/inventoryEvents.service');
+const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**
  * toolLoanOverdueJob (Marco 7 — Caderno item 14/EST-TS-13) — varre tool_loans OPEN com
@@ -89,6 +90,7 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
         if (confirmedLevel === locked.escalationLevel && locked.status === 'OVERDUE') return;
 
         const wasOpen = locked.status === 'OPEN';
+        const previousLevel = locked.escalationLevel;
         if (wasOpen) {
           // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 10, 2026-10-05): o job só
           // publicava tool.loan.overdue (evento de integração externa via outbox) e mudava o
@@ -100,6 +102,29 @@ async function escalateOverdueToolLoans(transaction, now = new Date()) {
         }
         locked.escalationLevel = confirmedLevel;
         await locked.save({ transaction: nested });
+
+        // GAP REAL CORRIGIDO (auditoria rodada 10, 2026-10-08): escalonamento de empréstimo de
+        // ferramenta é mudança de estado real (não um bloqueio) sem nenhum registro na trilha de
+        // auditoria — só gerava Notification/Task. Registra o avanço de nível para manter o
+        // histórico de escalonamento rastreável, mesmo padrão de registrarAuditoria usado nos
+        // demais serviços de inventory.
+        const levelOrder = ['NONE', 'WARNING', 'CRITICAL', 'OVERDUE'];
+        if (levelOrder.indexOf(confirmedLevel) > levelOrder.indexOf(previousLevel)) {
+          await registrarAuditoria(
+            {
+              groupId: locked.groupId,
+              companyId: locked.companyId,
+              actorUserId: null,
+              action: 'inventory.tool_loan.escalate',
+              entityType: 'InventoryToolLoan',
+              entityId: locked.id,
+              beforeJson: { escalationLevel: previousLevel, status: wasOpen ? 'OPEN' : locked.status },
+              afterJson: { escalationLevel: confirmedLevel, status: locked.status },
+              reason: `Empréstimo de ferramenta escalonado de ${previousLevel} para ${confirmedLevel} (atraso na devolução).`,
+            },
+            nested
+          );
+        }
 
         // Mantém a Notification original (NÃO removida): dispara ao transicionar pra OVERDUE
         // na primeira vez, independente do nível de escalonamento calculado.

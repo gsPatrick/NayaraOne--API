@@ -2,7 +2,7 @@
 
 const { Asset, InventoryLocation, InventoryLossCase, InventoryToolLoan } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { openMaintenanceOrder } = require('./maintenance.service');
 const { publishToolLoanCreated, publishToolReturned } = require('./inventoryEvents.service');
 
@@ -38,6 +38,19 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   // próprio caso em andamento (o item "perdido" sairia de novo pra campo).
   const openLossCase = await InventoryLossCase.findOne({ where: { assetId, status: 'OPEN' }, transaction });
   if (openLossCase) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'inventory.tool_loan.loan',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: { asset: asset.toJSON(), openLossCase: openLossCase.toJSON() },
+        reason: 'Tentativa de emprestar patrimônio com caso de perda OPEN.',
+      },
+      transaction
+    );
     throw AppError.conflict('Existe um caso de perda aberto para este patrimônio — decida-o antes de emprestar.', 'TOOL_LOAN_LOSS_CASE_OPEN');
   }
 
@@ -105,6 +118,19 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
   // esta checagem direta no asset garante que nenhum caminho de dados legado/futuro consiga
   // reverter uma perda formalizada sobrescrevendo o status aqui.
   if (asset.status === 'LOST') {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'inventory.tool_loan.return',
+        entityType: 'InventoryToolLoan',
+        entityId: loan.id,
+        beforeJson: { loan: loan.toJSON(), asset: asset.toJSON() },
+        reason: 'Tentativa de devolver empréstimo de patrimônio declarado perdido/extraviado (LOST).',
+      },
+      transaction
+    );
     throw AppError.conflict('Patrimônio declarado perdido/extraviado — não pode ser devolvido como se estivesse em circulação.', 'TOOL_LOAN_ASSET_LOST');
   }
   asset.status = conditionCode === 'DAMAGED' ? 'MAINTENANCE' : 'AVAILABLE';

@@ -2,7 +2,7 @@
 
 const { Asset, InventoryMaintenanceOrder } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceOpened, publishMaintenanceClosed } = require('./inventoryEvents.service');
 
 // Guia do Marcelo §8/item 7: devolução danificada abre manutenção; OS fecha manualmente e
@@ -35,11 +35,37 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
   // pra circulação (closeMaintenanceOrder libera pra AVAILABLE depois) como se a perda nunca
   // tivesse existido — sem reabrir o loss_case, sem auditoria de "recuperação", sem evidência.
   if (asset.status === 'LOST') {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'inventory.maintenance_order.open',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: asset.toJSON(),
+        reason: 'Tentativa de abrir OS de manutenção para patrimônio declarado perdido/extraviado (LOST).',
+      },
+      transaction
+    );
     throw AppError.conflict('Patrimônio declarado perdido/extraviado não pode entrar em manutenção — reverta o caso de perda primeiro.', 'MAINTENANCE_ASSET_LOST');
   }
   // Baixa (venda/descarte/doação — assets.service.js#disposeAsset) é terminal: o patrimônio
   // já saiu da empresa, não pode voltar a circular via manutenção -> AVAILABLE.
   if (asset.status === 'DISPOSED') {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'inventory.maintenance_order.open',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: asset.toJSON(),
+        reason: 'Tentativa de abrir OS de manutenção para patrimônio baixado (DISPOSED).',
+      },
+      transaction
+    );
     throw AppError.conflict('Patrimônio baixado (venda/descarte/doação) não pode entrar em manutenção.', 'MAINTENANCE_ASSET_DISPOSED');
   }
   if (asset.status !== 'MAINTENANCE') {
@@ -55,6 +81,19 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
     // Invariante correta: 1 asset : no máximo 1 OS OPEN por vez.
     const existingOpenOrder = await InventoryMaintenanceOrder.findOne({ where: { assetId, status: 'OPEN' }, transaction });
     if (existingOpenOrder) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId,
+          action: 'inventory.maintenance_order.open',
+          entityType: 'Asset',
+          entityId: asset.id,
+          beforeJson: { asset: asset.toJSON(), existingOpenOrder: existingOpenOrder.toJSON() },
+          reason: 'Tentativa de abrir uma segunda OS de manutenção OPEN para o mesmo patrimônio.',
+        },
+        transaction
+      );
       throw AppError.conflict('Já existe uma ordem de manutenção OPEN para este patrimônio — feche-a antes de abrir outra.', 'MAINTENANCE_ORDER_ALREADY_OPEN');
     }
   }

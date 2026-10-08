@@ -13,7 +13,7 @@ const {
   InventoryToolLoan,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
 const { publishAssetTransferred, publishAssetDisposed } = require('./inventoryEvents.service');
@@ -135,6 +135,19 @@ async function transferAsset(assetId, groupId, companyId, payload, actorUserId, 
   // profundidade, caso o status esteja dessincronizado de um loan legado).
   const openLoan = await InventoryToolLoan.findOne({ where: { assetId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction });
   if (asset.status === 'LOANED' || openLoan) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: asset.groupId,
+        companyId: asset.companyId,
+        actorUserId,
+        action: 'inventory.asset.transfer',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: { asset: asset.toJSON(), openLoan: openLoan ? openLoan.toJSON() : null },
+        reason: 'Tentativa de transferir patrimônio emprestado (ferramenta com empréstimo OPEN/OVERDUE).',
+      },
+      transaction
+    );
     throw AppError.conflict('Ferramenta emprestada não pode ser transferida — registre a devolução primeiro.', 'ASSET_TRANSFER_ASSET_LOANED');
   }
 
@@ -245,6 +258,19 @@ function parseDisposalValue(value) {
 //    evento de domínio asset.disposed.
 async function disposeAsset(assetId, groupId, companyId, payload, actor, transaction) {
   if (!actor?.canApprove) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId: actor?.userId || null,
+        action: 'inventory.asset.dispose',
+        entityType: 'Asset',
+        entityId: assetId,
+        beforeJson: { assetId, actor: { userId: actor?.userId || null, canApprove: actor?.canApprove || false } },
+        reason: 'Tentativa de baixar patrimônio sem permissão inventory:approve.',
+      },
+      transaction
+    );
     throw AppError.forbidden('Baixa de patrimônio (venda/descarte/doação) exige a permissão inventory:approve.', 'ASSET_DISPOSAL_APPROVAL_REQUIRED');
   }
   const { disposalType, disposalValue, reason, evidenceFileIds, financialDueAt, counterpartyName } = payload || {};
@@ -284,14 +310,53 @@ async function disposeAsset(assetId, groupId, companyId, payload, actor, transac
   // empréstimo/OS legado.
   const openLoan = await InventoryToolLoan.findOne({ where: { assetId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction });
   if (asset.status === 'LOANED' || openLoan) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: asset.groupId,
+        companyId: asset.companyId,
+        actorUserId: actor.userId || null,
+        action: 'inventory.asset.dispose',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: { asset: asset.toJSON(), openLoan: openLoan ? openLoan.toJSON() : null },
+        reason: 'Tentativa de baixar patrimônio emprestado (ferramenta com empréstimo OPEN/OVERDUE).',
+      },
+      transaction
+    );
     throw AppError.conflict('Ferramenta emprestada não pode ser baixada — registre a devolução primeiro.', 'ASSET_DISPOSAL_ASSET_LOANED');
   }
   const openOrder = await InventoryMaintenanceOrder.findOne({ where: { assetId, status: 'OPEN' }, transaction });
   if (asset.status === 'MAINTENANCE' || openOrder) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: asset.groupId,
+        companyId: asset.companyId,
+        actorUserId: actor.userId || null,
+        action: 'inventory.asset.dispose',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: { asset: asset.toJSON(), openOrder: openOrder ? openOrder.toJSON() : null },
+        reason: 'Tentativa de baixar patrimônio com ordem de manutenção OPEN.',
+      },
+      transaction
+    );
     throw AppError.conflict('Patrimônio com ordem de manutenção aberta não pode ser baixado — feche a OS primeiro.', 'ASSET_DISPOSAL_MAINTENANCE_OPEN');
   }
   const openLossCase = await InventoryLossCase.findOne({ where: { assetId, status: 'OPEN' }, transaction });
   if (openLossCase) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: asset.groupId,
+        companyId: asset.companyId,
+        actorUserId: actor.userId || null,
+        action: 'inventory.asset.dispose',
+        entityType: 'Asset',
+        entityId: asset.id,
+        beforeJson: { asset: asset.toJSON(), openLossCase: openLossCase.toJSON() },
+        reason: 'Tentativa de baixar patrimônio com caso de perda OPEN.',
+      },
+      transaction
+    );
     throw AppError.conflict('Existe um caso de perda aberto para este patrimônio — decida-o antes de baixar.', 'ASSET_DISPOSAL_LOSS_CASE_OPEN');
   }
 

@@ -3,7 +3,7 @@
 const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, InventoryMovement, File, FinancialEntry, Person } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
 const financialEntriesService = require('../finance/financialEntries.service');
@@ -121,6 +121,19 @@ async function openLossCase(payload, actorUserId, transaction) {
     // circulação por perda.
     const openOrder = await InventoryMaintenanceOrder.findOne({ where: { assetId, status: 'OPEN' }, transaction });
     if (openOrder) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId,
+          action: 'inventory.loss_case.open',
+          entityType: 'Asset',
+          entityId: assetId,
+          beforeJson: { asset: asset.toJSON(), openOrder: openOrder.toJSON() },
+          reason: 'Tentativa de abrir caso de perda para patrimônio com ordem de manutenção OPEN.',
+        },
+        transaction
+      );
       throw AppError.conflict('Patrimônio com ordem de manutenção aberta não pode ter caso de perda aberto — feche a OS primeiro.', 'LOSS_CASE_MAINTENANCE_OPEN');
     }
   }
@@ -221,6 +234,19 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
     throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'LOSS_CASE_VALIDATION');
   }
   if (!actor.canApprove) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId: actor?.userId || null,
+        action: 'inventory.loss_case.decide',
+        entityType: 'InventoryLossCase',
+        entityId: lossCaseId,
+        beforeJson: { lossCaseId, decision, actor: { userId: actor?.userId || null, canApprove: actor?.canApprove || false } },
+        reason: 'Tentativa de decidir caso de perda sem permissão inventory:approve.',
+      },
+      transaction
+    );
     throw AppError.forbidden('Decidir um caso de perda exige a permissão inventory:approve.', 'LOSS_CASE_APPROVAL_REQUIRED');
   }
   const chargeResponsible = parseChargeFlag(options.chargeResponsible);
@@ -318,6 +344,19 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
   if (decision === 'APPROVED' && lossCase.assetId) {
     const asset = await Asset.findOne({ where: { id: lossCase.assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
     if (asset?.status === 'DISPOSED') {
+      await registrarTentativaBloqueada(
+        {
+          groupId: lossCase.groupId,
+          companyId: lossCase.companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.loss_case.decide',
+          entityType: 'InventoryLossCase',
+          entityId: lossCase.id,
+          beforeJson: { lossCase: lossCase.toJSON(), asset: asset.toJSON() },
+          reason: 'Tentativa de aprovar perda sobre patrimônio já baixado (DISPOSED).',
+        },
+        transaction
+      );
       throw AppError.conflict('Patrimônio já baixado (venda/descarte/doação) — a perda não pode sobrescrever a baixa.', 'LOSS_CASE_ASSET_DISPOSED');
     }
     if (asset) {

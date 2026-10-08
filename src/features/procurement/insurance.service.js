@@ -14,7 +14,7 @@ const {
   FileLink,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
@@ -511,6 +511,19 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
   });
   if (!installment) throw AppError.notFound('Parcela de seguro não encontrada.', 'INSURANCE_INSTALLMENT_NOT_FOUND');
   if (installment.status === 'PAID') {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: installment.toJSON(),
+        reason: 'Tentativa de dar baixa em parcela já paga.',
+      },
+      transaction
+    );
     throw AppError.conflict('Esta parcela já está paga.', 'INSURANCE_INSTALLMENT_ALREADY_PAID');
   }
   if (!financialEntryId) {
@@ -529,13 +542,52 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
   });
   if (!entry) throw AppError.notFound('Lançamento financeiro informado não encontrado.', 'INSURANCE_INSTALLMENT_ENTRY_NOT_FOUND');
   if (entry.status !== 'SETTLED') {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON() },
+        reason: 'Tentativa de dar baixa usando lançamento financeiro ainda não liquidado (SETTLED).',
+      },
+      transaction
+    );
     throw AppError.conflict('O lançamento financeiro informado ainda não está liquidado (SETTLED).', 'INSURANCE_INSTALLMENT_ENTRY_NOT_SETTLED');
   }
   if (round2(entry.amount) !== round2(installment.amount)) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON() },
+        reason: 'Tentativa de dar baixa com valor do lançamento financeiro divergente do valor da parcela.',
+      },
+      transaction
+    );
     throw AppError.conflict('O valor do lançamento financeiro informado não corresponde ao valor da parcela.', 'INSURANCE_INSTALLMENT_ENTRY_AMOUNT_MISMATCH');
   }
   const alreadyUsed = await InsuranceInstallment.findOne({ where: { financialEntryId, groupId: actor.groupId, companyId: actor.companyId }, transaction });
   if (alreadyUsed && alreadyUsed.id !== installment.id) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON(), alreadyUsedByInstallmentId: alreadyUsed.id },
+        reason: 'Tentativa de reutilizar lançamento financeiro já usado para dar baixa em outra parcela.',
+      },
+      transaction
+    );
     throw AppError.conflict('Este lançamento financeiro já foi usado para dar baixa em outra parcela.', 'INSURANCE_INSTALLMENT_ENTRY_ALREADY_USED');
   }
 

@@ -18,7 +18,7 @@ const {
 } = require('../../models');
 const { InventoryStockBalance, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
 const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
@@ -145,12 +145,38 @@ async function decidePurchaseRequest(id, groupId, companyId, decision, actorUser
   // null aqui só pode vir de dado legado/corrompido — tratamos isso como anômalo e bloqueamos a
   // decisão (fail-closed) em vez de permitir a autoaprovação silenciosamente.
   if (!request.requestedByUserId) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'procurement.purchase_request.decide',
+        entityType: 'PurchaseRequest',
+        entityId: request.id,
+        beforeJson: request.toJSON(),
+        reason: 'Requisição de compra sem criador registrado — segregação "quem cria não aprova" não pode ser garantida.',
+      },
+      transaction
+    );
     throw AppError.conflict(
       'Requisição de compra sem criador registrado (dado anômalo) — não é possível garantir a segregação "quem cria não aprova".',
       'PURCHASE_REQUEST_MISSING_REQUESTER'
     );
   }
   if (actorUserId && String(request.requestedByUserId) === String(actorUserId)) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'procurement.purchase_request.decide',
+        entityType: 'PurchaseRequest',
+        entityId: request.id,
+        beforeJson: request.toJSON(),
+        reason: 'Tentativa de autoaprovação — quem cria a requisição tentou decidi-la.',
+      },
+      transaction
+    );
     throw AppError.forbidden(
       'Quem cria uma requisição de compra não pode aprová-la/rejeitá-la — peça a decisão de outro aprovador.',
       'PURCHASE_REQUEST_SELF_APPROVAL_FORBIDDEN'
@@ -324,6 +350,19 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
     // confirmar que existe um segundo aprovador distinto, trata como fail-closed: exige a
     // segunda aprovação mesmo assim, bloqueando com o mesmo erro.
     if (!request.approvedByUserId || (actorUserId && String(request.approvedByUserId) === String(actorUserId))) {
+      await registrarTentativaBloqueada(
+        {
+          groupId: offer.groupId,
+          companyId: offer.companyId,
+          actorUserId,
+          action: 'procurement.supplier_offer.award',
+          entityType: 'SupplierOffer',
+          entityId: offer.id,
+          beforeJson: { offer: offer.toJSON(), request: request.toJSON() },
+          reason: 'Adjudicação de alto valor sem segundo aprovador distinto.',
+        },
+        transaction
+      );
       throw AppError.forbidden(
         `Oferta de valor R$ ${Number(offer.totalAmount).toFixed(2)} (>= limiar de R$ ${secondApprovalThreshold.toFixed(2)} para segunda aprovação) não pode ser adjudicada pelo mesmo ator que aprovou a requisição de compra original — é exigido um segundo aprovador.`,
         'PURCHASE_ORDER_SECOND_APPROVAL_REQUIRED_HIGH_VALUE'
@@ -890,6 +929,19 @@ async function upsertSupplierQualification(payload, actorUserId, actor, transact
     // mesma alçada de aprovação — nunca permite que um `procurement:create` "desligue" uma
     // reprovação só mandando highRisk:false.
     if (qualification.dueDiligenceStatus === 'REJECTED' && fields.dueDiligenceStatus === 'NOT_REQUIRED' && !actor?.canApprove) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId,
+          action: 'procurement.supplier_qualification.upsert',
+          entityType: 'SupplierQualification',
+          entityId: qualification.id,
+          beforeJson: qualification.toJSON(),
+          reason: 'Tentativa de rebaixar highRisk de qualificação REJEITADA sem permissão de aprovação.',
+        },
+        transaction
+      );
       throw AppError.conflict(
         'Esta qualificação de fornecedor foi REJEITADA em due diligence — rebaixar "highRisk" para desligar essa exigência requer permissão "procurement:approve".',
         'SUPPLIER_QUALIFICATION_DOWNGRADE_REQUIRES_APPROVAL'

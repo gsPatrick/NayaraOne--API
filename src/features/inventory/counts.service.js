@@ -2,7 +2,7 @@
 
 const { InventoryCount, InventoryCountItem, InventoryStockBalance, InventoryLocation } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishCountCompleted } = require('./inventoryEvents.service');
 
@@ -138,6 +138,19 @@ async function listCounts(groupId, companyId, transaction, { status } = {}) {
 // validação feita dentro de recordMovement) e propagado pro controller/rota/front.
 async function applyAdjustment(countItemId, groupId, companyId, actor, transaction, evidenceFileId) {
   if (!actor.canApprove) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId: actor?.userId || null,
+        action: 'inventory.count.apply_adjustment',
+        entityType: 'InventoryCountItem',
+        entityId: countItemId,
+        beforeJson: { countItemId, actor: { userId: actor?.userId || null, canApprove: actor?.canApprove || false } },
+        reason: 'Tentativa de aplicar ajuste de inventário sem permissão inventory:approve.',
+      },
+      transaction
+    );
     throw AppError.forbidden('Aplicar ajuste de inventário exige a permissão inventory:approve.', 'INVENTORY_COUNT_APPROVAL_REQUIRED');
   }
   const line = await InventoryCountItem.findOne({ where: { id: countItemId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
