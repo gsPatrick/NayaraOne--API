@@ -19,6 +19,16 @@ after(async () => {
   await sequelize.close();
 });
 
+// EST-006: loanTool exige destino da saída (destinationLocationId).
+async function loanDestination(transaction) {
+  const itemsService = require('../src/features/inventory/items.service');
+  return itemsService.createLocation(
+    { groupId: tenant.groupId, companyId: tenant.companyId, name: `Destino empréstimo ${uniqueSuffix()}`, locationType: 'WAREHOUSE' },
+    tenant.userId,
+    transaction
+  );
+}
+
 // Gap real encontrado em auditoria "loop até secar" (rodada 10, 2026-10-05): o contrato
 // (EST-TS-13 "Ferramenta atrasada -> Escalona") esperava um alerta de verdade, mas o job só
 // publicava tool.loan.overdue (evento de integração via outbox) e mudava o status — ninguém
@@ -34,7 +44,7 @@ test('inventory: toolLoanOverdueJob cria Notification real pro responsável quan
 
     const loan = await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       tenant.userId,
       transaction
     );
@@ -67,7 +77,7 @@ test('inventory: toolLoanOverdueJob é idempotente — rodar de novo não duplic
     );
     await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       tenant.userId,
       transaction
     );

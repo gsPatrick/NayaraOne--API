@@ -24,6 +24,12 @@ function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
 }
 
+// EST-006: loanTool exige destino da saída (destinationLocationId).
+async function loanDestination(transaction) {
+  const itemsService = require('../src/features/inventory/items.service');
+  return itemsService.createLocation(withTenant({ name: `Destino empréstimo ${uniqueSuffix()}`, locationType: 'WAREHOUSE' }), tenant.userId, transaction);
+}
+
 // Bug real corrigido nesta auditoria (rodada 28, 2026-10-05): aprovar um loss_case de
 // Asset/ferramenta (EST-010) nunca tocava o próprio Asset — o ativo declarado perdido/quebrado
 // continuava AVAILABLE/LOANED, podia ser emprestado de novo, e mantinha o custodiante antigo.
@@ -35,7 +41,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA').toString('base64'), category: 'generic' }),
@@ -58,7 +64,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
     assert.equal(asset.assignedToUserId, null, 'custodiante precisa ser limpo — a perda já foi formalizada');
 
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction),
+      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_ASSET_UNAVAILABLE');
@@ -109,7 +115,7 @@ test('inventory: aprovar a perda de um Asset ainda emprestado fecha o loan e blo
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
     assert.equal(loan.status, 'OPEN');
 
     const file = await filesService.uploadFile(

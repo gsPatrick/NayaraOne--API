@@ -1,6 +1,6 @@
 'use strict';
 
-const { Asset, InventoryToolLoan } = require('../../models');
+const { Asset, InventoryLocation, InventoryToolLoan } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { openMaintenanceOrder } = require('./maintenance.service');
@@ -14,6 +14,17 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
   const { personUserId, destinationLocationId, dueAt } = payload;
   if (!personUserId) {
     throw AppError.badRequest('"personUserId" é obrigatório (EST-006: responsável pela saída).', 'TOOL_LOAN_VALIDATION');
+  }
+  // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-006 —
+  // "Saída de ferramenta registra responsável, destino, data prevista de retorno e condição" —
+  // mas o destino era opcional aqui e a tela nem tinha o campo: empréstimos saíam sem destino
+  // registrado e asset.currentLocationId ficava apontando pro almoxarifado de origem (EST-014).
+  if (!destinationLocationId) {
+    throw AppError.badRequest('"destinationLocationId" é obrigatório (EST-006: destino da saída).', 'TOOL_LOAN_VALIDATION');
+  }
+  const destination = await InventoryLocation.findByPk(destinationLocationId, { transaction });
+  if (!destination) {
+    throw AppError.notFound('Local de destino não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
   }
 
   const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
@@ -34,7 +45,7 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
       companyId: asset.companyId,
       assetId: asset.id,
       personUserId,
-      destinationLocationId: destinationLocationId || null,
+      destinationLocationId,
       sourceLocationId: asset.currentLocationId || null,
       dueAt: dueAt || null,
       status: 'OPEN',
@@ -46,7 +57,7 @@ async function loanTool(assetId, payload, actorUserId, transaction) {
 
   asset.status = 'LOANED';
   asset.assignedToUserId = personUserId;
-  if (destinationLocationId) asset.currentLocationId = destinationLocationId;
+  asset.currentLocationId = destinationLocationId;
   asset.updatedBy = actorUserId || null;
   await asset.save({ transaction });
 

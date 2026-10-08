@@ -23,6 +23,12 @@ function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
 }
 
+// EST-006: loanTool exige destino da saída (destinationLocationId).
+async function loanDestination(transaction) {
+  const itemsService = require('../src/features/inventory/items.service');
+  return itemsService.createLocation(withTenant({ name: `Destino empréstimo ${uniqueSuffix()}`, locationType: 'WAREHOUSE' }), tenant.userId, transaction);
+}
+
 // Bug real corrigido nesta auditoria (rodada 14, 2026-10-05): abrir uma OS de manutenção direto
 // via openMaintenanceOrder (endpoint POST /inventory/maintenance-orders) nunca travava o asset
 // — ele continuava AVAILABLE e podia ser emprestado normalmente com uma OS "OPEN" aberta sobre
@@ -48,7 +54,7 @@ test('inventory: abrir OS de manutenção direto trava o asset em MAINTENANCE (n
     assert.equal(asset.status, 'MAINTENANCE', 'abrir a OS precisa travar o asset — não pode ficar AVAILABLE com manutenção OPEN');
 
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction),
+      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_ASSET_UNAVAILABLE');
@@ -71,7 +77,7 @@ test('inventory: não é possível abrir OS de manutenção sobre um asset empre
       tenant.userId,
       transaction
     );
-    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
 
     await assert.rejects(
       () => maintenanceService.openMaintenanceOrder(withTenant({ assetId: asset.id, description: 'x' }), tenant.userId, transaction),
@@ -92,7 +98,7 @@ test('inventory: returnTool com devolução danificada continua abrindo manuten�
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
 
     const { maintenanceOrder } = await toolLoansService.returnTool(loan.id, { conditionCode: 'DAMAGED' }, tenant.userId, transaction);
     assert.ok(maintenanceOrder);
@@ -114,7 +120,7 @@ test('inventory: devolver a ferramenta limpa o custodiante do asset (assignedToU
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
     await asset.reload({ transaction });
     assert.equal(asset.assignedToUserId, tenant.userId);
 
@@ -133,7 +139,7 @@ test('inventory: devolução danificada também limpa o custodiante (mesmo indo 
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, transaction);
 
     await toolLoansService.returnTool(loan.id, { conditionCode: 'DAMAGED' }, tenant.userId, transaction);
     await asset.reload({ transaction });
