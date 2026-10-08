@@ -207,7 +207,7 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
     );
 
     const { item, location } = await createTestStockLink(transaction, 5000);
-    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
       sourceLocationId: location.id,
     });
@@ -223,7 +223,7 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
     // Confirmar recebimento uma segunda vez tem que bloquear — não pode disparar o evento de
     // novo nem voltar silenciosamente sem erro (mesmo padrão de "não duplicar" do módulo).
     await assert.rejects(
-      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id }),
+      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id }),
       (err) => {
         assert.equal(err.code, 'MATERIAL_REQUEST_ALREADY_RECEIVED');
         return true;
@@ -244,7 +244,7 @@ test('material-request: receber sem inventoryItemId/sourceLocationId é bloquead
       transaction
     );
     await assert.rejects(
-      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction),
+      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'MATERIAL_REQUEST_STOCK_LINK_REQUIRED');
         return true;
@@ -265,7 +265,7 @@ test('material-request: devolução de material recebido credita o saldo de volt
       tenant.userId,
       transaction
     );
-    await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
       sourceLocationId: location.id,
     });
@@ -274,6 +274,8 @@ test('material-request: devolução de material recebido credita o saldo de volt
 
     const { returnMovement } = await materialRequestsService.returnMaterialRequest(
       request.id,
+      tenant.groupId,
+      tenant.companyId,
       { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 5 },
       tenant.userId,
       transaction
@@ -286,6 +288,8 @@ test('material-request: devolução de material recebido credita o saldo de volt
     // Devolver de novo com a mesma requisição é idempotente — não duplica o crédito.
     const { returnMovement: replay } = await materialRequestsService.returnMaterialRequest(
       request.id,
+      tenant.groupId,
+      tenant.companyId,
       { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 5 },
       tenant.userId,
       transaction
@@ -308,7 +312,13 @@ test('material-request: devolução de requisição ainda não recebida é bloqu
       transaction
     );
     await assert.rejects(
-      () => materialRequestsService.returnMaterialRequest(request.id, { inventoryItemId: item.id, destinationLocationId: location.id }, tenant.userId, transaction),
+      () => materialRequestsService.returnMaterialRequest(
+      request.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: item.id, destinationLocationId: location.id },
+      tenant.userId,
+      transaction),
       (err) => {
         assert.equal(err.code, 'MATERIAL_REQUEST_RETURN_REQUIRES_RECEIVED');
         return true;
@@ -375,7 +385,7 @@ test('material-request: receber com vínculo de estoque debita o saldo real (OUT
       transaction
     );
 
-    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.userId, transaction, {
+    const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
       sourceLocationId: location.id,
     });
@@ -410,7 +420,7 @@ test('material-request: listMaterialRequests filtra por status', async () => {
       transaction
     );
     const { item, location } = await createTestStockLink(transaction, 50);
-    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id });
+    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id });
 
     const received = await materialRequestsService.listMaterialRequests(project.id, transaction, { status: 'RECEIVED' });
     assert.equal(received.length, 1);

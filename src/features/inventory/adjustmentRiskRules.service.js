@@ -180,8 +180,13 @@ async function getActiveHighValueThreshold(groupId, companyId, transaction, acto
   };
 }
 
-async function getAdjustmentRiskRule(id, transaction) {
-  const version = await RuleVersion.findByPk(id, { transaction });
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, rodada 5, 2026-10-08): findByPk(id) sem
+// filtro de groupId/companyId deixava qualquer tenant ler o limiar REG-EST-002 de outra
+// empresa só adivinhando o UUID da RuleVersion — projeto não usa RLS real do Postgres
+// (SET LOCAL app.group_id/company_id em tenant.middleware.js não tem nenhuma CREATE POLICY
+// correspondente), então o isolamento é 100% a cargo do filtro manual no where.
+async function getAdjustmentRiskRule(id, groupId, companyId, transaction) {
+  const version = await RuleVersion.findOne({ where: { id, groupId, companyId }, transaction });
   if (!version) throw AppError.notFound('Regra de limite de valor/risco não encontrada.', 'ADJUSTMENT_RISK_RULE_NOT_FOUND');
   return {
     id: version.id,

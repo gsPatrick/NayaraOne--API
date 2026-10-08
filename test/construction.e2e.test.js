@@ -95,7 +95,7 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       { userId: tenant.userId, canApprove: true },
       transaction
     );
-    const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.userId, transaction, {
+    const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: stockItem.id,
       sourceLocationId: stockLocation.id,
     });

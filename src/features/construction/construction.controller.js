@@ -381,13 +381,13 @@ const receiveMaterialRequest = catchAsync(async (req, res) => {
   // obrigatórios pra confirmar o recebimento — ver materialRequests.service.js.
   const { inventoryItemId, sourceLocationId } = req.body || {};
   const item = await req.withTenantTransaction((t) =>
-    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.userId, t, { inventoryItemId, sourceLocationId })
+    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t, { inventoryItemId, sourceLocationId })
   );
   return success(res, { data: item });
 });
 const returnMaterialRequest = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) =>
-    materialRequestsService.returnMaterialRequest(req.params.id, req.body, req.auth.userId, t)
+    materialRequestsService.returnMaterialRequest(req.params.id, req.auth.groupId, req.auth.companyId, req.body, req.auth.userId, t)
   );
   return success(res, { data: result });
 });

@@ -98,17 +98,24 @@ async function listMaterialRequests(projectId, transaction, filters = {}) {
   return MaterialRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function getMaterialRequest(id, transaction) {
-  const materialRequest = await MaterialRequest.findByPk(id, { transaction });
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, rodada 5, 2026-10-08): findByPk(id) sem
+// filtro de groupId/companyId em getMaterialRequest/receiveMaterialRequest/returnMaterialRequest
+// deixava qualquer tenant ler ou agir (receber, devolver — inclusive creditando estoque) sobre a
+// requisição de material de OUTRA empresa só adivinhando o UUID. Projeto não usa RLS real do
+// Postgres (SET LOCAL app.group_id/company_id em tenant.middleware.js não tem CREATE POLICY
+// correspondente) — isolamento é 100% a cargo do filtro manual no where, que faltava aqui.
+async function getMaterialRequest(id, groupId, companyId, transaction) {
+  const materialRequest = await MaterialRequest.findOne({ where: { id, groupId, companyId }, transaction });
   if (!materialRequest) throw AppError.notFound('Requisição de material não encontrada.', 'MATERIAL_REQUEST_NOT_FOUND');
   return materialRequest;
 }
 
-async function receiveMaterialRequest(id, actorUserId, transaction, stockLink = {}) {
+async function receiveMaterialRequest(id, groupId, companyId, actorUserId, transaction, stockLink = {}) {
   // Lock pessimista: mesma justificativa das outras máquinas de estado do módulo (ver
   // transitionProject em projects.service.js) — evita duas confirmações de recebimento
   // concorrentes disparando o evento `material.received` duas vezes para o mesmo registro.
-  const materialRequest = await MaterialRequest.findByPk(id, {
+  const materialRequest = await MaterialRequest.findOne({
+    where: { id, groupId, companyId },
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
@@ -185,8 +192,9 @@ async function receiveMaterialRequest(id, actorUserId, transaction, stockLink = 
  * "na mão", sempre pelo ledger (mesmo princípio EST-002/EST-003 usado no resto do módulo).
  * Idempotente por requisição: devolver a mesma requisição duas vezes não duplica o crédito.
  */
-async function returnMaterialRequest(id, payload, actorUserId, transaction) {
-  const materialRequest = await MaterialRequest.findByPk(id, {
+async function returnMaterialRequest(id, groupId, companyId, payload, actorUserId, transaction) {
+  const materialRequest = await MaterialRequest.findOne({
+    where: { id, groupId, companyId },
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
