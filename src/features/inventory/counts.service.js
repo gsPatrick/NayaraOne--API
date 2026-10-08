@@ -19,9 +19,19 @@ async function openCount(payload, actorUserId, transaction) {
   // count.projectId pro ADJUSTMENT gerado, e recordMovement bloqueia (EST-004) qualquer
   // movimento tocando local PROJECT_SITE sem projectId. Sem essa validação na abertura, a
   // contagem era aceita normalmente e só travava, sem solução, na hora de aplicar o ajuste.
-  const location = await InventoryLocation.findByPk(locationId, { transaction });
-  if (location?.locationType === 'PROJECT_SITE' && !projectId) {
+  //
+  // Caderno §10 — freeze lógico (ver movements.service.js#assertLocationsNotFrozenByCount): o
+  // FOR UPDATE no local serializa a abertura com qualquer movimento em voo no mesmo local
+  // (recordMovement trava o local com FOR SHARE). Também impede duas contagens OPEN no mesmo
+  // local (duas aberturas concorrentes esperam uma pela outra aqui).
+  const location = await InventoryLocation.findByPk(locationId, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!location) throw AppError.notFound('Local de estoque não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
+  if (location.locationType === 'PROJECT_SITE' && !projectId) {
     throw AppError.badRequest('Inventário num local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_COUNT_PROJECT_REQUIRED');
+  }
+  const alreadyOpen = await InventoryCount.findOne({ where: { locationId, status: 'OPEN' }, transaction });
+  if (alreadyOpen) {
+    throw AppError.conflict(`Já existe um inventário OPEN para este local (${alreadyOpen.id}) — conclua-o antes de abrir outro.`, 'INVENTORY_COUNT_ALREADY_OPEN');
   }
   const count = await InventoryCount.create(
     { groupId, companyId, locationId, projectId: projectId || null, status: 'OPEN', createdBy: actorUserId || null, updatedBy: actorUserId || null },
@@ -43,7 +53,9 @@ async function addCountItem(countId, payload, transaction) {
   if (!inventoryItemId || countedQuantity == null || !Number.isFinite(Number(countedQuantity)) || Number(countedQuantity) < 0) {
     throw AppError.badRequest('"inventoryItemId" e "countedQuantity" (>= 0) são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
   }
-  const count = await InventoryCount.findByPk(countId, { transaction });
+  // FOR SHARE: serializa com completeCount (FOR UPDATE na mesma linha) — uma linha contada não
+  // pode entrar depois do fechamento já ter calculado as divergências.
+  const count = await InventoryCount.findByPk(countId, { transaction, lock: transaction.LOCK.SHARE });
   if (!count) throw AppError.notFound('Inventário não encontrado.', 'INVENTORY_COUNT_NOT_FOUND');
   if (count.status !== 'OPEN') {
     throw AppError.badRequest(`Só é possível contar itens em um inventário OPEN (atual: ${count.status}).`, 'INVENTORY_COUNT_INVALID_TRANSITION');
@@ -68,6 +80,9 @@ async function completeCount(countId, actorUserId, transaction) {
     throw AppError.badRequest(`Só é possível fechar um inventário OPEN (atual: ${count.status}).`, 'INVENTORY_COUNT_INVALID_TRANSITION');
   }
 
+  // Com o freeze lógico (Caderno §10), nenhum movimento tocou este local desde openCount — o
+  // saldo lido aqui é exatamente o saldo do momento da abertura, então `divergence` é só
+  // divergência real de contagem, nunca efeito de movimento posterior.
   const items = await InventoryCountItem.findAll({ where: { countId }, transaction });
   for (const line of items) {
     const balance = await InventoryStockBalance.findOne({

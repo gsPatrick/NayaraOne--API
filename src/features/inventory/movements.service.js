@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance } = require('../../models');
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -40,6 +40,46 @@ async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, 
   balance.quantityOnHand = nextQuantity;
   await balance.save({ transaction });
   return balance;
+}
+
+// GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): Caderno §10 —
+// "Durante contagem, política define freeze lógico ou reconciliação de movimentos posteriores"
+// — não existia política nenhuma: um movimento registrado com a contagem aberta mudava o saldo
+// "esperado" lido por completeCount no fechamento, misturando movimento legítimo com divergência
+// de contagem (ajuste aplicado depois ficava errado na mesma proporção do movimento).
+//
+// Política escolhida: FREEZE LÓGICO (stock-take lock) por local. Enquanto existir um
+// InventoryCount OPEN para um local, nenhum movimento que toque esse local (origem ou destino)
+// é aceito — a contagem precisa ser concluída antes. Isso garante saldo esperado no fechamento
+// == saldo na abertura, então toda divergência é divergência real de contagem.
+//
+// Corrida abertura x movimento resolvida no banco, por lock de linha em inventory.locations:
+// - recordMovement trava cada local tocado com FOR SHARE (movimentos concorrentes no mesmo
+//   local continuam paralelos entre si — SHARE não conflita com SHARE) e só então checa se há
+//   contagem OPEN;
+// - openCount (counts.service.js) trava o local com FOR UPDATE antes de criar a contagem.
+// FOR UPDATE x FOR SHARE conflitam: a abertura espera os movimentos em voo comitarem (que
+// entram no saldo esperado, antes da contagem existir), e um movimento que chega durante a
+// abertura espera o commit dela e, ao destravar, enxerga a contagem OPEN (READ COMMITTED:
+// cada statement vê o que já foi comitado) e é bloqueado. Locais travados em ordem de id pra
+// dois movimentos TRANSFER cruzados nunca formarem deadlock com uma abertura de contagem.
+async function assertLocationsNotFrozenByCount(locationIds, transaction) {
+  const ids = [...new Set(locationIds.filter(Boolean))].sort();
+  if (ids.length === 0) return;
+  await InventoryLocation.findAll({
+    where: { id: ids },
+    attributes: ['id'],
+    order: [['id', 'ASC']],
+    lock: transaction.LOCK.SHARE,
+    transaction,
+  });
+  const openCount = await InventoryCount.findOne({ where: { locationId: ids, status: 'OPEN' }, transaction });
+  if (openCount) {
+    throw AppError.conflict(
+      `Local em inventário físico (contagem ${openCount.id} aberta) — movimentações neste local ficam bloqueadas até a contagem ser concluída (freeze lógico).`,
+      'INVENTORY_LOCATION_FROZEN_BY_COUNT'
+    );
+  }
 }
 
 async function recordMovement(payload, actor, transaction) {
@@ -145,6 +185,11 @@ async function recordMovement(payload, actor, transaction) {
     if (existing) return existing;
   }
 
+  // Caderno §10: freeze lógico durante inventário físico (ver assertLocationsNotFrozenByCount).
+  // Depois do retorno idempotente acima: reenvio de um movimento JÁ gravado antes da contagem
+  // abrir não é um movimento novo, então devolve o original em vez de falhar.
+  await assertLocationsNotFrozenByCount(touchedLocationIds, transaction);
+
   const movement = await InventoryMovement.create(
     {
       groupId,
@@ -233,4 +278,4 @@ async function listBalancesByItem(inventoryItemId, transaction) {
   });
 }
 
-module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem };
+module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem, assertLocationsNotFrozenByCount };
