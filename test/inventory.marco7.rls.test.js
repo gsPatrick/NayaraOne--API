@@ -151,7 +151,7 @@ test('EST-TS-11 RLS Estoque/Patrimônio: leitura e escrita cross-company bloquea
 
     const asset = await assetsService.createAsset(withTenant({ name: `HOMO QA RLS M7 Asset ${suffix}`, assetTag: `RLSM7-${suffix}`, currentLocationId: warehouse.id }), tenant.userId, transaction);
     const assetMovement = await assetsService.transferAsset(asset.id, { destinationLocationId: otherLoc.id }, tenant.userId, transaction);
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: otherLoc.id }, tenant.userId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia-rls.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA-RLS').toString('base64'), category: 'generic' }),
