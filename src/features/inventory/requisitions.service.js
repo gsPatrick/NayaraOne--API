@@ -123,6 +123,7 @@ async function listRequisitions(groupId, companyId, transaction, { status, proje
     where,
     include: [{ model: InventoryRequisitionItem, as: 'items' }],
     order: [['created_at', 'DESC']],
+    limit: 1500,
     transaction,
   });
 }

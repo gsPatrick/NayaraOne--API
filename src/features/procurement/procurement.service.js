@@ -117,7 +117,7 @@ async function getPurchaseRequest(id, groupId, companyId, transaction) {
 async function listPurchaseRequests(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return PurchaseRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return PurchaseRequest.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 // --- 2. APPROVAL ---
@@ -437,7 +437,7 @@ async function getPurchaseOrder(id, groupId, companyId, transaction) {
 async function listPurchaseOrders(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  const orders = await PurchaseOrder.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const orders = await PurchaseOrder.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
   return attachSupplierPersonNames(orders, transaction);
 }
 
@@ -630,13 +630,13 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
 async function listGoodsReceipts(groupId, companyId, transaction, { purchaseOrderId } = {}) {
   const where = { groupId, companyId };
   if (purchaseOrderId) where.purchaseOrderId = purchaseOrderId;
-  return GoodsReceipt.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return GoodsReceipt.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 async function listDiscrepancies(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return ReceiptDiscrepancy.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return ReceiptDiscrepancy.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 const DISCREPANCY_RESOLUTIONS = ['ACCEPTED', 'REJECTED'];
@@ -1002,7 +1002,7 @@ async function decideSupplierDueDiligence(id, groupId, companyId, payload, actor
 async function listSupplierQualifications(groupId, companyId, transaction, { supplierPersonId } = {}) {
   const where = { groupId, companyId };
   if (supplierPersonId) where.supplierPersonId = supplierPersonId;
-  return SupplierQualification.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return SupplierQualification.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 module.exports = {

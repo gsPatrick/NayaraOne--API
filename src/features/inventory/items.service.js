@@ -70,7 +70,7 @@ async function listItems(groupId, companyId, transaction, { itemType, status } =
   if (status && status !== 'ALL') where.status = status;
   else if (!status) where.status = 'ACTIVE';
   if (itemType) where.itemType = itemType;
-  return InventoryItem.findAll({ where, order: [['name', 'ASC']], transaction });
+  return InventoryItem.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
 }
 
 async function getItem(itemId, groupId, companyId, transaction) {
@@ -113,7 +113,7 @@ async function createLocation(payload, actorUserId, transaction) {
 }
 
 async function listLocations(groupId, companyId, transaction) {
-  return InventoryLocation.findAll({ where: { groupId, companyId, isActive: true }, order: [['name', 'ASC']], transaction });
+  return InventoryLocation.findAll({ where: { groupId, companyId, isActive: true }, order: [['name', 'ASC']], limit: 1500, transaction });
 }
 
 module.exports = { ITEM_TYPES, LOCATION_TYPES, createItem, listItems, getItem, setItemStatus, createLocation, listLocations };

@@ -182,7 +182,7 @@ async function attachChargeEntries(lossCases, transaction) {
 async function listLossCases(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  const lossCases = await InventoryLossCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const lossCases = await InventoryLossCase.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
   return attachChargeEntries(lossCases, transaction);
 }
 

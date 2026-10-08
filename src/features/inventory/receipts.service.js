@@ -101,7 +101,7 @@ async function getReceipt(receiptId, groupId, companyId, transaction) {
 async function listReceipts(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return InventoryReceipt.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return InventoryReceipt.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 async function reviewReceipt(receiptId, actorUserId, groupId, companyId, transaction) {

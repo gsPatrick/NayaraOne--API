@@ -387,6 +387,8 @@ async function listBalancesByItem(inventoryItemId, groupId, companyId, transacti
   return InventoryStockBalance.findAll({
     where: { inventoryItemId, groupId, companyId },
     include: [{ model: InventoryLocation, as: 'location' }],
+    order: [['location_id', 'ASC']],
+    limit: 1500,
     transaction,
   });
 }

@@ -127,7 +127,7 @@ async function listMaintenanceOrders(groupId, companyId, transaction, { status, 
   const where = { groupId, companyId };
   if (status) where.status = status;
   if (assetId) where.assetId = assetId;
-  return InventoryMaintenanceOrder.findAll({ where, order: [['opened_at', 'DESC']], transaction });
+  return InventoryMaintenanceOrder.findAll({ where, order: [['opened_at', 'DESC']], limit: 1500, transaction });
 }
 
 async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, transaction) {

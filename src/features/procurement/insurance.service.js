@@ -944,6 +944,7 @@ async function listPolicies(filters, groupId, companyId, transaction) {
       { model: InsuranceRenewalTask, as: 'renewalTasks' },
     ],
     order: [['created_at', 'DESC']],
+    limit: 1500,
     transaction,
   });
   const now = new Date();

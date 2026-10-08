@@ -174,7 +174,7 @@ async function listToolLoans(groupId, companyId, transaction, { status, assetId 
   const where = { groupId, companyId };
   if (status) where.status = status;
   if (assetId) where.assetId = assetId;
-  return InventoryToolLoan.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return InventoryToolLoan.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 module.exports = { CONDITION_CODES, loanTool, returnTool, listToolLoans };

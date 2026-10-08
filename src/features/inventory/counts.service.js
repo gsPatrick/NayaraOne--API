@@ -124,7 +124,7 @@ async function getCount(countId, groupId, companyId, transaction) {
 async function listCounts(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return InventoryCount.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return InventoryCount.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
 // EST-TS-09: divergência vira "proposal" — só este endpoint, com approve explícito e reason,

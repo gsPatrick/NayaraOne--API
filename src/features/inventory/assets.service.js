@@ -96,7 +96,7 @@ async function createAsset(payload, actorUserId, transaction) {
 async function listAssets(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return Asset.findAll({ where, order: [['name', 'ASC']], transaction });
+  return Asset.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
 }
 
 async function getAssetByTag(assetTag, groupId, companyId, transaction) {
@@ -216,7 +216,7 @@ async function updateAsset(id, groupId, companyId, payload, actorUserId, transac
 // movimentações do patrimônio, e toda transferência já gera um AssetMovement (transferAsset
 // acima) — mas não existia NENHUMA forma de ler esse histórico de volta, nem endpoint nem tela.
 async function listAssetMovements(assetId, groupId, companyId, transaction) {
-  const movements = await AssetMovement.findAll({ where: { assetId, groupId, companyId }, order: [['moved_at', 'DESC']], transaction });
+  const movements = await AssetMovement.findAll({ where: { assetId, groupId, companyId }, order: [['moved_at', 'DESC']], limit: 1500, transaction });
   // asset_movements não tem coluna de tipo — a baixa é identificada pelo prefixo reservado da
   // idempotencyKey (ver DISPOSAL_KEY_PREFIX), pra tela distinguir transferência de baixa.
   return movements.map((m) => ({
