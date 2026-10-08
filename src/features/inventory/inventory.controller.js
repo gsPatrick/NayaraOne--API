@@ -180,7 +180,12 @@ const listLossCases = catchAsync(async (req, res) => {
 });
 const decideLossCase = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const lossCase = await req.withTenantTransaction((t) => lossCasesService.decideLossCase(req.params.id, req.body.decision, actor, t));
+  // Contrato §11: a decisão humana pode atribuir o responsável e, explicitamente, cobrá-lo
+  // (lançamento a receber no Financeiro) — ver lossCases.service.js.
+  const { chargeResponsible, responsiblePersonId, chargeAmount, chargeDueAt } = req.body || {};
+  const lossCase = await req.withTenantTransaction((t) =>
+    lossCasesService.decideLossCase(req.params.id, req.body.decision, actor, t, { chargeResponsible, responsiblePersonId, chargeAmount, chargeDueAt })
+  );
   return success(res, { data: lossCase });
 });
 
