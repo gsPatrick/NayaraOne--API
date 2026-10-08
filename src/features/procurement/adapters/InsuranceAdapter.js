@@ -1,6 +1,7 @@
 'use strict';
 
 const AppError = require('../../../utils/AppError');
+const { resilientFetch } = require('../../../utils/resilientFetch');
 
 // Interface comum (duck-typed, mesmo estilo de BankAdapter.js/SignatureAdapter.js):
 //   async quote(req) -> { externalId, premiumAmount, coverageSummary, raw }
@@ -45,8 +46,12 @@ class SandboxInsuranceAdapter {
   }
 }
 
-async function httpRequestJson({ method, url, headers, body }) {
-  const response = await fetch(url, { method, headers, body });
+// GAP REAL CORRIGIDO (auditoria "mais um ciclo de 5", 2026-10-08; INT-005 a INT-008 do contrato
+// — timeout/retry classificado/circuit breaker): era `fetch` crua, sem bound de tempo, sem
+// retry e sem circuit breaker — uma seguradora lenta/fora do ar travava a chamada indefinidamente
+// e cada tentativa nova martelava a rede de novo, sem parar. Ver src/utils/resilientFetch.js.
+async function httpRequestJson({ circuitKey, method, url, headers, body }) {
+  const response = await resilientFetch({ circuitKey, method, url, headers, body });
   let parsed = null;
   const raw = await response.text();
   try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = raw; }
@@ -86,6 +91,7 @@ class PortoSeguroInsuranceAdapter {
     const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
     const bodyStr = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
     const { statusCode, body } = await httpRequestJson({
+      circuitKey: 'insurance:portoseguro',
       method: 'POST',
       url: `${this.authBaseUrl}/oauth/v2/access-token`,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basicAuth}` },
@@ -102,6 +108,7 @@ class PortoSeguroInsuranceAdapter {
   async _request(method, path, payload) {
     const token = await this._getAccessToken();
     const { statusCode, body } = await httpRequestJson({
+      circuitKey: 'insurance:portoseguro',
       method,
       url: `${this.baseUrl}${path}`,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -182,6 +189,7 @@ class YelumInsuranceAdapter {
 
   async _request(method, path, payload) {
     const { statusCode, body } = await httpRequestJson({
+      circuitKey: 'insurance:yelum',
       method,
       url: `${this.baseUrl}${path}`,
       headers: {
