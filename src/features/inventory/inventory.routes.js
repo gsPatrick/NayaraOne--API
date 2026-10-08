@@ -43,6 +43,10 @@ inventoryRouter.patch('/assets/:id', requirePermission('inventory:update'), inve
 inventoryRouter.get('/assets/by-tag/:tag', requirePermission('inventory:read'), inventoryController.getAssetByTag);
 inventoryRouter.post('/assets/:id/transfer', requirePermission('inventory:update'), inventoryController.transferAsset);
 inventoryRouter.get('/assets/:id/movements', requirePermission('inventory:read'), inventoryController.listAssetMovements);
+// Venda/descarte/doação (Caderno §9) — exige inventory:approve (validado também no service);
+// valor > 0 gera lançamento RECEIVABLE no Financeiro na mesma transação.
+inventoryRouter.post('/assets/:id/dispose', requirePermission('inventory:approve'), inventoryController.disposeAsset);
+inventoryRouter.get('/assets/:id/disposal', requirePermission('inventory:read'), inventoryController.getAssetDisposal);
 
 // Tool loans (Guia do Marcelo §6/§7) — OPEN -> RETURNED. EST-TS-05 bloqueia novo empréstimo de ferramenta já emprestada.
 inventoryRouter.post('/assets/:id/loan', requirePermission('inventory:create'), inventoryController.loanTool);

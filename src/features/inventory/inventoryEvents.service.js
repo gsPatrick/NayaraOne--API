@@ -145,6 +145,30 @@ function publishAssetTransferred(movement, transaction) {
   );
 }
 
+// Venda/descarte/doação de patrimônio (Caderno §9). Não está na lista mínima de eventos da
+// seção 14, mas mantém o módulo consistente: toda transição relevante do Asset publica evento.
+// Baixa é terminal (um asset só é baixado uma vez), então a chave por asset já é única.
+function publishAssetDisposed(asset, disposal, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: asset.groupId,
+      companyId: asset.companyId,
+      aggregateType: 'Asset',
+      aggregateId: asset.id,
+      eventType: 'asset.disposed',
+      payload: {
+        assetId: asset.id,
+        disposalType: disposal.disposalType,
+        disposalValue: disposal.disposalValue,
+        financialEntryId: disposal.financialEntryId,
+        movementId: disposal.movementId,
+      },
+      idempotencyKey: `asset.disposed:${asset.id}`,
+    },
+    transaction
+  );
+}
+
 function publishMaintenanceOpened(order, transaction) {
   return publishDomainEvent(
     {
@@ -215,6 +239,7 @@ module.exports = {
   publishToolLoanOverdue,
   publishToolReturned,
   publishAssetTransferred,
+  publishAssetDisposed,
   publishMaintenanceOpened,
   publishMaintenanceClosed,
   publishCountCompleted,

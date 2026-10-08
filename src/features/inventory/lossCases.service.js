@@ -45,6 +45,17 @@ async function openLossCase(payload, actorUserId, transaction) {
     throw AppError.badRequest('"locationId" é obrigatório quando "inventoryItemId" é informado (necessário para aprovar a baixa depois).', 'LOSS_CASE_VALIDATION');
   }
 
+  // Patrimônio já baixado (venda/descarte/doação — disposeAsset) saiu da empresa: aprovar uma
+  // perda sobre ele sobrescreveria DISPOSED com LOST, apagando a baixa formalizada. Lock no
+  // asset serializa com disposeAsset (que trava o mesmo asset e recusa baixa com perda OPEN).
+  if (assetId) {
+    const asset = await Asset.findByPk(assetId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
+    if (asset.status === 'DISPOSED') {
+      throw AppError.conflict('Patrimônio já baixado (venda/descarte/doação) não pode ter caso de perda aberto.', 'LOSS_CASE_ASSET_DISPOSED');
+    }
+  }
+
   const lossCase = await InventoryLossCase.create(
     {
       groupId,
@@ -128,6 +139,9 @@ async function decideLossCase(lossCaseId, decision, actor, transaction) {
   // novo, e mantinha o custodiante antigo mesmo após a perda ser formalizada (EST-010).
   if (decision === 'APPROVED' && lossCase.assetId) {
     const asset = await Asset.findByPk(lossCase.assetId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (asset?.status === 'DISPOSED') {
+      throw AppError.conflict('Patrimônio já baixado (venda/descarte/doação) — a perda não pode sobrescrever a baixa.', 'LOSS_CASE_ASSET_DISPOSED');
+    }
     if (asset) {
       asset.status = 'LOST';
       asset.assignedToUserId = null;

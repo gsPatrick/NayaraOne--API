@@ -122,6 +122,16 @@ const listAssetMovements = catchAsync(async (req, res) => {
   return success(res, { data: movements });
 });
 
+const disposeAsset = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const result = await req.withTenantTransaction((t) => assetsService.disposeAsset(req.params.id, req.body, actor, t));
+  return success(res, { statusCode: 201, data: result });
+});
+const getAssetDisposal = catchAsync(async (req, res) => {
+  const disposal = await req.withTenantTransaction((t) => assetsService.getAssetDisposal(req.params.id, t));
+  return success(res, { data: disposal });
+});
+
 const loanTool = catchAsync(async (req, res) => {
   const loan = await req.withTenantTransaction((t) => toolLoansService.loanTool(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: loan });
@@ -213,6 +223,8 @@ module.exports = {
   getAssetByTag,
   transferAsset,
   listAssetMovements,
+  disposeAsset,
+  getAssetDisposal,
   loanTool,
   returnTool,
   listToolLoans,

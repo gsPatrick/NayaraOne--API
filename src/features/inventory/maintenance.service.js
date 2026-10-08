@@ -37,6 +37,11 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
   if (asset.status === 'LOST') {
     throw AppError.conflict('Patrimônio declarado perdido/extraviado não pode entrar em manutenção — reverta o caso de perda primeiro.', 'MAINTENANCE_ASSET_LOST');
   }
+  // Baixa (venda/descarte/doação — assets.service.js#disposeAsset) é terminal: o patrimônio
+  // já saiu da empresa, não pode voltar a circular via manutenção -> AVAILABLE.
+  if (asset.status === 'DISPOSED') {
+    throw AppError.conflict('Patrimônio baixado (venda/descarte/doação) não pode entrar em manutenção.', 'MAINTENANCE_ASSET_DISPOSED');
+  }
   if (asset.status !== 'MAINTENANCE') {
     asset.status = 'MAINTENANCE';
     asset.updatedBy = actorUserId || null;
