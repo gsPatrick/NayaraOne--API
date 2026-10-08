@@ -19,6 +19,7 @@ const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscal
 const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
 const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
+const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -147,6 +148,15 @@ if (process.env.NODE_ENV !== 'test' && process.env.TOOL_LOAN_OVERDUE_JOB_DISABLE
 // nada. Mesmo padrão dos jobs acima.
 if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_RENEWAL_ALERT_JOB_DISABLED !== 'true') {
   startInsuranceRenewalAlertJob();
+}
+
+// Vencimento de apólice de seguro (Marco 7 — Insurance Hub, "vigência" no contrato). Gap real
+// achado em auditoria 2026-10-07: só existia o alerta de renovação, nada transicionava a apólice
+// para EXPIRED quando a vigência acabava. A trava de sinistro novo em apólice vencida fica em
+// insurance.service.js#openClaim (checa a data); este job dá visibilidade/status. Mesmo padrão
+// dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_POLICY_EXPIRY_JOB_DISABLED !== 'true') {
+  startInsurancePolicyExpiryJob();
 }
 
 module.exports = app;

@@ -63,6 +63,46 @@ function addMonthsDateOnly(dateOnlyStr, months) {
   return utcDate.toISOString().slice(0, 10);
 }
 
+// GAP REAL CORRIGIDO (auditoria contrato Marco 7, 2026-10-07 — "Apólice com ... vigência ...
+// renovação alerta"): o sistema alertava a renovação 30 dias antes, mas NADA agia quando a
+// vigência de fato acabava — a apólice continuava ACTIVE para sempre e `openClaim` só olhava
+// `policy.status`, então era possível abrir sinistro numa apólice já vencida. Agora a vigência
+// é aplicada em duas camadas (mesmo princípio fail-closed do resto do arquivo):
+//   1. `openClaim` checa a DATA (`isPolicyExpired`), independente do status gravado — defesa
+//      em profundidade pro intervalo entre o vencimento e a próxima execução do job;
+//   2. `insurancePolicyExpiryJob.js` transiciona ACTIVE/ISSUED vencidas para EXPIRED (status já
+//      previsto na migration 20260101000272: DRAFT|QUOTED|ISSUED|ACTIVE|EXPIRED|CANCELED),
+//      pra visibilidade/relatório/filtro por status.
+// Sinistros JÁ abertos antes do vencimento não são afetados (submitClaim/confirmClaimSettlement
+// não dependem do status da apólice) — só a ABERTURA de sinistro novo é bloqueada.
+//
+// `expiryDate` é DATEONLY e é o ÚLTIMO dia de cobertura (inclusive): a apólice está vencida
+// quando "hoje" > expiryDate. "Hoje" é o dia civil no fuso de negócio (America/Sao_Paulo —
+// ver src/config/database.js), nunca o dia UTC: com UTC, entre 21h e 23h59 do último dia de
+// vigência o sinistro já seria bloqueado indevidamente no Brasil.
+const BUSINESS_TIMEZONE = 'America/Sao_Paulo';
+const POLICY_STATUSES_ELIGIBLE_FOR_CLAIM = ['ACTIVE', 'ISSUED'];
+
+function todayDateOnly(now = new Date()) {
+  // 'en-CA' formata como YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+}
+
+function isPolicyExpired(policy, now = new Date()) {
+  if (!policy) return false;
+  if (policy.status === 'EXPIRED') return true;
+  if (!policy.expiryDate) return false;
+  return String(policy.expiryDate).slice(0, 10) < todayDateOnly(now);
+}
+
+// Campo derivado em leitura — o front não precisa esperar o job rodar pra mostrar "Vencida".
+function withExpiryFlag(policy, now = new Date()) {
+  if (policy) policy.setDataValue('isExpired', isPolicyExpired(policy, now));
+  return policy;
+}
+
 function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
@@ -442,9 +482,18 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
   return installment;
 }
 
-async function openClaim(policyId, payload, actor, transaction) {
+async function openClaim(policyId, payload, actor, transaction, now = new Date()) {
   const policy = await getPolicyForUpdate(policyId, transaction);
-  if (!['ACTIVE', 'ISSUED'].includes(policy.status)) {
+  // Vigência checada ANTES do status e pela DATA, não só pelo status gravado (ver comentário em
+  // `isPolicyExpired`): uma apólice ACTIVE cujo expiryDate já passou (job ainda não rodou) é
+  // bloqueada do mesmo jeito que uma já marcada EXPIRED.
+  if (isPolicyExpired(policy, now)) {
+    throw AppError.conflict(
+      `Apólice com vigência encerrada em ${policy.expiryDate || '(data não informada)'} — não é possível abrir sinistro novo. Sinistros abertos antes do vencimento seguem normalmente.`,
+      'INSURANCE_POLICY_EXPIRED'
+    );
+  }
+  if (!POLICY_STATUSES_ELIGIBLE_FOR_CLAIM.includes(policy.status)) {
     throw AppError.conflict(`Apólice com status "${policy.status}" não pode abrir sinistro.`, 'INSURANCE_POLICY_INVALID_STATUS');
   }
 
@@ -675,7 +724,7 @@ async function listPolicies(filters, transaction) {
   const where = {};
   if (filters?.status) where.status = filters.status;
   if (filters?.propertyId) where.propertyId = filters.propertyId;
-  return InsurancePolicy.findAll({
+  const policies = await InsurancePolicy.findAll({
     where,
     include: [
       { model: InsuranceCoverage, as: 'coverages' },
@@ -685,6 +734,8 @@ async function listPolicies(filters, transaction) {
     order: [['created_at', 'DESC']],
     transaction,
   });
+  const now = new Date();
+  return policies.map((policy) => withExpiryFlag(policy, now));
 }
 
 async function getPolicy(id, transaction) {
@@ -699,10 +750,13 @@ async function getPolicy(id, transaction) {
     transaction,
   });
   if (!policy) throw AppError.notFound('Apólice não encontrada.', 'INSURANCE_POLICY_NOT_FOUND');
-  return policy;
+  return withExpiryFlag(policy);
 }
 
 module.exports = {
+  todayDateOnly,
+  isPolicyExpired,
+  POLICY_STATUSES_ELIGIBLE_FOR_CLAIM,
   createPolicy,
   quotePolicy,
   issuePolicy,
