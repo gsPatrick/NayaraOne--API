@@ -32,52 +32,67 @@ async function detectMissingDailyReports(transaction, now = new Date()) {
 
   const activeProjects = await Project.findAll({ where: { status: ACTIVE_STATUS }, transaction });
 
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 19, Frente A, 09/10/2026): cada projeto era
+  // verificado/criava sua Task direto na transação da empresa, sem savepoint — diferente do
+  // job irmão (warrantyEscalationJob.js, já corrigido na rodada 16), que isola cada item numa
+  // transação aninhada exatamente pra evitar que UM projeto com problema (ex.: Task.create
+  // falhando por FK órfã em assignedToUserId) aborte a transação inteira e reverta as Tasks já
+  // criadas para os projetos anteriores do mesmo lote. Pior ainda aqui: como checkDate é
+  // recalculado a cada execução (sempre "ontem útil"), o dia que falhou nunca é reprocessado —
+  // o gap de verificação daquele dia específico ficava perdido silenciosamente para sempre.
   let tasksCreated = 0;
   for (const project of activeProjects) {
-    const hasReport = await DailyReport.findOne({
-      where: { projectId: project.id, reportDate: checkDate },
-      transaction,
-    });
-    if (hasReport) continue;
+    try {
+      await sequelize.transaction({ transaction }, async (nested) => {
+        const hasReport = await DailyReport.findOne({
+          where: { projectId: project.id, reportDate: checkDate },
+          transaction: nested,
+        });
+        if (hasReport) return;
 
-    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): o dedupe era
-    // "check-then-create" puro, sem nenhum lock — em deploy multi-réplica, dois processos
-    // podiam ambos checar "não existe Task ainda" antes de qualquer INSERT comitar e criar
-    // duas tarefas duplicadas pro mesmo projeto/dia. `pg_advisory_xact_lock` (mesmo mecanismo
-    // já usado em marginRules.service.js) serializa esse check-then-create por projeto+dia —
-    // o lock é liberado automaticamente no commit/rollback da transação.
-    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
-      replacements: { key: `missing-daily-report:${project.id}:${checkDate}` },
-      transaction,
-    });
+        // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): o dedupe era
+        // "check-then-create" puro, sem nenhum lock — em deploy multi-réplica, dois processos
+        // podiam ambos checar "não existe Task ainda" antes de qualquer INSERT comitar e criar
+        // duas tarefas duplicadas pro mesmo projeto/dia. `pg_advisory_xact_lock` (mesmo mecanismo
+        // já usado em marginRules.service.js) serializa esse check-then-create por projeto+dia —
+        // o lock é liberado automaticamente no commit/rollback da transação.
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+          replacements: { key: `missing-daily-report:${project.id}:${checkDate}` },
+          transaction: nested,
+        });
 
-    const taskTitle = `RDO ausente em ${project.name} (${checkDate})`;
-    const existingTask = await Task.findOne({
-      where: {
-        relatedEntityType: 'construction.projects',
-        relatedEntityId: project.id,
-        title: taskTitle,
-        status: { [Op.ne]: 'CANCELED' },
-      },
-      transaction,
-    });
-    if (existingTask) continue;
+        const taskTitle = `RDO ausente em ${project.name} (${checkDate})`;
+        const existingTask = await Task.findOne({
+          where: {
+            relatedEntityType: 'construction.projects',
+            relatedEntityId: project.id,
+            title: taskTitle,
+            status: { [Op.ne]: 'CANCELED' },
+          },
+          transaction: nested,
+        });
+        if (existingTask) return;
 
-    await Task.create(
-      {
-        groupId: project.groupId,
-        companyId: project.companyId,
-        assignedToUserId: project.responsibleUserId || null,
-        title: taskTitle,
-        description: `Nenhum RDO foi registrado para a obra "${project.name}" em ${checkDate}. Verifique com a equipe de campo e registre o diário pendente.`,
-        relatedEntityType: 'construction.projects',
-        relatedEntityId: project.id,
-        status: 'OPEN',
-        priority: 'HIGH',
-      },
-      { transaction }
-    );
-    tasksCreated += 1;
+        await Task.create(
+          {
+            groupId: project.groupId,
+            companyId: project.companyId,
+            assignedToUserId: project.responsibleUserId || null,
+            title: taskTitle,
+            description: `Nenhum RDO foi registrado para a obra "${project.name}" em ${checkDate}. Verifique com a equipe de campo e registre o diário pendente.`,
+            relatedEntityType: 'construction.projects',
+            relatedEntityId: project.id,
+            status: 'OPEN',
+            priority: 'HIGH',
+          },
+          { transaction: nested }
+        );
+        tasksCreated += 1;
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[MissingDailyReportJob] Falha ao verificar RDO ausente da obra ${project.id}: ${err.message}`);
+    }
   }
 
   return { projectsChecked: activeProjects.length, checkDate, tasksCreated };
@@ -100,59 +115,69 @@ async function detectMissingWorkerDocuments(transaction, now = new Date()) {
 
   const activeProjects = await Project.findAll({ where: { status: ACTIVE_STATUS }, transaction });
 
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 19, Frente A, 09/10/2026): mesmo problema de
+  // detectMissingDailyReports acima — cada projeto precisa de savepoint próprio pra UM projeto
+  // com problema não abortar a verificação dos demais da mesma empresa.
   let tasksCreated = 0;
   for (const project of activeProjects) {
-    const reportsInWindow = await DailyReport.findAll({
-      where: { projectId: project.id, reportDate: { [Op.between]: [windowStart, windowEnd] } },
-      transaction,
-    });
-    if (!reportsInWindow.length) continue;
+    try {
+      await sequelize.transaction({ transaction }, async (nested) => {
+        const reportsInWindow = await DailyReport.findAll({
+          where: { projectId: project.id, reportDate: { [Op.between]: [windowStart, windowEnd] } },
+          transaction: nested,
+        });
+        if (!reportsInWindow.length) return;
 
-    const workersMissingDocs = await DailyWorker.findAll({
-      where: {
-        dailyReportId: { [Op.in]: reportsInWindow.map((r) => r.id) },
-        [Op.or]: [{ documentFileIds: [] }, { documentFileIds: null }],
-      },
-      transaction,
-    });
-    if (!workersMissingDocs.length) continue;
+        const workersMissingDocs = await DailyWorker.findAll({
+          where: {
+            dailyReportId: { [Op.in]: reportsInWindow.map((r) => r.id) },
+            [Op.or]: [{ documentFileIds: [] }, { documentFileIds: null }],
+          },
+          transaction: nested,
+        });
+        if (!workersMissingDocs.length) return;
 
-    // Mesmo lock advisory já usado para "RDO ausente" (serializa check-then-create por
-    // projeto+janela), com chave própria para não colidir com o lock da outra verificação.
-    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
-      replacements: { key: `missing-worker-documents:${project.id}:${windowEnd}` },
-      transaction,
-    });
+        // Mesmo lock advisory já usado para "RDO ausente" (serializa check-then-create por
+        // projeto+janela), com chave própria para não colidir com o lock da outra verificação.
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+          replacements: { key: `missing-worker-documents:${project.id}:${windowEnd}` },
+          transaction: nested,
+        });
 
-    const taskTitle = `Documentação de trabalhador(es) pendente em ${project.name} (até ${windowEnd})`;
-    const existingTask = await Task.findOne({
-      where: {
-        relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
-        relatedEntityId: project.id,
-        title: taskTitle,
-        status: { [Op.ne]: 'CANCELED' },
-      },
-      transaction,
-    });
-    if (existingTask) continue;
+        const taskTitle = `Documentação de trabalhador(es) pendente em ${project.name} (até ${windowEnd})`;
+        const existingTask = await Task.findOne({
+          where: {
+            relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
+            relatedEntityId: project.id,
+            title: taskTitle,
+            status: { [Op.ne]: 'CANCELED' },
+          },
+          transaction: nested,
+        });
+        if (existingTask) return;
 
-    await Task.create(
-      {
-        groupId: project.groupId,
-        companyId: project.companyId,
-        assignedToUserId: project.responsibleUserId || null,
-        title: taskTitle,
-        description:
-          `${workersMissingDocs.length} trabalhador(es) sem documentação ("documentFileIds") registrada nos RDOs ` +
-          `da obra "${project.name}" entre ${windowStart} e ${windowEnd}. Verifique e anexe a documentação pendente.`,
-        relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
-        relatedEntityId: project.id,
-        status: 'OPEN',
-        priority: 'MEDIUM',
-      },
-      { transaction }
-    );
-    tasksCreated += 1;
+        await Task.create(
+          {
+            groupId: project.groupId,
+            companyId: project.companyId,
+            assignedToUserId: project.responsibleUserId || null,
+            title: taskTitle,
+            description:
+              `${workersMissingDocs.length} trabalhador(es) sem documentação ("documentFileIds") registrada nos RDOs ` +
+              `da obra "${project.name}" entre ${windowStart} e ${windowEnd}. Verifique e anexe a documentação pendente.`,
+            relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
+            relatedEntityId: project.id,
+            status: 'OPEN',
+            priority: 'MEDIUM',
+          },
+          { transaction: nested }
+        );
+        tasksCreated += 1;
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[MissingDailyReportJob] Falha ao verificar documentação pendente da obra ${project.id}: ${err.message}`);
+    }
   }
 
   return { projectsChecked: activeProjects.length, windowStart, windowEnd, tasksCreated };

@@ -72,6 +72,49 @@ test('missingDailyReportJob: obra ACTIVE sem RDO no dia útil anterior gera tare
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 19, Frente A, 09/10/2026): cada projeto era
+// verificado/criava sua Task direto na transação da empresa, sem savepoint — um projeto com
+// problema (ex.: Task.create falhando por FK órfã em assignedToUserId) abortava a verificação
+// de TODOS os outros projetos do mesmo lote. Confirma que, com um projeto "quebrado" no meio da
+// lista, os demais ainda recebem sua tarefa normalmente.
+test('missingDailyReportJob: um projeto com falha no Task.create não impede a tarefa dos demais projetos (savepoint por projeto)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const brokenProject = await createActiveProject(transaction);
+    const healthyProject = await createActiveProject(transaction);
+
+    // Simula uma falha real (ex.: FK órfã, violação de constraint) isolada a UM projeto
+    // específico, sem depender de burlar a FK de responsibleUserId (que é validada tanto na
+    // criação do Project quanto na do Task — não dá pra montar o cenário só com dados).
+    const originalCreate = Task.create.bind(Task);
+    Task.create = async (values, options) => {
+      if (values.relatedEntityId === brokenProject.id) {
+        throw new Error('Falha simulada no Task.create para este projeto específico.');
+      }
+      return originalCreate(values, options);
+    };
+
+    let result;
+    try {
+      result = await detectMissingDailyReports(transaction, new Date());
+    } finally {
+      Task.create = originalCreate;
+    }
+    assert.ok(result.tasksCreated >= 1, 'o projeto saudável precisa ter recebido sua tarefa mesmo com o outro projeto falhando');
+
+    const healthyTasks = await Task.findAll({
+      where: { relatedEntityType: 'construction.projects', relatedEntityId: healthyProject.id },
+      transaction,
+    });
+    assert.equal(healthyTasks.length, 1, 'o projeto saudável precisa ter exatamente 1 tarefa, não bloqueada pela falha do outro projeto');
+
+    const brokenTasks = await Task.findAll({
+      where: { relatedEntityType: 'construction.projects', relatedEntityId: brokenProject.id },
+      transaction,
+    });
+    assert.equal(brokenTasks.length, 0, 'o projeto com FK inválida não deve ter conseguido criar a tarefa (erro isolado, não propagado)');
+  });
+});
+
 test('missingDailyReportJob: obra com RDO registrado no dia útil anterior não gera tarefa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await createActiveProject(transaction);
