@@ -237,6 +237,45 @@ test('M6-20: correção de RDO é append-only — original permanece no banco ap
   });
 });
 
+// GAP REAL CORRIGIDO ("ciclos até secar", Ciclo 8, Frente B — comparação literal com o Caderno
+// Técnico, 09/10/2026): a fonte (seção 6, "Diário e equipes") exige "ocorrências e bloqueios"
+// como dois campos distintos do RDO. `occurrences` já existia; `blockages` não existia (nem
+// coluna, nem campo no service). Confirma que o RDO agora aceita e preserva `blockages`
+// separado de `occurrences`, inclusive numa correção (append-only).
+test('GAP (Caderno Técnico, seção 6): RDO aceita e preserva "blockages" separado de "occurrences"', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const suffix = uniqueSuffix();
+    const project = await createTestProject(t, suffix);
+
+    const original = await dailyReportsService.createDailyReport(
+      project.id,
+      withTenant({
+        reportDate: '2026-09-17',
+        shiftCode: 'MANHA',
+        occurrences: 'Nenhuma ocorrência relevante.',
+        blockages: 'Paralisação de 2h por chuva forte.',
+      }),
+      tenant.userId,
+      t
+    );
+    assert.equal(original.occurrences, 'Nenhuma ocorrência relevante.');
+    assert.equal(original.blockages, 'Paralisação de 2h por chuva forte.');
+
+    const revision = await dailyReportsService.correctDailyReport(
+      original.id,
+      { blockages: 'Correção: paralisação foi de 4h, não 2h.' },
+      tenant.userId,
+      t
+    );
+    assert.equal(revision.blockages, 'Correção: paralisação foi de 4h, não 2h.');
+    // PATCH parcial (só blockages) não pode esvaziar occurrences na revisão.
+    assert.equal(revision.occurrences, 'Nenhuma ocorrência relevante.');
+
+    const originalStillInDb = await DailyReport.findByPk(original.id, { transaction: t });
+    assert.equal(originalStillInDb.blockages, 'Paralisação de 2h por chuva forte.', 'original precisa continuar intacto após a correção');
+  });
+});
+
 // M6-94 — captura offline: reenviar a mesma `idempotencyKey` (simulando o app sincronizando de
 // novo um RDO que já tinha ido pro servidor) não cria um segundo registro.
 test('M6-94: idempotencyKey de captura offline evita duplicar RDO ao ressincronizar', async () => {

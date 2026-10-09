@@ -138,6 +138,7 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
     weather,
     workforceCount,
     occurrences,
+    blockages,
     servicesPerformed,
     workers,
     materials,
@@ -193,6 +194,7 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
       weather: weather || null,
       workforceCount: workforceCount != null ? workforceCount : null,
       occurrences: occurrences || null,
+      blockages: blockages || null,
       servicesPerformed: servicesPerformed || null,
       evidenceFileIds: resolvedEvidenceFileIds,
       evidenceReuseFlagged: reuse.flagged,
@@ -338,7 +340,7 @@ async function getDailyReportHistory(id, transaction) {
  */
 async function correctDailyReport(id, payload, actorUserId, transaction) {
   const original = await getCurrentDailyReport(id, transaction);
-  const { weather, workforceCount, occurrences, servicesPerformed, workers, materials, evidenceFileIds } = payload;
+  const { weather, workforceCount, occurrences, blockages, servicesPerformed, workers, materials, evidenceFileIds } = payload;
   validateWorkforceCount(workforceCount);
 
   const revision = await DailyReport.create(
@@ -351,6 +353,7 @@ async function correctDailyReport(id, payload, actorUserId, transaction) {
       weather: weather !== undefined ? weather : original.weather,
       workforceCount: workforceCount !== undefined ? workforceCount : original.workforceCount,
       occurrences: occurrences !== undefined ? occurrences : original.occurrences,
+      blockages: blockages !== undefined ? blockages : original.blockages,
       servicesPerformed: servicesPerformed !== undefined ? servicesPerformed : original.servicesPerformed,
       evidenceFileIds: Array.isArray(evidenceFileIds) ? evidenceFileIds : original.evidenceFileIds,
       reportedByUserId: original.reportedByUserId,

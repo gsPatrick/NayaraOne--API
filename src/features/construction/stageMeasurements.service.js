@@ -525,6 +525,19 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
   await measurement.save({ transaction });
 
   const stage = await getProjectStage(measurement.projectStageId, transaction);
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 8, Frente A, 09/10/2026): nenhuma validação
+  // impedia aprovar uma medição com measuredPct MENOR do que o já registrado na etapa (medição
+  // anterior aprovada) — progresso físico de obra não "regride". Sem esse guard, uma medição
+  // equivocada (erro de digitação/seleção) aprovada depois de uma medição maior já aprovada
+  // reduzia silenciosamente stage.measuredPct, podendo inclusive deixar a etapa com status DONE
+  // mas measuredPct abaixo de 100 (já que a conclusão automática abaixo só AVANÇA pra DONE,
+  // nunca reverte).
+  if (Number(measurement.measuredPct) < Number(stage.measuredPct)) {
+    throw AppError.conflict(
+      `Esta medição (${Number(measurement.measuredPct)}%) é menor do que o progresso já registrado na etapa (${Number(stage.measuredPct)}%) — progresso físico não pode regredir. Rejeite esta medição e crie uma nova com o valor correto, se for um erro.`,
+      'STAGE_MEASUREMENT_PCT_REGRESSION'
+    );
+  }
   stage.measuredPct = measurement.measuredPct;
   // FIX (auditoria E2E de browser, ciclo 4, 02/10/2026): aprovar uma medição de 100% nunca
   // completava a etapa (status ficava para sempre "Pendente"/"Em andamento") — nada aqui setava

@@ -27,6 +27,14 @@ module.exports = (sequelize) => {
       // achado numa rodada de verificação de integrações, campo próprio ausente até então.
       servicesPerformed: { type: DataTypes.TEXT, allowNull: true, field: 'services_performed' },
       occurrences: { type: DataTypes.TEXT, allowNull: true, field: 'occurrences' },
+      // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 8, Frente B, 09/10/2026): a fonte (seção
+      // 6 do Caderno Técnico) lista "ocorrências e bloqueios" como dois campos distintos do
+      // diário — a correção anterior (linha acima) só adicionou `occurrences`, sem o campo
+      // `blockages` que a mesma frase da fonte também exige. Sem campo próprio, "bloqueios"
+      // (paralisação por chuva, falta de material, pendência de terceiros) ficava forçado
+      // dentro do texto livre de occurrences, impedindo qualquer KPI/dashboard futuro de
+      // distinguir e contar bloqueios estruturadamente.
+      blockages: { type: DataTypes.TEXT, allowNull: true, field: 'blockages' },
       // Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige que o
       // diário registre "fotos" — campo ausente até então (não é divergência de nome, é campo
       // inteiro faltando).

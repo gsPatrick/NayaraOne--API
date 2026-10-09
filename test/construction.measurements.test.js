@@ -415,6 +415,51 @@ test('M6-106: aprovar medição de 100% completa a etapa E publica project.stage
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 8, Frente A, 09/10/2026): decideStageMeasurement
+// não validava que measuredPct da nova medição aprovada não fosse MENOR do que o já registrado
+// na etapa — progresso físico de obra não "regride". Confirma que uma segunda medição com valor
+// menor é recusada, e que o measuredPct da etapa permanece no valor maior já aprovado.
+test('M6-NOVO-6: decideStageMeasurement recusa aprovar medição com measuredPct MENOR do que o já registrado na etapa (progresso não regride)', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { stage } = await setupProjectAndStage(transaction, suffix);
+
+    const first = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 80, measuredAt: '2026-09-01', items: [{ description: 'Primeira medição', quantity: 1, unitPrice: 8000 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(first.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(first.id, {}, tenant.userId, transaction);
+    await stageMeasurementsService.decideStageMeasurement(first.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+
+    await stage.reload({ transaction });
+    assert.equal(Number(stage.measuredPct), 80);
+
+    const second = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 30, measuredAt: '2026-09-02', items: [{ description: 'Medição equivocada', quantity: 1, unitPrice: 3000 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(second.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(second.id, {}, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => stageMeasurementsService.decideStageMeasurement(second.id, { decision: 'APPROVED' }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'STAGE_MEASUREMENT_PCT_REGRESSION');
+        return true;
+      }
+    );
+
+    await stage.reload({ transaction });
+    assert.equal(Number(stage.measuredPct), 80, 'measuredPct da etapa não pode ter regredido após a tentativa recusada');
+  });
+});
+
 // Bug real corrigido nesta auditoria (rodada 46, 2026-10-05): o contrato (TAB-0701) trata
 // stage_code/planned_cost/planned_start/planned_end como NOT NULL — mas nada impedia uma etapa
 // entrar em execução (IN_PROGRESS) sem nenhum desses campos preenchidos.
