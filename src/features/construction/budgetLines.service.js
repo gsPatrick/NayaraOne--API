@@ -3,6 +3,7 @@
 const { BudgetLine, Budget } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 
 function assertNonNegativeAmount(value, fieldName) {
   if (value === undefined || value === null) return;
@@ -61,6 +62,7 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
       );
     }
   }
+  await assertCostCenterBelongsToCompany(costCenterId, companyId, transaction);
 
   const line = await BudgetLine.create(
     {
@@ -148,6 +150,7 @@ async function updateBudgetLine(id, payload, actorUserId, transaction) {
 
   const beforeJson = line.toJSON();
   assertNonNegativeAmount(plannedAmount, 'plannedAmount');
+  if (costCenterId !== undefined) await assertCostCenterBelongsToCompany(costCenterId, line.companyId, transaction);
   if (category !== undefined) line.category = category;
   if (description !== undefined) line.description = description;
   if (plannedAmount !== undefined) line.plannedAmount = plannedAmount;

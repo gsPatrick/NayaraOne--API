@@ -11,6 +11,7 @@ const {
   publishProjectWarrantyStarted,
   publishProjectClosed,
 } = require('./constructionEvents.service');
+const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 
 // M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
 // "4. Estados da obra"): "PLANNED → BUDGETED → READY → ACTIVE → FINAL_INSPECTION → DELIVERED →
@@ -157,6 +158,7 @@ async function createProject(payload, actorUserId, transaction) {
   }
   assertValidDateRange(startsAt, endsAtPlanned);
   assertValidBudgetAmount(budgetAmount);
+  await assertCostCenterBelongsToCompany(costCenterId, companyId, transaction);
 
   const resolvedCode = code || (await generateProjectCode(companyId, transaction));
 
@@ -283,7 +285,10 @@ async function updateProject(id, payload, actorUserId, transaction) {
     }
     project.actualEndDate = actualEndDate;
   }
-  if (costCenterId !== undefined) project.costCenterId = costCenterId;
+  if (costCenterId !== undefined) {
+    await assertCostCenterBelongsToCompany(costCenterId, project.companyId, transaction);
+    project.costCenterId = costCenterId;
+  }
   assertValidDateRange(
     startsAt !== undefined ? startsAt : project.startsAt,
     endsAtPlanned !== undefined ? endsAtPlanned : project.endsAtPlanned

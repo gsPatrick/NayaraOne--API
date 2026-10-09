@@ -676,6 +676,43 @@ test('M6-NOVO-7: createBudgetLine recusa budgetId que pertence a outra obra', as
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 13, Frente A, 09/10/2026): costCenterId era
+// aceito cru do payload, sem NENHUMA validação de existência/tenant, em createBudgetLine/
+// createProject/createStageMeasurement. Um lançamento financeiro real (conta a pagar) podia
+// ficar vinculado a um centro de custo de outra empresa.
+test('M6-NOVO-13: createBudgetLine recusa costCenterId que pertence a outra empresa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const [[otherCompanyRow]] = await sequelize.query(
+      'SELECT id, group_id AS "groupId" FROM core.companies WHERE id != :companyId LIMIT 1',
+      { replacements: { companyId: tenant.companyId }, transaction }
+    );
+    if (!otherCompanyRow) return; // ambiente sem segunda empresa semeada — nada a testar aqui.
+
+    const { CostCenter } = require('../src/models');
+    let costCenterOfOtherCompanyId;
+    await sequelize.query('SET LOCAL app.company_id = :otherCompanyId', { replacements: { otherCompanyId: otherCompanyRow.id }, transaction });
+    await sequelize.query('SET LOCAL app.group_id = :otherGroupId', { replacements: { otherGroupId: otherCompanyRow.groupId }, transaction });
+    const costCenterOfOtherCompany = await CostCenter.create(
+      { groupId: otherCompanyRow.groupId, companyId: otherCompanyRow.id, code: `CC-OTHER-${uniqueSuffix()}`, name: 'Centro de custo de outra empresa' },
+      { transaction }
+    );
+    costCenterOfOtherCompanyId = costCenterOfOtherCompany.id;
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+
+    const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra cost-center cross-company ${uniqueSuffix()}` }), tenant.userId, transaction);
+
+    await assert.rejects(
+      () => budgetLinesService.createBudgetLine(project.id, withTenant({ category: 'X', plannedAmount: 100, costCenterId: costCenterOfOtherCompanyId }), tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'COST_CENTER_COMPANY_MISMATCH');
+        return true;
+      }
+    );
+  });
+});
+
 // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): createBudget nunca
 // comparava project.companyId/groupId com companyId/groupId do payload. RLS já bloqueia
 // cross-COMPANY (linha nem fica visível), mas cross-GROUP dentro da MESMA empresa não era

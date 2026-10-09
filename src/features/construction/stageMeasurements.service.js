@@ -13,6 +13,7 @@ const { getProjectStage } = require('./projectStages.service');
 const { getNotDonePredecessors } = require('./stageDependencies.service');
 const financialEntriesService = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): a validação transversal "centro de custo obrigatório para despesa" virou
 // fail-closed em createFinancialEntry — o fallback previsto no comentário abaixo (medição sem
@@ -151,6 +152,7 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
   if (stage.companyId !== companyId || stage.groupId !== groupId) {
     throw AppError.badRequest('Esta etapa não pertence à empresa/grupo informado.', 'STAGE_MEASUREMENT_STAGE_COMPANY_MISMATCH');
   }
+  await assertCostCenterBelongsToCompany(costCenterId, companyId, transaction);
 
   const measurement = await StageMeasurement.create(
     {
