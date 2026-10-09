@@ -20,7 +20,11 @@ async function createBudget(projectId, payload, actorUserId, transaction) {
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'BUDGET_VALIDATION');
   }
-  const project = await Project.findByPk(projectId, { transaction });
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 16, Frente A, 09/10/2026): lock pessimista na
+  // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado
+  // em projects.service.js#removeProject) — sem isso, um projeto podia ser excluído enquanto
+  // este create ainda estava em voo, deixando um Budget órfão apontando pra um Project excluído.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): nunca comparava
   // project.companyId/groupId com companyId/groupId do payload — dependia só do RLS, sem

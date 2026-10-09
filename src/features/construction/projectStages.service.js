@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { ProjectStage } = require('../../models');
+const { ProjectStage, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishStageCompleted } = require('./constructionEvents.service');
@@ -68,6 +68,17 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
   assertValidDateRange(startsAt, endsAt);
   const numericPlannedPct = assertValidPlannedPct(plannedPct);
   const numericPlannedCost = assertValidPlannedCost(plannedCost);
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 16, Frente A, 09/10/2026): createProjectStage
+  // nunca buscava o Project — nem validava companyId/groupId cross-field (mesma classe de bug
+  // já corrigida em createBudget/createMaintenanceCase/createChangeOrder), nem tomava lock
+  // pessimista na linha do Project, serializando contra removeProject concorrente (ver
+  // comentário detalhado em projects.service.js#removeProject).
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  if (project.companyId !== companyId || project.groupId !== groupId) {
+    throw AppError.badRequest('Esta obra não pertence à empresa/grupo informado.', 'PROJECT_STAGE_PROJECT_COMPANY_MISMATCH');
+  }
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): sequence ia direto
   // pro create sem checar outras etapas da mesma obra — duas etapas podiam ficar com o MESMO

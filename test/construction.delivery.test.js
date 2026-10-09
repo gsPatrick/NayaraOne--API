@@ -410,3 +410,70 @@ test('removeProject: exclui normalmente obra sem nenhum vínculo (etapa/orçamen
     );
   });
 });
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 16, Frente A — concorrência real, 09/10/2026):
+// nem removeProject nem createBudget tomavam lock pessimista na linha do Project — a contagem
+// de dependentes do remove e o insert do create corriam sem nenhuma serialização entre si.
+// Confirmado empiricamente (duas transações commitadas) ANTES do fix: ambos tinham sucesso,
+// deixando o projeto soft-deletado com um Budget vivo e órfão apontando pra ele. Concorrência
+// real precisa de transações COMMITADAS (duas conexões), mesmo padrão de M6-67.
+test('removeProject: concorrente com createBudget — não pode excluir a obra se um orçamento foi criado antes do commit (lock pessimista)', async () => {
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { Project: ProjectModel, Budget: BudgetModel } = require('../src/models');
+
+  const projectId = await withCommitted(async (t) => {
+    const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra concorrencia remove ${uniqueSuffix()}` }), tenant.userId, t);
+    return project.id;
+  });
+
+  try {
+    // Transação A: cria o Budget, mas segura o lock (pg_sleep ANTES do commit) para garantir
+    // que a transação B (remove) realmente concorra com o lock ainda aberto.
+    const results = await Promise.allSettled([
+      withCommitted(async (t) => {
+        const budget = await budgetsService.createBudget(projectId, withTenant({}), tenant.userId, t);
+        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        return budget;
+      }),
+      (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
+      })(),
+    ]);
+
+    const [budgetResult, removeResult] = results;
+    assert.equal(budgetResult.status, 'fulfilled', 'a criação do orçamento deve ter sucesso');
+    assert.equal(
+      removeResult.status,
+      'rejected',
+      'a exclusão concorrente deve esperar o lock e então ver o orçamento já criado — não pode ter sucesso'
+    );
+    assert.equal(removeResult.reason.code, 'PROJECT_DELETE_HAS_DEPENDENTS');
+
+    await withCommitted(async (t) => {
+      const projectStillExists = await ProjectModel.findByPk(projectId, { transaction: t });
+      assert.ok(projectStillExists, 'a obra não pode ter sido excluída — o orçamento criado precisa continuar vinculado a uma obra viva');
+      const budgets = await BudgetModel.findAll({ where: { projectId }, transaction: t });
+      assert.equal(budgets.length, 1, 'o orçamento criado precisa continuar apontando para uma obra não excluída');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await BudgetModel.destroy({ where: { projectId }, transaction: t, force: true });
+      await ProjectModel.destroy({ where: { id: projectId }, transaction: t, force: true });
+    });
+  }
+});

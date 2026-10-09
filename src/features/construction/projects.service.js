@@ -590,7 +590,16 @@ async function closeProjectWarranty(id, actorUserId, transaction) {
 // obra), bloqueia a exclusão fail-closed enquanto existir qualquer etapa, orçamento ou chamado
 // de garantia vinculado — nunca deixa órfão vivo.
 async function removeProject(id, actorUserId, transaction) {
-  const project = await getProject(id, transaction);
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 16, Frente A — concorrência real,
+  // 09/10/2026): nem removeProject nem createBudget/createMaintenanceCase/createProjectStage
+  // tomavam lock pessimista na linha do Project — contagem de dependentes sem lock de nenhum
+  // dos dois lados. Confirmado empiricamente (duas transações commitadas): removeProject e um
+  // createBudget concorrente no MESMO projectId ambos tinham sucesso, deixando o projeto
+  // soft-deletado com um Budget vivo e órfão apontando pra ele. Agora remove e os 3 creates de
+  // filhos diretos travam a mesma linha do Project antes de contar/inserir, serializando a
+  // concorrência entre si.
+  const project = await Project.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
 
   const [stageCount, budgetCount, warrantyCaseCount] = await Promise.all([
     ProjectStage.count({ where: { projectId: id }, transaction }),

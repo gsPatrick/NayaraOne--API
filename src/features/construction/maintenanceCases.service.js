@@ -193,7 +193,10 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
     throw AppError.badRequest('Este imóvel não pertence à empresa informada.', 'MAINTENANCE_CASE_PROPERTY_COMPANY_MISMATCH');
   }
   if (projectId) {
-    const project = await Project.findByPk(projectId, { transaction });
+    // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 16, Frente A, 09/10/2026): lock pessimista
+    // na linha do Project, serializando contra removeProject concorrente (ver comentário
+    // detalhado em projects.service.js#removeProject).
+    const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
     if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
     if (project.companyId !== companyId) {
       throw AppError.badRequest('Esta obra não pertence à empresa informada.', 'MAINTENANCE_CASE_PROJECT_COMPANY_MISMATCH');
