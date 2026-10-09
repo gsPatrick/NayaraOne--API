@@ -228,6 +228,33 @@ uma medição 100% representativa da meta contratual, o ideal é rodar este mesm
 de uma instância no mesmo provedor da API de produção — isso fica registrado como o próximo
 passo real para fechar com certeza esse gate, não escondido atrás do resultado parcial acima.
 
+## GATE-DB-09 — status honesto e plano de otimização (DB-TS-015)
+
+**GATE-DB-09** ("Consultas críticas dentro das metas de performance") **ainda não está
+fechado** para `listProjects` e `listStageMeasurements` sob o volume testado (300k+/308k
+linhas), medido a partir desta máquina de desenvolvimento. `listDailyReports` chegou perto
+(774ms). Não escondemos isso atrás da melhoria de 18,5x — a meta de 300ms não foi atingida.
+
+Plano de otimização (DB-TS-015: "Metas p95 atendidas **ou plano de otimização**"):
+
+1. **Medir a partir de um ambiente co-localizado com o banco** (mesma região/provedor da API
+   de produção, não um notebook de desenvolvimento) — passo necessário antes de qualquer nova
+   otimização de código, porque a evidência atual (EXPLAIN ANALYZE) já mostra que o SQL em si
+   roda em 3-106ms; o que falta fechar é a parcela de rede, que só se resolve/mede
+   corretamente no ambiente real.
+2. **Paginar `listStageMeasurements`** (não feito nesta rodada — filtra versões superadas em
+   memória, precisa do mesmo tratamento cuidadoso já aplicado em `listDailyReports`: buscar só
+   os ids superados primeiro, depois paginar no banco).
+3. **Pool de conexões mais agressivo / keep-alive**, para amortizar o custo de abrir conexão
+   nova por requisição quando a latência de rede for o gargalo confirmado.
+4. **Cache de leitura de curta duração** (ex. 5-10s) para a listagem de obras da empresa, se o
+   p95 real em produção (medido pelo passo 1) ainda não bater a meta — último recurso, depois
+   de esgotar as otimizações estruturais acima.
+
+Este plano fica registrado como o caminho para fechar GATE-DB-09 de forma definitiva — o
+trabalho desta rodada (paginação + redução de round-trip) já é uma melhoria real e mensurável
+(18,5x), não a solução completa.
+
 ## Incidente no cleanup (relevante para quem reproduzir o teste)
 
 O `DELETE` de `daily_reports` e, em seguida, o de `stage_measurements` ficaram **extremamente

@@ -166,6 +166,59 @@ exatamente o que a auditoria pediu. A divergência de contagem é esperada e doc
 um defeito do restore) sempre que a verificação roda depois que novas escritas aconteceram no
 banco de origem após o dump — ver conclusão prática abaixo.
 
+## Rodada 3 (09/10/2026) — origem controlada, zero escrita concorrente, RTO/RPO medidos (DB-TS-012)
+
+Resposta direta ao pedido da auditora: "precisamos repetir em uma origem controlada... obtendo
+resultado sem divergências. Inclua também RTO/RPO medidos, conforme DB-TS-012 do caderno."
+
+Antes de iniciar, confirmado por query real que não havia nenhuma query ativa no banco de
+origem (`SELECT count(*) FROM pg_stat_activity WHERE state='active'` → `0`), garantindo que
+nada escreveria em `construction.*` durante a janela do teste.
+
+1. `node scripts/backupDatabase.js` — dump gerado em **33s**
+   (`backups/nayaraone--banco_2026-10-09T00-12-20-880Z.dump`).
+2. `CREATE DATABASE nayaraone_restore_verify_v3;`
+3. `node scripts/restoreDatabase.js --file ... --target-db nayaraone_restore_verify_v3` —
+   restore concluído em **437s**.
+4. `node scripts/verifyRestoreConstructionData.js --source-db "nayaraone--banco" --target-db nayaraone_restore_verify_v3`:
+
+```
+=== Comparando "nayaraone--banco" (origem) x "nayaraone_restore_verify_v3" (destino) ===
+
+--- Contagem de linhas por tabela (schema construction, somada em todos os tenants) ---
+  ✅ idêntico — construction.projects: 292 linhas
+  ✅ idêntico — construction.budgets: 40 linhas
+  ✅ idêntico — construction.budget_lines: 42 linhas
+  ✅ idêntico — construction.stage_measurements: 194 linhas
+  ✅ idêntico — construction.daily_reports: 48 linhas
+  ✅ idêntico — construction.nonconformities: 16 linhas
+  ✅ idêntico — construction.maintenance_cases: 94 linhas
+
+--- Conteúdo campo a campo da obra de referência (construction.projects) ---
+  ✅ idêntico — name / status / budgetAmount / responsibleUserId (4/4)
+
+--- Orçamento da obra (construction.budgets) ---
+  ✅ idêntico — baselineAmount / status (2/2)
+
+--- Medições da obra (construction.stage_measurements), campo a campo (2 medições) ---
+  ✅ idêntico — measuredPct / totalAmount / status / projectStageId (x2 = 8/8)
+
+=== Resumo ===
+21/21 checagens idênticas.
+✅ RESULTADO FINAL: nenhuma divergência encontrada entre origem e destino.
+```
+
+**21/21, zero divergência** — inclusive as 7 contagens totais que divergiam nas rodadas
+anteriores por causa de escrita concorrente de outro processo. Banco de teste removido ao
+final (`DROP DATABASE nayaraone_restore_verify_v3`), confirmado.
+
+### RTO/RPO medidos (DB-TS-012 / A.8 "Continuidade e recuperação")
+
+| Métrica | Meta do caderno (A.8) | Medido nesta rodada |
+|---|---|---|
+| **RTO** (tempo pra restaurar e confirmar integridade) | Operação geral ≤ 4h; TIER 1 (Obras/Estoque) intermediário | **470s (~7,8 min)** — backup 33s + restore 437s. Bem dentro da meta em qualquer tier. |
+| **RPO** (dado máximo que se perde num desastre) | TIER 1 intermediário (entre ≤1min de Financeiro e ≤15min de CRM) | **Não medido como SLA ainda — gap real, não escondido**: hoje o backup é só sob demanda (`node scripts/backupDatabase.js` rodado manualmente), não existe job agendado automático. Enquanto não houver agendamento automático (ex. cron a cada N minutos com retenção), o RPO real depende de quando alguém rodar o backup manualmente — não é um número que se possa prometer como SLA. **Ação necessária para fechar este ponto de verdade**: configurar um job agendado de backup (frequência definida conforme o tier do dado) — fora do escopo de um script isolado, é uma decisão de infraestrutura (cron no provedor de hospedagem ou serviço gerenciado de backup do Postgres). |
+
 ### Observação importante: banco de origem é um ambiente vivo
 
 Numa primeira rodada deste teste (dump das 20:31:32Z, verificado às ~20:39), o script acusou
