@@ -12,6 +12,8 @@ const {
   LossRecord,
   MaintenanceCase,
   WarrantyAction,
+  InventoryMovement,
+  InventoryItem,
 } = require('../../models');
 const { getTeamAndMaterialByActionIds } = require('./warrantyActionTeamMaterialColumns');
 
@@ -83,8 +85,31 @@ async function getConstructionDashboard(filters, transaction) {
   );
   const approvedChangesTotal = changeOrders.reduce((acc, c) => acc + toNumber(c.budgetImpact), 0);
   const actualFinancialCostTotal = settledEntries.reduce((acc, e) => acc + toNumber(e.amount), 0);
-  const forecastToCompleteTotal = Math.max(committedCostTotal + approvedChangesTotal - actualFinancialCostTotal, 0);
-  const projectedTotalCostTotal = round2(actualFinancialCostTotal + forecastToCompleteTotal);
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 5, Frente C, 09/10/2026): este agregado
+  // calculava forecastToComplete/projectedTotalCost/projectedMargin SEM consumedInventoryCost,
+  // diferente da fórmula canônica em projectHealth.service.js#computeMarginProjection (que soma
+  // actualFinancialCost + consumedInventoryCost em realizedCost). Para qualquer obra com consumo
+  // de estoque real, o painel agregado (Centro de Comando) subestimava o custo total e inflava
+  // a margem projetada exibida, divergindo do drill-down por obra (getProjectHealth) — viés
+  // sistemático de ocultar prejuízo por consumo de estoque no agregado.
+  const inventoryMovements = projectIds.length
+    ? await InventoryMovement.findAll({ where: { projectId: { [Op.in]: projectIds }, movementType: { [Op.in]: ['OUT', 'RETURN'] } }, transaction })
+    : [];
+  const inventoryItemIds = [...new Set(inventoryMovements.map((m) => m.inventoryItemId))];
+  const inventoryItems = inventoryItemIds.length
+    ? await InventoryItem.findAll({ where: { id: { [Op.in]: inventoryItemIds } }, transaction })
+    : [];
+  const inventoryCostById = new Map(inventoryItems.map((i) => [i.id, toNumber(i.averageCost)]));
+  const consumedInventoryCostTotal = inventoryMovements.reduce((acc, m) => {
+    const unitCost = inventoryCostById.get(m.inventoryItemId) || 0;
+    const sign = m.movementType === 'RETURN' ? -1 : 1;
+    return acc + sign * toNumber(m.quantity) * unitCost;
+  }, 0);
+
+  const realizedCostTotal = actualFinancialCostTotal + consumedInventoryCostTotal;
+  const forecastToCompleteTotal = Math.max(committedCostTotal + approvedChangesTotal - realizedCostTotal, 0);
+  const projectedTotalCostTotal = round2(realizedCostTotal + forecastToCompleteTotal);
   const marginBudgetBaseTotal = committedCostTotal + approvedChangesTotal;
   const projectedMarginTotal = round2(marginBudgetBaseTotal - projectedTotalCostTotal);
   const projectedMarginPct = marginBudgetBaseTotal > 0 ? round2((projectedMarginTotal / marginBudgetBaseTotal) * 100) : null;
@@ -187,6 +212,7 @@ async function getConstructionDashboard(filters, transaction) {
       approvedChangesTotal: round2(approvedChangesTotal),
       committedCostTotal: round2(committedCostTotal),
       actualFinancialCostTotal: round2(actualFinancialCostTotal),
+      consumedInventoryCostTotal: round2(consumedInventoryCostTotal),
       forecastToCompleteTotal: round2(forecastToCompleteTotal),
       projectedTotalCostTotal,
       projectedMarginTotal,

@@ -92,6 +92,68 @@ test('dashboard: getConstructionDashboard agrega baseline/committed de MÚLTIPLA
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 5, Frente C, 09/10/2026): o agregado calculava
+// forecastToCompleteTotal/projectedTotalCostTotal/projectedMarginTotal SEM consumedInventoryCost,
+// diferente da fórmula canônica em projectHealth.service.js#computeMarginProjection — para obra
+// com consumo de estoque real, o painel agregado subestimava custo e inflava margem exibida.
+test('dashboard: projectedMarginTotal/projectedTotalCostTotal consideram consumedInventoryCost (mesma fórmula do drill-down por obra)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { InventoryItem, InventoryLocation } = require('../src/models');
+    const inventoryMovementsService = require('../src/features/inventory/movements.service');
+
+    await marginRulesService.createMarginRule(withTenant({ minMarginPct: 10 }), tenant.userId, transaction);
+
+    const suffix = uniqueSuffix();
+    const project = await projectsService.createProject(withTenant({ name: `Dash Obra Estoque ${suffix}` }), tenant.userId, transaction);
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(project.id, withTenant({ category: 'X', plannedAmount: 1000, budgetId: budget.id }), tenant.userId, transaction);
+    await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+
+    const location = await InventoryLocation.create(
+      withTenant({ name: `Dash Deposito ${suffix}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }),
+      { transaction }
+    );
+    const item = await InventoryItem.create(
+      withTenant({ name: `Dash Cimento ${suffix}`, unitOfMeasure: 'saco', itemType: 'CONSUMABLE', averageCost: 30, allowNegativeStock: true, createdBy: tenant.userId, updatedBy: tenant.userId }),
+      { transaction }
+    );
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 100, destinationLocationId: location.id }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+    // 45 sacos a R$30 = R$1350 consumidos pela obra — mais do que o committedCost (1000),
+    // exatamente o cenário que expõe o viés: sem consumedInventoryCost, forecastToComplete
+    // zera (Math.max(1000-0,0)=1000... mas projectedTotalCost ficaria só 0, inflando a margem).
+    await inventoryMovementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      { userId: tenant.userId, canApprove: true },
+      transaction
+    );
+
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(health.consumedInventoryCost, 1350);
+    assert.equal(health.projectedTotalCost, 1350, 'drill-down por obra: custo projetado já reflete o consumo de estoque');
+    assert.equal(health.projectedMargin, -350, 'drill-down por obra: margem negativa real (consumiu 1350 de um orçado de 1000)');
+
+    const dashboard = await getConstructionDashboard({ groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
+    assert.ok(
+      dashboard.obras.consumedInventoryCostTotal >= 1350,
+      'consumedInventoryCostTotal do painel agregado precisa, no mínimo, incluir o consumo de estoque desta obra'
+    );
+    // Prova de que a fórmula do agregado está correta e não apenas "exposta sem efeito": a
+    // margem projetada total não pode estar inflada a ponto de ignorar o estoque consumido —
+    // ou seja, o custo total projetado agregado precisa ser >= realizedCost desta obra sozinha
+    // (actualFinancialCost=0 + consumedInventoryCost=1350), senão o agregado estaria
+    // subestimando o custo real da empresa.
+    assert.ok(
+      dashboard.obras.projectedTotalCostTotal >= 1350,
+      'projectedTotalCostTotal do painel agregado precisa refletir o consumo de estoque desta obra, não só o custo financeiro lançado'
+    );
+  });
+});
+
 test('dashboard: posObra agrega chamados de garantia de MÚLTIPLAS obras e quebra recorrência por causa/equipe/material', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
