@@ -24,6 +24,7 @@ module.exports = (sequelize) => {
       budgetImpact: { type: DataTypes.DECIMAL(18, 2), allowNull: false, field: 'budget_impact' },
       scheduleImpactDays: { type: DataTypes.INTEGER, allowNull: true, field: 'schedule_impact_days' },
       evidenceFileIds: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [], field: 'evidence_file_ids' },
+      idempotencyKey: { type: DataTypes.STRING(255), allowNull: true, field: 'idempotency_key' },
       status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
       decidedBy: { type: DataTypes.UUID, allowNull: true, field: 'decided_by' },
       decidedAt: { type: DataTypes.DATE, allowNull: true, field: 'decided_at' },

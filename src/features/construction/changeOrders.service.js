@@ -24,13 +24,23 @@ function assertEvidenceFileIds(evidenceFileIds) {
 }
 
 async function createChangeOrder(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, reasonCode, description, budgetImpact, scheduleImpactDays, evidenceFileIds } = payload;
+  const { groupId, companyId, reasonCode, description, budgetImpact, scheduleImpactDays, evidenceFileIds, idempotencyKey } = payload;
   if (!groupId || !companyId || !reasonCode || !description || budgetImpact === undefined || budgetImpact === null) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "reasonCode", "description" e "budgetImpact" são obrigatórios.',
       'CHANGE_ORDER_VALIDATION'
     );
   }
+  // BUG REAL CORRIGIDO (auditoria "ciclos até secar", Ciclo 3, Frente C — idempotência faltante,
+  // 09/10/2026): retry de rede/duplo-clique no formulário de Change Order criava 2 registros
+  // idênticos em PENDING_APPROVAL; se ambos fossem aprovados, budgetImpact era aplicado 2x em
+  // budget.baselineAmount/totalAmount e project.budgetAmount (dano financeiro real). Mesmo
+  // padrão já usado em materialRequests/stageMeasurements/dailyReports/lossRecords.
+  if (!idempotencyKey) {
+    throw AppError.badRequest('"idempotencyKey" é obrigatória para criar um Change Order.', 'CHANGE_ORDER_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const existing = await ChangeOrder.findOne({ where: { companyId, idempotencyKey }, transaction });
+  if (existing) return existing;
   const numericImpact = Number(budgetImpact);
   // FIX (auditoria Marco 6, ciclo 1 novo): só checava Number.isNaN — "budgetImpact": "Infinity"
   // não é NaN, passava o guard e, ao aprovar o Change Order, corrompia pra sempre
@@ -71,6 +81,7 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
       budgetImpact: numericImpact,
       scheduleImpactDays: scheduleImpactDays != null ? Number(scheduleImpactDays) : null,
       evidenceFileIds: assertEvidenceFileIds(evidenceFileIds),
+      idempotencyKey,
       status: 'PENDING_APPROVAL',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
