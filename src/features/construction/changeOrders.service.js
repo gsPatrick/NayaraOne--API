@@ -39,12 +39,23 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
   if (!Number.isFinite(numericImpact)) {
     throw AppError.badRequest('"budgetImpact" deve ser numérico.', 'CHANGE_ORDER_VALIDATION');
   }
-  if (
-    scheduleImpactDays !== undefined &&
-    scheduleImpactDays !== null &&
-    !Number.isFinite(Number(scheduleImpactDays))
-  ) {
-    throw AppError.badRequest('"scheduleImpactDays" deve ser numérico.', 'CHANGE_ORDER_VALIDATION');
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F4): o Caderno (p.163)
+  // lista "scheduleImpactDays" e "evidenceFileIds" no OBJETO OBRIGATÓRIO do Change Order, mas
+  // o código aceitava ambos ausentes/vazios sem bloquear. Decisão de engenharia: exige que
+  // scheduleImpactDays seja informado explicitamente (pode ser 0 — "sem impacto de prazo" é
+  // uma resposta válida, "não informado" não é) e que evidenceFileIds tenha pelo menos 1
+  // arquivo (todo aditivo precisa de alguma evidência que sustente o motivo/impacto alegado).
+  if (scheduleImpactDays === undefined || scheduleImpactDays === null || !Number.isFinite(Number(scheduleImpactDays))) {
+    throw AppError.badRequest(
+      '"scheduleImpactDays" é obrigatório e precisa ser numérico (use 0 quando não houver impacto de prazo).',
+      'CHANGE_ORDER_VALIDATION'
+    );
+  }
+  if (!Array.isArray(evidenceFileIds) || evidenceFileIds.length === 0) {
+    throw AppError.badRequest(
+      '"evidenceFileIds" é obrigatório e precisa ter pelo menos 1 arquivo de evidência sustentando o aditivo.',
+      'CHANGE_ORDER_VALIDATION'
+    );
   }
 
   const project = await Project.findByPk(projectId, { transaction });

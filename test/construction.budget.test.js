@@ -167,7 +167,7 @@ test('M6-33/M6-82: Change Order aprovado altera o baseline do orçamento já con
 
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -199,7 +199,7 @@ test('M6-42: projectedMargin não conta o Change Order aprovado duas vezes (base
     const { project, budget } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -352,7 +352,7 @@ test('Change Order não pode ser aprovado se a obra não tem orçamento APPROVED
     );
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'X', description: 'desc', budgetImpact: 10 }),
+      withTenant({ reasonCode: 'X', description: 'desc', budgetImpact: 10, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -371,7 +371,7 @@ test('Change Order rejeitado não altera o orçamento', async () => {
     const { project, budget } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'X', description: 'desc', budgetImpact: 999 }),
+      withTenant({ reasonCode: 'X', description: 'desc', budgetImpact: 999, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -664,7 +664,7 @@ test('M6-NOVO-2: createChangeOrder rejeita budgetImpact "Infinity" (categoria 14
       () =>
         changeOrdersService.createChangeOrder(
           project.id,
-          withTenant({ reasonCode: 'ESCOPO', description: 'Teste Infinity', budgetImpact: 'Infinity' }),
+          withTenant({ reasonCode: 'ESCOPO', description: 'Teste Infinity', budgetImpact: 'Infinity', scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
           tenant.userId,
           transaction
         ),
@@ -674,6 +674,55 @@ test('M6-NOVO-2: createChangeOrder rejeita budgetImpact "Infinity" (categoria 14
         return true;
       }
     );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F4): o Caderno (p.163)
+// lista scheduleImpactDays e evidenceFileIds no "objeto obrigatório" do Change Order, mas o
+// código aceitava ambos ausentes/vazios sem bloquear.
+test('M6-NOVO-4: createChangeOrder exige scheduleImpactDays (pode ser 0) e evidenceFileIds não vazio', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+
+    await assert.rejects(
+      () =>
+        changeOrdersService.createChangeOrder(
+          project.id,
+          withTenant({ reasonCode: 'ESCOPO', description: 'Sem impacto de prazo informado', budgetImpact: 100, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'CHANGE_ORDER_VALIDATION');
+        return true;
+      }
+    );
+
+    await assert.rejects(
+      () =>
+        changeOrdersService.createChangeOrder(
+          project.id,
+          withTenant({ reasonCode: 'ESCOPO', description: 'Sem evidência', budgetImpact: 100, scheduleImpactDays: 0, evidenceFileIds: [] }),
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'CHANGE_ORDER_VALIDATION');
+        return true;
+      }
+    );
+
+    // Controle positivo: com os dois campos preenchidos (scheduleImpactDays=0 é uma resposta
+    // válida — "sem impacto de prazo"), a criação funciona normalmente.
+    const changeOrder = await changeOrdersService.createChangeOrder(
+      project.id,
+      withTenant({ reasonCode: 'ESCOPO', description: 'Aditivo completo', budgetImpact: 100, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
+      tenant.userId,
+      transaction
+    );
+    assert.equal(changeOrder.status, 'PENDING_APPROVAL');
   });
 });
 
@@ -970,7 +1019,7 @@ test('ENFORCEMENT: enforcementMode=BLOCK recusa decideChangeOrder(APPROVE) quand
 
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -1001,7 +1050,7 @@ test('ENFORCEMENT: enforcementMode=ALERT permite decideChangeOrder(APPROVE) norm
 
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
@@ -1027,7 +1076,7 @@ test('ENFORCEMENT: enforcementMode=BLOCK não bloqueia decideChangeOrder(APPROVE
 
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
-      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250 }),
+      withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
       tenant.userId,
       transaction
     );
