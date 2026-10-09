@@ -44,6 +44,16 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
       lock: transaction ? transaction.LOCK.UPDATE : undefined,
     });
     if (!budget) throw AppError.notFound('Orçamento não encontrado.', 'BUDGET_NOT_FOUND');
+    // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): nunca comparava
+    // budget.projectId com o projectId do contexto da chamada (parâmetro de rota) — era possível
+    // criar uma BudgetLine na Obra A apontando pra um budgetId que pertence à Obra B, sem erro,
+    // aparecendo listada dentro da Obra A via listBudgetLines (confusão de orçamento entre obras).
+    if (budget.projectId !== projectId) {
+      throw AppError.badRequest(
+        'Este orçamento pertence a outra obra — não é possível vincular uma linha de custo a um orçamento de obra diferente.',
+        'BUDGET_LINE_BUDGET_PROJECT_MISMATCH'
+      );
+    }
     if (budget.status === 'APPROVED') {
       throw AppError.conflict(
         'Este orçamento já está aprovado (baseline imutável) — novas linhas de custo só via Change Order aprovado.',

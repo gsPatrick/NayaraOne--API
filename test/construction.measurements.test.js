@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
+const stageDependenciesService = require('../src/features/construction/stageDependencies.service');
 const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
 const projectHealthService = require('../src/features/construction/projectHealth.service');
 const AppError = require('../src/utils/AppError');
@@ -457,6 +458,57 @@ test('M6-NOVO-6: decideStageMeasurement recusa aprovar medição com measuredPct
 
     await stage.reload({ transaction });
     assert.equal(Number(stage.measuredPct), 80, 'measuredPct da etapa não pode ter regredido após a tentativa recusada');
+  });
+});
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): createProjectStage
+// aceitava sequence duplicado entre etapas da mesma obra, quebrando a ordenação de
+// listProjectStages.
+test('M6-NOVO-8: createProjectStage recusa sequence duplicado na mesma obra; sem informar sequence, auto-incrementa', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await projectsService.createProject({ groupId: tenant.groupId, companyId: tenant.companyId, name: `Obra sequence ${suffix}` }, tenant.userId, transaction);
+
+    const stage1 = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
+    const stage2 = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
+    assert.notEqual(stage1.sequence, stage2.sequence, 'sem informar sequence, cada etapa nova deve auto-incrementar, não colidir');
+
+    await assert.rejects(
+      () => projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Alvenaria', sequence: stage1.sequence }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'PROJECT_STAGE_SEQUENCE_DUPLICATE');
+        return true;
+      }
+    );
+  });
+});
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): a conclusão
+// automática de etapa (aprovar medição 100%) nunca checava se as etapas predecessoras
+// (StageDependency) já estavam DONE — tornava a dependência só decorativa.
+test('M6-NOVO-9: aprovar medição de 100% NÃO completa a etapa automaticamente se a predecessora ainda não está DONE', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await projectsService.createProject({ groupId: tenant.groupId, companyId: tenant.companyId, name: `Obra predecessora ${suffix}` }, tenant.userId, transaction);
+    const stageA = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
+    const stageB = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
+    await stageDependenciesService.createStageDependency(stageB.id, { groupId: tenant.groupId, companyId: tenant.companyId, dependsOnStageId: stageA.id }, tenant.userId, transaction);
+    assert.equal(stageA.status, 'PENDING');
+
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stageB.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 100, measuredAt: '2026-09-01', items: [{ description: 'Alvenaria completa', quantity: 1, unitPrice: 9000 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+    await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+
+    await stageB.reload({ transaction });
+    assert.equal(Number(stageB.measuredPct), 100, 'measuredPct precisa refletir a medição aprovada mesmo sem completar a etapa');
+    assert.notEqual(stageB.status, 'DONE', 'etapa não pode virar DONE automaticamente enquanto a predecessora não estiver DONE');
   });
 });
 

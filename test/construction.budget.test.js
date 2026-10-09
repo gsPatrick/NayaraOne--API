@@ -656,6 +656,26 @@ test('M6-NOVO-1: createBudgetLine rejeita plannedAmount "Infinity" (categoria 14
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): createBudgetLine
+// nunca comparava budget.projectId com o projectId do contexto — era possível criar uma linha
+// na Obra A apontando pra um budgetId que pertence à Obra B.
+test('M6-NOVO-7: createBudgetLine recusa budgetId que pertence a outra obra', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectA = await projectsService.createProject(withTenant({ name: `HOMO QA Obra A cross-budget ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const projectB = await projectsService.createProject(withTenant({ name: `HOMO QA Obra B cross-budget ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const budgetB = await budgetsService.createBudget(projectB.id, withTenant({}), tenant.userId, transaction);
+
+    await assert.rejects(
+      () => budgetLinesService.createBudgetLine(projectA.id, withTenant({ category: 'X', plannedAmount: 100, budgetId: budgetB.id }), tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'BUDGET_LINE_BUDGET_PROJECT_MISMATCH');
+        return true;
+      }
+    );
+  });
+});
+
 test('M6-NOVO-2: createChangeOrder rejeita budgetImpact "Infinity" (categoria 14 do catálogo)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });

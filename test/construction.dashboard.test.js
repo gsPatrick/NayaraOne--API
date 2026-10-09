@@ -228,7 +228,20 @@ test('dashboard: posObra agrega chamados de garantia de MÚLTIPLAS obras e quebr
       assert.ok(materialEntry, 'recurrenceByMaterial precisa conter o material específico criado pelo teste (item 2)');
       assert.equal(materialEntry.count, 1);
     } else {
-      assert.deepEqual(dashboard.posObra.recurrenceByTeam, dashboard.posObra.recurrenceByTeam);
+      // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente A — teste mente, 09/10/2026):
+      // comparar a variável contra ela mesma é tautológico — passa sempre, mesmo se
+      // recurrenceByTeam/Material estivessem quebrados (undefined, formato errado). Sem a
+      // coluna, getTeamAndMaterialByActionIds fica fail-open (Map vazio) e o agregador usa a
+      // chave 'DESCONHECIDA' pra toda ação — confirma essa estrutura real, não uma tautologia.
+      assert.ok(Array.isArray(dashboard.posObra.recurrenceByTeam), 'recurrenceByTeam precisa ser um array mesmo no caminho fail-open');
+      assert.ok(Array.isArray(dashboard.posObra.recurrenceByMaterial), 'recurrenceByMaterial precisa ser um array mesmo no caminho fail-open');
+      assert.ok(
+        !dashboard.posObra.recurrenceByTeam.some((r) => r.team === teamName),
+        'sem a coluna assigned_team, a equipe específica criada pelo teste não pode aparecer nomeada no agregado'
+      );
+      const desconhecidaEntry = dashboard.posObra.recurrenceByTeam.find((r) => r.team === 'DESCONHECIDA');
+      assert.ok(desconhecidaEntry, 'sem a coluna, a ação criada pelo teste precisa cair no bucket fail-open "DESCONHECIDA"');
+      assert.ok(desconhecidaEntry.count >= 1);
     }
   });
 });

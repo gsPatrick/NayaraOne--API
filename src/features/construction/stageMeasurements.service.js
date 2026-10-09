@@ -10,6 +10,7 @@ const {
   publishStageCompleted,
 } = require('./constructionEvents.service');
 const { getProjectStage } = require('./projectStages.service');
+const { getNotDonePredecessors } = require('./stageDependencies.service');
 const financialEntriesService = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
@@ -546,7 +547,16 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
   // medida e paga. Decisão de engenharia (sem detalhe explícito na fonte sobre o gatilho exato):
   // medição 100% APROVADA é o sinal mais forte disponível de etapa fisicamente concluída.
   const stageBeforeJson = stage.toJSON();
-  const stageCompletedNow = Number(stage.measuredPct) >= 100 && stage.status !== 'DONE';
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): a conclusão
+  // automática da etapa (ciclo 4, comentário abaixo) nunca checava se as etapas predecessoras
+  // (StageDependency) já estavam DONE — era possível completar automaticamente a etapa B
+  // (medição 100% aprovada) mesmo com sua predecessora A ainda PENDING/IN_PROGRESS, tornando a
+  // dependência só decorativa. Sem predecessora pendente, segue o mesmo gatilho de sempre; com
+  // predecessora pendente, a medição/pagamento ainda é aprovado normalmente (efeito financeiro
+  // não depende disso), mas a etapa NÃO vira DONE até a predecessora concluir.
+  const wouldComplete = Number(stage.measuredPct) >= 100 && stage.status !== 'DONE';
+  const predecessorsBlocking = wouldComplete ? (await getNotDonePredecessors(stage.id, transaction)).length > 0 : false;
+  const stageCompletedNow = wouldComplete && !predecessorsBlocking;
   if (stageCompletedNow) {
     stage.status = 'DONE';
   }

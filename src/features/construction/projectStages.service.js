@@ -1,9 +1,11 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishStageCompleted } = require('./constructionEvents.service');
+const { assertPredecessorsDone } = require('./stageDependencies.service');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
 const STATUS_LABELS_PT = { PENDING: 'Pendente', IN_PROGRESS: 'Em andamento', DONE: 'Concluída' };
@@ -67,6 +69,27 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
   const numericPlannedPct = assertValidPlannedPct(plannedPct);
   const numericPlannedCost = assertValidPlannedCost(plannedCost);
 
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): sequence ia direto
+  // pro create sem checar outras etapas da mesma obra — duas etapas podiam ficar com o MESMO
+  // sequence (valor repetido informado pelo chamador), quebrando a ordenação de
+  // listProjectStages (order by sequence ASC fica indefinida entre as duplicadas). Quando o
+  // chamador não informa sequence, auto-incrementa a partir do maior já usado na obra (em vez
+  // do antigo default fixo "1", que colidia sempre que mais de uma etapa fosse criada sem
+  // informar o campo).
+  let resolvedSequence = sequence;
+  if (resolvedSequence == null) {
+    const maxSequence = await ProjectStage.max('sequence', { where: { projectId }, transaction });
+    resolvedSequence = Number.isFinite(Number(maxSequence)) ? Number(maxSequence) + 1 : 1;
+  } else {
+    const duplicateSequence = await ProjectStage.findOne({ where: { projectId, sequence: resolvedSequence }, transaction });
+    if (duplicateSequence) {
+      throw AppError.conflict(
+        `Já existe uma etapa desta obra com "sequence"=${resolvedSequence} ("${duplicateSequence.name}") — use um valor diferente.`,
+        'PROJECT_STAGE_SEQUENCE_DUPLICATE'
+      );
+    }
+  }
+
   const stage = await ProjectStage.create(
     {
       groupId,
@@ -75,7 +98,7 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
       name,
       stageCode: stageCode || null,
       plannedCost: numericPlannedCost != null ? numericPlannedCost : null,
-      sequence: sequence != null ? sequence : 1,
+      sequence: resolvedSequence,
       plannedPct: numericPlannedPct != null ? numericPlannedPct : null,
       measuredPct: null,
       status: 'PENDING',
@@ -123,7 +146,19 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost } = payload;
   const previousStatus = stage.status;
   if (name !== undefined) stage.name = name;
-  if (sequence !== undefined) stage.sequence = sequence;
+  if (sequence !== undefined && sequence !== stage.sequence) {
+    const duplicateSequence = await ProjectStage.findOne({
+      where: { projectId: stage.projectId, sequence, id: { [Op.ne]: stage.id } },
+      transaction,
+    });
+    if (duplicateSequence) {
+      throw AppError.conflict(
+        `Já existe uma etapa desta obra com "sequence"=${sequence} ("${duplicateSequence.name}") — use um valor diferente.`,
+        'PROJECT_STAGE_SEQUENCE_DUPLICATE'
+      );
+    }
+    stage.sequence = sequence;
+  }
   if (plannedPct !== undefined) stage.plannedPct = assertValidPlannedPct(plannedPct);
   if (stageCode !== undefined) stage.stageCode = stageCode;
   if (plannedCost !== undefined) stage.plannedCost = assertValidPlannedCost(plannedCost);
@@ -143,6 +178,9 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
           'PROJECT_STAGE_STATUS_TRANSITION_INVALID'
         );
       }
+    }
+    if (normalizedStatus === 'DONE' && previousStatus !== 'DONE') {
+      await assertPredecessorsDone(stage.id, transaction);
     }
     stage.status = normalizedStatus;
   }

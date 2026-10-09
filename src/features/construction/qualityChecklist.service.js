@@ -1,6 +1,6 @@
 'use strict';
 
-const { QualityChecklistItem } = require('../../models');
+const { QualityChecklistItem, ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createNonconformity } = require('./nonconformities.service');
@@ -20,6 +20,22 @@ async function createQualityItem(projectId, payload, actorUserId, transaction) {
   const normalizedCategory = category ? String(category).toUpperCase() : 'OUTROS';
   if (!CATEGORIES.includes(normalizedCategory)) {
     throw AppError.badRequest(`"category" deve ser um de: ${CATEGORIES.join(', ')}.`, 'QUALITY_ITEM_CATEGORY_INVALID');
+  }
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): projectStageId ia
+  // direto pro create sem comparar contra o projectId do contexto — um item de checklist da
+  // Obra A podia referenciar uma ProjectStage pertencente à Obra B. Esse vínculo desalinhado se
+  // propagava: ao reprovar o item, a Nonconformity aberta automaticamente herdava esse
+  // projectStageId incorreto, confundindo a etapa de origem da NC entre obras diferentes.
+  if (projectStageId) {
+    const stage = await ProjectStage.findByPk(projectStageId, { transaction });
+    if (!stage) throw AppError.notFound('Etapa não encontrada.', 'PROJECT_STAGE_NOT_FOUND');
+    if (stage.projectId !== projectId) {
+      throw AppError.badRequest(
+        'Esta etapa pertence a outra obra — não é possível vincular um item de checklist a uma etapa de obra diferente.',
+        'QUALITY_ITEM_STAGE_PROJECT_MISMATCH'
+      );
+    }
   }
 
   const checklistItem = await QualityChecklistItem.create(

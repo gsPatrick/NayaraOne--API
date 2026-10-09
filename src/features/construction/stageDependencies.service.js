@@ -133,4 +133,33 @@ async function listStageDependencies(stageId, transaction) {
   return StageDependency.findAll({ where: { stageId }, transaction });
 }
 
-module.exports = { createStageDependency, listStageDependencies, wouldCreateCycle };
+/**
+ * BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): o grafo de
+ * dependências só era validado na CRIAÇÃO da aresta (wouldCreateCycle, acima) — nada
+ * reforçava, no momento em que uma etapa é EFETIVAMENTE concluída (DONE), que suas
+ * predecessoras ("stageId depende de dependsOnStageId") já estavam DONE. Era possível aprovar
+ * uma medição de 100% (ou mover status manualmente) e completar a etapa B mesmo com sua
+ * predecessora A ainda PENDING/IN_PROGRESS, tornando a dependência só decorativa.
+ */
+async function getNotDonePredecessors(stageId, transaction) {
+  const edges = await StageDependency.findAll({ where: { stageId }, transaction });
+  if (!edges.length) return [];
+
+  const predecessors = await ProjectStage.findAll({
+    where: { id: edges.map((e) => e.dependsOnStageId) },
+    transaction,
+  });
+  return predecessors.filter((p) => p.status !== 'DONE');
+}
+
+async function assertPredecessorsDone(stageId, transaction) {
+  const notDone = await getNotDonePredecessors(stageId, transaction);
+  if (notDone.length) {
+    throw AppError.conflict(
+      `Esta etapa depende de ${notDone.length === 1 ? 'uma etapa predecessora' : `${notDone.length} etapas predecessoras`} ainda não concluída(s) (${notDone.map((p) => p.name).join(', ')}) — conclua a(s) predecessora(s) primeiro.`,
+      'PROJECT_STAGE_PREDECESSOR_NOT_DONE'
+    );
+  }
+}
+
+module.exports = { createStageDependency, listStageDependencies, wouldCreateCycle, assertPredecessorsDone, getNotDonePredecessors };

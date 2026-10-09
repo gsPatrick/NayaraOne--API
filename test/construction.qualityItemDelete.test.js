@@ -11,7 +11,9 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const AppError = require('../src/utils/AppError');
 const projectsService = require('../src/features/construction/projects.service');
+const projectStagesService = require('../src/features/construction/projectStages.service');
 const qualityChecklistService = require('../src/features/construction/qualityChecklist.service');
 const { QualityChecklistItem } = require('../src/models');
 
@@ -55,6 +57,26 @@ test('DELETE quality-items: remove com sucesso item ainda PENDING', async () => 
 
     const reloaded = await QualityChecklistItem.findByPk(item.id, { transaction });
     assert.equal(reloaded, null, 'item deve ter sido removido de fato do banco');
+  });
+});
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): createQualityItem
+// nunca comparava a ProjectStage referenciada com o projectId do contexto — um item de
+// checklist da Obra A podia referenciar uma etapa pertencente à Obra B.
+test('createQualityItem recusa projectStageId que pertence a outra obra', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectA = await projectsService.createProject(withTenant({ name: `HOMO QA Obra A cross-stage ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const projectB = await projectsService.createProject(withTenant({ name: `HOMO QA Obra B cross-stage ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const stageOfB = await projectStagesService.createProjectStage(projectB.id, withTenant({ name: 'Etapa de B' }), tenant.userId, transaction);
+
+    await assert.rejects(
+      () => qualityChecklistService.createQualityItem(projectA.id, withTenant({ item: 'Verificar prumo', projectStageId: stageOfB.id }), tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'QUALITY_ITEM_STAGE_PROJECT_MISMATCH');
+        return true;
+      }
+    );
   });
 });
 
