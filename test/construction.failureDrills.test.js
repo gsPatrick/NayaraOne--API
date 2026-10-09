@@ -53,7 +53,16 @@ after(async () => {
 // (conexão própria), necessária pra exercitar rollback/corrida de verdade (uma transação
 // `withRollbackTenantTransaction` nunca commita nada, então não serve pra provar que um
 // rollback FORÇADO no meio do caminho não deixa resíduo).
-async function withCommitted(fn) {
+// GAP REAL CORRIGIDO (flakiness real do CI, 09/10/2026): sob a concorrência altíssima do CI
+// (dezenas de arquivos de teste rodando em paralelo, cada um criando obras/regras de margem
+// para o MESMO tenant seedado), as transações COMMITADAS de verdade deste arquivo (não têm
+// rollback — ver comentário da função abaixo) colidem genuinamente com transações de outros
+// arquivos disputando os mesmos advisory locks (project_code_sequences/margin_rules), gerando
+// "deadlock detected" (40P01) real do Postgres — não é um bug de lógica, é contenção legítima
+// sob paralelismo artificial do CI (bem acima de qualquer carga real de produção). Retry
+// automático na transação inteira (não só na query) resolve, porque o deadlock aborta toda a
+// transação atual — não há nada parcial pra recuperar, só repetir do zero.
+async function withCommitted(fn, attempt = 1) {
   const t = await sequelize.transaction();
   try {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
@@ -64,6 +73,10 @@ async function withCommitted(fn) {
     return result;
   } catch (err) {
     await t.rollback();
+    const pgCode = err && err.original && err.original.code;
+    if (pgCode === '40P01' && attempt < 5) {
+      return withCommitted(fn, attempt + 1);
+    }
     throw err;
   }
 }
