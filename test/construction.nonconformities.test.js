@@ -7,6 +7,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const projectsService = require('../src/features/construction/projects.service');
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');
 const lossRecordsService = require('../src/features/construction/lossRecords.service');
+const { LossRecord } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -151,6 +152,7 @@ test('M6-29: perda de material acima da alçada exige aprovação explícita', a
         quantity: 100,
         estimatedValue: threshold + 5000,
         reason: 'Quebra no transporte do fornecedor.',
+        idempotencyKey: `loss-${uniqueSuffix()}`,
       },
       tenant.userId,
       transaction
@@ -172,11 +174,59 @@ test('M6-29: perda de material acima da alçada exige aprovação explícita', a
         quantity: 5,
         estimatedValue: Math.max(threshold - 100, 1),
         reason: 'Perda pequena de estoque.',
+        idempotencyKey: `loss-${uniqueSuffix()}`,
       },
       tenant.userId,
       transaction
     );
     assert.equal(lowValueLoss.status, 'APPROVED');
+  });
+});
+
+// BUG REAL CORRIGIDO (varredura proativa pós-auditoria externa Nayara, 09/10/2026 —
+// "idempotência obrigatória em operações reexecutáveis"): createLossRecord autoaprova perdas
+// dentro da alçada SEM nenhum humano no caminho — reenviar o mesmo lançamento por timeout/
+// retry/duplo-clique duplicava o valor de perda reportado (e a quantidade de material dado como
+// perdido), afetando margem/custo da obra. Agora idempotencyKey é obrigatória e reenviar a
+// MESMA chave devolve o registro já existente, nunca cria um segundo.
+test('createLossRecord: idempotencyKey é obrigatória, e reenviar a MESMA chave devolve o registro original (sem duplicar perda)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+
+    await assert.rejects(
+      () =>
+        lossRecordsService.createLossRecord(
+          project.id,
+          { groupId: tenant.groupId, companyId: tenant.companyId, materialDescription: 'Cimento', quantity: 3, estimatedValue: 50, reason: 'Perda em transporte.' },
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'LOSS_RECORD_IDEMPOTENCY_KEY_REQUIRED');
+        return true;
+      }
+    );
+
+    const idempotencyKey = `loss-regression-${uniqueSuffix()}`;
+    const first = await lossRecordsService.createLossRecord(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, materialDescription: 'Cimento', quantity: 3, estimatedValue: 50, reason: 'Perda em transporte.', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    const second = await lossRecordsService.createLossRecord(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, materialDescription: 'Cimento', quantity: 3, estimatedValue: 50, reason: 'Perda em transporte.', idempotencyKey },
+      tenant.userId,
+      transaction
+    );
+
+    assert.equal(second.id, first.id, 'reenviar a mesma idempotencyKey precisa devolver o registro original, nunca criar um segundo');
+
+    const allWithKey = await LossRecord.findAll({ where: { companyId: tenant.companyId, idempotencyKey }, transaction });
+    assert.equal(allWithKey.length, 1, 'só pode existir 1 registro de perda para esta idempotencyKey');
   });
 });
 
@@ -227,6 +277,7 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
         quantity: 200,
         estimatedValue: 500,
         reason: 'Quebra no manuseio da entrega.',
+        idempotencyKey: `loss-${uniqueSuffix()}`,
       },
       tenant.userId,
       transaction

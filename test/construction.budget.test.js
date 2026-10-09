@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { Company } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
@@ -321,7 +321,7 @@ test('M6-99: wastagePct abate material devolvido (RETURN), n√£o conta a perda j√
 
     const loss = await lossRecordsService.createLossRecord(
       project.id,
-      withTenant({ materialDescription: 'Cimento', quantity: 100, estimatedValue: 100, reason: 'Quebra no transporte' }),
+      withTenant({ materialDescription: 'Cimento', quantity: 100, estimatedValue: 100, reason: 'Quebra no transporte', idempotencyKey: `loss-${uniqueSuffix()}` }),
       tenant.userId,
       transaction
     );

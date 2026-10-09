@@ -41,6 +41,7 @@ module.exports = (sequelize) => {
       },
       approvedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'approved_by_user_id' },
       approvedAt: { type: DataTypes.DATE, allowNull: true, field: 'approved_at' },
+      idempotencyKey: { type: DataTypes.STRING(255), allowNull: true, field: 'idempotency_key' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

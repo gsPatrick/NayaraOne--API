@@ -53,13 +53,27 @@ async function upsertApprovalThreshold(payload, actorUserId, transaction) {
  * limite configurado (`approval_thresholds.max_auto_approve_amount`), o registro já nasce
  * APPROVED (autoaprovação). Acima do limite, nasce PENDING_APPROVAL e exige uma chamada
  * explícita a `approveLossRecord` antes de virar APPROVED — nunca autoaprova valor alto.
+ *
+ * BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-09 — mesmo padrão do achado em
+ * inventory.movements.service.js/recordMovement para ADJUSTMENT/LOSS/DISPOSAL): registrar uma
+ * perda é uma operação REEXECUTÁVEL (retry de rede/duplo-clique no mesmo lançamento manual) e,
+ * dentro da alçada, AUTOAPROVA na hora — sem nenhum humano no caminho para notar a duplicidade
+ * antes do valor entrar em totalLossValue (projectHealth.service.js/dashboard.service.js).
+ * idempotencyKey agora é obrigatória; reenvio com a mesma chave devolve o registro já criado em
+ * vez de duplicar (migration 20260101000326-add-idempotency-key-to-loss-records.js).
  */
 async function createLossRecord(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, materialDescription, quantity, estimatedValue, reason } = payload;
+  const { groupId, companyId, materialDescription, quantity, estimatedValue, reason, idempotencyKey } = payload;
   if (!groupId || !companyId || !materialDescription || quantity == null || estimatedValue == null || !reason) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "materialDescription", "quantity", "estimatedValue" e "reason" são obrigatórios.',
       'LOSS_RECORD_VALIDATION'
+    );
+  }
+  if (!idempotencyKey) {
+    throw AppError.badRequest(
+      'O campo "idempotencyKey" é obrigatório — evita duplicar o registro de perda (e sua autoaprovação) em caso de retry/duplo-clique.',
+      'LOSS_RECORD_IDEMPOTENCY_KEY_REQUIRED'
     );
   }
   if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
@@ -68,6 +82,11 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
   if (!Number.isFinite(Number(estimatedValue)) || Number(estimatedValue) < 0) {
     throw AppError.badRequest('"estimatedValue" deve ser um número maior ou igual a zero.', 'LOSS_RECORD_VALUE_INVALID');
   }
+
+  // Idempotência: reenvio do mesmo payload (ex.: retry de rede) não cria um segundo registro —
+  // devolve o já criado, mesmo padrão de recordMovement/stageMeasurements.
+  const existingByKey = await LossRecord.findOne({ where: { companyId, idempotencyKey }, transaction });
+  if (existingByKey) return existingByKey;
 
   const threshold = await getApprovalThreshold(groupId, companyId, CONTEXT_MATERIAL_LOSS, transaction);
   const withinThreshold = Number(estimatedValue) <= threshold;
@@ -85,6 +104,7 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
       status: withinThreshold ? 'APPROVED' : 'PENDING_APPROVAL',
       approvedByUserId: withinThreshold ? actorUserId || null : null,
       approvedAt: withinThreshold ? new Date() : null,
+      idempotencyKey,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
