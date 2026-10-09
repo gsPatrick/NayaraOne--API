@@ -641,6 +641,84 @@ test('warranty: removeMaintenanceCase exclui normalmente chamado sem nenhuma aç
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 15, Frente A — concorrência real, 09/10/2026):
+// removeMaintenanceCase lia o MaintenanceCase SEM lock pessimista antes de contar
+// WarrantyAction — sob READ COMMITTED, uma createWarrantyAction concorrente que já tomou o
+// lock e inseriu a ação mas ainda não comitou não era vista pelo count() do remove, que então
+// seguia adiante e soft-deletava o caso com uma ação pendurada apontando pra ele. Concorrência
+// real precisa de transações COMMITADAS (duas conexões), mesmo padrão de M6-67.
+test('warranty: removeMaintenanceCase concorrente com createWarrantyAction — não pode excluir o chamado se uma ação foi registrada antes do commit (lock pessimista)', async () => {
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { MaintenanceCase, WarrantyAction, Property: PropertyModel } = require('../src/models');
+
+  const { propertyId, warrantyCaseId } = await withCommitted(async (t) => {
+    const property = await createTestProperty(t);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Chamado para teste de corrida com remove.' },
+      tenant.userId,
+      t
+    );
+    return { propertyId: property.id, warrantyCaseId: warrantyCase.id };
+  });
+
+  try {
+    // Transação A: registra a ação, mas segura o lock (pg_sleep ANTES do commit) para garantir
+    // que a transação B (remove) realmente concorra com o lock ainda aberto.
+    const results = await Promise.allSettled([
+      withCommitted(async (t) => {
+        const action = await maintenanceCasesService.createWarrantyAction(
+          warrantyCaseId,
+          { description: 'Visita técnica concorrente com remove.', cost: 400 },
+          tenant.userId,
+          t
+        );
+        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        return action;
+      }),
+      (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return withCommitted((t) => maintenanceCasesService.removeMaintenanceCase(warrantyCaseId, tenant.userId, t));
+      })(),
+    ]);
+
+    const [actionResult, removeResult] = results;
+    assert.equal(actionResult.status, 'fulfilled', 'o registro da ação deve ter sucesso');
+    assert.equal(
+      removeResult.status,
+      'rejected',
+      'a exclusão concorrente deve esperar o lock e então ver a ação já registrada — não pode ter sucesso'
+    );
+    assert.equal(removeResult.reason.code, 'MAINTENANCE_CASE_DELETE_HAS_DEPENDENTS');
+
+    await withCommitted(async (t) => {
+      const caseStillExists = await MaintenanceCase.findByPk(warrantyCaseId, { transaction: t });
+      assert.ok(caseStillExists, 'o chamado não pode ter sido excluído — a ação registrada precisa continuar vinculada a um caso vivo');
+      const actions = await WarrantyAction.findAll({ where: { warrantyCaseId }, transaction: t });
+      assert.equal(actions.length, 1, 'a ação registrada precisa continuar apontando para um chamado não excluído');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await WarrantyAction.destroy({ where: { warrantyCaseId }, transaction: t, force: true });
+      await MaintenanceCase.destroy({ where: { id: warrantyCaseId }, transaction: t, force: true });
+      await PropertyModel.destroy({ where: { id: propertyId }, transaction: t, force: true });
+    });
+  }
+});
+
 // BUG REAL CORRIGIDO (auditoria "loop até secar", Categoria 14, ciclo 2): laborCost/
 // materialCost (MaintenanceCase) e cost (WarrantyAction) nunca passavam por Number.isFinite —
 // "NaN"/"Infinity" (string) e negativo persistiam direto no DECIMAL do banco.

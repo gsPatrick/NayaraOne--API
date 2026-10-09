@@ -456,7 +456,17 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
 // ações/custos registrados, deixando o histórico de WarrantyAction.cost órfão sob um chamado
 // oficialmente excluído.
 async function removeMaintenanceCase(id, actorUserId, transaction) {
-  const maintenanceCase = await getMaintenanceCase(id, transaction);
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 15, Frente A — concorrência real, 09/10/2026):
+  // getMaintenanceCase era chamado sem lock pessimista antes de contar WarrantyAction — sob
+  // READ COMMITTED, uma createWarrantyAction concorrente que já tomou o lock (via
+  // getMaintenanceCase(id, transaction, true)) e inseriu a ação mas ainda não comitou não era
+  // vista pelo `count()` (lê committed data), passando a guarda MAINTENANCE_CASE_DELETE_
+  // HAS_DEPENDENTS com 0. O UPDATE/DELETE subsequente do remove bloqueava no lock da outra
+  // transação, mas ao comitar seguia adiante SEM reconferir a contagem — soft-deletava o
+  // MaintenanceCase com uma WarrantyAction (possivelmente com custo) pendurada apontando pra
+  // ele, exatamente o que a guarda pretendia impedir. Mesmo padrão de lock já usado em
+  // updateMaintenanceCase/createWarrantyAction/proposeWarrantyResolution/approveWarrantyResolution.
+  const maintenanceCase = await getMaintenanceCase(id, transaction, true);
 
   const actionCount = await WarrantyAction.count({ where: { warrantyCaseId: id }, transaction });
   if (actionCount > 0) {
