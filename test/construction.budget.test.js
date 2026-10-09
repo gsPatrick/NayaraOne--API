@@ -682,10 +682,10 @@ test('M6-NOVO-7: createBudgetLine recusa budgetId que pertence a outra obra', as
 // coberto por RLS (a policy usa só company_id) — dependia só dessa guarda na camada de serviço.
 test('M6-NOVO-10: createBudget recusa quando o groupId do payload não bate com o groupId real da obra (mesma empresa, grupo diferente)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { Project: ProjectModel } = require('../src/models');
-    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const { Project: ProjectModel, Group: GroupModel } = require('../src/models');
+    const otherGroup = await GroupModel.create({ name: `HOMO QA Grupo outro ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
     const projectOfOtherGroup = await ProjectModel.create(
-      { groupId: otherGroupId, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { groupId: otherGroup.id, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
 
@@ -811,10 +811,10 @@ test('M6-NOVO-5: createChangeOrder exige idempotencyKey, e reenviar a MESMA chav
 // company_id) — dependia só dessa guarda na camada de serviço.
 test('M6-NOVO-11: createChangeOrder recusa quando o groupId do payload não bate com o groupId real da obra (mesma empresa, grupo diferente)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { Project: ProjectModel } = require('../src/models');
-    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const { Project: ProjectModel, Group: GroupModel } = require('../src/models');
+    const otherGroup = await GroupModel.create({ name: `HOMO QA Grupo outro CO ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
     const projectOfOtherGroup = await ProjectModel.create(
-      { groupId: otherGroupId, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo CO ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { groupId: otherGroup.id, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo CO ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
 

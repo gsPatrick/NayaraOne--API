@@ -519,14 +519,14 @@ test('M6-NOVO-9: aprovar medição de 100% NÃO completa a etapa automaticamente
 test('M6-NOVO-12: createStageMeasurement recusa quando o groupId do payload não bate com o groupId real da etapa (mesma empresa, grupo diferente)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { ProjectStage: ProjectStageModel, Project: ProjectModel } = require('../src/models');
-    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const { ProjectStage: ProjectStageModel, Project: ProjectModel, Group: GroupModel } = require('../src/models');
+    const otherGroup = await GroupModel.create({ name: `Grupo outro medição ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
     const projectOfOtherGroup = await ProjectModel.create(
-      { groupId: otherGroupId, companyId: tenant.companyId, name: `Obra outro grupo medição ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { groupId: otherGroup.id, companyId: tenant.companyId, name: `Obra outro grupo medição ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
     const stageOfOtherGroup = await ProjectStageModel.create(
-      { groupId: otherGroupId, companyId: tenant.companyId, projectId: projectOfOtherGroup.id, name: 'Etapa outro grupo', sequence: 1, status: 'PENDING', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { groupId: otherGroup.id, companyId: tenant.companyId, projectId: projectOfOtherGroup.id, name: 'Etapa outro grupo', sequence: 1, status: 'PENDING', createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
 
