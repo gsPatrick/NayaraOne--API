@@ -266,6 +266,93 @@ test('warranty: createWarrantyAction registra ação de atendimento vinculada ao
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 4, Frente C, 09/10/2026): createWarrantyAction
+// lia o MaintenanceCase SEM lock pessimista antes de checar status===CLOSED — uma transação
+// concorrente fechando o chamado não bloqueava essa leitura, permitindo registrar ação com
+// custo entre o commit do fechamento e a checagem. Concorrência real precisa de transações
+// COMMITADAS (duas conexões), mesmo padrão de M6-67 (construction.budget.test.js).
+test('warranty: createWarrantyAction concorrente com o fechamento do chamado — não pode criar ação (com custo) depois que o chamado já fechou (lock pessimista)', async () => {
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const { MaintenanceCase, WarrantyAction, Property: PropertyModel } = require('../src/models');
+
+  const { propertyId, warrantyCaseId } = await withCommitted(async (t) => {
+    const property = await createTestProperty(t);
+    const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Infiltração na laje.' },
+      tenant.userId,
+      t
+    );
+    await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, t);
+    await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica inicial.' }, tenant.userId, t);
+    return { propertyId: property.id, warrantyCaseId: warrantyCase.id };
+  });
+
+  try {
+    // Transação A: fecha o chamado, mas segura o lock (pg_sleep ANTES do commit) para garantir
+    // que a transação B realmente concorra com o lock ainda aberto — não é uma corrida "no
+    // escuro", é uma prova determinística de que B precisa esperar A.
+    const results = await Promise.allSettled([
+      withCommitted(async (t) => {
+        const result = await maintenanceCasesService.updateMaintenanceCase(
+          warrantyCaseId,
+          {
+            status: 'CLOSED',
+            rootCauseCode: 'WORKMANSHIP',
+            beforeMediaFileIds: ['11111111-1111-1111-1111-111111111111'],
+            afterMediaFileIds: ['22222222-2222-2222-2222-222222222222'],
+          },
+          tenant.userId,
+          t
+        );
+        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        return result;
+      }),
+      (async () => {
+        // Pequeno atraso para garantir que a transação A já tomou o lock antes de B tentar ler.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return withCommitted((t) =>
+          maintenanceCasesService.createWarrantyAction(warrantyCaseId, { description: 'Visita técnica concorrente.', cost: 500 }, tenant.userId, t)
+        );
+      })(),
+    ]);
+
+    const [closeResult, actionResult] = results;
+    if (closeResult.status !== 'fulfilled') console.error('CLOSE FAILED:', closeResult.reason);
+    assert.equal(closeResult.status, 'fulfilled', 'o fechamento do chamado deve ter sucesso');
+    assert.equal(
+      actionResult.status,
+      'rejected',
+      'a criação da ação concorrente deve esperar o lock e então ver o chamado já CLOSED — não pode ter sucesso'
+    );
+    assert.equal(actionResult.reason.code, 'WARRANTY_ACTION_CASE_CLOSED');
+
+    await withCommitted(async (t) => {
+      const actions = await maintenanceCasesService.listWarrantyActions(warrantyCaseId, t);
+      assert.equal(actions.length, 1, 'só a ação inicial do setup deve existir — nenhuma WarrantyAction com custo pode ter sido criada após o fechamento concorrente');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await WarrantyAction.destroy({ where: { warrantyCaseId }, transaction: t, force: true });
+      await MaintenanceCase.destroy({ where: { id: warrantyCaseId }, transaction: t, force: true });
+      await PropertyModel.destroy({ where: { id: propertyId }, transaction: t, force: true });
+    });
+  }
+});
+
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 6): o contrato exige o nome canônico
 // `warranty.case.opened` (seção 11/Guia do Marcelo seção 11) — o código publicava
 // `construction.maintenance_case.opened`. Confirma o nome exato publicado na Outbox.

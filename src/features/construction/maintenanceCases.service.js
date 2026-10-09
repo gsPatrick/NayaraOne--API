@@ -460,15 +460,20 @@ async function removeMaintenanceCase(id, actorUserId, transaction) {
 // --- WarrantyAction (M6-15/M6-16): histórico de ações de atendimento dentro do chamado ---
 
 async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transaction) {
-  const maintenanceCase = await getMaintenanceCase(warrantyCaseId, transaction);
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 4, Frente C, 09/10/2026): a checagem de
+  // status CLOSED abaixo (ciclo 10) lia o MaintenanceCase SEM lock pessimista — sob READ
+  // COMMITTED, uma requisição concorrente que estava fechando o chamado (updateMaintenanceCase,
+  // que TOMA lock) não bloqueava esta leitura, que seguia vendo o status antigo. Resultado:
+  // dava para registrar WarrantyAction com custo ENTRE o commit de "fechar o chamado" e o
+  // retry/nova leitura, reabrindo exatamente o dano financeiro que a checagem pretendia evitar
+  // (totais de custo inflados em postObraHealth.service.js para um chamado já CLOSED). Mesmo
+  // padrão de lock já usado em updateMaintenanceCase/proposeWarrantyResolution/
+  // approveWarrantyResolution.
+  const maintenanceCase = await getMaintenanceCase(warrantyCaseId, transaction, true);
   const { description, performedByUserId, performedAt, cost, assignedTeam, materialUsed } = payload;
   if (!description) {
     throw AppError.badRequest('O campo "description" é obrigatório.', 'WARRANTY_ACTION_VALIDATION');
   }
-  // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 10): não havia checagem de status — era
-  // possível registrar nova ação (com custo) em um chamado já CLOSED (estado terminal,
-  // NEXT_STATUS_OPTIONS.CLOSED = []), inflando silenciosamente os totais de custo em
-  // postObraHealth.service.js para um chamado que o painel já trata como encerrado.
   if (maintenanceCase.status === 'CLOSED') {
     throw AppError.conflict(
       'Não é possível registrar uma ação de garantia em um chamado já encerrado.',
