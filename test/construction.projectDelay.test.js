@@ -111,18 +111,18 @@ test('M6-74: uma obra com falha simulada na notificação não desfaz o evento j
     const past = new Date();
     past.setDate(past.getDate() - 5);
 
-    // A dedupe de notificação (Notification.findOne por userId+title, sem filtrar por obra)
-    // marca "já notificado hoje" pro MESMO usuário independente da obra — por isso a obra com
-    // falha simulada precisa ser processada ANTES da saudável (ordem de criação = ordem de
-    // varredura), senão a notificação da saudável já teria satisfeito o dedupe e a quebrada
-    // nunca chegaria a chamar Notification.create de verdade.
+    // Project.findAll (candidates) não garante ordem sem ORDER BY explícito — o teste não pode
+    // depender de qual das duas obras é processada primeiro. healthyProject não tem
+    // responsibleUserId (não aciona a dedupe de notificação por userId+title em nenhuma ordem);
+    // só o evento (savepoint) importa pra ela. brokenProject sempre tenta notificar e sempre
+    // falha, independente da ordem de varredura.
     const brokenProject = await projectsService.createProject(
       withTenant({ name: 'Obra atrasada com notificação quebrada', responsibleUserId: tenant.userId, endsAtPlanned: past.toISOString() }),
       tenant.userId,
       transaction
     );
     const healthyProject = await projectsService.createProject(
-      withTenant({ name: 'Obra atrasada saudável', responsibleUserId: tenant.userId, endsAtPlanned: past.toISOString() }),
+      withTenant({ name: 'Obra atrasada saudável', endsAtPlanned: past.toISOString() }),
       tenant.userId,
       transaction
     );
