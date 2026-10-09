@@ -50,9 +50,14 @@ const BUDGET_LINES_PER_PROJECT = 5; // 1001 * 5 = 5.005
 const ITERATIONS = 20;
 const P300MS_GATE = 300;
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgres://nayaraonebanco:nayaraone--banco@2.25.115.2:5432/nayaraone--banco?sslmode=disable';
+// GAP DE SEGURANÇA REAL CORRIGIDO (achado pela auditoria da Nayara, 08/10/2026): este arquivo
+// tinha uma connection string completa (usuário+senha+host) como fallback hardcoded — exposta
+// num repositório PÚBLICO. Nunca aceitar fallback de credencial real no código; falha fechada
+// se a variável de ambiente não estiver definida.
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error('DATABASE_URL não definida no ambiente — este script nunca usa credencial hardcoded no código.');
+}
 
 function percentile(sortedMs, p) {
   if (sortedMs.length === 0) return null;
