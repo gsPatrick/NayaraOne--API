@@ -304,6 +304,53 @@ test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-
   createdMaintenanceCaseIds.push(body.data.id);
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 6, Frente B, 09/10/2026): GET
+// /construction/maintenance-cases não exigia projectId e devolvia TODOS os chamados do tenant
+// sem paginação — inconsistente com GET /construction/projects, que já pagina. Confirma, via
+// HTTP real, que o endpoint agora devolve o formato paginado padrão {data, pagination}.
+test('HTTP real: GET /construction/maintenance-cases devolve formato paginado {data, pagination} (mesmo padrão de GET /construction/projects)', async () => {
+  const property = await sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+    await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+    return Property.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        title: `Imóvel HTTP QA Paginação ${uniqueSuffix()}`,
+        internalCode: `HTTPQA-PAG-${uniqueSuffix()}`,
+        propertyType: 'HOUSE',
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+  });
+  createdPropertyIds.push(property.id);
+
+  const created = await authFetch('POST', '/construction/warranty-cases', {
+    groupId: tenant.groupId,
+    companyId: tenant.companyId,
+    propertyId: property.id,
+    description: 'Teste de paginação — HTTP QA',
+    severity: 'LOW',
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  createdMaintenanceCaseIds.push(createdBody.data.id);
+
+  const response = await authFetch('GET', '/construction/maintenance-cases?pageSize=1&page=1', undefined);
+  assert.equal(response.status, 200, `esperava 200, recebeu ${response.status}`);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.ok(Array.isArray(body.data), 'data precisa ser um array');
+  assert.ok(body.data.length <= 1, 'pageSize=1 precisa limitar a 1 item, não devolver a tabela inteira');
+  assert.ok(body.pagination, 'resposta precisa incluir o bloco pagination, igual GET /construction/projects');
+  assert.equal(body.pagination.page, 1);
+  assert.equal(body.pagination.pageSize, 1);
+  assert.ok(typeof body.pagination.total === 'number' && body.pagination.total >= 1);
+});
+
 // --- TAREFA 1 (auditoria Marco 6, fechamento de gap): imutabilidade de baseline aprovada,
 // exercitada via HTTP real (PATCH /construction/budget-lines/:id), não só via chamada direta
 // ao service. Cria obra + orçamento + linha + aprova (baseline congela) tudo comitado de

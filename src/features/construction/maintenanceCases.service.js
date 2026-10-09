@@ -232,12 +232,36 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
   return maintenanceCase;
 }
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 6, Frente B, 09/10/2026): listMaintenanceCases
+// não exigia projectId e devolvia TODOS os chamados de pós-obra/garantia do tenant inteiro,
+// sem paginação — inconsistente com listProjects (projects.service.js), que já implementa
+// page/pageSize/MAX_PAGE_SIZE. Um tenant com muitas obras entregues ao longo de anos acumula
+// muitos MaintenanceCase; GET /construction/maintenance-cases sem filtro devolvia a tabela
+// inteira de uma vez.
+const MAINTENANCE_CASE_DEFAULT_PAGE_SIZE = 50;
+const MAINTENANCE_CASE_MAX_PAGE_SIZE = 200;
+
 async function listMaintenanceCases(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.projectId) where.projectId = filters.projectId;
-  return MaintenanceCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
+
+  const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+  const pageSize = Math.min(
+    MAINTENANCE_CASE_MAX_PAGE_SIZE,
+    Math.max(1, Number.parseInt(filters.pageSize, 10) || MAINTENANCE_CASE_DEFAULT_PAGE_SIZE)
+  );
+
+  const { rows, count } = await MaintenanceCase.findAndCountAll({
+    where,
+    order: [['created_at', 'DESC']],
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    transaction,
+  });
+
+  return { data: rows, pagination: { page, pageSize, total: count } };
 }
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 42, 2026-10-05): proposeWarrantyResolution

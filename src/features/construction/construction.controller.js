@@ -324,10 +324,16 @@ const createMaintenanceCase = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: item });
 });
 const listMaintenanceCases = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) =>
-    maintenanceCasesService.listMaintenanceCases(t, { status: req.query.status, propertyId: req.query.propertyId, projectId: req.query.projectId })
+  const { data, pagination } = await req.withTenantTransaction((t) =>
+    maintenanceCasesService.listMaintenanceCases(t, {
+      status: req.query.status,
+      propertyId: req.query.propertyId,
+      projectId: req.query.projectId,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    })
   );
-  return success(res, { data: items });
+  return success(res, { data, pagination });
 });
 const getMaintenanceCase = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => maintenanceCasesService.getMaintenanceCase(req.params.id, t));
