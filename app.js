@@ -13,6 +13,7 @@ const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
+const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
 const { startCrmTaskOverdueJob } = require('./src/engines/jobs/crmTaskOverdueJob');
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
@@ -113,6 +114,15 @@ if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLE
 // efetivamente utilizáveis"). Roda a cada 30 min dentro do próprio processo.
 if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_DEADLINE_ALERT_JOB_DISABLED !== 'true') {
   startLegalDeadlineAlertJob();
+}
+
+// GAP REAL CORRIGIDO (varredura proativa, 09/10/2026 — mesma classe de bug encontrada pela
+// auditoria externa em missingDailyReportJob): existe desde 17/09/2026 com testes
+// (test/legal.guaranteeExpiry.test.js), mas nunca foi iniciado aqui — a rotina de alerta de
+// vencimento de garantia (fiança/seguro-fiança/caução) nunca rodava sozinha no ambiente
+// publicado.
+if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_GUARANTEE_EXPIRY_ALERT_JOB_DISABLED !== 'true') {
+  startLegalGuaranteeExpiryAlertJob();
 }
 
 // Escalonamento de reclamações/elogios/conflitos com SLA vencido (M3-20, 18/09/2026).
