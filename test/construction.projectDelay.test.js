@@ -99,6 +99,65 @@ test('M6-74: projectDelayDetectionJob cria Notification real pro responsável, e
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 20, Frente A, 09/10/2026): o bloco de
+// notificação rodava direto na transação externa, SEM savepoint próprio — diferente do bloco
+// de publicação do evento (já isolado). Se Notification.create falhasse pra UMA obra, o
+// Postgres abortava a transação inteira da empresa, desfazendo os eventos já publicados via
+// savepoint das obras ANTERIORES do mesmo lote. Agora evento+notificação da MESMA obra
+// compartilham um savepoint único — confirma que uma obra com falha na notificação não desfaz
+// o evento já publicado das obras processadas antes dela no mesmo lote.
+test('M6-74: uma obra com falha simulada na notificação não desfaz o evento já publicado de obras anteriores do mesmo lote (savepoint por obra)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const past = new Date();
+    past.setDate(past.getDate() - 5);
+
+    // A dedupe de notificação (Notification.findOne por userId+title, sem filtrar por obra)
+    // marca "já notificado hoje" pro MESMO usuário independente da obra — por isso a obra com
+    // falha simulada precisa ser processada ANTES da saudável (ordem de criação = ordem de
+    // varredura), senão a notificação da saudável já teria satisfeito o dedupe e a quebrada
+    // nunca chegaria a chamar Notification.create de verdade.
+    const brokenProject = await projectsService.createProject(
+      withTenant({ name: 'Obra atrasada com notificação quebrada', responsibleUserId: tenant.userId, endsAtPlanned: past.toISOString() }),
+      tenant.userId,
+      transaction
+    );
+    const healthyProject = await projectsService.createProject(
+      withTenant({ name: 'Obra atrasada saudável', responsibleUserId: tenant.userId, endsAtPlanned: past.toISOString() }),
+      tenant.userId,
+      transaction
+    );
+
+    const originalCreate = Notification.create.bind(Notification);
+    Notification.create = async (values, options) => {
+      if (values.userId === tenant.userId && values.body && values.body.includes(brokenProject.name)) {
+        throw new Error('Falha simulada no Notification.create para esta obra específica.');
+      }
+      return originalCreate(values, options);
+    };
+
+    let result;
+    try {
+      result = await detectDelayedProjects(transaction, new Date());
+    } finally {
+      Notification.create = originalCreate;
+    }
+
+    assert.ok(result.detected >= 1, 'a obra saudável precisa ter tido o evento publicado mesmo com a outra obra falhando na notificação');
+
+    const healthyEvents = await OutboxEvent.findAll({
+      where: { aggregateId: healthyProject.id, eventType: 'project.delay.detected' },
+      transaction,
+    });
+    assert.equal(healthyEvents.length, 1, 'o evento da obra saudável não pode ter sido desfeito pela falha da outra obra');
+
+    const brokenEvents = await OutboxEvent.findAll({
+      where: { aggregateId: brokenProject.id, eventType: 'project.delay.detected' },
+      transaction,
+    });
+    assert.equal(brokenEvents.length, 0, 'a obra com falha na notificação não deve ter conseguido publicar o evento (savepoint revertido, erro isolado)');
+  });
+});
+
 test('M6-74: obra com prazo no futuro não gera evento de atraso', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const future = new Date();

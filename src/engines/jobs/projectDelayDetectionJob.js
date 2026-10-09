@@ -38,54 +38,71 @@ async function detectDelayedProjects(transaction, now = new Date()) {
   let notified = 0;
   for (const project of candidates) {
     try {
-      // BUG REAL CORRIGIDO (rodada 15): o comentário deste arquivo já prometia que "rodar o job
-      // várias vezes seguidas não duplica o evento", mas isso dependia só da constraint UNIQUE
-      // do banco — sem savepoint, a 2ª chamada no mesmo dia lançava SequelizeUniqueConstraintError
-      // e abortava a transação INTEIRA da empresa (Postgres marca a transação como abortada após
-      // qualquer erro não tratado via savepoint — toda query seguinte, incluindo a Notification
-      // abaixo, falharia também). `sequelize.transaction({ transaction }, ...)` abre um SAVEPOINT
-      // real — o rollback do savepoint em caso de conflito não afeta a transação externa.
-      await sequelize.transaction({ transaction }, (nested) => publishProjectDelayDetected(project, todayKey(now), nested));
-      detected += 1;
-    } catch (err) {
-      if (err?.name !== 'SequelizeUniqueConstraintError') throw err;
-    }
+      // BUG REAL CORRIGIDO (rodada 15, estendido no Ciclo 20 — "ciclos até secar", 09/10/2026):
+      // o evento (publishProjectDelayDetected) já estava isolado em savepoint, mas o bloco de
+      // notificação abaixo rodava direto na transação EXTERNA (sem savepoint próprio). Se o
+      // Notification.create de uma obra falhasse por qualquer erro não tratado via savepoint,
+      // o Postgres abortava a transação inteira da empresa — desfazendo (rollback) os eventos
+      // já publicados via savepoint das obras ANTERIORES do mesmo lote, mesmo esses tendo
+      // comitado com sucesso dentro de seus próprios savepoints (savepoint comitado ainda fica
+      // sob o guarda-chuva da transação externa). Agora evento + notificação da MESMA obra
+      // compartilham um único savepoint — falha em qualquer parte do processamento de UMA obra
+      // nunca aborta o trabalho já feito pelas obras anteriores do mesmo lote.
+      let projectNotified = false;
+      await sequelize.transaction({ transaction }, async (nested) => {
+        await publishProjectDelayDetected(project, todayKey(now), nested);
 
-    // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 15, 2026-10-05): o evento
-    // project.delay.detected só ia pro outbox (integração externa) — ninguém DENTRO do app era
-    // avisado. Mesma lacuna já corrigida em R7/R9/R10 pra outros jobs. Como este evento se
-    // repete todo dia enquanto a obra continuar atrasada (de propósito, pra escalonamento),
-    // a notificação também é por dia — uma checagem simples evita duplicar se o job rodar mais
-    // de uma vez no mesmo dia.
-    if (project.responsibleUserId) {
-      const title = 'Obra atrasada';
-      // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): dedupe
-      // check-then-create sem lock — em deploy multi-réplica, dois processos podiam ambos ler
-      // "ainda não notificado hoje" antes de qualquer INSERT comitar. pg_advisory_xact_lock
-      // serializa por projeto+dia (liberado automaticamente no fim da transação).
-      await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
-        replacements: { key: `project-delay-notify:${project.id}:${todayKey(now)}` },
-        transaction,
+        // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 15, 2026-10-05): o evento
+        // project.delay.detected só ia pro outbox (integração externa) — ninguém DENTRO do app
+        // era avisado. Mesma lacuna já corrigida em R7/R9/R10 pra outros jobs. Como este evento
+        // se repete todo dia enquanto a obra continuar atrasada (de propósito, pra
+        // escalonamento), a notificação também é por dia — uma checagem simples evita duplicar
+        // se o job rodar mais de uma vez no mesmo dia.
+        if (project.responsibleUserId) {
+          const title = 'Obra atrasada';
+          // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 44, 2026-10-05): dedupe
+          // check-then-create sem lock — em deploy multi-réplica, dois processos podiam ambos
+          // ler "ainda não notificado hoje" antes de qualquer INSERT comitar.
+          // pg_advisory_xact_lock serializa por projeto+dia (liberado automaticamente no fim da
+          // transação/savepoint).
+          await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', {
+            replacements: { key: `project-delay-notify:${project.id}:${todayKey(now)}` },
+            transaction: nested,
+          });
+          const alreadyNotifiedToday = await Notification.findOne({
+            where: { userId: project.responsibleUserId, title },
+            order: [['created_at', 'DESC']],
+            transaction: nested,
+          });
+          const sameDay = alreadyNotifiedToday && todayKey(new Date(alreadyNotifiedToday.created_at)) === todayKey(now);
+          if (!sameDay) {
+            await Notification.create(
+              {
+                groupId: project.groupId,
+                companyId: project.companyId,
+                userId: project.responsibleUserId,
+                channel: 'IN_APP',
+                title,
+                body: `A obra ${project.name || project.id} está atrasada (previsão: ${project.endsAtPlanned}) — verifique o cronograma.`,
+              },
+              { transaction: nested }
+            );
+            projectNotified = true;
+          }
+        }
       });
-      const alreadyNotifiedToday = await Notification.findOne({
-        where: { userId: project.responsibleUserId, title },
-        order: [['created_at', 'DESC']],
-        transaction,
-      });
-      const sameDay = alreadyNotifiedToday && todayKey(new Date(alreadyNotifiedToday.created_at)) === todayKey(now);
-      if (!sameDay) {
-        await Notification.create(
-          {
-            groupId: project.groupId,
-            companyId: project.companyId,
-            userId: project.responsibleUserId,
-            channel: 'IN_APP',
-            title,
-            body: `A obra ${project.name || project.id} está atrasada (previsão: ${project.endsAtPlanned}) — verifique o cronograma.`,
-          },
-          { transaction }
-        );
-        notified += 1;
+      detected += 1;
+      if (projectNotified) notified += 1;
+    } catch (err) {
+      // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 20, Frente A, 09/10/2026): o catch só
+      // absorvia SequelizeUniqueConstraintError (reenvio no mesmo dia) e relançava qualquer
+      // outro erro — isso abortava o loop inteiro (e, por propagação, a transação da empresa
+      // em processCompany), impedindo o processamento dos demais projetos do mesmo lote por
+      // causa de UM projeto com problema. Mesmo padrão dos jobs irmãos (warrantyEscalationJob.js/
+      // missingDailyReportJob.js): loga e segue para o próximo projeto, nunca aborta o lote.
+      if (err?.name !== 'SequelizeUniqueConstraintError') {
+        // eslint-disable-next-line no-console
+        console.error(`[ProjectDelayDetectionJob] Falha ao processar obra ${project.id}: ${err.message}`);
       }
     }
   }
