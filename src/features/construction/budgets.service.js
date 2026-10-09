@@ -22,6 +22,13 @@ async function createBudget(projectId, payload, actorUserId, transaction) {
   }
   const project = await Project.findByPk(projectId, { transaction });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): nunca comparava
+  // project.companyId/groupId com companyId/groupId do payload — dependia só do RLS, sem
+  // guarda na camada de serviço (mesma classe de bug já corrigida em createLossRecord/
+  // createMaintenanceCase/createChangeOrder).
+  if (project.companyId !== companyId || project.groupId !== groupId) {
+    throw AppError.badRequest('Esta obra não pertence à empresa/grupo informado.', 'BUDGET_PROJECT_COMPANY_MISMATCH');
+  }
 
   const existing = await Budget.findOne({ where: { projectId }, transaction });
   if (existing) {

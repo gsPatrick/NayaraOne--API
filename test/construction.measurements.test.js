@@ -512,6 +512,41 @@ test('M6-NOVO-9: aprovar medição de 100% NÃO completa a etapa automaticamente
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): createStageMeasurement
+// descartava o retorno de getProjectStage — nunca comparava stage.companyId/groupId com
+// companyId/groupId do payload. RLS já bloqueia cross-COMPANY, mas cross-GROUP dentro da MESMA
+// empresa não era coberto (a policy usa só company_id) — dependia só dessa guarda no serviço.
+test('M6-NOVO-12: createStageMeasurement recusa quando o groupId do payload não bate com o groupId real da etapa (mesma empresa, grupo diferente)', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { ProjectStage: ProjectStageModel, Project: ProjectModel } = require('../src/models');
+    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const projectOfOtherGroup = await ProjectModel.create(
+      { groupId: otherGroupId, companyId: tenant.companyId, name: `Obra outro grupo medição ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    const stageOfOtherGroup = await ProjectStageModel.create(
+      { groupId: otherGroupId, companyId: tenant.companyId, projectId: projectOfOtherGroup.id, name: 'Etapa outro grupo', sequence: 1, status: 'PENDING', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+
+    await assert.rejects(
+      () =>
+        stageMeasurementsService.createStageMeasurement(
+          stageOfOtherGroup.id,
+          { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 50, measuredAt: '2026-09-01' },
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'STAGE_MEASUREMENT_STAGE_COMPANY_MISMATCH');
+        return true;
+      }
+    );
+  });
+});
+
 // Bug real corrigido nesta auditoria (rodada 46, 2026-10-05): o contrato (TAB-0701) trata
 // stage_code/planned_cost/planned_start/planned_end como NOT NULL — mas nada impedia uma etapa
 // entrar em execução (IN_PROGRESS) sem nenhum desses campos preenchidos.

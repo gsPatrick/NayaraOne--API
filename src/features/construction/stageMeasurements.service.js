@@ -142,7 +142,15 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
     }
   }
 
-  await getProjectStage(projectStageId, transaction);
+  const stage = await getProjectStage(projectStageId, transaction);
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): o retorno de
+  // getProjectStage era descartado — nunca comparava stage.companyId/groupId com
+  // companyId/groupId do payload — dependia só do RLS, sem guarda na camada de serviço (mesma
+  // classe de bug já corrigida em createLossRecord/createMaintenanceCase/createChangeOrder/
+  // createBudget).
+  if (stage.companyId !== companyId || stage.groupId !== groupId) {
+    throw AppError.badRequest('Esta etapa não pertence à empresa/grupo informado.', 'STAGE_MEASUREMENT_STAGE_COMPANY_MISMATCH');
+  }
 
   const measurement = await StageMeasurement.create(
     {

@@ -676,6 +676,30 @@ test('M6-NOVO-7: createBudgetLine recusa budgetId que pertence a outra obra', as
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): createBudget nunca
+// comparava project.companyId/groupId com companyId/groupId do payload. RLS já bloqueia
+// cross-COMPANY (linha nem fica visível), mas cross-GROUP dentro da MESMA empresa não era
+// coberto por RLS (a policy usa só company_id) — dependia só dessa guarda na camada de serviço.
+test('M6-NOVO-10: createBudget recusa quando o groupId do payload não bate com o groupId real da obra (mesma empresa, grupo diferente)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { Project: ProjectModel } = require('../src/models');
+    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const projectOfOtherGroup = await ProjectModel.create(
+      { groupId: otherGroupId, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+
+    await assert.rejects(
+      () => budgetsService.createBudget(projectOfOtherGroup.id, withTenant({}), tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'BUDGET_PROJECT_COMPANY_MISMATCH');
+        return true;
+      }
+    );
+  });
+});
+
 test('M6-NOVO-2: createChangeOrder rejeita budgetImpact "Infinity" (categoria 14 do catálogo)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
@@ -778,6 +802,36 @@ test('M6-NOVO-5: createChangeOrder exige idempotencyKey, e reenviar a MESMA chav
     const all = await changeOrdersService.listChangeOrders(project.id, transaction);
     const withKey = all.filter((co) => co.idempotencyKey === key);
     assert.equal(withKey.length, 1, 'não pode existir mais de um Change Order com a mesma idempotencyKey');
+  });
+});
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): createChangeOrder
+// nunca comparava project.companyId/groupId com companyId/groupId do payload. RLS já bloqueia
+// cross-COMPANY, mas cross-GROUP dentro da MESMA empresa não era coberto (a policy usa só
+// company_id) — dependia só dessa guarda na camada de serviço.
+test('M6-NOVO-11: createChangeOrder recusa quando o groupId do payload não bate com o groupId real da obra (mesma empresa, grupo diferente)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { Project: ProjectModel } = require('../src/models');
+    const otherGroupId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const projectOfOtherGroup = await ProjectModel.create(
+      { groupId: otherGroupId, companyId: tenant.companyId, name: `HOMO QA Obra outro grupo CO ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+
+    await assert.rejects(
+      () =>
+        changeOrdersService.createChangeOrder(
+          projectOfOtherGroup.id,
+          withTenant({ reasonCode: 'ESCOPO', description: 'Cross-group', budgetImpact: 100, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'], idempotencyKey: `co-cross-group-${uniqueSuffix()}` }),
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'CHANGE_ORDER_PROJECT_COMPANY_MISMATCH');
+        return true;
+      }
+    );
   });
 });
 
