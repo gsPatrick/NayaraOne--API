@@ -550,3 +550,106 @@ test('material-request: devolução DAMAGED credita o saldo e persiste returnCos
     assert.equal(defaultDetails.returnCost, 0);
   });
 });
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — "material perdido"): uma
+// saída reduzia o saldo de 10 para 8; registrar a devolução como LOST/reusable=false AINDA
+// gerava o movimento RETURN (que sempre credita +quantity), fazendo o saldo voltar pra 10
+// mesmo o material NUNCA tendo voltado fisicamente. LOST agora nunca credita estoque.
+test('material-request: devolução LOST NÃO credita o saldo — material nunca voltou fisicamente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item, location } = await createTestStockLink(transaction, 10);
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Fiação elétrica', quantity: 2, unit: 'rolo' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
+      inventoryItemId: item.id,
+      sourceLocationId: location.id,
+    });
+    const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterReceive, 8, 'saída real de 2 unidades deve reduzir o saldo de 10 para 8');
+
+    const { returnMovement, returnDetails } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: item.id, destinationLocationId: location.id, quantity: 2, conditionCode: 'LOST', reusable: false },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(returnMovement, null, 'LOST não pode gerar nenhum movimento de crédito de estoque');
+    assert.equal(returnDetails.conditionCode, 'LOST');
+    assert.equal(returnDetails.reusable, false);
+
+    const balanceAfterLostReturn = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceAfterLostReturn, 8, 'saldo precisa continuar em 8 — material perdido nunca volta fisicamente, nunca credita');
+
+    const auditEntry = await AuditLog.findOne({
+      where: { entityType: 'MaterialRequest', entityId: request.id, action: 'construction.material_request.return' },
+      order: [['created_at', 'DESC']],
+      transaction,
+    });
+    assert.ok(auditEntry, 'LOST ainda precisa deixar trilha de auditoria, mesmo sem crédito de estoque');
+    assert.equal(auditEntry.afterJson.returnMovementId, null);
+    assert.equal(auditEntry.afterJson.conditionCode, 'LOST');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — "troca de item"): a
+// requisição consumia 2 unidades do item A, mas a devolução aceitava 2 unidades do item B sem
+// nenhuma checagem contra o movimento OUT original, creditando estoque de um item que nunca
+// saiu desta requisição.
+test('material-request: devolução recusa item diferente do que foi consumido na requisição (vínculo com a saída original)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const { item: itemA, location } = await createTestStockLink(transaction, 50);
+    const { item: itemB, location: locationB } = await createTestStockLink(transaction, 50);
+    const balanceItemBBefore = await inventoryMovementsService.getBalance(itemB.id, locationB.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceItemBBefore, 50);
+
+    const request = await materialRequestsService.createMaterialRequest(
+      project.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, description: 'Cimento CP-II', quantity: 2, unit: 'saco' },
+      tenant.userId,
+      transaction
+    );
+    await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
+      inventoryItemId: itemA.id,
+      sourceLocationId: location.id,
+    });
+
+    await assert.rejects(
+      () =>
+        materialRequestsService.returnMaterialRequest(
+          request.id,
+          tenant.groupId,
+          tenant.companyId,
+          { inventoryItemId: itemB.id, destinationLocationId: locationB.id, quantity: 2 },
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'MATERIAL_REQUEST_RETURN_ITEM_MISMATCH');
+        return true;
+      }
+    );
+
+    const balanceItemBAfter = await inventoryMovementsService.getBalance(itemB.id, locationB.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(balanceItemBAfter, 50, 'item que nunca saiu desta requisição não pode ser creditado por uma devolução dela');
+
+    // Controle positivo: devolver o MESMO item consumido (itemA) continua funcionando.
+    const { returnMovement } = await materialRequestsService.returnMaterialRequest(
+      request.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: itemA.id, destinationLocationId: location.id, quantity: 2 },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(returnMovement.movementType, 'RETURN');
+  });
+});

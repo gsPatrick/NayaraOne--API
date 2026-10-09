@@ -214,6 +214,43 @@ test('delivery: deliverProject BLOQUEIA entrega quando há não conformidade CRI
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F1): hasOpenCriticalNonconformity
+// tinha um fallback de fase antiga que tratava erro de Postgres 42P01 (tabela ausente) como
+// "sem pendência crítica", LIBERANDO a entrega mesmo sem conseguir confirmar a ausência de NC
+// crítica — fail-open. Simula o erro real (monkey-patch de sequelize.query, restaurado no
+// finally) e confirma que deliverProject agora PROPAGA o erro, bloqueando a entrega, em vez de
+// liberar silenciosamente.
+test('delivery: deliverProject NÃO libera a obra quando a consulta de NC falha (fail-closed, não fail-open)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction, 'FINAL_INSPECTION');
+
+    const originalQuery = sequelize.query.bind(sequelize);
+    sequelize.query = async (sql, options) => {
+      if (typeof sql === 'string' && sql.includes('"construction"."nonconformities"') && sql.includes('SELECT 1')) {
+        const err = new Error('relation "construction.nonconformities" does not exist');
+        err.original = { code: '42P01' };
+        throw err;
+      }
+      return originalQuery(sql, options);
+    };
+
+    try {
+      await assert.rejects(
+        () => projectsService.deliverProject(project.id, tenant.userId, transaction),
+        (err) => {
+          assert.ok(err && err.original && err.original.code === '42P01', 'esperava o erro real de banco propagado, não engolido');
+          return true;
+        }
+      );
+    } finally {
+      sequelize.query = originalQuery;
+    }
+
+    const reloaded = await projectsService.getProject(project.id, transaction);
+    assert.equal(reloaded.status, 'FINAL_INSPECTION', 'projeto NÃO pode avançar quando a verificação de NC crítica falha — fail-closed');
+  });
+});
+
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 60, 2026-10-06): checkQualityItem
 // sempre abria a NC automática com severity='MEDIUM' fixo — reprovar um item ESTRUTURA/
 // HIDRAULICA/ELETRICA nunca bloqueava a entrega, porque o gate só considera NC CRITICAL.

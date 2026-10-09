@@ -17,6 +17,7 @@ const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAl
 const { startCrmTaskOverdueJob } = require('./src/engines/jobs/crmTaskOverdueJob');
 const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
 const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
+const { startMissingDailyReportJob } = require('./src/engines/jobs/missingDailyReportJob');
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
 const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
 const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
@@ -135,6 +136,15 @@ if (process.env.NODE_ENV !== 'test' && process.env.WARRANTY_ESCALATION_JOB_DISAB
 // do job de escalonamento de garantia acima.
 if (process.env.NODE_ENV !== 'test' && process.env.PROJECT_DELAY_DETECTION_JOB_DISABLED !== 'true') {
   startProjectDelayDetectionJob();
+}
+
+// GAP REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F3): o job existia e tinha
+// testes (missingDailyReportJob.js, test/construction.missingDailyReport.test.js) desde
+// 02/10/2026, mas nunca foi iniciado aqui — a rotina de "ausência de diário gera tarefa"
+// (contrato Caderno p.161) nunca rodava sozinha no ambiente publicado, só quando chamada
+// diretamente em teste. Mesmo padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.MISSING_DAILY_REPORT_JOB_DISABLED !== 'true') {
+  startMissingDailyReportJob();
 }
 
 // Escalonamento de empréstimo de ferramenta vencido (Marco 7 — EST-TS-13). Mesmo padrão dos

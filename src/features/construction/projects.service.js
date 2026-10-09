@@ -397,15 +397,13 @@ async function transitionProject(id, targetStatus, actorUserId, transaction) {
  * hasOpenCriticalNonconformity — M6-25/M6-39/M6-51/M6-65/M6-79/M6-87: verifica se existe
  * alguma Não Conformidade com status=OPEN e severity=CRITICAL vinculada ao projeto.
  *
- * TODO: ATIVAR QUANDO "nonconformities" EXISTIR — no momento em que este código foi escrito, a
- * tabela `construction.nonconformities` estava sendo criada por outro agente em paralelo (fatia
- * separada de Não Conformidades) e ainda não tinha sido mergeada. A query abaixo é DEFENSIVA:
- * se a tabela ainda não existir (erro de Postgres 42P01 "undefined_table"), trata como "sem
- * pendência crítica" para não travar a entrega de obras enquanto a outra fatia não é mergeada.
- * ISSO PRECISA SER REVISTO/REATIVADO EXPLICITAMENTE depois do merge: sem a tabela real, o gate
- * de entrega NÃO bloqueia nada de fato — está apenas com a "porta pronta" para quando a tabela
- * existir. Depois do merge, rode os testes de `test/construction.delivery.test.js` de novo:
- * eles cobrem o caminho "tabela existe e tem pendência crítica" simulando a tabela diretamente.
+ * BUG REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F1): este trecho tinha um
+ * fallback defensivo de uma fase antiga do desenvolvimento (quando `construction.nonconformities`
+ * ainda não existia) que tratava erro 42P01 (tabela ausente) como "sem pendência crítica",
+ * LIBERANDO a entrega mesmo sem conseguir confirmar a ausência de NC crítica. A tabela existe
+ * em produção há muito tempo — esse fallback virou código morto perigoso: fail-OPEN em vez de
+ * fail-CLOSED. Removido por completo; qualquer erro ao consultar nonconformities agora
+ * PROPAGA (bloqueia a entrega), nunca libera silenciosamente.
  */
 async function hasOpenCriticalNonconformity(companyId, projectId, transaction) {
   // Postgres aborta a transação INTEIRA quando um statement dá erro (ex.: "relation does not
@@ -430,11 +428,8 @@ async function hasOpenCriticalNonconformity(companyId, projectId, transaction) {
     return rows.length > 0;
   } catch (err) {
     await sequelize.query('ROLLBACK TO SAVEPOINT nonconformity_gate_check', { transaction });
-    const pgCode = err && err.original && err.original.code;
-    if (pgCode === '42P01') {
-      // undefined_table — construction.nonconformities ainda não existe neste ambiente.
-      return false;
-    }
+    // Fail-closed: qualquer erro ao consultar nonconformities propaga e bloqueia a entrega —
+    // nunca assume silenciosamente "sem pendência crítica" diante de uma falha de banco.
     throw err;
   }
 }
