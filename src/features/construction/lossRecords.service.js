@@ -1,6 +1,6 @@
 'use strict';
 
-const { LossRecord, ApprovalThreshold } = require('../../models');
+const { LossRecord, ApprovalThreshold, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -87,6 +87,20 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
   // devolve o já criado, mesmo padrão de recordMovement/stageMeasurements.
   const existingByKey = await LossRecord.findOne({ where: { companyId, idempotencyKey }, transaction });
   if (existingByKey) return existingByKey;
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 11, Frente A, 09/10/2026): projectId nunca
+  // era validado contra o companyId/groupId informados no mesmo payload — dava pra enviar
+  // projectId de uma obra de outra empresa junto com companyId/groupId diferentes, criando um
+  // LossRecord que mistura tenants (dependendo só do RLS, sem nenhuma guarda na camada de
+  // serviço).
+  const project = await Project.findByPk(projectId, { transaction });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  if (project.companyId !== companyId || project.groupId !== groupId) {
+    throw AppError.badRequest(
+      'Esta obra não pertence à empresa/grupo informado.',
+      'LOSS_RECORD_PROJECT_COMPANY_MISMATCH'
+    );
+  }
 
   const threshold = await getApprovalThreshold(groupId, companyId, CONTEXT_MATERIAL_LOSS, transaction);
   const withinThreshold = Number(estimatedValue) <= threshold;

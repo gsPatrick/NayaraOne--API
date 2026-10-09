@@ -1,6 +1,6 @@
 'use strict';
 
-const { MaintenanceCase, WarrantyAction } = require('../../models');
+const { MaintenanceCase, WarrantyAction, Property, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
@@ -181,6 +181,23 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
   // pro create/computeSlaDueAt com uma string inválida, estourando erro cru de tipo do Postgres.
   if (warrantyDeadlineAt !== undefined && warrantyDeadlineAt !== null && Number.isNaN(new Date(warrantyDeadlineAt).getTime())) {
     throw AppError.badRequest('"warrantyDeadlineAt" precisa ser uma data válida.', 'MAINTENANCE_CASE_WARRANTY_DEADLINE_INVALID');
+  }
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 11, Frente A, 09/10/2026): propertyId/projectId
+  // nunca eram validados contra o companyId informado no mesmo payload — dava pra abrir um
+  // chamado de garantia referenciando um imóvel ou obra de OUTRA empresa, dependendo só do RLS
+  // (sem nenhuma guarda na camada de serviço).
+  const property = await Property.findByPk(propertyId, { transaction });
+  if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
+  if (property.companyId !== companyId) {
+    throw AppError.badRequest('Este imóvel não pertence à empresa informada.', 'MAINTENANCE_CASE_PROPERTY_COMPANY_MISMATCH');
+  }
+  if (projectId) {
+    const project = await Project.findByPk(projectId, { transaction });
+    if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+    if (project.companyId !== companyId) {
+      throw AppError.badRequest('Esta obra não pertence à empresa informada.', 'MAINTENANCE_CASE_PROJECT_COMPANY_MISMATCH');
+    }
   }
 
   const normalizedSeverity = validateSeverity(severity);

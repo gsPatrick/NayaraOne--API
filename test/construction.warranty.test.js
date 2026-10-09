@@ -102,6 +102,42 @@ test('warranty: createMaintenanceCase calcula sla_due_at e escalation_level a pa
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 11, Frente A, 09/10/2026): createMaintenanceCase
+// nunca validava que propertyId/projectId pertenciam ao companyId informado no payload — dava
+// pra abrir um chamado de garantia referenciando um imóvel ou obra de OUTRA empresa.
+test('warranty: createMaintenanceCase recusa propertyId que pertence a uma empresa diferente do companyId informado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const [[otherCompanyRow]] = await sequelize.query(
+      'SELECT id, group_id AS "groupId" FROM core.companies WHERE id != :companyId LIMIT 1',
+      { replacements: { companyId: tenant.companyId }, transaction }
+    );
+    if (!otherCompanyRow) return; // ambiente sem segunda empresa semeada — nada a testar aqui.
+
+    const propertyOfOtherCompany = await Property.create(
+      {
+        groupId: otherCompanyRow.groupId,
+        companyId: otherCompanyRow.id,
+        title: `Imóvel de outra empresa ${uniqueSuffix()}`,
+        internalCode: `OTHER-${uniqueSuffix()}`,
+        propertyType: 'HOUSE',
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+
+    await assert.rejects(
+      () =>
+        maintenanceCasesService.createMaintenanceCase(
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: propertyOfOtherCompany.id, description: 'Chamado cross-company.' },
+          tenant.userId,
+          transaction
+        ),
+      rejectsWithCode('MAINTENANCE_CASE_PROPERTY_COMPANY_MISMATCH')
+    );
+  });
+});
+
 test('warranty: updateMaintenanceCase rejeita severity/category/rootCauseCode fora da lista configurada', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const property = await createTestProperty(transaction);

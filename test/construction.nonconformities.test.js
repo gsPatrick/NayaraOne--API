@@ -230,6 +230,43 @@ test('createLossRecord: idempotencyKey é obrigatória, e reenviar a MESMA chave
   });
 });
 
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 11, Frente A, 09/10/2026): createLossRecord
+// nunca validava que o projectId informado pertencia ao companyId/groupId também informados no
+// payload — dava pra enviar projectId de uma obra junto com companyId/groupId de outra empresa.
+test('createLossRecord recusa quando o projectId pertence a uma empresa diferente do companyId informado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const [[otherCompanyRow]] = await sequelize.query(
+      'SELECT id, group_id AS "groupId" FROM core.companies WHERE id != :companyId LIMIT 1',
+      { replacements: { companyId: tenant.companyId }, transaction }
+    );
+    if (!otherCompanyRow) return; // ambiente sem segunda empresa semeada — nada a testar aqui.
+
+    await assert.rejects(
+      () =>
+        lossRecordsService.createLossRecord(
+          project.id,
+          {
+            groupId: otherCompanyRow.groupId,
+            companyId: otherCompanyRow.id,
+            materialDescription: 'Cimento',
+            quantity: 3,
+            estimatedValue: 50,
+            reason: 'Perda em transporte.',
+            idempotencyKey: `loss-cross-company-${uniqueSuffix()}`,
+          },
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'LOSS_RECORD_PROJECT_COMPANY_MISMATCH');
+        return true;
+      }
+    );
+  });
+});
+
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): upsertApprovalThreshold
 // não validava Number.isFinite/teto — "Infinity"/"NaN" passava e quebrava a alçada (threshold
 // Infinity faz tudo auto-aprovar).
