@@ -93,7 +93,11 @@ async function createLossRecord(projectId, payload, actorUserId, transaction) {
   // projectId de uma obra de outra empresa junto com companyId/groupId diferentes, criando um
   // LossRecord que mistura tenants (dependendo só do RLS, sem nenhuma guarda na camada de
   // serviço).
-  const project = await Project.findByPk(projectId, { transaction });
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): lock pessimista na
+  // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado
+  // em projects.service.js#removeProject) — sem isso, um LossRecord (que autoaprova e entra em
+  // totalLossValue) podia ser criado ao mesmo tempo em que a obra era excluída.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
   if (project.companyId !== companyId || project.groupId !== groupId) {
     throw AppError.badRequest(

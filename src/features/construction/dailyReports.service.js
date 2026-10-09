@@ -1,6 +1,6 @@
 'use strict';
 
-const { DailyReport, DailyWorker, DailyMaterial } = require('../../models');
+const { DailyReport, DailyWorker, DailyMaterial, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDailyLogCreated } = require('./constructionEvents.service');
@@ -156,6 +156,17 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   }
   validateWorkforceCount(workforceCount);
   const normalizedShiftCode = normalizeShiftCode(shiftCode);
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): createDailyReport
+  // nunca buscava o Project — nem validava existência/companyId cross-field, nem tomava lock
+  // pessimista na linha do Project, serializando contra removeProject concorrente (ver
+  // comentário detalhado em projects.service.js#removeProject) — removeProject agora também
+  // conta DailyReport antes de excluir a obra.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  if (project.companyId !== companyId || project.groupId !== groupId) {
+    throw AppError.badRequest('Esta obra não pertence à empresa/grupo informado.', 'DAILY_REPORT_PROJECT_COMPANY_MISMATCH');
+  }
 
   // M6-94: captura offline — se o app já reenviou esta `idempotencyKey`, devolve o registro
   // existente em vez de duplicar (o UNIQUE parcial do banco é a garantia final, mas checamos

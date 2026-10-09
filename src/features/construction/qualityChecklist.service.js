@@ -1,6 +1,6 @@
 'use strict';
 
-const { QualityChecklistItem, ProjectStage } = require('../../models');
+const { QualityChecklistItem, ProjectStage, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createNonconformity } = require('./nonconformities.service');
@@ -20,6 +20,17 @@ async function createQualityItem(projectId, payload, actorUserId, transaction) {
   const normalizedCategory = category ? String(category).toUpperCase() : 'OUTROS';
   if (!CATEGORIES.includes(normalizedCategory)) {
     throw AppError.badRequest(`"category" deve ser um de: ${CATEGORIES.join(', ')}.`, 'QUALITY_ITEM_CATEGORY_INVALID');
+  }
+
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): createQualityItem
+  // nunca buscava o Project — nem validava existência/companyId cross-field, nem tomava lock
+  // pessimista na linha do Project, serializando contra removeProject concorrente (ver
+  // comentário detalhado em projects.service.js#removeProject) — removeProject agora também
+  // conta QualityChecklistItem antes de excluir a obra.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  if (project.companyId !== companyId) {
+    throw AppError.badRequest('Esta obra não pertence à empresa informada.', 'QUALITY_ITEM_PROJECT_COMPANY_MISMATCH');
   }
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): projectStageId ia

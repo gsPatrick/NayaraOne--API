@@ -55,7 +55,11 @@ async function createMaterialRequest(projectId, payload, actorUserId, transactio
     }
   }
 
-  const project = await Project.findByPk(projectId, { transaction });
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): lock pessimista na
+  // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado
+  // em projects.service.js#removeProject) — removeProject agora também conta MaterialRequest
+  // antes de excluir a obra.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
 
   if (stageId) {

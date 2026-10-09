@@ -53,10 +53,24 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'cost',
       },
-      // Nota (item 2): assigned_team/material_used ainda não são atributos deste model porque a
-      // migration que cria essas colunas ainda não foi aplicada no banco neste momento. Veja
-      // warrantyActionTeamMaterialColumns.js — leitura/escrita feita por SQL direto, guardada
-      // por checagem de existência, até a migration ser aplicada.
+      // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente B — consistência model vs
+      // migration, 09/10/2026): a migration 20260101000296 já roda incondicionalmente (sem
+      // guard de permissão) e já foi aplicada neste banco — o comentário anterior ("ainda não
+      // foi aplicada") estava desatualizado. Sem o atributo declarado aqui, `WarrantyAction.
+      // findAll()/.create()` via Sequelize ignorava silenciosamente essas colunas, obrigando
+      // todo acesso a passar por warrantyActionTeamMaterialColumns.js (SQL direto, sem
+      // validação/type-cast do model). Mantém esse helper como estava (ainda é usado por
+      // dashboard.service.js), mas agora o model também expõe os campos nativamente.
+      assignedTeam: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: 'assigned_team',
+      },
+      materialUsed: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'material_used',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

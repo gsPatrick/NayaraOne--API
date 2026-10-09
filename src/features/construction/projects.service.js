@@ -1,6 +1,18 @@
 'use strict';
 
-const { Project, ProjectCodeSequence, Budget, ProjectStage, MaintenanceCase, sequelize } = require('../../models');
+const {
+  Project,
+  ProjectCodeSequence,
+  Budget,
+  ProjectStage,
+  MaintenanceCase,
+  ChangeOrder,
+  MaterialRequest,
+  DailyReport,
+  QualityChecklistItem,
+  LossRecord,
+  sequelize,
+} = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const {
@@ -601,14 +613,36 @@ async function removeProject(id, actorUserId, transaction) {
   const project = await Project.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
 
-  const [stageCount, budgetCount, warrantyCaseCount] = await Promise.all([
-    ProjectStage.count({ where: { projectId: id }, transaction }),
-    Budget.count({ where: { projectId: id }, transaction }),
-    MaintenanceCase.count({ where: { projectId: id }, transaction }),
-  ]);
-  if (stageCount > 0 || budgetCount > 0 || warrantyCaseCount > 0) {
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A — concorrência real,
+  // 09/10/2026): a guarda só contava ProjectStage/Budget/MaintenanceCase — nunca contava
+  // ChangeOrder, MaterialRequest, DailyReport, QualityChecklistItem nem LossRecord, que também
+  // têm projectId e não exigem nenhuma etapa/orçamento/garantia prévia pra existir. Confirmado
+  // empiricamente (duas transações commitadas): removeProject concorrente com createChangeOrder
+  // (ou createLossRecord) no MESMO projectId, ambos tinham sucesso, deixando o registro filho
+  // vivo e órfão apontando pra uma obra já excluída.
+  const [stageCount, budgetCount, warrantyCaseCount, changeOrderCount, materialRequestCount, dailyReportCount, qualityItemCount, lossRecordCount] =
+    await Promise.all([
+      ProjectStage.count({ where: { projectId: id }, transaction }),
+      Budget.count({ where: { projectId: id }, transaction }),
+      MaintenanceCase.count({ where: { projectId: id }, transaction }),
+      ChangeOrder.count({ where: { projectId: id }, transaction }),
+      MaterialRequest.count({ where: { projectId: id }, transaction }),
+      DailyReport.count({ where: { projectId: id }, transaction }),
+      QualityChecklistItem.count({ where: { projectId: id }, transaction }),
+      LossRecord.count({ where: { projectId: id }, transaction }),
+    ]);
+  if (
+    stageCount > 0 ||
+    budgetCount > 0 ||
+    warrantyCaseCount > 0 ||
+    changeOrderCount > 0 ||
+    materialRequestCount > 0 ||
+    dailyReportCount > 0 ||
+    qualityItemCount > 0 ||
+    lossRecordCount > 0
+  ) {
     throw AppError.conflict(
-      'Não é possível excluir uma obra que já tem etapas, orçamento ou chamados de garantia vinculados.',
+      'Não é possível excluir uma obra que já tem etapas, orçamento, chamados de garantia, change orders, requisições de material, diários, itens de qualidade ou registros de perda vinculados.',
       'PROJECT_DELETE_HAS_DEPENDENTS'
     );
   }

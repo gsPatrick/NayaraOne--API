@@ -477,3 +477,155 @@ test('removeProject: concorrente com createBudget — não pode excluir a obra s
     });
   }
 });
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A — concorrência real, 09/10/2026):
+// removeProject só contava ProjectStage/Budget/MaintenanceCase antes de excluir — nunca contava
+// ChangeOrder/MaterialRequest/DailyReport/QualityChecklistItem/LossRecord, que também têm
+// projectId e não exigem nenhuma etapa/orçamento/garantia prévia pra existir; createChangeOrder
+// também não travava o Project. Confirmado empiricamente ANTES do fix: ambos tinham sucesso,
+// deixando um Change Order órfão vivo apontando pra obra excluída.
+test('removeProject: concorrente com createChangeOrder — não pode excluir a obra se um Change Order foi criado antes do commit (lock pessimista)', async () => {
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const changeOrdersService = require('../src/features/construction/changeOrders.service');
+  const { Project: ProjectModel, ChangeOrder: ChangeOrderModel } = require('../src/models');
+
+  const projectId = await withCommitted(async (t) => {
+    const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra concorrencia CO ${uniqueSuffix()}` }), tenant.userId, t);
+    return project.id;
+  });
+
+  try {
+    const results = await Promise.allSettled([
+      withCommitted(async (t) => {
+        const co = await changeOrdersService.createChangeOrder(
+          projectId,
+          withTenant({
+            reasonCode: 'SCOPE_CHANGE',
+            description: 'Aditivo de concorrência',
+            budgetImpact: 100,
+            scheduleImpactDays: 0,
+            evidenceFileIds: ['11111111-1111-1111-1111-111111111111'],
+            idempotencyKey: uniqueSuffix(),
+          }),
+          tenant.userId,
+          t
+        );
+        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        return co;
+      }),
+      (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
+      })(),
+    ]);
+
+    const [coResult, removeResult] = results;
+    assert.equal(coResult.status, 'fulfilled', 'a criação do Change Order deve ter sucesso');
+    assert.equal(
+      removeResult.status,
+      'rejected',
+      'a exclusão concorrente deve esperar o lock e então ver o Change Order já criado — não pode ter sucesso'
+    );
+    assert.equal(removeResult.reason.code, 'PROJECT_DELETE_HAS_DEPENDENTS');
+
+    await withCommitted(async (t) => {
+      const projectStillExists = await ProjectModel.findByPk(projectId, { transaction: t });
+      assert.ok(projectStillExists, 'a obra não pode ter sido excluída — o Change Order criado precisa continuar vinculado a uma obra viva');
+      const changeOrders = await ChangeOrderModel.findAll({ where: { projectId }, transaction: t });
+      assert.equal(changeOrders.length, 1, 'o Change Order criado precisa continuar apontando para uma obra não excluída');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await ChangeOrderModel.destroy({ where: { projectId }, transaction: t, force: true });
+      await ProjectModel.destroy({ where: { id: projectId }, transaction: t, force: true });
+    });
+  }
+});
+
+// BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): mesmo cenário acima,
+// mas para LossRecord (createLossRecord também não travava o Project, e autoaprova na hora
+// dentro da alçada, entrando direto em totalLossValue do projectHealth/dashboard).
+test('removeProject: concorrente com createLossRecord — não pode excluir a obra se um registro de perda foi criado antes do commit (lock pessimista)', async () => {
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  const lossRecordsService = require('../src/features/construction/lossRecords.service');
+  const { Project: ProjectModel, LossRecord: LossRecordModel } = require('../src/models');
+
+  const projectId = await withCommitted(async (t) => {
+    const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra concorrencia loss ${uniqueSuffix()}` }), tenant.userId, t);
+    return project.id;
+  });
+
+  try {
+    const results = await Promise.allSettled([
+      withCommitted(async (t) => {
+        const loss = await lossRecordsService.createLossRecord(
+          projectId,
+          withTenant({
+            materialDescription: 'Cimento perdido',
+            quantity: 1,
+            estimatedValue: 50,
+            reason: 'Avaria de concorrência',
+            idempotencyKey: uniqueSuffix(),
+          }),
+          tenant.userId,
+          t
+        );
+        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        return loss;
+      }),
+      (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
+      })(),
+    ]);
+
+    const [lossResult, removeResult] = results;
+    assert.equal(lossResult.status, 'fulfilled', 'a criação do registro de perda deve ter sucesso');
+    assert.equal(
+      removeResult.status,
+      'rejected',
+      'a exclusão concorrente deve esperar o lock e então ver o registro de perda já criado — não pode ter sucesso'
+    );
+    assert.equal(removeResult.reason.code, 'PROJECT_DELETE_HAS_DEPENDENTS');
+
+    await withCommitted(async (t) => {
+      const projectStillExists = await ProjectModel.findByPk(projectId, { transaction: t });
+      assert.ok(projectStillExists, 'a obra não pode ter sido excluída — o registro de perda criado precisa continuar vinculado a uma obra viva');
+      const lossRecords = await LossRecordModel.findAll({ where: { projectId }, transaction: t });
+      assert.equal(lossRecords.length, 1, 'o registro de perda criado precisa continuar apontando para uma obra não excluída');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await LossRecordModel.destroy({ where: { projectId }, transaction: t, force: true });
+      await ProjectModel.destroy({ where: { id: projectId }, transaction: t, force: true });
+    });
+  }
+});

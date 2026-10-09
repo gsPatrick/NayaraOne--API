@@ -68,7 +68,12 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
     );
   }
 
-  const project = await Project.findByPk(projectId, { transaction });
+  // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): lock pessimista na
+  // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado
+  // em projects.service.js#removeProject) — sem isso, um Change Order podia ser criado ao
+  // mesmo tempo em que a obra era excluída, ficando órfão vivo apontando pra um Project já
+  // soft-deletado.
+  const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 12, Frente A, 09/10/2026): nunca comparava
   // project.companyId/groupId com companyId/groupId do payload — dependia só do RLS, sem
