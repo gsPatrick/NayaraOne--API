@@ -87,3 +87,38 @@ test('M6-59: arquivos genuinamente distintos não geram alerta falso-positivo', 
     assert.equal(nc2.evidenceReuseFlagged, false, 'arquivos com conteúdo distinto não devem gerar alerta');
   });
 });
+
+// GAP REAL CORRIGIDO ("ciclos até secar", Ciclo 9, Frente A, 09/10/2026): detectEvidenceReuse
+// exclui o próprio registro da busca (pra não acusar reuso contra ele mesmo), mas isso também
+// deixava sem nenhuma checagem o caso de fechar a NC usando a MESMA foto como prova do "antes"
+// e do "depois" — persistindo um estado contraditório sem nenhum alerta.
+test('M6-59/GAP: fechar a NC reaproveitando a MESMA evidência do "antes" como prova do "depois" gera alerta', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await projectsService.createProject(withTenant({ name: 'Obra D M6-59 self-reuse', managerUserId: tenant.userId }), tenant.userId, transaction);
+
+    const sharedContent = Buffer.from('foto-unica-antes-e-depois-m6-59').toString('base64');
+    const fileBefore = await uploadTestFile(transaction, sharedContent, 'antes.jpg');
+
+    const nc = await nonconformitiesService.createNonconformity(
+      project.id,
+      withTenant({ description: 'Infiltração na parede', severity: 'MEDIUM', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [fileBefore.id] }),
+      tenant.userId,
+      transaction
+    );
+    assert.equal(nc.evidenceReuseFlagged, false);
+
+    // Reupload do MESMO conteúdo (bytes idênticos) usado agora como prova do "depois" — a
+    // "prova de que foi corrigido" é literalmente a mesma foto da constatação original.
+    const fileAfterSameContent = await uploadTestFile(transaction, sharedContent, 'depois-mesma-foto.jpg');
+    const closed = await nonconformitiesService.closeNonconformity(
+      nc.id,
+      { afterEvidenceFileIds: [fileAfterSameContent.id] },
+      tenant.userId,
+      transaction
+    );
+
+    assert.equal(closed.status, 'CLOSED', 'fechamento continua permitido — a regra é alertar, não bloquear');
+    assert.equal(closed.evidenceReuseFlagged, true, 'reaproveitar a evidência do "antes" como "depois" precisa gerar o alerta de reuso');
+    assert.ok(closed.evidenceReuseDetails, 'deve carregar detalhes do reuso');
+  });
+});

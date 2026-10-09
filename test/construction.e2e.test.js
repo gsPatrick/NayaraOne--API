@@ -85,7 +85,11 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     );
     const approvedBudget = await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
     assert.equal(approvedBudget.status, 'APPROVED');
-    assert.ok(approvedBudget.baselineAmount > 0, 'baseline deve estar congelada com valor real');
+    // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 9, Frente C — teste mente, 09/10/2026):
+    // `assert.ok(x > 0)` deixaria passar qualquer bug de cálculo do baseline (soma duplicada,
+    // multiplicação errada) desde que o resultado fosse positivo. Única BudgetLine criada tem
+    // plannedAmount=20000 — o valor exato precisa bater.
+    assert.equal(Number(approvedBudget.baselineAmount), 20000, 'baseline deve estar congelada com o valor exato da única linha criada');
 
     // 3. Requisição de material: criar e marcar recebida
     const materialRequest = await materialRequestsService.createMaterialRequest(
@@ -225,7 +229,11 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     const postObraHealth = await postObraHealthService.getPostObraHealth(project.id, transaction);
     assert.equal(postObraHealth.closedCases, 1);
     assert.equal(postObraHealth.totalWarrantyActions, 1);
-    assert.ok(postObraHealth.totalLaborCost >= 350, 'custo da ação de garantia deve entrar no total');
+    // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 9, Frente C — teste mente, 09/10/2026):
+    // `>= 350` deixaria passar um bug de duplicação de custo (ex. somar o WarrantyAction duas
+    // vezes, dar 700) sem ser detectado. Única ação criada tem cost=350 — o valor exato precisa
+    // bater.
+    assert.equal(Number(postObraHealth.totalLaborCost), 350, 'custo da ação de garantia deve entrar no total com o valor exato, sem duplicar');
 
     // 14. Fechamento definitivo da obra (M6-18: WARRANTY -> CLOSED) — último estágio da máquina
     // de estados de 8 estágios, só alcançável porque o único caso de garantia já está CLOSED.

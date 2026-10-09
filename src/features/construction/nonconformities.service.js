@@ -215,6 +215,23 @@ async function closeNonconformity(id, payload, actorUserId, transaction) {
     }
   }
 
+  // GAP REAL CORRIGIDO ("ciclos até secar", Ciclo 9, Frente A, 09/10/2026): detectEvidenceReuse
+  // exclui o próprio registro (excludeNonconformityId) da busca, então nunca compara
+  // afterEvidenceFileIds contra o beforeEvidenceFileIds DESTA MESMA NC — fechar com a MESMA
+  // foto usada como prova do "antes" passava sem nenhum alerta (nem o flag evidenceReuseFlagged
+  // era setado), persistindo um estado contraditório ("prova do depois" = "prova do antes").
+  // Mesma política do módulo (alerta, nunca bloqueia) — só estende a checagem pro próprio
+  // registro, que a exclusão de escopo acima deixava sem cobertura.
+  if (newAfterFiles.length && !nonconformity.evidenceReuseFlagged) {
+    const sameContentAsAfter = await resolveSameContentFileIds(newAfterFiles, nonconformity.companyId, transaction);
+    const reusedFromBefore = sameContentAsAfter.filter((fileId) => nonconformity.beforeEvidenceFileIds.includes(fileId));
+    if (reusedFromBefore.length) {
+      nonconformity.evidenceReuseFlagged = true;
+      nonconformity.evidenceReuseReferenceId = nonconformity.id;
+      nonconformity.evidenceReuseDetails = { overlappingFileIds: reusedFromBefore, matchedAt: new Date().toISOString(), selfReuse: true };
+    }
+  }
+
   const beforeJson = nonconformity.toJSON();
   nonconformity.afterEvidenceFileIds = resolvedAfterEvidence;
   if (resolvedAcceptedBy) nonconformity.acceptedByUserId = resolvedAcceptedBy;
