@@ -108,9 +108,63 @@ async function getConstructionDashboard(filters, transaction) {
   }, 0);
 
   const realizedCostTotal = actualFinancialCostTotal + consumedInventoryCostTotal;
-  const forecastToCompleteTotal = Math.max(committedCostTotal + approvedChangesTotal - realizedCostTotal, 0);
-  const projectedTotalCostTotal = round2(realizedCostTotal + forecastToCompleteTotal);
   const marginBudgetBaseTotal = committedCostTotal + approvedChangesTotal;
+
+  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2, estendido ao
+  // agregado pra não reabrir a divergência já corrigida no Ciclo 5): a fórmula canônica em
+  // projectHealth.service.js#computeMarginProjection passou a usar EAC (Estimate At Completion)
+  // por desempenho de custo POR OBRA quando há progresso físico medido — permite margem
+  // positiva, não mais travada em <= 0 (ver comentário detalhado lá). Esse agregado somava
+  // forecastToComplete/projectedTotalCost em nível de EMPRESA com a fórmula antiga (sempre
+  // assume gastar o resto do orçamento), que reintroduziria exatamente a mesma divergência
+  // dashboard-vs-drilldown já corrigida no Ciclo 5 — a margem agregada nunca poderia ficar
+  // positiva mesmo que toda obra individual mostrasse economia real. Calcula o EAC POR OBRA
+  // (não dá pra fazer isso só com somas globais, porque a taxa de desempenho de custo é por
+  // obra) e soma os resultados — mesma fórmula, nunca duplicada em espírito, só precisa ser
+  // aplicada por obra antes de agregar.
+  const budgetLinesByProject = new Map();
+  for (const l of budgetLines) budgetLinesByProject.set(l.projectId, (budgetLinesByProject.get(l.projectId) || 0) + toNumber(l.plannedAmount));
+  const changeOrdersByProject = new Map();
+  for (const c of changeOrders) changeOrdersByProject.set(c.projectId, (changeOrdersByProject.get(c.projectId) || 0) + toNumber(c.budgetImpact));
+  const actualCostByProject = new Map();
+  for (const e of settledEntries) actualCostByProject.set(e.constructionProjectId, (actualCostByProject.get(e.constructionProjectId) || 0) + toNumber(e.amount));
+  const inventoryCostByProject = new Map();
+  for (const m of inventoryMovements) {
+    const unitCost = inventoryCostById.get(m.inventoryItemId) || 0;
+    const sign = m.movementType === 'RETURN' ? -1 : 1;
+    inventoryCostByProject.set(m.projectId, (inventoryCostByProject.get(m.projectId) || 0) + sign * toNumber(m.quantity) * unitCost);
+  }
+  const stagesByProject = new Map();
+  for (const s of stages) {
+    if (!stagesByProject.has(s.projectId)) stagesByProject.set(s.projectId, []);
+    stagesByProject.get(s.projectId).push(s);
+  }
+
+  let forecastToCompleteTotal = 0;
+  let projectedTotalCostTotal = 0;
+  for (const projectId of projectIds) {
+    const projectBudgetBase = (budgetLinesByProject.get(projectId) || 0) + (changeOrdersByProject.get(projectId) || 0);
+    const projectRealizedCost = (actualCostByProject.get(projectId) || 0) + (inventoryCostByProject.get(projectId) || 0);
+    const projectStages = stagesByProject.get(projectId) || [];
+    const projectPhysicalProgressPct = projectStages.length
+      ? projectStages.reduce((acc, s) => acc + toNumber(s.measuredPct), 0) / projectStages.length
+      : 0;
+
+    let projectForecastToComplete;
+    let projectProjectedTotalCost;
+    if (projectPhysicalProgressPct > 0) {
+      const estimateAtCompletion = projectRealizedCost / (projectPhysicalProgressPct / 100);
+      projectForecastToComplete = Math.max(estimateAtCompletion - projectRealizedCost, 0);
+      projectProjectedTotalCost = estimateAtCompletion;
+    } else {
+      projectForecastToComplete = Math.max(projectBudgetBase - projectRealizedCost, 0);
+      projectProjectedTotalCost = projectRealizedCost + projectForecastToComplete;
+    }
+    forecastToCompleteTotal += projectForecastToComplete;
+    projectedTotalCostTotal += projectProjectedTotalCost;
+  }
+  forecastToCompleteTotal = round2(forecastToCompleteTotal);
+  projectedTotalCostTotal = round2(projectedTotalCostTotal);
   const projectedMarginTotal = round2(marginBudgetBaseTotal - projectedTotalCostTotal);
   const projectedMarginPct = marginBudgetBaseTotal > 0 ? round2((projectedMarginTotal / marginBudgetBaseTotal) * 100) : null;
 

@@ -131,9 +131,46 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
   const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
 
   const realizedCost = actualFinancialCost + consumedInventoryCost;
-  const forecastToComplete = Math.max(committedCost + approvedChanges - realizedCost, 0);
-  const projectedTotalCost = round2(realizedCost + forecastToComplete);
   const marginBudgetBase = committedCost + approvedChanges;
+
+  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2): a fórmula
+  // anterior calculava `forecastToComplete = max(B - R, 0)` — ou seja, SEMPRE assumia que o
+  // restante do orçamento inteiro ainda seria gasto até o fim, nunca menos. Isso faz
+  // `projectedTotalCost` nunca ficar abaixo de B: se R < B, projectedTotalCost = R + (B-R) = B
+  // (margem sempre 0); se R >= B, projectedTotalCost = R (margem sempre <= 0). Prova algébrica:
+  // a margem projetada NUNCA podia ser positiva, estruturalmente — mesmo uma obra terminando
+  // genuinamente abaixo do orçamento nunca mostraria lucro/economia projetada, só "zero" ou
+  // "prejuízo". O Caderno Técnico (seção 7, "Read model de custo") exige os CAMPOS
+  // (forecastToComplete/projectedTotalCost/projectedMargin) mas não fecha a fórmula — a escolha
+  // de "sempre gastar o resto do orçamento" era conservadora demais a ponto de quebrar o
+  // propósito do KPI (nunca sinaliza economia real).
+  //
+  // Fix: Estimate At Completion (EAC) por desempenho de custo — método padrão de controle de
+  // obra (EVM/CPI), só ativado quando já existe progresso físico medido (measuredPct > 0 em
+  // pelo menos uma etapa). Com progresso real, o restante do trabalho é projetado pela MESMA
+  // taxa de custo-por-%-concluído já observada: EAC = realizedCost / (progresso físico / 100).
+  // Isso permite projectedTotalCost < B (margem positiva) quando a obra está gastando menos por
+  // % concluído do que o orçado, e > B (margem mais negativa) quando está gastando mais — nos
+  // dois sentidos, não só pra baixo. Sem NENHUM progresso físico medido ainda (obra recém-criada,
+  // sem nenhuma StageMeasurement aprovada), não há dado real pra projetar desempenho — mantém o
+  // comportamento conservador anterior (assume gastar o que resta do orçamento) em vez de
+  // inventar uma estimativa sem base.
+  const stagesForProgress = await ProjectStage.findAll({ where: { projectId }, transaction });
+  const physicalProgressPct = stagesForProgress.length
+    ? stagesForProgress.reduce((acc, s) => acc + toNumber(s.measuredPct), 0) / stagesForProgress.length
+    : 0;
+
+  let forecastToComplete;
+  let projectedTotalCost;
+  if (physicalProgressPct > 0) {
+    const estimateAtCompletion = realizedCost / (physicalProgressPct / 100);
+    forecastToComplete = Math.max(estimateAtCompletion - realizedCost, 0);
+    projectedTotalCost = round2(estimateAtCompletion);
+  } else {
+    forecastToComplete = Math.max(marginBudgetBase - realizedCost, 0);
+    projectedTotalCost = round2(realizedCost + forecastToComplete);
+  }
+
   const projectedMargin = round2(marginBudgetBase - projectedTotalCost);
   const marginPct = marginBudgetBase > 0 ? round2((projectedMargin / marginBudgetBase) * 100) : null;
 
@@ -148,6 +185,31 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
     ? (marginEvaluation.action.enforcementMode || 'ALERT')
     : 'ALERT';
   const belowMinMargin = marginPct !== null && minMarginPct !== null ? marginPct < minMarginPct : null;
+
+  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F5): economyPct/
+  // commissionPct eram validados, salvos e versionados (rule_version_id preservado — ver
+  // marginRules.service.js) mas NUNCA entravam em nenhum cálculo — ficavam "mortos" após salvos.
+  // O Caderno Técnico (seção 2 "Invariantes") exige que "margem mínima, economia e comissão
+  // vêm do Motor de Regras e guardam rule_version_id" — a parte de guardar a versão já estava
+  // correta; faltava a aplicação operacional. Decisão de engenharia (o caderno não fecha a
+  // fórmula exata, mesma situação documentada pra minMarginPct): economyPct/commissionPct são
+  // parâmetros CONFIGURÁVEIS por empresa, então sua aplicação só pode ser calculada quando a
+  // margem projetada é POSITIVA (há economia real de fato, não hipotética) — nunca gera
+  // pagamento/lançamento financeiro automático (consistente com "IA não atribui culpa nem
+  // executa desconto automaticamente", seção 10, mesmo espírito aplicado aqui por segurança:
+  // só exposição informativa pro humano decidir). economyAmount = a economia projetada em R$
+  // (projectedMargin quando positivo, 0 caso contrário — nunca negativo, "economia" não é
+  // "prejuízo"). commissionAmount = economyAmount * commissionPct / 100, só quando a regra tem
+  // commissionPct configurado; null quando não há regra ativa ou commissionPct não configurado
+  // (nunca inventa um percentual).
+  const economyPct = marginEvaluation.decision === 'APPLY' && marginEvaluation.action.economyPct !== undefined && marginEvaluation.action.economyPct !== null
+    ? Number(marginEvaluation.action.economyPct)
+    : null;
+  const commissionPct = marginEvaluation.decision === 'APPLY' && marginEvaluation.action.commissionPct !== undefined && marginEvaluation.action.commissionPct !== null
+    ? Number(marginEvaluation.action.commissionPct)
+    : null;
+  const economyAmount = round2(Math.max(projectedMargin, 0));
+  const commissionAmount = commissionPct !== null ? round2((economyAmount * commissionPct) / 100) : null;
 
   return {
     project,
@@ -164,6 +226,11 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
     minMarginPct,
     belowMinMargin,
     enforcementMode,
+    ruleVersionId: marginEvaluation.decision === 'APPLY' ? marginEvaluation.ruleVersionId : null,
+    economyPct,
+    commissionPct,
+    economyAmount,
+    commissionAmount,
   };
 }
 
@@ -213,6 +280,11 @@ async function getProjectHealth(projectId, transaction) {
     marginPct,
     minMarginPct,
     belowMinMargin,
+    ruleVersionId,
+    economyPct,
+    commissionPct,
+    economyAmount,
+    commissionAmount,
   } = await computeMarginProjection(projectId, transaction);
 
   const baselineBudget = project.budgetAmount !== null && project.budgetAmount !== undefined
@@ -322,6 +394,11 @@ async function getProjectHealth(projectId, transaction) {
     marginPct,
     minMarginPct,
     belowMinMargin,
+    ruleVersionId,
+    economyPct,
+    commissionPct,
+    economyAmount,
+    commissionAmount,
     updatedAt: new Date().toISOString(),
 
     // --- KPIs adicionais (M6-99) calculáveis só com dados desta fatia ---

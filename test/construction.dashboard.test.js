@@ -154,6 +154,63 @@ test('dashboard: projectedMarginTotal/projectedTotalCostTotal consideram consume
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2, estendido ao
+// agregado): a fórmula antiga do dashboard (igual à antiga de projectHealth.service.js) nunca
+// conseguia mostrar projectedMarginTotal positiva — reaplicando a mesma lógica EAC por obra
+// (agora usada em computeMarginProjection) ANTES de agregar, o painel da empresa consegue
+// refletir economia real quando pelo menos uma obra está rendendo mais barato que o orçado.
+test('dashboard: projectedMarginTotal consegue ficar POSITIVA quando a obra agregada está gastando menos por % concluído do que o orçado (EAC, mesma fórmula do drill-down)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectStagesService = require('../src/features/construction/projectStages.service');
+    const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
+    const financialEntriesService = require('../src/features/finance/financialEntries.service');
+    const { FinancialEntry } = require('../src/models');
+
+    await marginRulesService.createMarginRule(withTenant({ minMarginPct: 0 }), tenant.userId, transaction);
+
+    const suffix = uniqueSuffix();
+    const project = await projectsService.createProject(withTenant({ name: `Dash Obra EAC positiva ${suffix}` }), tenant.userId, transaction);
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(project.id, withTenant({ category: 'X', plannedAmount: 1000, budgetId: budget.id }), tenant.userId, transaction);
+    await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+
+    // Snapshot ANTES de medir/liquidar o custo real — a obra já existe (budget aprovado) mas
+    // ainda contribui com margem 0 ao agregado (sem progresso/custo real lançado ainda).
+    const dashboardBefore = await getConstructionDashboard({ groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
+
+    // Mesmo cenário do teste de drill-down: 50% concluído, 400 gasto — EAC=800, economia=200.
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 50, measuredAt: '2026-10-01', items: [{ description: 'Serviço executado', quantity: 1, unitPrice: 400 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+    await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+    const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
+    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(health.projectedMargin, 200, 'sanity: drill-down desta obra sozinha já mostra margem positiva');
+
+    // Banco de dev compartilhado: não afirma um valor absoluto da empresa inteira (outras obras
+    // concorrentes podem ter margem negativa arrastando o total pra baixo). Mede o DELTA
+    // causado só por esta obra (snapshot ANTES de medir/liquidar o custo real vs DEPOIS, dentro
+    // da MESMA transação) — isolado de qualquer dado pré-existente/concorrente.
+    const dashboardAfter = await getConstructionDashboard({ groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
+    const delta = Math.round((dashboardAfter.obras.projectedMarginTotal - dashboardBefore.obras.projectedMarginTotal) * 100) / 100;
+    assert.equal(
+      delta,
+      200,
+      `a contribuição desta obra ao agregado precisa ser +200 (economia real), recebeu delta=${delta} — a fórmula antiga nunca conseguia contribuir com valor positivo`
+    );
+  });
+});
+
 test('dashboard: posObra agrega chamados de garantia de MÚLTIPLAS obras e quebra recorrência por causa/equipe/material', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();

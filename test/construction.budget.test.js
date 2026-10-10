@@ -310,6 +310,139 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2): a fórmula
+// anterior de projectedMargin (forecastToComplete = max(B-R,0)) tornava projectedMargin
+// matematicamente IMPOSSÍVEL de ser positiva — só 0 ou negativa, mesmo quando a obra termina
+// genuinamente abaixo do orçamento. Prova algébrica: projectedTotalCost = R + max(B-R,0), que
+// é sempre >= B. Fix: Estimate At Completion por desempenho de custo (EVM/CPI) quando já existe
+// progresso físico medido — projeta o restante pela MESMA taxa de custo-por-%-concluído já
+// observada, permitindo projectedTotalCost < B (margem positiva) quando a obra está gastando
+// menos por % concluído do que o orçado. Demonstra os 3 cenários pedidos: positiva, zero e
+// negativa, todos com progresso físico real medido (sem isso, o cálculo fica conservador como
+// antes — ver testes acima, nenhum deles tem ProjectStage/measuredPct).
+test('M6-NOVO-14: projectedMargin consegue ficar POSITIVA, ZERO e NEGATIVA conforme o desempenho de custo real (EAC), nunca mais travada em <= 0', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectStagesService = require('../src/features/construction/projectStages.service');
+    const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const financialEntriesService = require('../src/features/finance/financialEntries.service');
+    const { FinancialEntry } = require('../src/models');
+
+    async function measureAndSettle(stage, projectId, measuredPct, unitPrice, dateStr) {
+      const measurement = await stageMeasurementsService.createStageMeasurement(
+        stage.id,
+        { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct, measuredAt: dateStr, items: [{ description: 'Serviço executado', quantity: 1, unitPrice }] },
+        tenant.userId,
+        transaction
+      );
+      await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+      await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+      await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+      const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
+      await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    }
+
+    // Orçamento (B) = 1000. Etapa medida em 50% concluída, com 400 já gasto (realizedCost).
+    // Taxa observada: 400 de custo para 50% do trabalho → EAC = 400 / 0.5 = 800 (abaixo de B).
+    // Margem esperada: 1000 - 800 = 200 (POSITIVA) — a obra está rendendo mais barato que o
+    // orçado, e agora isso aparece como economia projetada, não mais como "zero" disfarçado.
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000, minMarginPct: 0 });
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
+    await measureAndSettle(stage, project.id, 50, 400, '2026-10-01');
+
+    const healthPositive = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthPositive.actualFinancialCost + healthPositive.consumedInventoryCost, 400, 'realizedCost = actualFinancialCost + consumedInventoryCost');
+    assert.equal(healthPositive.projectedTotalCost, 800, 'EAC = realizedCost / (progresso/100) = 400 / 0.5 = 800');
+    assert.equal(healthPositive.projectedMargin, 200, 'margem positiva: a obra está gastando menos por % concluído do que o orçado');
+    assert.ok(healthPositive.projectedMargin > 0, 'cenário POSITIVO: a fórmula anterior nunca conseguia chegar aqui');
+
+    // Cenário ZERO: progresso vai a 100% e o custo total bate exatamente o orçamento (gastou
+    // exatamente o esperado por % concluído) — EAC = B, margem = 0.
+    await projectStagesService.updateProjectStage(stage.id, { measuredPct: 100 }, tenant.userId, transaction);
+    await measureAndSettle(stage, project.id, 100, 600, '2026-10-02');
+
+    const healthZero = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthZero.actualFinancialCost + healthZero.consumedInventoryCost, 1000);
+    assert.equal(healthZero.projectedTotalCost, 1000, 'EAC = 1000 / (100/100) = 1000 = B');
+    assert.equal(healthZero.projectedMargin, 0, 'cenário ZERO: gastou exatamente o orçado pelo progresso concluído');
+
+    // Cenário NEGATIVO: outra obra, progresso de 50% mas já gastou MAIS do que a taxa linear do
+    // orçamento sustentaria (600 de 1000 para só 50% do trabalho) — EAC = 600/0.5 = 1200 > B.
+    const { project: projectOver } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000, minMarginPct: 0 });
+    const stageOver = await projectStagesService.createProjectStage(projectOver.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    await projectStagesService.updateProjectStage(stageOver.id, { measuredPct: 50 }, tenant.userId, transaction);
+    await measureAndSettle(stageOver, projectOver.id, 50, 600, '2026-10-01');
+
+    const healthNegative = await projectHealthService.getProjectHealth(projectOver.id, transaction);
+    assert.equal(healthNegative.actualFinancialCost + healthNegative.consumedInventoryCost, 600);
+    assert.equal(healthNegative.projectedTotalCost, 1200, 'EAC = 600 / (50/100) = 1200 > B');
+    assert.equal(healthNegative.projectedMargin, -200, 'cenário NEGATIVO: a obra está gastando mais por % concluído do que o orçado');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F5): economyPct/
+// commissionPct eram validados, salvos e versionados (rule_version_id preservado), mas nunca
+// entravam em nenhum cálculo — "percentuais mortos". Agora getProjectHealth/computeMarginProjection
+// expõem economyAmount (economia real em R$, nunca negativa) e commissionAmount (economyAmount
+// * commissionPct/100), calculados a partir da MESMA avaliação do Motor de Regras que já
+// preserva ruleVersionId — nenhum pagamento/lançamento automático é disparado, é só exposição
+// informativa pro humano decidir (mesmo espírito de "IA não executa desconto automaticamente").
+test('M6-NOVO-15: economyAmount/commissionAmount são calculados a partir da margem positiva e preservam o ruleVersionId usado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const projectStagesService = require('../src/features/construction/projectStages.service');
+    const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
+    const projectHealthService = require('../src/features/construction/projectHealth.service');
+    const financialEntriesService = require('../src/features/finance/financialEntries.service');
+    const { FinancialEntry } = require('../src/models');
+
+    const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra economia/comissão ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const marginRule = await marginRulesService.createMarginRule(
+      withTenant({ minMarginPct: 0, economyPct: 10, commissionPct: 20 }),
+      tenant.userId,
+      transaction
+    );
+    const budget = await budgetsService.createBudget(project.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(project.id, withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget.id }), tenant.userId, transaction);
+    await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
+
+    // Mesmo cenário POSITIVO do teste anterior: orçamento 1000, 50% concluído com 400 gasto —
+    // EAC=800, economia real projetada = 1000-800 = 200.
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
+    const measurement = await stageMeasurementsService.createStageMeasurement(
+      stage.id,
+      { groupId: tenant.groupId, companyId: tenant.companyId, measuredPct: 50, measuredAt: '2026-10-01', items: [{ description: 'Serviço executado', quantity: 1, unitPrice: 400 }] },
+      tenant.userId,
+      transaction
+    );
+    await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
+    await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
+    await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
+    const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
+    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+
+    const health = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(health.projectedMargin, 200);
+    assert.equal(health.economyPct, 10, 'economyPct configurado na regra precisa ser exposto tal como salvo');
+    assert.equal(health.commissionPct, 20, 'commissionPct configurado na regra precisa ser exposto tal como salvo');
+    assert.equal(health.economyAmount, 200, 'economyAmount = economia real projetada (margem positiva), nunca negativa');
+    assert.equal(health.commissionAmount, 40, 'commissionAmount = economyAmount (200) * commissionPct (20%) = 40');
+    assert.equal(health.ruleVersionId, marginRule.id, 'a versão da regra usada no cálculo precisa ser a mesma criada (rule_version_id preservado)');
+
+    // Controle negativo: sem commissionPct configurado, commissionAmount fica null (nunca
+    // inventa um percentual nem assume um padrão).
+    const project2 = await projectsService.createProject(withTenant({ name: `HOMO QA Obra sem comissão ${uniqueSuffix()}` }), tenant.userId, transaction);
+    const budget2 = await budgetsService.createBudget(project2.id, withTenant({}), tenant.userId, transaction);
+    await budgetLinesService.createBudgetLine(project2.id, withTenant({ category: 'FUNDACAO', plannedAmount: 1000, budgetId: budget2.id }), tenant.userId, transaction);
+    await budgetsService.approveBudget(budget2.id, tenant.userId, transaction);
+    const health2 = await projectHealthService.getProjectHealth(project2.id, transaction);
+    assert.equal(health2.commissionPct, 20, 'empresa continua usando a mesma regra ativa (a última versão criada acima)');
+    assert.equal(health2.economyAmount, 0, 'sem nenhum custo lançado/medido ainda, margem é 0 — economia real é 0, nunca negativa');
+    assert.equal(health2.commissionAmount, 0, 'commissionAmount = 0 * 20% = 0 quando não há economia real ainda');
+  });
+});
+
 // BUG REAL CORRIGIDO (auditoria Marco 6, ciclo 5, 2026-10-06): wastagePct em
 // projectHealth.service.js somava só LossRecord do tipo LOSS, nunca abatendo os RETURN já
 // aprovados que apontam pra eles (relatedLossRecordId) — mesmo padrão de "campo financeiro não
