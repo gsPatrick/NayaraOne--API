@@ -1,7 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
+const AppError = require('../../utils/AppError');
+const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const costCentersService = require('./costCenters.service');
 const resultCentersService = require('./resultCenters.service');
 const bankAccountsService = require('./bankAccounts.service');
@@ -9,10 +12,12 @@ const financialEntriesService = require('./financialEntries.service');
 const bankTransactionsService = require('./bankTransactions.service');
 const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
+const { clearManualReview } = require('./financeAntifraud.service');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
 const chartOfAccountsService = require('./chartOfAccounts.service');
 const paymentIntentsService = require('./paymentIntents.service');
+const bankPaymentsService = require('./bankPayments.service');
 const intercompanyTransfersService = require('./intercompanyTransfers.service');
 const periodClosuresService = require('./periodClosures.service');
 const financialHealthReportService = require('./financialHealthReport.service');
@@ -118,6 +123,16 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
     financialEntriesService.reverseFinancialEntry(req.params.id, req.body.reason, req.auth.userId, t)
   );
   return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7): clearManualReview
+// (financeAntifraud.service.js) já existia e era usada internamente, mas nunca foi exposta por
+// rota nenhuma — um lançamento retido por antifraude não tinha como ser liberado pela API/tela,
+// só direto no banco.
+const clearFinancialEntryManualReview = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    clearManualReview(req.params.id, req.auth.userId, t, req.body?.reviewNote)
+  );
+  return success(res, { data: item });
 });
 
 // --- Bank transactions (extrato) ---
@@ -251,6 +266,88 @@ const cancelPaymentIntent = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Submissão bancária real (BankAdapter — ver PROVIDER_BANCARIO.md) ---
+const submitPaymentIntentToBank = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId };
+  const intent = await req.withTenantTransaction((t) =>
+    bankPaymentsService.submitPaymentIntentToBank(req.params.id, req.body.paymentMethod, actor, t)
+  );
+  return success(res, { data: intent });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 38, 2026-10-05): mesma falha de
+// segurança já corrigida no webhook de seguro (R37, insurance.controller.js) — HMAC-SHA256 por
+// tenant, timing-safe, fail-closed quando há provider real configurado.
+const BANK_WEBHOOK_HEADER = 'x-webhook-signature';
+
+function computeHmacSha256Hex(secret, rawBody) {
+  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+}
+
+function verifyBankWebhookSignature(rawBody, headers, webhookSecret) {
+  if (!webhookSecret || !rawBody || rawBody.length === 0) return false;
+  const received = headers ? headers[BANK_WEBHOOK_HEADER] : null;
+  if (!received || typeof received !== 'string') return false;
+  const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
+
+  const expectedHex = computeHmacSha256Hex(webhookSecret, rawBody);
+
+  let expectedBuffer;
+  let receivedBuffer;
+  try {
+    expectedBuffer = Buffer.from(expectedHex, 'hex');
+    receivedBuffer = Buffer.from(receivedHex, 'hex');
+  } catch (err) {
+    return false;
+  }
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+// Webhook PÚBLICO (fora do authMiddleware/tenantMiddleware — ver finance.routes.js/routes/index.js,
+// mesmo padrão de clicksignPublicWebhook em legal.controller.js). O provedor bancário não tem
+// (e nunca terá) um JWT de usuário deste sistema.
+const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
+  const { externalSubmissionId, status } = req.body || {};
+  // Valida TIPO, não só presença — um payload malformado (ex.: status como objeto/array) não
+  // pode chegar a uma query Sequelize sem passar por aqui primeiro; isso derrubaria o webhook
+  // público com um 500 cru, sem nenhum código de erro específico.
+  if (typeof externalSubmissionId !== 'string' || !externalSubmissionId || typeof status !== 'string' || !status) {
+    return success(res, { statusCode: 400, data: { received: false, reason: 'invalid_payload' } });
+  }
+  const { sequelize, BankPaymentProviderRouting } = require('../../models');
+  const result = await sequelize.transaction(async (t) => {
+    // Resolve o tenant via routing table (sem RLS) ANTES de abrir qualquer SET LOCAL — mesma
+    // ordem de operações do webhook de assinatura.
+    const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId }, transaction: t });
+    if (!routing) {
+      // Mesmo padrão do webhook da Clicksign (legal.controller.js): 200 pra o provedor não
+      // ficar reenviando infinitamente, mas o motivo de não ter processado fica EXPLÍCITO no
+      // campo `reason` da resposta — nunca um "received: true" indistinguível de sucesso real.
+      return { received: true, processed: false, reason: 'unknown_routing' };
+    }
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: routing.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: routing.companyId }, transaction: t });
+
+    const tenant = { groupId: routing.groupId, companyId: routing.companyId };
+    const providerName = await getSetting('finance.payment_provider', tenant, t, 'sandbox');
+    if (providerName !== 'sandbox') {
+      const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
+      const isValid = verifyBankWebhookSignature(req.rawBody, req.headers, webhookSecret);
+      if (!isValid) {
+        throw AppError.unauthorized(
+          'Assinatura HMAC do webhook bancário ausente ou inválida para o provedor configurado.',
+          'BANK_PAYMENT_WEBHOOK_HMAC_INVALID'
+        );
+      }
+    }
+
+    await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t);
+    return { received: true, processed: true };
+  });
+  return success(res, { data: result });
+});
+
 // --- Intercompany transfers (M4-18) ---
 const createIntercompanyTransfer = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) =>
@@ -294,12 +391,14 @@ const getWeeklyHealthReport = catchAsync(async (req, res) => {
 module.exports = {
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
+  submitPaymentIntentToBank, bankPaymentPublicWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
   closePeriod, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
+  clearFinancialEntryManualReview,
   createBankTransaction, listBankTransactions,
   matchReconciliation, listReconciliations,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,

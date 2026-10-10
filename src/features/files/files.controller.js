@@ -29,8 +29,13 @@ const getFileMetadata = catchAsync(async (req, res) => {
 const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction((t) => filesService.getFileContent(req.params.id, t));
   const total = file.content.length;
-  const mimeType = file.mimeType || 'application/octet-stream';
-  const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+  // Defesa em profundidade (auditoria E2E ao vivo, Marco 6, Ciclo 4): uploadFile agora bloqueia
+  // mimeType fora da allowlist na ENTRADA, mas um arquivo antigo gravado antes desse fix (ou
+  // qualquer outra via de escrita direta no banco) não pode ser servido com Content-Type/
+  // Content-Disposition que renderize HTML/script no navegador — força download seguro.
+  const isSafeToRenderInline = filesService.ALLOWED_MIME_TYPES.includes(String(file.mimeType || '').toLowerCase());
+  const mimeType = isSafeToRenderInline ? file.mimeType : 'application/octet-stream';
+  const disposition = isSafeToRenderInline && req.query.download !== '1' ? 'inline' : 'attachment';
 
   res.set('Accept-Ranges', 'bytes');
   res.set('Content-Type', mimeType);

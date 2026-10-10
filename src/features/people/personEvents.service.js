@@ -21,7 +21,14 @@ async function publishPersonCreated(person, transaction) {
   );
 }
 
-async function publishPersonMerged(canonicalPerson, absorbedPerson, transaction) {
+/**
+ * publishPersonMerged — payload inclui `remappedReferences` (mapa tabela -> quantidade de
+ * linhas remapeadas do absorvido para o canônico) desde o reforço do item 1 do ciclo de
+ * auditoria externa Marco 3: "Gerar evento person.merged e audit log com mapa de
+ * referências." (Caderno §29, passo 8) — antes o payload só tinha os dois ids, sem dizer o
+ * que de fato foi remapeado.
+ */
+async function publishPersonMerged(canonicalPerson, absorbedPerson, remappedReferences, transaction) {
   return publishDomainEvent(
     {
       groupId: canonicalPerson.groupId,
@@ -29,7 +36,7 @@ async function publishPersonMerged(canonicalPerson, absorbedPerson, transaction)
       aggregateType: 'Person',
       aggregateId: canonicalPerson.id,
       eventType: 'person.merged',
-      payload: { canonicalId: canonicalPerson.id, absorbedId: absorbedPerson.id },
+      payload: { canonicalId: canonicalPerson.id, absorbedId: absorbedPerson.id, remappedReferences: remappedReferences || {} },
       idempotencyKey: `person.merged:${canonicalPerson.id}:${absorbedPerson.id}`,
     },
     transaction

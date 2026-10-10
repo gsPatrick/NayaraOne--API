@@ -1,14 +1,17 @@
 'use strict';
 
-const { Contract, ContractParty, ContractVersion, Signature, Guarantee, sequelize } = require('../../models');
+const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged } = require('./legalEvents.service');
 
-const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE'];
+// M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
+// empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
+// createContract abaixo e migrations/20260101000237-add-construction_project_id-to-legal-contracts.js).
+const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE', 'CONSTRUCTION'];
 
 // Prefixo de numeração por contractType — ver 20260101000177-create-legal-contract_number_sequences.js.
-const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV' };
+const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV', CONSTRUCTION: 'OBR' };
 
 /**
  * generateContractNumber — gera o próximo número no formato "{PREFIXO}-{ANO}-{SEQ:04d}"
@@ -52,6 +55,21 @@ async function generateContractNumber(companyId, contractType, transaction) {
 // e adicionamos CANCELLED como estado terminal alcançável de qualquer estado não-ACTIVE, já
 // que todo processo de negócio real precisa de uma saída de cancelamento — mas isso NÃO está
 // no doc, é decisão nossa, documentada aqui explicitamente.
+//
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): o Caderno (Anexo I, "5. Estado do
+// contrato") LISTA LITERALMENTE os status SUSPENDED/TERMINATED/CLOSED e a máquina de estados de
+// referência do próprio documento define:
+//   ACTIVE: ['SUSPENDED', 'TERMINATED']
+//   SUSPENDED: ['ACTIVE', 'TERMINATED']
+//   TERMINATED: ['CLOSED']
+// Este código tinha `ACTIVE: []` — nenhuma saída de ACTIVE — e nem os status SUSPENDED/
+// TERMINATED/CLOSED existiam na máquina. Gap REAL confirmado (não é mal-entendido do auditor):
+// um contrato locado em vigor não tinha como ser suspenso (ex.: inadimplência em negociação,
+// decisão judicial) nem encerrado/rescindido formalmente — só "CANCELLED", que semanticamente é
+// para antes da ativação, não para o fim de vida de um contrato ativo. Adicionadas as transições
+// abaixo, com funções dedicadas (suspendContract/reactivateContract/terminateContract/
+// closeContract) que exigem motivo e preservam o histórico (nunca apagam a linha — só mudam
+// `status` com auditoria append-only, mesmo padrão de correctContractData acima).
 const VALID_TRANSITIONS = {
   DRAFT: ['DOCUMENTS_PENDING', 'CANCELLED'],
   DOCUMENTS_PENDING: ['LEGAL_REVIEW', 'CANCELLED'],
@@ -59,7 +77,10 @@ const VALID_TRANSITIONS = {
   APPROVED: ['SIGNING', 'CANCELLED'],
   SIGNING: ['SIGNED', 'CANCELLED'],
   SIGNED: ['ACTIVE'],
-  ACTIVE: [],
+  ACTIVE: ['SUSPENDED', 'TERMINATED'],
+  SUSPENDED: ['ACTIVE', 'TERMINATED'],
+  TERMINATED: ['CLOSED'],
+  CLOSED: [],
   CANCELLED: [],
 };
 
@@ -235,12 +256,20 @@ async function assertActivationGate(contract, transaction) {
 }
 
 async function createContract(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt } = payload;
+  const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId } = payload;
   if (!groupId || !companyId || !contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
   if (!CONTRACT_TYPES.includes(contractType)) {
     throw AppError.badRequest(`"contractType" deve ser um de: ${CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION');
+  }
+  // M6-104: contrato de empreitada (CONSTRUCTION) precisa nascer já vinculado à obra —
+  // sem isso não há como o Marco 6 amarrar o contrato à execução física da obra.
+  if (contractType === 'CONSTRUCTION' && !constructionProjectId) {
+    throw AppError.badRequest(
+      '"constructionProjectId" é obrigatório para contratos do tipo "CONSTRUCTION".',
+      'LEGAL_CONTRACT_CONSTRUCTION_PROJECT_REQUIRED'
+    );
   }
 
   // Numeração automática: só gera se o chamador não informou um número explícito (correção
@@ -253,6 +282,7 @@ async function createContract(payload, actorUserId, transaction) {
       companyId,
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
+      constructionProjectId: constructionProjectId || null,
       contractType,
       contractNumber: finalContractNumber,
       status: 'DRAFT',
@@ -306,6 +336,22 @@ async function getContract(id, transaction) {
  * (evita 2 SELECTs quando o chamador já a tem em mãos, ex.: signatures.service.js).
  */
 async function transitionContractStatus(contract, targetStatus, actorUserId, transaction) {
+  // NOTA DE INVESTIGAÇÃO (homologação, contrato c00af665-98b9-47bc-8aa2-b7c7143ec894 —
+  // "Violação de restrição de unicidade" ao avançar para SIGNING): a hipótese inicial foi uma
+  // corrida de concorrência aqui (duas transições simultâneas do mesmo `fromStatus` disputando
+  // o mesmo INSERT no outbox de eventos). Investigação confirmou que essa corrida específica JÁ
+  // é coberta pelo lock otimista existente no model `Contract` (`lockVersion`/`version` — ver
+  // Contract.js): `contract.save()` abaixo falha primeiro com `OptimisticLockError` quando duas
+  // transições concorrentes partem do mesmo estado, então a segunda NUNCA chega a tentar o
+  // INSERT duplicado no outbox — não há violação de UNIQUE possível por esse caminho (ver
+  // ADV-L17 em test/adversarial.legal.test.js, que já provava isso). Adicionar aqui um `SELECT
+  // ... FOR UPDATE` extra SERIALIZARIA as duas transições em vez de rejeitar a perdedora — o que
+  // mudaria um comportamento correto (a segunda falha rápido e o cliente decide se tenta de
+  // novo) para um comportamento diferente (a segunda espera e reaplica sobre o estado novo),
+  // sem necessidade real. A CAUSA RAIZ verdadeira do "Violação de restrição de unicidade" deste
+  // contrato estava em `createContractVersion` (contractVersions.service.js) — o cálculo de
+  // `nextVersionNumber` ali SIM tinha um SELECT sem lock antes de decidir, e é lá que o fix e o
+  // teste de regressão (ADV-L18) foram aplicados.
   const fromStatus = contract.status;
   const allowedTargets = VALID_TRANSITIONS[fromStatus] || [];
   if (!allowedTargets.includes(targetStatus)) {
@@ -353,6 +399,139 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   return contract;
 }
 
+/**
+ * Transições dedicadas de fim-de-vida de um contrato ATIVO (SUSPENDED/TERMINATED/CLOSED).
+ *
+ * Diferente da transição genérica `transitionContractStatus` (que só valida a máquina de
+ * estados, sem exigir motivo), estas funções seguem o mesmo padrão de `correctContractData`:
+ * exigem `reason` não vazio, travam a linha (lock pessimista, mesmo motivo documentado no
+ * módulo de Obras — `Project.transitionProject`/`budgets.service.js`: evita lost update em
+ * transições concorrentes do mesmo contrato), NUNCA apagam o registro (`Contract` é `paranoid`
+ * e esta operação é um simples UPDATE de `status`), e gravam auditoria append-only completa
+ * (beforeJson/afterJson/motivo/autor) — o histórico fica inteiro e sem buraco, igual ao padrão
+ * já usado em `transitionContractStatus`/`correctContractData` acima.
+ */
+async function assertReason(reason) {
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest('O campo "reason" é obrigatório para justificar esta transição.', 'LEGAL_CONTRACT_TRANSITION_REASON_REQUIRED');
+  }
+}
+
+async function loadContractForTransition(contractId, transaction) {
+  const contract = await Contract.findByPk(contractId, {
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!contract) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
+  return contract;
+}
+
+async function applyGatedTransition(contract, targetStatus, actorUserId, reason, action, transaction) {
+  const fromStatus = contract.status;
+  const allowedTargets = VALID_TRANSITIONS[fromStatus] || [];
+  if (!allowedTargets.includes(targetStatus)) {
+    throw AppError.conflict(
+      `Transição de status inválida: "${fromStatus}" -> "${targetStatus}". Transições permitidas a partir de "${fromStatus}": ${allowedTargets.join(', ') || '(nenhuma)'}.`,
+      'LEGAL_CONTRACT_INVALID_TRANSITION'
+    );
+  }
+
+  const beforeJson = contract.toJSON();
+  contract.status = targetStatus;
+  contract.updatedBy = actorUserId || null;
+  await contract.save({ transaction });
+
+  await publishContractStatusChanged(contract, fromStatus, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      actorUserId,
+      action,
+      entityType: 'Contract',
+      entityId: contract.id,
+      beforeJson,
+      afterJson: contract.toJSON(),
+      reason: `Contrato transicionado de "${fromStatus}" para "${targetStatus}": ${reason}`,
+    },
+    transaction
+  );
+
+  return contract;
+}
+
+/**
+ * suspendContract — ACTIVE -> SUSPENDED (Caderno, Anexo I "5. Estado do contrato"). Usado para
+ * suspender um contrato em vigor (ex.: inadimplência em negociação, decisão judicial liminar)
+ * sem perder o fato de que ele já esteve ACTIVE — o histórico de status fica íntegro na
+ * auditoria (`legal.contract.suspend`), nunca é sobrescrito nem apagado.
+ */
+async function suspendContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'SUSPENDED', actorUserId, reason, 'legal.contract.suspend', transaction);
+}
+
+/**
+ * reactivateContract — SUSPENDED -> ACTIVE (Caderno). Reativação depois que a causa da
+ * suspensão foi sanada (ex.: inadimplência regularizada).
+ */
+async function reactivateContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'ACTIVE', actorUserId, reason, 'legal.contract.reactivate', transaction);
+}
+
+/**
+ * terminateContract — ACTIVE -> TERMINATED ou SUSPENDED -> TERMINATED (Caderno).
+ *
+ * GATE DE ENCERRAMENTO (item cobrado pela auditoria da cliente — "encerramento bloqueado
+ * quando há obrigação crítica pendente"): não é possível encerrar um contrato que ainda tenha
+ * (a) alguma Guarantee com status "ACTIVE" (garantia/caução/fiança ainda não devolvida/liberada
+ * nem cancelada) ou (b) algum LegalCase vinculado a este contrato com status diferente de
+ * "CLOSED" (processo jurídico aberto). Isso espelha o mesmo espírito do `assertActivationGate`
+ * acima (reconfere do zero, não confia em estado passado) e fecha exatamente o buraco que a
+ * máquina de estados antiga deixava: antes nem existia TERMINATED, então esse risco nunca tinha
+ * sido modelado.
+ */
+async function terminateContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+
+  const openGuarantees = await Guarantee.findAll({ where: { contractId: contract.id, status: 'ACTIVE' }, transaction });
+  if (openGuarantees.length > 0) {
+    throw AppError.conflict(
+      'Não é possível ENCERRAR o contrato: existem garantias com status "ACTIVE" (não devolvidas/liberadas) — libere ou cancele todas as garantias antes do encerramento.',
+      'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING'
+    );
+  }
+
+  const { LegalCase } = require('../../models');
+  const openCases = await LegalCase.findAll({
+    where: { contractId: contract.id },
+    transaction,
+  });
+  const stillOpen = openCases.filter((c) => c.status !== 'CLOSED');
+  if (stillOpen.length > 0) {
+    throw AppError.conflict(
+      'Não é possível ENCERRAR o contrato: existe(m) processo(s) jurídico(s) vinculado(s) que ainda não está(ão) com status "CLOSED".',
+      'LEGAL_CONTRACT_TERMINATION_LEGAL_CASE_OPEN'
+    );
+  }
+
+  return applyGatedTransition(contract, 'TERMINATED', actorUserId, reason, 'legal.contract.terminate', transaction);
+}
+
+/**
+ * closeContract — TERMINATED -> CLOSED (Caderno: "Arquivado operacionalmente").
+ */
+async function closeContract(contractId, reason, actorUserId, transaction) {
+  await assertReason(reason);
+  const contract = await loadContractForTransition(contractId, transaction);
+  return applyGatedTransition(contract, 'CLOSED', actorUserId, reason, 'legal.contract.close', transaction);
+}
+
 async function addContractParty(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
   const { personId, partyRole } = payload;
@@ -362,6 +541,22 @@ async function addContractParty(contractId, payload, actorUserId, transaction) {
   }
   if (!VALID_ROLES.includes(partyRole)) {
     throw AppError.badRequest(`"partyRole" deve ser um de: ${VALID_ROLES.join(', ')}.`, 'LEGAL_CONTRACT_PARTY_VALIDATION');
+  }
+
+  // FIX (homologação — contrato com "as partes aparecem sem nome"): `personId` nunca era
+  // conferido contra a tabela `people.persons`. Um `personId` inválido/de outro tenant (RLS faz
+  // `Person.findByPk` sob o mesmo tenant do `getContract` acima simplesmente não achar a
+  // pessoa) ainda assim criava a linha em `legal.contract_parties` — o contrato ficava com uma
+  // parte "órfã" que nenhuma tela consegue resolver (a listagem de pessoas do tenant nunca
+  // contém esse id), e a tela de detalhe do contrato cai no fallback "—"/"?" do nome, porque o
+  // dado nunca existiu de fato, não porque a tela falhou em exibi-lo. Fail closed: exige que a
+  // pessoa exista (mesmo tenant, via RLS) antes de gravar a parte.
+  const person = await Person.findByPk(personId, { transaction });
+  if (!person) {
+    throw AppError.badRequest(
+      `Pessoa "${personId}" não encontrada — não é possível adicionar uma parte ao contrato com um "personId" inexistente.`,
+      'LEGAL_CONTRACT_PARTY_PERSON_NOT_FOUND'
+    );
   }
 
   const party = await ContractParty.create(
@@ -471,6 +666,10 @@ module.exports = {
   listContracts,
   getContract,
   transitionContractStatus,
+  suspendContract,
+  reactivateContract,
+  terminateContract,
+  closeContract,
   addContractParty,
   listContractParties,
   correctContractData,

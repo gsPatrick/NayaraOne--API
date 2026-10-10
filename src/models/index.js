@@ -51,6 +51,9 @@ const modelDefiners = {
   PropertyInternalOccurrence: require('./PropertyInternalOccurrence'),
   Opportunity: require('./Opportunity'),
   PropertyRadar: require('./PropertyRadar'),
+  Cart: require('./Cart'),
+  CartVersion: require('./CartVersion'),
+  CartShareRouting: require('./CartShareRouting'),
   Proposal: require('./Proposal'),
   FeedbackCase: require('./FeedbackCase'),
   Visit: require('./Visit'),
@@ -73,15 +76,26 @@ const modelDefiners = {
   InspectionSignature: require('./InspectionSignature'),
   Guarantee: require('./Guarantee'),
   KeyDelivery: require('./KeyDelivery'),
+  ContractRequirement: require('./ContractRequirement'),
+  Notice: require('./Notice'),
   EvidencePackage: require('./EvidencePackage'),
   EvidencePackageAccessLog: require('./EvidencePackageAccessLog'),
   InsuranceCase: require('./InsuranceCase'),
+  InsurancePolicy: require('./InsurancePolicy'),
+  InsurancePolicyParty: require('./InsurancePolicyParty'),
+  InsuranceCoverage: require('./InsuranceCoverage'),
+  InsuranceInstallment: require('./InsuranceInstallment'),
+  InsuranceClaim: require('./InsuranceClaim'),
+  InsuranceClaimEvent: require('./InsuranceClaimEvent'),
+  InsuranceRenewalTask: require('./InsuranceRenewalTask'),
+  InsuranceProviderSubmission: require('./InsuranceProviderSubmission'),
   BankAccount: require('./BankAccount'),
   CostCenter: require('./CostCenter'),
   ResultCenter: require('./ResultCenter'),
   FinancialEntry: require('./FinancialEntry'),
   ChartOfAccount: require('./ChartOfAccount'),
   PaymentIntent: require('./PaymentIntent'),
+  BankPaymentProviderRouting: require('./BankPaymentProviderRouting'),
   IntercompanyTransfer: require('./IntercompanyTransfer'),
   PeriodClosure: require('./PeriodClosure'),
   BankTransaction: require('./BankTransaction'),
@@ -95,13 +109,50 @@ const modelDefiners = {
   Project: require('./Project'),
   ProjectStage: require('./ProjectStage'),
   MaintenanceCase: require('./MaintenanceCase'),
+  WarrantyAction: require('./WarrantyAction'),
   StageMeasurement: require('./StageMeasurement'),
+  MeasurementItem: require('./MeasurementItem'),
   DailyReport: require('./DailyReport'),
+  StageDependency: require('./StageDependency'),
+  DailyWorker: require('./DailyWorker'),
+  DailyMaterial: require('./DailyMaterial'),
   BudgetLine: require('./BudgetLine'),
+  Budget: require('./Budget'),
+  ChangeOrder: require('./ChangeOrder'),
+  MarginRule: require('./MarginRule'),
   QualityChecklistItem: require('./QualityChecklistItem'),
+  Nonconformity: require('./Nonconformity'),
+  LossRecord: require('./LossRecord'),
+  ApprovalThreshold: require('./ApprovalThreshold'),
+  MaterialRequest: require('./MaterialRequest'),
+  ProjectCodeSequence: require('./ProjectCodeSequence'),
   InventoryItem: require('./InventoryItem'),
   InventoryMovement: require('./InventoryMovement'),
+  InventoryLocation: require('./InventoryLocation'),
+  InventoryStockBalance: require('./InventoryStockBalance'),
+  InventoryReceipt: require('./InventoryReceipt'),
+  InventoryReceiptItem: require('./InventoryReceiptItem'),
+  InventoryRequisition: require('./InventoryRequisition'),
+  InventoryRequisitionItem: require('./InventoryRequisitionItem'),
   Asset: require('./Asset'),
+  AssetMovement: require('./AssetMovement'),
+  InventoryToolLoan: require('./InventoryToolLoan'),
+  InventoryMaintenanceOrder: require('./InventoryMaintenanceOrder'),
+  InventoryLossCase: require('./InventoryLossCase'),
+  InventoryCount: require('./InventoryCount'),
+  InventoryCountItem: require('./InventoryCountItem'),
+  PurchaseRequest: require('./PurchaseRequest'),
+  PurchaseRequestItem: require('./PurchaseRequestItem'),
+  Quotation: require('./Quotation'),
+  SupplierOffer: require('./SupplierOffer'),
+  SupplierOfferItem: require('./SupplierOfferItem'),
+  PurchaseOrder: require('./PurchaseOrder'),
+  PurchaseOrderItem: require('./PurchaseOrderItem'),
+  GoodsReceipt: require('./GoodsReceipt'),
+  GoodsReceiptItem: require('./GoodsReceiptItem'),
+  ReceiptDiscrepancy: require('./ReceiptDiscrepancy'),
+  SupplierEvaluation: require('./SupplierEvaluation'),
+  SupplierQualification: require('./SupplierQualification'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
   DomainEvent: require('./DomainEvent'),
@@ -255,6 +306,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.Inspection.belongsTo(db.User, { foreignKey: 'inspector_user_id', as: 'inspectorUser', constraints: false });
   db.InspectionItem.belongsTo(db.Inspection, { foreignKey: 'inspection_id', as: 'inspection', constraints: false });
   db.Guarantee.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.ContractRequirement.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.Contract.hasMany(db.ContractRequirement, { foreignKey: 'contract_id', as: 'requirements', constraints: false });
+  db.Notice.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.Notice.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
   db.Guarantee.belongsTo(db.Person, { foreignKey: 'guarantor_person_id', as: 'guarantorPerson', constraints: false });
   db.KeyDelivery.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.KeyDelivery.belongsTo(db.Inspection, { foreignKey: 'inspection_id', as: 'inspection', constraints: false });
@@ -263,6 +318,26 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.EvidencePackage.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
   db.InsuranceCase.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
   db.InsuranceCase.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+
+  // Insurance Hub (Marco 7 — procurement.insurance_*)
+  db.InsurancePolicy.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
+  db.InsurancePolicy.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
+  db.InsurancePolicy.hasMany(db.InsurancePolicyParty, { foreignKey: 'policy_id', as: 'parties' });
+  db.InsurancePolicyParty.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsurancePolicy.hasMany(db.InsuranceCoverage, { foreignKey: 'policy_id', as: 'coverages' });
+  db.InsuranceCoverage.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsurancePolicy.hasMany(db.InsuranceInstallment, { foreignKey: 'policy_id', as: 'installments' });
+  db.InsuranceInstallment.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceInstallment.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.InsurancePolicy.hasMany(db.InsuranceClaim, { foreignKey: 'policy_id', as: 'claims' });
+  db.InsuranceClaim.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceClaim.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+  db.InsuranceClaim.hasMany(db.InsuranceClaimEvent, { foreignKey: 'claim_id', as: 'events' });
+  db.InsuranceClaimEvent.belongsTo(db.InsuranceClaim, { foreignKey: 'claim_id', as: 'claim' });
+  db.InsurancePolicy.hasMany(db.InsuranceRenewalTask, { foreignKey: 'policy_id', as: 'renewalTasks' });
+  db.InsuranceRenewalTask.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy' });
+  db.InsuranceProviderSubmission.belongsTo(db.InsurancePolicy, { foreignKey: 'policy_id', as: 'policy', constraints: false });
+  db.InsuranceProviderSubmission.belongsTo(db.InsuranceClaim, { foreignKey: 'claim_id', as: 'claim', constraints: false });
   db.BankAccount.belongsTo(db.Person, { foreignKey: 'owner_person_id', as: 'ownerPerson', constraints: false });
   db.FinancialEntry.belongsTo(db.BankAccount, { foreignKey: 'bank_account_id', as: 'bankAccount', constraints: false });
   db.FinancialEntry.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });
@@ -304,26 +379,111 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.MaintenanceCase.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.MaintenanceCase.belongsTo(db.Person, { foreignKey: 'opened_by_person_id', as: 'openedByPerson', constraints: false });
   db.MaintenanceCase.belongsTo(db.User, { foreignKey: 'responsible_user_id', as: 'responsibleUser', constraints: false });
+  db.MaintenanceCase.hasMany(db.WarrantyAction, { foreignKey: 'warranty_case_id', as: 'warrantyActions', constraints: false });
+  db.WarrantyAction.belongsTo(db.MaintenanceCase, { foreignKey: 'warranty_case_id', as: 'warrantyCase', constraints: false });
+  db.WarrantyAction.belongsTo(db.User, { foreignKey: 'performed_by_user_id', as: 'performedByUser', constraints: false });
   db.Project.hasMany(db.ProjectStage, { foreignKey: 'project_id', as: 'stages', constraints: false });
   db.Project.hasMany(db.DailyReport, { foreignKey: 'project_id', as: 'dailyReports', constraints: false });
   db.Project.hasMany(db.BudgetLine, { foreignKey: 'project_id', as: 'budgetLines', constraints: false });
   db.Project.hasMany(db.QualityChecklistItem, { foreignKey: 'project_id', as: 'qualityItems', constraints: false });
+  db.Project.belongsTo(db.Unit, { foreignKey: 'unit_id', as: 'unit', constraints: false });
+  db.Project.hasMany(db.MaterialRequest, { foreignKey: 'project_id', as: 'materialRequests', constraints: false });
+  db.MaterialRequest.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.MaterialRequest.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
+  db.MaterialRequest.belongsTo(db.User, { foreignKey: 'requested_by_user_id', as: 'requestedByUser', constraints: false });
+  db.Contract.belongsTo(db.Project, { foreignKey: 'construction_project_id', as: 'constructionProject', constraints: false });
   db.ProjectStage.hasMany(db.StageMeasurement, { foreignKey: 'project_stage_id', as: 'measurements', constraints: false });
   db.StageMeasurement.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'measured_by_user_id', as: 'measuredByUser', constraints: false });
   db.StageMeasurement.belongsTo(db.User, { foreignKey: 'approved_by_user_id', as: 'approvedByUser', constraints: false });
+  db.StageMeasurement.belongsTo(db.User, { foreignKey: 'reviewed_by_user_id', as: 'reviewedByUser', constraints: false });
+  db.StageMeasurement.belongsTo(db.FinancialEntry, { foreignKey: 'payable_financial_entry_id', as: 'payableFinancialEntry', constraints: false });
+  db.StageMeasurement.belongsTo(db.StageMeasurement, { foreignKey: 'parent_measurement_id', as: 'parentMeasurement', constraints: false });
+  db.StageMeasurement.hasMany(db.MeasurementItem, { foreignKey: 'measurement_id', as: 'items', constraints: false });
+  db.MeasurementItem.belongsTo(db.StageMeasurement, { foreignKey: 'measurement_id', as: 'measurement', constraints: false });
+  db.FinancialEntry.belongsTo(db.Project, { foreignKey: 'construction_project_id', as: 'constructionProject', constraints: false });
   db.DailyReport.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.DailyReport.belongsTo(db.User, { foreignKey: 'reported_by_user_id', as: 'reportedByUser', constraints: false });
+  db.DailyReport.belongsTo(db.DailyReport, { foreignKey: 'supersedes_id', as: 'supersedes', constraints: false });
+  db.DailyReport.hasMany(db.DailyWorker, { foreignKey: 'daily_report_id', as: 'workers', constraints: false });
+  db.DailyReport.hasMany(db.DailyMaterial, { foreignKey: 'daily_report_id', as: 'materials', constraints: false });
+  db.DailyWorker.belongsTo(db.DailyReport, { foreignKey: 'daily_report_id', as: 'dailyReport', constraints: false });
+  db.DailyWorker.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  db.DailyMaterial.belongsTo(db.DailyReport, { foreignKey: 'daily_report_id', as: 'dailyReport', constraints: false });
+  db.ProjectStage.hasMany(db.StageDependency, { foreignKey: 'stage_id', as: 'dependencies', constraints: false });
+  db.StageDependency.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
+  db.StageDependency.belongsTo(db.ProjectStage, { foreignKey: 'depends_on_stage_id', as: 'dependsOnStage', constraints: false });
   db.BudgetLine.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.BudgetLine.belongsTo(db.CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter', constraints: false });
+  db.BudgetLine.belongsTo(db.Budget, { foreignKey: 'budget_id', as: 'budget', constraints: false });
+  db.Budget.hasMany(db.BudgetLine, { foreignKey: 'budget_id', as: 'lines', constraints: false });
+  db.Budget.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Budget.belongsTo(db.MarginRule, { foreignKey: 'rule_version_id', as: 'marginRule', constraints: false });
+  db.Project.hasMany(db.Budget, { foreignKey: 'project_id', as: 'budgets', constraints: false });
+  db.ChangeOrder.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Project.hasMany(db.ChangeOrder, { foreignKey: 'project_id', as: 'changeOrders', constraints: false });
   db.QualityChecklistItem.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.QualityChecklistItem.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
   db.QualityChecklistItem.belongsTo(db.User, { foreignKey: 'checked_by_user_id', as: 'checkedByUser', constraints: false });
+  db.Project.hasMany(db.Nonconformity, { foreignKey: 'project_id', as: 'nonconformities', constraints: false });
+  db.Nonconformity.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Nonconformity.belongsTo(db.ProjectStage, { foreignKey: 'project_stage_id', as: 'stage', constraints: false });
+  db.Nonconformity.belongsTo(db.User, { foreignKey: 'responsible_user_id', as: 'responsibleUser', constraints: false });
+  db.Nonconformity.belongsTo(db.User, { foreignKey: 'accepted_by_user_id', as: 'acceptedByUser', constraints: false });
+  db.Project.hasMany(db.LossRecord, { foreignKey: 'project_id', as: 'lossRecords', constraints: false });
+  db.LossRecord.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.LossRecord.belongsTo(db.User, { foreignKey: 'approved_by_user_id', as: 'approvedByUser', constraints: false });
+  db.LossRecord.belongsTo(db.LossRecord, { foreignKey: 'related_loss_record_id', as: 'relatedLossRecord', constraints: false });
   db.InventoryMovement.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryMovement.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.InventoryMovement.belongsTo(db.User, { foreignKey: 'moved_by_user_id', as: 'movedByUser', constraints: false });
+  db.InventoryMovement.belongsTo(db.InventoryLocation, { foreignKey: 'source_location_id', as: 'sourceLocation', constraints: false });
+  db.InventoryMovement.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  db.InventoryLocation.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.InventoryStockBalance.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryStockBalance.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
+  db.InventoryItem.hasMany(db.InventoryStockBalance, { foreignKey: 'inventory_item_id', as: 'stockBalances', constraints: false });
+  db.InventoryReceipt.hasMany(db.InventoryReceiptItem, { foreignKey: 'receipt_id', as: 'items', constraints: false });
+  db.InventoryReceiptItem.belongsTo(db.InventoryReceipt, { foreignKey: 'receipt_id', as: 'receipt', constraints: false });
+  db.InventoryReceiptItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryReceipt.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  db.InventoryRequisition.hasMany(db.InventoryRequisitionItem, { foreignKey: 'requisition_id', as: 'items', constraints: false });
+  db.InventoryRequisitionItem.belongsTo(db.InventoryRequisition, { foreignKey: 'requisition_id', as: 'requisition', constraints: false });
+  db.InventoryRequisitionItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryRequisition.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.InventoryRequisition.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
   db.Asset.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
   db.Asset.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.Asset.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.Asset.belongsTo(db.InventoryLocation, { foreignKey: 'current_location_id', as: 'currentLocation', constraints: false });
+  db.Asset.hasMany(db.AssetMovement, { foreignKey: 'asset_id', as: 'movements', constraints: false });
+  db.AssetMovement.belongsTo(db.Asset, { foreignKey: 'asset_id', as: 'asset', constraints: false });
+  db.InventoryToolLoan.belongsTo(db.Asset, { foreignKey: 'asset_id', as: 'asset', constraints: false });
+  db.InventoryToolLoan.belongsTo(db.User, { foreignKey: 'person_user_id', as: 'person', constraints: false });
+  db.InventoryMaintenanceOrder.belongsTo(db.Asset, { foreignKey: 'asset_id', as: 'asset', constraints: false });
+  db.InventoryMaintenanceOrder.belongsTo(db.InventoryToolLoan, { foreignKey: 'source_tool_loan_id', as: 'sourceToolLoan', constraints: false });
+  db.InventoryCount.hasMany(db.InventoryCountItem, { foreignKey: 'count_id', as: 'items', constraints: false });
+  db.InventoryCountItem.belongsTo(db.InventoryCount, { foreignKey: 'count_id', as: 'count', constraints: false });
+  db.InventoryCountItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryCount.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
+  db.PurchaseRequest.hasMany(db.PurchaseRequestItem, { foreignKey: 'purchase_request_id', as: 'items', constraints: false });
+  db.PurchaseRequestItem.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.Quotation.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.Quotation.hasMany(db.SupplierOffer, { foreignKey: 'quotation_id', as: 'offers', constraints: false });
+  db.SupplierOffer.belongsTo(db.Quotation, { foreignKey: 'quotation_id', as: 'quotation', constraints: false });
+  db.SupplierOffer.hasMany(db.SupplierOfferItem, { foreignKey: 'supplier_offer_id', as: 'items', constraints: false });
+  db.SupplierOfferItem.belongsTo(db.SupplierOffer, { foreignKey: 'supplier_offer_id', as: 'supplierOffer', constraints: false });
+  db.SupplierOfferItem.belongsTo(db.PurchaseRequestItem, { foreignKey: 'purchase_request_item_id', as: 'purchaseRequestItem', constraints: false });
+  db.PurchaseOrder.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
+  db.PurchaseOrder.belongsTo(db.SupplierOffer, { foreignKey: 'supplier_offer_id', as: 'supplierOffer', constraints: false });
+  db.PurchaseOrder.hasMany(db.PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items', constraints: false });
+  db.PurchaseOrderItem.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
+  db.GoodsReceipt.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
+  db.GoodsReceipt.hasMany(db.GoodsReceiptItem, { foreignKey: 'goods_receipt_id', as: 'items', constraints: false });
+  db.GoodsReceiptItem.belongsTo(db.GoodsReceipt, { foreignKey: 'goods_receipt_id', as: 'goodsReceipt', constraints: false });
+  db.GoodsReceiptItem.belongsTo(db.PurchaseOrderItem, { foreignKey: 'purchase_order_item_id', as: 'purchaseOrderItem', constraints: false });
+  db.ReceiptDiscrepancy.belongsTo(db.GoodsReceiptItem, { foreignKey: 'goods_receipt_item_id', as: 'goodsReceiptItem', constraints: false });
+  db.SupplierEvaluation.belongsTo(db.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder', constraints: false });
   db.AiRun.belongsTo(db.User, { foreignKey: 'user_id', as: 'user', constraints: false });
   db.AiSource.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });
   db.AiRecommendation.belongsTo(db.AiRun, { foreignKey: 'ai_run_id', as: 'aiRun', constraints: false });

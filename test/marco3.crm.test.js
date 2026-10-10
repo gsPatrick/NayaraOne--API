@@ -651,6 +651,7 @@ test('M3-20: resolver um caso marca RESOLVED e audita', async () => {
         type: 'COMPLIMENT',
         description: `Elogio ao atendimento ${suffix}`,
         severity: 'LOW',
+        assignedToUserId: tenant.userId,
       },
       tenant.userId,
       transaction

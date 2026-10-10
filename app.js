@@ -13,7 +13,15 @@ const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
+const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
 const { startFeedbackCaseAlertJob } = require('./src/engines/jobs/feedbackCaseAlertJob');
+const { startCrmTaskOverdueJob } = require('./src/engines/jobs/crmTaskOverdueJob');
+const { startWarrantyEscalationJob } = require('./src/engines/jobs/warrantyEscalationJob');
+const { startProjectDelayDetectionJob } = require('./src/engines/jobs/projectDelayDetectionJob');
+const { startMissingDailyReportJob } = require('./src/engines/jobs/missingDailyReportJob');
+const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
+const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
+const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -108,9 +116,67 @@ if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_DEADLINE_ALERT_JOB_DISA
   startLegalDeadlineAlertJob();
 }
 
+// GAP REAL CORRIGIDO (varredura proativa, 09/10/2026 — mesma classe de bug encontrada pela
+// auditoria externa em missingDailyReportJob): existe desde 17/09/2026 com testes
+// (test/legal.guaranteeExpiry.test.js), mas nunca foi iniciado aqui — a rotina de alerta de
+// vencimento de garantia (fiança/seguro-fiança/caução) nunca rodava sozinha no ambiente
+// publicado.
+if (process.env.NODE_ENV !== 'test' && process.env.LEGAL_GUARANTEE_EXPIRY_ALERT_JOB_DISABLED !== 'true') {
+  startLegalGuaranteeExpiryAlertJob();
+}
+
 // Escalonamento de reclamações/elogios/conflitos com SLA vencido (M3-20, 18/09/2026).
 if (process.env.NODE_ENV !== 'test' && process.env.FEEDBACK_CASE_ALERT_JOB_DISABLED !== 'true') {
   startFeedbackCaseAlertJob();
+}
+
+// Escalonamento de tarefas de CRM vencidas (crm.task.overdue) — item 5 do ciclo de auditoria
+// externa Marco 3 (Guia do Marcelo §11 "Tarefa vencida escala conforme regra.").
+if (process.env.NODE_ENV !== 'test' && process.env.CRM_TASK_OVERDUE_JOB_DISABLED !== 'true') {
+  startCrmTaskOverdueJob();
+}
+
+// Escalonamento de SLA dos chamados de garantia/pós-obra (M6-63/M6-88). Roda a cada 30 min
+// dentro do próprio processo, mesmo padrão de feedbackCaseAlertJob.
+if (process.env.NODE_ENV !== 'test' && process.env.WARRANTY_ESCALATION_JOB_DISABLED !== 'true') {
+  startWarrantyEscalationJob();
+}
+
+// Detecção de atraso de obra (M6-74). Roda a cada 1h dentro do próprio processo, mesmo padrão
+// do job de escalonamento de garantia acima.
+if (process.env.NODE_ENV !== 'test' && process.env.PROJECT_DELAY_DETECTION_JOB_DISABLED !== 'true') {
+  startProjectDelayDetectionJob();
+}
+
+// GAP REAL CORRIGIDO (auditoria externa Nayara, reteste 09/10/2026 — F3): o job existia e tinha
+// testes (missingDailyReportJob.js, test/construction.missingDailyReport.test.js) desde
+// 02/10/2026, mas nunca foi iniciado aqui — a rotina de "ausência de diário gera tarefa"
+// (contrato Caderno p.161) nunca rodava sozinha no ambiente publicado, só quando chamada
+// diretamente em teste. Mesmo padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.MISSING_DAILY_REPORT_JOB_DISABLED !== 'true') {
+  startMissingDailyReportJob();
+}
+
+// Escalonamento de empréstimo de ferramenta vencido (Marco 7 — EST-TS-13). Mesmo padrão dos
+// jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.TOOL_LOAN_OVERDUE_JOB_DISABLED !== 'true') {
+  startToolLoanOverdueJob();
+}
+
+// Alerta de renovação de apólice de seguro (Marco 7 — Insurance Hub, "renovação alerta" no
+// contrato). Gap real achado em auditoria 2026-10-05: a tarefa era criada mas nunca lida por
+// nada. Mesmo padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_RENEWAL_ALERT_JOB_DISABLED !== 'true') {
+  startInsuranceRenewalAlertJob();
+}
+
+// Vencimento de apólice de seguro (Marco 7 — Insurance Hub, "vigência" no contrato). Gap real
+// achado em auditoria 2026-10-07: só existia o alerta de renovação, nada transicionava a apólice
+// para EXPIRED quando a vigência acabava. A trava de sinistro novo em apólice vencida fica em
+// insurance.service.js#openClaim (checa a data); este job dá visibilidade/status. Mesmo padrão
+// dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_POLICY_EXPIRY_JOB_DISABLED !== 'true') {
+  startInsurancePolicyExpiryJob();
 }
 
 module.exports = app;

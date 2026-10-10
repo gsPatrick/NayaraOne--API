@@ -26,10 +26,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'company_id',
       },
+      // BUG REAL CORRIGIDO (rodada 47): unicidade precisa ser por empresa (TAB-0760:
+      // UNIQUE(company_id, asset_tag)), não global — índice composto criado via migration.
       assetTag: {
         type: DataTypes.STRING(64),
         allowNull: true,
-        unique: true,
         field: 'asset_tag',
         comment: "Código impresso no QR Code",
       },
@@ -47,6 +48,21 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: true,
         field: 'project_id',
+      },
+      inventoryItemId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'inventory_item_id',
+      },
+      currentLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'current_location_id',
+      },
+      warrantyUntil: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'warranty_until',
       },
       acquisitionValue: {
         type: DataTypes.DECIMAL(18, 2),

@@ -2,6 +2,7 @@
 
 const { Message, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { canContact } = require('../people/personConsents.service');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -20,7 +21,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId } = payload;
+  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -40,10 +41,28 @@ async function createMessage(payload, actorUserId, transaction) {
     throw AppError.badRequest(`O campo "channel" deve ser um de: ${CHANNELS.join(', ')}.`, 'MESSAGE_VALIDATION');
   }
 
+  let person = null;
   if (personId) {
-    const person = await Person.findByPk(personId, { transaction });
+    person = await Person.findByPk(personId, { transaction });
     if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
   }
+
+  // Bloqueio ATIVO de opt-out (Guia do Marcelo §11/§18 "Não ignorar opt-out.";
+  // CRM-TS-009 "Opt-out — Cadência tenta enviar — Bloqueado."). Só se aplica a envio SAÍDO
+  // (OUTBOUND) para uma pessoa identificada — mensagem recebida do cliente (INBOUND) nunca é
+  // bloqueada por consentimento (o cliente está livre pra falar com a empresa mesmo tendo
+  // pedido pra não ser contatado).
+  if (person && normalizedDirection === 'OUTBOUND') {
+    const allowed = await canContact(person, normalizedChannel, purpose || 'TRANSACTIONAL', transaction);
+    if (!allowed) {
+      throw AppError.unprocessable(
+        'Envio bloqueado: a pessoa optou por não receber contato (opt-out) neste canal/finalidade, ou a finalidade exige opt-in explícito ausente.',
+        'MESSAGE_BLOCKED_BY_CONSENT',
+        { personId, channel: normalizedChannel, purpose: purpose || 'TRANSACTIONAL' }
+      );
+    }
+  }
+
   if (opportunityId) {
     const opportunity = await Opportunity.findByPk(opportunityId, { transaction });
     if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');

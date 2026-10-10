@@ -171,9 +171,39 @@ test('M3-09 publishOffer bloqueia publicação sem vídeo (REG-IMO-001), libera 
       'sem vídeo, REG-IMO-001 precisa bloquear a publicação (fail closed)'
     );
 
-    const { PropertyMedia } = require('../src/models');
+    const { PropertyMedia, PropertyDocument } = require('../src/models');
     await PropertyMedia.create(
       { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, mediaType: 'VIDEO', storageKey: `m309-${suffix}.mp4`, originalName: 'video.mp4', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+
+    // Vídeo presente mas sem fotos aprovadas nem documentos (REG-IMO-PHOTO-MIN/REG-IMO-DOCS-001)
+    // ainda bloqueia — vídeo por si só não basta mais.
+    await assert.rejects(
+      () => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_PHOTO_MIN'); return true; },
+      'com vídeo mas sem fotos mínimas aprovadas, REG-IMO-PHOTO-MIN precisa bloquear a publicação'
+    );
+
+    for (let i = 0; i < 3; i += 1) {
+      await PropertyMedia.create(
+        { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED', storageKey: `m309-${suffix}-foto-${i}.jpg`, originalName: `foto-${i}.jpg`, createdBy: tenant.userId, updatedBy: tenant.userId },
+        { transaction }
+      );
+    }
+
+    await assert.rejects(
+      () => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001'); return true; },
+      'com vídeo e fotos mas sem matrícula/IPTU, REG-IMO-DOCS-001 precisa bloquear a publicação'
+    );
+
+    await PropertyDocument.create(
+      { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'REGISTRY', label: 'Cartório 1', valueNumber: `MAT-${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await PropertyDocument.create(
+      { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'IPTU', valueNumber: `IPTU-${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
 

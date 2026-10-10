@@ -175,12 +175,131 @@ test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato 
   });
 });
 
-test('máquina de estados: contrato ACTIVE não tem transição de saída (não se cancela pelo fluxo normal)', async () => {
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): o teste abaixo afirmava que
+// "contrato ACTIVE não tem transição de saída" — isso CONTRADIZ literalmente o Caderno (Anexo I,
+// "5. Estado do contrato"), que lista os status SUSPENDED/TERMINATED/CLOSED e define
+// ACTIVE -> ['SUSPENDED', 'TERMINATED']. Um contrato locado em vigor PRECISA poder ser suspenso
+// (inadimplência em negociação, decisão judicial) e encerrado (rescisão) sem perder histórico.
+// O teste antigo travava exatamente o comportamento que o contrato exige — substituído pelos
+// testes abaixo, que cobrem a máquina de estados real de fim-de-vida.
+test('máquina de estados: ACTIVE -> SUSPENDED (suspendContract) preserva histórico e exige motivo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
-    contract.status = 'ACTIVE'; // simula um contrato já ativo, sem passar pelas etapas
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
     await assert.rejects(
-      () => contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, transaction),
+      () => contractsService.suspendContract(contract.id, '', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_TRANSITION_REASON_REQUIRED');
+        return true;
+      }
+    );
+
+    const suspended = await contractsService.suspendContract(contract.id, 'Inadimplência em negociação.', tenant.userId, transaction);
+    assert.equal(suspended.status, 'SUSPENDED');
+
+    // Histórico preservado: é a MESMA linha (nunca apagada/recriada).
+    const reloaded = await contractsService.getContract(contract.id, transaction);
+    assert.equal(reloaded.id, contract.id);
+    assert.equal(reloaded.status, 'SUSPENDED');
+  });
+});
+
+test('máquina de estados: SUSPENDED -> ACTIVE (reactivateContract)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.suspendContract(contract.id, 'Decisão judicial liminar.', tenant.userId, transaction);
+
+    const reactivated = await contractsService.reactivateContract(contract.id, 'Inadimplência regularizada.', tenant.userId, transaction);
+    assert.equal(reactivated.status, 'ACTIVE');
+  });
+});
+
+test('máquina de estados: SUSPENDED -> TERMINATED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.suspendContract(contract.id, 'Inadimplência em negociação.', tenant.userId, transaction);
+
+    const terminated = await contractsService.terminateContract(contract.id, 'Rescisão por inadimplência não sanada.', tenant.userId, transaction);
+    assert.equal(terminated.status, 'TERMINATED');
+  });
+});
+
+test('máquina de estados: ACTIVE -> TERMINATED direto (sem passar por SUSPENDED)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
+    const terminated = await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+    assert.equal(terminated.status, 'TERMINATED');
+  });
+});
+
+test('máquina de estados: TERMINATED -> CLOSED (closeContract)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+
+    const closed = await contractsService.closeContract(contract.id, 'Arquivamento operacional.', tenant.userId, transaction);
+    assert.equal(closed.status, 'CLOSED');
+
+    // CLOSED é terminal: nada sai dele (sem renovação, sem ACTIVE->CLOSED direto já coberto
+    // abaixo pelo teste de transição inválida).
+    assert.deepEqual(contractsService.VALID_TRANSITIONS.CLOSED, []);
+  });
+});
+
+test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pendente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    const parties = await contractsService.listContractParties(contract.id, transaction);
+    const tenantParty = parties.find((p) => p.partyRole === 'TENANT');
+    await guaranteesService.createGuarantee(
+      contract.id,
+      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      tenant.userId,
+      transaction
+    );
+    void tenantParty;
+
+    await assert.rejects(
+      () => contractsService.terminateContract(contract.id, 'Tentativa sem liberar garantia.', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+        return true;
+      }
+    );
+  });
+});
+
+test('máquina de estados: transições inválidas são bloqueadas (DRAFT -> ACTIVE direto, SUSPENDED -> CLOSED direto)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    // DRAFT -> ACTIVE não existe na máquina de estados.
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'ACTIVE', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_INVALID_TRANSITION');
+        return true;
+      }
+    );
+
+    contract.status = 'SUSPENDED';
+    await contract.save({ transaction });
+    // SUSPENDED -> CLOSED não existe (precisa passar por TERMINATED).
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'CLOSED', tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_CONTRACT_INVALID_TRANSITION');
         return true;

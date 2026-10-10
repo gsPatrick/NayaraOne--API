@@ -31,6 +31,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'property_id',
       },
+      // M6-95: dimensão unit_id além de group_id/company_id — relacionamento raiz
+      // group -> company -> unit; nullable porque nem toda empresa opera com unidades.
+      unitId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'unit_id',
+      },
       name: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -55,6 +62,26 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'ends_at_planned',
+      },
+      // M6-01 (fechado 30/09/2026): código legível único por empresa (ex.: OBRA-2026-0001),
+      // gerado automaticamente em createProject via generateProjectCode() quando não informado.
+      code: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: 'code',
+      },
+      actualEndDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: 'actual_end_date',
+      },
+      // M6-97 (reforço): centro de custo padrão da obra — "Centro de custo obrigatório para
+      // despesa" é regra transversal do Financeiro; lançamentos gerados por Obras (medições
+      // aprovadas) usam este valor quando a medição não tiver um próprio.
+      costCenterId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'cost_center_id',
       },
       status: {
         type: DataTypes.STRING(32),

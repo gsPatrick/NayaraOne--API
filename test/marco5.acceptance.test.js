@@ -163,7 +163,7 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED'); return true; },
       'sem vistoria de entrada concluída, a entrega de chaves precisa ser bloqueada mesmo com contrato SIGNED'
     );
@@ -176,22 +176,124 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'vistoria CONCLUÍDA mas SEM assinatura de locador/locatário ainda tem que bloquear a liberação'
     );
     await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'assinatura-locador-m522' }, tenant.userId, transaction);
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'só o locador ter assinado ainda não basta — falta o locatário'
     );
     await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'assinatura-locatario-m522' }, tenant.userId, transaction);
 
-    const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      tenant.userId,
+      transaction
+    );
     assert.equal(released.status, 'RELEASED');
     assert.ok(released.deliveredAt, 'precisa registrar QUANDO as chaves foram entregues');
     assert.equal(released.deliveredByUserId, tenant.userId, 'precisa registrar QUEM entregou');
     assert.equal(released.deliveredToPersonId, person.personId, 'precisa registrar QUEM recebeu (já era obrigatório na criação)');
+  });
+});
+
+// --- Regressão homologação (LOC-2026-0002): releaseKeyDelivery usando a vistoria ERRADA quando
+// o contrato tem mais de uma vistoria de CHECK_IN concluída ---
+//
+// Cenário reportado ao vivo pela cliente: o contrato tinha DUAS vistorias de CHECK_IN
+// concluídas — uma ANTIGA já assinada por locador e locatário, e uma NOVA (a que estava
+// realmente vinculada à entrega de chaves em questão) ainda sem nenhuma assinatura. A entrega
+// foi liberada mesmo assim, porque `releaseKeyDelivery` buscava "qualquer" Inspection CHECK_IN
+// COMPLETED do contrato com `findOne` sem ORDER — nada garantia que a vistoria "achada" fosse a
+// mesma vinculada à entrega. Este teste reproduz exatamente essa configuração: cria as duas
+// vistorias (antiga assinada, nova não assinada), vincula a entrega de chaves à vistoria NOVA
+// (inspectionId explícito, como o app real faz) e confirma que a liberação é BLOQUEADA usando o
+// código de erro correto — nunca autorizada pela vistoria antiga.
+test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à entrega (não qualquer CHECK_IN concluído do contrato)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
+    const { contract } = await createLeaseWithParties(transaction);
+    const suffix = uniqueSuffix();
+    const file = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `loc20260002-${suffix}.pdf`, fileName: `contrato-${suffix}.pdf`, mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+    await contractVersionsService.createContractVersion(contract.id, { content: `LOC-2026-0002 corpo ${suffix}`, documentFileId: file.id }, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
+    const signaturesService = require('../src/features/legal/signatures.service');
+    const version = await contractVersionsService.listContractVersions(contract.id, transaction).then((v) => v[0]);
+    const parties = await contractsService.listContractParties(contract.id, transaction);
+    const signatures = await signaturesService.initiateSignature(version.id, parties.map((p) => p.personId), tenant.userId, transaction);
+    for (const sig of signatures) {
+      await signaturesService.handleSignatureWebhook(sig.externalSignatureId, {}, transaction);
+    }
+
+    // Vistoria ANTIGA: concluída E assinada por ambas as partes — exatamente o tipo de vistoria
+    // que a hipótese da cliente apontava como sendo usada indevidamente para autorizar a
+    // entrega.
+    const oldInspection = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: contract.propertyId, contractId: contract.id, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.completeInspection(oldInspection.id, tenant.userId, transaction);
+    await inspectionsService.signInspection(oldInspection.id, { partyRole: 'LANDLORD', signaturePayload: 'antiga-locador' }, tenant.userId, transaction);
+    await inspectionsService.signInspection(oldInspection.id, { partyRole: 'TENANT', signaturePayload: 'antiga-locatario' }, tenant.userId, transaction);
+
+    // Vistoria NOVA: concluída, mas SEM nenhuma assinatura ainda — é esta que fica realmente
+    // vinculada à entrega de chaves (o app sempre manda `inspectionId` explícito ao criar a
+    // entrega, como no fluxo real).
+    const newInspection = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: contract.propertyId, contractId: contract.id, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.completeInspection(newInspection.id, tenant.userId, transaction);
+
+    const person = parties[0];
+    const keyDelivery = await keyDeliveriesService.createKeyDelivery(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        contractId: contract.id,
+        inspectionId: newInspection.id,
+        deliveredToPersonId: person.personId,
+      },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      (err) => {
+        assert.equal(
+          err.code,
+          'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED',
+          'tem que bloquear citando a vistoria vinculada sem assinatura — nunca liberar usando a vistoria antiga já assinada'
+        );
+        return true;
+      },
+      'existir uma OUTRA vistoria (antiga) concluída e assinada não pode autorizar a entrega vinculada à vistoria NOVA sem assinatura'
+    );
+
+    // Assinando a vistoria NOVA (a que de fato está vinculada), a liberação passa a ser
+    // permitida normalmente — prova que o gate está de fato olhando pra vistoria certa, e não
+    // simplesmente bloqueando tudo.
+    await inspectionsService.signInspection(newInspection.id, { partyRole: 'LANDLORD', signaturePayload: 'nova-locador' }, tenant.userId, transaction);
+    await inspectionsService.signInspection(newInspection.id, { partyRole: 'TENANT', signaturePayload: 'nova-locatario' }, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(released.status, 'RELEASED');
   });
 });

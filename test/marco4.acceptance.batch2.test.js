@@ -5,7 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -42,8 +42,9 @@ after(async () => {
 test('M4-08 decideApprovalStep recusa aprovação com expectedLockVersion desatualizado (FINANCE_APPROVAL_STALE)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
+    const costCenterM408 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 500 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, costCenterId: costCenterM408.id },
       tenant.userId,
       transaction
     );
@@ -113,8 +114,9 @@ test('M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lanç
     const suffix = uniqueSuffix();
     const idempotencyKey = `m423-${suffix}`;
 
+    const resultCenterM423 = await createTestResultCenter(tenant, transaction);
     const first = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey },
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
       tenant.userId,
       transaction
     );
@@ -123,7 +125,7 @@ test('M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lanç
     await assert.rejects(
       () =>
         financialEntriesService.createFinancialEntry(
-          { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey },
+          { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
           tenant.userId,
           transaction
         ),
@@ -141,13 +143,14 @@ test('M4-24 duas tentativas concorrentes do MESMO aprovador decidindo a mesma so
   let approvalRequest;
   let approver;
   try {
-    entry = await withCommittedTenantTransaction(tenant, (t) =>
-      financialEntriesService.createFinancialEntry(
-        { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 9000 },
+    entry = await withCommittedTenantTransaction(tenant, async (t) => {
+      const costCenterM424 = await createTestCostCenter(tenant, t);
+      return financialEntriesService.createFinancialEntry(
+        { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 9000, costCenterId: costCenterM424.id },
         tenant.userId,
         t
-      )
-    );
+      );
+    });
     approver = await withCommittedTenantTransaction(tenant, (t) =>
       User.create({ name: `HOMO QA M4-24 ${suffix}`, email: `homo-qa-m424-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction: t })
     );

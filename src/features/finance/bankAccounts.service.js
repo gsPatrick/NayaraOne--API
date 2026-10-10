@@ -14,7 +14,16 @@ function hoursSince(date) {
 // Campos sensíveis: alterá-los reabre o cooldown antifraude (mesma regra de "conta nova"),
 // porque uma troca desses dados é exatamente o vetor de fraude que o período de resfriamento
 // existe para conter (ver financeAntifraud.service.js).
-const SENSITIVE_FIELDS = ['bankCode', 'agency', 'accountNumber', 'pixKey'];
+//
+// BUG REAL CORRIGIDO (auditoria contratual Marco 7, 2026-10-07 — Caderno COMPRAS/PROCUREMENT,
+// "Fornecedores: banco via fluxo IAM blindado"; Testes/DoD: "banco fornecedor alterado"):
+// `ownerPersonId` não era tratado como sensível. Reatribuir a um fornecedor uma conta que já
+// passou pelo resfriamento (ACTIVE, de outro titular) é, do ponto de vista do fornecedor,
+// exatamente "trocar a conta bancária dele" — e a conta continuava ACTIVE, pagável na hora,
+// sem nenhuma reverificação. Trocar o titular agora reabre o cooldown como qualquer outro dado
+// bancário. (A fusão de cadastros duplicados em personMerge.service.js reaponta owner_person_id
+// em lote para o MESMO titular real — não é troca de beneficiário, não passa por aqui.)
+const SENSITIVE_FIELDS = ['bankCode', 'agency', 'accountNumber', 'pixKey', 'ownerPersonId'];
 const STATUSES = ['PENDING_COOLDOWN', 'ACTIVE', 'BLOCKED'];
 
 async function createBankAccount(payload, actorUserId, transaction) {
@@ -93,7 +102,12 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
   if (agency !== undefined && agency !== bankAccount.agency) { bankAccount.agency = agency; sensitiveChanged = true; }
   if (accountNumber !== undefined && accountNumber !== bankAccount.accountNumber) { bankAccount.accountNumber = accountNumber; sensitiveChanged = true; }
   if (pixKey !== undefined && pixKey !== bankAccount.pixKey) { bankAccount.pixKey = pixKey; sensitiveChanged = true; }
-  if (ownerPersonId !== undefined) bankAccount.ownerPersonId = ownerPersonId;
+  if (ownerPersonId !== undefined && (ownerPersonId || null) !== (bankAccount.ownerPersonId || null)) {
+    bankAccount.ownerPersonId = ownerPersonId || null;
+    sensitiveChanged = true;
+  }
+
+  let reverificationAfterUnblock = false;
 
   if (status !== undefined) {
     const normalized = String(status).toUpperCase();
@@ -120,7 +134,21 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
         'FINANCE_BANK_ACCOUNT_COOLDOWN'
       );
     }
-    bankAccount.status = normalized;
+    // BUG REAL CORRIGIDO (auditoria contratual Marco 7, 2026-10-07 — "banco fornecedor
+    // alterado"): enquanto a conta está BLOCKED, alterar PIX/conta mantém o status BLOCKED (a
+    // regra abaixo não reabre cooldown sobre bloqueio, corretamente). Mas o desbloqueio
+    // seguinte (status=ACTIVE) ia direto pra ACTIVE — os dados trocados durante o bloqueio
+    // ficavam pagáveis na hora, sem nunca terem passado pelo resfriamento. O schema não guarda
+    // "houve alteração sensível durante o bloqueio" (não há coluna pra isso), então a regra é
+    // fail-closed: desbloquear sempre devolve a conta para PENDING_COOLDOWN (reverificação),
+    // com o relógio do cooldown reiniciando no momento do desbloqueio. Uma conta bloqueada por
+    // suspeita reconquista a elegibilidade pelo mesmo caminho de uma conta nova.
+    if (normalized === 'ACTIVE' && bankAccount.status === 'BLOCKED') {
+      bankAccount.status = 'PENDING_COOLDOWN';
+      reverificationAfterUnblock = true;
+    } else {
+      bankAccount.status = normalized;
+    }
   }
 
   if (sensitiveChanged && bankAccount.status !== 'BLOCKED') {
@@ -139,14 +167,20 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
       groupId: bankAccount.groupId,
       companyId: bankAccount.companyId,
       actorUserId,
-      action: sensitiveChanged ? 'finance.bank_account.sensitive_data_changed' : 'finance.bank_account.update',
+      action: sensitiveChanged
+        ? 'finance.bank_account.sensitive_data_changed'
+        : reverificationAfterUnblock
+          ? 'finance.bank_account.unblock_reverification'
+          : 'finance.bank_account.update',
       entityType: 'BankAccount',
       entityId: bankAccount.id,
       beforeJson,
       afterJson: bankAccount.toJSON(),
       reason: sensitiveChanged
         ? 'Dados bancários sensíveis alterados — conta voltou para período de resfriamento (antifraude).'
-        : 'Conta bancária atualizada.',
+        : reverificationAfterUnblock
+          ? 'Conta desbloqueada — volta para período de resfriamento (reverificação antifraude) antes de poder receber pagamentos.'
+          : 'Conta bancária atualizada.',
     },
     transaction
   );

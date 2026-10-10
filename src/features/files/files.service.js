@@ -5,6 +5,7 @@ const { File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const diskStorage = require('../../utils/diskStorage');
+const { resolveAntivirusAdapter } = require('../people/adapters/resolveDocumentAdapters');
 
 // 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -16,7 +17,25 @@ const MAX_BYTES = 20 * 1024 * 1024;
 // "contracts-signed" é usada só internamente por signatures.service.js#handleEnvelopeClosedWebhook
 // (documento assinado baixado do provedor) — não é um upload manual via este service, mas
 // listada aqui pra manter a validação de categoria centralizada.
-const KNOWN_CATEGORIES = ['contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'generic'];
+// "inventory-invoices": NF/foto de nota fiscal de entrada de estoque (Guia §6 — "NF/foto
+// armazenada em files"), enviada por receiptOcr.service.js antes da sugestão de OCR/IA.
+const KNOWN_CATEGORIES = ['contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'insurance', 'inventory-invoices', 'generic'];
+
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): uploadFile aceitava
+// QUALQUER mimeType enviado pelo cliente, sem allowlist — um arquivo marcado "text/html" (mesmo
+// contendo <script>) era aceito, e GET /files/:id/content servia de volta com
+// Content-Type: text/html + Content-Disposition: inline, executando o script no navegador de
+// quem abrisse o link (stored XSS). Também aceitava executáveis (.exe) sem bloqueio nenhum.
+// Allowlist cobre os tipos reais usados pelo sistema (foto/vistoria, PDF/laudo, documento
+// office, vídeo curto de RDO) — nunca html/svg/script/executável.
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+  'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'video/mp4', 'video/quicktime', 'video/webm',
+  'audio/mpeg', 'audio/mp4', 'audio/webm',
+];
 
 function resolveCategory(category) {
   if (category && KNOWN_CATEGORIES.includes(category)) return category;
@@ -35,11 +54,19 @@ function resolveCategory(category) {
  */
 async function uploadFile(payload, actorUserId, transaction) {
   const { groupId, companyId, fileName, mimeType, contentBase64, category } = payload;
-  if (!groupId || !companyId || !fileName || !contentBase64) {
+  if (!groupId || !companyId || !fileName) {
     throw AppError.badRequest(
-      'Os campos "groupId", "companyId", "fileName" e "contentBase64" são obrigatórios.',
+      'Os campos "groupId", "companyId" e "fileName" são obrigatórios.',
       'FILE_UPLOAD_VALIDATION'
     );
+  }
+  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): upload de arquivo
+  // vazio (0 bytes) chega com contentBase64="" — a checagem acima tratava string vazia igual a
+  // campo AUSENTE, vazando nomes de parâmetro interno da API ("groupId", "companyId") numa
+  // mensagem de erro de tela de upload de foto, em vez da mensagem de negócio correta ("arquivo
+  // vazio") que nunca era alcançada nesse caso.
+  if (!contentBase64) {
+    throw AppError.badRequest('O arquivo enviado está vazio.', 'FILE_UPLOAD_VALIDATION');
   }
 
   let buffer;
@@ -51,11 +78,32 @@ async function uploadFile(payload, actorUserId, transaction) {
   if (buffer.length === 0) {
     throw AppError.badRequest('O arquivo enviado está vazio.', 'FILE_UPLOAD_VALIDATION');
   }
+  if (!mimeType || !ALLOWED_MIME_TYPES.includes(String(mimeType).toLowerCase())) {
+    throw AppError.badRequest(
+      `Tipo de arquivo não permitido${mimeType ? ` ("${mimeType}")` : ''}. Tipos aceitos: imagem, PDF, documento Office, áudio ou vídeo.`,
+      'FILE_UPLOAD_TYPE_NOT_ALLOWED'
+    );
+  }
   if (buffer.length > MAX_BYTES) {
     throw AppError.badRequest(
       `O arquivo excede o limite de ${MAX_BYTES / (1024 * 1024)}MB.`,
       'FILE_UPLOAD_TOO_LARGE'
     );
+  }
+
+  // GAP REAL CORRIGIDO (auditoria 2026-10-08): este era o ÚNICO ponto de upload (POST /files
+  // genérico, usado por qualquer feature que apenas vincula um fileId depois — ex.
+  // procurement/insurance.service.js#attachPolicyDocument) que NUNCA passava por scan de
+  // antivírus. O scan existia só "espalhado" nos chamadores que decidiram chamá-lo manualmente
+  // antes de uploadFile (ex. inventory/receiptOcr.service.js), não dentro do próprio
+  // uploadFile — então qualquer outra tela que suba um arquivo e depois só vincule o fileId
+  // (Seguros, Jurídico, etc.) nunca scaneava nada. Centralizando aqui, com o MESMO adapter
+  // plugável (resolveAntivirusAdapter, people/adapters/resolveDocumentAdapters.js) já usado no
+  // Estoque, nenhum arquivo entra no sistema por QUALQUER caminho sem passar pelo antivírus.
+  const antivirus = await resolveAntivirusAdapter({ groupId, companyId }, transaction);
+  const scan = await antivirus.scan(buffer);
+  if (!scan.clean) {
+    throw AppError.unprocessable('Arquivo rejeitado pelo antivírus: assinatura de malware detectada.', 'FILE_UPLOAD_MALWARE_DETECTED', { signature: scan.signature });
   }
 
   const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -142,4 +190,4 @@ async function getFileMetadata(id, transaction) {
   return file;
 }
 
-module.exports = { uploadFile, getFileContent, getFileMetadata, MAX_BYTES };
+module.exports = { uploadFile, getFileContent, getFileMetadata, MAX_BYTES, ALLOWED_MIME_TYPES };

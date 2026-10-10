@@ -70,6 +70,20 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      // NOTA DE AMBIENTE (07/10/2026): a coluna "replaced_by_guarantee_id" (ver migration
+      // 20260101000289 e guarantees.service.js#replaceGuarantee, Caderno Anexo I "9. Garantias
+      // locatícias" — "contrato não perde histórico quando a garantia é substituída") AINDA NÃO
+      // existe fisicamente no banco deste ambiente: a credencial de runtime disponível aqui
+      // (nayara_runtime) não tem privilégio de DDL (nem USAGE/CREATE em "legal", confirmado via
+      // has_schema_privilege) — só o role `nayara_migration` roda migrations, e esse role não
+      // está disponível neste sandbox. A migration está pronta para rodar com `npm run migrate`
+      // (credenciais de deploy reais). Até lá, o campo fica DELIBERADAMENTE FORA do model —
+      // declará-lo aqui faz TODO INSERT em legal.guarantees (inclusive os já existentes em
+      // produção/testes) falhar com "column does not exist", quebrando funcionalidade que já
+      // funciona. Reativar esta linha (e os campos/testes de replaceGuarantee que dependem
+      // dela) IMEDIATAMENTE depois de rodar a migration:
+      //
+      //   replacedByGuaranteeId: { type: DataTypes.UUID, allowNull: true, field: 'replaced_by_guarantee_id' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

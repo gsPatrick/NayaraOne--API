@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const mfaService = require('../src/features/users/mfa.service');
 const approvalsService = require('../src/features/finance/approvals.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
@@ -92,6 +92,7 @@ test('MFA-004 ação de alto risco (decideApprovalStep, riskLevel HIGH) sem step
     const approverUserId = await createSecondUser(suffix);
     await setupAndConfirmMfa(transaction, approverUserId); // MFA habilitado mas SEM verify recente
 
+    const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -100,6 +101,7 @@ test('MFA-004 ação de alto risco (decideApprovalStep, riskLevel HIGH) sem step
         nature: 'PAYABLE',
         amount: 100,
         description: 'HOMO QA — lançamento MFA',
+        costCenterId: costCenterMfa.id,
       },
       tenant.userId,
       transaction
@@ -128,6 +130,7 @@ test('MFA-005 ação de alto risco com step-up recente é permitida', async () =
     const { secret } = await setupAndConfirmMfa(transaction, approverUserId);
     await mfaService.verifyMfa(approverUserId, authenticator.generate(secret), tenant, transaction);
 
+    const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -136,6 +139,7 @@ test('MFA-005 ação de alto risco com step-up recente é permitida', async () =
         nature: 'PAYABLE',
         amount: 100,
         description: 'HOMO QA — lançamento MFA permitido',
+        costCenterId: costCenterMfa.id,
       },
       tenant.userId,
       transaction
@@ -172,11 +176,33 @@ test('MFA-006 código de recuperação de uso único não pode ser reusado', asy
   });
 });
 
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): disableMfa fazia
+// soft-delete (paranoid) da MfaCredential, mas user_id tem UNIQUE constraint física (não
+// parcial, ignorando deleted_at) — a linha "fantasma" continuava ocupando o user_id, e QUALQUER
+// setupMfa futuro desse usuário quebrava pra sempre com SequelizeUniqueConstraintError cru.
+test('MFA-008 desabilitar e reconfigurar MFA do mesmo usuário funciona (disableMfa não deixa linha fantasma)', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const userId = await createSecondUser(suffix);
+    const { secret } = await setupAndConfirmMfa(transaction, userId);
+
+    await mfaService.disableMfa(userId, authenticator.generate(secret), tenant, transaction);
+
+    // Sem o fix, isto quebrava com SequelizeUniqueConstraintError (user_id já ocupado pela
+    // linha soft-deletada da credencial anterior).
+    const { otpauthUri } = await mfaService.setupMfa(userId, tenant, transaction);
+    const newSecret = extractSecret(otpauthUri);
+    const { recoveryCodes } = await mfaService.confirmMfa(userId, authenticator.generate(newSecret), tenant, transaction);
+    assert.ok(Array.isArray(recoveryCodes) && recoveryCodes.length > 0);
+  });
+});
+
 test('MFA-007 ação de alto risco sem MFA habilitado é bloqueada pedindo habilitar primeiro', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const approverUserId = await createSecondUser(suffix); // nunca configurou MFA
 
+    const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -185,6 +211,7 @@ test('MFA-007 ação de alto risco sem MFA habilitado é bloqueada pedindo habil
         nature: 'PAYABLE',
         amount: 100,
         description: 'HOMO QA — lançamento sem MFA',
+        costCenterId: costCenterMfa.id,
       },
       tenant.userId,
       transaction

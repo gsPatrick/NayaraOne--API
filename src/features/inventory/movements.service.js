@@ -1,0 +1,411 @@
+'use strict';
+
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase } = require('../../models');
+const AppError = require('../../utils/AppError');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
+const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
+const { getMinStockPolicy, resolveMinimumForLocation } = require('./minStockRules.service');
+const { getActiveHighValueThreshold } = require('./adjustmentRiskRules.service');
+
+// EST-00x (Caderno Marco 7): 7 tipos de movimento. ADJUSTMENT/LOSS/DISPOSAL exigem
+// inventory:approve (mesmo padrão de alçada já usado em construction:approve/finance:approve)
+// porque alteram saldo sem uma origem física rastreável (recebimento/requisição/devolução).
+const MOVEMENT_TYPES = ['IN', 'OUT', 'RETURN', 'TRANSFER', 'ADJUSTMENT', 'LOSS', 'DISPOSAL'];
+const APPROVAL_REQUIRED_TYPES = ['ADJUSTMENT', 'LOSS', 'DISPOSAL'];
+
+// EST-002: saldo é sempre derivado de movimentos, nunca digitável diretamente — esta é a
+// ÚNICA função do sistema que deve escrever em inventory.stock_balances.
+async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, groupId, allowNegativeStock, transaction) {
+  let balance = await InventoryStockBalance.findOne({
+    where: { inventoryItemId, locationId, groupId, companyId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+
+  if (!balance) {
+    balance = await InventoryStockBalance.create(
+      { groupId, companyId, inventoryItemId, locationId, quantityOnHand: 0 },
+      { transaction }
+    );
+  }
+
+  const nextQuantity = Number(balance.quantityOnHand) + Number(delta);
+  // Documento "Banco de Dados Físico BLINDADO": "OUT não pode gerar saldo negativo QUANDO item
+  // não permitir estoque negativo" — regra condicional, não incondicional (allowNegativeStock).
+  if (nextQuantity < 0 && !allowNegativeStock) {
+    throw AppError.badRequest(
+      `Saldo insuficiente no local informado (disponível: ${balance.quantityOnHand}, solicitado: ${Math.abs(delta)}).`,
+      'INVENTORY_INSUFFICIENT_BALANCE'
+    );
+  }
+
+  balance.quantityOnHand = nextQuantity;
+  await balance.save({ transaction });
+  return balance;
+}
+
+// GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): Caderno §10 —
+// "Durante contagem, política define freeze lógico ou reconciliação de movimentos posteriores"
+// — não existia política nenhuma: um movimento registrado com a contagem aberta mudava o saldo
+// "esperado" lido por completeCount no fechamento, misturando movimento legítimo com divergência
+// de contagem (ajuste aplicado depois ficava errado na mesma proporção do movimento).
+//
+// Política escolhida: FREEZE LÓGICO (stock-take lock) por local. Enquanto existir um
+// InventoryCount OPEN para um local, nenhum movimento que toque esse local (origem ou destino)
+// é aceito — a contagem precisa ser concluída antes. Isso garante saldo esperado no fechamento
+// == saldo na abertura, então toda divergência é divergência real de contagem.
+//
+// Corrida abertura x movimento resolvida no banco, por lock de linha em inventory.locations:
+// - recordMovement trava cada local tocado com FOR SHARE (movimentos concorrentes no mesmo
+//   local continuam paralelos entre si — SHARE não conflita com SHARE) e só então checa se há
+//   contagem OPEN;
+// - openCount (counts.service.js) trava o local com FOR UPDATE antes de criar a contagem.
+// FOR UPDATE x FOR SHARE conflitam: a abertura espera os movimentos em voo comitarem (que
+// entram no saldo esperado, antes da contagem existir), e um movimento que chega durante a
+// abertura espera o commit dela e, ao destravar, enxerga a contagem OPEN (READ COMMITTED:
+// cada statement vê o que já foi comitado) e é bloqueado. Locais travados em ordem de id pra
+// dois movimentos TRANSFER cruzados nunca formarem deadlock com uma abertura de contagem.
+async function assertLocationsNotFrozenByCount(locationIds, groupId, companyId, transaction) {
+  const ids = [...new Set(locationIds.filter(Boolean))].sort();
+  if (ids.length === 0) return;
+  await InventoryLocation.findAll({
+    where: { id: ids, groupId, companyId },
+    attributes: ['id'],
+    order: [['id', 'ASC']],
+    lock: transaction.LOCK.SHARE,
+    transaction,
+  });
+  const openCount = await InventoryCount.findOne({ where: { locationId: ids, groupId, companyId, status: 'OPEN' }, transaction });
+  if (openCount) {
+    throw AppError.conflict(
+      `Local em inventário físico (contagem ${openCount.id} aberta) — movimentações neste local ficam bloqueadas até a contagem ser concluída (freeze lógico).`,
+      'INVENTORY_LOCATION_FROZEN_BY_COUNT'
+    );
+  }
+}
+
+async function recordMovement(payload, actor, transaction) {
+  const {
+    groupId,
+    companyId,
+    inventoryItemId,
+    projectId,
+    stageId,
+    movementType,
+    quantity,
+    sourceLocationId,
+    destinationLocationId,
+    sourceType,
+    sourceId,
+    idempotencyKey,
+    movedAt,
+    responsiblePersonId,
+    evidenceFileId,
+    reason,
+  } = payload;
+
+  if (!groupId || !companyId || !inventoryItemId || !movementType || quantity == null) {
+    throw AppError.badRequest(
+      'Os campos "groupId", "companyId", "inventoryItemId", "movementType" e "quantity" são obrigatórios.',
+      'INVENTORY_MOVEMENT_VALIDATION'
+    );
+  }
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 47, 2026-10-05): TAB-0751 trata
+  // created_by como NOT NULL — "Movimentações imutáveis de estoque" sem autor registrado
+  // quebra a rastreabilidade exigida de um ledger. Nunca aceitar null aqui.
+  if (!actor?.userId) {
+    throw AppError.badRequest('Movimento de estoque exige um usuário autenticado ("actor.userId") — ledger imutável não pode ter autor nulo.', 'INVENTORY_MOVEMENT_ACTOR_REQUIRED');
+  }
+  if (!MOVEMENT_TYPES.includes(movementType)) {
+    throw AppError.badRequest(`"movementType" precisa ser um de: ${MOVEMENT_TYPES.join(', ')}.`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  const qty = Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw AppError.badRequest('"quantity" precisa ser um número maior que zero.', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !actor.canApprove) {
+    throw AppError.forbidden(
+      `Movimento do tipo "${movementType}" exige a permissão inventory:approve.`,
+      'INVENTORY_MOVEMENT_APPROVAL_REQUIRED'
+    );
+  }
+
+  const item = await InventoryItem.findOne({ where: { id: inventoryItemId, groupId, companyId }, transaction });
+  if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar" — Ciclo 1, auditor Estoque/Patrimônio,
+  // 2026-10-06): o checklist (MARCO_7_CHECKLIST.md §3) já apontava explicitamente que faltava
+  // "validar o bloqueio 'não movimenta estoque'" de SERVICE_ITEM, mas nenhum código aqui
+  // impedia — um item SERVICE_ITEM (mão de obra/serviço, sem controle físico de saldo) podia
+  // receber IN/OUT/TRANSFER/ADJUSTMENT normalmente e acumular `stock_balances` fantasma, o que
+  // contradiz o próprio tipo (serviço não tem unidade física armazenável).
+  if (item.itemType === 'SERVICE_ITEM') {
+    throw AppError.badRequest(
+      'Item do tipo "SERVICE_ITEM" não movimenta estoque (não possui saldo físico).',
+      'INVENTORY_MOVEMENT_SERVICE_ITEM_FORBIDDEN'
+    );
+  }
+
+  if ((movementType === 'OUT' || movementType === 'LOSS' || movementType === 'DISPOSAL') && !sourceLocationId) {
+    throw AppError.badRequest(`Movimento "${movementType}" exige "sourceLocationId".`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  if ((movementType === 'IN' || movementType === 'RETURN') && !destinationLocationId) {
+    throw AppError.badRequest(`Movimento "${movementType}" exige "destinationLocationId".`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  if (movementType === 'TRANSFER' && (!sourceLocationId || !destinationLocationId)) {
+    throw AppError.badRequest('Movimento "TRANSFER" exige "sourceLocationId" e "destinationLocationId".', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  if (movementType === 'ADJUSTMENT' && !sourceLocationId && !destinationLocationId) {
+    throw AppError.badRequest('Movimento "ADJUSTMENT" exige "sourceLocationId" ou "destinationLocationId".', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  // EST-008: ajuste/perda/descarte exigem motivo (evidência é recomendada, mas só obrigatória
+  // quando a política da empresa exigir — isso é regra de negócio do Motor de Regras, fora de
+  // código fixo; aqui garantimos o mínimo "sempre obrigatório" do Caderno, que é o motivo).
+  // BUG REAL CORRIGIDO (auditoria Marco 7, EST-TS-07, 2026-10-07): "   " (só espaços) passava
+  // no `!reason`, gravando um ajuste/perda/descarte no ledger imutável sem motivo de verdade.
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && (!reason || !String(reason).trim())) {
+    throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
+  }
+  // GAP REAL CORRIGIDO (auditoria Marco 7, Caderno §6 EST-TS-12, 2026-10-08): "evento repetido
+  // não pode criar segunda obrigação" já era garantido POR CONSTRUÇÃO nos fluxos automatizados
+  // (recebimento/requisição geram a idempotencyKey internamente antes de chamar recordMovement),
+  // mas o endpoint genérico de movimento manual deixava idempotencyKey opcional — um ADJUSTMENT/
+  // LOSS/DISPOSAL disparado manualmente (os mesmos tipos reexecutáveis que já exigem reason/
+  // aprovação acima) podia ser reenviado (retry, duplo clique) sem key e criar uma segunda
+  // obrigação de verdade. IN/OUT/TRANSFER continuam sem exigência aqui porque são chamados
+  // internamente por outros services que já constroem a key (ex.: receipts.service.js linha
+  // ~157: `receipt:${receipt.id}:item:${line.id}`) — exigir aqui quebraria esses fluxos.
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !idempotencyKey) {
+    throw AppError.badRequest(
+      `Movimento "${movementType}" exige "idempotencyKey" (evento reexecutável não pode criar segunda obrigação — EST-TS-12).`,
+      'INVENTORY_MOVEMENT_IDEMPOTENCY_KEY_REQUIRED'
+    );
+  }
+  // GAP REAL CORRIGIDO (reauditoria externa Nayara, 3ª rodada, 2026-10-08; EST-008: "...
+  // evidência... conforme valor/risco"): motivo e aprovação (canApprove, acima) já eram sempre
+  // obrigatórios pros 3 tipos — faltava o eixo "valor": acima de um limiar configurável
+  // (REG-EST-002, Motor de Regras — ver adjustmentRiskRules.service.js), evidência deixa de
+  // ser opcional e passa a ser obrigatória, igual o "ajuste de alto valor" exige comprovação
+  // visual, não só uma linha de texto.
+  // BUG REAL CORRIGIDO (reauditoria adversarial da própria correção EST-008, 2026-10-08): item
+  // nunca recebido formalmente (averageCost null/0, ex.: cadastrado direto ou só movimentado via
+  // ADJUSTMENT) fazia estimatedValue=0 e pulava o limiar de valor/risco INTEIRO, não importa a
+  // quantidade — um ajuste de 100.000 unidades de um item de custo desconhecido passava sem
+  // evidência nenhuma. Custo desconhecido é RISCO, não ausência de risco: trata averageCost
+  // null/0 como "valor não determinável" e aplica o limiar por QUANTIDADE (mesma ordem de
+  // grandeza do limiar de valor padrão, na ausência de custo) em vez de pular a checagem.
+  // GAP GRAVE CORRIGIDO (auditoria RLS/multi-tenant, 2026-10-08): `evidenceFileId` nunca era
+  // validado contra a tabela File — qualquer string (UUID inventado, ou de OUTRA empresa) era
+  // aceita como "evidência válida" pro REG-EST-002, esvaziando a exigência de comprovação visual.
+  // Mesmo padrão já usado em `lossCases.service.js#openLossCase` (File.findOne/findAll com
+  // companyId no where): se o File não existe (ou não pertence a este tenant), trata como se
+  // evidência não tivesse sido fornecida — reaproveita a mesma validação de alto valor abaixo.
+  let evidenceFile = null;
+  if (evidenceFileId) {
+    evidenceFile = await File.findOne({ where: { id: evidenceFileId, groupId, companyId }, transaction });
+  }
+  if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !evidenceFile) {
+    const hasKnownCost = item.averageCost != null && Number(item.averageCost) > 0;
+    const estimatedValue = qty * Number(item.averageCost || 0);
+    const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
+    const unknownCostHighQuantity = !hasKnownCost && qty >= highValueThreshold;
+    if ((hasKnownCost && estimatedValue >= highValueThreshold) || unknownCostHighQuantity) {
+      const detail = hasKnownCost
+        ? `de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${highValueThreshold.toFixed(2)}`
+        : `de quantidade ${qty} (custo médio do item desconhecido/zerado) está acima do limite de ${highValueThreshold}`;
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, estimatedValue, highValueThreshold },
+          reason: 'Tentativa de registrar movimento de alto valor sem evidência (REG-EST-002).',
+        },
+        transaction
+      );
+      throw AppError.badRequest(
+        `Movimento "${movementType}" ${detail} (REG-EST-002) — exige "evidenceFileId".`,
+        'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      );
+    }
+  }
+  // EST-006: saída de ferramenta/ativo (item_type TOOL/ASSET) exige responsável.
+  if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {
+    throw AppError.badRequest(`Movimento "${movementType}" de ferramenta/ativo exige "responsiblePersonId".`, 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): o endpoint genérico de movimentos
+  // aceitava "movementType: LOSS" direto (com motivo/aprovação/evidência por valor já exigidos
+  // acima), mas sem NENHUM vínculo obrigatório com um InventoryLossCase — permitindo registrar
+  // perda/quebra/extravio sem nunca passar pela investigação/decisão humana que
+  // lossCases.service.js implementa (abertura -> decisão -> só então o movimento). Exige que o
+  // LOSS venha de um loss_case já APROVADO deste tenant, com o mesmo inventoryItemId.
+  // DISPOSAL (baixa deliberada de item, não perda) continua sem essa exigência de propósito —
+  // o contrato (EST-010) é especificamente sobre perda/quebra/extravio.
+  if (movementType === 'LOSS') {
+    if (sourceType !== 'LOSS_CASE' || !sourceId) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, sourceType, sourceId },
+          reason: 'Tentativa de registrar movimento LOSS sem vínculo com caso de perda (EST-010).',
+        },
+        transaction
+      );
+      throw AppError.badRequest(
+        'Movimento "LOSS" exige vínculo com um caso de perda aprovado ("sourceType": "LOSS_CASE" e "sourceId" do caso) — registre e decida em lossCases antes.',
+        'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
+      );
+    }
+    const lossCase = await InventoryLossCase.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!lossCase || lossCase.status !== 'APPROVED' || lossCase.inventoryItemId !== inventoryItemId) {
+      await registrarTentativaBloqueada(
+        {
+          groupId,
+          companyId,
+          actorUserId: actor.userId || null,
+          action: 'inventory.movement.record',
+          entityType: 'InventoryItem',
+          entityId: item.id,
+          beforeJson: { item: item.toJSON(), movementType, quantity: qty, sourceId, lossCase: lossCase ? lossCase.toJSON() : null },
+          reason: 'Tentativa de registrar movimento LOSS com caso de perda inválido/não aprovado/de outro item (EST-010).',
+        },
+        transaction
+      );
+      throw AppError.badRequest(
+        'O caso de perda informado ("sourceId") não existe, não pertence a este item, ou não está APROVADO.',
+        'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
+      );
+    }
+  }
+  // EST-004: material atribuído à obra (entra/sai de um local PROJECT_SITE) precisa de projectId.
+  const touchedLocationIds = [sourceLocationId, destinationLocationId].filter(Boolean);
+  if (touchedLocationIds.length > 0 && !projectId) {
+    const siteLocations = await InventoryLocation.findAll({
+      where: { id: touchedLocationIds, groupId, companyId, locationType: 'PROJECT_SITE' },
+      transaction,
+    });
+    if (siteLocations.length > 0) {
+      throw AppError.badRequest('Movimento envolvendo local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
+    }
+  }
+
+  // EST-00x: idempotência — reenvio do mesmo payload (ex.: retry de rede) não duplica o movimento.
+  if (idempotencyKey) {
+    const existing = await InventoryMovement.findOne({ where: { companyId, idempotencyKey }, transaction });
+    if (existing) return existing;
+  }
+
+  // Caderno §10: freeze lógico durante inventário físico (ver assertLocationsNotFrozenByCount).
+  // Depois do retorno idempotente acima: reenvio de um movimento JÁ gravado antes da contagem
+  // abrir não é um movimento novo, então devolve o original em vez de falhar.
+  await assertLocationsNotFrozenByCount(touchedLocationIds, groupId, companyId, transaction);
+
+  const movement = await InventoryMovement.create(
+    {
+      groupId,
+      companyId,
+      inventoryItemId,
+      projectId: projectId || null,
+      stageId: stageId || null,
+      movementType,
+      quantity: qty,
+      sourceLocationId: sourceLocationId || null,
+      destinationLocationId: destinationLocationId || null,
+      sourceType: sourceType || 'MANUAL',
+      sourceId: sourceId || null,
+      idempotencyKey: idempotencyKey || null,
+      movedAt: movedAt || new Date(),
+      movedByUserId: actor.userId || null,
+      responsiblePersonId: responsiblePersonId || null,
+      evidenceFileId: evidenceFile ? evidenceFile.id : null,
+      reason: reason || null,
+      createdBy: actor.userId || null,
+      updatedBy: actor.userId || null,
+    },
+    { transaction }
+  );
+
+  const allowNegative = item.allowNegativeStock;
+  const touchedBalances = [];
+
+  // Aplica o delta de saldo por local — TRANSFER move entre dois locais na mesma transação,
+  // o que garante atomicidade (EST-003): nunca existe estado intermediário com saldo "perdido".
+  if (movementType === 'OUT' || movementType === 'LOSS' || movementType === 'DISPOSAL') {
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
+  } else if (movementType === 'IN' || movementType === 'RETURN') {
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
+  } else if (movementType === 'TRANSFER') {
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
+    touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
+  } else if (movementType === 'ADJUSTMENT') {
+    // Ajuste positivo soma no destino; ajuste negativo subtrai da origem — sinal definido por
+    // qual dos dois campos veio preenchido no payload.
+    if (destinationLocationId) {
+      touchedBalances.push(await applyBalanceDelta(inventoryItemId, destinationLocationId, qty, companyId, groupId, allowNegative, transaction));
+    } else {
+      touchedBalances.push(await applyBalanceDelta(inventoryItemId, sourceLocationId, -qty, companyId, groupId, allowNegative, transaction));
+    }
+  }
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId: actor.userId || null,
+      action: 'INVENTORY_MOVEMENT_RECORDED',
+      entityType: 'InventoryMovement',
+      entityId: movement.id,
+      afterJson: { movementType, quantity: qty, inventoryItemId, sourceLocationId, destinationLocationId },
+      reason: `Movimento de estoque "${movementType}" de ${qty} unidade(s) registrado.`,
+    },
+    transaction
+  );
+
+  await publishMovementRecorded(movement, transaction);
+
+  // EST-012: estoque mínimo — avisa (NAY sugere, nunca efetiva) quando o saldo resultante de
+  // um local tocado por este movimento cruza para abaixo do mínimo do item NAQUELE local.
+  // GAP CORRIGIDO (auditoria de conformidade Marco 7, EST-012 "Estoque mínimo e reposição vêm
+  // do Motor de Regras"): o limiar vinha da coluna estática `item.minimumQuantity`; agora vem
+  // exclusivamente da regra REG-EST-001 do Motor de Regras genérico (minStockRules.service.js),
+  // com política por item e sobreposição opcional por local. A coluna virou só espelho legado.
+  const minStockPolicy = await getMinStockPolicy(item, transaction, actor.userId);
+  for (const balance of touchedBalances) {
+    const threshold = resolveMinimumForLocation(minStockPolicy, balance.locationId);
+    if (threshold != null && Number(balance.quantityOnHand) < threshold) {
+      await publishStockLow(item, balance.locationId, balance.quantityOnHand, transaction, {
+        minimumQuantity: threshold,
+        reorderQuantity: minStockPolicy.reorderQuantity,
+        ruleCode: minStockPolicy.ruleCode,
+        ruleVersionId: minStockPolicy.ruleVersionId,
+      });
+    }
+  }
+
+  return movement;
+}
+
+async function getBalance(inventoryItemId, locationId, groupId, companyId, transaction) {
+  const balance = await InventoryStockBalance.findOne({ where: { inventoryItemId, locationId, groupId, companyId }, transaction });
+  return balance ? Number(balance.quantityOnHand) : 0;
+}
+
+async function listBalancesByItem(inventoryItemId, groupId, companyId, transaction) {
+  return InventoryStockBalance.findAll({
+    where: { inventoryItemId, groupId, companyId },
+    include: [{ model: InventoryLocation, as: 'location' }],
+    order: [['location_id', 'ASC']],
+    limit: 1500,
+    transaction,
+  });
+}
+
+module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem, assertLocationsNotFrozenByCount };

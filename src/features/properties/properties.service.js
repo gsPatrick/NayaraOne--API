@@ -241,6 +241,37 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
           { ruleDecision: evaluation.decision, reason: evaluation.reason }
         );
       }
+
+      // Mesmo gate aplicado em publish.service.js (REG-IMO-PHOTO-MIN / REG-IMO-DOCS-001) —
+      // este caminho genérico de PATCH não pode contornar as mesmas regras do Motor de Regras.
+      const approvedPhotoCount = await PropertyMedia.count({
+        where: { propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED' },
+        transaction,
+      });
+      const photoEvaluation = await evaluateRule('REG-IMO-PHOTO-MIN', { approvedPhotoCount }, tenant, { transaction });
+      if (photoEvaluation.decision !== 'APPLY') {
+        throw AppError.unprocessable(
+          'Publicação bloqueada: quantidade mínima de fotos aprovadas não atingida.',
+          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_PHOTO_MIN',
+          { ruleDecision: photoEvaluation.decision, reason: photoEvaluation.reason, approvedPhotoCount }
+        );
+      }
+
+      const requiredDocTypes = ['REGISTRY', 'IPTU'];
+      const existingDocTypes = new Set(
+        (await PropertyDocument.findAll({ where: { propertyId: property.id, documentType: requiredDocTypes }, transaction })).map(
+          (doc) => doc.documentType
+        )
+      );
+      const hasRequiredDocuments = requiredDocTypes.every((type) => existingDocTypes.has(type));
+      const docsEvaluation = await evaluateRule('REG-IMO-DOCS-001', { hasRequiredDocuments }, tenant, { transaction });
+      if (docsEvaluation.decision !== 'APPLY') {
+        throw AppError.unprocessable(
+          'Publicação bloqueada: documentos mínimos (matrícula/IPTU) ausentes.',
+          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001',
+          { ruleDecision: docsEvaluation.decision, reason: docsEvaluation.reason, missingDocTypes: requiredDocTypes.filter((t) => !existingDocTypes.has(t)) }
+        );
+      }
     }
     property.publicationStatus = normalized;
   }

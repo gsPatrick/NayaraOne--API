@@ -3,7 +3,7 @@
 const { Guarantee } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishGuaranteeCreated } = require('./legalEvents.service');
+const { publishGuaranteeCreated, publishGuaranteeReplaced } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 
 const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE'];
@@ -163,4 +163,62 @@ async function deleteGuarantee(id, actorUserId, transaction) {
   return { id };
 }
 
-module.exports = { createGuarantee, listGuarantees, getGuarantee, updateGuarantee, deleteGuarantee, GUARANTEE_TYPES };
+/**
+ * replaceGuarantee — Caderno Anexo I "9. Garantias locatícias": "contrato não perde histórico
+ * quando a garantia é substituída." Cria a NOVA Guarantee (mesmo contrato), marca a ANTIGA como
+ * RELEASED + replacedByGuaranteeId apontando para a nova — NUNCA apaga/edita o tipo/valor da
+ * garantia antiga (histórico íntegro, igual ao padrão de versão imutável usado no resto do
+ * módulo jurídico). Publica `legal.guarantee.replaced`.
+ */
+async function replaceGuarantee(oldGuaranteeId, newGuaranteePayload, actorUserId, transaction) {
+  const oldGuarantee = await getGuarantee(oldGuaranteeId, transaction);
+  if (oldGuarantee.replacedByGuaranteeId) {
+    throw AppError.conflict('Esta garantia já foi substituída anteriormente.', 'LEGAL_GUARANTEE_ALREADY_REPLACED');
+  }
+
+  const newGuarantee = await createGuarantee(oldGuarantee.contractId, newGuaranteePayload, actorUserId, transaction);
+
+  const beforeJson = oldGuarantee.toJSON();
+  oldGuarantee.status = 'RELEASED';
+  // NOTA DE AMBIENTE (ver comentário em src/models/Guarantee.js): a coluna física
+  // "replaced_by_guarantee_id" ainda não existe neste banco (migration 20260101000289 pronta,
+  // mas pendente de rodar com credenciais de DDL que este ambiente não possui) — o atributo NÃO
+  // está declarado no model por isso, então esta atribuição fica só na instância em memória
+  // (não é persistida nem causa erro) e, quando o model for atualizado, passa a persistir sem
+  // nenhuma outra mudança de código. O que SEMPRE é persistido, mesmo hoje: status RELEASED da
+  // garantia antiga + o vínculo completo em auditoria (afterJson abaixo), que já documenta
+  // "quem substituiu quem" de forma consultável.
+  oldGuarantee.replacedByGuaranteeId = newGuarantee.id;
+  oldGuarantee.updatedBy = actorUserId || null;
+  await oldGuarantee.save({ transaction });
+
+  await publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: oldGuarantee.groupId,
+      companyId: oldGuarantee.companyId,
+      actorUserId,
+      action: 'legal.guarantee.replace',
+      entityType: 'Guarantee',
+      entityId: oldGuarantee.id,
+      beforeJson,
+      afterJson: oldGuarantee.toJSON(),
+      reason: `Garantia ${oldGuarantee.id} substituída pela garantia ${newGuarantee.id}.`,
+    },
+    transaction
+  );
+
+  return { oldGuarantee, newGuarantee };
+}
+
+module.exports = {
+  createGuarantee,
+  listGuarantees,
+  getGuarantee,
+  updateGuarantee,
+  deleteGuarantee,
+  replaceGuarantee,
+  GUARANTEE_TYPES,
+  GUARANTEE_STATUSES,
+};

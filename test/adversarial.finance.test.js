@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -35,6 +35,11 @@ after(async () => {
 });
 
 async function createEntry(transaction, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  if (!costCenterId && (overrides.nature || 'PAYABLE') === 'PAYABLE') {
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    costCenterId = costCenter.id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -43,6 +48,7 @@ async function createEntry(transaction, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'QA ADV finance',
+      costCenterId,
       ...overrides,
     },
     tenant.userId,
@@ -595,18 +601,32 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
 
   try {
     // Duas baixas de 60 ao mesmo tempo somariam 120 num lançamento de 100.
+    //
+    // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10): o
+    // comportamento ANTERIOR deste teste esperava que a segunda baixa concorrente fosse
+    // REJEITADA (FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING). Isso contraria o contrato — "Valor
+    // excedente nunca é automaticamente tratado como receita; abre pendência de classificação"
+    // significa que o recebimento é SEMPRE aceito; é o excedente que fica retido. Sob
+    // concorrência real, o lock pessimista (FOR UPDATE) ainda serializa as duas chamadas — a
+    // segunda só prossegue depois da primeira comitar — mas agora AMBAS têm sucesso: a segunda
+    // aplica só os 40 que cabem no saldo e os 20 que sobram abrem pendência de classificação,
+    // em vez de a chamada inteira falhar. O saldo do lançamento original continua nunca ficando
+    // negativo (garantia que o teste existe para provar).
     const resultados = await Promise.allSettled([
       withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
       withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
     ]);
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');
-    assert.equal(sucessos.length, 1, 'apenas UMA das baixas concorrentes pode passar');
-    const falha = resultados.find((r) => r.status === 'rejected');
-    assert.equal(falha.reason.code, 'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING');
+    assert.equal(sucessos.length, 2, 'sob o novo contrato, recebimento nunca é rejeitado — ambas as baixas concorrentes são aceitas');
+    const comExcedente = sucessos.find((r) => r.value.classificationPending);
+    assert.ok(comExcedente, 'a baixa que chegou depois do saldo já fechado gerou pendência de classificação para o excedente');
+    assert.equal(String(comExcedente.value.classificationPending.amount), '20.00');
 
     await withCommitted(async (t) => {
       const restante = await financialEntriesService.computeRemainingAmount(entryId, t);
-      assert.equal(restante, '40.00', 'o saldo restante nunca fica negativo');
+      assert.equal(restante, '0.00', 'o saldo restante nunca fica negativo (e aqui fecha em zero, nunca abaixo)');
+      const reloaded = await FinancialEntry.findByPk(entryId, { transaction: t });
+      assert.equal(reloaded.status, 'SETTLED');
     });
   } finally {
     // Limpeza: o ledger é append-only em runtime, mas estes são dados de teste num banco

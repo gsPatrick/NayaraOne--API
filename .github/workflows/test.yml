@@ -46,7 +46,14 @@ jobs:
       JWT_REFRESH_TTL: 7d
       PII_HASH_SECRET: ci-pii-hash-secret-not-for-production
       MFA_ENCRYPTION_KEY: 47f62af2f91a7ac9bb6ca3db95498c3ab311d033dd97f7e101b062a84c4781e0
-      APP_API_PREFIX: /api/v1
+      # GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): com "/api/v1" aqui, o app monta as rotas
+      # versionadas (router.use('/v1', ...) dentro de src/routes/index.js) sob
+      # "/api/v1" + "/v1" = "/api/v1/v1/...". Os testes HTTP reais que sobem o app numa porta
+      # alternativa (construction.httpRoutes, inventory.nay.httpRoutes, procurement.httpRoutes)
+      # batem direto em "/api/v1/..." (mesmo valor usado em produção/.env local, que é "/api"),
+      # então toda rota dava 404. Alinhado com .env/.env.example ("/api"), igual ao ambiente que
+      # roda localmente e em produção.
+      APP_API_PREFIX: /api
       PORT: 3011
 
     steps:
@@ -61,6 +68,25 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # M6-96: scanner de hard-code cobrindo o módulo de Obras — vigia contra regressão de
+      # margem/comissão/valor monetário fixado em código em vez de vir do Motor de Regras.
+      - name: Scanner de hard-code (Obras/Construction)
+        run: node scripts/scanConstructionHardcode.js
+
+      # Caderno Técnico, página 165, item 13 ("segurança/antifraude do módulo de Obras") — a
+      # auditora externa pediu evidência de "security scan" pro Marco 6. Dois steps novos:
+      # SAST simples (regex sobre src/, sem AST, mesma filosofia do scanner de hard-code acima)
+      # e scan de dependências (npm audit contra prod deps apenas — devDependencies não vão pro
+      # runtime). Resultado real documentado em scripts/README-security.md.
+      - name: SAST simples (padrões perigosos conhecidos em src/)
+        run: node scripts/sastScan.js
+
+      # securityScan.js falha o build (exit 1) só para HIGH/CRITICAL com fix disponível
+      # ignorado — moderate/low viram warning no log, não bloqueiam (ver comentário no topo do
+      # script pro motivo da escolha e o resultado real rodado em 08/10/2026).
+      - name: Security scan (npm audit — dependências de produção)
+        run: node scripts/securityScan.js
 
       # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
       # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
@@ -90,6 +116,12 @@ jobs:
           node scripts/seedBillingRules.js
           node scripts/seedRealEstateRules.js
 
+      # GAP REAL CORRIGIDO (auditoria de entrega Marco 6/7, 08/10/2026): o schema "procurement"
+      # (migration 20260101000267, Compras/Seguros) nunca estava nesta lista — toda a suíte de
+      # procurement/insurance falharia aqui com "permission denied for schema procurement" por
+      # faltar GRANT, mesmo com migrations/seed corretos. Mesma classe de bug já documentada
+      # acima pro usuário superuser do Postgres: um schema novo só existe de verdade no CI
+      # depois de entrar nesta lista.
       - name: Criar usuário de privilégio mínimo (nayara_ci_app)
         env:
           PGPASSWORD: nayara_ci_password
@@ -102,7 +134,7 @@ jobs:
               END IF;
             END $$;
           SQL
-          for schema in ai audit construction core crm finance integration inventory legal people real_estate; do
+          for schema in ai audit construction core crm finance integration inventory legal people procurement real_estate; do
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"

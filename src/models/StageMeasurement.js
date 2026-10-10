@@ -26,13 +26,30 @@ module.exports = (sequelize) => {
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
-        defaultValue: 'PENDING_APPROVAL',
+        defaultValue: 'DRAFT',
         field: 'status',
-        comment: 'PENDING_APPROVAL|APPROVED|REJECTED',
+        comment: 'DRAFT|SUBMITTED|REVIEWED|APPROVED|PAYABLE|REJECTED|SUPERSEDED',
       },
       approvedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'approved_by_user_id' },
       decidedAt: { type: DataTypes.DATE, allowNull: true, field: 'decided_at' },
       rejectionReason: { type: DataTypes.TEXT, allowNull: true, field: 'rejection_reason' },
+      submittedAt: { type: DataTypes.DATE, allowNull: true, field: 'submitted_at' },
+      reviewedAt: { type: DataTypes.DATE, allowNull: true, field: 'reviewed_at' },
+      reviewedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'reviewed_by_user_id' },
+      reviewNotes: { type: DataTypes.TEXT, allowNull: true, field: 'review_notes' },
+      approvedAt: { type: DataTypes.DATE, allowNull: true, field: 'approved_at' },
+      totalAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'total_amount' },
+      payableFinancialEntryId: { type: DataTypes.UUID, allowNull: true, field: 'payable_financial_entry_id' },
+      parentMeasurementId: { type: DataTypes.UUID, allowNull: true, field: 'parent_measurement_id' },
+      revisionNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, field: 'revision_number' },
+      // M6-97 (reforço): override pontual de centro de custo por medição — se ausente, o
+      // lançamento gerado usa o centro de custo padrão da obra (Project.costCenterId).
+      costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
+      // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline já usado em
+      // DailyReport (M6-94): o app de campo gera a chave localmente e a envia ao sincronizar;
+      // reenviar a MESMA chave não cria uma segunda medição. UNIQUE parcial via migration
+      // 20260101000295 (só quando não-nulo).
+      idempotencyKey: { type: DataTypes.STRING(128), allowNull: true, field: 'idempotency_key' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

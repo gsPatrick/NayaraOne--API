@@ -10,6 +10,10 @@ const {
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): ver getOrCreateDefaultResultCenter em resultCenters.service.js.
+const UTILITIES_RESULT_CENTER_CODE = 'LOCACAO-UTILIDADES';
 const {
   publishUtilityTransferRequired,
   publishUtilityTransferCompleted,
@@ -243,6 +247,13 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
 
   const owedByParty = obligation.responsibleParty;
 
+  const resultCenter = await getOrCreateDefaultResultCenter(
+    obligation.groupId,
+    obligation.companyId,
+    UTILITIES_RESULT_CENTER_CODE,
+    'Locação — reembolso de utilidades',
+    transaction
+  );
   const financialEntry = await createFinancialEntry(
     {
       groupId: obligation.groupId,
@@ -254,6 +265,7 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
       description: `Reembolso de utilidade "${obligation.utilityType}" pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
       dueAt: new Date(),
       idempotencyKey: `utility_reimbursement:${obligation.id}:${Date.now()}`,
+      resultCenterId: resultCenter.id,
     },
     actorUserId,
     transaction

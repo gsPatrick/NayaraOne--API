@@ -1,0 +1,988 @@
+'use strict';
+
+const {
+  InsurancePolicy,
+  InsurancePolicyParty,
+  InsuranceCoverage,
+  InsuranceInstallment,
+  InsuranceClaim,
+  InsuranceClaimEvent,
+  InsuranceRenewalTask,
+  InsuranceProviderSubmission,
+  FinancialEntry,
+  File,
+  FileLink,
+} = require('../../models');
+const AppError = require('../../utils/AppError');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
+const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
+const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { getSetting } = require('../settings/settings.service');
+const filesService = require('../files/files.service');
+
+// Insurance Hub (Marco 7, contrato 00000009 Anexo I — "COMPRAS/PROCUREMENT + SEGUROS"):
+// "policies, parties, coverages, installments, claims, claim_events, renewal_tasks,
+// provider_submissions. Apólice com provider/número/vigência/cobertura/prêmio/documentos;
+// renovação alerta; sinistro timeline; indenização confirmada integra Financeiro."
+//
+// Mesmo princípio já usado em bankPayments.service.js: o caminho NOVO (via adapter) nunca
+// presume sucesso — só confirmSettlement (webhook/polling) grava ledger, e só quando o status
+// reportado pela seguradora é de fato liquidação confirmada.
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 5, 2026-10-05): `quoteSnapshot`
+// guardava o `raw` inteiro devolvido pelo adapter — que embute o `req` de cotação enviado,
+// contendo CPF (`PublicIdNumber`), renda mensal, dados do cônjuge e endereço completo do
+// locatário (schema `TenantData` documentado em `adapters/InsuranceAdapter.js`), em texto
+// claro, sem máscara nem hash. Isso desviava do padrão já estabelecido no projeto pro mesmo
+// dado (CPF) — `src/models/Person.js` mantém `taxIdNormalized` mascarado na camada de
+// aplicação + `taxIdNormalizedHash` (HMAC) pra busca, nunca o valor cru solto num JSONB.
+// `redactPii` varre recursivamente o objeto e mascara qualquer chave que bata com um padrão
+// conhecido de PII — funciona para qualquer formato de resposta de provider (Yelum, Porto
+// Seguro, Sandbox), não só o schema específico de um deles.
+const PII_KEY_PATTERN = /cpf|cnpj|publicidnumber|income|renda|birthdate|salary|telephonenumber|cellphonenumber|celularnumber|\bemail\b|zipcode|streetname|streetnumber|ownertelephonenumber/i;
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 55, 2026-10-05): aritmética de datas
+// DATEONLY ("YYYY-MM-DD") nunca pode passar por `new Date(str)` + `.getDate()/.setDate()` —
+// esses métodos leem/escrevem no fuso LOCAL do servidor, enquanto `new Date("YYYY-MM-DD")" é
+// interpretado como UTC midnight. Em qualquer servidor com offset negativo (Brasil, UTC-3),
+// isso trunca o dia pro anterior antes de somar/subtrair, gravando a data errada em 1 dia.
+// Opera só em componentes UTC e devolve string "YYYY-MM-DD", nunca convertendo pra fuso local.
+function addDaysDateOnly(dateOnlyStr, days) {
+  const [year, month, day] = String(dateOnlyStr).slice(0, 10).split('-').map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  utcDate.setUTCDate(utcDate.getUTCDate() + days);
+  return utcDate.toISOString().slice(0, 10);
+}
+
+// Mesmo cuidado de `addDaysDateOnly`, pra meses em vez de dias — usado por `generateInstallments`.
+function addMonthsDateOnly(dateOnlyStr, months) {
+  const [year, month, day] = String(dateOnlyStr).slice(0, 10).split('-').map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  utcDate.setUTCMonth(utcDate.getUTCMonth() + months);
+  return utcDate.toISOString().slice(0, 10);
+}
+
+// GAP REAL CORRIGIDO (auditoria contrato Marco 7, 2026-10-07 — "Apólice com ... vigência ...
+// renovação alerta"): o sistema alertava a renovação 30 dias antes, mas NADA agia quando a
+// vigência de fato acabava — a apólice continuava ACTIVE para sempre e `openClaim` só olhava
+// `policy.status`, então era possível abrir sinistro numa apólice já vencida. Agora a vigência
+// é aplicada em duas camadas (mesmo princípio fail-closed do resto do arquivo):
+//   1. `openClaim` checa a DATA (`isPolicyExpired`), independente do status gravado — defesa
+//      em profundidade pro intervalo entre o vencimento e a próxima execução do job;
+//   2. `insurancePolicyExpiryJob.js` transiciona ACTIVE/ISSUED vencidas para EXPIRED (status já
+//      previsto na migration 20260101000272: DRAFT|QUOTED|ISSUED|ACTIVE|EXPIRED|CANCELED),
+//      pra visibilidade/relatório/filtro por status.
+// Sinistros JÁ abertos antes do vencimento não são afetados (submitClaim/confirmClaimSettlement
+// não dependem do status da apólice) — só a ABERTURA de sinistro novo é bloqueada.
+//
+// `expiryDate` é DATEONLY e é o ÚLTIMO dia de cobertura (inclusive): a apólice está vencida
+// quando "hoje" > expiryDate. "Hoje" é o dia civil no fuso de negócio (America/Sao_Paulo —
+// ver src/config/database.js), nunca o dia UTC: com UTC, entre 21h e 23h59 do último dia de
+// vigência o sinistro já seria bloqueado indevidamente no Brasil.
+const BUSINESS_TIMEZONE = 'America/Sao_Paulo';
+const POLICY_STATUSES_ELIGIBLE_FOR_CLAIM = ['ACTIVE', 'ISSUED'];
+// Teto de negócio pra "installmentsCount" (item 4, auditoria 2026-10-08): mensal por até 5 anos.
+const MAX_INSTALLMENTS_COUNT = 60;
+
+function todayDateOnly(now = new Date()) {
+  // 'en-CA' formata como YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+}
+
+function isPolicyExpired(policy, now = new Date()) {
+  if (!policy) return false;
+  if (policy.status === 'EXPIRED') return true;
+  if (!policy.expiryDate) return false;
+  return String(policy.expiryDate).slice(0, 10) < todayDateOnly(now);
+}
+
+// Campo derivado em leitura — o front não precisa esperar o job rodar pra mostrar "Vencida".
+function withExpiryFlag(policy, now = new Date()) {
+  if (policy) policy.setDataValue('isExpired', isPolicyExpired(policy, now));
+  return policy;
+}
+
+function round2(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+function redactPii(value) {
+  if (Array.isArray(value)) return value.map(redactPii);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [key, val] of Object.entries(value)) {
+      out[key] = PII_KEY_PATTERN.test(key) ? '[REDACTED]' : redactPii(val);
+    }
+    return out;
+  }
+  return value;
+}
+
+async function createPolicy(payload, actorUserId, transaction) {
+  const { groupId, companyId, propertyId, contractId, coverageSummary, parties } = payload;
+  if (!groupId || !companyId) {
+    throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'INSURANCE_POLICY_VALIDATION');
+  }
+
+  const policy = await InsurancePolicy.create(
+    {
+      groupId,
+      companyId,
+      propertyId: propertyId || null,
+      contractId: contractId || null,
+      coverageSummary: coverageSummary || null,
+      status: 'DRAFT',
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+
+  if (Array.isArray(parties)) {
+    for (const party of parties) {
+      if (!party.partyRole) continue;
+      await InsurancePolicyParty.create(
+        { groupId, companyId, policyId: policy.id, partyRole: party.partyRole, personId: party.personId || null },
+        { transaction }
+      );
+    }
+  }
+
+  await registrarAuditoria(
+    {
+      groupId, companyId, actorUserId,
+      action: 'procurement.insurance_policy.create',
+      entityType: 'InsurancePolicy', entityId: policy.id,
+      beforeJson: null, afterJson: policy.toJSON(),
+      reason: 'Apólice criada (rascunho).',
+    },
+    transaction
+  );
+
+  return policy;
+}
+
+// BUG REAL CORRIGIDO (reauditoria RLS/multi-tenant, 2026-10-08): findByPk(id) sem filtro de
+// groupId/companyId deixava qualquer tenant ler/travar/alterar a apólice de OUTRA empresa só
+// adivinhando o UUID — mesmo padrão já corrigido em materialRequests.service.js. Projeto não usa
+// RLS real do Postgres em todo caminho (isolamento é 100% a cargo do filtro manual no where).
+async function getPolicyForUpdate(id, groupId, companyId, transaction) {
+  const policy = await InsurancePolicy.findOne({
+    where: { id, groupId, companyId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  if (!policy) throw AppError.notFound('Apólice não encontrada.', 'INSURANCE_POLICY_NOT_FOUND');
+  return policy;
+}
+
+// Cotação: NÃO altera estado, só consulta o adapter e grava o snapshot bruto — útil pra
+// comparar provider antes de decidir emitir.
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 8, 2026-10-05): o contrato pede
+// apólice com "...prêmio/documentos..." — a Yelum já devolve o documento da análise cadastral
+// embutido na resposta de cotação (`Data.File`, base64, documentado em InsuranceAdapter.js),
+// mas isso era descartado dentro do `quoteSnapshot` bruto, nunca virava um `File`/`FileLink`
+// de verdade (padrão já usado pelo Jurídico em `inspections.service.js`). Extrai e persiste via
+// o mesmo mecanismo, e some do JSONB bruto pra não duplicar um blob base64 grande ali dentro.
+function extractEmbeddedDocument(raw) {
+  const base64 = raw?.Data?.File;
+  if (typeof base64 !== 'string' || base64.length === 0) return null;
+  return { contentBase64: base64, fileName: `cotacao-seguro-${Date.now()}.pdf`, mimeType: 'application/pdf' };
+}
+
+// Status de origem elegíveis para (re)cotar — mesma whitelist de `issuePolicy`. BUG REAL
+// CORRIGIDO (auditoria RLS/regras de negócio, 2026-10-08): quotePolicy nunca checava
+// `policy.status` antes de recotar, permitindo sobrescrever premiumAmount/coverageSummary de uma
+// apólice já ACTIVE/ISSUED com uma nova cotação — reemissão silenciosa de prêmio sem passar pelo
+// fluxo de emissão (e sem invalidar parcelas/renewal task já gerados).
+const POLICY_STATUSES_ELIGIBLE_FOR_QUOTE = ['DRAFT', 'QUOTED'];
+
+async function quotePolicy(id, quoteRequest, actor, transaction) {
+  const policy = await getPolicyForUpdate(id, actor.groupId, actor.companyId, transaction);
+  if (!POLICY_STATUSES_ELIGIBLE_FOR_QUOTE.includes(policy.status)) {
+    throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser recotada.`, 'INSURANCE_POLICY_INVALID_STATUS');
+  }
+  const adapter = await resolveInsuranceAdapter({ groupId: policy.groupId, companyId: policy.companyId }, transaction);
+  const quote = await adapter.quote(quoteRequest || {});
+
+  const embeddedDoc = extractEmbeddedDocument(quote.raw);
+  const rawForSnapshot = embeddedDoc && quote.raw?.Data
+    ? { ...quote.raw, Data: { ...quote.raw.Data, File: '[ARMAZENADO_COMO_ARQUIVO]' } }
+    : quote.raw;
+
+  // BUG REAL CORRIGIDO (item 3, auditoria 2026-10-08): premiumAmount nunca era validado como
+  // número finito > 0 antes de gravar — mesmo padrão já usado para claimAmount em `openClaim`.
+  const nextPremiumAmount = quote.premiumAmount ?? policy.premiumAmount;
+  if (nextPremiumAmount != null) {
+    const amount = Number(nextPremiumAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw AppError.badRequest('"premiumAmount" precisa ser um número finito maior que zero.', 'INSURANCE_POLICY_VALIDATION');
+    }
+  }
+
+  policy.quoteSnapshot = redactPii(rawForSnapshot);
+  policy.premiumAmount = nextPremiumAmount;
+  policy.coverageSummary = quote.coverageSummary || policy.coverageSummary;
+  policy.status = 'QUOTED';
+  policy.updatedBy = actor.userId || null;
+  await policy.save({ transaction });
+
+  if (embeddedDoc) {
+    const file = await filesService.uploadFile(
+      {
+        groupId: policy.groupId,
+        companyId: policy.companyId,
+        fileName: embeddedDoc.fileName,
+        mimeType: embeddedDoc.mimeType,
+        contentBase64: embeddedDoc.contentBase64,
+        category: 'insurance',
+      },
+      actor.userId,
+      transaction
+    );
+    await FileLink.create(
+      {
+        groupId: policy.groupId,
+        companyId: policy.companyId,
+        fileId: file.id,
+        relatedEntityType: 'InsurancePolicy',
+        relatedEntityId: policy.id,
+        purpose: 'QUOTE_DOCUMENT',
+        createdBy: actor.userId || null,
+        updatedBy: actor.userId || null,
+      },
+      { transaction }
+    );
+  }
+
+  return policy;
+}
+
+// Anexo manual de documento à apólice (ex.: PDF da apólice assinada, laudo) — mesmo padrão de
+// `attachInspectionItemMedia` no Jurídico: arquivo já precisa existir (upload via POST /files
+// separado), aqui só cria o vínculo.
+async function attachPolicyDocument(policyId, fileId, actor, transaction) {
+  const policy = await InsurancePolicy.findOne({
+    where: { id: policyId, groupId: actor.groupId, companyId: actor.companyId },
+    transaction,
+  });
+  if (!policy) throw AppError.notFound('Apólice não encontrada.', 'INSURANCE_POLICY_NOT_FOUND');
+  if (!fileId) {
+    throw AppError.badRequest('O campo "fileId" é obrigatório (arquivo precisa existir antes de vincular).', 'INSURANCE_POLICY_DOCUMENT_VALIDATION');
+  }
+  // BUG REAL CORRIGIDO (item 7, auditoria 2026-10-08): File.findByPk não conferia se o arquivo
+  // pertence à mesma empresa da apólice — filtrando por companyId (igual ao padrão já usado em
+  // lossCases.service.js#openLossCase), um fileId de outro tenant nunca é aceito aqui.
+  const file = await File.findOne({ where: { id: fileId, companyId: policy.companyId }, transaction });
+  if (!file) throw AppError.notFound('Arquivo não encontrado.', 'INSURANCE_POLICY_DOCUMENT_FILE_NOT_FOUND');
+
+  const link = await FileLink.create(
+    {
+      groupId: policy.groupId,
+      companyId: policy.companyId,
+      fileId,
+      relatedEntityType: 'InsurancePolicy',
+      relatedEntityId: policy.id,
+      purpose: 'MANUAL',
+      createdBy: actor.userId || null,
+      updatedBy: actor.userId || null,
+    },
+    { transaction }
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_policy.attach_document',
+      entityType: 'InsurancePolicy', entityId: policy.id,
+      afterJson: { fileLinkId: link.id, fileId },
+      reason: 'Documento anexado manualmente à apólice.',
+    },
+    transaction
+  );
+
+  return link;
+}
+
+async function listPolicyDocuments(policyId, groupId, companyId, transaction) {
+  return FileLink.findAll({
+    where: { relatedEntityType: 'InsurancePolicy', relatedEntityId: policyId, groupId, companyId },
+    order: [['created_at', 'DESC']],
+    transaction,
+  });
+}
+
+// Emissão: idempotente via idempotencyKey = `insurance-policy:{id}`, mesmo padrão de
+// submitPaymentIntentToBank. Nunca presume ACTIVE — o adapter retorna o status real
+// (Sandbox confirma na hora; provider real pode devolver "em análise").
+async function issuePolicy(id, issueRequest, actor, transaction) {
+  const policy = await getPolicyForUpdate(id, actor.groupId, actor.companyId, transaction);
+  if (!['DRAFT', 'QUOTED'].includes(policy.status)) {
+    throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser emitida.`, 'INSURANCE_POLICY_INVALID_STATUS');
+  }
+
+  // BUG REAL CORRIGIDO (item 2, auditoria 2026-10-08): generateInstallments e a criação da
+  // renewal task eram sempre `create`, nunca checavam se já existiam de uma emissão anterior —
+  // como o status de origem agora só permite DRAFT/QUOTED (nunca ACTIVE/ISSUED/EXPIRED), a única
+  // forma de chegar aqui de novo é uma apólice que nunca tinha sido emitida (sem installments) ou
+  // que voltou pra DRAFT/QUOTED manualmente sem a limpeza correspondente — bloqueia reemissão
+  // nesse segundo caso em vez de duplicar parcelas/tarefa (mais simples e seguro).
+  const existingInstallment = await InsuranceInstallment.findOne({ where: { policyId: policy.id }, transaction });
+  const existingRenewalTask = await InsuranceRenewalTask.findOne({ where: { policyId: policy.id }, transaction });
+  if (existingInstallment || existingRenewalTask) {
+    throw AppError.conflict(
+      'Esta apólice já possui parcelas e/ou tarefa de renovação de uma emissão anterior — reemissão duplicaria registros financeiros/de alerta.',
+      'INSURANCE_POLICY_ALREADY_ISSUED'
+    );
+  }
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", Ciclo 1, Seguros, 2026-10-06): nada validava
+  // a vigência informada na emissão — uma data de vencimento igual, anterior, ou simplesmente
+  // inválida (string não-parseável) à data de início era aceita de cara, gravando uma apólice
+  // "ativa" cuja janela de vigência é vazia ou invertida. Isso também corrompe silenciosamente
+  // `addDaysDateOnly(expiryDate, -30)` (renewal task nasceria com dueDate != esperado) e
+  // `generateInstallments` (parcelas vencendo numa ordem sem sentido). Mesmo padrão de
+  // validação fail-closed já usado no resto do arquivo (ex.: claimAmount em `openClaim`).
+  // Validado ANTES de chamar o adapter — não há motivo pra gastar uma chamada externa (e
+  // possivelmente consumir idempotencyKey do provider real) com uma vigência já sabida inválida.
+  const nextEffectiveDate = issueRequest?.effectiveDate || policy.effectiveDate;
+  const nextExpiryDate = issueRequest?.expiryDate || policy.expiryDate;
+  if (nextEffectiveDate && nextExpiryDate) {
+    const effectiveTime = Date.parse(String(nextEffectiveDate).slice(0, 10));
+    const expiryTime = Date.parse(String(nextExpiryDate).slice(0, 10));
+    if (!Number.isFinite(effectiveTime) || !Number.isFinite(expiryTime)) {
+      throw AppError.badRequest(
+        '"effectiveDate" e "expiryDate" precisam ser datas válidas (YYYY-MM-DD).',
+        'INSURANCE_POLICY_VALIDATION'
+      );
+    }
+    if (expiryTime <= effectiveTime) {
+      throw AppError.badRequest(
+        '"expiryDate" precisa ser posterior a "effectiveDate" — vigência vazia ou invertida não é permitida.',
+        'INSURANCE_POLICY_VALIDATION'
+      );
+    }
+  }
+
+  // BUG REAL CORRIGIDO (item 4, auditoria 2026-10-08): installmentsCount não tinha limite
+  // superior nem checava se era inteiro — `Math.max(1, Number(count) || 1)` aceitava 2.5 ou
+  // 5000000. Validado ANTES de chamar o adapter/mutar a apólice (fail-closed, mesmo padrão do
+  // resto do arquivo, e mesmo motivo da validação de vigência acima): precisa ser inteiro e
+  // caber num teto de negócio sensato (mensal por até 5 anos).
+  if (issueRequest?.installmentsCount != null) {
+    const count = issueRequest.installmentsCount;
+    if (!Number.isInteger(count) || count < 1 || count > MAX_INSTALLMENTS_COUNT) {
+      throw AppError.badRequest(
+        `"installmentsCount" precisa ser um número inteiro entre 1 e ${MAX_INSTALLMENTS_COUNT}.`,
+        'INSURANCE_POLICY_VALIDATION'
+      );
+    }
+  }
+
+  const tenant = { groupId: policy.groupId, companyId: policy.companyId };
+  const providerName = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
+  const idempotencyKey = `insurance-policy:${policy.id}`;
+  const adapter = await resolveInsuranceAdapter(tenant, transaction);
+  const issued = await adapter.issuePolicy({ ...issueRequest, idempotencyKey });
+
+  const beforeJson = policy.toJSON();
+  policy.provider = providerName;
+  policy.externalPolicyNumber = issued.policyNumber || policy.externalPolicyNumber;
+  policy.status = issued.status === 'ACTIVE' ? 'ACTIVE' : 'ISSUED';
+  policy.effectiveDate = nextEffectiveDate;
+  policy.expiryDate = nextExpiryDate;
+  policy.updatedBy = actor.userId || null;
+  await policy.save({ transaction });
+
+  await InsuranceProviderSubmission.create(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, policyId: policy.id,
+      provider: providerName,
+      submissionType: 'ISSUE',
+      externalSubmissionId: issued.externalId,
+      status: issued.status,
+    },
+    { transaction }
+  );
+
+  // Renovação: tarefa de alerta criada já na emissão, não depois — "renovação alerta" é
+  // requisito do próprio contrato (Insurance Hub). 30 dias antes do vencimento por padrão.
+  //
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 55, 2026-10-05): `expiryDate` é
+  // DATEONLY — o Sequelize devolve a string "YYYY-MM-DD". `new Date("2026-12-31")` é
+  // interpretado como UTC midnight, mas `.getDate()`/`.setDate()` operam no fuso LOCAL do
+  // servidor. Em qualquer servidor com offset negativo (Brasil, UTC-3), isso trunca o dia pra
+  // o anterior ANTES de subtrair os 30 dias — a tarefa nascia gravada um dia antes do correto.
+  // `addDaysDateOnly` opera só em componentes UTC/string, nunca convertendo pra fuso local.
+  if (policy.expiryDate) {
+    const dueDate = addDaysDateOnly(policy.expiryDate, -30);
+    await InsuranceRenewalTask.create(
+      { groupId: policy.groupId, companyId: policy.companyId, policyId: policy.id, dueDate, status: 'PENDING' },
+      { transaction }
+    );
+  }
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 11, 2026-10-05): o contrato lista
+  // "parcelas" como campo da apólice (seguro-fiança, linha 8179) e "installments" como entidade
+  // própria do Insurance Hub (linha 9514) — a migration/model já existiam, mas nada no sistema
+  // jamais criava uma linha: `generateInstallments` divide o prêmio em N parcelas (padrão já
+  // usado em `commissions.service.js` para Commission/CommissionInstallment), a última parcela
+  // absorve a diferença de arredondamento de centavos.
+  const installments = policy.premiumAmount
+    ? await generateInstallments(policy, issueRequest?.installmentsCount || 1, policy.effectiveDate, transaction)
+    : [];
+
+  await registrarAuditoria(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_policy.issue',
+      entityType: 'InsurancePolicy', entityId: policy.id,
+      beforeJson, afterJson: policy.toJSON(),
+      reason: `Apólice emitida — id externo ${issued.externalId}.`,
+    },
+    transaction
+  );
+
+  policy.setDataValue('installments', installments);
+  return policy;
+}
+
+async function generateInstallments(policy, count, firstDueAt, transaction) {
+  const n = Math.max(1, Number(count) || 1);
+  const baseInstallment = Math.floor((policy.premiumAmount / n) * 100) / 100;
+  const installments = [];
+  let allocated = 0;
+  // BUG REAL CORRIGIDO (rodada 55): mesmo risco de fuso horário de addDaysDateOnly, aqui pra
+  // meses — `firstDueAt` normalmente é `policy.effectiveDate` (DATEONLY).
+  const startDateOnly = firstDueAt
+    ? String(firstDueAt).slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  for (let i = 1; i <= n; i += 1) {
+    const isLast = i === n;
+    const amount = isLast ? round2(policy.premiumAmount - allocated) : baseInstallment;
+    allocated = round2(allocated + amount);
+
+    const dueDate = addMonthsDateOnly(startDateOnly, i - 1);
+
+    // eslint-disable-next-line no-await-in-loop
+    const installment = await InsuranceInstallment.create(
+      {
+        groupId: policy.groupId,
+        companyId: policy.companyId,
+        policyId: policy.id,
+        dueDate,
+        amount,
+        status: 'PENDING',
+      },
+      { transaction }
+    );
+    installments.push(installment);
+  }
+
+  return installments;
+}
+
+async function listPolicyInstallments(policyId, transaction) {
+  return InsuranceInstallment.findAll({ where: { policyId }, order: [['due_date', 'ASC']], transaction });
+}
+
+// payInsurancePolicyInstallment — mesmo padrão de validação fail-closed de
+// `commissions.service.js#markInstallmentPaid`: a parcela só vira PAID se apontar pra um
+// FinancialEntry que já existe, está SETTLED, tem o mesmo valor, e ainda não foi usado por
+// outra parcela — nunca aceita a baixa "porque alguém clicou no botão".
+async function payInsurancePolicyInstallment(installmentId, financialEntryId, actor, transaction) {
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 40, 2026-10-05): faltava lock
+  // pessimista aqui — getPolicyForUpdate/getClaimForUpdate (mesmo arquivo) já usam
+  // `lock: transaction.LOCK.UPDATE` pra qualquer transição financeira/de status, mas esta
+  // função lia a parcela sem lock. Como cada requisição HTTP abre sua própria transação (sem
+  // serialização externa), duas chamadas concorrentes de pay poderiam ambas passar pela
+  // checagem `alreadyUsed` antes de qualquer commit e marcar duas parcelas diferentes como
+  // PAID usando o MESMO financialEntryId — dupla contagem de um único pagamento real.
+  // BUG REAL CORRIGIDO (RLS/multi-tenant, 2026-10-08): findByPk sem filtro de
+  // groupId/companyId permitia a qualquer tenant travar/dar baixa na parcela de OUTRA empresa.
+  const installment = await InsuranceInstallment.findOne({
+    where: { id: installmentId, groupId: actor.groupId, companyId: actor.companyId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  if (!installment) throw AppError.notFound('Parcela de seguro não encontrada.', 'INSURANCE_INSTALLMENT_NOT_FOUND');
+  if (installment.status === 'PAID') {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: installment.toJSON(),
+        reason: 'Tentativa de dar baixa em parcela já paga.',
+      },
+      transaction
+    );
+    throw AppError.conflict('Esta parcela já está paga.', 'INSURANCE_INSTALLMENT_ALREADY_PAID');
+  }
+  if (!financialEntryId) {
+    throw AppError.badRequest(
+      'O campo "financialEntryId" é obrigatório para dar baixa na parcela — precisa apontar para um lançamento financeiro já liquidado.',
+      'INSURANCE_INSTALLMENT_ENTRY_REQUIRED'
+    );
+  }
+  // Trava o FinancialEntry também — é o recurso compartilhado que duas parcelas DIFERENTES
+  // disputam (ambas apontando pro mesmo financialEntryId). Travar só a installment não
+  // serializa essa corrida, já que são linhas distintas.
+  const entry = await FinancialEntry.findOne({
+    where: { id: financialEntryId, groupId: actor.groupId, companyId: actor.companyId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  if (!entry) throw AppError.notFound('Lançamento financeiro informado não encontrado.', 'INSURANCE_INSTALLMENT_ENTRY_NOT_FOUND');
+  if (entry.status !== 'SETTLED') {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON() },
+        reason: 'Tentativa de dar baixa usando lançamento financeiro ainda não liquidado (SETTLED).',
+      },
+      transaction
+    );
+    throw AppError.conflict('O lançamento financeiro informado ainda não está liquidado (SETTLED).', 'INSURANCE_INSTALLMENT_ENTRY_NOT_SETTLED');
+  }
+  if (round2(entry.amount) !== round2(installment.amount)) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON() },
+        reason: 'Tentativa de dar baixa com valor do lançamento financeiro divergente do valor da parcela.',
+      },
+      transaction
+    );
+    throw AppError.conflict('O valor do lançamento financeiro informado não corresponde ao valor da parcela.', 'INSURANCE_INSTALLMENT_ENTRY_AMOUNT_MISMATCH');
+  }
+  const alreadyUsed = await InsuranceInstallment.findOne({ where: { financialEntryId, groupId: actor.groupId, companyId: actor.companyId }, transaction });
+  if (alreadyUsed && alreadyUsed.id !== installment.id) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON(), alreadyUsedByInstallmentId: alreadyUsed.id },
+        reason: 'Tentativa de reutilizar lançamento financeiro já usado para dar baixa em outra parcela.',
+      },
+      transaction
+    );
+    throw AppError.conflict('Este lançamento financeiro já foi usado para dar baixa em outra parcela.', 'INSURANCE_INSTALLMENT_ENTRY_ALREADY_USED');
+  }
+
+  const beforeJson = installment.toJSON();
+  installment.status = 'PAID';
+  installment.financialEntryId = financialEntryId;
+  await installment.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: installment.groupId, companyId: installment.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_installment.pay',
+      entityType: 'InsuranceInstallment', entityId: installment.id,
+      beforeJson, afterJson: installment.toJSON(),
+      reason: `Parcela do seguro paga (${installment.amount}).`,
+    },
+    transaction
+  );
+
+  return installment;
+}
+
+// Status não-terminais de InsuranceClaim — item 6 (auditoria 2026-10-08).
+const CLAIM_NON_TERMINAL_STATUSES = ['OPEN', 'SUBMITTED', 'UNDER_REVIEW'];
+
+async function openClaim(policyId, payload, actor, transaction, now = new Date()) {
+  const policy = await getPolicyForUpdate(policyId, actor.groupId, actor.companyId, transaction);
+  // Vigência checada ANTES do status e pela DATA, não só pelo status gravado (ver comentário em
+  // `isPolicyExpired`): uma apólice ACTIVE cujo expiryDate já passou (job ainda não rodou) é
+  // bloqueada do mesmo jeito que uma já marcada EXPIRED.
+  if (isPolicyExpired(policy, now)) {
+    throw AppError.conflict(
+      `Apólice com vigência encerrada em ${policy.expiryDate || '(data não informada)'} — não é possível abrir sinistro novo. Sinistros abertos antes do vencimento seguem normalmente.`,
+      'INSURANCE_POLICY_EXPIRED'
+    );
+  }
+  if (!POLICY_STATUSES_ELIGIBLE_FOR_CLAIM.includes(policy.status)) {
+    throw AppError.conflict(`Apólice com status "${policy.status}" não pode abrir sinistro.`, 'INSURANCE_POLICY_INVALID_STATUS');
+  }
+
+  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 56, 2026-10-06): claimAmount era
+  // persistido sem validação de tipo/sinal — um valor negativo/inválido digitado errado ficava
+  // gravado no InsuranceClaim até confirmClaimSettlement rejeitar o sinistro mais adiante.
+  if (payload?.claimAmount != null) {
+    const amount = Number(payload.claimAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw AppError.badRequest('"claimAmount" deve ser um número maior ou igual a zero.', 'INSURANCE_CLAIM_VALIDATION');
+    }
+  }
+
+  // BUG REAL CORRIGIDO (item 6, auditoria 2026-10-08): openClaim nunca checava se já existia um
+  // claim ativo (não-terminal) pra mesma apólice antes de criar outro — permitia sinistros
+  // duplicados concorrentes pro MESMO evento, cada um liquidável independentemente (duplica
+  // indenização no Financeiro). O contrato (Insurance Hub) não proíbe múltiplos sinistros
+  // LEGÍTIMOS simultâneos numa mesma apólice (ex.: dois eventos diferentes, um incêndio e um
+  // furto, na mesma vigência) — bloquear TODO claim ativo adicional impediria esse caso real.
+  // Decisão: bloquear só quando a MESMA descrição (normalizada) já está aberta/em andamento —
+  // isso cobre o cenário de duplicação acidental/concorrente do mesmo evento sem impedir dois
+  // eventos distintos na mesma apólice.
+  const normalizedDescription = String(payload?.description || '').trim().toLowerCase();
+  if (normalizedDescription) {
+    const activeClaims = await InsuranceClaim.findAll({
+      where: { policyId: policy.id, status: CLAIM_NON_TERMINAL_STATUSES },
+      transaction,
+    });
+    const duplicateClaim = activeClaims.find(
+      (c) => String(c.description || '').trim().toLowerCase() === normalizedDescription
+    );
+    if (duplicateClaim) {
+      throw AppError.conflict(
+        'Já existe um sinistro ativo com a mesma descrição para esta apólice — evite abrir sinistros duplicados para o mesmo evento.',
+        'INSURANCE_CLAIM_DUPLICATE'
+      );
+    }
+  }
+
+  const claim = await InsuranceClaim.create(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, policyId: policy.id,
+      description: payload?.description || null,
+      claimAmount: payload?.claimAmount || null,
+      status: 'OPEN',
+      openedAt: new Date(),
+      createdBy: actor.userId || null,
+      updatedBy: actor.userId || null,
+    },
+    { transaction }
+  );
+
+  await InsuranceClaimEvent.create(
+    { groupId: policy.groupId, companyId: policy.companyId, claimId: claim.id, eventType: 'OPENED', actorUserId: actor.userId || null, occurredAt: new Date() },
+    { transaction }
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_claim.open',
+      entityType: 'InsuranceClaim', entityId: claim.id,
+      beforeJson: null, afterJson: claim.toJSON(),
+      reason: 'Sinistro aberto.',
+    },
+    transaction
+  );
+
+  return claim;
+}
+
+// BUG REAL CORRIGIDO (RLS/multi-tenant, 2026-10-08): findByPk sem filtro de groupId/companyId —
+// `groupId`/`companyId` são opcionais (undefined) só no caminho do webhook público, que já
+// resolveu o tenant via InsuranceProviderSubmission e aplica SET LOCAL app.group_id/company_id
+// (ver insurance.controller.js#insurancePublicWebhook) ANTES de chamar confirmClaimSettlement —
+// nesse caminho específico passamos explicitamente submission.groupId/companyId (ver abaixo),
+// nunca undefined.
+async function getClaimForUpdate(id, groupId, companyId, transaction) {
+  const claim = await InsuranceClaim.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  if (!claim) throw AppError.notFound('Sinistro não encontrado.', 'INSURANCE_CLAIM_NOT_FOUND');
+  return claim;
+}
+
+async function submitClaim(claimId, actor, transaction) {
+  const claim = await getClaimForUpdate(claimId, actor.groupId, actor.companyId, transaction);
+  if (claim.status !== 'OPEN') {
+    throw AppError.conflict(`Sinistro com status "${claim.status}" não pode ser submetido.`, 'INSURANCE_CLAIM_INVALID_STATUS');
+  }
+  const policy = await InsurancePolicy.findOne({ where: { id: claim.policyId, groupId: claim.groupId, companyId: claim.companyId }, transaction });
+
+  const idempotencyKey = `insurance-claim:${claim.id}`;
+  const adapter = await resolveInsuranceAdapter({ groupId: claim.groupId, companyId: claim.companyId }, transaction);
+  const submitted = await adapter.submitClaim({
+    idempotencyKey,
+    externalPolicyNumber: policy?.externalPolicyNumber,
+    description: claim.description,
+    claimAmount: claim.claimAmount,
+  });
+
+  const beforeJson = claim.toJSON();
+  claim.externalClaimId = submitted.externalId;
+  claim.status = 'SUBMITTED';
+  claim.updatedBy = actor.userId || null;
+  await claim.save({ transaction });
+
+  await InsuranceProviderSubmission.create(
+    {
+      groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id,
+      provider: policy?.provider || 'sandbox',
+      submissionType: 'CLAIM',
+      externalSubmissionId: submitted.externalId,
+      status: submitted.status,
+    },
+    { transaction }
+  );
+
+  await InsuranceClaimEvent.create(
+    { groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'SUBMITTED', actorUserId: actor.userId || null, occurredAt: new Date() },
+    { transaction }
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: claim.groupId, companyId: claim.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_claim.submit',
+      entityType: 'InsuranceClaim', entityId: claim.id,
+      beforeJson, afterJson: claim.toJSON(),
+      reason: `Sinistro submetido à seguradora — id externo ${submitted.externalId}.`,
+    },
+    transaction
+  );
+
+  return claim;
+}
+
+// Chamado por webhook do provedor OU por confirmação manual — idempotente: reprocessar o mesmo
+// status num claim que já saiu de SUBMITTED/UNDER_REVIEW é no-op. "Indenização confirmada
+// integra Financeiro" (contrato) — só AQUI, na confirmação real, nunca na submissão.
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4: "Centro de resultado obrigatório para receita"): confirmClaimSettlement
+// criava um lançamento RECEIVABLE (indenização de sinistro) sem nenhum resultCenterId — a
+// confirmação chega por webhook da seguradora, que não tem como informar essa dimensão. Usa
+// getOrCreateDefaultResultCenter (ver resultCenters.service.js) com um código dedicado.
+const INSURANCE_RESULT_CENTER_CODE = 'SEGUROS-INDENIZACOES';
+
+async function confirmClaimSettlement(externalSubmissionId, externalStatus, settledAmount, transaction) {
+  const submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction });
+  if (!submission || !submission.claimId) {
+    throw AppError.notFound('Nenhum sinistro encontrado para este id externo.', 'INSURANCE_CLAIM_SUBMISSION_NOT_FOUND');
+  }
+
+  // Tenant já resolvido via InsuranceProviderSubmission (sem RLS real do Postgres em todo
+  // caminho) — propaga explicitamente pro lock/filtro de getClaimForUpdate, nunca undefined.
+  const claim = await getClaimForUpdate(submission.claimId, submission.groupId, submission.companyId, transaction);
+  if (!['SUBMITTED', 'UNDER_REVIEW'].includes(claim.status)) {
+    return claim;
+  }
+
+  const beforeJson = claim.toJSON();
+  // Bug real encontrado em auditoria (2026-10-05): se nem `settledAmount` (vindo do
+  // webhook/confirmação manual) nem `claim.claimAmount` (vindo da abertura do sinistro, campo
+  // opcional) existirem, `createFinancialEntry` lança FINANCE_ENTRY_VALIDATION — e isso
+  // acontecia DENTRO da transação do webhook público, vazando um erro cru em vez do padrão
+  // 200+reason já usado pro resto desse mesmo endpoint (routing desconhecido, payload
+  // inválido). Validado ANTES de chamar o Financeiro, igual aos outros casos de falha.
+  // BUG REAL CORRIGIDO (item 5, auditoria 2026-10-08): resolvedAmount só checava `> 0`, nunca
+  // `Number.isFinite` (aceitava Infinity vindo de um settledAmount malicioso/malformado no
+  // webhook) — e nunca aplicava round2 antes de persistir, diferente do padrão já usado para
+  // payableAmount em procurement (sempre round2). `Number(resolvedAmount) > 0` já é falso pra
+  // NaN, mas não pra Infinity — some Number.isFinite explicitamente e arredonda em seguida.
+  const rawResolvedAmount = settledAmount || claim.claimAmount;
+  const resolvedAmount = Number.isFinite(Number(rawResolvedAmount)) ? round2(rawResolvedAmount) : rawResolvedAmount;
+  if ((externalStatus === 'SETTLED' || externalStatus === 'APPROVED') && !(Number.isFinite(Number(resolvedAmount)) && Number(resolvedAmount) > 0)) {
+    claim.status = 'REJECTED';
+    await claim.save({ transaction });
+    await InsuranceClaimEvent.create(
+      {
+        groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'REJECTED',
+        notes: 'Seguradora confirmou liquidação, mas nenhum valor (settledAmount/claimAmount) estava disponível para gerar o lançamento — revisão manual necessária.',
+        occurredAt: new Date(),
+      },
+      { transaction }
+    );
+    await registrarAuditoria(
+      {
+        groupId: claim.groupId, companyId: claim.companyId, actorUserId: null,
+        action: 'procurement.insurance_claim.settlement_missing_amount',
+        entityType: 'InsuranceClaim', entityId: claim.id,
+        beforeJson, afterJson: claim.toJSON(),
+        reason: 'Confirmação de liquidação recebida sem valor utilizável — marcado para revisão manual em vez de criar lançamento com amount inválido.',
+      },
+      transaction
+    );
+    return claim;
+  }
+
+  if (externalStatus === 'SETTLED' || externalStatus === 'APPROVED') {
+    const policy = await InsurancePolicy.findOne({ where: { id: claim.policyId, groupId: claim.groupId, companyId: claim.companyId }, transaction });
+    const resultCenter = await getOrCreateDefaultResultCenter(
+      claim.groupId,
+      claim.companyId,
+      INSURANCE_RESULT_CENTER_CODE,
+      'Indenizações de seguro',
+      transaction
+    );
+    const entry = await createFinancialEntry(
+      {
+        groupId: claim.groupId,
+        companyId: claim.companyId,
+        contractId: policy?.contractId || null,
+        entryType: 'CREDIT',
+        nature: 'RECEIVABLE',
+        amount: resolvedAmount,
+        description: `Indenização de sinistro de seguro — apólice ${policy?.externalPolicyNumber || policy?.id}`,
+        dueAt: new Date(),
+        resultCenterId: resultCenter.id,
+      },
+      null,
+      transaction
+    );
+
+    claim.financialEntryId = entry.id;
+    claim.settledAmount = resolvedAmount;
+    claim.status = 'SETTLED';
+    claim.settledAt = new Date();
+    await claim.save({ transaction });
+
+    await InsuranceClaimEvent.create(
+      { groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'SETTLED', notes: `Lançamento ${entry.id} criado.`, occurredAt: new Date() },
+      { transaction }
+    );
+
+    await registrarAuditoria(
+      {
+        groupId: claim.groupId, companyId: claim.companyId, actorUserId: null,
+        action: 'procurement.insurance_claim.settle',
+        entityType: 'InsuranceClaim', entityId: claim.id,
+        beforeJson, afterJson: claim.toJSON(),
+        reason: `Indenização confirmada — lançamento ${entry.id} criado no Financeiro.`,
+      },
+      transaction
+    );
+  } else {
+    claim.status = 'REJECTED';
+    await claim.save({ transaction });
+
+    await InsuranceClaimEvent.create(
+      { groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'REJECTED', notes: `Status retornado pela seguradora: ${externalStatus}`, occurredAt: new Date() },
+      { transaction }
+    );
+
+    await registrarAuditoria(
+      {
+        groupId: claim.groupId, companyId: claim.companyId, actorUserId: null,
+        action: 'procurement.insurance_claim.reject',
+        entityType: 'InsuranceClaim', entityId: claim.id,
+        beforeJson, afterJson: claim.toJSON(),
+        reason: `Sinistro recusado pela seguradora — status "${externalStatus}".`,
+      },
+      transaction
+    );
+  }
+
+  return claim;
+}
+
+// BUG REAL CORRIGIDO (gap contratual, 2026-10-08): o enum de status (migration
+// 20260101000272) já previa 'CANCELED', mas não existia NENHUMA função/rota pra cancelar uma
+// apólice — uma vez DRAFT/QUOTED/ISSUED/ACTIVE, a apólice nunca podia ser formalmente encerrada
+// fora do fluxo de vencimento natural (EXPIRED, via insurancePolicyExpiryJob.js). Mesmo padrão
+// das outras transições deste arquivo: `getPolicyForUpdate` (tenant + lock), exige "reason",
+// bloqueia se já terminal (CANCELED/EXPIRED), grava status + auditoria com beforeJson/afterJson.
+// O model não tem colunas dedicadas `canceledAt`/`canceledReason` (nenhuma outra transição deste
+// módulo tem colunas de timestamp/motivo próprias — ex.: `cancelPurchaseOrder` em
+// procurement.service.js usa só `status` + o `reason` no log de auditoria) — segue o mesmo
+// padrão já estabelecido em vez de introduzir uma migration isolada só para esta função.
+const POLICY_STATUSES_TERMINAL = ['CANCELED', 'EXPIRED'];
+
+async function cancelPolicy(policyId, payload, actor, transaction) {
+  const policy = await getPolicyForUpdate(policyId, actor.groupId, actor.companyId, transaction);
+  if (POLICY_STATUSES_TERMINAL.includes(policy.status)) {
+    throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser cancelada.`, 'INSURANCE_POLICY_INVALID_STATUS');
+  }
+  const reason = payload?.reason;
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest('O campo "reason" é obrigatório para cancelar uma apólice.', 'INSURANCE_POLICY_CANCEL_REASON_REQUIRED');
+  }
+
+  const beforeJson = policy.toJSON();
+  policy.status = 'CANCELED';
+  policy.updatedBy = actor.userId || null;
+  await policy.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
+      action: 'procurement.insurance_policy.cancel',
+      entityType: 'InsurancePolicy', entityId: policy.id,
+      beforeJson, afterJson: policy.toJSON(),
+      reason: `Apólice cancelada — ${String(reason).trim()}.`,
+    },
+    transaction
+  );
+
+  return policy;
+}
+
+async function listPolicies(filters, groupId, companyId, transaction) {
+  const where = { groupId, companyId };
+  if (filters?.status) where.status = filters.status;
+  if (filters?.propertyId) where.propertyId = filters.propertyId;
+  const policies = await InsurancePolicy.findAll({
+    where,
+    include: [
+      { model: InsuranceCoverage, as: 'coverages' },
+      { model: InsuranceClaim, as: 'claims' },
+      { model: InsuranceRenewalTask, as: 'renewalTasks' },
+    ],
+    order: [['created_at', 'DESC']],
+    limit: 1500,
+    transaction,
+  });
+  const now = new Date();
+  return policies.map((policy) => withExpiryFlag(policy, now));
+}
+
+async function getPolicy(id, groupId, companyId, transaction) {
+  const policy = await InsurancePolicy.findOne({
+    where: { id, groupId, companyId },
+    include: [
+      { model: InsurancePolicyParty, as: 'parties' },
+      { model: InsuranceCoverage, as: 'coverages' },
+      { model: InsuranceInstallment, as: 'installments' },
+      { model: InsuranceClaim, as: 'claims', include: [{ model: InsuranceClaimEvent, as: 'events' }] },
+      { model: InsuranceRenewalTask, as: 'renewalTasks' },
+    ],
+    transaction,
+  });
+  if (!policy) throw AppError.notFound('Apólice não encontrada.', 'INSURANCE_POLICY_NOT_FOUND');
+  return withExpiryFlag(policy);
+}
+
+module.exports = {
+  todayDateOnly,
+  isPolicyExpired,
+  POLICY_STATUSES_ELIGIBLE_FOR_CLAIM,
+  createPolicy,
+  quotePolicy,
+  issuePolicy,
+  cancelPolicy,
+  openClaim,
+  submitClaim,
+  confirmClaimSettlement,
+  listPolicies,
+  getPolicy,
+  attachPolicyDocument,
+  listPolicyDocuments,
+  extractEmbeddedDocument,
+  listPolicyInstallments,
+  payInsurancePolicyInstallment,
+};
