@@ -6,6 +6,41 @@ const { recordPriceHistory } = require('./propertyPriceHistory.service');
 const { supersedeCurrentActiveOffer } = require('./propertyOfferSupersede.service');
 const { publishPropertyOfferCreated } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { OutboxEvent } = require('../../models');
+const { matchNewPropertyToRadars } = require('../radar/radarMatching.service');
+const { publishRadarMatched } = require('../radar/radarEvents.service');
+
+/**
+ * M3-22 (CRMX-007) — dispara o matching do Radar NO INSTANTE em que uma offer fica ACTIVE,
+ * em vez de só na próxima rodada do job periódico (radarMatchingJob.js). Reaproveita o MESMO
+ * evento/idempotencyKey (`radar.matched:${radarId}:${propertyId}`) do job — a unicidade da
+ * coluna no outbox garante que, se o job também rodar depois, não duplica o aviso.
+ */
+async function triggerRadarMatchingForProperty(property, transaction) {
+  const matchedRadars = await matchNewPropertyToRadars(property, transaction);
+  if (matchedRadars.length === 0) return;
+
+  // Pré-checagem (mesmo padrão de radarMatchingJob.js: "notifiedKeys") em vez de
+  // tentar/capturar a violação de unicidade — um erro capturado deixaria a transação do
+  // Postgres em estado abortado para os comandos seguintes (create do offer, auditoria etc.),
+  // já que não há savepoint aqui.
+  const existing = await OutboxEvent.findAll({
+    where: {
+      aggregateType: 'PropertyRadar',
+      aggregateId: matchedRadars.map((radar) => radar.id),
+      eventType: 'radar.matched',
+    },
+    attributes: ['idempotencyKey'],
+    transaction,
+  });
+  const notifiedKeys = new Set(existing.map((event) => event.idempotencyKey));
+
+  for (const radar of matchedRadars) {
+    const key = `radar.matched:${radar.id}:${property.id}`;
+    if (notifiedKeys.has(key)) continue;
+    await publishRadarMatched(radar, property, transaction);
+  }
+}
 
 // CRUD de PropertyOffer — a geração append-only de histórico de preço vive em
 // propertyPriceHistory.service.js e a regra de supersede de offer ACTIVE anterior vive em
@@ -115,6 +150,10 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  if (normalizedStatus === 'ACTIVE') {
+    await triggerRadarMatchingForProperty(property, transaction);
+  }
 
   return offer;
 }
