@@ -23,15 +23,15 @@ const { getContract } = require('./contracts.service');
  *   - Imóvel usado: termo específico deixando clara natureza/estado conforme modelo jurídico
  *     aprovado.
  *
- * NOTA DE AMBIENTE (07/10/2026): depende da tabela "legal"."contract_requirements" (migration
- * 20260101000291), AINDA NÃO aplicada neste banco (sem credencial de DDL disponível aqui — ver
- * nota em src/models/ContractRequirement.js). Por isso `assertRequirementsSatisfied` NÃO está
- * (ainda) chamada dentro de `transitionContractStatus` (contracts.service.js) — wire-up
- * proposital mas DELIBERADAMENTE NÃO ATIVADO para não quebrar toda a máquina de estados de
- * contrato em produção/homologação enquanto a tabela não existir de fato. Depois de rodar
- * `npm run migrate`, ativar chamando `assertRequirementsSatisfied(contract, targetStatus,
- * transaction)` no início de `transitionContractStatus`, antes dos demais gates — é uma linha
- * só, documentada lá também.
+ * FIX AUD-009 (auditoria externa, 09/10/2026): a migration 20260101000291 (tabela
+ * "legal"."contract_requirements") JÁ está aplicada neste banco (confirmado via
+ * `SELECT to_regclass('legal.contract_requirements')`), mas a nota de ambiente que acompanhava
+ * este arquivo dizia o contrário e o wire-up de `assertRequirementsSatisfied` dentro de
+ * `transitionContractStatus` (contracts.service.js) nunca tinha sido ativado — mesmo padrão de
+ * bug do fallback de bootstrap encontrado em
+ * construction/projects.service.js#hasOpenCriticalNonconformity. Agora `transitionContractStatus`
+ * chama `assertDocumentRequirementsGate` (que chama esta função) no início de TODA transição,
+ * antes dos demais gates — ver contracts.service.js.
  */
 
 // Tipos de documento/garantia/termo exigidos — só para documentação/consulta; o enum real é a

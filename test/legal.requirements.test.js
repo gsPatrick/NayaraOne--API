@@ -72,6 +72,55 @@ test('satisfyRequirement (SATISFIED/WAIVED) libera assertRequirementsSatisfied',
   });
 });
 
+// FIX AUD-009 (auditoria externa, 09/10/2026): assertRequirementsSatisfied existia e era
+// testado isoladamente (testes acima), mas NUNCA era chamado dentro de transitionContractStatus
+// (contracts.service.js) — a nota de ambiente do arquivo dizia que a tabela
+// "legal"."contract_requirements" ainda não existia no banco, o que ficou desatualizado (a
+// migration já foi aplicada) e o wire-up real nunca foi feito. Resultado: um contrato com
+// requirement PENDING conseguia avançar de DRAFT para DOCUMENTS_PENDING sem bloqueio nenhum —
+// mesmo padrão de bug de hasOpenCriticalNonconformity (construction/projects.service.js).
+test('AUD-009: transitionContractStatus BLOQUEIA avanço de status com requirement PENDING (gate estava desligado)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await contractsService.createContract(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', totalValue: 1000 },
+      tenant.userId,
+      transaction
+    );
+
+    // Partes mínimas presentes (LANDLORD/TENANT) para não cair no outro gate (assertRequirementsGate
+    // de papéis) e isolar exatamente o gate de checklist documental que é o objeto deste teste.
+    const peopleService = require('../src/features/people/people.service');
+    const landlord = await peopleService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: 'HOMO QA Locador AUD-009' },
+      tenant.userId,
+      transaction
+    );
+    const tenantPerson = await peopleService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: 'HOMO QA Locatário AUD-009' },
+      tenant.userId,
+      transaction
+    );
+    await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
+    await contractsService.addContractParty(contract.id, { personId: tenantPerson.id, partyRole: 'TENANT' }, tenant.userId, transaction);
+
+    await requirementsService.generateRequirementsForContract(contract.id, {}, tenant.userId, transaction);
+
+    // Antes do fix: isto passava silenciosamente e o contrato virava DOCUMENTS_PENDING com
+    // checklist documental inteiro em PENDING.
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'LEGAL_REQUIREMENTS_PENDING');
+        return true;
+      }
+    );
+
+    const refreshed = await contractsService.getContract(contract.id, transaction);
+    assert.equal(refreshed.status, 'DRAFT', 'contrato não deve ter avançado de status com requirement pendente.');
+  });
+});
+
 test('generateRequirementsForContract: template USED_PROPERTY_DELIVERY gera termo específico', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await contractsService.createContract(

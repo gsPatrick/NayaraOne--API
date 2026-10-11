@@ -8,10 +8,13 @@ const { DataTypes } = require('sequelize');
  * documental"). Gerado por tipo de contrato + regras + características das
  * partes/imóvel — ver requirementsEngine.service.js#generateRequirementsForContract.
  *
- * NOTA DE AMBIENTE (07/10/2026): migration 20260101000291 PRONTA mas AINDA NÃO aplicada neste
- * banco — a credencial de runtime disponível neste ambiente não tem privilégio de DDL (só o
- * role `nayara_migration`, indisponível aqui). Model já declarado para que o código fique
- * pronto para uso assim que `npm run migrate` rodar com credenciais reais de deploy.
+ * FIX AUD-009 (auditoria externa, 09/10/2026): a migration 20260101000291 já está aplicada
+ * neste banco (confirmado via `SELECT to_regclass('legal.contract_requirements')`); a nota de
+ * ambiente anterior dizia o contrário e sobreviveu depois que a dependência real passou a
+ * existir — mesmo padrão do fallback de bootstrap encontrado em
+ * construction/projects.service.js#hasOpenCriticalNonconformity. O gate que usa esta tabela
+ * (assertRequirementsSatisfied, requirements.service.js) agora é chamado de verdade em
+ * contracts.service.js#transitionContractStatus — ver comentário lá.
  */
 module.exports = (sequelize) => {
   const ContractRequirement = sequelize.define(

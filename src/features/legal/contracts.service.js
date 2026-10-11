@@ -111,6 +111,25 @@ async function assertRequirementsGate(contract, transaction) {
   }
 }
 
+// FIX AUD-009 (auditoria externa, 09/10/2026): `assertRequirementsSatisfied` (JUR-003/JUR-TS-003,
+// requirements.service.js — checklist DOCUMENTAL do contrato, legal.contract_requirements) foi
+// escrito e testado isoladamente, mas a nota de ambiente que acompanhava o arquivo ("migration
+// 20260101000291 ainda não aplicada, por isso NÃO chamado aqui") ficou desatualizada: a
+// migration JÁ foi aplicada neste banco (confirmado via
+// `SELECT to_regclass('legal.contract_requirements')` -> não nulo) e o wire-up real nunca foi
+// feito — exatamente o mesmo padrão de bug encontrado em
+// construction/projects.service.js#hasOpenCriticalNonconformity (fallback de bootstrap que
+// sobreviveu depois que a dependência real passou a existir, deixando o gate inteiro inerte).
+// Resultado prático: um contrato podia avançar por TODA a máquina de estados com documento
+// obrigatório faltante (ex.: LEASE sem garantia cadastrada), porque nada chamava este gate.
+// Chamado aqui, no INÍCIO de toda transição (antes dos demais gates, como a nota original de
+// requirements.service.js já previa) — usa `require` lazy para não criar dependência circular
+// com requirements.service.js -> contracts.service.js#getContract.
+async function assertDocumentRequirementsGate(contract, transaction) {
+  const { assertRequirementsSatisfied } = require('./requirements.service');
+  await assertRequirementsSatisfied(contract.id, transaction);
+}
+
 // FIX HOM-001 (homologação 28/08/2026, reportado pela cliente): a transição de status era
 // exposta via POST /legal/contracts/:id/transition chamando transitionContractStatus
 // diretamente com QUALQUER targetStatus permitido em VALID_TRANSITIONS, sem checar se existia
@@ -360,6 +379,8 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
       'LEGAL_CONTRACT_INVALID_TRANSITION'
     );
   }
+
+  await assertDocumentRequirementsGate(contract, transaction);
 
   if (fromStatus === 'DRAFT' && targetStatus === 'DOCUMENTS_PENDING') {
     await assertRequirementsGate(contract, transaction);
