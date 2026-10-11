@@ -93,4 +93,9 @@ financeRouter.get('/finance/period-closures', requirePermission('finance:read'),
 financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), financeController.reopenPeriod);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);
 
+// Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)
+financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), financeController.createBudgetForecast);
+financeRouter.get('/finance/budget-forecasts', requirePermission('finance:read'), financeController.listBudgetForecasts);
+financeRouter.get('/finance/budget-forecasts/compare', requirePermission('finance:read'), financeController.compareBudgetForecastToRealized);
+
 module.exports = financeRouter;

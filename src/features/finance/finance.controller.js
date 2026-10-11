@@ -12,6 +12,7 @@ const financialEntriesService = require('./financialEntries.service');
 const bankTransactionsService = require('./bankTransactions.service');
 const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
+const budgetsForecastsService = require('./budgetsForecasts.service');
 const { clearManualReview } = require('./financeAntifraud.service');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
@@ -394,6 +395,28 @@ const getWeeklyHealthReport = catchAsync(async (req, res) => {
   return success(res, { data: report });
 });
 
+// GAP REAL CORRIGIDO (varredura completa Marco 4, 11/10/2026): finance.budgets_forecasts
+// (Caderno §5) tinha service mas nenhuma rota HTTP.
+const createBudgetForecast = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => budgetsForecastsService.createBudgetForecast(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listBudgetForecasts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    budgetsForecastsService.listBudgetForecasts(t, {
+      competenceMonth: req.query.competenceMonth,
+      nature: req.query.nature,
+      costCenterId: req.query.costCenterId,
+      resultCenterId: req.query.resultCenterId,
+    })
+  );
+  return success(res, { data: items });
+});
+const compareBudgetForecastToRealized = catchAsync(async (req, res) => {
+  const comparison = await req.withTenantTransaction((t) => budgetsForecastsService.compareForecastToRealized(req.query.competenceMonth, t));
+  return success(res, { data: comparison });
+});
+
 module.exports = {
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
@@ -410,4 +433,5 @@ module.exports = {
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
   createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment,
   createOwnerRepasse, listOwnerRepasses, payOwnerRepasse,
+  createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized,
 };
