@@ -106,6 +106,7 @@ const modelDefiners = {
   CommissionInstallment: require('./CommissionInstallment'),
   OwnerRepass: require('./OwnerRepass'),
   AnomalyCase: require('./AnomalyCase'),
+  BudgetForecast: require('./BudgetForecast'),
   TaxDocument: require('./TaxDocument'),
   Project: require('./Project'),
   ProjectStage: require('./ProjectStage'),
