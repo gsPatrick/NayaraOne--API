@@ -7,6 +7,7 @@ const { BankAccount, FinancialEntry, Notification, UserMembership } = require('.
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { getSetting } = require('../settings/settings.service');
+const { createAnomalyCase } = require('./anomalyCases.service');
 
 // Regras de antifraude do Financeiro Base (01_ARQUITETURA_E_INVARIANTES.md — bloco Antifraude/
 // 03_MOTORES_TRANSVERSAIS.md — gatilhos "mudança bancária + pagamento em janela curta" e
@@ -241,6 +242,24 @@ async function flagAnomalousPayment(financialEntry, transaction) {
       afterJson: financialEntry.toJSON(),
       reason: `Antifraude reteve o pagamento para revisão manual: ${reason}`,
     },
+    transaction
+  );
+
+  // GAP REAL CORRIGIDO (Caderno §17, "Valor fora do padrão → Anomaly score + revisão"): até
+  // aqui, o único rastro de um pagamento anômalo era a flag requires_manual_review no próprio
+  // FinancialEntry — sem caso próprio, "openHighRiskAnomalies" do relatório semanal (§19) não
+  // tinha de onde vir.
+  await createAnomalyCase(
+    {
+      groupId: financialEntry.groupId,
+      companyId: financialEntry.companyId,
+      caseType: 'AMOUNT_OUTLIER',
+      riskLevel: 'HIGH',
+      relatedEntityType: 'FinancialEntry',
+      relatedEntityId: financialEntry.id,
+      reason,
+    },
+    null,
     transaction
   );
 

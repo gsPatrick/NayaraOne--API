@@ -3,7 +3,8 @@
 const { FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
+const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment, checkFrequentReversalAlert } = require('./financeAntifraud.service');
+const { createAnomalyCase } = require('./anomalyCases.service');
 const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed } = require('./financeEvents.service');
 const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
 const { assertPeriodOpenForEntry } = require('./periodClosures.service');
@@ -782,6 +783,28 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
     },
     transaction
   );
+
+  // GAP REAL CORRIGIDO (Caderno §17, "Estorno frequente → Anomaly case"): checkFrequentReversalAlert
+  // já calculava o sinal (N estornos na janela), mas nunca era chamada por nenhum fluxo real —
+  // só por teste. Agora, a cada estorno, confere se a empresa cruzou o limiar e abre um caso de
+  // anomalia (idempotente o bastante na prática: um caso por estorno que cruza o limiar; não é
+  // um problema duplicar o alerta aqui, ao contrário de duplicar dinheiro).
+  const reversalAlert = await checkFrequentReversalAlert(original.companyId, transaction);
+  if (reversalAlert.flagged) {
+    await createAnomalyCase(
+      {
+        groupId: original.groupId,
+        companyId: original.companyId,
+        caseType: 'FREQUENT_REVERSAL',
+        riskLevel: 'HIGH',
+        relatedEntityType: 'FinancialEntry',
+        relatedEntityId: original.id,
+        reason: `${reversalAlert.count} estornos nos últimos ${reversalAlert.windowDays} dias — acima do limiar configurado.`,
+      },
+      actorUserId,
+      transaction
+    );
+  }
 
   return { original, reversal };
 }

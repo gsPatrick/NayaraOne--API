@@ -406,6 +406,15 @@ test('FIN-005 flagAnomalousPayment continua detectando desvio histórico e prime
     const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
     assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada mesmo com os limiares vindos do Motor de Regras');
     assert.match(flag.reason, /FIN-005/);
+
+    // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment agora também abre um
+    // AnomalyCase HIGH (antes só marcava a flag requires_manual_review, sem registro próprio).
+    const { AnomalyCase } = require('../src/models');
+    const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, transaction });
+    assert.equal(cases.length, 1);
+    assert.equal(cases[0].status, 'OPEN');
+    assert.equal(cases[0].riskLevel, 'HIGH');
+    assert.equal(cases[0].caseType, 'AMOUNT_OUTLIER');
   });
 });
 
@@ -427,21 +436,33 @@ test('FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imed
   });
 });
 
-test('antifraude: sinalizador de estorno frequente e conciliação manual recorrente (contador simples, nunca bloqueia)', async () => {
+test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno em si); conciliação manual recorrente só sinaliza', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
 
+    let lastReversal;
     for (let i = 0; i < 3; i += 1) {
       // eslint-disable-next-line no-await-in-loop
       const entry = await createEntry(transaction, { bankAccountId: account.id, description: `estorno frequente ${i}` });
       // eslint-disable-next-line no-await-in-loop
-      await financialEntriesService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
+      lastReversal = await financialEntriesService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
     }
 
     const alert = await antifraudService.checkFrequentReversalAlert(tenant.companyId, transaction);
     assert.ok(alert.count >= 3);
-    assert.equal(alert.flagged, true, 'contador simples sinaliza estorno frequente — sem bloquear nada');
+    assert.equal(alert.flagged, true, 'contador simples sinaliza estorno frequente — sem bloquear o estorno em si');
+
+    // GAP REAL CORRIGIDO (Caderno §17, "Estorno frequente → Anomaly case"): reverseFinancialEntry
+    // agora chama checkFrequentReversalAlert e, quando cruza o limiar, abre um AnomalyCase.
+    const { AnomalyCase } = require('../src/models');
+    const openCases = await AnomalyCase.findAll({
+      where: { companyId: tenant.companyId, caseType: 'FREQUENT_REVERSAL', status: 'OPEN' },
+      transaction,
+    });
+    assert.ok(openCases.length >= 1, 'pelo menos um AnomalyCase de estorno frequente deve existir (aberto no último estorno que cruzou o limiar)');
+    assert.equal(openCases[0].riskLevel, 'HIGH');
+    void lastReversal;
 
     const reconciliationAlert = await antifraudService.checkRecurringManualReconciliationAlert(tenant.companyId, transaction);
     assert.equal(typeof reconciliationAlert.count, 'number');
