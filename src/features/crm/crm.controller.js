@@ -24,12 +24,25 @@ const createOpportunity = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: opportunity });
 });
 
+// CRM-TS-012: resolve o escopo ANTES do service — se o usuário tem a permissão de gestor
+// (`crm:opportunities:read:all`), vê tudo; se só tem a de corretor (`:read:own`), vê só a
+// própria carteira; se não tem NENHUMA das duas (papel ainda não migrado para o RBAC
+// granular), cai no fallback 'ALL' — sem regressão de acesso para quem já usava o sistema
+// antes desta permissão existir.
+function resolveOpportunityOwnerScope(auth) {
+  const permissions = auth.permissions || [];
+  if (permissions.includes('crm:opportunities:read:all')) return { mode: 'ALL' };
+  if (permissions.includes('crm:opportunities:read:own')) return { mode: 'OWN', userId: auth.userId };
+  return { mode: 'ALL' };
+}
+
 const listOpportunities = catchAsync(async (req, res) => {
   const opportunities = await req.withTenantTransaction((transaction) =>
     opportunitiesService.listOpportunities(transaction, {
       stage: req.query.stage,
       personId: req.query.personId,
       propertyId: req.query.propertyId,
+      ownerScope: resolveOpportunityOwnerScope(req.auth),
     })
   );
   return success(res, { data: opportunities });

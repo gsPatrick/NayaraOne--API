@@ -93,11 +93,22 @@ async function createOpportunity(payload, actorUserId, transaction) {
   return opportunity;
 }
 
+// CRM-TS-012 / item 17 do Caderno (seção 18, "Antifraude e segurança": "Corretor visualizar
+// carteira alheia — Escopo conforme política de equipe"): sem `ownerScope`, o comportamento é
+// o de sempre (ver tudo) — quem decide o escopo é o CONTROLLER, a partir de
+// `req.auth.permissions` (ver crm.controller.js). Dois valores possíveis:
+//   - 'OWN'  → só oportunidades onde ownerUserId === ownerScope.userId.
+//   - 'ALL'  (ou ausente) → sem filtro extra, vê tudo da empresa (fallback sem regressão para
+//     quem só tem a permissão legada `crm:opportunities:read`, sem nenhuma das duas novas
+//     permissões de escopo granular `crm:opportunities:read:own`/`:all`).
 async function listOpportunities(transaction, filters = {}) {
   const where = {};
   if (filters.stage) where.stage = String(filters.stage).toUpperCase();
   if (filters.personId) where.personId = filters.personId;
   if (filters.propertyId) where.propertyId = filters.propertyId;
+  if (filters.ownerScope && filters.ownerScope.mode === 'OWN') {
+    where.ownerUserId = filters.ownerScope.userId;
+  }
   return Opportunity.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
