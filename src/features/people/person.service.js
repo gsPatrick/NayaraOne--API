@@ -6,6 +6,7 @@ const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocum
 const { findPotentialDuplicate } = require('./personDedup.service');
 const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
 const { VALID_ROLES } = require('./personRoles.service');
+const { scorePersonDataQuality } = require('./personDataQuality.service');
 
 // Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
 // payload de criação da pessoa (fonte única da lista: VALID_ROLES).
@@ -223,7 +224,13 @@ async function getPerson(id, transaction) {
     transaction,
   });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
-  return person;
+  // Caderno (seção 16, "NAY Comercial" — "classifica qualidade do cadastro e documentos
+  // faltantes"): derivado na leitura, não persistido. IMPORTANTE: `Model#toJSON()` do Sequelize
+  // só serializa atributos reais — uma propriedade solta atribuída à instância (`person.x = y`)
+  // é silenciosamente descartada por `res.json`/`JSON.stringify`. Por isso devolvemos um objeto
+  // plano (`{ ...person.toJSON(), dataQuality }`), mesmo padrão já usado em `afterJson` em todo
+  // o projeto (ex: opportunity.service.js), em vez de anexar a propriedade na instância.
+  return { ...person.toJSON(), dataQuality: scorePersonDataQuality(person) };
 }
 
 async function updatePerson(id, payload, actorUserId, transaction) {
