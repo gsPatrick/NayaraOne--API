@@ -580,3 +580,44 @@ test('FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou li
     );
   });
 });
+
+// FIN-004(c) — verificação cética pós-correção (11/10/2026): o fix original só provou a parte
+// "aprovação prévia obrigatória" (settleFinancialEntry recusa sem payment_intent/ApprovalRequest
+// aprovado). As partes "snapshot/hash" e "invalidação ao trocar favorecido" já eram cobertas por
+// mecanismos existentes (computeSnapshotHash em paymentIntents.service.js; isBankAccountRedirect
+// em updateFinancialEntry marca requiresManualReview=true), mas NENHUM teste provava o cenário
+// COMBINADO: ApprovalRequest aprovada -> favorecido (bankAccountId) trocado depois -> tentativa
+// de liquidação direta tem que ser bloqueada mesmo com a aprovação antiga ainda "válida" no
+// registro. Reproduzido ao vivo antes deste teste existir: bloqueava corretamente via
+// FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW — comportamento já correto, só sem prova formal.
+test('FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequest aprovada invalida a liquidação direta', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const bankA = await createActiveBankAccount(transaction, `fin004c-a-${suffix}`);
+    const bankB = await createActiveBankAccount(transaction, `fin004c-b-${suffix}`);
+    const entry = await createEntry(transaction, { bankAccountId: bankA.id, idempotencyKey: `fin004c-${suffix}` });
+
+    const { User } = require('../src/models');
+    const [approver] = await User.findOrCreate({
+      where: { email: `fin004c-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: 'HOMO QA — Aprovador FIN-004(c)', passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const request = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+
+    // Troca o favorecido depois da aprovação já concedida.
+    await financialEntriesService.updateFinancialEntry(entry.id, { bankAccountId: bankB.id }, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW'); return true; }
+    );
+
+    const refreshed = await FinancialEntry.findByPk(entry.id, { transaction });
+    assert.equal(refreshed.status, 'PENDING', 'o lançamento não deve ter sido liquidado com a aprovação antiga.');
+  });
+});
