@@ -1,5 +1,6 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishPropertyCreated } = require('./propertyEvents.service');
@@ -9,6 +10,27 @@ const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 const PUBLICATION_STATUSES = ['DRAFT', 'READY', 'PUBLISHED', 'INACTIVE'];
 const AVAILABILITY_STATUSES = ['AVAILABLE', 'SOLD', 'RENTED', 'WITHDRAWN'];
+
+// GAP REAL CORRIGIDO (auditoria externa Abacus AI, 11/10/2026 — Marco 3, CRMX-003 "Imóvel
+// único"): dois imóveis com a mesma matrícula (MAT-AUDIT-001) eram aceitos sem bloqueio —
+// "real_estate"."properties" não tinha nenhuma validação nem constraint de unicidade em
+// registry_number. Checagem aqui dá o erro de negócio claro ANTES de bater no banco; a
+// migration 20260101000329 adiciona o índice único parcial (group_id, registry_number) WHERE
+// registry_number IS NOT NULL como rede de segurança contra corrida/bypass desta checagem —
+// fail-closed de verdade, não só validação de aplicação. Matrícula vazia/null nunca conflita
+// (imóvel pode ser cadastrado antes da documentação chegar).
+async function assertRegistryNumberUnique(groupId, registryNumber, transaction, excludeId) {
+  if (!registryNumber) return;
+  const where = { groupId, registryNumber };
+  if (excludeId) where.id = { [Op.ne]: excludeId };
+  const existing = await Property.findOne({ where, transaction });
+  if (existing) {
+    throw AppError.conflict(
+      `Já existe um imóvel com a matrícula "${registryNumber}" cadastrado neste grupo (imóvel "${existing.title}", código ${existing.internalCode}). Matrícula física deve ser única (CRMX-003).`,
+      'PROPERTY_REGISTRY_NUMBER_DUPLICATE'
+    );
+  }
+}
 
 async function createOrReuseAddress(addressPayload, transaction) {
   if (!addressPayload) return null;
@@ -71,6 +93,8 @@ async function createProperty(payload, actorUserId, transaction) {
   if (availabilityStatus && !AVAILABILITY_STATUSES.includes(String(availabilityStatus).toUpperCase())) {
     throw AppError.badRequest(`O campo "availabilityStatus" deve ser um de: ${AVAILABILITY_STATUSES.join(', ')}.`, 'PROPERTY_VALIDATION');
   }
+
+  await assertRegistryNumberUnique(groupId, registryNumber || null, transaction);
 
   const resolvedAddressId = addressId || (await createOrReuseAddress(address, transaction));
 
@@ -202,7 +226,10 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     }
     property.propertyType = normalizedType;
   }
-  if (registryNumber !== undefined) property.registryNumber = registryNumber;
+  if (registryNumber !== undefined) {
+    await assertRegistryNumberUnique(property.groupId, registryNumber || null, transaction, property.id);
+    property.registryNumber = registryNumber;
+  }
   if (registryOffice !== undefined) property.registryOffice = registryOffice;
   if (latitude !== undefined) property.latitude = latitude;
   if (longitude !== undefined) property.longitude = longitude;
