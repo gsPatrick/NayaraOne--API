@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -291,7 +291,7 @@ test('ADV-F11 lançamento já liquidado não pode ser editado nem "re-liquidado"
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 250, bankAccountId: account.id });
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
 
     await assert.rejects(
       () => financialEntriesService.updateFinancialEntry(entry.id, { description: 'maquiando o histórico' }, tenant.userId, transaction),
@@ -538,6 +538,21 @@ test('ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem
     const relido = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(relido.requiresManualReview, true, 'só clearManualReview (com revisor auditado) desliga o flag');
     assert.equal(relido.manualReviewClearedBy, null);
+
+    // Aprova o pagamento (FIX FIN-004) pra isolar exatamente o que este teste quer provar: que
+    // a revisão manual bloqueia mesmo DEPOIS de aprovado — não é a ausência de aprovação que
+    // deveria barrar aqui.
+    const [approverF19] = await User.findOrCreate({
+      where: { email: `homo-qa-advf19-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador F19 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequest = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequest.id, { decision: 'APPROVED' }, approverF19.id, transaction);
+
     await assert.rejects(
       () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
@@ -556,6 +571,17 @@ test('ADV-F20 pagar para conta bancária BLOQUEADA depois da criação do lança
 
     account.status = 'BLOCKED';
     await account.save({ transaction });
+
+    const [approverF20] = await User.findOrCreate({
+      where: { email: `homo-qa-advf20-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador F20 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequestF20 = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequestF20.id, { decision: 'APPROVED' }, approverF20.id, transaction);
 
     await assert.rejects(
       () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),

@@ -10,7 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -350,7 +350,7 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
     // Histórico: dois pagamentos de 100 já liquidados nessa conta (média = 100).
     for (let i = 0; i < 2; i += 1) {
       const historico = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
-      await financialEntriesService.settleFinancialEntry(historico.id, tenant.userId, transaction);
+      await settleFinancialEntryWithApproval(tenant, historico.id, tenant.userId, transaction);
     }
 
     const normal = await createEntry(transaction, { amount: 120, bankAccountId: account.id });
@@ -371,6 +371,19 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
       notificacoes.some((n) => n.body && n.body.includes(suspeito.id)),
       'time financeiro notificado sobre o pagamento retido'
     );
+
+    // Aprova o pagamento (FIX FIN-004) pra isolar exatamente o que este teste quer provar: que
+    // a revisão manual (antifraude) bloqueia mesmo DEPOIS de aprovado.
+    const [approvadorM421] = await User.findOrCreate({
+      where: { email: `homo-qa-m421-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador M4-21 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequestM421 = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: suspeito.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequestM421.id, { decision: 'APPROVED' }, approvadorM421.id, transaction);
 
     // Fail closed: enquanto retido, não liquida nem total nem parcialmente.
     await assert.rejects(
@@ -416,7 +429,7 @@ test('M4-21 primeiro pagamento alto para conta sem histórico é flagado; revis�
     assert.equal(liberacao.userId, revisor.id, 'a trilha guarda QUEM revisou');
 
     // Liberado, agora liquida normalmente.
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    const settled = await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED');
 
     // Liberar de novo algo que não está retido é conflito (não é no-op silencioso).

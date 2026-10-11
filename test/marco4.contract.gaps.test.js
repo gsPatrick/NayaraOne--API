@@ -24,6 +24,7 @@ const antifraudService = require('../src/features/finance/financeAntifraud.servi
 const commissionsService = require('../src/features/finance/commissions.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
 const bankPaymentsService = require('../src/features/finance/bankPayments.service');
+const approvalsService = require('../src/features/finance/approvals.service');
 const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 const { PaymentIntent, BankPaymentProviderRouting, FinancialEntry } = require('../src/models');
 
@@ -445,5 +446,71 @@ test('antifraude: sinalizador de estorno frequente e conciliação manual recorr
     const reconciliationAlert = await antifraudService.checkRecurringManualReconciliationAlert(tenant.companyId, transaction);
     assert.equal(typeof reconciliationAlert.count, 'number');
     assert.equal(typeof reconciliationAlert.flagged, 'boolean');
+  });
+});
+
+// FIX FIN-004 (auditoria externa Abacus AI, 11/10/2026): o lançamento de teste da auditora
+// abriu a ação "Liquidar" direto no detalhe, sem passar por nenhuma fila de aprovação (só
+// bloqueada pelo 2FA). Reproduzido ao vivo antes do fix: settleFinancialEntry liquidava
+// qualquer PAYABLE com bankAccountId sem checar payment_intent/ApprovalRequest nenhuma. Fix:
+// gate em financialEntries.service.js#settleFinancialEntry.
+test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovação prévia (payment_intent OU ApprovalRequest)', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+
+    // 1) Liquidação direta SEM nenhuma aprovação é recusada.
+    const entry1 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-a-${suffix}` });
+    await assert.rejects(
+      () => financialEntriesService.settleFinancialEntry(entry1.id, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
+        return true;
+      }
+    );
+    const reread1 = await FinancialEntry.findByPk(entry1.id, { transaction });
+    assert.equal(reread1.status, 'PENDING', 'nada foi liquidado sem aprovação');
+
+    // 2) Via payment_intent aprovado + executado: liquida normalmente.
+    const entry2 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-b-${suffix}` });
+    const { User: User2 } = require('../src/models');
+    const [intentApprover] = await User2.findOrCreate({
+      where: { email: `homo-qa-fin004-intent-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador intent FIN-004 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const intent = await paymentIntentsService.createPaymentIntent(
+      { groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: entry2.id, idempotencyKey: `fin004-intent-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await paymentIntentsService.approvePaymentIntent(intent.id, intentApprover.id, transaction);
+    const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction);
+    assert.equal(executed.intent.status, 'EXECUTED');
+    assert.equal(executed.entry.status, 'SETTLED');
+    const reread2 = await FinancialEntry.findByPk(entry2.id, { transaction });
+    assert.equal(reread2.status, 'SETTLED');
+
+    // 3) Via ApprovalRequest aprovada (maker-checker genérico) para o mesmo FinancialEntry:
+    // liquida normalmente, sem precisar de payment_intent.
+    const entry3 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-c-${suffix}` });
+    const { User } = require('../src/models');
+    const [approver] = await User.findOrCreate({
+      where: { email: `homo-qa-fin004-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador FIN-004 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const request = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry3.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction);
+    assert.equal(settled3.status, 'SETTLED');
+
+    // 4) RECEIVABLE continua liquidando direto, sem exigir nenhuma aprovação (Caderno §10).
+    const resultCenter = await createTestResultCenter(tenant, transaction, suffix);
+    const receivable = await createEntry(transaction, { nature: 'RECEIVABLE', resultCenterId: resultCenter.id, amount: 500, idempotencyKey: `fin004-d-${suffix}` });
+    const settledReceivable = await financialEntriesService.settleFinancialEntry(receivable.id, tenant.userId, transaction);
+    assert.equal(settledReceivable.status, 'SETTLED', 'recebimento não exige aprovação prévia, só pagamento exige');
   });
 });

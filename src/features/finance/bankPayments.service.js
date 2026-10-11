@@ -134,7 +134,7 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
   intent.externalStatus = externalStatus;
 
   if (externalStatus === 'CONFIRMED') {
-    const settled = await settleFinancialEntry(intent.financialEntryId, null, transaction);
+    const settled = await settleFinancialEntry(intent.financialEntryId, null, transaction, { viaApprovedPaymentIntent: true });
     intent.status = 'EXECUTED';
     intent.executedAt = new Date();
     await intent.save({ transaction });

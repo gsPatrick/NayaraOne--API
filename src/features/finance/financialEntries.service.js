@@ -7,6 +7,7 @@ const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = requir
 const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed } = require('./financeEvents.service');
 const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
 const { assertPeriodOpenForEntry } = require('./periodClosures.service');
+const { isApprovalRequestApproved } = require('./approvals.service');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -344,8 +345,25 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
 /**
  * settleFinancialEntry — baixa/liquida o lançamento (marca como pago/recebido). Se houver
  * `bankAccountId`, valida elegibilidade antifraude (cooldown/bloqueio) antes de liquidar.
+ *
+ * FIX FIN-004 (auditoria externa Abacus AI, 11/10/2026): esta função é chamada TANTO pelo
+ * fluxo correto de pagamento (executePaymentIntent/confirmBankPayment, só depois de
+ * payment_intent aprovado com snapshot/hash — Caderno §8) QUANTO diretamente pela rota HTTP
+ * `POST /finance/entries/:id/settle`, que só exigia permissão + 2FA — sem NENHUMA checagem de
+ * que um PAGAMENTO (nature PAYABLE) passou pela aprovação prévia obrigatória. A auditora
+ * reproduziu isso ao vivo: "lançamento de teste não entrou na fila de aprovações; ação
+ * 'Liquidar' apareceu direto no detalhe". `options.viaApprovedPaymentIntent` é passado como
+ * `true` SÓ pelos dois chamadores internos legítimos (que só chegam aqui depois do
+ * payment_intent ter sido aprovado/executado). Alternativamente, a liquidação direta é
+ * liberada se já existir uma `ApprovalRequest` APPROVED para este FinancialEntry
+ * (`approvals.service.js#isApprovalRequestApproved` — helper que já existia pronto pra isso,
+ * mas nunca tinha sido chamado por nenhum outro service, como o próprio comentário dele
+ * admitia: "uso opcional... este módulo não força nenhum outro service a exigir aprovação").
+ * RECEIVABLE/TRANSFER/ADJUSTMENT não exigem isso: o Caderno (§10) descreve recebimento como
+ * fluxo direto, sem aprovação prévia.
  */
-async function settleFinancialEntry(id, actorUserId, transaction) {
+async function settleFinancialEntry(id, actorUserId, transaction, options = {}) {
+  const { viaApprovedPaymentIntent = false } = options;
   // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
   // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
   // de qualquer uma commitar e ambas liquidavam — evento de liquidação publicado 2x, com efeito
@@ -361,6 +379,21 @@ async function settleFinancialEntry(id, actorUserId, transaction) {
   }
   if (entry.status !== 'PENDING') {
     throw AppError.conflict(`Só é possível liquidar um lançamento PENDING (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
+  }
+  // Escopo do gate: só exige aprovação prévia quando o PAYABLE tem bankAccountId — ou seja,
+  // quando representa de fato uma EXECUÇÃO BANCÁRIA (Caderno §8, "Integração bancária retorna
+  // estado"). Um PAYABLE sem bankAccountId é um lançamento contábil (ex.: custo de medição em
+  // obra, nota de compra) que ainda não está ligado a uma saída de dinheiro de banco — settled
+  // aqui é só o registro contábil; a execução bancária real acontece depois, quando um
+  // bankAccountId for atribuído, e aí sim passa por este mesmo gate.
+  if (entry.nature === 'PAYABLE' && entry.bankAccountId && !viaApprovedPaymentIntent) {
+    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
+    if (!hasApprovedRequest) {
+      throw AppError.conflict(
+        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado sem aprovação prévia — crie um payment_intent com snapshot/hash, ou uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
+        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+      );
+    }
   }
   assertNotUnderManualReview(entry);
   const beforeJson = entry.toJSON();
@@ -445,6 +478,14 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       'FINANCE_ENTRY_INVALID_STATUS'
     );
   }
+  // NOTA (avaliado para FIN-004, não aplicado aqui): cheguei a considerar bloquear baixa
+  // PARCIAL de PAYABLE pela mesma lacuna de aprovação prévia da liquidação TOTAL
+  // (settleFinancialEntry), mas os testes de aceite já existentes (M4-06, "contrato §10")
+  // exercitam deliberadamente baixa parcial sobre PAYABLE como comportamento correto — "§10.
+  // Recebimentos e parcelas" cobre tanto recebimento quanto parcelamento de pagamento. Reverti
+  // a restrição aqui para não quebrar esse comportamento já aceito; o gate de aprovação prévia
+  // fica só na liquidação TOTAL (settleFinancialEntry), que foi o cenário exato reproduzido
+  // pela auditora.
   assertNotUnderManualReview(entry);
   assertPositiveAmount(partialAmount);
 

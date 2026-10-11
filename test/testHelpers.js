@@ -104,7 +104,34 @@ async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix
   );
 }
 
+/**
+ * settleFinancialEntryWithApproval — FIX FIN-004 (ver comentário em
+ * financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE direto agora exige
+ * aprovação prévia (via payment_intent OU via ApprovalRequest aprovada). Testes que não são
+ * sobre o fluxo de aprovação em si (ex.: imutabilidade pós-SETTLED, antifraude, relatório
+ * semanal, idempotência de replay) usam este helper pra abrir+aprovar uma ApprovalRequest LOW
+ * (1 aprovador) antes de liquidar, em vez de repetir o boilerplate em cada teste.
+ */
+async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
+  const approvalsService = require('../src/features/finance/approvals.service');
+  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const { User } = require('../src/models');
+  const suffix = uniqueSuffix();
+  const [approver] = await User.findOrCreate({
+    where: { email: `homo-qa-settle-approver-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — Aprovador de liquidação ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  const request = await approvalsService.createApprovalRequest(
+    { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entryId, riskLevel: 'LOW' },
+    actorUserId,
+    transaction
+  );
+  await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
+}
+
 module.exports = {
+  settleFinancialEntryWithApproval,
   sequelize,
   getSeedTenant,
   withTenantTransaction,

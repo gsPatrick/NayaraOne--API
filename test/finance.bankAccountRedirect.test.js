@@ -9,10 +9,12 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const approvalsService = require('../src/features/finance/approvals.service');
+const { User } = require('../src/models');
 
 let tenant;
 
@@ -67,6 +69,19 @@ test('FIN-REDIR-01: trocar bankAccountId de um lançamento PENDING já com conta
     assert.equal(updated.bankAccountId, accountB.id);
     assert.equal(updated.requiresManualReview, true, 'trocar de conta um lançamento que já tinha conta definida precisa reter para revisão manual');
     assert.ok(updated.manualReviewReason);
+
+    // Aprova o pagamento (FIX FIN-004) pra isolar exatamente o que este teste quer provar: que
+    // a revisão manual (redirecionamento de conta) bloqueia mesmo DEPOIS de aprovado.
+    const [approvadorRedir] = await User.findOrCreate({
+      where: { email: `homo-qa-redir-approver-${uniqueSuffix()}@nayaraone.dev` },
+      defaults: { name: 'HOMO QA — Aprovador redirecionamento', passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequestRedir = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequestRedir.id, { decision: 'APPROVED' }, approvadorRedir.id, transaction);
 
     // Liquidar continua bloqueado enquanto não for liberado por um revisor humano.
     await assert.rejects(

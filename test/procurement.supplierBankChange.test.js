@@ -20,13 +20,31 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
 const itemsService = require('../src/features/inventory/items.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
+const approvalsService = require('../src/features/finance/approvals.service');
 const { Person, BankAccount, FinancialEntry, User } = require('../src/models');
+
+// FIX FIN-004 (ver financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE com
+// bankAccountId agora exige aprovação prévia. Estes testes são sobre COOLDOWN de conta
+// bancária, não sobre o fluxo de aprovação — aprova o pagamento antes de cada tentativa de
+// liquidação pra isolar exatamente o que cada teste quer provar.
+async function approvePayable(tenant, entryId, transaction) {
+  const [approver] = await User.findOrCreate({
+    where: { email: `homo-qa-supplierbank-approver-${uniqueSuffix()}@nayaraone.dev` },
+    defaults: { name: 'HOMO QA — Aprovador fornecedor', passwordHash: 'x', status: 'ACTIVE' },
+  });
+  const request = await approvalsService.createApprovalRequest(
+    { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entryId, riskLevel: 'LOW' },
+    tenant.userId,
+    transaction
+  );
+  await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+}
 
 let tenant;
 
@@ -129,7 +147,7 @@ test('Banco fornecedor alterado: troca de PIX do fornecedor reabre o cooldown e 
 
     // Controle: com a conta verificada, o primeiro payable (recebimento parcial) é pago normalmente.
     const firstPayable = await receiveAndPointPayableTo(transaction, order, location, 4, account.id);
-    const settled = await financialEntriesService.settleFinancialEntry(firstPayable.id, tenant.userId, transaction);
+    const settled = await settleFinancialEntryWithApproval(tenant, firstPayable.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED', 'conta do fornecedor já verificada paga normalmente');
 
     // O fornecedor "avisa" que trocou de banco — alteração feita pelo caminho guardado do Financeiro.
@@ -143,6 +161,7 @@ test('Banco fornecedor alterado: troca de PIX do fornecedor reabre o cooldown e 
 
     // O pagamento seguinte do MESMO fornecedor, pela MESMA conta, fica retido.
     const secondPayable = await receiveAndPointPayableTo(transaction, order, location, 6, account.id);
+    await approvePayable(tenant, secondPayable.id, transaction);
     await assert.rejects(() => financialEntriesService.settleFinancialEntry(secondPayable.id, tenant.userId, transaction), assertCooldownError);
     await assert.rejects(
       () => financialEntriesService.settleFinancialEntryPartial(secondPayable.id, 10, tenant.userId, transaction),
@@ -175,6 +194,7 @@ test('Banco fornecedor alterado: reatribuir ao fornecedor uma conta já ACTIVE d
 
     const { order, location } = await createAwardedOrder(transaction, supplier.id);
     const payable = await receiveAndPointPayableTo(transaction, order, location, 10, foreignAccount.id);
+    await approvePayable(tenant, payable.id, transaction);
     await assert.rejects(() => financialEntriesService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
   });
 });
@@ -199,6 +219,7 @@ test('Banco fornecedor alterado: trocar o PIX com a conta BLOQUEADA e depois des
 
     const { order, location } = await createAwardedOrder(transaction, supplier.id);
     const payable = await receiveAndPointPayableTo(transaction, order, location, 10, account.id);
+    await approvePayable(tenant, payable.id, transaction);
     await assert.rejects(() => financialEntriesService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
     await assert.rejects(() => bankAccountsService.updateBankAccount(account.id, { status: 'ACTIVE' }, tenant.userId, transaction), assertCooldownError);
   });
@@ -220,7 +241,7 @@ test('Banco fornecedor: reenviar os MESMOS dados (inclusive o mesmo titular) nã
 
     const { order, location } = await createAwardedOrder(transaction, supplier.id);
     const payable = await receiveAndPointPayableTo(transaction, order, location, 10, account.id);
-    const settled = await financialEntriesService.settleFinancialEntry(payable.id, tenant.userId, transaction);
+    const settled = await settleFinancialEntryWithApproval(tenant, payable.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED');
 
     const reread = await BankAccount.findByPk(account.id, { transaction });

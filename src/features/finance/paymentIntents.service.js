@@ -267,7 +267,7 @@ async function executePaymentIntent(id, actorUserId, transaction) {
     );
   }
 
-  const settled = await settleFinancialEntry(intent.financialEntryId, actorUserId, transaction);
+  const settled = await settleFinancialEntry(intent.financialEntryId, actorUserId, transaction, { viaApprovedPaymentIntent: true });
 
   const beforeJson = intent.toJSON();
   intent.status = 'EXECUTED';
