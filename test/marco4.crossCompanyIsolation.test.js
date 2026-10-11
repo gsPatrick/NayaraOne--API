@@ -18,6 +18,8 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, c
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const commissionsService = require('../src/features/finance/commissions.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
+const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const companiesService = require('../src/features/companies/companies.service');
 
 let tenant;
 let otherCompanyId;
@@ -121,5 +123,66 @@ test('FIN-TS-020: payment_intents é isolado por EMPRESA — outra empresa do me
       transaction,
     });
     assert.equal(fromOtherCompany.length, 0, 'outra empresa (mesmo grupo) NUNCA deve ver a intenção de pagamento de outra empresa');
+  });
+});
+
+// FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação —
+// Bloqueado"): verificação cética encontrou que isso só era barrado pela RLS bruta do Postgres
+// (erro 500 "new row violates row-level security policy"), sem nenhuma validação de aplicação.
+// Reproduzido ao vivo antes do fix. Agora createFinancialEntry/updateFinancialEntry recusam
+// com erro de negócio claro ANTES de bater no banco.
+test('FIN-TS-004: lançamento não pode usar bankAccount de outra empresa (mesmo do mesmo grupo) — erro de aplicação, não só RLS', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const cc = await createTestCostCenter(tenant, transaction);
+    const otherCompany = await companiesService.createCompany(
+      { groupId: tenant.groupId, name: `Empresa B FIN-TS-004 ${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    // createCompany muda SET LOCAL app.company_id pra empresa recém-criada (documentado no
+    // próprio service: assume ser a última operação da transação). A conta bancária que
+    // criamos AQUI é da outra empresa de propósito (simula o cadastro feito por quem tem
+    // acesso a ela), então o contexto já está certo pra isso; só precisamos devolver pra
+    // empresa do tenant DEPOIS, antes de continuar operando nela.
+    const foreignBank = await bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: otherCompany.id, bankCode: '999', agency: '0001', accountNumber: `fints004-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
+
+    await assert.rejects(
+      () => financialEntriesService.createFinancialEntry(
+        {
+          groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
+          amount: 100, description: 'FIN-TS-004', costCenterId: cc.id,
+          bankAccountId: foreignBank.id, idempotencyKey: `fints004-create-${suffix}`,
+        },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.ok(['FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH', 'FINANCE_BANK_ACCOUNT_NOT_FOUND'].includes(err.code), `código inesperado: ${err.code}`); return true; }
+    );
+
+    // Mesma checagem no redirecionamento (update) de um lançamento PENDING já existente.
+    const ownBank = await bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `fints004-own-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    const entry = await financialEntriesService.createFinancialEntry(
+      {
+        groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
+        amount: 100, description: 'FIN-TS-004 base', costCenterId: cc.id,
+        bankAccountId: ownBank.id, idempotencyKey: `fints004-base-${suffix}`,
+      },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => financialEntriesService.updateFinancialEntry(entry.id, { bankAccountId: foreignBank.id }, tenant.userId, transaction),
+      (err) => { assert.ok(['FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH', 'FINANCE_BANK_ACCOUNT_NOT_FOUND'].includes(err.code), `código inesperado: ${err.code}`); return true; }
+    );
   });
 });

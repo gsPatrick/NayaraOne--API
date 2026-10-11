@@ -8,6 +8,7 @@ const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinan
 const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
 const { assertPeriodOpenForEntry } = require('./periodClosures.service');
 const { isApprovalRequestApproved } = require('./approvals.service');
+const { getBankAccount } = require('./bankAccounts.service');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -181,6 +182,26 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
 
   await assertAccountUsableForEntry(chartOfAccountId, companyId, transaction);
 
+  // FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação —
+  // Bloqueado"): até aqui, usar uma bankAccountId de OUTRA empresa (inclusive de outra empresa
+  // do mesmo grupo, ex.: duas empresas da holding usando contas bancárias diferentes) só era
+  // barrado pela RLS bruta do Postgres no INSERT — reproduzido ao vivo: "new row violates
+  // row-level security policy for table \"financial_entries\"", um erro 500 sem nenhuma
+  // mensagem de negócio. Na prática, a RLS de SELECT em bank_accounts já torna uma conta de
+  // outra empresa invisível pra este getBankAccount (ele devolve FINANCE_BANK_ACCOUNT_NOT_FOUND,
+  // não "achou mas é de outra empresa") — então o teste explícito de companyId abaixo é defesa
+  // em profundidade (cobre um cenário só alcançável se a RLS de SELECT algum dia for
+  // enfraquecida), mas o efeito prático já é: erro de negócio claro, nunca mais um 500 cru.
+  if (bankAccountId) {
+    const bankAccount = await getBankAccount(bankAccountId, transaction);
+    if (bankAccount.companyId !== companyId) {
+      throw AppError.badRequest(
+        'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
+        'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
+      );
+    }
+  }
+
   // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
   // da própria criação).
   await assertPeriodOpenForEntry(companyId, [dueAt, new Date()], transaction);
@@ -309,6 +330,18 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   // conta mudam — ver bankAccounts.service.js); aqui o "dado que muda" é qual conta o
   // lançamento aponta, não precisa reabrir cooldown da conta em si (ela pode já estar ACTIVE há
   // meses), mas precisa de revisão humana antes de poder ser liquidado.
+  // FIX FIN-TS-004 — mesma checagem de createFinancialEntry: um redirecionamento de conta
+  // bancária (troca de favorecido) nunca pode apontar pra uma conta de outra empresa.
+  if (bankAccountId) {
+    const bankAccount = await getBankAccount(bankAccountId, transaction);
+    if (bankAccount.companyId !== entry.companyId) {
+      throw AppError.badRequest(
+        'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
+        'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
+      );
+    }
+  }
+
   const isBankAccountRedirect = bankAccountId !== undefined && entry.bankAccountId && bankAccountId && bankAccountId !== entry.bankAccountId;
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
