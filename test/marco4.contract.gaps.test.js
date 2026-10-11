@@ -796,7 +796,91 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     assert.equal(delta((r) => r.pendingOwnerRepasses.total), 450, 'repasse líquido = 500 - 50');
     assert.equal(delta((r) => r.openHighRiskAnomalies), 1);
     assert.equal(typeof afterReport.breathingNeed.value, 'number');
-    assert.equal(afterReport.breathingNeed.excludesFreeCashBalance, true);
+    // GAP REAL CORRIGIDO (Caderno §19, "Caixa disponível"/"Margem por setor"): freeCash agora é
+    // calculado de verdade (saldo assinado de finance.bank_transactions menos dinheiro de
+    // terceiro retido), e breathingNeed passou a subtraí-lo — excludesFreeCashBalance virou
+    // false porque a limitação documentada anteriormente foi fechada.
+    assert.equal(afterReport.breathingNeed.excludesFreeCashBalance, false);
+    assert.equal(typeof afterReport.freeCash.value, 'number');
+    assert.ok(Array.isArray(afterReport.marginBySector));
     assert.equal(typeof afterReport.delinquencyRatio, 'number');
+  });
+});
+
+// GAP REAL CORRIGIDO (Caderno §19, "Caixa disponível" e "Margem por setor"): caixa disponível
+// agora é o saldo assinado real de finance.bank_transactions (menos dinheiro de terceiro
+// retido), e margem por setor agrupa lançamentos SETTLED por centro de resultado (§4 liga
+// result_center_id explicitamente a "análise de margem").
+test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de terceiro retido; marginBySector agrupa por centro de resultado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const before = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
+
+    // Caixa: importa um extrato com entrada de 1000 e saída de 300 -> saldo bruto +700.
+    const account = await createActiveBankAccount(transaction, `m420c-${suffix.slice(-8)}`);
+    await bankTransactionsService.importBankStatement(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        bankAccountId: account.id,
+        csvText:
+          `externalTransactionId,transactionDate,description,amount\n` +
+          `m420c-in-${suffix},2026-10-01,entrada,1000.00\n` +
+          `m420c-out-${suffix},2026-10-02,saida,-300.00`,
+      },
+      tenant.userId,
+      transaction
+    );
+
+    // Dinheiro de terceiro RETIDO (caução recebida e SETTLED, nunca devolvida): não deve contar
+    // como caixa livre.
+    const caucaoResultCenter = await createTestResultCenter(tenant, transaction);
+    const caucao = await financialEntriesService.createFinancialEntry(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        entryType: 'CREDIT',
+        nature: 'RECEIVABLE',
+        amount: 400,
+        isThirdPartyFunds: true,
+        thirdPartyReference: `M4-20c caução ${suffix}`,
+        description: `M4-20c caução ${suffix}`,
+        resultCenterId: caucaoResultCenter.id,
+      },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(caucao.id, tenant.userId, transaction);
+
+    // Margem por setor: um centro de resultado com receita 500 e custo 120 -> margem 380.
+    const resultCenter = await createTestResultCenter(tenant, transaction);
+    const receita = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, resultCenterId: resultCenter.id, description: `M4-20c receita ${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(receita.id, tenant.userId, transaction);
+    const custoCostCenter = await createTestCostCenter(tenant, transaction);
+    const custo = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 120, costCenterId: custoCostCenter.id, resultCenterId: resultCenter.id, description: `M4-20c custo ${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(custo.id, tenant.userId, transaction);
+
+    const after = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
+
+    const grossDelta = Math.round((after.freeCash.grossBankBalance - before.freeCash.grossBankBalance) * 100) / 100;
+    const heldDelta = Math.round((after.freeCash.thirdPartyHeld - before.freeCash.thirdPartyHeld) * 100) / 100;
+    const freeDelta = Math.round((after.freeCash.value - before.freeCash.value) * 100) / 100;
+    assert.equal(grossDelta, 700, 'extrato: +1000 -300 = +700 de saldo bruto');
+    assert.equal(heldDelta, 400, 'caução SETTLED recebida fica retida como dinheiro de terceiro');
+    assert.equal(freeDelta, 300, 'caixa livre = bruto (700) - retido de terceiro (400)');
+
+    const sector = after.marginBySector.find((s) => s.resultCenterId === resultCenter.id);
+    assert.ok(sector, 'centro de resultado aparece em marginBySector');
+    assert.equal(sector.revenueRealized, 500);
+    assert.equal(sector.costsAttributed, 120);
+    assert.equal(sector.margin, 380);
   });
 });

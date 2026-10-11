@@ -177,18 +177,74 @@ async function getWeeklyHealthReport(transaction, options = {}) {
     ? await countOpenHighRiskAnomalies(options.companyId, transaction)
     : null;
 
-  // "Necessidade para respirar": saídas obrigatórias já vencidas ou vencendo em 7 dias, menos
-  // o que deve entrar com alta probabilidade na mesma janela (recebíveis que ainda não
-  // venceram e vencem em até 7 dias — overdue de recebível NÃO conta como "altamente
-  // provável", é inadimplência, não entrada certa). O Caderno também subtrai "caixa livre", mas
-  // este serviço não tem (ainda) o saldo bancário real conciliado — ver nota em "Status deste
-  // bloco": documentado como limitação explícita, não aproximado silenciosamente.
+  // GAP REAL CORRIGIDO (Caderno §19, indicador "Caixa disponível"): não existe uma tabela
+  // finance.ledger nem um campo de saldo materializado em BankAccount — o saldo bancário real é
+  // a soma assinada (entrada positiva, saída negativa, já é a convenção usada por
+  // importBankStatement) de todo o extrato já importado (finance.bank_transactions), que É o
+  // fato bancário realizado. "Excluindo dinheiro de terceiros" (§19): subtrai o que está
+  // efetivamente retido hoje — recebido e ainda não devolvido — calculado sobre os lançamentos
+  // de terceiro já SETTLED (RECEIVABLE de terceiro menos PAYABLE de devolução de terceiro).
+  const [bankBalanceRow] = await sequelize.query(
+    `SELECT COALESCE(SUM(amount), 0)::numeric AS total FROM finance.bank_transactions`,
+    { transaction, type: sequelize.QueryTypes.SELECT }
+  );
+  const grossBankBalance = round2(toNumber(bankBalanceRow?.total));
+
+  const settledThirdParty = await FinancialEntry.findAll({
+    where: { status: 'SETTLED', isThirdPartyFunds: true },
+    attributes: ['amount', 'nature'],
+    transaction,
+  });
+  const thirdPartyHeld = round2(
+    settledThirdParty.reduce((acc, e) => {
+      const amt = toNumber(e.amount);
+      if (e.nature === 'RECEIVABLE') return acc + amt;
+      if (e.nature === 'PAYABLE') return acc - amt;
+      return acc;
+    }, 0)
+  );
+
+  report.freeCash = {
+    grossBankBalance,
+    thirdPartyHeld,
+    value: round2(grossBankBalance - thirdPartyHeld),
+  };
+
+  // GAP REAL CORRIGIDO (Caderno §19, indicador "Margem por setor" — "Receita realizada − custos
+  // atribuídos"): "setor" não é um conceito solto — o próprio Caderno (§4) define
+  // result_center_id como a dimensão obrigatória "para receita e análise de margem". Agrupa
+  // todo lançamento SETTLED próprio (exclui terceiro) por centro de resultado.
+  const settledForMargin = await FinancialEntry.findAll({
+    where: { status: 'SETTLED', isThirdPartyFunds: false, nature: { [Op.in]: ['PAYABLE', 'RECEIVABLE'] } },
+    attributes: ['amount', 'nature', 'resultCenterId'],
+    transaction,
+  });
+  const bySector = new Map();
+  for (const entry of settledForMargin) {
+    const key = entry.resultCenterId || '__SEM_CENTRO_RESULTADO__';
+    if (!bySector.has(key)) bySector.set(key, { revenueRealized: 0, costsAttributed: 0 });
+    const bucket = bySector.get(key);
+    const amt = toNumber(entry.amount);
+    if (entry.nature === 'RECEIVABLE') bucket.revenueRealized += amt;
+    else bucket.costsAttributed += amt;
+  }
+  report.marginBySector = Array.from(bySector.entries()).map(([resultCenterId, v]) => ({
+    resultCenterId: resultCenterId === '__SEM_CENTRO_RESULTADO__' ? null : resultCenterId,
+    revenueRealized: round2(v.revenueRealized),
+    costsAttributed: round2(v.costsAttributed),
+    margin: round2(v.revenueRealized - v.costsAttributed),
+  }));
+
+  // "Necessidade para respirar": saídas obrigatórias já vencidas ou vencendo em 7 dias, menos o
+  // caixa livre, menos o que deve entrar com alta probabilidade na mesma janela (recebíveis que
+  // ainda não venceram e vencem em até 7 dias — overdue de recebível NÃO conta como "altamente
+  // provável", é inadimplência, não entrada certa). Agora usa o caixa livre real (freeCash.value
+  // acima) — a limitação documentada anteriormente (sem saldo bancário rastreado) foi fechada.
   const saidasObrigatorias = report.overdue.payable.total + report.dueNextSevenDays.payable.total;
   const entradasProvaveis = report.dueNextSevenDays.receivable.total;
   report.breathingNeed = {
-    value: round2(saidasObrigatorias - entradasProvaveis),
-    excludesFreeCashBalance: true,
-    note: 'Caixa livre (saldo bancário conciliado) ainda não é rastreado por este relatório — ver financeiro/bankAccounts; o valor acima é só obrigações próximas menos entradas prováveis.',
+    value: round2(saidasObrigatorias - report.freeCash.value - entradasProvaveis),
+    excludesFreeCashBalance: false,
   };
 
   return report;
