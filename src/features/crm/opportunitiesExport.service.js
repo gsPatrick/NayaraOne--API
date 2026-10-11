@@ -4,6 +4,7 @@ const { Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { listOpportunities } = require('./opportunity.service');
+const { assertRecentMfa } = require('../users/mfa.service');
 
 /**
  * M3-21 — Exportação sensível LIMITADA e AUDITADA.
@@ -26,6 +27,16 @@ const { listOpportunities } = require('./opportunity.service');
  *
  * (c) CAMPOS LIMITADOS — a exportação NÃO devolve a linha crua do banco. Só as colunas de
  *     EXPORT_FIELDS abaixo saem.
+ *
+ * (d) MFA RECENTE + LIMITE DE VOLUME (CRM-TS-013 / item 14 do Caderno, seção 18 — pendência
+ *     fechada nesta rodada, "nenhum parcial"): exportação em massa é uma ação de risco igual
+ *     à liquidação financeira que já exige step-up MFA (Marco 4 — ver
+ *     src/features/finance/approvals.service.js, mesmo `assertRecentMfa`). Reutiliza o MESMO
+ *     mecanismo de MFA, não um novo — usuário sem MFA habilitado ou sem verificação recente
+ *     (janela configurável em mfa.service.js) é bloqueado ANTES de ler qualquer linha.
+ *     Limite de volume: MAX_EXPORT_RECORDS (abaixo) — acima disso, a exportação é recusada
+ *     com erro claro pedindo para filtrar (stage/personId/propertyId), em vez de silenciosamente
+ *     truncar o resultado (truncar sem avisar seria pior: dado incompleto parecendo completo).
  *
  *     DECISÃO DOCUMENTADA sobre quais campos entram e por quê:
  *       - id, stage, temperature, expectedValue, closedAt, createdAt, nextActionDueAt:
@@ -60,6 +71,12 @@ const EXPORT_FIELDS = [
 ];
 
 const FORMATS = ['csv', 'json'];
+
+// CRM-TS-013 / item 14 (Caderno, seção 18): teto razoável por exportação. Não é um valor do
+// Caderno (que não define número) — 5000 é uma ordem de grandeza conservadora para exportação
+// manual via CSV/JSON síncrono (acima disso, o caminho correto é um job assíncrono dedicado,
+// fora de escopo desta correção). Acima do limite, a exportação é recusada (não truncada).
+const MAX_EXPORT_RECORDS = 5000;
 
 function assertExportPermission(permissions) {
   const granted = Array.isArray(permissions) ? permissions : [];
@@ -108,6 +125,7 @@ async function exportOpportunities(
   transaction
 ) {
   assertExportPermission(actorPermissions);
+  await assertRecentMfa(actorUserId, transaction);
 
   const normalizedFormat = String(format || 'csv').toLowerCase();
   if (!FORMATS.includes(normalizedFormat)) {
@@ -121,6 +139,12 @@ async function exportOpportunities(
   };
 
   const opportunities = await listOpportunities(transaction, appliedFilters);
+  if (opportunities.length > MAX_EXPORT_RECORDS) {
+    throw AppError.badRequest(
+      `A exportação tem ${opportunities.length} registros, acima do limite de ${MAX_EXPORT_RECORDS} por exportação. Filtre por "stage", "personId" ou "propertyId" e tente novamente.`,
+      'EXPORT_VOLUME_LIMIT_EXCEEDED'
+    );
+  }
   const rows = opportunities.map(toExportRow);
   const recordCount = rows.length;
 
@@ -160,6 +184,7 @@ module.exports = {
   EXPORT_PERMISSION,
   EXPORT_FIELDS,
   FORMATS,
+  MAX_EXPORT_RECORDS,
   assertExportPermission,
   exportOpportunities,
 };
