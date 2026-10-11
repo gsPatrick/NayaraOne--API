@@ -44,6 +44,7 @@ financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission
 // Bank transactions (extrato)
 financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), financeController.createBankTransaction);
 financeRouter.get('/finance/bank-transactions', requirePermission('finance:read'), financeController.listBankTransactions);
+financeRouter.post('/finance/bank-transactions/import', requirePermission('finance:create'), financeController.importBankStatement);
 
 // Reconciliation
 financeRouter.post('/finance/reconciliations', requirePermission('finance:reconcile'), financeController.matchReconciliation);

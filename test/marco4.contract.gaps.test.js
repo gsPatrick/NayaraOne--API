@@ -514,3 +514,69 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     assert.equal(settledReceivable.status, 'SETTLED', 'recebimento não exige aprovação prévia, só pagamento exige');
   });
 });
+
+// FIX FIN-TS-007 (auditoria externa Abacus AI, 11/10/2026): "Nenhuma tela de importação
+// OFX/CSV encontrada" — bankTransactions.service.js só tinha criação individual (via
+// API/webhook); importBankStatement é o caminho de LOTE novo.
+test('FIN-TS-007: importação de extrato em lote (CSV) é idempotente — reimportar o MESMO arquivo não duplica', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+    const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+
+    const csv = [
+      'externalTransactionId,transactionDate,description,amount',
+      `ext-${suffix}-1,2026-10-01,Pagamento recebido,100.50`,
+      `ext-${suffix}-2,2026-10-02,Tarifa bancária,-15.00`,
+    ].join('\n');
+
+    const firstImport = await bankTransactionsService.importBankStatement(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, csvText: csv },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(firstImport.imported.length, 2);
+    assert.equal(firstImport.duplicates.length, 0);
+
+    // Reimportar o MESMO arquivo: nenhuma linha nova, todas marcadas como duplicata.
+    const secondImport = await bankTransactionsService.importBankStatement(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, csvText: csv },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(secondImport.imported.length, 0, 'reimportar o mesmo arquivo não cria linha nova nenhuma');
+    assert.equal(secondImport.duplicates.length, 2);
+
+    const all = await bankTransactionsService.listBankTransactions(transaction, { bankAccountId: account.id });
+    assert.equal(all.length, 2, 'total de transações na conta continua 2, não 4');
+  });
+});
+
+test('FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou linha sem externalTransactionId', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+    const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+
+    await assert.rejects(
+      () => bankTransactionsService.importBankStatement(
+        { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, csvText: 'id,data,valor\n1,2026-10-01,100' },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_HEADER'); return true; }
+    );
+
+    await assert.rejects(
+      () => bankTransactionsService.importBankStatement(
+        {
+          groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id,
+          csvText: `externalTransactionId,transactionDate,description,amount\n,2026-10-01,sem id,100`,
+        },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'FINANCE_BANK_STATEMENT_IMPORT_MISSING_EXTERNAL_ID'); return true; }
+    );
+  });
+});

@@ -144,6 +144,10 @@ const listBankTransactions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => bankTransactionsService.listBankTransactions(t, { bankAccountId: req.query.bankAccountId }));
   return success(res, { data: items });
 });
+const importBankStatement = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => bankTransactionsService.importBankStatement(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: result });
+});
 
 // --- Reconciliation ---
 const matchReconciliation = catchAsync(async (req, res) => {
@@ -399,7 +403,7 @@ module.exports = {
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
   clearFinancialEntryManualReview,
-  createBankTransaction, listBankTransactions,
+  createBankTransaction, listBankTransactions, importBankStatement,
   matchReconciliation, listReconciliations,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
   createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment,
