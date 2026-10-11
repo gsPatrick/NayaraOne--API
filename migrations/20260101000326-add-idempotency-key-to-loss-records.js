@@ -19,16 +19,28 @@
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn(
-      { tableName: 'loss_records', schema: 'construction' },
-      'idempotency_key',
-      { type: Sequelize.STRING(255), allowNull: true }
+    // Idempotente: outra tentativa anterior (sem conseguir marcar SequelizeMeta, por falta de
+    // credencial de DDL na hora) já pode ter criado a coluna/índice.
+    const [cols] = await queryInterface.sequelize.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'construction' AND table_name = 'loss_records' AND column_name = 'idempotency_key'`
     );
-    await queryInterface.addIndex(
-      { tableName: 'loss_records', schema: 'construction' },
-      ['company_id', 'idempotency_key'],
-      { name: 'loss_records_company_idempotency_unique', unique: true, where: { idempotency_key: { [Sequelize.Op.ne]: null } } }
+    if (!cols.length) {
+      await queryInterface.addColumn(
+        { tableName: 'loss_records', schema: 'construction' },
+        'idempotency_key',
+        { type: Sequelize.STRING(255), allowNull: true }
+      );
+    }
+    const [idx] = await queryInterface.sequelize.query(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = 'construction' AND tablename = 'loss_records' AND indexname = 'loss_records_company_idempotency_unique'`
     );
+    if (!idx.length) {
+      await queryInterface.addIndex(
+        { tableName: 'loss_records', schema: 'construction' },
+        ['company_id', 'idempotency_key'],
+        { name: 'loss_records_company_idempotency_unique', unique: true, where: { idempotency_key: { [Sequelize.Op.ne]: null } } }
+      );
+    }
   },
 
   async down(queryInterface) {

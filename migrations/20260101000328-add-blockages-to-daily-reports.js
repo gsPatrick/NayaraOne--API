@@ -11,11 +11,16 @@
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn(
-      { tableName: 'daily_reports', schema: 'construction' },
-      'blockages',
-      { type: Sequelize.TEXT, allowNull: true }
+    const [cols] = await queryInterface.sequelize.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'construction' AND table_name = 'daily_reports' AND column_name = 'blockages'`
     );
+    if (!cols.length) {
+      await queryInterface.addColumn(
+        { tableName: 'daily_reports', schema: 'construction' },
+        'blockages',
+        { type: Sequelize.TEXT, allowNull: true }
+      );
+    }
   },
 
   async down(queryInterface) {
