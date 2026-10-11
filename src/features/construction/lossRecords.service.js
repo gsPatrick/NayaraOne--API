@@ -223,6 +223,28 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
     throw AppError.conflict('Só é possível devolver material de uma perda já aprovada.', 'LOSS_RECORD_RETURN_REQUIRES_APPROVED');
   }
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — item 3,
+  // "distinguir devoluções parciais de um simples reenvio"): returnLossRecord não tinha
+  // NENHUMA proteção de idempotência — diferente de TODO outro fluxo "reenviável" do sistema
+  // (createLossRecord, createChangeOrder, createMaterialRequest, recordMovement etc., todos com
+  // idempotencyKey). Reproduzido ao vivo: duas chamadas IDÊNTICAS de returnLossRecord (mesma
+  // quantidade, simulando um retry de rede/duplo-clique) eram aceitas como DUAS devoluções
+  // parciais distintas — a segunda chamada não excede `remainingQuantity` (o saldo ainda
+  // "cabia"), então era criada como se fosse uma devolução nova genuína, inflando o saldo
+  // corrigido do material. Exemplo real reproduzido: perda de 200, devolução de 80 enviada
+  // duas vezes (retry) → saldo ficava -40 em vez de -120 (material "voltou" duas vezes).
+  // idempotencyKey agora obrigatória: reenvio com a MESMA chave devolve o registro já criado,
+  // nunca cria uma segunda devolução.
+  const { idempotencyKey } = payload || {};
+  if (!idempotencyKey) {
+    throw AppError.badRequest(
+      'O campo "idempotencyKey" é obrigatório — evita duplicar a devolução (e a correção de saldo) em caso de retry/duplo-clique.',
+      'LOSS_RECORD_RETURN_IDEMPOTENCY_KEY_REQUIRED'
+    );
+  }
+  const existingByKey = await LossRecord.findOne({ where: { companyId: original.companyId, idempotencyKey }, transaction });
+  if (existingByKey) return existingByKey;
+
   // FIX (auditoria 01/10/2026): devoluções anteriores do MESMO registro de perda não eram
   // somadas — cada clique em "Registrar devolução" aceitava até 100% da quantidade original de
   // novo, inflando o saldo de material indefinidamente. Agora soma todos os RETURN aprovados já
@@ -267,6 +289,7 @@ async function returnLossRecord(id, payload, actorUserId, transaction) {
       status: 'APPROVED',
       approvedByUserId: actorUserId || null,
       approvedAt: new Date(),
+      idempotencyKey,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },

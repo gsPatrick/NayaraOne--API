@@ -465,7 +465,7 @@ test('M6-99: wastagePct abate material devolvido (RETURN), não conta a perda j�
     assert.equal(healthBeforeReturn.kpis.wastagePct, 10); // 100 / 1000 * 100
 
     // Devolve 100% do material perdido — saldo líquido de perda vira zero.
-    await lossRecordsService.returnLossRecord(loss.id, { quantity: 100 }, tenant.userId, transaction);
+    await lossRecordsService.returnLossRecord(loss.id, { quantity: 100, idempotencyKey: `loss-return-${uniqueSuffix()}` }, tenant.userId, transaction);
 
     const healthAfterReturn = await projectHealthService.getProjectHealth(project.id, transaction);
     assert.equal(

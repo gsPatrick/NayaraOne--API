@@ -326,7 +326,7 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
     assert.equal(balanceAfterLoss.valueBalance, -500);
 
     // Devolve só parte do material perdido (80 de 200) — movimento inverso parcial.
-    const returned = await lossRecordsService.returnLossRecord(loss.id, { quantity: 80 }, tenant.userId, transaction);
+    const returned = await lossRecordsService.returnLossRecord(loss.id, { quantity: 80, idempotencyKey: `loss-return-${uniqueSuffix()}` }, tenant.userId, transaction);
     assert.equal(returned.movementType, 'RETURN');
     assert.equal(returned.relatedLossRecordId, loss.id);
     assert.equal(Number(returned.quantity), 80);
@@ -343,7 +343,7 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
 
     // Não é possível devolver mais do que o total original.
     await assert.rejects(
-      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 1000 }, tenant.userId, transaction),
+      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 1000, idempotencyKey: `loss-return-${uniqueSuffix()}` }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LOSS_RECORD_RETURN_QUANTITY_INVALID');
         return true;
@@ -354,12 +354,64 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
     // não satisfaz nem `<= 0` nem `> remainingQuantity` — sem Number.isFinite, passava o guard
     // e criava um RETURN com quantity/estimatedValue = NaN.
     await assert.rejects(
-      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 'NaN' }, tenant.userId, transaction),
+      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 'NaN', idempotencyKey: `loss-return-${uniqueSuffix()}` }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LOSS_RECORD_RETURN_QUANTITY_INVALID');
         return true;
       }
     );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — item 3,
+// "distinguir devoluções parciais de um simples reenvio"): returnLossRecord não tinha NENHUMA
+// proteção de idempotência — reproduzido ao vivo ANTES do fix: duas chamadas IDÊNTICAS (mesma
+// quantidade, simulando retry de rede/duplo-clique) eram aceitas como duas devoluções parciais
+// distintas (saldo ficava -40 em vez de -120, numa perda de 200 com devolução de 80 enviada
+// duas vezes). Confirma que reenviar a MESMA idempotencyKey devolve o registro original, sem
+// duplicar a devolução nem corromper o saldo; e que uma devolução parcial GENUÍNA seguinte
+// (idempotencyKey diferente, quantidade diferente) continua funcionando normalmente.
+test('returnLossRecord: idempotencyKey é obrigatória, e reenviar a MESMA chave (retry) devolve o registro original — não duplica a devolução', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const project = await createTestProject(transaction);
+    const loss = await lossRecordsService.createLossRecord(
+      project.id,
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        materialDescription: 'Areia média',
+        quantity: 200,
+        estimatedValue: 500,
+        reason: 'Excesso na entrega.',
+        idempotencyKey: `loss-${uniqueSuffix()}`,
+      },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => lossRecordsService.returnLossRecord(loss.id, { quantity: 80 }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LOSS_RECORD_RETURN_IDEMPOTENCY_KEY_REQUIRED');
+        return true;
+      }
+    );
+
+    const returnKey = `loss-return-${uniqueSuffix()}`;
+    const first = await lossRecordsService.returnLossRecord(loss.id, { quantity: 80, idempotencyKey: returnKey }, tenant.userId, transaction);
+
+    // Retry de rede: MESMA requisição (mesma idempotencyKey, mesma quantidade) reenviada.
+    const retry = await lossRecordsService.returnLossRecord(loss.id, { quantity: 80, idempotencyKey: returnKey }, tenant.userId, transaction);
+    assert.equal(retry.id, first.id, 'reenviar a mesma idempotencyKey precisa devolver o registro original, nunca criar uma segunda devolução');
+
+    const balanceAfterRetry = await lossRecordsService.getMaterialBalance(project.id, 'Areia média', transaction);
+    assert.equal(balanceAfterRetry.quantityBalance, -120, 'saldo precisa refletir só UMA devolução de 80 (-200+80=-120), não duas (-40)');
+
+    // Devolução parcial GENUÍNA seguinte (chave e quantidade diferentes) continua funcionando.
+    const second = await lossRecordsService.returnLossRecord(loss.id, { quantity: 50, idempotencyKey: `loss-return-${uniqueSuffix()}` }, tenant.userId, transaction);
+    assert.notEqual(second.id, first.id);
+    const balanceAfterSecond = await lossRecordsService.getMaterialBalance(project.id, 'Areia média', transaction);
+    assert.equal(balanceAfterSecond.quantityBalance, -70, '-200+80+50=-70, segunda devolução genuína soma normalmente');
   });
 });
 
