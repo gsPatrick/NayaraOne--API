@@ -172,3 +172,55 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
     );
   });
 });
+
+// FIN-TS-015 (auditoria externa Abacus AI, 11/10/2026): "Módulo existe mas sem repasses no
+// ambiente; isolamento não comprovado." M4-15 acima já prova o CÁLCULO correto (teto elegível,
+// dedução, nunca editável), mas não prova explicitamente a SEGREGAÇÃO do caixa próprio. Este
+// teste fecha esse ângulo: pagar um repasse NUNCA cria nem toca um FinancialEntry da empresa
+// (não é dinheiro próprio, não entra na receita/despesa da empresa — é só a baixa de status
+// do repasse em si), diferente de qualquer outra liquidação do Financeiro.
+test('FIN-TS-015: pagar um repasse de proprietário NÃO cria nenhum FinancialEntry novo — repasse não é movimento de caixa próprio da empresa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const owner = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `FIN-TS-015 Proprietário ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    const account = await bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, ownerPersonId: owner.id, bankCode: '001', accountNumber: `FINTS015-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+    await account.update({ status: 'ACTIVE' }, { transaction }); // pula o cooldown pra testar só o ponto deste teste
+
+    const property = await propertiesService.createProperty(
+      { groupId: tenant.groupId, companyId: tenant.companyId, title: `FIN-TS-015 Imóvel ${suffix}`, internalCode: `FINTS015P-${suffix}`, propertyType: 'RESIDENTIAL' },
+      tenant.userId,
+      transaction
+    );
+    const resultCenter = await createTestResultCenter(tenant, transaction);
+    const recebimento = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `FIN-TS-015 aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      tenant.userId,
+      transaction
+    );
+    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+
+    const { FinancialEntry } = require('../src/models');
+    const countAntes = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
+
+    const repasse = await ownerRepassesService.createOwnerRepasse(
+      {
+        groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id,
+        sourceEntryIds: [recebimento.id], grossAmount: 1000, deductionsAmount: 0, referenceMonth: '2026-09',
+      },
+      tenant.userId,
+      transaction
+    );
+    const paid = await ownerRepassesService.payOwnerRepasse(repasse.id, tenant.userId, transaction);
+    assert.equal(paid.status, 'PAID');
+
+    const countDepois = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
+    assert.equal(countDepois, countAntes, 'pagar o repasse não pode criar nenhum FinancialEntry novo — dinheiro do proprietário nunca passa pelo caixa/resultado da empresa');
+  });
+});
