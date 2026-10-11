@@ -262,7 +262,7 @@ test('FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pa
     );
 
     const { commission, installments } = await commissionsService.createCommission(
-      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 10000, percentage: 6, installmentsCount: 2 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 10000, percentage: 6, installmentsCount: 2, idempotencyKey: `commission-${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );
@@ -308,7 +308,7 @@ test('FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pa
 
     // Motivo é obrigatório.
     const { commission: commission2 } = await commissionsService.createCommission(
-      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 1000, percentage: 5 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 1000, percentage: 5, idempotencyKey: `commission-${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );

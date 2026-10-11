@@ -700,6 +700,7 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
           baseAmount: testCase.baseAmount,
           percentage: testCase.percentage,
           installmentsCount: testCase.installmentsCount,
+          idempotencyKey: `commission-${uniqueSuffix()}`,
         },
         tenant.userId,
         transaction

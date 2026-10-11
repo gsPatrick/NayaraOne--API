@@ -5,6 +5,14 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCommissionCreated } = require('./financeEvents.service');
 
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-09 — mesmo padrão do achado em
+// inventory.movements.service.js/recordMovement): criar uma comissão é uma operação
+// REEXECUTÁVEL (POST manual, retry de rede/duplo-clique reenvia o mesmo cálculo) que gera uma
+// obrigação financeira real (Commission + parcelas), e não tinha NENHUMA proteção contra
+// duplicidade — nem campo de idempotência, nem UNIQUE constraint que pegasse o caso. Fail
+// closed: idempotencyKey agora é obrigatória aqui, única por empresa (migration
+// 20260101000325-add-idempotency-key-to-commissions.js).
+
 const STATUSES = ['PENDING', 'APPROVED', 'PAID', 'CANCELLED'];
 
 function round2(value) {
@@ -18,12 +26,26 @@ function round2(value) {
  * comentário do model).
  */
 async function createCommission(payload, actorUserId, transaction) {
-  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, baseAmount, percentage, ruleVersionId, installmentsCount, firstDueAt } = payload;
+  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, baseAmount, percentage, ruleVersionId, installmentsCount, firstDueAt, idempotencyKey } = payload;
 
   if (!groupId || !companyId || !beneficiaryUserId || baseAmount === undefined || percentage === undefined) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "beneficiaryUserId", "baseAmount" e "percentage" são obrigatórios.',
       'FINANCE_COMMISSION_VALIDATION'
+    );
+  }
+  if (!idempotencyKey) {
+    throw AppError.badRequest(
+      'O campo "idempotencyKey" é obrigatório — evita duplicar a obrigação de comissão em caso de retry/duplo-clique.',
+      'FINANCE_COMMISSION_IDEMPOTENCY_KEY_REQUIRED'
+    );
+  }
+  const existingByKey = await Commission.findOne({ where: { companyId, idempotencyKey }, transaction });
+  if (existingByKey) {
+    throw AppError.conflict(
+      'Já existe uma comissão criada com esta mesma chave de idempotência — envio duplicado bloqueado.',
+      'FINANCE_COMMISSION_DUPLICATE',
+      { existingId: existingByKey.id }
     );
   }
   const baseNumeric = Number(baseAmount);
@@ -49,6 +71,7 @@ async function createCommission(payload, actorUserId, transaction) {
       totalAmount,
       ruleVersionId: ruleVersionId || null,
       status: 'PENDING',
+      idempotencyKey,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
