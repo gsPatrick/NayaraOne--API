@@ -3,6 +3,7 @@
 const { Message, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { canContact } = require('../people/personConsents.service');
+const { publishDomainEvent } = require('../../engines/events/outbox');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -76,7 +77,7 @@ async function createMessage(payload, actorUserId, transaction) {
     }
   }
 
-  return Message.create(
+  const message = await Message.create(
     {
       groupId,
       companyId,
@@ -94,6 +95,23 @@ async function createMessage(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+
+  // Caderno (seção 17, "Eventos mínimos"): crm.interaction.recorded — "Message" é a
+  // implementação concreta de crm.interactions no sistema (ver Crm.md).
+  await publishDomainEvent(
+    {
+      groupId,
+      companyId,
+      aggregateType: 'Message',
+      aggregateId: message.id,
+      eventType: 'crm.interaction.recorded',
+      payload: { id: message.id, personId: message.personId, opportunityId: message.opportunityId, channel: message.channel, direction: message.direction },
+      idempotencyKey: `crm.interaction.recorded:${message.id}`,
+    },
+    transaction
+  );
+
+  return message;
 }
 
 async function listMessages(transaction, filters = {}) {

@@ -70,9 +70,13 @@ test('opportunity ativa com nextAction/nextActionDueAt é criada e publica domai
     );
     assert.ok(opportunity.id);
 
+    // Caderno (seção 17, "Eventos mínimos"): crm.opportunity.created é um evento PRÓPRIO,
+    // publicado ADEMAIS do stage_changed(fromStage=null) histórico — não em vez dele, para não
+    // quebrar nenhum consumidor existente de stage_changed.
     const events = await OutboxEvent.findAll({ where: { aggregateId: opportunity.id }, transaction });
-    assert.equal(events.length, 1);
-    assert.equal(events[0].eventType, 'crm.opportunity.stage_changed');
+    assert.equal(events.length, 2);
+    const eventTypes = events.map((e) => e.eventType).sort();
+    assert.deepEqual(eventTypes, ['crm.opportunity.created', 'crm.opportunity.stage_changed']);
   });
 });
 
@@ -126,13 +130,16 @@ test('atualizar stage de opportunity publica novo domain event de stage_changed'
       transaction
     );
 
+    // 3 eventos agora: crm.opportunity.created (na criação) + stage_changed(null->NEW) +
+    // stage_changed(NEW->QUALIFIED). O último continua sendo o que importa pra este teste.
     const events = await OutboxEvent.findAll({
       where: { aggregateId: opportunity.id },
       order: [['occurred_at', 'ASC']],
       transaction,
     });
-    assert.equal(events.length, 2);
-    assert.equal(events[1].payloadJson.fromStage, 'NEW');
-    assert.equal(events[1].payloadJson.toStage, 'QUALIFIED');
+    assert.equal(events.length, 3);
+    const lastStageChanged = events.filter((e) => e.eventType === 'crm.opportunity.stage_changed').pop();
+    assert.equal(lastStageChanged.payloadJson.fromStage, 'NEW');
+    assert.equal(lastStageChanged.payloadJson.toStage, 'QUALIFIED');
   });
 });

@@ -4,7 +4,7 @@ const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = req
 const AppError = require('../../utils/AppError');
 const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
 const { findPotentialDuplicate } = require('./personDedup.service');
-const { publishPersonCreated } = require('./personEvents.service');
+const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
 const { VALID_ROLES } = require('./personRoles.service');
 
 // Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
@@ -251,6 +251,7 @@ async function updatePerson(id, payload, actorUserId, transaction) {
   if (riskFlagsJson !== undefined) person.riskFlagsJson = riskFlagsJson;
   person.updatedBy = actorUserId || null;
   await person.save({ transaction });
+  await publishPersonUpdated(person, transaction);
   return getPerson(id, transaction);
 }
 

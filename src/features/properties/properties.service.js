@@ -3,7 +3,7 @@
 const { Op } = require('sequelize');
 const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { publishPropertyCreated } = require('./propertyEvents.service');
+const { publishPropertyCreated, publishPropertyUpdated } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
@@ -317,6 +317,7 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
 
   property.updatedBy = actorUserId || null;
   await property.save({ transaction });
+  await publishPropertyUpdated(property, transaction);
 
   await registrarAuditoria(
     {

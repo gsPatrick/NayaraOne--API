@@ -4,7 +4,13 @@ const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
 const { assertOutcomeReason } = require('./opportunityOutcomeReason.validator');
-const { publishOpportunityCreated, publishOpportunityStageChanged } = require('./opportunityEvents.service');
+const {
+  publishOpportunityCreated,
+  publishOpportunityStageChanged,
+  publishOpportunityCreatedEvent,
+  publishOpportunityWon,
+  publishOpportunityLost,
+} = require('./opportunityEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const TEMPERATURES = ['COLD', 'WARM', 'HOT'];
@@ -75,6 +81,9 @@ async function createOpportunity(payload, actorUserId, transaction) {
   );
 
   await publishOpportunityCreated(opportunity, transaction);
+  await publishOpportunityCreatedEvent(opportunity, transaction);
+  if (opportunity.stage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
+  if (opportunity.stage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
 
   await registrarAuditoria(
     {
@@ -189,6 +198,8 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
 
   if (stage !== undefined && nextStage !== previousStage) {
     await publishOpportunityStageChanged(opportunity, previousStage, transaction);
+    if (nextStage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
+    if (nextStage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
   }
 
   const stageChanged = stage !== undefined && nextStage !== previousStage;

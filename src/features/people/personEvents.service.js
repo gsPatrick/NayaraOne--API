@@ -43,4 +43,21 @@ async function publishPersonMerged(canonicalPerson, absorbedPerson, remappedRefe
   );
 }
 
-module.exports = { publishPersonCreated, publishPersonMerged };
+// Caderno (seção 17, "Eventos mínimos"): person.updated — faltava, só person.created/merged
+// existiam.
+async function publishPersonUpdated(person, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: person.groupId,
+      companyId: person.companyId,
+      aggregateType: 'Person',
+      aggregateId: person.id,
+      eventType: 'person.updated',
+      payload: { id: person.id, personType: person.personType, legalName: person.legalName },
+      idempotencyKey: `person.updated:${person.id}:${Date.now()}`,
+    },
+    transaction
+  );
+}
+
+module.exports = { publishPersonCreated, publishPersonMerged, publishPersonUpdated };
