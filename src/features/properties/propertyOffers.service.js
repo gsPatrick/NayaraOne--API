@@ -176,10 +176,25 @@ async function getOffer(propertyId, offerId, transaction) {
  * updateOffer — atualiza uma offer existente. Se `askingPrice` mudar, grava histórico
  * append-only automaticamente. Se `status` for alterado para ACTIVE, aplica a mesma regra de
  * supersede automático de qualquer outra offer ACTIVE do mesmo tipo (exceto ela mesma).
+ *
+ * CRM-TS-014 ("Price race — 2 alterações simultâneas — Lock/version history correto"): a
+ * leitura usa SELECT ... FOR UPDATE (mesmo padrão FOR UPDATE já usado no resto do projeto —
+ * ver opportunity.service.js). Sem o lock, duas transações concorrentes liam o mesmo
+ * `askingPrice` em memória ANTES de qualquer uma commitar; cada uma gravava um
+ * PropertyPriceHistory com o mesmo `oldPrice` (o valor pré-corrida), então o histórico
+ * passava a impressão de duas mudanças paralelas a partir do mesmo preço-base, quando na
+ * verdade uma delas já tinha sido sobrescrita — o "version history correto" do requisito.
+ * Com o lock, a segunda transação só lê a linha depois da primeira commitar, então grava o
+ * `oldPrice` real (o preço que a primeira transação deixou), preservando a cadeia exata.
  */
 async function updateOffer(propertyId, offerId, payload, actorUserId, transaction) {
   const property = await assertPropertyExists(propertyId, transaction);
-  const offer = await getOffer(propertyId, offerId, transaction);
+  const offer = await PropertyOffer.findOne({
+    where: { id: offerId, propertyId },
+    lock: transaction.LOCK.UPDATE,
+    transaction,
+  });
+  if (!offer) throw AppError.notFound('Oferta não encontrada.', 'PROPERTY_OFFER_NOT_FOUND');
   const beforeJson = offer.toJSON();
   const { askingPrice, confidentialMinPrice, acceptsFinancing, acceptsTrade, status, startsAt, endsAt, reasonCode } = payload;
 
