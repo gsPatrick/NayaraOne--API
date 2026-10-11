@@ -180,14 +180,10 @@ async function replaceGuarantee(oldGuaranteeId, newGuaranteePayload, actorUserId
 
   const beforeJson = oldGuarantee.toJSON();
   oldGuarantee.status = 'RELEASED';
-  // NOTA DE AMBIENTE (ver comentário em src/models/Guarantee.js): a coluna física
-  // "replaced_by_guarantee_id" ainda não existe neste banco (migration 20260101000289 pronta,
-  // mas pendente de rodar com credenciais de DDL que este ambiente não possui) — o atributo NÃO
-  // está declarado no model por isso, então esta atribuição fica só na instância em memória
-  // (não é persistida nem causa erro) e, quando o model for atualizado, passa a persistir sem
-  // nenhuma outra mudança de código. O que SEMPRE é persistido, mesmo hoje: status RELEASED da
-  // garantia antiga + o vínculo completo em auditoria (afterJson abaixo), que já documenta
-  // "quem substituiu quem" de forma consultável.
+  // FIX AUD-009 (ver comentário em src/models/Guarantee.js): a coluna física
+  // "replaced_by_guarantee_id" já existe neste banco e agora está declarada no model, então
+  // esta atribuição é persistida de fato pelo `save()` abaixo (antes ficava só na instância em
+  // memória). O vínculo completo também continua registrado em auditoria (afterJson abaixo).
   oldGuarantee.replacedByGuaranteeId = newGuarantee.id;
   oldGuarantee.updatedBy = actorUserId || null;
   await oldGuarantee.save({ transaction });
