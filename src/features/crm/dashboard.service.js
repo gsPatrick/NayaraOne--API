@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
-const { Opportunity, Proposal } = require('../../models');
+const { sequelize, Opportunity, Proposal } = require('../../models');
 const { LOST_REASONS } = require('./opportunityOutcomeReason.validator');
 
 /**
@@ -108,6 +108,69 @@ async function getCrmDashboard(filters = {}, transaction) {
     if (row.status === 'ACCEPTED') acceptedProposalsValue = Number(row.totalValue);
   }
 
+  // Caderno (seção 11, "Próxima ação e SLA"): "Gerente visualiza oportunidades sem atividade e
+  // tempo parado por estágio." Faltava no painel — só havia contagem por stage, sem visão de
+  // estagnação. "Sem atividade" = aberta e nextActionDueAt já vencido (mesmo critério já usado
+  // por crmTaskOverdueJob.js). Limitado a 50 para o card não virar uma segunda listagem.
+  const staleWhere = {
+    ...where,
+    stage: { [Op.notIn]: CLOSED_LIKE_STAGES },
+    nextActionDueAt: { [Op.lt]: new Date() },
+  };
+  const staleCount = await Opportunity.count({ where: staleWhere, transaction });
+  const staleOpportunities = await Opportunity.findAll({
+    where: staleWhere,
+    attributes: ['id', 'stage', 'ownerUserId', 'nextAction', 'nextActionDueAt'],
+    order: [['next_action_due_at', 'ASC']],
+    limit: 50,
+    raw: true,
+    transaction,
+  });
+
+  // "Tempo parado por estágio": para cada oportunidade ABERTA, o instante em que ela entrou no
+  // stage ATUAL é o `occurred_at` do seu evento crm.opportunity.stage_changed mais recente (todo
+  // stage, inclusive o inicial na criação, publica esse evento — ver opportunityEvents.service.js)
+  // — não existe coluna dedicada tipo "stage_entered_at" na tabela. Quando por algum motivo não
+  // há evento (dado legado pré-outbox), cai para created_at da própria oportunidade.
+  const timeInStageRows = await sequelize.query(
+    `
+    SELECT
+      o.stage AS stage,
+      AVG(EXTRACT(EPOCH FROM (now() - COALESCE(last_evt.occurred_at, o.created_at))) / 86400.0) AS avg_days_in_stage,
+      COUNT(*) AS total
+    FROM crm.opportunities o
+    LEFT JOIN LATERAL (
+      SELECT occurred_at
+      FROM integration.outbox_events e
+      WHERE e.aggregate_id = o.id AND e.event_type = 'crm.opportunity.stage_changed'
+      ORDER BY occurred_at DESC
+      LIMIT 1
+    ) last_evt ON true
+    WHERE o.deleted_at IS NULL AND o.stage NOT IN ('CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN')
+      ${filters.ownerUserId ? 'AND o.owner_user_id = :ownerUserId' : ''}
+      ${filters.personId ? 'AND o.person_id = :personId' : ''}
+      ${filters.propertyId ? 'AND o.property_id = :propertyId' : ''}
+    GROUP BY o.stage
+    `,
+    {
+      replacements: {
+        ownerUserId: filters.ownerUserId,
+        personId: filters.personId,
+        propertyId: filters.propertyId,
+      },
+      type: sequelize.QueryTypes.SELECT,
+      transaction,
+    }
+  );
+
+  const avgTimeInStageByStageDays = {};
+  for (const row of timeInStageRows) {
+    avgTimeInStageByStageDays[row.stage] = {
+      avgDays: Number(Number(row.avg_days_in_stage).toFixed(2)),
+      total: Number(row.total),
+    };
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     opportunities: {
@@ -124,6 +187,12 @@ async function getCrmDashboard(filters = {}, transaction) {
       byStatus: proposalsByStatus,
       acceptedValue: acceptedProposalsValue,
     },
+    // Caderno (seção 11): visão de estagnação para o gerente.
+    staleOpportunities: {
+      count: staleCount,
+      items: staleOpportunities,
+    },
+    avgTimeInStageByStageDays,
   };
 }
 
