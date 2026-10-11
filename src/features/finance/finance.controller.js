@@ -388,7 +388,9 @@ const listPeriodClosures = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const getWeeklyHealthReport = catchAsync(async (req, res) => {
-  const report = await req.withTenantTransaction((t) => financialHealthReportService.getWeeklyHealthReport(t));
+  const report = await req.withTenantTransaction((t) =>
+    financialHealthReportService.getWeeklyHealthReport(t, { companyId: req.auth.companyId })
+  );
   return success(res, { data: report });
 });
 

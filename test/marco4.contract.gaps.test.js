@@ -25,6 +25,9 @@ const commissionsService = require('../src/features/finance/commissions.service'
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
 const bankPaymentsService = require('../src/features/finance/bankPayments.service');
 const approvalsService = require('../src/features/finance/approvals.service');
+const financialHealthReportService = require('../src/features/finance/financialHealthReport.service');
+const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const propertiesService = require('../src/features/properties/properties.service');
 const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 const { PaymentIntent, BankPaymentProviderRouting, FinancialEntry } = require('../src/models');
 
@@ -717,4 +720,83 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       await sequelize.query('DELETE FROM finance.bank_accounts WHERE id = :id', { replacements: { id: bankAccountId }, transaction: t });
     });
   }
+});
+
+// GAP REAL CORRIGIDO (Caderno §19, "Relatório semanal de saúde" — 10 indicadores exigidos):
+// varredura completa encontrou que getWeeklyHealthReport só cobria 2 dos 10 (contas 7 dias e
+// dinheiro de terceiros). Teste delta (antes/depois), mesmo padrão do M4-20 já existente, para
+// não ser afetado por dado pré-existente no banco de homologação compartilhado.
+test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dias, conciliação pendente, comissão provisionada, repasse pendente, anomalia aberta)', async () => {
+  const { Person } = require('../src/models');
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const beforeReport = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
+
+    // 30/60 dias: um pagável vencendo em 45 dias cai em dueNext60Days mas não em dueNext30Days.
+    const cc = await createTestCostCenter(tenant, transaction);
+    const in45Days = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString();
+    await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 777, dueAt: in45Days, costCenterId: cc.id, description: `M4-20b 45d ${suffix}` },
+      tenant.userId, transaction
+    );
+
+    // Conciliação pendente: importa extrato sem conciliar.
+    const account = await createActiveBankAccount(transaction, `m420b-${suffix.slice(-8)}`);
+    await bankTransactionsService.importBankStatement(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, csvText: `externalTransactionId,transactionDate,description,amount\nm420b-${suffix},2026-10-01,extrato pendente,321.00` },
+      tenant.userId, transaction
+    );
+
+    // Comissão provisionada: PENDING, não paga.
+    await commissionsService.createCommission(
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: tenant.userId, baseAmount: 1000, percentage: 10, idempotencyKey: `m420b-commission-${suffix}` },
+      tenant.userId, transaction
+    );
+
+    // Repasse pendente: recebimento real liquidado -> repasse PENDING.
+    const owner = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `M4-20b Proprietário ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    const ownerAccount = await bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, ownerPersonId: owner.id, bankCode: '001', accountNumber: `m420bo-${suffix.slice(-8)}` },
+      tenant.userId, transaction
+    );
+    const property = await propertiesService.createProperty(
+      { groupId: tenant.groupId, companyId: tenant.companyId, title: `M4-20b Imóvel ${suffix}`, internalCode: `M420BP-${suffix}`, propertyType: 'RESIDENTIAL' },
+      tenant.userId, transaction
+    );
+    const resultCenter = await createTestResultCenter(tenant, transaction);
+    const recebimento = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-20b aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      tenant.userId, transaction
+    );
+    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await ownerRepassesService.createOwnerRepasse(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: ownerAccount.id, sourceEntryIds: [recebimento.id], grossAmount: 500, deductionsAmount: 50, referenceMonth: '2026-10' },
+      tenant.userId, transaction
+    );
+
+    // Anomalia aberta: pagamento alto numa conta sem histórico.
+    await seedFinanceAntifraudRules(tenant, transaction);
+    const anomalyAccount = await createActiveBankAccount(transaction, `m420bx-${suffix.slice(-8)}`);
+    const anomalyEntry = await createEntry(transaction, { amount: 90000, bankAccountId: anomalyAccount.id });
+    await antifraudService.flagAnomalousPayment(anomalyEntry, transaction);
+
+    const afterReport = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
+    const delta = (path) => Math.round((path(afterReport) - path(beforeReport)) * 100) / 100;
+
+    assert.equal(delta((r) => r.dueNext60Days.payable.total), 777, 'o pagável de 45 dias entra em dueNext60Days');
+    assert.equal(delta((r) => r.dueNext30Days.payable.total), 0, 'mas NÃO entra em dueNext30Days (45 > 30)');
+    assert.equal(delta((r) => r.pendingReconciliations.count), 1);
+    assert.equal(delta((r) => r.pendingReconciliations.total), 321);
+    assert.equal(delta((r) => r.provisionedCommissions.count), 1);
+    assert.equal(delta((r) => r.provisionedCommissions.total), 100, 'comissão = 1000 * 10%');
+    assert.equal(delta((r) => r.pendingOwnerRepasses.count), 1);
+    assert.equal(delta((r) => r.pendingOwnerRepasses.total), 450, 'repasse líquido = 500 - 50');
+    assert.equal(delta((r) => r.openHighRiskAnomalies), 1);
+    assert.equal(typeof afterReport.breathingNeed.value, 'number');
+    assert.equal(afterReport.breathingNeed.excludesFreeCashBalance, true);
+    assert.equal(typeof afterReport.delinquencyRatio, 'number');
+  });
 });
