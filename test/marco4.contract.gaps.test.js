@@ -621,3 +621,79 @@ test('FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequ
     assert.equal(refreshed.status, 'PENDING', 'o lançamento não deve ter sido liquidado com a aprovação antiga.');
   });
 });
+
+// FIN-TS-002 (Caderno §20: "Race — 2 workers executam intent — 1 vence; outro idempotente") —
+// verificação cética encontrou que nenhum teste provava isso: o lock FOR UPDATE em
+// getPaymentIntentForUpdate e a checagem de status 'APPROVED' sugeriam proteção, mas sem prova
+// de concorrência REAL (duas conexões/transações distintas, não duas chamadas sequenciais na
+// mesma transação). Concorrência real precisa de transações COMMITADAS — usa o mesmo padrão
+// `withCommitted` já usado em ADV-F21 (test/adversarial.finance.test.js).
+test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger)', async () => {
+  const suffix = uniqueSuffix();
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  let entryId;
+  let bankAccountId;
+  let intentId;
+  try {
+    const { User } = require('../src/models');
+    const [maker] = await User.findOrCreate({
+      where: { email: `fints002-maker-${suffix}@nayaraone.dev` },
+      defaults: { name: 'HOMO QA — Maker FIN-TS-002', passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const [approver] = await User.findOrCreate({
+      where: { email: `fints002-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: 'HOMO QA — Approver FIN-TS-002', passwordHash: 'x', status: 'ACTIVE' },
+    });
+
+    await withCommitted(async (t) => {
+      const account = await createActiveBankAccount(t, `fints002-${suffix}`);
+      bankAccountId = account.id;
+      const entry = await createEntry(t, { amount: 500, bankAccountId: account.id, idempotencyKey: `fints002-entry-${suffix}` });
+      entryId = entry.id;
+      const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, maker.id, t);
+      intentId = intent.id;
+      await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, t);
+    });
+
+    // Duas "execuções" concorrentes de verdade — cada uma na sua própria transação commitada.
+    const resultados = await Promise.allSettled([
+      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t)),
+      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t)),
+    ]);
+
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    const falhas = resultados.filter((r) => r.status === 'rejected');
+    assert.equal(sucessos.length, 1, 'exatamente UMA das duas execuções concorrentes deve vencer');
+    assert.equal(falhas.length, 1, 'a outra deve ser rejeitada (não executar duas vezes)');
+    assert.equal(
+      falhas[0].reason.code,
+      'FINANCE_PAYMENT_INTENT_NOT_APPROVED',
+      'a perdedora falha porque, quando ela consegue o lock, a intent já não está mais APPROVED (a vencedora já mudou pra EXECUTED)'
+    );
+
+    await withCommitted(async (t) => {
+      const ledgerCount = await FinancialEntry.count({ where: { id: entryId, status: 'SETTLED' }, transaction: t });
+      assert.equal(ledgerCount, 1, 'o lançamento foi liquidado exatamente uma vez');
+    });
+  } finally {
+    await withCommitted(async (t) => {
+      await sequelize.query('DELETE FROM finance.payment_intents WHERE id = :id', { replacements: { id: intentId }, transaction: t });
+      await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entryId }, transaction: t });
+      await sequelize.query('DELETE FROM finance.bank_accounts WHERE id = :id', { replacements: { id: bankAccountId }, transaction: t });
+    });
+  }
+});
