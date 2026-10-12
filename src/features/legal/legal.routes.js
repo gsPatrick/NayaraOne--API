@@ -72,6 +72,13 @@ legalRouter.post('/legal/contract-templates', requirePermission('legal:create'),
 legalRouter.get('/legal/contract-templates', requirePermission('legal:read'), legalController.listContractTemplates);
 legalRouter.get('/legal/contract-templates/:id', requirePermission('legal:read'), legalController.getContractTemplate);
 legalRouter.post('/legal/contract-templates/:id/clauses', requirePermission('legal:create'), legalController.addClauseToContractTemplate);
+// Biblioteca de cláusulas (JUR-002) — ordem importa: /legal/clauses/:code/versions antes de
+// qualquer coisa que capture :id, mesmo padrão já usado para classification-pendings no Marco 4.
+legalRouter.post('/legal/clauses', requirePermission('legal:create'), legalController.createClause);
+legalRouter.get('/legal/clauses', requirePermission('legal:read'), legalController.listClauses);
+legalRouter.get('/legal/clauses/:code/versions', requirePermission('legal:read'), legalController.listClauseVersions);
+legalRouter.post('/legal/clauses/:code/versions', requirePermission('legal:create'), legalController.createClauseVersion);
+legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:update'), legalController.deactivateClause);
 // Preview de renderização (só leitura — não persiste nada, ver renderContractTemplate).
 legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), legalController.renderContractTemplate);
 

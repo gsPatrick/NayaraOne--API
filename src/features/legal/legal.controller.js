@@ -17,6 +17,7 @@ const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
+const contractClausesService = require('./contractClauses.service');
 const contractPdfService = require('./contractPdf.service');
 const requirementsService = require('./requirements.service');
 const noticesService = require('./notices.service');
@@ -168,6 +169,35 @@ const getContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.getTemplate(req.params.id, t));
   return success(res, { data: item });
 });
+// --- Clause library (JUR-002) ---
+// Fix AUD-012 (auditoria externa Nayara, 11/10/2026): contractClauses.service.js já tinha
+// createClause/createClauseVersion/listClauses/listClauseVersions/deactivateClause prontos e
+// testados, mas NENHUMA rota expunha isso — addClauseToContractTemplate exige um
+// contractClauseId já existente, e não havia como criar uma cláusula em primeiro lugar sem
+// SQL direto. A biblioteca de cláusulas ficava inalcançável por qualquer usuário/tela.
+const createClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.createClause(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const createClauseVersion = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractClausesService.createClauseVersion(req.params.code, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listClauses = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractClausesService.listClauses(t, req.query));
+  return success(res, { data: items });
+});
+const listClauseVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractClausesService.listClauseVersions(req.params.code, t));
+  return success(res, { data: items });
+});
+const deactivateClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.deactivateClause(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
 const addClauseToContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
@@ -602,6 +632,7 @@ module.exports = {
   addContractParty, listContractParties, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
+  createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
