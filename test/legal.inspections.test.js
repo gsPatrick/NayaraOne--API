@@ -247,3 +247,45 @@ test('vistoria: compareInspections continua funcionando junto com os novos campo
     assert.equal(comparison.divergences[0].exitCondition, 'DAMAGED');
   });
 });
+
+// AUD-013 (auditoria externa Nayara, 11/10/2026, JUR-007 "Vistoria assinada é imutável"): a
+// auditora reproduziu ao vivo que uma vistoria CONCLUÍDA ainda oferecia "Anexar foto/vídeo" —
+// nada no backend impedia editar itens/mídia depois de já assinada por uma das partes.
+test('JUR-007: vistoria com QUALQUER assinatura fica imutável — nem item novo, nem mídia nova', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const inspection = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    const item = await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Piso da sala', condition: 'GOOD' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
+
+    // Antes de assinar, ainda é possível editar — confirma que o bloqueio é por assinatura, não por COMPLETED.
+    await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Pia da cozinha', condition: 'GOOD' }, tenant.userId, transaction);
+
+    // Só UMA das partes assina.
+    await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'sig-tenant' }, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => inspectionsService.addInspectionItem(inspection.id, { itemName: 'Janela do quarto', condition: 'GOOD' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE');
+        return true;
+      }
+    );
+
+    const file = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'foto.jpg', storageKey: `test/${uniqueSuffix()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 100, createdBy: tenant.userId },
+      { transaction }
+    );
+    await assert.rejects(
+      () => inspectionsService.attachInspectionItemMedia(item.id, { fileId: file.id, mediaType: 'PHOTO' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE');
+        return true;
+      }
+    );
+  });
+});

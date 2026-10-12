@@ -14,6 +14,22 @@ const PARTY_ROLES = ['LANDLORD', 'TENANT', 'INSPECTOR'];
 // M5-21: de quem é a responsabilidade pelo dano encontrado na vistoria.
 const RESPONSIBLE_PARTIES = ['TENANT', 'LANDLORD', 'SHARED', 'UNDETERMINED'];
 
+// FIX AUD-013 (auditoria externa Nayara, 11/10/2026, JUR-007 "Vistoria assinada é imutável"):
+// signInspection exigia a vistoria COMPLETED antes de assinar, mas nada impedia continuar
+// anexando foto/vídeo (attachInspectionItemMedia) ou criando item novo (addInspectionItem)
+// DEPOIS de já assinada — a auditora reproduziu isso ao vivo ("vistoria concluída ainda
+// oferece Anexar foto/vídeo"). Qualquer assinatura registrada (mesmo de só uma das partes)
+// trava o conteúdo: a parte já assinou em cima do que existia naquele momento.
+async function assertInspectionNotSigned(inspectionId, transaction) {
+  const anySignature = await InspectionSignature.findOne({ where: { inspectionId }, transaction });
+  if (anySignature) {
+    throw AppError.conflict(
+      'Esta vistoria já tem assinatura registrada e ficou imutável — itens e mídia não podem mais ser alterados.',
+      'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE'
+    );
+  }
+}
+
 async function createInspection(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, contractId, inspectorUserId, inspectionType, scheduledAt } = payload;
   if (!groupId || !companyId || !propertyId || !inspectionType) {
@@ -131,6 +147,7 @@ async function completeInspection(id, actorUserId, transaction) {
 
 async function addInspectionItem(inspectionId, payload, actorUserId, transaction) {
   const inspection = await getInspection(inspectionId, transaction);
+  await assertInspectionNotSigned(inspectionId, transaction);
   const { itemName, condition, notes, damageDescription, estimatedBudget, responsibleParty } = payload;
   if (!itemName) {
     throw AppError.badRequest('O campo "itemName" é obrigatório.', 'LEGAL_INSPECTION_ITEM_VALIDATION');
@@ -291,6 +308,7 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
 async function attachInspectionItemMedia(itemId, payload, actorUserId, transaction) {
   const item = await InspectionItem.findByPk(itemId, { transaction });
   if (!item) throw AppError.notFound('Item de vistoria não encontrado.', 'LEGAL_INSPECTION_ITEM_NOT_FOUND');
+  await assertInspectionNotSigned(item.inspectionId, transaction);
 
   const { fileId, mediaType } = payload;
   if (!fileId) {
