@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
@@ -113,6 +113,11 @@ async function createLeaseWithParties(transaction) {
 
 async function createSignableContractVersion(transaction) {
   const contract = await createLeaseWithParties(transaction);
+  // FIX AUD-009 reforçado (gate de checklist documental agora fail-closed de verdade, ver
+  // requirements.service.js#assertRequirementsSatisfied): a transição pra DOCUMENTS_PENDING
+  // gera o checklist automaticamente e bloqueia com requirement PENDING — este helper testa
+  // outro cenário (assinatura/webhook), não o checklist em si, então dispensa tudo antes.
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
   await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   // FIX AUD-008 (14/09/2026): assertDocumentGate agora exige um File real anexado
   // (documentFileId), não só um "content" textual — este teste precisa simular o mesmo caminho
@@ -606,6 +611,9 @@ test('ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi re
 test('AUD-008b versão SEM documentFileId (documento real) não pode avançar o contrato para SIGNING', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    // Este teste prova o gate de DOCUMENTO (AUD-008b), não o de checklist documental
+    // (AUD-009) — dispensa o checklist antes pra isolar o cenário.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     // Mesma reprodução do caso real: content textual "válido" (não vazio), mas SEM documentFileId.
     await contractVersionsService.createContractVersion(
