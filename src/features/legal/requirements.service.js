@@ -3,7 +3,7 @@
 const { ContractRequirement } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { getContract } = require('./contracts.service');
+const { getContract, isLeaseLikeContractType } = require('./contracts.service');
 
 /**
  * requirements.service.js — auditoria externa (contrato bruto, Anexo I "7. Checklist
@@ -107,11 +107,20 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
   const contract = await getContract(contractId, transaction);
   const { templateKey, hasRepresentedParty } = options || {};
 
-  const key = templateKey || contract.contractType;
+  // BUG REAL CORRIGIDO (varredura completa Marco 5, 12/10/2026, achado por teste HTTP novo):
+  // esta tabela só tinha a chave literal "LEASE", mas os subtipos LEASE_RESIDENTIAL/
+  // LEASE_COMMERCIAL/LEASE_SEASONAL/PROPERTY_ADMIN (AUD-015, commit 7d75b76) nunca foram
+  // mapeados aqui — gerar o checklist documental para QUALQUER contrato de locação criado com
+  // um subtipo específico (em vez do "LEASE" genérico) falhava com
+  // LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND, bloqueando o próprio gate fail-closed (JUR-003/
+  // JUR-015) que esses subtipos deveriam estar protegidos por. Mesmo padrão de bug já corrigido
+  // em rentAdvance.service.js/billingScheduleAutoGenerateJob — usar isLeaseLikeContractType()
+  // em vez de comparar contractType literalmente.
+  const key = templateKey || (isLeaseLikeContractType(contract.contractType) ? 'LEASE' : contract.contractType);
   const template = REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE[key];
   if (!template) {
     throw AppError.badRequest(
-      `Não há template de requirements configurado para "${key}". Templates disponíveis: ${Object.keys(REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE).join(', ')}.`,
+      `Não há template de requirements configurado para "${contract.contractType}". Templates disponíveis: ${Object.keys(REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE).join(', ')} (ou informe "templateKey" explicitamente).`,
       'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
     );
   }
