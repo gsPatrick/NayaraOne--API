@@ -22,6 +22,7 @@ const { startMissingDailyReportJob } = require('./src/engines/jobs/missingDailyR
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
 const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
 const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
+const { startBillingScheduleAutoGenerateJob } = require('./src/engines/jobs/billingScheduleAutoGenerateJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -134,6 +135,14 @@ if (process.env.NODE_ENV !== 'test' && process.env.FEEDBACK_CASE_ALERT_JOB_DISAB
 // externa Marco 3 (Guia do Marcelo §11 "Tarefa vencida escala conforme regra.").
 if (process.env.NODE_ENV !== 'test' && process.env.CRM_TASK_OVERDUE_JOB_DISABLED !== 'true') {
   startCrmTaskOverdueJob();
+}
+
+// Billing mensal automático de locação (auditoria externa Nayara, 11/10/2026: "Billing mensal
+// automático... não foi encontrado — apenas lançamentos financeiros avulsos"). Gera o
+// cronograma de cobrança (componente RENT, pelo valor vigente após reajuste) de toda
+// competência ainda não gerada para contratos de locação ACTIVE — 1x por dia.
+if (process.env.NODE_ENV !== 'test' && process.env.BILLING_SCHEDULE_AUTO_GENERATE_JOB_DISABLED !== 'true') {
+  startBillingScheduleAutoGenerateJob();
 }
 
 // Escalonamento de SLA dos chamados de garantia/pós-obra (M6-63/M6-88). Roda a cada 30 min
