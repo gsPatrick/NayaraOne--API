@@ -3,7 +3,7 @@
 const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishContractStatusChanged } = require('./legalEvents.service');
+const { publishContractStatusChanged, publishContractActivated, publishContractTerminated } = require('./legalEvents.service');
 
 // M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
 // empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
@@ -448,6 +448,9 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   await contract.save({ transaction });
 
   await publishContractStatusChanged(contract, fromStatus, transaction);
+  if (targetStatus === 'ACTIVE') {
+    await publishContractActivated(contract, transaction);
+  }
 
   await registrarAuditoria(
     {
@@ -510,6 +513,9 @@ async function applyGatedTransition(contract, targetStatus, actorUserId, reason,
   await contract.save({ transaction });
 
   await publishContractStatusChanged(contract, fromStatus, transaction);
+  if (targetStatus === 'TERMINATED') {
+    await publishContractTerminated(contract, transaction);
+  }
 
   await registrarAuditoria(
     {

@@ -29,6 +29,41 @@ function publishContractStatusChanged(contract, fromStatus, transaction) {
   );
 }
 
+// GAP REAL (verificação final Marco 5, §18 "Eventos mínimos"): o Caderno exige os eventos
+// nomeados "contract.activated" e "contract.terminated" além do genérico
+// "legal.contract.status_changed" que já existia — mesmo padrão já usado no Marco 3
+// (crm.opportunity.won/lost publicados ADEMAIS do stage_changed genérico, sem substituí-lo,
+// pra não quebrar consumidor existente).
+function publishContractActivated(contract, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      aggregateType: 'Contract',
+      aggregateId: contract.id,
+      eventType: 'contract.activated',
+      payload: { id: contract.id, contractType: contract.contractType },
+      idempotencyKey: `contract.activated:${contract.id}:${contract.lockVersion}`,
+    },
+    transaction
+  );
+}
+
+function publishContractTerminated(contract, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      aggregateType: 'Contract',
+      aggregateId: contract.id,
+      eventType: 'contract.terminated',
+      payload: { id: contract.id, contractType: contract.contractType },
+      idempotencyKey: `contract.terminated:${contract.id}:${contract.lockVersion}`,
+    },
+    transaction
+  );
+}
+
 function publishContractVersionCreated(contractVersion, transaction) {
   return publishDomainEvent(
     {
@@ -141,6 +176,33 @@ function publishInspectionCompleted(inspection, transaction) {
   );
 }
 
+// GAP REAL (verificação final Marco 5, §11/§18 do Caderno: "NAY pode comparar entrada x saída
+// e sugerir diferenças" + evento mínimo "inspection.difference.detected"): compareInspections()
+// já existia e calculava as divergências corretamente, mas era uma função de leitura pura
+// (rota GET) sem nenhum efeito colateral — nenhum evento de domínio nunca era publicado quando
+// uma divergência real era detectada. idempotencyKey pelo PAR entrada+saída garante que
+// reassinar/reconsultar não duplica o alerta.
+function publishInspectionDifferenceDetected(entryInspection, exitInspection, divergences, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: exitInspection.groupId,
+      companyId: exitInspection.companyId,
+      aggregateType: 'Inspection',
+      aggregateId: exitInspection.id,
+      eventType: 'inspection.difference.detected',
+      payload: {
+        entryInspectionId: entryInspection.id,
+        exitInspectionId: exitInspection.id,
+        contractId: exitInspection.contractId,
+        divergenceCount: divergences.length,
+        divergences,
+      },
+      idempotencyKey: `inspection.difference.detected:${entryInspection.id}:${exitInspection.id}`,
+    },
+    transaction
+  );
+}
+
 function publishKeyDeliveryReleased(keyDelivery, transaction) {
   return publishDomainEvent(
     {
@@ -191,6 +253,25 @@ function publishLegalCaseCreated(legalCase, transaction) {
   );
 }
 
+// GAP REAL (verificação final Marco 5, §18 "Eventos mínimos"): "legal.deadline.created" nunca
+// era publicado — só existia o alerta de severidade (publishLegalDeadlineAlert, disparado pelo
+// job periódico quando a severidade piora). A criação do prazo em si, que é o evento mínimo
+// literal exigido pelo Caderno, não tinha nenhum rastro no outbox.
+function publishLegalDeadlineCreated(deadline, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: deadline.groupId,
+      companyId: deadline.companyId,
+      aggregateType: 'LegalDeadline',
+      aggregateId: deadline.id,
+      eventType: 'legal.deadline.created',
+      payload: { id: deadline.id, legalCaseId: deadline.legalCaseId, dueAt: deadline.dueAt },
+      idempotencyKey: `legal.deadline.created:${deadline.id}`,
+    },
+    transaction
+  );
+}
+
 function publishLegalDeadlineAlert(deadline, severity, transaction) {
   return publishDomainEvent(
     {
@@ -226,6 +307,8 @@ function publishEvidencePackageCreated(evidencePackage, transaction) {
 
 module.exports = {
   publishContractStatusChanged,
+  publishContractActivated,
+  publishContractTerminated,
   publishContractVersionCreated,
   publishSignatureRequested,
   publishSignatureSigned,
@@ -233,9 +316,11 @@ module.exports = {
   publishGuaranteeExpiring,
   publishGuaranteeReplaced,
   publishInspectionCompleted,
+  publishInspectionDifferenceDetected,
   publishKeyDeliveryReleased,
   publishKeysDelivered,
   publishLegalCaseCreated,
+  publishLegalDeadlineCreated,
   publishLegalDeadlineAlert,
   publishEvidencePackageCreated,
 };

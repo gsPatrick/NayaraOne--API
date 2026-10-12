@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 const { Inspection, InspectionItem, InspectionSignature, File, FileLink } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishInspectionCompleted } = require('./legalEvents.service');
+const { publishInspectionCompleted, publishInspectionDifferenceDetected } = require('./legalEvents.service');
 
 const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC'];
 const CONDITIONS = ['GOOD', 'REGULAR', 'DAMAGED'];
@@ -427,6 +427,25 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  // GAP REAL (verificação final Marco 5, §11/§18): assinar uma vistoria de SAÍDA (CHECK_OUT)
+  // com uma de ENTRADA (CHECK_IN) já registrada pro mesmo contrato é o gatilho natural pra
+  // comparar entrada x saída e alertar diferença — compareInspections() já existia e calculava
+  // certo, só nunca era chamado automaticamente nem publicava evento. idempotencyKey pelo par
+  // entrada+saída evita duplicar o alerta se a vistoria for assinada por mais de uma parte.
+  if (inspection.inspectionType === 'CHECK_OUT' && inspection.contractId) {
+    const entryInspection = await Inspection.findOne({
+      where: { contractId: inspection.contractId, inspectionType: 'CHECK_IN' },
+      order: [['completedAt', 'DESC']],
+      transaction,
+    });
+    if (entryInspection) {
+      const comparison = await compareInspections(entryInspection.id, inspection.id, transaction);
+      if (comparison.divergences.length > 0) {
+        await publishInspectionDifferenceDetected(entryInspection, inspection, comparison.divergences, transaction);
+      }
+    }
+  }
 
   return signature;
 }

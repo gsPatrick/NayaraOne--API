@@ -4,6 +4,7 @@ const { LegalDeadline } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCase } = require('./legalCases.service');
+const { publishLegalDeadlineCreated } = require('./legalEvents.service');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -24,9 +25,18 @@ function computeSeverity(deadline, now = new Date()) {
 
 async function createLegalDeadline(legalCaseId, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  const { description, dueAt } = payload;
+  const { description, dueAt, sourceDocument, sourceEvent } = payload;
   if (!description || !dueAt) {
     throw AppError.badRequest('Os campos "description" e "dueAt" são obrigatórios.', 'LEGAL_DEADLINE_VALIDATION');
+  }
+  // Caderno §15: "Prazo sempre tem source_document/source_event" — exige pelo menos um dos
+  // dois (não os dois obrigatoriamente, já que um prazo pode nascer de um documento OU de um
+  // evento de sistema, nunca dos dois ao mesmo tempo necessariamente).
+  if (!sourceDocument && !sourceEvent) {
+    throw AppError.badRequest(
+      'Informe "sourceDocument" ou "sourceEvent" — todo prazo jurídico precisa de uma origem rastreável.',
+      'LEGAL_DEADLINE_SOURCE_REQUIRED'
+    );
   }
 
   const deadline = await LegalDeadline.create(
@@ -36,6 +46,8 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
       legalCaseId: legalCase.id,
       description,
       dueAt,
+      sourceDocument: sourceDocument || null,
+      sourceEvent: sourceEvent || null,
       status: 'PENDING',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -56,6 +68,8 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
     },
     transaction
   );
+
+  await publishLegalDeadlineCreated(deadline, transaction);
 
   return deadline;
 }

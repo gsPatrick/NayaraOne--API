@@ -692,7 +692,7 @@ test('M5-34: jornada E2E jurídica — processo, prazo, alerta, escalonamento, d
     // 2) Prazo processual que vence em 12h -> severidade DUE_SOON.
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
       tenant.userId,
       transaction
     );

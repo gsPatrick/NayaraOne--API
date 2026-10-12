@@ -25,7 +25,7 @@ const legalDeadlinesService = require('../src/features/legal/legalDeadlines.serv
 const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
 const inspectionsService = require('../src/features/legal/inspections.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const { File, ContractClause, ContractAmendment, Notification, LegalDeadline } = require('../src/models');
+const { File, ContractClause, ContractAmendment, Notification, LegalDeadline, OutboxEvent } = require('../src/models');
 
 let tenant;
 
@@ -430,7 +430,7 @@ test('M5-27: prazo OVERDUE há mais de 24h sem ação escala para o escalationUs
 
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
       tenant.userId,
       transaction
     );
@@ -738,5 +738,36 @@ test('M5-21: item DAMAGED exige responsibleParty válido', async () => {
       transaction
     );
     assert.equal(okItem.responsibleParty, null);
+  });
+});
+
+// GAP REAL (verificação final Marco 5, §18 "Eventos mínimos" do Caderno): criar um prazo
+// jurídico nunca publicava "legal.deadline.created" — só existia o alerta de severidade
+// (publicado depois, pelo job periódico, quando o prazo já está vencendo/vencido).
+test('Eventos mínimos: legal.deadline.created é publicado ao criar um prazo jurídico', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const legalCase = await legalCasesService.createLegalCase(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        caseType: 'LITIGATION',
+        summary: `Evento de prazo ${suffix}`,
+        responsibleUserId: tenant.userId,
+      },
+      tenant.userId,
+      transaction
+    );
+
+    const deadline = await legalDeadlinesService.createLegalDeadline(
+      legalCase.id,
+      { description: `Prazo teste de evento ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
+      tenant.userId,
+      transaction
+    );
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'legal.deadline.created', aggregateId: deadline.id }, transaction });
+    assert.ok(event, 'evento legal.deadline.created deveria ter sido publicado no outbox');
+    assert.equal(event.payloadJson.legalCaseId, legalCase.id);
   });
 });

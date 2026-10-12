@@ -11,7 +11,7 @@ const contractVersionsService = require('../src/features/legal/contractVersions.
 const signaturesService = require('../src/features/legal/signatures.service');
 const requirementsService = require('../src/features/legal/requirements.service');
 const AppError = require('../src/utils/AppError');
-const { File, TenantSetting } = require('../src/models');
+const { File, TenantSetting, OutboxEvent } = require('../src/models');
 
 // O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
 // VERDADE (token real) para testes manuais de assinatura eletrônica em andamento. O teste
@@ -323,5 +323,56 @@ test('máquina de estados: transições inválidas são bloqueadas (DRAFT -> ACT
         return true;
       }
     );
+  });
+});
+
+// GAP REAL (verificação final Marco 5, §18 "Eventos mínimos" do Caderno): "contract.activated"
+// e "contract.terminated" nunca eram publicados — só existia o evento genérico
+// "legal.contract.status_changed" (que continua existindo, sem quebrar consumidor nenhum).
+test('Eventos mínimos: contract.activated é publicado quando o contrato entra em ACTIVE', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
+    const suffix = uniqueSuffix();
+    const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+    const file = await createFakeDocumentFile(transaction);
+    const version = await contractVersionsService.createContractVersion(
+      contract.id,
+      { content: `EVT-activated ${suffix}`, documentFileId: file.id },
+      tenant.userId,
+      transaction
+    );
+    await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
+    const parties = await contractsService.listContractParties(contract.id, transaction);
+    const signatures = await signaturesService.initiateSignature(version.id, parties.map((p) => p.personId), tenant.userId, transaction);
+    for (const signature of signatures) {
+      await signaturesService.handleSignatureWebhook(signature.externalSignatureId, {}, transaction);
+    }
+    const signedContract = await contractsService.getContract(contract.id, transaction);
+
+    const before = await OutboxEvent.findOne({ where: { eventType: 'contract.activated', aggregateId: contract.id }, transaction });
+    assert.equal(before, null, 'não deveria existir contract.activated antes da transição pra ACTIVE');
+
+    await contractsService.transitionContractStatus(signedContract, 'ACTIVE', tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'contract.activated', aggregateId: contract.id }, transaction });
+    assert.ok(event, 'evento contract.activated deveria ter sido publicado no outbox');
+    assert.equal(event.payloadJson.id, contract.id);
+  });
+});
+
+test('Eventos mínimos: contract.terminated é publicado ao encerrar um contrato ACTIVE', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
+    await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'contract.terminated', aggregateId: contract.id }, transaction });
+    assert.ok(event, 'evento contract.terminated deveria ter sido publicado no outbox');
   });
 });
