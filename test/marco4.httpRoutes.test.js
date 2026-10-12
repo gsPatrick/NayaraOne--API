@@ -20,9 +20,9 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '34593';
 
 const app = require('../app');
-const { getSeedTenant, uniqueSuffix } = require('./testHelpers');
+const { getSeedTenant, uniqueSuffix, withTenantTransaction } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast } = require('../src/models');
+const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase } = require('../src/models');
 
 let tenant;
 let baseUrl;
@@ -33,6 +33,8 @@ const createdCostCenterIds = [];
 const createdResultCenterIds = [];
 const createdEntryIds = [];
 const createdBudgetForecastIds = [];
+const createdCommissionIds = [];
+const createdAnomalyCaseIds = [];
 
 before(async () => {
   tenant = await getSeedTenant();
@@ -50,6 +52,8 @@ before(async () => {
 });
 
 after(async () => {
+  if (createdAnomalyCaseIds.length > 0) await AnomalyCase.destroy({ where: { id: createdAnomalyCaseIds }, force: true });
+  if (createdCommissionIds.length > 0) await Commission.destroy({ where: { id: createdCommissionIds }, force: true });
   if (createdBudgetForecastIds.length > 0) await BudgetForecast.destroy({ where: { id: createdBudgetForecastIds }, force: true });
   if (createdEntryIds.length > 0) await FinancialEntry.destroy({ where: { id: createdEntryIds }, force: true });
   if (createdResultCenterIds.length > 0) await ResultCenter.destroy({ where: { id: createdResultCenterIds }, force: true });
@@ -144,6 +148,64 @@ test('Marco 4 ponta a ponta via HTTP real: plano de contas -> centros -> lançam
   assert.equal(health.status, 200, JSON.stringify(health.body));
   assert.equal(typeof health.body.data.freeCash.value, 'number');
   assert.ok(Array.isArray(health.body.data.marginBySector));
+});
+
+// GAP REAL CORRIGIDO (verificação cética adicional, Marco 4, 12/10/2026): `cancelCommission`
+// (FIN-TS-017) e `listAnomalyCases`/`resolveAnomalyCase` (antifraude, §17/§19) tinham service
+// completo e testado por chamada direta, mas NENHUMA rota HTTP os expunha — um humano não
+// conseguia cancelar uma comissão nem ver/resolver um caso de anomalia pela API, muito menos
+// pela interface. Rotas adicionadas em finance.routes.js; este teste prova que existem e
+// funcionam de ponta a ponta.
+test('FIN-TS-017 via HTTP: cancelar comissão exige motivo e gera ajuste auditável', async () => {
+  const suffix = uniqueSuffix();
+  const commission = await http('POST', '/finance/commissions', {
+    beneficiaryUserId: tenant.userId,
+    baseAmount: 5000,
+    percentage: 5,
+    idempotencyKey: `commission-http-${suffix}`,
+  });
+  assert.equal(commission.status, 201, JSON.stringify(commission.body));
+  createdCommissionIds.push(commission.body.data.commission.id);
+
+  const withoutReason = await http('POST', `/finance/commissions/${commission.body.data.commission.id}/cancel`, {});
+  assert.equal(withoutReason.status, 400, JSON.stringify(withoutReason.body));
+  assert.equal(withoutReason.body.error?.code, 'FINANCE_COMMISSION_CANCEL_REASON_REQUIRED');
+
+  const cancelled = await http('POST', `/finance/commissions/${commission.body.data.commission.id}/cancel`, {
+    reason: `Contrato cancelado — teste HTTP ${suffix}`,
+  });
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+  assert.equal(cancelled.body.data.commission.status, 'CANCELLED');
+});
+
+test('Anomaly cases via HTTP: listar e resolver um caso real', async () => {
+  const anomalyCase = await withTenantTransaction(tenant, (transaction) =>
+    AnomalyCase.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        caseType: 'HTTP_TEST',
+        riskLevel: 'HIGH',
+        reason: 'Caso fictício criado direto pelo teste HTTP para provar list/resolve via rota real',
+        status: 'OPEN',
+      },
+      { transaction }
+    )
+  );
+  createdAnomalyCaseIds.push(anomalyCase.id);
+
+  const list = await http('GET', '/finance/anomaly-cases?status=OPEN&riskLevel=HIGH');
+  assert.equal(list.status, 200, JSON.stringify(list.body));
+  assert.ok(list.body.data.some((c) => c.id === anomalyCase.id));
+
+  const resolved = await http('POST', `/finance/anomaly-cases/${anomalyCase.id}/resolve`, {
+    resolutionNote: 'Falso positivo confirmado — teste HTTP',
+  });
+  assert.equal(resolved.status, 200, JSON.stringify(resolved.body));
+  assert.equal(resolved.body.data.status, 'RESOLVED');
+
+  const resolveAgain = await http('POST', `/finance/anomaly-cases/${anomalyCase.id}/resolve`, {});
+  assert.equal(resolveAgain.status, 409, JSON.stringify(resolveAgain.body));
 });
 
 // FIN-TS-011 (§20 do Caderno: "Reabrir — Usuário comum — Negado"): a rota já é protegida por

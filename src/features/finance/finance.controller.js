@@ -18,6 +18,7 @@ const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
 const chartOfAccountsService = require('./chartOfAccounts.service');
 const paymentIntentsService = require('./paymentIntents.service');
+const anomalyCasesService = require('./anomalyCases.service');
 const bankPaymentsService = require('./bankPayments.service');
 const intercompanyTransfersService = require('./intercompanyTransfers.service');
 const periodClosuresService = require('./periodClosures.service');
@@ -211,6 +212,28 @@ const listCommissionInstallments = catchAsync(async (req, res) => {
 const payCommissionInstallment = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     commissionsService.markInstallmentPaid(req.params.installmentId, req.body.financialEntryId, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+const cancelCommission = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    commissionsService.cancelCommission(req.params.id, req.body.reason, req.auth.userId, t)
+  );
+  return success(res, { data: result });
+});
+
+// --- Anomaly cases (GAP REAL CORRIGIDO: service completo existia, sem nenhuma rota HTTP —
+// toda anomalia detectada ficava invisível pra qualquer humano, só contada no relatório
+// semanal como um número solto, sem forma de abrir e ver qual caso é qual) ---
+const listAnomalyCases = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    anomalyCasesService.listAnomalyCases(t, { status: req.query.status, riskLevel: req.query.riskLevel })
+  );
+  return success(res, { data: items });
+});
+const resolveAnomalyCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    anomalyCasesService.resolveAnomalyCase(req.params.id, req.auth.userId, t, req.body.resolutionNote)
   );
   return success(res, { data: item });
 });
@@ -442,7 +465,8 @@ module.exports = {
   createBankTransaction, listBankTransactions, importBankStatement,
   matchReconciliation, listReconciliations, suggestReconciliationMatches,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
-  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment,
+  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission,
+  listAnomalyCases, resolveAnomalyCase,
   createOwnerRepasse, listOwnerRepasses, payOwnerRepasse,
   createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized,
 };

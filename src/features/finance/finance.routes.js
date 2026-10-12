@@ -60,6 +60,11 @@ financeRouter.post('/finance/approval-requests/:id/decide', requirePermission('f
 financeRouter.post('/finance/commissions', requirePermission('finance:create'), financeController.createCommission);
 financeRouter.get('/finance/commissions', requirePermission('finance:read'), financeController.listCommissions);
 financeRouter.get('/finance/commissions/:id/installments', requirePermission('finance:read'), financeController.listCommissionInstallments);
+financeRouter.post('/finance/commissions/:id/cancel', requirePermission('finance:update'), financeController.cancelCommission);
+
+// --- Anomaly cases (antifraude, §17/§19) ---
+financeRouter.get('/finance/anomaly-cases', requirePermission('finance:read'), financeController.listAnomalyCases);
+financeRouter.post('/finance/anomaly-cases/:id/resolve', requirePermission('finance:update'), financeController.resolveAnomalyCase);
 financeRouter.post('/finance/commission-installments/:installmentId/pay', requirePermission('finance:settle'), financeController.payCommissionInstallment);
 
 // Owner repasses
