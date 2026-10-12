@@ -41,15 +41,14 @@ legalRouter.get('/legal/contracts/:id/timeline', requirePermission('legal:read')
 legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:update'), requireRecentMfa, legalController.correctContractData);
 
 // Contract requirements (checklist documental por tipo — Caderno Anexo I "7. Checklist
-// documental"). NOTA DE AMBIENTE: depende de "legal"."contract_requirements" (migration
-// 20260101000291, pendente de rodar em ambiente com credencial de DDL — ver requirements.service.js).
+// documental"). Migration 20260101000291 já aplicada; o gate correspondente roda fail-closed
+// de verdade dentro de transitionContractStatus (ver requirements.service.js).
 legalRouter.post('/legal/contracts/:id/requirements/generate', requirePermission('legal:create'), legalController.generateContractRequirements);
 legalRouter.get('/legal/contracts/:id/requirements', requirePermission('legal:read'), legalController.listContractRequirements);
 legalRouter.patch('/legal/requirements/:requirementId', requirePermission('legal:update'), legalController.satisfyContractRequirement);
 
-// Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). NOTA DE
-// AMBIENTE: depende de "legal"."notices" (migration 20260101000292, pendente de rodar em
-// ambiente com credencial de DDL — ver notices.service.js).
+// Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). Migration
+// 20260101000292 já aplicada — módulo funcional ponta a ponta.
 legalRouter.post('/legal/notices', requirePermission('legal:create'), legalController.createNotice);
 legalRouter.get('/legal/notices', requirePermission('legal:read'), legalController.listNotices);
 legalRouter.get('/legal/notices/:id', requirePermission('legal:read'), legalController.getNotice);

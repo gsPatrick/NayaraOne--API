@@ -20,10 +20,10 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
  * uma SENSÍVEL (isLegallySensitive=true OU draftedByAi=true) é OBRIGADA a passar por
  * PENDING_REVIEW -> APPROVED por um humano antes de SENT — nunca enviada direto.
  *
- * NOTA DE AMBIENTE (07/10/2026): depende da tabela "legal"."notices" (migration 20260101000292),
- * AINDA NÃO aplicada neste banco (sem credencial de DDL disponível — ver nota em
- * src/models/Notice.js). Código pronto para uso assim que a migration rodar em um ambiente com
- * `nayara_migration`.
+ * A migration 20260101000292 (tabela "legal"."notices") já está aplicada neste banco —
+ * confirmado em verificação cética do Marco 5 (ver nota equivalente, já corrigida, em
+ * src/models/ContractRequirement.js/Guarantee.js). Módulo funcional de ponta a ponta,
+ * ver test/marco5.httpRoutes.test.js "notificação formal (seção 13)".
  */
 const CHANNELS = ['EMAIL', 'WHATSAPP', 'POSTAL_MAIL', 'IN_PERSON', 'OTHER'];
 const STATUSES = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SENT', 'DELIVERED', 'REJECTED'];
