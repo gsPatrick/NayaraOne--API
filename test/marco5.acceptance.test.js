@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const guaranteesService = require('../src/features/legal/guarantees.service');
@@ -140,6 +140,7 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
       { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `m522-${suffix}.pdf`, fileName: `contrato-${suffix}.pdf`, mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractVersionsService.createContractVersion(contract.id, { content: `M5-22 corpo ${suffix}`, documentFileId: file.id }, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
@@ -222,6 +223,7 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
       { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `loc20260002-${suffix}.pdf`, fileName: `contrato-${suffix}.pdf`, mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractVersionsService.createContractVersion(contract.id, { content: `LOC-2026-0002 corpo ${suffix}`, documentFileId: file.id }, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);

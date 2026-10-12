@@ -20,7 +20,7 @@ const crypto = require('crypto');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
@@ -128,7 +128,8 @@ async function createLeaseWithParties(transaction) {
 
 async function createContractWithVersion(transaction, content) {
   const { contract, landlord, lessee } = await createLeaseWithParties(transaction);
-  await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   const file = await createDocumentFile(transaction);
   const version = await contractVersionsService.createContractVersion(
     contract.id,
@@ -710,6 +711,7 @@ test('ADV-L16: cláusula DESATIVADA vinculada a um template não entra no docume
 
     // E o hash da versão gerada a partir do modelo reflete APENAS o texto vigente.
     const { contract } = await createLeaseWithParties(transaction);
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
@@ -754,6 +756,12 @@ test('ADV-L17: duas transações simultâneas transicionando o MESMO contrato pa
       const lessee = await createPerson(t, 'ADV-L17 Locatário');
       await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, t);
       await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, t);
+      // Resolve o checklist documental ANTES da corrida: os dois alvos (DOCUMENTS_PENDING e
+      // CANCELLED) passam pelo mesmo gate genérico (assertDocumentRequirementsGate), que agora
+      // gera o checklist automaticamente se ainda não existir — sem isso, as duas transações
+      // concorrentes disputariam a própria criação do checklist, o que é um teste de corrida
+      // DIFERENTE do que ADV-L17 quer isolar (a corrida da máquina de estados em si).
+      await waiveAllContractRequirements(contract.id, tenant.userId, t);
       return contract;
     });
     contractId = criado.id;
@@ -807,6 +815,7 @@ test('ADV-L17: duas transações simultâneas transicionando o MESMO contrato pa
   } finally {
     if (contractId) {
       await withCommittedTenantTransaction(async (t) => {
+        await sequelize.query('DELETE FROM legal.contract_requirements WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
         await sequelize.query('DELETE FROM legal.contract_parties WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
         await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
       });
@@ -842,7 +851,8 @@ test('ADV-L18: duas criações de versão simultâneas do MESMO contrato nunca e
       const lessee = await createPerson(t, 'ADV-L18 Locatário');
       await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, t);
       await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, t);
-      await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, t);
+      await waiveAllContractRequirements(contract.id, tenant.userId, t);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, t);
       return contract;
     });
     contractId = criado.id;
@@ -885,6 +895,11 @@ test('ADV-L18: duas criações de versão simultâneas do MESMO contrato nunca e
       await withCommittedTenantTransaction(async (t) => {
         await sequelize.query('DELETE FROM legal.contract_versions WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
         await sequelize.query('DELETE FROM legal.contract_parties WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
+        // FIX: desde que assertRequirementsSatisfied passou a gerar o checklist
+        // automaticamente, este teste (via waiveAllContractRequirements) passou a deixar
+        // linhas em legal.contract_requirements — o DELETE do contrato falhava com violação de
+        // FK sem limpar isso primeiro.
+        await sequelize.query('DELETE FROM legal.contract_requirements WHERE contract_id = :id', { replacements: { id: contractId }, transaction: t });
         await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
       });
     }

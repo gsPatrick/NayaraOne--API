@@ -130,6 +130,23 @@ async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, tr
   return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
 }
 
+// Dispensa todo o checklist documental (JUR-003/JUR-015) de um contrato, com motivo — para
+// testes que não são sobre o checklist em si, mas agora precisam resolvê-lo antes de avançar
+// o contrato além de DOCUMENTS_PENDING, já que assertRequirementsSatisfied passou a gerar e
+// cobrar o checklist automaticamente na primeira chamada (ver requirements.service.js). Chame
+// ANTES de transitionContractStatus(..., 'DOCUMENTS_PENDING', ...), nunca depois — o próprio
+// gate roda na transição de ENTRADA também.
+async function waiveAllContractRequirements(contractId, actorUserId, transaction) {
+  const requirementsService = require('../src/features/legal/requirements.service');
+  await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
+  const items = await requirementsService.listRequirements(contractId, transaction);
+  for (const item of items) {
+    if (item.status === 'PENDING') {
+      await requirementsService.satisfyRequirement(item.id, { waivedReason: 'Teste de regressão — fora do escopo deste cenário' }, actorUserId, transaction);
+    }
+  }
+}
+
 module.exports = {
   settleFinancialEntryWithApproval,
   sequelize,
@@ -139,4 +156,5 @@ module.exports = {
   uniqueSuffix,
   createTestCostCenter,
   createTestResultCenter,
+  waiveAllContractRequirements,
 };

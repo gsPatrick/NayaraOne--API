@@ -9,6 +9,7 @@ const personContactsService = require('../src/features/people/personContacts.ser
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
+const requirementsService = require('../src/features/legal/requirements.service');
 const AppError = require('../src/utils/AppError');
 const { File, TenantSetting } = require('../src/models');
 
@@ -96,12 +97,27 @@ async function createLeaseWithParties(transaction) {
   return contract;
 }
 
+// Dispensa todo o checklist documental (JUR-003/JUR-015) de um contrato, com motivo — usado
+// pelos testes abaixo que não são sobre o checklist em si (são sobre assinatura/versão), mas
+// agora precisam resolver o gate pra poder avançar, já que assertRequirementsSatisfied passou a
+// gerar e cobrar o checklist automaticamente (ver requirements.service.js).
+async function waiveAllRequirements(contractId, actorUserId, transaction) {
+  await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
+  const items = await requirementsService.listRequirements(contractId, transaction);
+  for (const item of items) {
+    if (item.status === 'PENDING') {
+      await requirementsService.satisfyRequirement(item.id, { waivedReason: 'Teste de regressão — fora do escopo deste cenário' }, actorUserId, transaction);
+    }
+  }
+}
+
 // Regressão do HOM-001 (homologação 28/08/2026): contrato virava ACTIVE sem nenhuma versão de
 // documento nem assinatura. Estes 3 testes travam exatamente o cenário que a cliente reportou.
 
 test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documento', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
@@ -120,6 +136,7 @@ test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documen
 test('HOM-001: contrato não avança para SIGNED sem todas as assinaturas confirmadas', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createFakeDocumentFile(transaction);
     await contractVersionsService.createContractVersion(contract.id, { content: 'HOMO QA — corpo do contrato de teste', documentFileId: file.id }, tenant.userId, transaction);
@@ -143,6 +160,7 @@ test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato 
     await clearSignatureSettings(transaction);
     const suffix = uniqueSuffix();
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createFakeDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(

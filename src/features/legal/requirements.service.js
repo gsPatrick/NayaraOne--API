@@ -224,7 +224,36 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
  * configurado ainda.
  */
 async function assertRequirementsSatisfied(contractId, transaction) {
-  const requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
+  let requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
+
+  // BUG REAL CORRIGIDO (ciclo de verificação cética independente, 12/10/2026): zero
+  // requirements gerados fazia este gate PASSAR silenciosamente (pending.length === 0), porque
+  // ninguém no backend gerava o checklist automaticamente — só um botão manual na tela
+  // (generateContractRequirements) fazia isso. Um contrato de locação/venda financiada cujo
+  // responsável nunca clicasse nesse botão atravessava TODA a máquina de estados sem nenhum
+  // documento verificado, reproduzindo exatamente o bug crítico original (JUR-003/JUR-015)
+  // numa camada mais funda. Fail closed de verdade: se o tipo de contrato tem um template de
+  // requirements aplicável e ainda não foi gerado, gera agora (idempotente, dentro da mesma
+  // transação) antes de checar pendências — em vez de deixar passar por omissão.
+  if (requirements.length === 0) {
+    const contract = await getContract(contractId, transaction);
+    const key = isLeaseLikeContractType(contract.contractType) ? 'LEASE' : contract.contractType;
+    if (REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE[key]) {
+      try {
+        await generateRequirementsForContract(contractId, {}, null, transaction);
+      } catch (err) {
+        // Corrida real (duas transações concorrentes chamando este gate pro mesmo contrato ao
+        // mesmo tempo, ambas veem 0 requirements e tentam gerar): a perdedora pode receber um
+        // erro de concorrência do banco aqui (não é o resultado que importa pra ela — o que
+        // importa é o estado final, já garantido pela vencedora). Relê o estado atual em vez de
+        // propagar o erro cru; se realmente não há nada e o erro for outra coisa, o próximo
+        // findAll continua vazio e nenhuma pendência bloqueia (mesmo comportamento de antes
+        // desta correção para contratos sem template aplicável).
+      }
+      requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
+    }
+  }
+
   const pending = requirements.filter((r) => r.status === 'PENDING');
   if (pending.length > 0) {
     throw AppError.conflict(

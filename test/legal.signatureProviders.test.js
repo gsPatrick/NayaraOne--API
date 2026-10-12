@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements } = require('./testHelpers');
 const settingsService = require('../src/features/settings/settings.service');
 const signaturesService = require('../src/features/legal/signatures.service');
 const { TenantSetting, File } = require('../src/models');
@@ -158,7 +158,8 @@ async function createLeaseWithSignedContract(transaction) {
   );
   await contractsService.addContractParty(contract.id, { personId: person.id, partyRole: 'TENANT' }, tenant.userId, transaction);
   await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
-  await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   // M5-07: criar versão de contrato agora exige o arquivo do documento já na criação
   // (default do tenant `legal.contract_version_requires_document` = true).
   const file = await File.create(

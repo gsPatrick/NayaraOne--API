@@ -17,7 +17,7 @@ const crypto = require('crypto');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const propertiesService = require('../src/features/properties/properties.service');
@@ -147,7 +147,8 @@ async function buildSignedLease(transaction, { withProperty = false } = {}) {
   await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
   await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, transaction);
 
-  await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   const file = await createDocumentFile(transaction);
   const version = await contractVersionsService.createContractVersion(
     contract.id,
@@ -183,6 +184,10 @@ test('M5-10: SIGNED forjado (sem documento nem assinatura) NÃO vira ACTIVE — 
       transaction
     );
     contract.status = 'SIGNED';
+    // Dispensa o checklist documental pra isolar exatamente o gate de ativação que este teste
+    // quer provar — sem isso, assertDocumentRequirementsGate (que roda em TODA transição, antes
+    // do gate de ativação) bloqueia primeiro com LEGAL_REQUIREMENTS_PENDING.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
 
     await assert.rejects(
       () => contractsService.transitionContractStatus(contract, 'ACTIVE', tenant.userId, transaction),
@@ -213,6 +218,7 @@ test('M5-10: contrato com documento mas com assinatura ainda PENDENTE não é at
     const lessee = await createPerson(transaction, 'M5-10 Locatário');
     await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
     await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, transaction);
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
@@ -499,6 +505,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     await contractsService.addContractParty(contract.id, { personId: guarantor.id, partyRole: 'GUARANTOR' }, tenant.userId, transaction);
 
     // 4) Versão com documento REAL (File) + hash verificável.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const contractFile = await createDocumentFile(transaction, 'e2e-lease');
     const content = `E2E — CONTRATO DE LOCAÇÃO ${suffix}\nAluguel: R$ 2.800,00`;
