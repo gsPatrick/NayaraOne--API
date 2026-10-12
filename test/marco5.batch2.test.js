@@ -250,7 +250,7 @@ test('M5-10: garantia cadastrada mas NENHUMA ACTIVE bloqueia a ativação; sem n
     const fiador = await createPerson(transaction, 'M5-10 Fiador');
     const guarantee = await guaranteesService.createGuarantee(
       comGarantia.contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, value: 7500 },
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, value: 7500, endsAt: new Date(Date.now() + 365 * 86400000) },
       tenant.userId,
       transaction
     );
@@ -517,7 +517,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     // 6) Garantia (fiador) ACTIVE.
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date() },
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date(), endsAt: new Date(Date.now() + 365 * 86400000) },
       tenant.userId,
       transaction
     );

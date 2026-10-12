@@ -109,7 +109,7 @@ test('replaceGuarantee: garantia antiga vira registro histórico (nunca apagada)
 
     const { oldGuarantee: updatedOld, newGuarantee } = await guaranteesService.replaceGuarantee(
       oldGuarantee.id,
-      { guaranteeType: 'INSURANCE', value: 1200, status: 'ACTIVE' },
+      { guaranteeType: 'INSURANCE', value: 1200, status: 'ACTIVE', endsAt: new Date(Date.now() + 365 * 86400000) },
       tenant.userId,
       transaction
     );
