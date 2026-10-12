@@ -120,6 +120,16 @@ test('releaseKeyDelivery libera normalmente com garantia ACTIVE válida', async 
     assert.equal(released.keysCount, 3);
     assert.equal(released.termSignedByPersonId, tenantPerson.id);
     assert.ok(released.termSignedAt);
+
+    // GAP REAL (verificação cética Marco 5, ciclo 4): o model KeyDelivery nunca declarava
+    // keysCount/keysIdentification/photosFileIds/termType/termSignedByPersonId/termSignedAt —
+    // a atribuição na instância passava na asserção acima mesmo sem persistir nada de verdade
+    // (Sequelize só grava atributo declarado). Reler do banco é o que de fato prova o fix.
+    const reloaded = await keyDeliveriesService.getKeyDelivery(keyDelivery.id, transaction);
+    assert.equal(reloaded.keysCount, 3);
+    assert.equal(reloaded.keysIdentification, '2 chaves + 1 controle');
+    assert.equal(reloaded.termSignedByPersonId, tenantPerson.id);
+    assert.ok(reloaded.termSignedAt);
   });
 });
 

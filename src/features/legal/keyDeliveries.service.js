@@ -42,16 +42,15 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
       deliveredAt: null,
       status: 'PENDING',
       notes: notes || null,
+      // FIX (ciclo cético Marco 5): a coluna já existe (migration 20260101000290) e agora está
+      // declarada no model — persistida direto na criação, não mais via atribuição pós-create
+      // sem save() (que nunca gravava nada de fato).
+      termType: termType || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
-  // NOTA DE AMBIENTE (ver migration 20260101000290, ainda não aplicada neste banco — mesma
-  // limitação documentada em src/models/Guarantee.js): "termType" fica em memória até a coluna
-  // existir fisicamente; não é persistido nem quebra o INSERT porque não é um atributo
-  // declarado no model KeyDelivery.
-  if (termType) keyDelivery.termType = termType;
 
   await registrarAuditoria(
     {
@@ -212,11 +211,11 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   keyDelivery.deliveredAt = new Date();
   keyDelivery.deliveredByUserId = actorUserId || null;
   keyDelivery.updatedBy = actorUserId || null;
-  // NOTA DE AMBIENTE (ver migration 20260101000290, ainda não aplicada neste banco): estes
-  // campos ficam em memória (refletidos no retorno/auditoria) até a coluna existir de fato —
-  // mesma limitação documentada em src/models/Guarantee.js/guarantees.service.js#replaceGuarantee.
+  // FIX (ciclo cético Marco 5): a coluna já existe (migration 20260101000290) e agora está
+  // declarada no model — `save()` abaixo persiste de verdade, antes ficava só em memória.
   keyDelivery.keysCount = Number(keysCount);
   keyDelivery.keysIdentification = keysIdentification || null;
+  keyDelivery.photosRequired = Boolean(photosRequired);
   keyDelivery.photosFileIds = Array.isArray(photosFileIds) ? photosFileIds : null;
   keyDelivery.termSignedByPersonId = termSignedByPersonId;
   keyDelivery.termSignedAt = new Date();
