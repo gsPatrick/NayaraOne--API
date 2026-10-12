@@ -310,6 +310,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.Guarantee.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.ContractRequirement.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.Contract.hasMany(db.ContractRequirement, { foreignKey: 'contract_id', as: 'requirements', constraints: false });
+  // AUD-016: associação faltante — necessária para evidencePackages.service.js montar a cadeia
+  // de custódia incluindo o documento que satisfez cada item do checklist.
+  db.ContractRequirement.belongsTo(db.File, { foreignKey: 'satisfied_by_file_id', as: 'satisfiedByFile', constraints: false });
   db.Notice.belongsTo(db.Contract, { foreignKey: 'contract_id', as: 'contract', constraints: false });
   db.Notice.belongsTo(db.LegalCase, { foreignKey: 'legal_case_id', as: 'legalCase', constraints: false });
   db.Guarantee.belongsTo(db.Person, { foreignKey: 'guarantor_person_id', as: 'guarantorPerson', constraints: false });

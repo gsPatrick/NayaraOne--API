@@ -18,6 +18,7 @@ const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
 const contractClausesService = require('./contractClauses.service');
+const contractTimelineService = require('./contractTimeline.service');
 const contractPdfService = require('./contractPdf.service');
 const requirementsService = require('./requirements.service');
 const noticesService = require('./notices.service');
@@ -79,6 +80,13 @@ const correctContractData = catchAsync(async (req, res) => {
 const listContractParties = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => contractsService.listContractParties(req.params.id, t));
   return success(res, { data: items });
+});
+// AUD-017 (JUR-012, "timeline consolidada"): aditivos + notificações + inadimplência +
+// reparos de um contrato, derivados na leitura das tabelas de origem (nunca uma cópia que
+// possa divergir).
+const getContractTimeline = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTimelineService.getContractTimeline(req.params.id, t));
+  return success(res, { data });
 });
 
 // --- Contract requirements (checklist documental por tipo) ---
@@ -598,6 +606,17 @@ const createEvidencePackage = catchAsync(async (req, res) => {
   );
   return success(res, { statusCode: 201, data: item });
 });
+// AUD-016 (JUR-010, "custódia de todos os anexos"): monta o dossiê automaticamente a partir
+// de TODO anexo conhecido do contrato vinculado ao processo, em vez de depender do usuário
+// lembrar de listar cada um manualmente.
+const createEvidencePackageFromContractAttachments = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.createEvidencePackageFromContractAttachments(req.params.id, req.auth.userId, t, {
+      extraManifestItems: req.body && req.body.extraManifestItems,
+    })
+  );
+  return success(res, { statusCode: 201, data: item });
+});
 const listEvidencePackages = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => evidencePackagesService.listEvidencePackages(req.params.id, t));
   return success(res, { data: items });
@@ -629,7 +648,7 @@ module.exports = {
   suspendContract, reactivateContract, terminateContract, closeContract,
   generateContractRequirements, listContractRequirements, satisfyContractRequirement,
   createNotice, listNotices, getNotice, submitNoticeForReview, approveNotice, rejectNotice, sendNotice, registerNoticeDeliveryEvidence,
-  addContractParty, listContractParties, correctContractData,
+  addContractParty, listContractParties, getContractTimeline, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
   createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause,
@@ -642,5 +661,5 @@ module.exports = {
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
-  createEvidencePackage, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
+  createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
 };

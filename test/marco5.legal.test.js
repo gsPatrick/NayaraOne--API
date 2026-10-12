@@ -552,6 +552,102 @@ test('M5-29: export do dossiê é verificável e a adulteração de qualquer cam
 });
 
 // ---------------------------------------------------------------------------
+// AUD-016 (JUR-010, "custódia de todos os anexos") — dossiê montado automaticamente a
+// partir de TODO anexo conhecido do contrato (versão, assinatura, checklist, vistoria)
+// ---------------------------------------------------------------------------
+
+test('AUD-016: createEvidencePackageFromContractAttachments inclui documento da versão, checklist satisfeito e mídia de vistoria — nada esquecido', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createContract(transaction);
+
+    // 1) Documento da versão do contrato.
+    const versionFile = await createFakeDocumentFile(transaction);
+    versionFile.checksumSha256 = 'hash-versao-contrato';
+    await versionFile.save({ transaction });
+    const version = await contractVersionsService.createContractVersion(
+      contract.id,
+      { content: `corpo do contrato ${uniqueSuffix()}`, documentFileId: versionFile.id },
+      tenant.userId,
+      transaction
+    );
+
+    // 2) Documento que satisfez um item do checklist (requirement).
+    const requirementFile = await createFakeDocumentFile(transaction);
+    requirementFile.checksumSha256 = 'hash-documento-checklist';
+    await requirementFile.save({ transaction });
+    const { ContractRequirement } = require('../src/models');
+    const requirement = await ContractRequirement.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        contractId: contract.id,
+        requirementCode: `DOC-TESTE-${uniqueSuffix()}`,
+        description: 'Documento de teste para custódia',
+        requirementType: 'DOCUMENT',
+        status: 'SATISFIED',
+        satisfiedByFileId: requirementFile.id,
+        satisfiedAt: new Date(),
+      },
+      { transaction }
+    );
+
+    // 3) Foto de um item de vistoria vinculada ao mesmo contrato.
+    const property = await propertiesService.createProperty(
+      { groupId: tenant.groupId, companyId: tenant.companyId, title: `Imóvel custódia ${uniqueSuffix()}`, internalCode: `CUST-${uniqueSuffix()}`, propertyType: 'RESIDENTIAL' },
+      tenant.userId,
+      transaction
+    );
+    const inspection = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractId: contract.id, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    const item = await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Piso', condition: 'GOOD' }, tenant.userId, transaction);
+    const mediaFile = await createFakeDocumentFile(transaction);
+    mediaFile.checksumSha256 = 'hash-foto-vistoria';
+    await mediaFile.save({ transaction });
+    await inspectionsService.attachInspectionItemMedia(item.id, { fileId: mediaFile.id, mediaType: 'PHOTO' }, tenant.userId, transaction);
+
+    // 4) Processo jurídico vinculado ao contrato.
+    const legalCase = await legalCasesService.createLegalCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, caseType: 'LITIGATION', summary: `Dossiê custódia ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+
+    const pkg = await evidencePackagesService.createEvidencePackageFromContractAttachments(legalCase.id, tenant.userId, transaction);
+
+    assert.equal(pkg.manifestJson.length, 3, 'os 3 anexos reais (versão, checklist, vistoria) entraram, sem precisar listar manualmente');
+    const types = pkg.manifestJson.map((m) => m.type).sort();
+    assert.deepEqual(types, ['CONTRACT_VERSION_DOCUMENT', 'INSPECTION_MEDIA', 'REQUIREMENT_DOCUMENT']);
+
+    const versionEntry = pkg.manifestJson.find((m) => m.type === 'CONTRACT_VERSION_DOCUMENT');
+    assert.equal(versionEntry.hash, 'hash-versao-contrato', 'hash real do arquivo, não inventado pelo chamador');
+    const requirementEntry = pkg.manifestJson.find((m) => m.type === 'REQUIREMENT_DOCUMENT');
+    assert.equal(requirementEntry.hash, 'hash-documento-checklist');
+    const mediaEntry = pkg.manifestJson.find((m) => m.type === 'INSPECTION_MEDIA');
+    assert.equal(mediaEntry.hash, 'hash-foto-vistoria');
+  });
+});
+
+test('AUD-016: processo sem contrato vinculado é rejeitado com erro claro (nada para montar)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const legalCase = await legalCasesService.createLegalCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Sem contrato ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => evidencePackagesService.createEvidencePackageFromContractAttachments(legalCase.id, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_EVIDENCE_PACKAGE_NO_CONTRACT');
+        return true;
+      }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // M5-21 — Responsabilidade pelo dano na vistoria
 // ---------------------------------------------------------------------------
 

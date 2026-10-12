@@ -35,6 +35,7 @@ legalRouter.post('/legal/contracts/:id/terminate', requirePermission('legal:appr
 legalRouter.post('/legal/contracts/:id/close', requirePermission('legal:approve'), legalController.closeContract);
 legalRouter.post('/legal/contracts/:id/parties', requirePermission('legal:create'), legalController.addContractParty);
 legalRouter.get('/legal/contracts/:id/parties', requirePermission('legal:read'), legalController.listContractParties);
+legalRouter.get('/legal/contracts/:id/timeline', requirePermission('legal:read'), legalController.getContractTimeline);
 // AUD-004: correção auditada de dados já gravados (não é a máquina de estados) — ação HIGH,
 // exige MFA recente e motivo obrigatório (ver correctContractData em contracts.service.js).
 legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:update'), requireRecentMfa, legalController.correctContractData);
@@ -139,6 +140,9 @@ legalRouter.patch('/legal/deadlines/:id', requirePermission('legal:update'), leg
 
 // Evidence packages
 legalRouter.post('/legal/cases/:id/evidence-packages', requirePermission('legal:create'), legalController.createEvidencePackage);
+// AUD-016 (JUR-010): monta o manifesto automaticamente a partir de todo anexo conhecido do
+// contrato — ordem antes de qualquer rota que capture :id solto, mesmo padrão já usado alhures.
+legalRouter.post('/legal/cases/:id/evidence-packages/auto', requirePermission('legal:create'), legalController.createEvidencePackageFromContractAttachments);
 legalRouter.get('/legal/cases/:id/evidence-packages', requirePermission('legal:read'), legalController.listEvidencePackages);
 legalRouter.get('/legal/evidence-packages/:id', requirePermission('legal:read'), legalController.getEvidencePackage);
 // M5-28/M5-29: export verificável do dossiê e leitura da cadeia de custódia.
