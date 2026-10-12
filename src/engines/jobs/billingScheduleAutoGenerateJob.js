@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, Contract, RentAdjustment, BillingSchedule } = require('../../models');
 const billingScheduleService = require('../../features/billing/billingSchedule.service');
+const { LEASE_LIKE_TYPES } = require('../../features/legal/contracts.service');
 
 /**
  * billingScheduleAutoGenerateJob — JUR-faltante (auditoria externa Nayara, 11/10/2026):
@@ -59,8 +60,10 @@ async function resolveCurrentRentAmount(contract, transaction) {
 async function generateBillingSchedulesInTransaction(transaction, { period = currentPeriod() } = {}) {
   const summary = { contractsChecked: 0, generated: 0, skipped: 0, errors: 0 };
 
+  // FIX AUD-015 (11/10/2026): contractType 'LEASE' deixou de ser o único código de locação —
+  // inclui também os subtipos LEASE_RESIDENTIAL/LEASE_COMMERCIAL/LEASE_SEASONAL/PROPERTY_ADMIN.
   const activeLeases = await Contract.findAll({
-    where: { contractType: 'LEASE', status: 'ACTIVE' },
+    where: { contractType: { [Op.in]: LEASE_LIKE_TYPES }, status: 'ACTIVE' },
     transaction,
   });
 

@@ -11,6 +11,7 @@ const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.ser
 const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
+const { isLeaseLikeContractType } = require('../legal/contracts.service');
 
 // PRODUTO SEPARADO de guaranteed_rent_contracts (ver guaranteedRent.service.js) — tabela e
 // fluxo próprios (eligibility -> proposal -> acceptance -> payment -> recovery), nunca
@@ -44,7 +45,10 @@ async function requestRentAdvance(payload, actorUserId, transaction) {
   }
   const contract = await Contract.findByPk(contractId, { transaction });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'RENT_ADVANCE_CONTRACT_NOT_FOUND');
-  if (contract.contractType !== 'LEASE' || contract.status !== 'ACTIVE') {
+  // FIX AUD-015 (11/10/2026): LEASE deixou de ser o único código de locação (ver
+  // contracts.service.js, subtipos LEASE_RESIDENTIAL/LEASE_COMMERCIAL/LEASE_SEASONAL/
+  // PROPERTY_ADMIN) — comparar com o literal 'LEASE' passou a rejeitar locação de verdade.
+  if (!isLeaseLikeContractType(contract.contractType) || contract.status !== 'ACTIVE') {
     throw AppError.unprocessable(
       'Antecipação de aluguel só é elegível para contratos de locação (LEASE) com status ACTIVE.',
       'RENT_ADVANCE_NOT_ELIGIBLE'

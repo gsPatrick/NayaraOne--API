@@ -8,10 +8,49 @@ const { publishContractStatusChanged } = require('./legalEvents.service');
 // M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
 // empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
 // createContract abaixo e migrations/20260101000237-add-construction_project_id-to-legal-contracts.js).
-const CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE', 'CONSTRUCTION'];
+//
+// FIX AUD-015 (auditoria externa Nayara, 11/10/2026): o Caderno (seção 3, "Tipos de
+// contrato") define 12 códigos específicos (SALE_CASH/SALE_FINANCED/SALE_TRADE/
+// SALE_INSTALLMENTS/LEASE_RESIDENTIAL/LEASE_COMMERCIAL/LEASE_SEASONAL/PROPERTY_ADMIN/
+// CONSTRUCTION/ADDENDUM/KEY_DELIVERY/USED_PROPERTY_DELIVERY), mas só os 4 genéricos
+// SALE/LEASE/SERVICE/CONSTRUCTION existiam — a auditora reproduziu exatamente isso
+// ("Apenas Venda, Locação e Prestação de serviço disponíveis"). ADDENDUM/KEY_DELIVERY/
+// USED_PROPERTY_DELIVERY já são tratados como entidades próprias no sistema
+// (contractAmendments/keyDeliveries/requirements com templates dedicados), não como
+// contractType de Contract — não duplicados aqui.
+//
+// Mantidos SALE/LEASE/SERVICE como aliases genéricos (dados já existentes e testes não
+// quebram), e ADICIONADOS os subtipos específicos que a auditora cobrou de verdade —
+// locação residencial/comercial/temporada e administração de imóvel (sem contrato de
+// locação por trás, só gestão) são o uso real do dia a dia da imobiliária.
+const CONTRACT_TYPES = [
+  'SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS',
+  'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
+  'PROPERTY_ADMIN',
+  'SERVICE', 'CONSTRUCTION',
+];
+
+// Subtipos de LOCAÇÃO/VENDA usam exatamente as mesmas regras de negócio (gate de partes,
+// billing, garantias, vistorias) do tipo genérico correspondente — só muda o código salvo e o
+// rótulo que o usuário escolhe. Qualquer checagem de "é um contrato de locação?" no resto do
+// sistema deve usar isLeaseLikeContractType()/isSaleLikeContractType(), não comparar com
+// 'LEASE'/'SALE' literal.
+const LEASE_LIKE_TYPES = ['LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL', 'PROPERTY_ADMIN'];
+const SALE_LIKE_TYPES = ['SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS'];
+function isLeaseLikeContractType(contractType) {
+  return LEASE_LIKE_TYPES.includes(contractType);
+}
+function isSaleLikeContractType(contractType) {
+  return SALE_LIKE_TYPES.includes(contractType);
+}
 
 // Prefixo de numeração por contractType — ver 20260101000177-create-legal-contract_number_sequences.js.
-const CONTRACT_NUMBER_PREFIX = { LEASE: 'LOC', SALE: 'VEN', SERVICE: 'SRV', CONSTRUCTION: 'OBR' };
+const CONTRACT_NUMBER_PREFIX = {
+  LEASE: 'LOC', LEASE_RESIDENTIAL: 'LOC', LEASE_COMMERCIAL: 'LOC', LEASE_SEASONAL: 'LOC',
+  PROPERTY_ADMIN: 'ADM',
+  SALE: 'VEN', SALE_CASH: 'VEN', SALE_FINANCED: 'VEN', SALE_TRADE: 'VEN', SALE_INSTALLMENTS: 'VEN',
+  SERVICE: 'SRV', CONSTRUCTION: 'OBR',
+};
 
 /**
  * generateContractNumber — gera o próximo número no formato "{PREFIXO}-{ANO}-{SEQ:04d}"
@@ -92,7 +131,15 @@ const VALID_TRANSITIONS = {
 // dos party_role documentados em ContractParty: LANDLORD|TENANT|GUARANTOR|BUYER|SELLER):
 const REQUIRED_ROLES_BY_TYPE = {
   LEASE: ['LANDLORD', 'TENANT'],
+  LEASE_RESIDENTIAL: ['LANDLORD', 'TENANT'],
+  LEASE_COMMERCIAL: ['LANDLORD', 'TENANT'],
+  LEASE_SEASONAL: ['LANDLORD', 'TENANT'],
+  PROPERTY_ADMIN: ['LANDLORD'], // administração: imobiliária gerencia o imóvel do proprietário, sem locatário fixo no próprio contrato.
   SALE: ['SELLER', 'BUYER'],
+  SALE_CASH: ['SELLER', 'BUYER'],
+  SALE_FINANCED: ['SELLER', 'BUYER'],
+  SALE_TRADE: ['SELLER', 'BUYER'],
+  SALE_INSTALLMENTS: ['SELLER', 'BUYER'],
   SERVICE: [], // prestação de serviço não tem papéis fixos definidos no doc — sem gate de partes.
 };
 
@@ -701,4 +748,8 @@ module.exports = {
   VALID_TRANSITIONS,
   REQUIRED_ROLES_BY_TYPE,
   CONTRACT_NUMBER_PREFIX,
+  LEASE_LIKE_TYPES,
+  SALE_LIKE_TYPES,
+  isLeaseLikeContractType,
+  isSaleLikeContractType,
 };

@@ -21,7 +21,12 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  * isso explícito evita acoplar a geração de documento à máquina de estados do contrato.
  */
 
-const TEMPLATE_CONTRACT_TYPES = ['SALE', 'LEASE', 'SERVICE'];
+// FIX AUD-015 (11/10/2026): mesma expansão de subtipos de contratos.service.js#CONTRACT_TYPES.
+const TEMPLATE_CONTRACT_TYPES = [
+  'SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS',
+  'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
+  'PROPERTY_ADMIN', 'SERVICE',
+];
 
 async function createTemplate(payload, actorUserId, transaction) {
   const { groupId, companyId, name, contractType } = payload;
