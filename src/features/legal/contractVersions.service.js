@@ -67,7 +67,7 @@ function computeContentHash(content) {
 
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { content, documentFileId, effectiveFrom, templateId } = payload;
+  const { content, documentFileId, effectiveFrom, templateId, clauseVersionIds } = payload;
   // FIX AUD-008 (homologação 09/09/2026): `content === undefined || content === null` deixava
   // passar `content: ""` (ou só espaços) como se fosse um documento real — o hash de uma
   // string vazia é um hash "válido" tecnicamente, mas não representa nenhum conteúdo de
@@ -137,6 +137,11 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       content: typeof content === 'string' ? content : JSON.stringify(content),
       contentHash: computeContentHash(content),
       templateId: templateId || null,
+      // GAP REAL (verificação cética Marco 5, §3): snapshot de rastreabilidade — se o
+      // chamador veio de renderTemplate() (contractTemplates.service.js), passa a lista
+      // `.clauses` direto como `clauseVersionIds`; caso contrário fica null (versão criada
+      // sem template, ex.: contrato de venda sem biblioteca de cláusulas).
+      clauseVersionIds: Array.isArray(clauseVersionIds) && clauseVersionIds.length ? clauseVersionIds : null,
       effectiveFrom: effectiveFrom || new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,

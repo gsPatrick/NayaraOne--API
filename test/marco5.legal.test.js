@@ -193,11 +193,32 @@ test('M5-01: renderTemplate monta o texto na ordem certa e ignora cláusula desa
     const file = await createFakeDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
       contract.id,
-      { content: rendered.content, documentFileId: file.id },
+      {
+        content: rendered.content,
+        documentFileId: file.id,
+        templateId: rendered.templateId,
+        clauseVersionIds: rendered.clauses.map((c) => ({
+          contractClauseId: c.contractClauseId,
+          code: c.code,
+          versionNumber: c.versionNumber,
+        })),
+      },
       tenant.userId,
       transaction
     );
     assert.ok(version.contentHash);
+
+    // GAP REAL (verificação cética, §3 do Caderno: "Versão gerada do contrato guarda
+    // template_version_id, clause_version_ids e conteúdo/hash final") — rastreabilidade de
+    // QUAL versão exata de cada cláusula entrou no documento, mesmo que a cláusula seja
+    // editada (nova linha append-only) depois.
+    assert.equal(version.templateId, template.id);
+    assert.equal(version.clauseVersionIds.length, 2);
+    assert.deepEqual(
+      version.clauseVersionIds.map((c) => c.code),
+      [clauseA.code, clauseB.code]
+    );
+    assert.equal(version.clauseVersionIds[0].versionNumber, clauseA.versionNumber);
   });
 });
 
