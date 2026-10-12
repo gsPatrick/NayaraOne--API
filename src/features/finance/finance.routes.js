@@ -49,6 +49,7 @@ financeRouter.post('/finance/bank-transactions/import', requirePermission('finan
 // Reconciliation
 financeRouter.post('/finance/reconciliations', requirePermission('finance:reconcile'), financeController.matchReconciliation);
 financeRouter.get('/finance/reconciliations', requirePermission('finance:read'), financeController.listReconciliations);
+financeRouter.get('/finance/bank-transactions/:id/reconciliation-suggestions', requirePermission('finance:read'), financeController.suggestReconciliationMatches);
 
 // Approvals (maker-checker)
 financeRouter.post('/finance/approval-requests', requirePermission('finance:create'), financeController.createApprovalRequest);

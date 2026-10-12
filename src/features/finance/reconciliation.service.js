@@ -308,7 +308,15 @@ function sameCounterparty(bankTx, candidate) {
 }
 
 function withinDateWindow(bankTx, candidate) {
-  const reference = candidate.dueAt || candidate.createdAt;
+  // BUG REAL CORRIGIDO (verificação cética adicional, Marco 4, 12/10/2026): o model
+  // FinancialEntry (ver src/models/FinancialEntry.js) declara `createdAt: 'created_at'` em
+  // conjunto com `underscored: true`, e nesta versão do Sequelize isso faz o ATRIBUTO em si se
+  // chamar `created_at` (dataValues só tem a chave `created_at`, nunca `createdAt`) — então
+  // `candidate.createdAt` (e até `candidate.get('createdAt')`, que resolve pelo nome lógico do
+  // atributo) eram sempre `undefined` para qualquer lançamento sem `dueAt` preenchido, fazendo
+  // `dateMatch` nunca bater e a classe EXATO ficar praticamente inatingível (score travava em
+  // 0.9, nunca em 1.0). Lendo a chave real `created_at` diretamente.
+  const reference = candidate.dueAt || candidate.created_at || candidate.get?.('created_at');
   if (!bankTx.transactionDate || !reference) return false;
   const diffMs = Math.abs(new Date(bankTx.transactionDate).getTime() - new Date(reference).getTime());
   return diffMs <= DATE_WINDOW_DAYS * 24 * 60 * 60 * 1000;

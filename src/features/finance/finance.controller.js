@@ -161,6 +161,17 @@ const listReconciliations = catchAsync(async (req, res) => {
   );
   return success(res, { data: items });
 });
+// GAP REAL (verificação cética adicional, Marco 4, 12/10/2026): suggestReconciliationMatches —
+// o motor de classificação EXATO/FORTE/PROVÁVEL/AMBÍGUO/SEM CORRESPONDÊNCIA exigido pelo
+// Caderno (§11) já existia inteiro no service, mas nunca tinha rota — a tela de conciliação
+// bypassava a engine inteira e fazia match ingênuo só por valor exato no front. Só sugere,
+// nunca executa (ver reconciliation.service.js#suggestReconciliationMatches).
+const suggestReconciliationMatches = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    reconciliationService.suggestReconciliationMatches(req.params.id, t)
+  );
+  return success(res, { data: result });
+});
 
 // --- Approvals (maker-checker) ---
 const createApprovalRequest = catchAsync(async (req, res) => {
@@ -429,7 +440,7 @@ module.exports = {
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
   clearFinancialEntryManualReview,
   createBankTransaction, listBankTransactions, importBankStatement,
-  matchReconciliation, listReconciliations,
+  matchReconciliation, listReconciliations, suggestReconciliationMatches,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
   createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment,
   createOwnerRepasse, listOwnerRepasses, payOwnerRepasse,
