@@ -145,3 +145,22 @@ test('Marco 4 ponta a ponta via HTTP real: plano de contas -> centros -> lançam
   assert.equal(typeof health.body.data.freeCash.value, 'number');
   assert.ok(Array.isArray(health.body.data.marginBySector));
 });
+
+// FIN-TS-011 (§20 do Caderno: "Reabrir — Usuário comum — Negado"): a rota já é protegida por
+// requirePermission('finance:approve') (finance.routes.js), mas nenhum teste provava isso pela
+// camada HTTP real — verificação cética final do Marco 4 (11/10/2026).
+test('FIN-TS-011: POST /finance/period-closures/reopen responde 403 para usuário sem finance:approve', async () => {
+  const commonUserToken = signAccessToken({
+    sub: tenant.userId,
+    group_id: tenant.groupId,
+    company_id: tenant.companyId,
+    roles: ['member'],
+    permissions: ['finance:read'],
+  });
+  const res = await fetch(`${baseUrl}/finance/period-closures/reopen`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${commonUserToken}` },
+    body: JSON.stringify({ companyId: tenant.companyId, referenceMonth: '2031-01', reason: 'tentativa usuário comum' }),
+  });
+  assert.equal(res.status, 403);
+});
