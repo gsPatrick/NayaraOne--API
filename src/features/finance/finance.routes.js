@@ -33,6 +33,9 @@ financeRouter.delete('/finance/bank-accounts/:id', requirePermission('finance:ba
 // Financial entries (ledger / contas a pagar e receber)
 financeRouter.post('/finance/entries', requirePermission('finance:create'), financeController.createFinancialEntry);
 financeRouter.get('/finance/entries', requirePermission('finance:read'), financeController.listFinancialEntries);
+// Rotas estáticas ANTES de /:id — senão Express casa "classification-pendings" como :id.
+financeRouter.get('/finance/entries/classification-pendings', requirePermission('finance:read'), financeController.listFinancialEntryClassificationPendings);
+financeRouter.post('/finance/entries/classification-pendings/:id/resolve', requirePermission('finance:update'), financeController.resolveFinancialEntryClassificationPending);
 financeRouter.get('/finance/entries/:id', requirePermission('finance:read'), financeController.getFinancialEntry);
 financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'), financeController.updateFinancialEntry);
 // Liquidação de lançamento é step-up MFA obrigatório (Caderno §3.3/3.4: "aprovação de
@@ -40,6 +43,7 @@ financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'),
 financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntry);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
+financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);
 
 // Bank transactions (extrato)
 financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), financeController.createBankTransaction);
@@ -50,6 +54,7 @@ financeRouter.post('/finance/bank-transactions/import', requirePermission('finan
 financeRouter.post('/finance/reconciliations', requirePermission('finance:reconcile'), financeController.matchReconciliation);
 financeRouter.get('/finance/reconciliations', requirePermission('finance:read'), financeController.listReconciliations);
 financeRouter.get('/finance/bank-transactions/:id/reconciliation-suggestions', requirePermission('finance:read'), financeController.suggestReconciliationMatches);
+financeRouter.post('/finance/bank-transactions/:id/auto-reconcile', requirePermission('finance:update'), financeController.autoReconcileSuggestion);
 
 // Approvals (maker-checker)
 financeRouter.post('/finance/approval-requests', requirePermission('finance:create'), financeController.createApprovalRequest);
@@ -61,6 +66,7 @@ financeRouter.post('/finance/commissions', requirePermission('finance:create'), 
 financeRouter.get('/finance/commissions', requirePermission('finance:read'), financeController.listCommissions);
 financeRouter.get('/finance/commissions/:id/installments', requirePermission('finance:read'), financeController.listCommissionInstallments);
 financeRouter.post('/finance/commissions/:id/cancel', requirePermission('finance:update'), financeController.cancelCommission);
+financeRouter.get('/finance/commissions/:id/adjustments', requirePermission('finance:read'), financeController.getCommissionAdjustments);
 
 // --- Anomaly cases (antifraude, §17/§19) ---
 financeRouter.get('/finance/anomaly-cases', requirePermission('finance:read'), financeController.listAnomalyCases);
@@ -71,6 +77,7 @@ financeRouter.post('/finance/commission-installments/:installmentId/pay', requir
 financeRouter.post('/finance/owner-repasses', requirePermission('finance:create'), financeController.createOwnerRepasse);
 financeRouter.get('/finance/owner-repasses', requirePermission('finance:read'), financeController.listOwnerRepasses);
 financeRouter.post('/finance/owner-repasses/:id/pay', requirePermission('finance:settle'), financeController.payOwnerRepasse);
+financeRouter.get('/finance/owner-repasses/:id/composition', requirePermission('finance:read'), financeController.getOwnerRepasseComposition);
 
 // Chart of accounts (plano de contas — M4-01). Conta nunca é excluída: DELETE aqui desativa.
 financeRouter.post('/finance/chart-of-accounts', requirePermission('finance:create'), financeController.createChartAccount);

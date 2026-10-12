@@ -126,6 +126,28 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
   );
   return success(res, { data: result });
 });
+// GAP REAL CORRIGIDO (ciclo de verificação Marco 4, 12/10/2026): settleFinancialEntryPartial
+// (recebimento parcial, FIN-TS-006) existia no service e era testada diretamente, mas nunca
+// tinha rota/controller — nenhum humano conseguia dar baixa parcial pela API/tela, só a baixa
+// total via settleFinancialEntry.
+const settleFinancialEntryPartial = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+// GAP REAL CORRIGIDO: fila de pendências de classificação (M4-contrato §10) existia no service,
+// sem rota — ninguém via nem resolvia essas pendências.
+const listFinancialEntryClassificationPendings = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => financialEntriesService.listClassificationPendings(t, req.query));
+  return success(res, { data: items });
+});
+const resolveFinancialEntryClassificationPending = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
 // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7): clearManualReview
 // (financeAntifraud.service.js) já existia e era usada internamente, mas nunca foi exposta por
 // rota nenhuma — um lançamento retido por antifraude não tinha como ser liberado pela API/tela,
@@ -170,6 +192,20 @@ const listReconciliations = catchAsync(async (req, res) => {
 const suggestReconciliationMatches = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) =>
     reconciliationService.suggestReconciliationMatches(req.params.id, t)
+  );
+  return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO: autoReconcileSuggestion existia no service (confirma EXATO/FORTE e já
+// concilia sozinho, igual o Caderno §11 pede — "Exato: auto confirmado"), mas nunca era chamada
+// de lugar nenhum, nem pela rota de sugestão nem internamente — morta. Classe AMBÍGUO/PROVÁVEL
+// nunca é auto-conciliada por esta rota (ela mesma recusa, ver reconciliation.service.js).
+const autoReconcileSuggestion = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    reconciliationService.autoReconcileSuggestion(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, bankTransactionId: req.params.id },
+      req.auth.userId,
+      t
+    )
   );
   return success(res, { data: result });
 });
@@ -221,6 +257,13 @@ const cancelCommission = catchAsync(async (req, res) => {
   );
   return success(res, { data: result });
 });
+// GAP REAL CORRIGIDO: getCommissionAdjustments (histórico de ajustes/cancelamentos de uma
+// comissão) existia no service, sem rota — a tela de cancelar comissão não tinha como mostrar
+// o histórico de ajustes já feitos.
+const getCommissionAdjustments = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => commissionsService.getCommissionAdjustments(req.params.id, t));
+  return success(res, { data: items });
+});
 
 // --- Anomaly cases (GAP REAL CORRIGIDO: service completo existia, sem nenhuma rota HTTP —
 // toda anomalia detectada ficava invisível pra qualquer humano, só contada no relatório
@@ -252,6 +295,14 @@ const listOwnerRepasses = catchAsync(async (req, res) => {
 const payOwnerRepasse = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => ownerRepassesService.payOwnerRepasse(req.params.id, req.auth.userId, t));
   return success(res, { data: item });
+});
+// GAP REAL CORRIGIDO: getOwnerRepasseComposition (decomposição do valor em aluguel, taxa,
+// multa, consumo, manutenção, comissão/administração — Caderno §12 "extrato do proprietário
+// mostra composição, não apenas valor líquido") existia no service, sem rota — a tela de
+// repasses só mostrava o valor líquido final, violando essa regra explícita.
+const getOwnerRepasseComposition = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => ownerRepassesService.getOwnerRepasseComposition(req.params.id, t));
+  return success(res, { data: result });
 });
 
 // --- Chart of accounts (plano de contas — M4-01) ---
@@ -461,12 +512,13 @@ module.exports = {
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
-  clearFinancialEntryManualReview,
+  clearFinancialEntryManualReview, settleFinancialEntryPartial,
+  listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending,
   createBankTransaction, listBankTransactions, importBankStatement,
-  matchReconciliation, listReconciliations, suggestReconciliationMatches,
+  matchReconciliation, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
-  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission,
+  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments,
   listAnomalyCases, resolveAnomalyCase,
-  createOwnerRepasse, listOwnerRepasses, payOwnerRepasse,
+  createOwnerRepasse, listOwnerRepasses, payOwnerRepasse, getOwnerRepasseComposition,
   createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized,
 };

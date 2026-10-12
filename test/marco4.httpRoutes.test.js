@@ -20,9 +20,13 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '34593';
 
 const app = require('../app');
-const { getSeedTenant, uniqueSuffix, withTenantTransaction } = require('./testHelpers');
+const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase } = require('../src/models');
+const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase, Person, Property } = require('../src/models');
+const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const propertiesService = require('../src/features/properties/properties.service');
 
 let tenant;
 let baseUrl;
@@ -225,4 +229,155 @@ test('FIN-TS-011: POST /finance/period-closures/reopen responde 403 para usuári
     body: JSON.stringify({ companyId: tenant.companyId, referenceMonth: '2031-01', reason: 'tentativa usuário comum' }),
   });
   assert.equal(res.status, 403);
+});
+
+async function withCommitted(fn) {
+  const t = await seqHelper.transaction();
+  try {
+    await seqHelper.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+    await seqHelper.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+    await seqHelper.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+    const r = await fn(t);
+    await t.commit();
+    return r;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
+// GAP REAL CORRIGIDO (ciclo de verificação adicional, Marco 4, 12/10/2026 — varredura
+// função-por-função de todo src/features/finance/): 5 funções de service existiam, completas e
+// usadas em teste direto, mas NENHUMA tinha rota HTTP nem controller — settleFinancialEntryPartial
+// (FIN-TS-006, fora deste arquivo por exigir MFA, já provado em test/marco4.batch3.test.js),
+// listClassificationPendings/resolveClassificationPending, autoReconcileSuggestion (nunca
+// chamada de lugar nenhum, nem internamente — código morto),
+// getOwnerRepasseComposition e getCommissionAdjustments.
+test('GAP fechado via HTTP: fila de pendências de classificação é listável e resolvível pela rota', async () => {
+  const suffix = uniqueSuffix();
+  const pending = await withCommitted((t) =>
+    FinancialEntry.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        entryType: 'CREDIT',
+        nature: 'PENDING_CLASSIFICATION',
+        status: 'PENDING',
+        amount: 42.5,
+        description: `Excedente HTTP ${suffix}`,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction: t }
+    )
+  );
+  createdEntryIds.push(pending.id);
+
+  const list = await http('GET', '/finance/entries/classification-pendings');
+  assert.equal(list.status, 200, JSON.stringify(list.body));
+  assert.ok(list.body.data.some((e) => e.id === pending.id));
+
+  const resolve = await http('POST', `/finance/entries/classification-pendings/${pending.id}/resolve`, { finalNature: 'ADJUSTMENT' });
+  assert.equal(resolve.status, 200, JSON.stringify(resolve.body));
+  assert.equal(resolve.body.data.nature, 'ADJUSTMENT');
+  assert.equal(resolve.body.data.status, 'SETTLED');
+});
+
+test('GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EXATO, pela rota', async () => {
+  const suffix = uniqueSuffix();
+  const bankAccount = await withCommitted((t) =>
+    bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '237', accountNumber: `m4auto-${suffix.slice(-8)}` },
+      tenant.userId,
+      t
+    )
+  );
+  const externalId = `EXT-${suffix}`;
+  const resultCenter = await withCommitted((t) => createTestResultCenter(tenant, t));
+  // EXATO exige, ao mesmo tempo: mesmo valor, referência batendo pelo externalTransactionId ==
+  // idempotencyKey do lançamento, mesma bankAccountId (contraparte) e data dentro da janela —
+  // ver reconciliation.service.js#classifyMatch.
+  const entry = await http('POST', '/finance/entries', {
+    entryType: 'CREDIT',
+    nature: 'RECEIVABLE',
+    amount: 777.0,
+    description: `Recebimento conciliação HTTP ${suffix}`,
+    bankAccountId: bankAccount.id,
+    resultCenterId: resultCenter.id,
+    idempotencyKey: externalId,
+  });
+  assert.equal(entry.status, 201, JSON.stringify(entry.body));
+  createdEntryIds.push(entry.body.data.id);
+
+  const csvText = `externaltransactionid,transactiondate,description,amount\n${externalId},${new Date().toISOString().slice(0, 10)},Recebimento conciliação HTTP ${suffix},777.00\n`;
+  const imported = await http('POST', '/finance/bank-transactions/import', { bankAccountId: bankAccount.id, csvText });
+  assert.equal(imported.status, 201, JSON.stringify(imported.body));
+  const bankTransactionId = imported.body.data.imported[0].id;
+
+  const auto = await http('POST', `/finance/bank-transactions/${bankTransactionId}/auto-reconcile`, {});
+  assert.equal(auto.status, 200, JSON.stringify(auto.body));
+  assert.equal(auto.body.data.finalClass, 'EXACT', JSON.stringify(auto.body.data));
+  assert.equal(auto.body.data.autoReconciled, true, JSON.stringify(auto.body));
+  assert.equal(auto.body.data.reconciliation.financialEntryId, entry.body.data.id);
+});
+
+test('GAP fechado via HTTP: histórico de ajustes de comissão é consultável pela rota', async () => {
+  const suffix = uniqueSuffix();
+  const commission = await http('POST', '/finance/commissions', {
+    beneficiaryUserId: tenant.userId,
+    baseAmount: 2000,
+    percentage: 5,
+    idempotencyKey: `commission-http-${suffix}`,
+  });
+  assert.equal(commission.status, 201, JSON.stringify(commission.body));
+  createdCommissionIds.push(commission.body.data.commission.id);
+
+  const cancel = await http('POST', `/finance/commissions/${commission.body.data.commission.id}/cancel`, { reason: 'teste de rota HTTP' });
+  assert.equal(cancel.status, 200, JSON.stringify(cancel.body));
+
+  const adjustments = await http('GET', `/finance/commissions/${commission.body.data.commission.id}/adjustments`);
+  assert.equal(adjustments.status, 200, JSON.stringify(adjustments.body));
+  assert.ok(adjustments.body.data.length >= 1, JSON.stringify(adjustments.body));
+  assert.equal(adjustments.body.data[0].adjustmentType, 'CANCELLATION_REVERSAL');
+});
+
+test('GAP fechado via HTTP: composição do repasse de proprietário é consultável pela rota (Caderno §12)', async () => {
+  const suffix = uniqueSuffix();
+  const repasse = await withCommitted(async (t) => {
+    const owner = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `M4-comp HTTP ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction: t }
+    );
+    const property = await propertiesService.createProperty(
+      { groupId: tenant.groupId, companyId: tenant.companyId, title: `M4-comp Imóvel ${suffix}`, internalCode: `M4COMP-${suffix}`, propertyType: 'RESIDENTIAL' },
+      tenant.userId,
+      t
+    );
+    const resultCenter = await createTestResultCenter(tenant, t);
+    const recebimento = await financialEntriesService.createFinancialEntry(
+      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-comp aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      tenant.userId,
+      t
+    );
+    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, t);
+    return ownerRepassesService.createOwnerRepasse(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        propertyId: property.id,
+        ownerPersonId: owner.id,
+        sourceEntryIds: [recebimento.id],
+        deductionsAmount: 50,
+        idempotencyKey: `repasse-http-${suffix}`,
+      },
+      tenant.userId,
+      t
+    );
+  });
+
+  const composition = await http('GET', `/finance/owner-repasses/${repasse.id}/composition`);
+  assert.equal(composition.status, 200, JSON.stringify(composition.body));
+  assert.equal(composition.body.data.ownerRepasseId, repasse.id);
+  assert.ok(Array.isArray(composition.body.data.composition));
+  assert.ok(composition.body.data.composition.length >= 1, JSON.stringify(composition.body.data));
 });
