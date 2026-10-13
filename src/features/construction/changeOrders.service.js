@@ -83,23 +83,48 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
     throw AppError.badRequest('Esta obra não pertence à empresa/grupo informado.', 'CHANGE_ORDER_PROJECT_COMPANY_MISMATCH');
   }
 
-  const changeOrder = await ChangeOrder.create(
-    {
-      groupId,
-      companyId,
-      projectId,
-      reasonCode,
-      description,
-      budgetImpact: numericImpact,
-      scheduleImpactDays: scheduleImpactDays != null ? Number(scheduleImpactDays) : null,
-      evidenceFileIds: assertEvidenceFileIds(evidenceFileIds),
-      idempotencyKey,
-      status: 'PENDING_APPROVAL',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
-    },
-    { transaction }
-  );
+  // BUG REAL CORRIGIDO (verificação cética do Marco 6, 13/10/2026): a checagem de
+  // idempotencyKey acima (`ChangeOrder.findOne`) acontece ANTES do lock pessimista no Project —
+  // duas requisições concorrentes com a MESMA chave podem passar pelo findOne sem ver a
+  // criação uma da outra (nenhuma commitou ainda), e só a trava do Project serializa a partir
+  // daí. Reproduzido ao vivo com `Promise.allSettled` disparando 2 chamadas idênticas em
+  // paralelo: o índice único `change_orders_company_idempotency_unique` do banco sempre
+  // rejeitou a segunda tentativa de INSERT — sem este catch, isso vazaria como um
+  // SequelizeUniqueConstraintError cru (500) em vez de um erro de negócio tratado. Não dá para
+  // simplesmente reconsultar e devolver o registro vencedor NA MESMA transação (o Postgres
+  // aborta toda a transação após a violação, até rollback) — por isso a transação precisa ser
+  // refeita pelo chamador, igual ao mesmo padrão de corrida já usado em
+  // propertyOffers.service.js/person.service.js: erro de conflito claro, retry do cliente cria
+  // uma nova transação onde o findOne de idempotência no topo desta função já encontra o
+  // registro vencedor e devolve ele, sem duplicar nada.
+  let changeOrder;
+  try {
+    changeOrder = await ChangeOrder.create(
+      {
+        groupId,
+        companyId,
+        projectId,
+        reasonCode,
+        description,
+        budgetImpact: numericImpact,
+        scheduleImpactDays: scheduleImpactDays != null ? Number(scheduleImpactDays) : null,
+        evidenceFileIds: assertEvidenceFileIds(evidenceFileIds),
+        idempotencyKey,
+        status: 'PENDING_APPROVAL',
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Já existe um Change Order criado com esta mesma chave de idempotência (corrida concorrente detectada) — tente novamente.',
+        'CHANGE_ORDER_IDEMPOTENCY_RACE'
+      );
+    }
+    throw err;
+  }
 
   await registrarAuditoria(
     {
