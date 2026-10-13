@@ -21,6 +21,7 @@ const lossRecordsService = require('./lossRecords.service');
 const materialRequestsService = require('./materialRequests.service');
 const marginRulesService = require('./marginRules.service');
 const dashboardService = require('./dashboard.service');
+const slaRulesService = require('./slaRules.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -488,6 +489,18 @@ const approveWarrantyResolution = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- SLA de garantia (REG-OBR-002 — configurável via Motor de Regras, não por caso) ---
+const getActiveSlaRule = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    slaRulesService.getActiveSlaDaysMap(req.auth.groupId, req.auth.companyId, t, req.auth.userId)
+  );
+  return success(res, { data: item });
+});
+const createSlaRule = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => slaRulesService.createSlaRule(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+
 module.exports = {
   createProject,
   listProjects,
@@ -563,4 +576,6 @@ module.exports = {
   listMaterialRequests,
   receiveMaterialRequest,
   returnMaterialRequest,
+  getActiveSlaRule,
+  createSlaRule,
 };

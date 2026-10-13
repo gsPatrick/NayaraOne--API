@@ -171,4 +171,11 @@ constructionRouter.get('/construction/projects/:id/material-requests', requirePe
 constructionRouter.post('/construction/material-requests/:id/receive', requirePermission('construction:update'), constructionController.receiveMaterialRequest);
 constructionRouter.post('/construction/material-requests/:id/return', requirePermission('construction:update'), constructionController.returnMaterialRequest);
 
+// SLA de garantia (REG-OBR-002) — configuração de dias por severidade via Motor de Regras,
+// não um campo por caso (Caderno §9/§12: "Warranty SLA vencido → escalar", regra versionada,
+// não entrada manual por chamado). Re-auditoria 13/10/2026 (M6-R06) apontou corretamente que
+// não existia NENHUMA interface (nem rota) para configurar isso.
+constructionRouter.get('/construction/settings/sla-rule', requirePermission('construction:read'), constructionController.getActiveSlaRule);
+constructionRouter.post('/construction/settings/sla-rule', requirePermission('construction:approve'), constructionController.createSlaRule);
+
 module.exports = constructionRouter;
