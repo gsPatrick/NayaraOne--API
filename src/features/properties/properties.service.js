@@ -77,9 +77,20 @@ async function createProperty(payload, actorUserId, transaction) {
     parkingSpots,
     attributesJson,
   } = payload;
-  if (!groupId || !companyId || !title || !internalCode || !propertyType) {
+  // FIX (auditoria externa Nayara, re-auditoria round 2, M3-R01): a mensagem antiga sempre
+  // listava os 5 campos juntos, mesmo quando só 1 estava faltando — groupId/companyId são
+  // injetados pelo controller a partir da sessão e nunca aparecem no formulário, então listá-los
+  // como "obrigatórios no formulário" induzia a um diagnóstico errado. Agora a mensagem cita só
+  // o(s) campo(s) realmente ausente(s).
+  const missingFields = [];
+  if (!groupId) missingFields.push('groupId');
+  if (!companyId) missingFields.push('companyId');
+  if (!title) missingFields.push('title');
+  if (!internalCode) missingFields.push('internalCode');
+  if (!propertyType) missingFields.push('propertyType');
+  if (missingFields.length) {
     throw AppError.badRequest(
-      'Os campos "groupId", "companyId", "title", "internalCode" e "propertyType" são obrigatórios.',
+      `Campo(s) obrigatório(s) ausente(s): ${missingFields.join(', ')}.`,
       'PROPERTY_VALIDATION'
     );
   }
