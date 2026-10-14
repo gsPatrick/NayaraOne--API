@@ -111,6 +111,24 @@ async function assertNoIncompatibleActiveContracts(canonicalId, absorbedId, tran
 }
 
 async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
+  try {
+    return await mergePersonsInner(canonicalId, absorbedId, actorUserId, transaction);
+  } catch (err) {
+    // Rede de segurança (auditoria externa, 14/10/2026): qualquer violação de unicidade do
+    // Postgres NÃO prevista pelas checagens específicas acima (ex.: uma constraint nova
+    // adicionada no futuro em alguma das tabelas remapeadas) não deve nunca vazar como "erro
+    // de banco" cru pro usuário final — vira uma mensagem de negócio genérica, mas humana.
+    if (err?.name === 'SequelizeUniqueConstraintError' || err?.original?.code === '23505') {
+      throw AppError.unprocessable(
+        'Não foi possível concluir a mesclagem: um dos dados vinculados às duas pessoas entra em conflito ao ser unificado (ex.: mais de um endereço atual ou documento na mesma versão). Revise os cadastros e tente novamente.',
+        'PERSON_MERGE_UNIQUE_CONFLICT'
+      );
+    }
+    throw err;
+  }
+}
+
+async function mergePersonsInner(canonicalId, absorbedId, actorUserId, transaction) {
   if (!absorbedId) {
     throw AppError.badRequest('O campo "absorbedId" é obrigatório.', 'PERSON_MERGE_VALIDATION');
   }
@@ -186,7 +204,53 @@ async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
 
   await remapAndCount('people.person_roles', PersonRole, { personId: absorbedId });
   await remapAndCount('people.person_contacts', PersonContact, { personId: absorbedId });
+
+  // BUG REAL CORRIGIDO (auditoria externa, 14/10/2026): mesclar dois cadastros GENUINAMENTE
+  // duplicados (ambos com documentos/endereço reais, caso para o qual o merge existe) falhava
+  // com "violação de restrição de unicidade" crua do Postgres. Causa raiz: duas constraints
+  // únicas parciais/compostas que o remapeamento ingênuo (só trocar person_id) não respeitava:
+  //   - person_addresses_one_current_per_person_uk: no máximo 1 endereço is_current=true por
+  //     pessoa (migration 20260101000174). Se as duas pessoas tinham endereço atual, o
+  //     remapeamento criava 2 linhas is_current=true para o mesmo canônico.
+  //   - person_documents_person_id_document_type_version_no_key: unique(person_id,
+  //     document_type, version_no) (migration 20260101000086). Se as duas pessoas tinham
+  //     documento do mesmo tipo na mesma versão (ex.: ambas na v1), o remapeamento colidia.
+  // Fix: antes de remapear, resolver o conflito (demover o endereço atual duplicado; renumerar
+  // a versão do documento duplicado) em vez de deixar o banco recusar a operação inteira.
+  if (PersonDocument) {
+    const absorbedDocs = await PersonDocument.findAll({ where: { personId: absorbedId }, transaction });
+    for (const doc of absorbedDocs) {
+      const clash = await PersonDocument.findOne({
+        where: { personId: canonicalId, documentType: doc.documentType, versionNo: doc.versionNo },
+        transaction,
+      });
+      if (clash) {
+        const maxVersion = await PersonDocument.max('versionNo', {
+          where: { personId: canonicalId, documentType: doc.documentType },
+          transaction,
+        });
+        doc.versionNo = (maxVersion || 0) + 1;
+        await doc.save({ transaction });
+      }
+    }
+  }
   await remapAndCount('people.person_documents', PersonDocument, { personId: absorbedId });
+
+  if (PersonAddress) {
+    const canonicalHasCurrent = await PersonAddress.findOne({
+      where: { personId: canonicalId, isCurrent: true },
+      transaction,
+    });
+    if (canonicalHasCurrent) {
+      // O canônico já tem um endereço "atual" — o do absorvido não pode continuar marcado
+      // como atual depois do remapeamento (violaria o índice único parcial). Mantém o
+      // histórico (não apaga a linha), só deixa de ser o endereço corrente.
+      await PersonAddress.update(
+        { isCurrent: false },
+        { where: { personId: absorbedId, isCurrent: true }, transaction }
+      );
+    }
+  }
   await remapAndCount('people.person_addresses', PersonAddress, { personId: absorbedId });
   await remapAndCount('people.communication_consents', CommunicationConsent, { personId: absorbedId });
   await remapAndCount('real_estate.property_owners', PropertyOwner, { personId: absorbedId });

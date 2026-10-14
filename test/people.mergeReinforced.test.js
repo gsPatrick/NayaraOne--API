@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const personService = require('../src/features/people/person.service');
 const { mergePersons, reverseMergeSupervised } = require('../src/features/people/personMerge.service');
-const { AuditLog, OutboxEvent, Contract, ContractParty } = require('../src/models');
+const { AuditLog, OutboxEvent, Contract, ContractParty, PersonContact, PersonAddress } = require('../src/models');
 
 let tenant;
 
@@ -169,5 +169,56 @@ test('reverseMergeSupervised exige reason real e nunca é um "desfazer" trivial;
 
     const auditEntry = await AuditLog.findOne({ where: { action: 'person.merge.reversed_supervised', entityId: absorbed.id }, transaction });
     assert.ok(auditEntry, 'reversão supervisionada precisa gerar sua própria trilha de auditoria distinta');
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria externa, 14/10/2026): mesclar duas pessoas GENUINAMENTE
+// duplicadas (mesmo nome, mesmo telefone, mesmo endereço atual, ambas sem CPF/CNPJ) falhava
+// com "violação de restrição de unicidade" crua do Postgres — a funcionalidade não funcionava
+// justamente no caso para o qual ela existe. Causa: o remapeamento ingênuo de FK tentava
+// colocar 2 linhas "endereço atual" (is_current=true) para a mesma pessoa canônica, violando
+// o índice único parcial person_addresses_one_current_per_person_uk.
+test('mergePersons: duas pessoas genuinamente duplicadas (mesmo telefone e mesmo endereço atual) mesclam com sucesso, sem erro de unicidade', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const canonical = await personService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `Empresa Dup ${suffix} Ltda` },
+      tenant.userId,
+      transaction
+    );
+    const absorbed = await personService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `Empresa Dup ${suffix} Ltda` },
+      tenant.userId,
+      transaction
+    );
+
+    const sharedPhone = `7190000${suffix.slice(-4)}`;
+    await PersonContact.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: canonical.id, contactType: 'PHONE', valueNormalized: sharedPhone, isPrimary: true },
+      { transaction }
+    );
+    await PersonContact.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: absorbed.id, contactType: 'PHONE', valueNormalized: sharedPhone, isPrimary: true },
+      { transaction }
+    );
+
+    await PersonAddress.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: canonical.id, isCurrent: true, addressLine: 'Rua Duplicada, 1', city: 'Salvador', state: 'BA' },
+      { transaction }
+    );
+    await PersonAddress.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: absorbed.id, isCurrent: true, addressLine: 'Rua Duplicada, 1', city: 'Salvador', state: 'BA' },
+      { transaction }
+    );
+
+    const result = await mergePersons(canonical.id, absorbed.id, tenant.userId, transaction);
+    assert.equal(result.status, 'MERGED');
+    assert.equal(result.remappedReferences['people.person_addresses'], 1);
+
+    const canonicalCurrentAddresses = await PersonAddress.findAll({
+      where: { personId: canonical.id, isCurrent: true },
+      transaction,
+    });
+    assert.equal(canonicalCurrentAddresses.length, 1, 'não pode sobrar mais de 1 endereço atual pro canônico depois do merge');
   });
 });
