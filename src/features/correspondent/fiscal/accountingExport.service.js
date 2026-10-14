@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const { AccountingExportBatch, AccountingExportLine } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
@@ -14,6 +15,12 @@ function hashLines(lines) {
  * createExportBatch — "export/import contábil sempre por batch com hash" (citação literal do
  * Caderno). `lines` é a lista de lançamentos a exportar nesse período — cada linha referencia a
  * origem (`sourceType`/`sourceId`), nunca copia o dado pra um formato paralelo sem rastreio.
+ *
+ * Achado real (auditoria pós-DoD, Frente Financeiro/CRM, ciclo 3): nada impedia a MESMA origem
+ * (sourceType+sourceId) de entrar em dois batches diferentes — duplicaria o mesmo fato contábil
+ * na exportação. Agora rejeita, antes de criar qualquer coisa, se alguma linha da entrada já foi
+ * exportada como linha ORIGINAL (não-ajuste) em qualquer batch anterior desta empresa. Corrigir um
+ * valor já exportado é sempre via `adjustExportLine` (linha nova, nunca duplicação de origem).
  */
 async function createExportBatch(referencePeriod, lines, actorUserId, groupId, companyId, transaction) {
   if (!/^\d{4}-\d{2}$/.test(String(referencePeriod || ''))) {
@@ -21,6 +28,22 @@ async function createExportBatch(referencePeriod, lines, actorUserId, groupId, c
   }
   if (!Array.isArray(lines) || lines.length === 0) {
     throw AppError.badRequest('O batch precisa de ao menos uma linha.', 'ACCOUNTING_EXPORT_VALIDATION');
+  }
+
+  const duplicate = await AccountingExportLine.findOne({
+    where: {
+      groupId,
+      companyId,
+      adjustmentOfLineId: null,
+      [Op.or]: lines.map((l) => ({ sourceType: l.sourceType, sourceId: String(l.sourceId) })),
+    },
+    transaction,
+  });
+  if (duplicate) {
+    throw AppError.conflict(
+      `A origem "${duplicate.sourceType}:${duplicate.sourceId}" já foi exportada no batch ${duplicate.batchId}. Para corrigir um valor já exportado, use o ajuste (adjustExportLine) em vez de exportar de novo.`,
+      'ACCOUNTING_EXPORT_DUPLICATE_SOURCE'
+    );
   }
 
   const batchHash = hashLines(lines);

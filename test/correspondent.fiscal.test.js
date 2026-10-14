@@ -2,6 +2,7 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const nfseService = require('../src/features/correspondent/fiscal/nfse.service');
@@ -207,6 +208,52 @@ test('FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha no
 
     await originalLine.reload({ transaction });
     assert.equal(Number(originalLine.amount), originalAmountBefore); // linha original intocada
+  });
+});
+
+test('FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes (nunca duplica o fato contábil)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const sourceId = crypto.randomUUID();
+    await exportService.createExportBatch(
+      '2026-03',
+      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Comissão original' }],
+      tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    await assert.rejects(
+      () => exportService.createExportBatch(
+        '2026-04',
+        [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Mesma comissão, batch diferente' }],
+        tenant.userId, tenant.groupId, tenant.companyId, transaction
+      ),
+      (err) => {
+        assert.equal(err.code, 'ACCOUNTING_EXPORT_DUPLICATE_SOURCE');
+        return true;
+      }
+    );
+  });
+});
+
+test('FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a checagem de origem', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const sourceId = crypto.randomUUID();
+    const batch = await exportService.createExportBatch(
+      '2026-05',
+      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Comissão original' }],
+      tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    const { AccountingExportLine } = require('../src/models');
+    const [originalLine] = await AccountingExportLine.findAll({ where: { batchId: batch.id }, transaction });
+    // Ajuste cria uma linha nova com a MESMA origem (sourceType/sourceId) — não deve ser
+    // confundido como "exportação duplicada" por uma futura chamada de createExportBatch.
+    await exportService.adjustExportLine(originalLine.id, -100, 'Correção', tenant.userId, tenant.groupId, tenant.companyId, transaction);
+
+    const otherSourceId = crypto.randomUUID();
+    const secondBatch = await exportService.createExportBatch(
+      '2026-06',
+      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: otherSourceId, amount: 500, description: 'Comissão diferente' }],
+      tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    assert.ok(secondBatch.batchHash);
   });
 });
 
