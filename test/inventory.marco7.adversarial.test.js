@@ -21,7 +21,7 @@ const movementsService = require('../src/features/inventory/movements.service');
 const countsService = require('../src/features/inventory/counts.service');
 const lossCasesService = require('../src/features/inventory/lossCases.service');
 const filesService = require('../src/features/files/files.service');
-const { InventoryMovement, InventoryLossCase } = require('../src/models');
+const { InventoryMovement, InventoryLossCase, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -40,6 +40,17 @@ function withTenant(fields) {
 
 const approver = () => ({ userId: tenant.userId, canApprove: true });
 const operator = () => ({ userId: tenant.userId, canApprove: false });
+
+// EST-008 (auditoria Nayara, Marco 7, 14/10/2026): quem abre o inventário não pode aprovar o
+// próprio ajuste — para testar `applyAdjustment` com sucesso, o aprovador precisa ser alguém
+// diferente de quem abriu a contagem (tenant.userId).
+async function secondApprover(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-est-ts-09-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — EST-TS-09 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return { userId: user.id, canApprove: true };
+}
 
 async function createItemAndLocation(transaction, initialQty = 0) {
   const suffix = uniqueSuffix();
@@ -139,7 +150,9 @@ test('EST-TS-07 [ACHADO — FALHA ESPERADA até correção no service]: ADJUSTME
 // ---------------------------------------------------------------------------------------------
 
 test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só applyAdjustment (com inventory:approve) altera, via movimento ADJUSTMENT', async () => {
+  const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const approver2 = await secondApprover(suffix);
     const { item, location } = await createItemAndLocation(transaction, 10);
     const movementsBefore = await InventoryMovement.count({ where: { inventoryItemId: item.id }, transaction });
 
@@ -169,7 +182,7 @@ test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só 
     assert.deepEqual(await readBalanceRow(item.id, location.id, transaction), balanceBefore, 'applyAdjustment sem inventory:approve não altera o saldo');
 
     // Com alçada: ajuste efetivado via ledger.
-    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver(), transaction);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver2, transaction);
     assert.ok(adjusted.adjustmentMovementId, 'linha fica vinculada ao movimento de ajuste');
     assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 7, 'saldo só muda aqui, para o valor contado');
 
@@ -182,7 +195,7 @@ test('EST-TS-09: completeCount com divergência NÃO altera stock_balances; só 
     assert.ok(movement.reason && movement.reason.trim().length > 0, 'ajuste de contagem leva motivo');
 
     // Re-aplicar é idempotente (não debita de novo).
-    await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver(), transaction);
+    await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver2, transaction);
     assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 7, 're-aplicar o mesmo ajuste não duplica');
     assert.equal(await InventoryMovement.count({ where: { inventoryItemId: item.id, movementType: 'ADJUSTMENT' }, transaction }), 1);
   });

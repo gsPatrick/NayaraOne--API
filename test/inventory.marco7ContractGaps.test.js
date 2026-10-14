@@ -22,6 +22,7 @@ const {
   InventoryMovement,
   OutboxEvent,
   ResultCenter,
+  User,
 } = require('../src/models');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
@@ -45,6 +46,17 @@ before(async () => {
   approver = { userId: tenant.userId, canApprove: true };
   operator = { userId: tenant.userId, canApprove: false };
 });
+
+// EST-008 (auditoria Nayara, Marco 7, 14/10/2026): quem abre o inventário não pode aprovar o
+// próprio ajuste — testes que abrem contagem com tenant.userId e aplicam ajuste em seguida
+// precisam de um segundo usuário como aprovador.
+async function secondApprover(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-gap4-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — Gap4 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return { userId: user.id, canApprove: true };
+}
 
 after(async () => {
   await sequelize.close();
@@ -403,7 +415,9 @@ test('Gap 3 (§9): transferAsset recusa idempotencyKey com o prefixo reservado d
 // ---------------------------------------------------------------------------------------------
 
 test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é bloqueado; outros locais seguem livres; fechar libera', async () => {
+  const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const countApprover = await secondApprover(suffix);
     const frozen = await createLocation(transaction);
     const other = await createLocation(transaction);
     const item = await createItem(transaction);
@@ -438,7 +452,7 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
     assert.equal(Number(line.divergence), -2);
 
     // Fechada a contagem, o local volta a aceitar movimentos (incluindo o ajuste da divergência).
-    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver, transaction);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, countApprover, transaction);
     assert.ok(adjusted.adjustmentMovementId);
     await movementsService.recordMovement(withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 1, destinationLocationId: frozen.id }), approver, transaction);
     assert.equal(await movementsService.getBalance(item.id, frozen.id, tenant.groupId, tenant.companyId, transaction), 9);

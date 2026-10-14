@@ -18,7 +18,7 @@ const receiptsService = require('../src/features/inventory/receipts.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const countsService = require('../src/features/inventory/counts.service');
 const adjustmentRiskRules = require('../src/features/inventory/adjustmentRiskRules.service');
-const { File } = require('../src/models');
+const { File, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -36,6 +36,16 @@ function withTenant(fields) {
 }
 
 const actor = () => ({ userId: tenant.userId, canApprove: true });
+
+// EST-008 (auditoria Nayara, Marco 7, 14/10/2026): quem abre o inventário não pode aprovar o
+// próprio ajuste — testes de applyAdjustment via counts.service precisam de um segundo usuário.
+async function secondApprover(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-reg-est-002-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — REG-EST-002 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return { userId: user.id, canApprove: true };
+}
 
 async function createItemAndWarehouse(transaction) {
   const suffix = uniqueSuffix();
@@ -171,7 +181,9 @@ test('REG-EST-002: limiar é configurável via Motor de Regras (nova versão fec
 });
 
 test('REG-EST-002: ajuste de contagem (counts.service.js#applyAdjustment) de alto valor propaga evidenceFileId', async () => {
+  const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const approver = await secondApprover(suffix);
     const { item, location } = await createItemAndWarehouse(transaction);
     await receive(transaction, item, location, 100, 80); // averageCost 80
 
@@ -182,12 +194,12 @@ test('REG-EST-002: ajuste de contagem (counts.service.js#applyAdjustment) de alt
     const line = completed.items.find((l) => l.inventoryItemId === item.id);
 
     await assert.rejects(
-      () => countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, actor(), transaction),
+      () => countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver, transaction),
       (err) => err instanceof AppError && err.code === 'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
     );
 
     const file = await createFile(transaction);
-    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, actor(), transaction, file.id);
+    const adjusted = await countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver, transaction, file.id);
     assert.ok(adjusted.adjustmentMovementId, 'ajuste aplicado com sucesso ao informar evidenceFileId');
   });
 });

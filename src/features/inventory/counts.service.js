@@ -27,7 +27,7 @@ async function openCount(payload, actorUserId, transaction) {
   const location = await InventoryLocation.findByPk(locationId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!location) throw AppError.notFound('Local de estoque não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
   if (location.locationType === 'PROJECT_SITE' && !projectId) {
-    throw AppError.badRequest('Inventário num local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_COUNT_PROJECT_REQUIRED');
+    throw AppError.badRequest('Este local é um canteiro de obra e precisa estar vinculado a uma obra antes de abrir o inventário.', 'INVENTORY_COUNT_PROJECT_REQUIRED');
   }
   const alreadyOpen = await InventoryCount.findOne({ where: { locationId, status: 'OPEN' }, transaction });
   if (alreadyOpen) {
@@ -161,6 +161,30 @@ async function applyAdjustment(countItemId, groupId, companyId, actor, transacti
   }
 
   const count = await InventoryCount.findOne({ where: { id: line.countId, groupId, companyId }, transaction });
+
+  // ACHADO REAL (auditoria Nayara, Marco 7, 14/10/2026): EST-008 exige "motivo, evidência e
+  // aprovação" pro ajuste, e o Caderno testa explicitamente "ajuste sem aprovação falha" — mas
+  // antes desta correção, `inventory:approve` era checado sem nunca comparar contra quem abriu a
+  // contagem, então o mesmo usuário podia abrir o inventário E aplicar o próprio ajuste sozinho
+  // (igual ao gate já existente em Compras/Financeiro, aqui faltava). Bloqueia explicitamente
+  // quando o aprovador é a mesma pessoa que abriu a contagem.
+  if (count && count.createdBy && actor?.userId && count.createdBy === actor.userId) {
+    await registrarTentativaBloqueada(
+      {
+        groupId,
+        companyId,
+        actorUserId: actor.userId,
+        action: 'inventory.count.apply_adjustment',
+        entityType: 'InventoryCountItem',
+        entityId: countItemId,
+        beforeJson: { countItemId, countId: count.id, openedBy: count.createdBy },
+        reason: 'Quem abriu o inventário não pode aprovar o próprio ajuste (EST-008).',
+      },
+      transaction
+    );
+    throw AppError.forbidden('Quem abriu este inventário não pode aprovar o próprio ajuste — peça para outra pessoa com permissão de aprovação revisar.', 'INVENTORY_COUNT_SELF_APPROVAL_BLOCKED');
+  }
+
   const divergence = Number(line.divergence);
 
   const movement = await recordMovement(
