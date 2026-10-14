@@ -90,6 +90,15 @@ const SETTINGS_SCHEMA = {
   // lançamento financeiro arbitrário. Mesmo padrão já usado pro Clicksign
   // (legal.clicksign_webhook_secret) — um secret por tenant, HMAC-SHA256 do corpo bruto.
   'procurement.insurance_webhook_secret': { type: 'string', encrypted: true },
+  // Marco 8 — Correspondente Bancário + Financiamentos (Fase 0, ProviderAdapter). Mesmo padrão
+  // dos demais: "sandbox" é o default seguro, "manual" é o workflow assistido do Caderno
+  // ("Provider sem API usa workflow manual assistido"). Nenhum banco real integrado ainda nesta
+  // fase — quando a Nayara formalizar parceria com um banco/financeira, o nome entra aqui como
+  // novo valor de enum, igual Porto Seguro/Yelum entraram em procurement.insurance_provider.
+  'correspondent.financing_provider': { type: 'string', enum: ['sandbox', 'manual'] },
+  // Secret HMAC-SHA256 do webhook do provider sandbox (`verifyWebhook` em
+  // FinancingProviderAdapter.js) — mesmo padrão de procurement.insurance_webhook_secret.
+  'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
 };
 
 function validateAgainstSchema(key, value) {
