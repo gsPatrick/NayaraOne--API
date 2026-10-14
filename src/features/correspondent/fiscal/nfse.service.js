@@ -61,6 +61,18 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
     throw AppError.badRequest('O campo "description" é obrigatório.', 'NFSE_VALIDATION');
   }
 
+  // Deduplicação: já existe um pedido "em andamento" (não REJECTED/CANCELED) pra essa mesma
+  // origem? Retorna o existente em vez de criar um segundo — mesmo espírito da idempotência de
+  // submissão (Fase 5) e confirmação de comissão (Fase 8). Protegido também a nível de banco
+  // pelo índice único parcial `invoice_requests_source_dedup_unique`.
+  const existing = await InvoiceRequest.findOne({
+    where: { companyId, sourceType, sourceId, status: ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'] },
+    transaction,
+  });
+  if (existing) {
+    return existing;
+  }
+
   const invoiceRequest = await InvoiceRequest.create(
     {
       groupId,
