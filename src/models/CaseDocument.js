@@ -21,7 +21,10 @@ module.exports = (sequelize) => {
       version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
       classification: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'RESTRICTED' },
       supersededAt: { type: DataTypes.DATE, allowNull: true, field: 'superseded_at' },
+      expiresAt: { type: DataTypes.DATE, allowNull: true, field: 'expires_at' },
       uploadedBy: { type: DataTypes.UUID, allowNull: true, field: 'uploaded_by' },
+      duplicateOfDocumentId: { type: DataTypes.UUID, allowNull: true, field: 'duplicate_of_document_id' },
+      suggestedNote: { type: DataTypes.TEXT, allowNull: true, field: 'suggested_note' },
     },
     {
       schema: 'correspondent',

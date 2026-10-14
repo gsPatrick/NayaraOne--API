@@ -9,6 +9,28 @@ const INCOMPLETE_REQUIREMENT_STATUSES = ['PENDING', 'REJECTED', 'EXPIRED'];
 
 const DOCUMENT_TYPES = ['RG_CPF', 'COMPROVANTE_RENDA', 'COMPROVANTE_RESIDENCIA', 'MATRICULA_IMOVEL', 'CERTIDAO_ESTADO_CIVIL', 'IPTU', 'OUTRO'];
 
+// Tipos que normalmente chegam como documento escaneado/gerado (PDF) — uma foto solta costuma
+// significar que a pessoa fotografou a tela em vez de anexar o PDF oficial. Não é OCR/IA: é uma
+// heurística determinística e declarada como tal, só pra dar um alerta ao validador humano, que
+// segue sendo quem decide (status VALIDATED sempre exige ação humana).
+const DOCUMENT_TYPES_EXPECTING_PDF = ['COMPROVANTE_RENDA', 'MATRICULA_IMOVEL', 'CERTIDAO_ESTADO_CIVIL', 'IPTU'];
+
+/**
+ * buildSuggestedNote — sugestão heurística determinística (substituto honesto do "OCR/IA" do
+ * Caderno, que é fronteira explícita com o Marco 9/NAY generativa — fora de escopo aqui). Nunca
+ * bloqueia nada, só anota um alerta pro validador humano conferir com mais atenção.
+ */
+function buildSuggestedNote(documentType, file) {
+  const notes = [];
+  if (DOCUMENT_TYPES_EXPECTING_PDF.includes(documentType) && file.mimeType && file.mimeType.startsWith('image/')) {
+    notes.push('Arquivo enviado como imagem/foto, mas este tipo de documento normalmente é um PDF oficial — confirme se está legível e completo antes de validar.');
+  }
+  if (file.sizeBytes && file.sizeBytes < 10 * 1024) {
+    notes.push('Arquivo muito pequeno (menos de 10KB) — pode estar incompleto ou ilegível.');
+  }
+  return notes.length ? notes.join(' ') : null;
+}
+
 async function getCaseOrThrow(financingCaseId, groupId, companyId, transaction) {
   const financingCase = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
   if (!financingCase) {
@@ -106,7 +128,7 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
     throw AppError.notFound('Item de checklist (requirement) não encontrado para este caso.', 'CASE_REQUIREMENT_NOT_FOUND');
   }
 
-  const { fileId } = payload || {};
+  const { fileId, expiresAt } = payload || {};
   if (!fileId) {
     throw AppError.badRequest('"fileId" é obrigatório — envie o arquivo em "/files" primeiro e use o id retornado.', 'CASE_DOCUMENT_VALIDATION');
   }
@@ -123,6 +145,20 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
     await current.save({ transaction });
   }
 
+  // Sinaliza (nunca bloqueia) re-upload do MESMO conteúdo exato pro mesmo requirement — hash já
+  // calculado por files.service.js#uploadFile (checksumSha256), reusado aqui sem duplicar lógica.
+  let duplicateOfDocumentId = null;
+  if (file.checksumSha256) {
+    const previousVersions = await CaseDocument.findAll({
+      where: { requirementId },
+      include: [{ model: File, as: 'file', attributes: ['checksumSha256'], where: { checksumSha256: file.checksumSha256 } }],
+      transaction,
+    });
+    if (previousVersions.length > 0) {
+      duplicateOfDocumentId = previousVersions[0].id;
+    }
+  }
+
   const document = await CaseDocument.create(
     {
       groupId,
@@ -132,7 +168,10 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
       fileId,
       version: nextVersion,
       classification: 'RESTRICTED',
+      expiresAt: expiresAt || null,
       uploadedBy: actorUserId || null,
+      duplicateOfDocumentId,
+      suggestedNote: buildSuggestedNote(requirement.documentType, file),
     },
     { transaction }
   );
