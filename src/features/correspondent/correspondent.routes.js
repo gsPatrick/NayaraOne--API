@@ -7,6 +7,7 @@ const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
 const simulationsController = require('./cases/simulations.controller');
 const submissionsController = require('./cases/submissions.controller');
+const appraisalsController = require('./cases/appraisals.controller');
 const webhooksController = require('./webhooks.controller');
 
 const correspondentRouter = Router();
@@ -76,6 +77,19 @@ correspondentRouter.get(
   '/financing-cases/:id/status',
   requirePermission('correspondent:read'),
   webhooksController.getFinancingCaseStatus
+);
+
+// Fase 7 — appraisals (avaliação do imóvel). Mesmo nível de permissão de criar/ler o caso —
+// avaliação é puramente informativa, não precisa de permissão própria.
+correspondentRouter.post(
+  '/financing-cases/:id/appraisals',
+  requirePermission('correspondent:create'),
+  appraisalsController.createAppraisal
+);
+correspondentRouter.get(
+  '/financing-cases/:id/appraisals',
+  requirePermission('correspondent:read'),
+  appraisalsController.listAppraisals
 );
 
 module.exports = correspondentRouter;

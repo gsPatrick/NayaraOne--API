@@ -152,6 +152,7 @@ const modelDefiners = {
   ProviderStatusHistory: require('./ProviderStatusHistory'),
   WebhookInbox: require('./WebhookInbox'),
   ExternalCaseRouting: require('./ExternalCaseRouting'),
+  Appraisal: require('./Appraisal'),
   PurchaseRequest: require('./PurchaseRequest'),
   PurchaseRequestItem: require('./PurchaseRequestItem'),
   Quotation: require('./Quotation'),
@@ -263,6 +264,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
 
   db.FinancingCase.hasMany(db.ProviderSubmission, { foreignKey: 'financing_case_id', as: 'submissions', constraints: false });
   db.ProviderSubmission.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
+
+  db.FinancingCase.hasMany(db.Appraisal, { foreignKey: 'financing_case_id', as: 'appraisals', constraints: false });
+  db.Appraisal.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
 
   db.FinancingCase.hasMany(db.ProviderStatusHistory, { foreignKey: 'financing_case_id', as: 'statusHistory', constraints: false });
   db.ProviderStatusHistory.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });

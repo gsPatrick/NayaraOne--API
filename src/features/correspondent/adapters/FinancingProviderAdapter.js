@@ -119,8 +119,26 @@ class SandboxFinancingProviderAdapter {
     return { externalDocumentId: `sandbox-doc-${req?.idempotencyKey || Date.now()}`, raw: { sandbox: true, req } };
   }
 
+  // Determinístico, como os demais métodos sandbox: sem worker/fila assíncrona nesta fase
+  // (mesma simplificação já documentada na Fase 5 de submissões), a avaliação "conclui" na hora,
+  // com um valor calculado a partir do valor de referência informado (±3%, variação fixa por
+  // hash do idempotencyKey — nunca aleatório de verdade, pra o teste poder reproduzir o valor
+  // exato). Puramente informativo: quem chama este método NUNCA deve escrever `value` de volta
+  // no imóvel/oferta (invariante do Caderno).
   async requestAppraisal(req) {
-    return { externalId: `sandbox-appraisal-${req?.idempotencyKey || Date.now()}`, status: 'REQUESTED', raw: { sandbox: true, req } };
+    const externalId = `sandbox-appraisal-${req?.idempotencyKey || Date.now()}`;
+    const referenceValue = Number(req?.referenceValue) || 0;
+    const seed = String(req?.idempotencyKey || externalId)
+      .split('')
+      .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const variancePct = ((seed % 7) - 3) / 100; // -3% a +3%, determinístico
+    const value = referenceValue > 0 ? Number((referenceValue * (1 + variancePct)).toFixed(2)) : null;
+    return {
+      externalId,
+      status: 'COMPLETED',
+      value,
+      raw: { sandbox: true, req, variancePct },
+    };
   }
 
   // Sandbox aceita assinatura HMAC válida contra o secret de desenvolvimento configurado — não

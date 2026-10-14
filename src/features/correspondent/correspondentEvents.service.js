@@ -33,4 +33,48 @@ function publishSubmissionRequested(submission, transaction) {
   );
 }
 
-module.exports = { publishSubmissionRequested };
+/**
+ * publishAppraisalRequested / publishAppraisalCompleted — "appraisal.requested" /
+ * "appraisal.completed" (Caderno, Fase 9: lista de eventos mínimos). idempotencyKey reaproveita
+ * o id da appraisal + o evento, pra nunca duplicar mesmo se o service for chamado de novo.
+ */
+function publishAppraisalRequested(appraisal, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: appraisal.groupId,
+      companyId: appraisal.companyId,
+      aggregateType: 'Appraisal',
+      aggregateId: appraisal.id,
+      eventType: 'appraisal.requested',
+      payload: {
+        id: appraisal.id,
+        financingCaseId: appraisal.financingCaseId,
+        providerCode: appraisal.providerCode,
+      },
+      idempotencyKey: `appraisal.requested:${appraisal.id}`,
+    },
+    transaction
+  );
+}
+
+function publishAppraisalCompleted(appraisal, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: appraisal.groupId,
+      companyId: appraisal.companyId,
+      aggregateType: 'Appraisal',
+      aggregateId: appraisal.id,
+      eventType: 'appraisal.completed',
+      payload: {
+        id: appraisal.id,
+        financingCaseId: appraisal.financingCaseId,
+        providerCode: appraisal.providerCode,
+        requestedValue: appraisal.requestedValue,
+      },
+      idempotencyKey: `appraisal.completed:${appraisal.id}`,
+    },
+    transaction
+  );
+}
+
+module.exports = { publishSubmissionRequested, publishAppraisalRequested, publishAppraisalCompleted };
