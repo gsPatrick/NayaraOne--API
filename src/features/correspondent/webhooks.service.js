@@ -12,6 +12,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getDecryptedSetting } = require('../settings/settings.service');
 const { resolveFinancingProviderAdapterByCode } = require('./adapters/resolveFinancingProviderAdapter');
 const { shouldApplyTransition } = require('./statusMachine');
+const { publishFinancingStatusChanged } = require('./correspondentEvents.service');
+const { syncOpportunityFromFinancingCase } = require('./correspondentCrmSync.service');
 
 /**
  * resolveTenantByExternalId — o webhook só traz `externalCaseId` (do provider), nunca o
@@ -106,8 +108,9 @@ async function processFinancingWebhook(providerCode, rawBody, headers, body) {
 
     const normalizedStatus = adapter.normalizeProviderStatus(rawProviderStatus);
     const applied = normalizedStatus ? shouldApplyTransition(financingCase.status, normalizedStatus) : false;
+    const previousStatus = financingCase.status;
 
-    await ProviderStatusHistory.create(
+    const historyEntry = await ProviderStatusHistory.create(
       {
         groupId,
         companyId,
@@ -124,6 +127,17 @@ async function processFinancingWebhook(providerCode, rawBody, headers, body) {
     if (applied) {
       financingCase.status = normalizedStatus;
       await financingCase.save({ transaction });
+
+      // Caderno, Fase 9: "financing.status.changed" (+ approved/rejected/completed quando
+      // aplicável) e atualização da oportunidade de CRM via evento/audit log — só quando a
+      // transição é REALMENTE aplicada (nunca para status fora de ordem, que só ficam no
+      // histórico raw+normalized acima).
+      await publishFinancingStatusChanged(
+        financingCase,
+        { previousStatus, normalizedStatus, historyId: historyEntry.id },
+        transaction
+      );
+      await syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction);
     }
 
     await registrarAuditoria(

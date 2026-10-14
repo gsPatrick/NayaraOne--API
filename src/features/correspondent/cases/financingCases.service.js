@@ -4,6 +4,7 @@ const { FinancingCase, CaseApplicant, Person, Property } = require('../../../mod
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
+const { publishFinancingCaseCreated } = require('../correspondentEvents.service');
 
 const APPLICANT_ROLES = ['PRINCIPAL', 'CO_APPLICANT'];
 const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
@@ -15,7 +16,7 @@ const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
  * precisa ser PRINCIPAL.
  */
 async function createFinancingCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, providerCode, purpose, applicants } = payload;
+  const { groupId, companyId, propertyId, providerCode, purpose, applicants, opportunityId } = payload;
 
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCING_CASE_VALIDATION');
@@ -68,6 +69,7 @@ async function createFinancingCase(payload, actorUserId, transaction) {
       groupId,
       companyId,
       propertyId: propertyId || null,
+      opportunityId: opportunityId || null,
       providerCode: resolvedProviderCode,
       purpose: resolvedPurpose,
       status: 'DRAFT',
@@ -97,6 +99,8 @@ async function createFinancingCase(payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  await publishFinancingCaseCreated(financingCase, transaction);
 
   return getFinancingCase(financingCase.id, groupId, companyId, transaction);
 }

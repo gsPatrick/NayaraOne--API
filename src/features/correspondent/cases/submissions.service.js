@@ -6,7 +6,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { assertEligible } = require('../eligibility.service');
-const { publishSubmissionRequested } = require('../correspondentEvents.service');
+const { publishSubmissionRequested, publishFinancingSubmitted, publishIntegrationCorrespondentFailed } = require('../correspondentEvents.service');
 
 // DECISÃO DE ENGENHARIA — não especificado no Caderno com um número exato: tempo máximo que
 // esperamos o adapter responder antes de considerar a submissão "ambígua" (status UNKNOWN em vez
@@ -167,6 +167,7 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
 
     financingCase.status = 'SUBMITTED';
     await financingCase.save({ transaction });
+    await publishFinancingSubmitted(financingCase, submission, transaction);
 
     // Fase 6 (webhooks): grava o mapeamento externalCaseId -> tenant na tabela de roteamento
     // sem RLS (ver ExternalCaseRouting) — é assim que o webhook consegue descobrir o tenant
@@ -216,6 +217,14 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
       },
       transaction
     ).catch(() => {});
+
+    // "integration.correspondent.failed" (Caderno, Fase 9) — payload nunca inclui o corpo cru
+    // da exceção, só `submission.failureReason` (já sanitizado acima, nunca stack/detalhe técnico).
+    await publishIntegrationCorrespondentFailed(
+      financingCase,
+      { providerCode: financingCase.providerCode, reason: submission.failureReason, submissionId: submission.id },
+      transaction
+    );
     // Nunca relança como erro genérico 500 — UNKNOWN é um estado de negócio válido, não uma
     // falha da requisição em si; o chamador recebe a submission com status UNKNOWN no corpo 201.
   }

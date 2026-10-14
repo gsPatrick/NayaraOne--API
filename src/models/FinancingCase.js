@@ -15,6 +15,9 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       propertyId: { type: DataTypes.UUID, allowNull: true, field: 'property_id' },
+      // Oportunidade de CRM vinculada (opcional, Marco 8 Fase 9) — só referência; atualizada via
+      // evento/audit log (correspondentCrmSync.service.js), nunca escrita direta na Opportunity.
+      opportunityId: { type: DataTypes.UUID, allowNull: true, field: 'opportunity_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },

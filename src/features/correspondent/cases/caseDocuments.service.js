@@ -3,6 +3,9 @@
 const { FinancingCase, CaseRequirement, CaseDocument, File } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
+const { publishFinancingDocumentsCompleted } = require('../correspondentEvents.service');
+
+const INCOMPLETE_REQUIREMENT_STATUSES = ['PENDING', 'REJECTED', 'EXPIRED'];
 
 const DOCUMENT_TYPES = ['RG_CPF', 'COMPROVANTE_RENDA', 'COMPROVANTE_RESIDENCIA', 'MATRICULA_IMOVEL', 'CERTIDAO_ESTADO_CIVIL', 'IPTU', 'OUTRO'];
 
@@ -151,6 +154,19 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
     },
     transaction
   );
+
+  // Caderno, Fase 9: "financing.documents.completed" — emitido quando TODOS os requirements
+  // OBRIGATÓRIOS do case saem do estado incompleto (pelo menos SUBMITTED). Itens opcionais
+  // (required: false) nunca bloqueiam esse checklist.
+  const totalRequired = await CaseRequirement.count({ where: { financingCaseId, groupId, companyId, required: true }, transaction });
+  const pendingRequired = await CaseRequirement.count({
+    where: { financingCaseId, groupId, companyId, required: true, status: INCOMPLETE_REQUIREMENT_STATUSES },
+    transaction,
+  });
+  if (totalRequired > 0 && pendingRequired === 0) {
+    const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+    await publishFinancingDocumentsCompleted(financingCase, transaction);
+  }
 
   return document;
 }
