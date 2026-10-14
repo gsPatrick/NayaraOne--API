@@ -7,7 +7,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const simulationsService = require('../src/features/correspondent/cases/simulations.service');
 const eligibilityService = require('../src/features/correspondent/eligibility.service');
-const { Person, Simulation } = require('../src/models');
+const { Person, Simulation, Property } = require('../src/models');
 
 let tenant;
 
@@ -38,9 +38,27 @@ async function createCase(transaction, overrides = {}) {
       providerCode: overrides.providerCode || 'sandbox',
       purpose: overrides.purpose || 'RESIDENCIAL',
       applicants: [{ personId: principal.id, role: 'PRINCIPAL' }],
+      propertyId: overrides.propertyId || null,
     },
     tenant.userId,
     transaction
+  );
+}
+
+async function createPropertyWithState(transaction, state) {
+  const suffix = uniqueSuffix();
+  return Property.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      title: `Imóvel Eligibility ${suffix}`,
+      internalCode: `ELIG-${suffix}`,
+      propertyType: 'HOUSE',
+      state,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction }
   );
 }
 
@@ -146,5 +164,58 @@ test('CORRESPONDENT-ELIG-08: resolveEligibilityConfig semeia o padrão automatic
     assert.ok(ruleVersionId);
     assert.deepEqual(action.allowedProviders.sort(), ['manual', 'sandbox']);
     assert.equal(action.maxAmountByProvider.sandbox, 2000000);
+  });
+});
+
+test('CORRESPONDENT-ELIG-09: imóvel fora da UF habilitada para o provider é bloqueado com motivo claro', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await eligibilityService.publishProviderEligibilityVersion(
+      tenant.groupId,
+      tenant.companyId,
+      { ...eligibilityService.DEFAULT_ACTION, allowedStatesByProvider: { sandbox: ['SP', 'RJ'] } },
+      tenant.userId,
+      transaction
+    );
+    const property = await createPropertyWithState(transaction, 'MG');
+    const financingCase = await createCase(transaction, { propertyId: property.id });
+    await assert.rejects(
+      () => eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'COR_ELIGIBILITY_REGION_NOT_ALLOWED');
+        assert.match(err.message, /MG/);
+        return true;
+      }
+    );
+  });
+});
+
+test('CORRESPONDENT-ELIG-10: imóvel dentro da UF habilitada passa normalmente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await eligibilityService.publishProviderEligibilityVersion(
+      tenant.groupId,
+      tenant.companyId,
+      { ...eligibilityService.DEFAULT_ACTION, allowedStatesByProvider: { sandbox: ['SP', 'RJ'] } },
+      tenant.userId,
+      transaction
+    );
+    const property = await createPropertyWithState(transaction, 'SP');
+    const financingCase = await createCase(transaction, { propertyId: property.id });
+    const result = await eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    assert.equal(result.eligible, true);
+  });
+});
+
+test('CORRESPONDENT-ELIG-11: case sem propertyId vinculado nunca é bloqueado por região (não há como verificar)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await eligibilityService.publishProviderEligibilityVersion(
+      tenant.groupId,
+      tenant.companyId,
+      { ...eligibilityService.DEFAULT_ACTION, allowedStatesByProvider: { sandbox: ['SP', 'RJ'] } },
+      tenant.userId,
+      transaction
+    );
+    const financingCase = await createCase(transaction);
+    const result = await eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    assert.equal(result.eligible, true);
   });
 });
