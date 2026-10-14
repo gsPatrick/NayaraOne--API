@@ -9,7 +9,9 @@ const nfseService = require('../src/features/correspondent/fiscal/nfse.service')
 const dimobService = require('../src/features/correspondent/fiscal/dimob.service');
 const reconciliationService = require('../src/features/correspondent/fiscal/reconciliation.service');
 const exportService = require('../src/features/correspondent/fiscal/accountingExport.service');
-const { InvoiceRequest } = require('../src/models');
+const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
+const commissionsService = require('../src/features/correspondent/cases/commissionEntitlements.service');
+const { InvoiceRequest, Person } = require('../src/models');
 
 let tenant;
 let otherCompanyId;
@@ -145,6 +147,62 @@ test('FISCAL-DIMOB-03: RLS — batch de outra empresa não é encontrado', async
         return true;
       }
     );
+  });
+});
+
+test('FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEIVED, exclui EXPECTED e ADJUSTED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const year = 2012 + Math.floor(Math.random() * 5); // ano exclusivo, evita colidir com dado real
+    const principal = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Proponente DIMOB ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    const financingCase = await financingCasesService.createFinancingCase(
+      { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', applicants: [{ personId: principal.id, role: 'PRINCIPAL' }] },
+      tenant.userId, transaction
+    );
+
+    // Entitlement CONFIRMADO (RECEIVABLE) — deve entrar no dataset com o valor exato.
+    const confirmed = await commissionsService.createCommissionEntitlement(
+      financingCase.id, { baseAmount: 50000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    await commissionsService.confirmCommissionEntitlement(
+      confirmed.id, { externalConfirmationId: `dimob-conf-${uniqueSuffix()}` }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+
+    // Entitlement EXPECTED (nunca confirmado) — NÃO deve entrar (ainda não é renda recebível).
+    await commissionsService.createCommissionEntitlement(
+      financingCase.id, { baseAmount: 30000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+
+    // Entitlement ADJUSTED (confirmado e depois estornado) — NÃO deve entrar (receita revertida).
+    const adjusted = await commissionsService.createCommissionEntitlement(
+      financingCase.id, { baseAmount: 20000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    await commissionsService.confirmCommissionEntitlement(
+      adjusted.id, { externalConfirmationId: `dimob-adj-${uniqueSuffix()}` }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+    await commissionsService.chargebackCommissionEntitlement(
+      adjusted.id, 'Estornado para o teste de dataset DIMOB.', tenant.userId, tenant.groupId, tenant.companyId, transaction
+    );
+
+    // Usamos a data real (ano corrente, não `year` fictício) porque created_at é definido pelo
+    // banco no momento do INSERT — fixamos o teste no ano corrente em vez de tentar forjar created_at.
+    const currentYear = new Date().getUTCFullYear();
+    const dataset = await dimobService.buildDimobDataset(currentYear, tenant.groupId, tenant.companyId, transaction);
+
+    const confirmedRef = dataset.find((r) => r.sourceRefs.commissionEntitlementId === confirmed.id);
+    assert.ok(confirmedRef, 'o entitlement RECEIVABLE deveria estar no dataset');
+    assert.equal(confirmedRef.amount, Number((await commissionsService.listCommissionEntitlements(financingCase.id, tenant.groupId, tenant.companyId, transaction)).find((e) => e.id === confirmed.id).amount));
+
+    const adjustedRef = dataset.find((r) => r.sourceRefs.commissionEntitlementId === adjusted.id);
+    assert.equal(adjustedRef, undefined, 'entitlement ADJUSTED (estornado) nunca deveria aparecer no dataset DIMOB');
+
+    const allEntitlements = await commissionsService.listCommissionEntitlements(financingCase.id, tenant.groupId, tenant.companyId, transaction);
+    const expectedOne = allEntitlements.find((e) => e.status === 'EXPECTED');
+    assert.ok(expectedOne, 'deveria existir um entitlement ainda EXPECTED pra este teste fazer sentido');
+    const expectedRef = dataset.find((r) => r.sourceRefs.commissionEntitlementId === expectedOne.id);
+    assert.equal(expectedRef, undefined, 'entitlement EXPECTED (nunca confirmado) nunca deveria aparecer no dataset DIMOB');
   });
 });
 
