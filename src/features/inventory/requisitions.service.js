@@ -36,11 +36,11 @@ async function createRequisition(payload, actorUserId, transaction) {
   // ou etapa sem obra nenhuma). Mesmo padrão de materialRequests.service.js#createMaterialRequest.
   if (stageId) {
     if (!projectId) {
-      throw AppError.badRequest('"stageId" exige "projectId" (a etapa pertence a uma obra — EST-004).', 'INVENTORY_REQUISITION_VALIDATION');
+      throw AppError.badRequest('Informe a obra antes de escolher a etapa (a etapa pertence a uma obra).', 'INVENTORY_REQUISITION_VALIDATION');
     }
     const stage = await ProjectStage.findOne({ where: { id: stageId, projectId }, transaction });
     if (!stage) {
-      throw AppError.badRequest('"stageId" não corresponde a uma etapa desta obra.', 'INVENTORY_REQUISITION_STAGE_INVALID');
+      throw AppError.badRequest('A etapa escolhida não pertence à obra selecionada.', 'INVENTORY_REQUISITION_STAGE_INVALID');
     }
   }
 
@@ -56,10 +56,10 @@ async function createRequisition(payload, actorUserId, transaction) {
   // movements.service.js#recordMovement e counts.service.js#openCount).
   if (projectLocationId && !projectId) {
     const projectLocation = await InventoryLocation.findOne({ where: { id: projectLocationId, groupId, companyId }, transaction });
-    if (!projectLocation) throw AppError.notFound('Local de destino no canteiro (projectLocationId) não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
+    if (!projectLocation) throw AppError.notFound('Local de destino no canteiro não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
     if (projectLocation.locationType === 'PROJECT_SITE') {
       throw AppError.badRequest(
-        'Local de destino é de obra (PROJECT_SITE) — informe "projectId" (e, se aplicável, "stageId") para vincular a requisição à obra (EST-004).',
+        'O local de destino é um canteiro de obra — selecione a obra (e a etapa, se aplicável) para vincular a requisição.',
         'REQUISITION_PROJECT_LOCATION_REQUIRES_PROJECT'
       );
     }

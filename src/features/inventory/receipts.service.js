@@ -44,7 +44,7 @@ async function createReceipt(payload, actorUserId, transaction) {
   // fingerprint — não há documento pra "impressão digital".
   if ((invoiceNumber || supplierPersonId) && !invoiceFingerprint) {
     throw AppError.badRequest(
-      'Recebimento vinculado a nota fiscal ("invoiceNumber" e/ou "supplierPersonId" informados) exige "invoiceFingerprint" para detecção de duplicidade (EST-TS-08).',
+      'Quando o recebimento tem número de nota fiscal e/ou fornecedor, é preciso anexar o arquivo da nota para detectar duplicidade.',
       'INVENTORY_RECEIPT_FINGERPRINT_REQUIRED'
     );
   }
@@ -53,8 +53,9 @@ async function createReceipt(payload, actorUserId, transaction) {
   if (invoiceFingerprint) {
     const existing = await InventoryReceipt.findOne({ where: { companyId, invoiceFingerprint }, transaction });
     if (existing) {
+      const label = existing.invoiceNumber ? `nota fiscal nº ${existing.invoiceNumber}` : 'esta mesma nota fiscal';
       throw AppError.badRequest(
-        `Já existe um recebimento (${existing.id}) com esta mesma nota fiscal (invoiceFingerprint duplicado).`,
+        `Já existe um recebimento registrado para ${label}.`,
         'INVENTORY_RECEIPT_DUPLICATE_INVOICE'
       );
     }

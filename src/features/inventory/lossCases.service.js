@@ -99,7 +99,7 @@ async function openLossCase(payload, actorUserId, transaction) {
   // por trás. Exige que todo id seja uma string não vazia E que cada um aponte pra um File
   // de verdade, da mesma empresa (nunca de outro tenant).
   if (!Array.isArray(evidenceFileIds) || evidenceFileIds.length === 0 || evidenceFileIds.some((id) => !id || typeof id !== 'string')) {
-    throw AppError.badRequest('Pelo menos um arquivo de evidência ("evidenceFileIds") é obrigatório (EST-TS-10).', 'LOSS_CASE_EVIDENCE_REQUIRED');
+    throw AppError.badRequest('Pelo menos um arquivo de evidência é obrigatório para registrar a perda.', 'LOSS_CASE_EVIDENCE_REQUIRED');
   }
   const uniqueEvidenceFileIds = [...new Set(evidenceFileIds)];
   const evidenceFiles = await File.findAll({ where: { id: { [Op.in]: uniqueEvidenceFileIds }, companyId }, transaction });
