@@ -1,6 +1,6 @@
 'use strict';
 
-const { FinancingCase, CaseApplicant, Person, Property } = require('../../../models');
+const { FinancingCase, CaseApplicant, Person, Property, Opportunity } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
@@ -51,6 +51,17 @@ async function createFinancingCase(payload, actorUserId, transaction) {
     const property = await Property.findOne({ where: { id: propertyId, groupId, companyId }, transaction });
     if (!property) {
       throw AppError.badRequest('O imóvel informado não foi encontrado nesta empresa.', 'FINANCING_CASE_PROPERTY_NOT_FOUND');
+    }
+  }
+
+  // Achado real — auditoria Fase 14+ (Frente Conformidade Caderno, ciclo 3): `opportunityId` era
+  // aceito do payload sem nenhuma validação de existência/propriedade, permitindo vincular (e
+  // depois auditar via correspondentCrmSync.service.js) uma oportunidade de OUTRA empresa. Mesmo
+  // padrão de validação já usado acima para `propertyId`.
+  if (opportunityId) {
+    const opportunity = await Opportunity.findOne({ where: { id: opportunityId, groupId, companyId }, transaction });
+    if (!opportunity) {
+      throw AppError.badRequest('A oportunidade informada não foi encontrada nesta empresa.', 'FINANCING_CASE_OPPORTUNITY_NOT_FOUND');
     }
   }
 

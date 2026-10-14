@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
-const { Person } = require('../src/models');
+const { Person, Opportunity } = require('../src/models');
 
 let tenant;
 let otherCompanyId;
@@ -175,5 +175,57 @@ test('CORRESPONDENT-CASE-09: getFinancingCase lança NOT_FOUND para id de outra 
       () => financingCasesService.getFinancingCase('00000000-0000-0000-0000-000000000000', tenant.groupId, tenant.companyId, transaction),
       (err) => err.code === 'FINANCING_CASE_NOT_FOUND'
     );
+  });
+});
+
+// Achado real — auditoria pós-DoD (Frente Conformidade Caderno, ciclo 3, 14/10/2026):
+// `opportunityId` era aceito do payload sem nenhuma validação de existência/propriedade, o que
+// permitiria vincular (e depois auditar via correspondentCrmSync.service.js) uma oportunidade de
+// OUTRA empresa. Corrigido com o mesmo padrão de validação já usado para `propertyId`.
+test('CORRESPONDENT-CASE-10: rejeita opportunityId inexistente/de outra empresa (não aceita silenciosamente)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const principal = await createPerson(transaction, 'OpportunityGap');
+    await assert.rejects(
+      () =>
+        financingCasesService.createFinancingCase(
+          {
+            groupId: tenant.groupId,
+            companyId: tenant.companyId,
+            applicants: [{ personId: principal.id, role: 'PRINCIPAL' }],
+            opportunityId: '00000000-0000-0000-0000-000000000000',
+          },
+          tenant.userId,
+          transaction
+        ),
+      (err) => err.code === 'FINANCING_CASE_OPPORTUNITY_NOT_FOUND'
+    );
+  });
+});
+
+test('CORRESPONDENT-CASE-11: aceita opportunityId quando a oportunidade existe de verdade na mesma empresa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const principal = await createPerson(transaction, 'OpportunityOk');
+    const opportunity = await Opportunity.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        personId: principal.id,
+        stage: 'NEGOTIATION',
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+    const financingCase = await financingCasesService.createFinancingCase(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        applicants: [{ personId: principal.id, role: 'PRINCIPAL' }],
+        opportunityId: opportunity.id,
+      },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(financingCase.opportunityId, opportunity.id);
   });
 });
