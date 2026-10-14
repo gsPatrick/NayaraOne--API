@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 
 const APPLICANT_ROLES = ['PRINCIPAL', 'CO_APPLICANT'];
+const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
 
 /**
  * createFinancingCase — Marco 8 Fase 1. Cria um financing_case em DRAFT com seus proponentes
@@ -14,7 +15,7 @@ const APPLICANT_ROLES = ['PRINCIPAL', 'CO_APPLICANT'];
  * precisa ser PRINCIPAL.
  */
 async function createFinancingCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, providerCode, applicants } = payload;
+  const { groupId, companyId, propertyId, providerCode, purpose, applicants } = payload;
 
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCING_CASE_VALIDATION');
@@ -57,12 +58,18 @@ async function createFinancingCase(payload, actorUserId, transaction) {
     throw AppError.badRequest(`Provider "${resolvedProviderCode}" não é suportado.`, 'FINANCING_CASE_PROVIDER_UNKNOWN');
   }
 
+  const resolvedPurpose = purpose || 'RESIDENCIAL';
+  if (!FINANCING_PURPOSES.includes(resolvedPurpose)) {
+    throw AppError.badRequest(`"purpose" precisa ser um de: ${FINANCING_PURPOSES.join(', ')}.`, 'FINANCING_CASE_VALIDATION');
+  }
+
   const financingCase = await FinancingCase.create(
     {
       groupId,
       companyId,
       propertyId: propertyId || null,
       providerCode: resolvedProviderCode,
+      purpose: resolvedPurpose,
       status: 'DRAFT',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,

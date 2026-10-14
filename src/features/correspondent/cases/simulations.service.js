@@ -4,6 +4,7 @@ const { FinancingCase, Simulation } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
+const { assertEligible } = require('../eligibility.service');
 
 /**
  * createSimulation — Marco 8 Fase 3. Chama `adapter.simulate()` do provider configurado no
@@ -26,6 +27,10 @@ async function createSimulation(financingCaseId, payload, actorUserId, groupId, 
   if (!termMonths || termMonths <= 0 || !Number.isInteger(termMonths)) {
     throw AppError.badRequest('Informe o prazo em meses ("termMonths"), um número inteiro maior que zero.', 'SIMULATION_VALIDATION');
   }
+
+  // Caderno: "Antes de simular/submeter, chamar Motor de Regras COR_PROVIDER_ELIGIBILITY [...].
+  // Se não elegível, bloquear." — nunca chama o adapter de um case inelegível.
+  await assertEligible(financingCase, { amount }, groupId, companyId, actorUserId, transaction);
 
   const adapter = resolveFinancingProviderAdapterByCode(financingCase.providerCode);
   if (!adapter) {

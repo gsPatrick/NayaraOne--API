@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       propertyId: { type: DataTypes.UUID, allowNull: true, field: 'property_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
+      purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
