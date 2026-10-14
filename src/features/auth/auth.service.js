@@ -213,17 +213,31 @@ async function refresh({ refreshToken: rawToken }, meta = {}) {
   const decoded = verifyRefreshToken(rawToken);
   const tokenHash = hashRefreshToken(decoded.jti);
 
-  const session = await Session.findOne({ where: { refreshTokenHash: tokenHash } });
-  if (!session || session.revokedAt || session.expiresAt < new Date()) {
-    throw AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID');
-  }
-
-  const user = await User.findByPk(session.userId);
-  if (!user || user.status !== 'ACTIVE') {
-    throw AppError.unauthorized('Usuário inválido ou inativo.', 'SESSION_USER_INVALID');
-  }
-
+  // BUG REAL CORRIGIDO (auditoria Claude Browser, 13-14/10/2026, sessão caindo em ~15min mesmo
+  // com renovação proativa implementada): "core"."sessions" tem RLS FORCE com a policy
+  // `tenant_isolation` (company_id = current_setting('app.company_id')) — mas esta função fazia
+  // o `Session.findOne` ANTES de qualquer `SET LOCAL app.company_id`, fora de transação. Numa
+  // conexão sem BYPASSRLS (a de runtime), isso faz a policy filtrar TUDO, e a sessão recém-criada
+  // no login nunca é encontrada — falha com SESSION_INVALID na primeira tentativa de renovação,
+  // sempre, não é intermitente. O `company_id` já vem na claim do próprio refresh token (ver
+  // `issueTokensForSession`), então dá pra configurar o contexto antes mesmo de abrir a sessão —
+  // mesmo padrão já usado em `auth.middleware.js` para o access token.
   return sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.company_id = :companyId', {
+      replacements: { companyId: decoded.company_id },
+      transaction,
+    });
+
+    const session = await Session.findOne({ where: { refreshTokenHash: tokenHash }, transaction });
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      throw AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID');
+    }
+
+    const user = await User.findByPk(session.userId, { transaction });
+    if (!user || user.status !== 'ACTIVE') {
+      throw AppError.unauthorized('Usuário inválido ou inativo.', 'SESSION_USER_INVALID');
+    }
+
     // Rotação: revoga a sessão usada e emite uma nova (mitigação de refresh token reuse — IAM-TS).
     session.revokedAt = new Date();
     session.updatedBy = user.id;
