@@ -63,7 +63,7 @@ function toSafeJson(user) {
 // usuário-alvo em si. Sem esse contexto (ex.: chamada de um script sem JWT), a auditoria é
 // simplesmente pulada — nunca derruba a operação de negócio por falha de log.
 async function createUser(payload, actorUserId, actorContext = {}) {
-  const { name, email, password, mfaEnabled, mfaMethod, status } = payload;
+  const { name, email, password, status } = payload;
   if (!name || !email || !password) {
     throw AppError.badRequest('Os campos "name", "email" e "password" são obrigatórios.', 'USER_VALIDATION');
   }
@@ -78,12 +78,18 @@ async function createUser(payload, actorUserId, actorContext = {}) {
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
+  // mfaEnabled/mfaMethod NUNCA vêm do payload de criação/edição — achado real (14/10/2026):
+  // um usuário ficou com mfa_enabled=true em homologação sem nenhum MfaCredential confirmado
+  // (tabela core.mfa_credentials vazia pra ele), porque esses campos aceitavam qualquer valor
+  // vindo de fora aqui. O único jeito legítimo de mfaEnabled virar true é confirmMfa() (código
+  // TOTP validado de verdade); de voltar a false é disableMfa() (idem). Mesmo padrão de bug já
+  // corrigido antes pra "password" neste arquivo.
   const user = await User.create({
     name,
     email: email.toLowerCase().trim(),
     passwordHash,
-    mfaEnabled: Boolean(mfaEnabled),
-    mfaMethod: mfaMethod || null,
+    mfaEnabled: false,
+    mfaMethod: null,
     status: status || 'ACTIVE',
     createdBy: actorUserId || null,
     updatedBy: actorUserId || null,
@@ -129,12 +135,11 @@ async function getUserSafe(id) {
 async function updateUser(id, payload, actorUserId, actorContext = {}) {
   const user = await getUser(id);
   const beforeJson = toSafeJson(user);
-  const { name, status, mfaEnabled, mfaMethod } = payload;
+  const { name, status } = payload;
   const statusChanged = status !== undefined && status !== user.status;
   if (name !== undefined) user.name = name;
   if (status !== undefined) user.status = status;
-  if (mfaEnabled !== undefined) user.mfaEnabled = Boolean(mfaEnabled);
-  if (mfaMethod !== undefined) user.mfaMethod = mfaMethod;
+  // mfaEnabled/mfaMethod não são aceitos aqui — ver nota em createUser.
   user.updatedBy = actorUserId || null;
   await user.save();
 
