@@ -168,3 +168,94 @@ test('CORRESPONDENT-NAY-08: comparar simulações de case inexistente retorna 40
     );
   });
 });
+
+test('CORRESPONDENT-NAY-09 (auditoria ciclo 2): NAY nunca escreve em nenhuma tabela ligada ao caso de teste (snapshot escopado por financing_case_id, imune a ruído de outros testes/agentes rodando em paralelo no mesmo banco)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    await simulationsService.createSimulation(financingCase.id, { amount: 150000, termMonths: 240 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await backdateCase(financingCase.id, 10, transaction);
+
+    // Só tabelas com financing_case_id direto — contagem GLOBAL da tabela inteira não é confiável
+    // neste projeto porque o banco de dev é compartilhado por muitos testes/agentes em paralelo
+    // (achado real desta auditoria: a 1ª versão deste teste, contando a tabela inteira, falhou
+    // por ruído externo, não por bug da NAY). Escopar por financing_case_id torna o teste imune
+    // a esse ruído, já que nenhuma outra sessão pode escrever usando ESTE id específico.
+    const tables = [
+      'appraisals', 'case_applicants', 'case_documents', 'case_requirements',
+      'commission_entitlements', 'external_case_routing', 'provider_status_history',
+      'provider_submissions', 'simulations', 'webhook_inbox',
+    ];
+
+    async function countAll() {
+      const counts = {};
+      for (const t of tables) {
+        const [[row]] = await sequelize.query(
+          `SELECT count(*)::int AS c FROM correspondent.${t} WHERE financing_case_id = :id`,
+          { replacements: { id: financingCase.id }, transaction }
+        );
+        counts[t] = row.c;
+      }
+      return counts;
+    }
+
+    const before = await countAll();
+    await nayService.checkStalledCases(tenant.groupId, tenant.companyId, { thresholdDays: 7 }, transaction);
+    await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
+    const after = await countAll();
+
+    assert.deepEqual(after, before, 'nenhuma linha ligada a este caso deveria mudar só por chamar a NAY');
+  });
+});
+
+test('CORRESPONDENT-NAY-10 (auditoria ciclo 2): regex de promessa ampliado não encontra variações indiretas no texto real retornado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 180 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await backdateCase(financingCase.id, 10, transaction);
+
+    const stalled = await nayService.checkStalledCases(tenant.groupId, tenant.companyId, { thresholdDays: 7 }, transaction);
+    const compare = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
+
+    // Regex ampliado (ciclo 2): além dos termos óbvios, cobre sinônimos/frases indiretas que
+    // poderiam soar como promessa sem usar as palavras exatas do teste original.
+    const extendedForbidden = /voc[eê] vai conseguir|aprovado automaticamente|garantimos|garantid[oa]|promet|recomendamos fortemente|melhor op[cç][aã]o garantida|certamente ser[aá]|com certeza|sem d[uú]vida ser[aá] aprovado/i;
+    const stalledText = JSON.stringify(stalled);
+    const compareText = JSON.stringify(compare);
+    assert.doesNotMatch(stalledText, extendedForbidden);
+    assert.doesNotMatch(compareText, extendedForbidden);
+  });
+});
+
+test('CORRESPONDENT-NAY-11 (auditoria ciclo 2): compareSimulations com zero simulações não quebra e recommendedSimulationId é null', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    const result = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(result.simulations.length, 0);
+    assert.equal(result.recommendedSimulationId, null);
+  });
+});
+
+test('CORRESPONDENT-NAY-12 (auditoria ciclo 2): empate técnico entre simulações (mesma parcela) não quebra e recomenda exatamente uma', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    const simA = await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 180 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const simB = await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 180 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(Number(simA.monthlyPayment), Number(simB.monthlyPayment), 'pré-condição: mesmo valor/prazo deveria gerar a mesma parcela no sandbox determinístico');
+
+    const result = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
+    const recommendedCount = result.simulations.filter((s) => s.recommended).length;
+    assert.equal(recommendedCount, 1, 'mesmo empatado, só uma simulação deveria estar marcada como recomendada');
+    assert.ok([simA.id, simB.id].includes(result.recommendedSimulationId));
+  });
+});
+
+test('CORRESPONDENT-NAY-13 (auditoria ciclo 2): limiar exato de dias parado é inclusivo (idleDays === thresholdDays conta como parado)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    await backdateCase(financingCase.id, 7, transaction);
+
+    const result = await nayService.checkStalledCases(tenant.groupId, tenant.companyId, { thresholdDays: 7 }, transaction);
+    const found = result.cases.find((c) => c.financingCaseId === financingCase.id);
+    assert.ok(found, 'idleDays exatamente igual ao threshold deveria contar como parado (inclusive)');
+  });
+});
