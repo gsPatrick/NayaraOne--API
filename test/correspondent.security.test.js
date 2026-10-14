@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const simulationsService = require('../src/features/correspondent/cases/simulations.service');
+const { computeDuplicateFingerprint } = require('../src/features/correspondent/correspondentDuplicate.service');
 const { Person, FinancingCase, AuditLog } = require('../src/models');
 
 /**
@@ -132,4 +133,14 @@ test('SEC-03: bloqueio de eligibility (provider inelegível) gera entrada de aud
     });
     assert.ok(auditEntry, 'bloqueio de eligibility precisa auditar o motivo');
   });
+});
+
+test('SEC-05: fingerprint de duplicidade não depende do dia calendário (achado real — virada de dia UTC escapava da detecção)', () => {
+  const base = { companyId: 'c1', principalPersonId: 'p1', propertyId: 'prop1' };
+  const fp1 = computeDuplicateFingerprint(base);
+  const fp2 = computeDuplicateFingerprint(base);
+  assert.equal(fp1, fp2, 'o mesmo proponente+imóvel+empresa precisa gerar sempre o mesmo fingerprint, independente de quando for calculado (a janela de tempo é responsabilidade do filtro created_at, não do hash)');
+
+  const differentProperty = computeDuplicateFingerprint({ ...base, propertyId: 'prop2' });
+  assert.notEqual(fp1, differentProperty, 'imóvel diferente precisa gerar fingerprint diferente');
 });

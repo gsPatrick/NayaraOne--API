@@ -10,12 +10,18 @@ const DUPLICATE_WINDOW_HOURS = 24;
 /**
  * computeDuplicateFingerprint — Marco 8 Fase 11 ("Caso duplicado → fingerprint + fila de
  * revisão, não bloqueio automático silencioso"). Hash determinístico de
- * companyId + personId principal + propertyId (ou "sem-imovel") + dia corrente (UTC) — mesmo
- * espírito do dedupe de pessoas do Marco 3 (personDedup.service.js): sinaliza, nunca bloqueia.
+ * companyId + personId principal + propertyId (ou "sem-imovel") — mesmo espírito do dedupe de
+ * pessoas do Marco 3 (personDedup.service.js): sinaliza, nunca bloqueia.
+ *
+ * ACHADO REAL CORRIGIDO (auditoria pós-DoD, frente Segurança): a versão anterior incluía o dia
+ * calendário UTC no hash. Isso fazia dois casos criados minutos antes/depois da virada de dia
+ * (ex: 23:59 e 00:01) gerarem fingerprints DIFERENTES, escapando da detecção mesmo estando bem
+ * dentro da janela de `DUPLICATE_WINDOW_HOURS` pretendida — a janela de tempo real já é aplicada
+ * pelo filtro `created_at >= since` em `flagPossibleDuplicate`, então o fingerprint não precisa
+ * (e não deve) carregar nenhum componente de data.
  */
 function computeDuplicateFingerprint({ companyId, principalPersonId, propertyId }) {
-  const day = new Date().toISOString().slice(0, 10);
-  const raw = `${companyId}::${principalPersonId}::${propertyId || 'sem-imovel'}::${day}`;
+  const raw = `${companyId}::${principalPersonId}::${propertyId || 'sem-imovel'}`;
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 64);
 }
 
