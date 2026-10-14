@@ -145,6 +145,8 @@ const modelDefiners = {
   InventoryCountItem: require('./InventoryCountItem'),
   FinancingCase: require('./FinancingCase'),
   CaseApplicant: require('./CaseApplicant'),
+  CaseRequirement: require('./CaseRequirement'),
+  CaseDocument: require('./CaseDocument'),
   PurchaseRequest: require('./PurchaseRequest'),
   PurchaseRequestItem: require('./PurchaseRequestItem'),
   Quotation: require('./Quotation'),
@@ -243,6 +245,13 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.FinancingCase.hasMany(db.CaseApplicant, { foreignKey: 'financing_case_id', as: 'applicants', constraints: false });
   db.CaseApplicant.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
   db.CaseApplicant.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
+  // Marco 8 Fase 2 — requirements/documents.
+  db.FinancingCase.hasMany(db.CaseRequirement, { foreignKey: 'financing_case_id', as: 'requirements', constraints: false });
+  db.CaseRequirement.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
+  db.CaseRequirement.hasMany(db.CaseDocument, { foreignKey: 'requirement_id', as: 'documents', constraints: false });
+  db.CaseDocument.belongsTo(db.CaseRequirement, { foreignKey: 'requirement_id', as: 'requirement', constraints: false });
+  db.CaseDocument.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
+  db.CaseDocument.belongsTo(db.File, { foreignKey: 'file_id', as: 'file', constraints: false });
   db.Person.hasMany(db.Person, { foreignKey: 'merged_into_id', as: 'mergedFrom', constraints: false });
   db.File.belongsTo(db.User, { foreignKey: 'uploaded_by_user_id', as: 'uploadedByUser', constraints: false });
   db.FileLink.belongsTo(db.File, { foreignKey: 'file_id', as: 'file', constraints: false });
