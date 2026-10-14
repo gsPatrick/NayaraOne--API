@@ -11,16 +11,23 @@ const CONDITION_CODES = ['OK', 'DAMAGED'];
 // Guia do Marcelo §6/§7: loanTool exige asset AVAILABLE (EST-TS-05: ferramenta já emprestada
 // não pode sair de novo); returnTool exige condition_code e abre manutenção se DAMAGED.
 async function loanTool(assetId, payload, actorUserId, groupId, companyId, transaction) {
-  const { personUserId, destinationLocationId, dueAt } = payload;
+  const { personUserId, destinationLocationId, dueAt, conditionOutCode } = payload;
+  // GAP REAL CORRIGIDO (auditoria real Nayara, Marco 7, 2026-10-14, achado F11): EST-006 pede
+  // responsável, destino, data prevista de retorno E condição na saída — só os 3 primeiros eram
+  // exigidos. Condição é opcional na API (nem toda ferramenta tem inspeção formal de saída), mas
+  // quando informada precisa ser um dos códigos válidos — mesma validação do retorno.
+  if (conditionOutCode && !CONDITION_CODES.includes(conditionOutCode)) {
+    throw AppError.badRequest(`A condição informada não é válida — escolha uma de: ${CONDITION_CODES.join(', ')}.`, 'TOOL_LOAN_VALIDATION');
+  }
   if (!personUserId) {
-    throw AppError.badRequest('"personUserId" é obrigatório (EST-006: responsável pela saída).', 'TOOL_LOAN_VALIDATION');
+    throw AppError.badRequest('O responsável pela saída é obrigatório.', 'TOOL_LOAN_VALIDATION');
   }
   // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-006 —
   // "Saída de ferramenta registra responsável, destino, data prevista de retorno e condição" —
   // mas o destino era opcional aqui e a tela nem tinha o campo: empréstimos saíam sem destino
   // registrado e asset.currentLocationId ficava apontando pro almoxarifado de origem (EST-014).
   if (!destinationLocationId) {
-    throw AppError.badRequest('"destinationLocationId" é obrigatório (EST-006: destino da saída).', 'TOOL_LOAN_VALIDATION');
+    throw AppError.badRequest('O local de destino da ferramenta é obrigatório.', 'TOOL_LOAN_VALIDATION');
   }
   const destination = await InventoryLocation.findOne({ where: { id: destinationLocationId, groupId, companyId }, transaction });
   if (!destination) {
@@ -30,7 +37,7 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (asset.status !== 'AVAILABLE') {
-    throw AppError.badRequest(`Ferramenta indisponível para empréstimo (status atual: ${asset.status}) — EST-TS-05.`, 'TOOL_LOAN_ASSET_UNAVAILABLE');
+    throw AppError.badRequest('Esta ferramenta não está disponível para empréstimo no momento (já emprestada, em manutenção ou indisponível).', 'TOOL_LOAN_ASSET_UNAVAILABLE');
   }
   // GAP REAL CORRIGIDO (auditoria Marco 7, 2026-10-08): mesmo padrão de guarda que disposeAsset
   // já usa pra bloquear baixa com loss case aberto — um asset com InventoryLossCase OPEN está em
@@ -69,6 +76,7 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
       destinationLocationId,
       sourceLocationId: asset.currentLocationId || null,
       dueAt: dueAt || null,
+      conditionOutCode: conditionOutCode || null,
       status: 'OPEN',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -153,7 +161,7 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
         companyId: loan.companyId,
         assetId: asset.id,
         sourceToolLoanId: loan.id,
-        description: `Devolução danificada do empréstimo ${loan.id}.`,
+        description: `Devolução danificada — ${asset.name || 'ferramenta'} (empréstimo de ${loan.createdAt ? new Date(loan.createdAt).toLocaleDateString('pt-BR') : 'data não registrada'}).`,
       },
       actorUserId,
       transaction

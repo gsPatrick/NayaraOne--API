@@ -47,6 +47,16 @@ function assertNonNegativeAcquisitionValue(value) {
   }
 }
 
+// GAP REAL CORRIGIDO (auditoria real Nayara, Marco 7, 2026-10-14, achado F20): nada impedia
+// cadastrar "Garantia até" ANTERIOR à data de aquisição (garantia expirando antes de o bem
+// existir na empresa) — aceito silenciosamente tanto na criação quanto na edição.
+function assertWarrantyNotBeforeAcquisition(acquiredAt, warrantyUntil) {
+  if (!acquiredAt || !warrantyUntil) return;
+  if (new Date(warrantyUntil).getTime() < new Date(acquiredAt).getTime()) {
+    throw AppError.badRequest('"warrantyUntil" não pode ser anterior à data de aquisição ("acquiredAt").', 'ASSET_VALIDATION');
+  }
+}
+
 // Caderno §9/Guia §9: patrimônio individualizável, asset_tag UNIQUE (EST-TS-04), QR só carrega
 // identificador opaco (GET /assets/by-tag/:tag), toda transferência gera asset_movement.
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 47, 2026-10-05): o contrato (TAB-0760)
@@ -60,12 +70,20 @@ async function createAsset(payload, actorUserId, transaction) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'ASSET_VALIDATION');
   }
   if (!assetTag) {
-    throw AppError.badRequest('O campo "assetTag" é obrigatório (QR/etiqueta — TAB-0760).', 'ASSET_VALIDATION');
+    throw AppError.badRequest('A etiqueta/código do patrimônio (QR) é obrigatória.', 'ASSET_VALIDATION');
   }
   assertNonNegativeAcquisitionValue(acquisitionValue);
+  assertWarrantyNotBeforeAcquisition(acquiredAt, warrantyUntil);
 
-  const existing = await Asset.findOne({ where: { companyId, assetTag }, transaction });
-  if (existing) throw AppError.badRequest(`"assetTag" "${assetTag}" já está em uso nesta empresa (EST-TS-04).`, 'ASSET_DUPLICATE_TAG');
+  // GAP REAL CORRIGIDO (auditoria real Nayara, Marco 7, 2026-10-14, achado F15): comparação de
+  // assetTag era sensível a maiúsculas/minúsculas — permitia cadastrar "ABC-1" e "abc-1" como tags
+  // "diferentes" na mesma empresa, e a busca por QR (getAssetByTag) falhava se o usuário digitasse
+  // em caixa diferente da cadastrada. Normaliza com fn('lower', ...) nos dois lados.
+  const existing = await Asset.findOne({
+    where: { companyId, [Op.and]: [{ assetTag: { [Op.iLike]: assetTag } }] },
+    transaction,
+  });
+  if (existing) throw AppError.badRequest(`A etiqueta "${assetTag}" já está em uso nesta empresa.`, 'ASSET_DUPLICATE_TAG');
 
   return Asset.create(
     {
@@ -111,7 +129,8 @@ async function listAssets(groupId, companyId, transaction, { status } = {}) {
 // devolvia só a linha crua do Asset, sem nenhum dos dados de circulação que o Caderno exige
 // aparecerem na ficha aberta pelo QR (último movimento, manutenção aberta, empréstimo ativo).
 async function getAssetByTag(assetTag, groupId, companyId, transaction) {
-  const asset = await Asset.findOne({ where: { assetTag, groupId, companyId }, transaction });
+  // F15: busca case-insensitive, mesmo critério usado na checagem de duplicidade em createAsset.
+  const asset = await Asset.findOne({ where: { assetTag: { [Op.iLike]: assetTag }, groupId, companyId }, transaction });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado para este QR Code.', 'ASSET_NOT_FOUND');
 
   const [lastMovement, openMaintenance, activeLoan] = await Promise.all([
@@ -161,10 +180,10 @@ function computeEstimatedCurrentValue(asset, usefulLifeMonthsOverride) {
 async function transferAsset(assetId, groupId, companyId, payload, actorUserId, transaction) {
   const { destinationLocationId, destinationCustodianUserId, idempotencyKey } = payload;
   if (!destinationLocationId && !destinationCustodianUserId) {
-    throw AppError.badRequest('Informe "destinationLocationId" e/ou "destinationCustodianUserId".', 'ASSET_TRANSFER_VALIDATION');
+    throw AppError.badRequest('Informe o novo local e/ou o novo responsável pela transferência.', 'ASSET_TRANSFER_VALIDATION');
   }
   if (idempotencyKey && String(idempotencyKey).startsWith(DISPOSAL_KEY_PREFIX)) {
-    throw AppError.badRequest(`"idempotencyKey" não pode começar com "${DISPOSAL_KEY_PREFIX}" (prefixo reservado à baixa de patrimônio).`, 'ASSET_TRANSFER_VALIDATION');
+    throw AppError.badRequest('Esta chave de operação é reservada para baixa de patrimônio e não pode ser usada numa transferência.', 'ASSET_TRANSFER_VALIDATION');
   }
 
   if (idempotencyKey) {
@@ -247,6 +266,10 @@ async function updateAsset(id, groupId, companyId, payload, actorUserId, transac
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
 
   if (acquisitionValue !== undefined) assertNonNegativeAcquisitionValue(acquisitionValue);
+  assertWarrantyNotBeforeAcquisition(
+    acquiredAt !== undefined ? acquiredAt : asset.acquiredAt,
+    warrantyUntil !== undefined ? warrantyUntil : asset.warrantyUntil
+  );
 
   const beforeJson = asset.toJSON();
   if (name !== undefined) asset.name = name;
@@ -272,10 +295,41 @@ async function listAssetMovements(assetId, groupId, companyId, transaction) {
   const movements = await AssetMovement.findAll({ where: { assetId, groupId, companyId }, order: [['moved_at', 'DESC']], limit: 1500, transaction });
   // asset_movements não tem coluna de tipo — a baixa é identificada pelo prefixo reservado da
   // idempotencyKey (ver DISPOSAL_KEY_PREFIX), pra tela distinguir transferência de baixa.
-  return movements.map((m) => ({
+  const transferEntries = movements.map((m) => ({
     ...m.toJSON(),
     movementType: m.idempotencyKey && m.idempotencyKey.startsWith(DISPOSAL_KEY_PREFIX) ? 'DISPOSAL' : 'TRANSFER',
+    movedAt: m.movedAt,
   }));
+
+  // GAP REAL CORRIGIDO (auditoria real Nayara, Marco 7, 2026-10-14, achado F11): o "Histórico" do
+  // patrimônio só lia asset_movements (transferência/baixa) — empréstimo e devolução de
+  // ferramenta ficavam em outra tabela (InventoryToolLoan) e nunca apareciam aqui, mesmo sendo
+  // eventos reais na vida do ativo. Unifica as duas fontes numa única linha do tempo.
+  const loans = await InventoryToolLoan.findAll({ where: { assetId, groupId, companyId }, order: [['created_at', 'DESC']], limit: 1500, transaction });
+  const loanEntries = [];
+  loans.forEach((loan) => {
+    loanEntries.push({
+      id: `loan-${loan.id}-out`,
+      movementType: 'LOAN',
+      movedAt: loan.createdAt,
+      destinationLocationId: loan.destinationLocationId,
+      assignedToUserId: loan.personUserId,
+      dueAt: loan.dueAt,
+      conditionCode: loan.conditionOutCode || null,
+    });
+    if (loan.status === 'RETURNED' && loan.returnedAt) {
+      loanEntries.push({
+        id: `loan-${loan.id}-return`,
+        movementType: 'RETURN',
+        movedAt: loan.returnedAt,
+        sourceLocationId: loan.sourceLocationId,
+        assignedToUserId: loan.personUserId,
+        conditionCode: loan.conditionCode,
+      });
+    }
+  });
+
+  return [...transferEntries, ...loanEntries].sort((a, b) => new Date(b.movedAt) - new Date(a.movedAt));
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

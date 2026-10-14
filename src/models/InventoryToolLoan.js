@@ -20,6 +20,8 @@ module.exports = (sequelize) => {
       dueAt: { type: DataTypes.DATE, allowNull: true, field: 'due_at' },
       returnedAt: { type: DataTypes.DATE, allowNull: true, field: 'returned_at' },
       conditionCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_code' },
+      // EST-006: condição registrada na SAÍDA (separada da condição no retorno, condition_code).
+      conditionOutCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_out_code' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
       // EST-TS-13: nível de escalonamento calculado por quantos dias já passaram do dueAt
       // (NONE/WARNING/CRITICAL/OVERDUE), mesmo padrão de construction.maintenance_cases.
