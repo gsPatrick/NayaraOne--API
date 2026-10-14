@@ -154,6 +154,15 @@ const modelDefiners = {
   ExternalCaseRouting: require('./ExternalCaseRouting'),
   Appraisal: require('./Appraisal'),
   CommissionEntitlement: require('./CommissionEntitlement'),
+  InvoiceRequest: require('./InvoiceRequest'),
+  InvoiceEvent: require('./InvoiceEvent'),
+  FiscalObligation: require('./FiscalObligation'),
+  AccountingExportBatch: require('./AccountingExportBatch'),
+  AccountingExportLine: require('./AccountingExportLine'),
+  AccountingReturnImport: require('./AccountingReturnImport'),
+  DimobBatch: require('./DimobBatch'),
+  DimobRecord: require('./DimobRecord'),
+  FiscalReconciliation: require('./FiscalReconciliation'),
   PurchaseRequest: require('./PurchaseRequest'),
   PurchaseRequestItem: require('./PurchaseRequestItem'),
   Quotation: require('./Quotation'),
@@ -272,6 +281,18 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.FinancingCase.hasMany(db.CommissionEntitlement, { foreignKey: 'financing_case_id', as: 'commissionEntitlements', constraints: false });
   db.CommissionEntitlement.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
   db.CommissionEntitlement.belongsTo(db.FinancialEntry, { foreignKey: 'financial_entry_id', as: 'financialEntry', constraints: false });
+
+  db.InvoiceRequest.hasMany(db.InvoiceEvent, { foreignKey: 'invoice_request_id', as: 'events', constraints: false });
+  db.InvoiceEvent.belongsTo(db.InvoiceRequest, { foreignKey: 'invoice_request_id', as: 'invoiceRequest', constraints: false });
+  db.InvoiceRequest.hasOne(db.TaxDocument, { foreignKey: 'invoice_request_id', as: 'taxDocument', constraints: false });
+  db.TaxDocument.belongsTo(db.InvoiceRequest, { foreignKey: 'invoice_request_id', as: 'invoiceRequest', constraints: false });
+
+  db.AccountingExportBatch.hasMany(db.AccountingExportLine, { foreignKey: 'batch_id', as: 'lines', constraints: false });
+  db.AccountingExportLine.belongsTo(db.AccountingExportBatch, { foreignKey: 'batch_id', as: 'batch', constraints: false });
+  db.AccountingExportLine.belongsTo(db.AccountingExportLine, { foreignKey: 'adjustment_of_line_id', as: 'adjustmentOfLine', constraints: false });
+
+  db.DimobBatch.hasMany(db.DimobRecord, { foreignKey: 'dimob_batch_id', as: 'records', constraints: false });
+  db.DimobRecord.belongsTo(db.DimobBatch, { foreignKey: 'dimob_batch_id', as: 'batch', constraints: false });
 
   db.FinancingCase.hasMany(db.ProviderStatusHistory, { foreignKey: 'financing_case_id', as: 'statusHistory', constraints: false });
   db.ProviderStatusHistory.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });

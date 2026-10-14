@@ -36,6 +36,14 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'financial_entry_id',
       },
+      // Marco 8 Fase 12 (migration 351) — vincula a NFS-e emitida ao pedido de emissão do
+      // Correspondente Bancário. Nullable: os outros documentType (DIMOB, WITHHOLDING_RECEIPT)
+      // não têm InvoiceRequest de origem.
+      invoiceRequestId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'invoice_request_id',
+      },
       documentType: {
         type: DataTypes.STRING(32),
         allowNull: false,

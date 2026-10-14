@@ -11,6 +11,7 @@ const appraisalsController = require('./cases/appraisals.controller');
 const commissionEntitlementsController = require('./cases/commissionEntitlements.controller');
 const webhooksController = require('./webhooks.controller');
 const nayController = require('./correspondentNay.controller');
+const fiscalController = require('./fiscal/fiscal.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -129,6 +130,74 @@ correspondentRouter.get(
   '/financing-cases/:id/nay/compare-simulations',
   requirePermission('correspondent:read'),
   nayController.getCompareSimulations
+);
+
+// Fase 12 — Fiscal/Compliance (addendum do Caderno). Permissão própria "correspondent:fiscal"
+// (criar/consultar/fechar NFS-e, DIMOB, export contábil e reconciliações) — área sensível,
+// separada de "correspondent:create"/"correspondent:read" que são sobre o caso de financiamento
+// em si, não sobre o subledger fiscal.
+correspondentRouter.post(
+  '/fiscal/invoices',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.requestInvoice
+);
+correspondentRouter.get(
+  '/fiscal/invoices',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.listInvoiceRequests
+);
+correspondentRouter.post(
+  '/fiscal/invoices/:id/check-status',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.checkInvoiceStatus
+);
+correspondentRouter.post(
+  '/fiscal/invoices/:id/cancel',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.cancelInvoice
+);
+correspondentRouter.get(
+  '/fiscal/invoices/:id/events',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.getInvoiceEvents
+);
+
+correspondentRouter.post(
+  '/fiscal/dimob-batches',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.generateDimobBatch
+);
+correspondentRouter.get(
+  '/fiscal/dimob-batches',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.listDimobBatches
+);
+correspondentRouter.post(
+  '/fiscal/dimob-batches/:id/close',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.closeDimobBatch
+);
+
+correspondentRouter.get(
+  '/fiscal/reconciliations',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.listReconciliations
+);
+correspondentRouter.post(
+  '/fiscal/reconciliations/:id/resolve',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.resolveReconciliation
+);
+
+correspondentRouter.post(
+  '/fiscal/export-batches',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.createExportBatch
+);
+correspondentRouter.get(
+  '/fiscal/export-batches',
+  requirePermission('correspondent:fiscal'),
+  fiscalController.listExportBatches
 );
 
 module.exports = correspondentRouter;
