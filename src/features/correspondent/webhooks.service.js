@@ -93,18 +93,33 @@ async function processFinancingWebhook(providerCode, rawBody, headers, body) {
       return { received: true, processed: false, reason: 'duplicate_event' };
     }
 
-    await WebhookInbox.create(
-      {
-        groupId,
-        companyId,
-        financingCaseId: financingCase.id,
-        providerCode,
-        externalEventId,
-        payload: body,
-        receivedAt: new Date(),
-      },
-      { transaction }
-    );
+    // ACHADO REAL (auditoria pós-DoD, Frente Idempotência/Concorrência): o findOne acima só
+    // decide a resposta de forma otimista — duas entregas de webhook verdadeiramente
+    // concorrentes (cenário real: o provider reentrega por timeout de rede do lado dele, duas
+    // conexões distintas processando ao mesmo tempo) podem passar pelo findOne antes de
+    // qualquer uma commitar, e a 2ª `create()` bate no índice único
+    // `webhook_inbox_provider_event_idx` e estoura um erro cru em vez de responder
+    // graciosamente "evento duplicado" (resposta esperada e inofensiva pra um webhook). Captura
+    // a violação e trata como duplicata — nunca propaga erro técnico de banco pro provider.
+    try {
+      await WebhookInbox.create(
+        {
+          groupId,
+          companyId,
+          financingCaseId: financingCase.id,
+          providerCode,
+          externalEventId,
+          payload: body,
+          receivedAt: new Date(),
+        },
+        { transaction }
+      );
+    } catch (err) {
+      if (err?.name === 'SequelizeUniqueConstraintError') {
+        return { received: true, processed: false, reason: 'duplicate_event' };
+      }
+      throw err;
+    }
 
     const normalizedStatus = adapter.normalizeProviderStatus(rawProviderStatus);
     const applied = normalizedStatus ? shouldApplyTransition(financingCase.status, normalizedStatus) : false;

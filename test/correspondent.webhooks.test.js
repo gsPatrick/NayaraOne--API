@@ -177,6 +177,42 @@ test('CORRESPONDENT-WEBHOOK-03: webhook duplicado (mesmo externalEventId) aplica
   });
 });
 
+// Auditoria pós-DoD, Frente Idempotência/Concorrência — o WEBHOOK-03 acima prova dedup
+// SEQUENCIAL (2ª chamada só começa depois da 1ª terminar). Isso NÃO prova nada sobre concorrência
+// real: `processFinancingWebhook` abre sua PRÓPRIA transação internamente (sequelize.transaction
+// auto-gerenciada), então duas entregas verdadeiramente simultâneas do mesmo evento (cenário real
+// de provider reentregando por timeout de rede) usam 2 conexões/transações distintas, e podem
+// passar pelo findOne de dedup antes de qualquer uma commitar.
+test('CORRESPONDENT-WEBHOOK-11: duas entregas CONCORRENTES de verdade do mesmo evento (Promise.all, não sequencial) nunca duplicam histórico nem estouram erro cru', async () => {
+  const secret = `wh-secret-${uniqueSuffix()}`;
+  await setWebhookSecret(secret);
+  const { financingCaseId, externalCaseId } = await createSubmittedCase();
+
+  const externalEventId = `evt-${uniqueSuffix()}`;
+  const body = { externalCaseId, externalEventId, status: 'ANALYSIS' };
+  const { rawBody, headers } = signedWebhookRequest(secret, body);
+
+  const resultados = await Promise.allSettled([
+    webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body),
+    webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body),
+  ]);
+
+  for (const r of resultados) {
+    assert.equal(r.status, 'fulfilled', `nenhuma chamada pode rejeitar com erro técnico cru. Recebido: ${r.reason?.message || r.reason}`);
+  }
+  const processadas = resultados.filter((r) => r.value.processed === true);
+  const duplicadas = resultados.filter((r) => r.value.reason === 'duplicate_event');
+  assert.equal(processadas.length, 1, 'exatamente uma das duas entregas concorrentes deve processar o evento de verdade');
+  assert.equal(duplicadas.length, 1, 'a outra deve voltar como duplicate_event, nunca um erro cru de violação de unicidade');
+
+  await withTenantTransaction(tenant, async (transaction) => {
+    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(history.length, 1, 'mesmo sob concorrência real, nunca deve existir mais de 1 linha de histórico para o mesmo evento');
+    const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
+    assert.equal(financingCase.status, 'UNDER_ANALYSIS', 'o status deve ter sido aplicado exatamente uma vez');
+  });
+});
+
 test('CORRESPONDENT-WEBHOOK-04: status fora de ordem não regride o case, mas fica registrado no histórico', async () => {
   const secret = `wh-secret-${uniqueSuffix()}`;
   await setWebhookSecret(secret);

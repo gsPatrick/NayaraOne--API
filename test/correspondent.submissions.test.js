@@ -11,6 +11,7 @@ const submissionsService = require('../src/features/correspondent/cases/submissi
 const { withTimeout, SubmitTimeoutError } = submissionsService;
 const { Person, File } = require('../src/models');
 const { SandboxFinancingProviderAdapter } = require('../src/features/correspondent/adapters/FinancingProviderAdapter');
+const AppError = require('../src/utils/AppError');
 
 let tenant;
 let otherCompanyId;
@@ -259,4 +260,85 @@ test('CORRESPONDENT-SUB-10: evento financing.submission_requested é emitido (ou
     );
     assert.equal(rows.length, 1);
   });
+});
+
+// Auditoria pós-DoD, Frente Idempotência/Concorrência — duas requisições de submissão DE VERDADE
+// concorrentes (duas transações COMMITADAS separadas, não uma única transação sequencial) para o
+// MESMO case. O padrão findOne-depois-create em submitFinancingCase não tinha proteção contra a
+// violação de unicidade do índice `provider_submissions_idempotency_key_company_idx` quando as
+// duas corridas vencem o findOne antes de qualquer create — a 2ª create batia no índice único e
+// estourava um erro cru (SequelizeUniqueConstraintError) em vez de devolver a submission existente.
+test('CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações commitadas em paralelo) nunca duplicam — perdedora recebe conflito tratado, nunca erro cru', async () => {
+  const suffix = uniqueSuffix();
+  async function withCommitted(fn) {
+    const t = await sequelize.transaction();
+    try {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+      await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+      await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: t });
+      const r = await fn(t);
+      await t.commit();
+      return r;
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  let financingCaseId;
+  try {
+    financingCaseId = await withCommitted(async (t) => {
+      const financingCase = await createCase(t);
+      await completeChecklist(financingCase.id, t);
+      await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 120 }, tenant.userId, tenant.groupId, tenant.companyId, t);
+      return financingCase.id;
+    });
+
+    const resultados = await Promise.allSettled([
+      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t)),
+      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t)),
+    ]);
+
+    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
+    const falhas = resultados.filter((r) => r.status === 'rejected');
+    // Dependendo do timing exato da corrida, dois desfechos são válidos: (a) a 2ª transação só
+    // inicia depois da 1ª já ter commitado — aí o findOne de idempotência no topo da função já
+    // encontra a existente e as duas chamadas "sucedem" retornando o MESMO id, sem nunca chegar
+    // no create(); ou (b) as duas passam pelo findOne antes de qualquer commit — aí uma cria com
+    // sucesso e a outra recebe o conflito tratado (409), nunca o erro cru do Postgres. O que NUNCA
+    // pode acontecer é mais de 1 linha no banco, ou qualquer erro que não seja um AppError.
+    for (const r of falhas) {
+      assert.ok(r.reason instanceof AppError, `qualquer rejeição deve ser um AppError tratado, nunca o SequelizeUniqueConstraintError cru. Recebido: ${r.reason?.name || r.reason}`);
+      assert.equal(r.reason.code, 'SUBMISSION_IDEMPOTENCY_RACE');
+      assert.equal(r.reason.statusCode, 409);
+    }
+    assert.ok(sucessos.length >= 1, 'pelo menos uma das duas chamadas concorrentes deve ter sucesso');
+    const idsDosSucessos = new Set(sucessos.map((r) => r.value.id));
+    assert.equal(idsDosSucessos.size, 1, 'todo sucesso deve apontar para a MESMA submission, nunca duas diferentes');
+    const submissionId = [...idsDosSucessos][0];
+
+    // Simula o retry do cliente (relevante só se houve rejeição): numa transação NOVA, o findOne
+    // de idempotência no topo da função já encontra a submission vencedora e devolve ela.
+    const retry = await withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t));
+    assert.equal(retry.id, submissionId, 'um retry posterior deve encontrar e devolver a MESMA submission já criada, nunca duplicar');
+
+    await withCommitted(async (t) => {
+      const [rows] = await sequelize.query('SELECT id FROM "correspondent"."provider_submissions" WHERE financing_case_id = :id', {
+        replacements: { id: financingCaseId },
+        transaction: t,
+      });
+      assert.equal(rows.length, 1, 'nunca deve existir mais de 1 submission para o mesmo case+provider+version, mesmo sob corrida real');
+    });
+  } finally {
+    if (financingCaseId) {
+      await withCommitted(async (t) => {
+        await sequelize.query('DELETE FROM "correspondent"."provider_submissions" WHERE financing_case_id = :id', { replacements: { id: financingCaseId }, transaction: t });
+        await sequelize.query('DELETE FROM "correspondent"."simulations" WHERE financing_case_id = :id', { replacements: { id: financingCaseId }, transaction: t });
+        await sequelize.query('DELETE FROM "correspondent"."case_documents" WHERE financing_case_id = :id', { replacements: { id: financingCaseId }, transaction: t });
+        await sequelize.query('DELETE FROM "correspondent"."case_requirements" WHERE financing_case_id = :id', { replacements: { id: financingCaseId }, transaction: t });
+        await sequelize.query('DELETE FROM "correspondent"."case_applicants" WHERE financing_case_id = :id', { replacements: { id: financingCaseId }, transaction: t });
+        await sequelize.query('DELETE FROM "correspondent"."financing_cases" WHERE id = :id', { replacements: { id: financingCaseId }, transaction: t });
+      });
+    }
+  }
 });
