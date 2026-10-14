@@ -123,6 +123,23 @@ test('maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações in
   });
 });
 
+test('listApprovalRequests resolve relatedEntityLabel com a descrição real do lançamento (achado M4-R01, auditoria rodada 4)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const description = `HOMO QA — descrição real do lançamento ${suffix}`;
+    const entry = await createEntry(transaction, tenant.userId, { description });
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.equal(list.length, 1);
+    assert.equal(list[0].relatedEntityLabel, description, 'a listagem precisa trazer a descrição real do lançamento, não só o id');
+  });
+});
+
 test('conciliação: valores divergentes entre lançamento e extrato são bloqueados', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await bankAccountsService.createBankAccount(

@@ -85,12 +85,53 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
   return approvalRequest;
 }
 
+// ACHADO REAL (auditoria Nayara, rodada 4, 14/10/2026, M4-R01): a tela de Aprovações só exibia
+// "Lançamento — <id curto>" (sem a descrição real) porque `approval_requests` é polimórfico e a
+// listagem nunca resolvia a entidade relacionada — isso também quebrava a busca por texto, que
+// filtrava sobre esse mesmo rótulo genérico. `relatedEntityLabel` resolve a descrição real da
+// entidade (quando existir um campo apropriado) para cada request da página atual, em lotes por
+// tipo (evita N+1 query por item).
+async function resolveRelatedEntityLabels(requests, transaction) {
+  const byType = {};
+  requests.forEach((r) => {
+    if (!byType[r.relatedEntityType]) byType[r.relatedEntityType] = new Set();
+    byType[r.relatedEntityType].add(r.relatedEntityId);
+  });
+
+  const labelsByTypeAndId = {};
+  await Promise.all(
+    Object.entries(byType).map(async ([type, idSet]) => {
+      const Model = ENTITY_MODELS[type];
+      if (!Model) return;
+      const ids = Array.from(idSet);
+      const rows = await Model.findAll({ where: { id: ids }, transaction });
+      labelsByTypeAndId[type] = {};
+      rows.forEach((row) => {
+        let label = null;
+        if (type === 'FinancialEntry') label = row.description || null;
+        else if (type === 'BankAccount') label = row.pixKey ? `Chave PIX — ${row.pixKey}` : `${row.bankCode || 'Banco'} · Ag. ${row.agency || '—'} · Conta ${row.accountNumber || '—'}`;
+        else if (type === 'Commission') label = `Comissão — ${row.percentage}% sobre ${row.baseAmount}`;
+        else if (type === 'CommissionInstallment') label = `Parcela de comissão — ${row.amount || ''}`.trim();
+        else if (type === 'OwnerRepass') label = `Repasse — ${row.referenceMonth || ''} · R$ ${row.netAmount || ''}`.trim();
+        labelsByTypeAndId[type][row.id] = label;
+      });
+    })
+  );
+
+  return requests.map((r) => {
+    const label = labelsByTypeAndId[r.relatedEntityType]?.[r.relatedEntityId] || null;
+    const json = r.toJSON ? r.toJSON() : r;
+    return { ...json, relatedEntityLabel: label };
+  });
+}
+
 async function listApprovalRequests(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.relatedEntityType) where.relatedEntityType = filters.relatedEntityType;
   if (filters.relatedEntityId) where.relatedEntityId = filters.relatedEntityId;
-  return ApprovalRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const requests = await ApprovalRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return resolveRelatedEntityLabels(requests, transaction);
 }
 
 async function getApprovalRequest(id, transaction) {
