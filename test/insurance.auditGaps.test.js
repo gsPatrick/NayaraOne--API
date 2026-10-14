@@ -73,7 +73,7 @@ async function receive(transaction, item, location, quantity) {
 test('Item 1: quotePolicy recusa recotar apólice já ACTIVE/ISSUED', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, actor(), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
       { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' },
@@ -83,7 +83,7 @@ test('Item 1: quotePolicy recusa recotar apólice já ACTIVE/ISSUED', async () =
     assert.ok(['ACTIVE', 'ISSUED'].includes(issued.status));
 
     await assert.rejects(
-      () => insuranceService.quotePolicy(policy.id, {}, actor(), transaction),
+      () => insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'INSURANCE_POLICY_INVALID_STATUS');
@@ -122,7 +122,7 @@ test('Item 3: quotePolicy recusa premiumAmount não-finito/<=0 vindo do adapter'
     );
 
     // Confirma que o fluxo normal (sandbox devolve um premiumAmount válido) continua funcionando.
-    const quoted = await insuranceService.quotePolicy(policy.id, {}, actor(), transaction);
+    const quoted = await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
     assert.ok(Number.isFinite(Number(quoted.premiumAmount)) && Number(quoted.premiumAmount) > 0);
   });
 });
@@ -130,7 +130,7 @@ test('Item 3: quotePolicy recusa premiumAmount não-finito/<=0 vindo do adapter'
 test('Item 4: issuePolicy recusa installmentsCount não-inteiro ou fora do teto de 60 parcelas', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, actor(), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
 
     await assert.rejects(
       () => insuranceService.issuePolicy(

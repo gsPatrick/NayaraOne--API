@@ -12,6 +12,7 @@ const {
   FinancialEntry,
   File,
   FileLink,
+  AuditLog,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
@@ -205,6 +206,16 @@ async function quotePolicy(id, quoteRequest, actor, transaction) {
   if (!POLICY_STATUSES_ELIGIBLE_FOR_QUOTE.includes(policy.status)) {
     throw AppError.conflict(`Apólice com status "${policy.status}" não pode ser recotada.`, 'INSURANCE_POLICY_INVALID_STATUS');
   }
+  // BUG REAL CORRIGIDO (auditoria Nayara, 2026-10-14 — Marco 7 F6): a cotação exigia um valor
+  // estimado para o adapter calcular o prêmio; sem validar, um request vazio ainda era aceito e
+  // caía no prêmio fixo de fallback do sandbox (R$ 100,00), escondendo o erro do usuário.
+  const estimatedValueNumber = Number(quoteRequest?.estimatedValue);
+  if (!Number.isFinite(estimatedValueNumber) || estimatedValueNumber <= 0) {
+    throw AppError.badRequest(
+      'Informe o valor estimado do bem/aluguel segurado (maior que zero) antes de cotar.',
+      'INSURANCE_POLICY_VALIDATION'
+    );
+  }
   const adapter = await resolveInsuranceAdapter({ groupId: policy.groupId, companyId: policy.companyId }, transaction);
   const quote = await adapter.quote(quoteRequest || {});
 
@@ -219,13 +230,17 @@ async function quotePolicy(id, quoteRequest, actor, transaction) {
   if (nextPremiumAmount != null) {
     const amount = Number(nextPremiumAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      throw AppError.badRequest('"premiumAmount" precisa ser um número finito maior que zero.', 'INSURANCE_POLICY_VALIDATION');
+      throw AppError.badRequest('O valor do prêmio precisa ser um número maior que zero.', 'INSURANCE_POLICY_VALIDATION');
     }
   }
 
+  // BUG REAL CORRIGIDO (auditoria Nayara, 2026-10-14 — Marco 7 F6): o adapter sandbox sempre
+  // retorna um texto fixo de coverageSummary ("Cotação simulada...") que sobrescrevia a cobertura
+  // digitada pelo usuário na criação da apólice — perda silenciosa de dado. A resposta do
+  // provider já fica preservada em `quoteSnapshot` (linha abaixo); `coverageSummary` nunca é
+  // mais sobrescrito por uma cotação.
   policy.quoteSnapshot = redactPii(rawForSnapshot);
   policy.premiumAmount = nextPremiumAmount;
-  policy.coverageSummary = quote.coverageSummary || policy.coverageSummary;
   policy.status = 'QUOTED';
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
@@ -355,13 +370,13 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     const expiryTime = Date.parse(String(nextExpiryDate).slice(0, 10));
     if (!Number.isFinite(effectiveTime) || !Number.isFinite(expiryTime)) {
       throw AppError.badRequest(
-        '"effectiveDate" e "expiryDate" precisam ser datas válidas (YYYY-MM-DD).',
+        'A data de início e a data de fim da vigência precisam ser datas válidas.',
         'INSURANCE_POLICY_VALIDATION'
       );
     }
     if (expiryTime <= effectiveTime) {
       throw AppError.badRequest(
-        '"expiryDate" precisa ser posterior a "effectiveDate" — vigência vazia ou invertida não é permitida.',
+        'A data de fim da vigência precisa ser posterior à data de início — vigência vazia ou invertida não é permitida.',
         'INSURANCE_POLICY_VALIDATION'
       );
     }
@@ -376,7 +391,7 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     const count = issueRequest.installmentsCount;
     if (!Number.isInteger(count) || count < 1 || count > MAX_INSTALLMENTS_COUNT) {
       throw AppError.badRequest(
-        `"installmentsCount" precisa ser um número inteiro entre 1 e ${MAX_INSTALLMENTS_COUNT}.`,
+        `O número de parcelas precisa ser um número inteiro entre 1 e ${MAX_INSTALLMENTS_COUNT}.`,
         'INSURANCE_POLICY_VALIDATION'
       );
     }
@@ -634,7 +649,7 @@ async function openClaim(policyId, payload, actor, transaction, now = new Date()
   if (payload?.claimAmount != null) {
     const amount = Number(payload.claimAmount);
     if (!Number.isFinite(amount) || amount < 0) {
-      throw AppError.badRequest('"claimAmount" deve ser um número maior ou igual a zero.', 'INSURANCE_CLAIM_VALIDATION');
+      throw AppError.badRequest('O valor do sinistro deve ser um número maior ou igual a zero.', 'INSURANCE_CLAIM_VALIDATION');
     }
   }
 
@@ -964,6 +979,25 @@ async function getPolicy(id, groupId, companyId, transaction) {
     transaction,
   });
   if (!policy) throw AppError.notFound('Apólice não encontrada.', 'INSURANCE_POLICY_NOT_FOUND');
+  // BUG REAL CORRIGIDO (auditoria Nayara, 2026-10-14 — Marco 7 F7): o motivo do cancelamento era
+  // gravado só no audit log (ver comentário em `cancelPolicy`), mas nunca exposto de volta pra
+  // tela — depois de cancelada, a apólice mostrava só "Cancelada", sem motivo/data/autor. Mesmo
+  // padrão já usado em `legal/contractTimeline.service.js` (ler do audit log na leitura, em vez
+  // de duplicar coluna).
+  if (policy.status === 'CANCELED') {
+    const cancelLog = await AuditLog.findOne({
+      where: { entityType: 'InsurancePolicy', entityId: policy.id, action: 'procurement.insurance_policy.cancel' },
+      order: [['created_at', 'DESC']],
+      transaction,
+    });
+    if (cancelLog) {
+      policy.setDataValue('cancelInfo', {
+        reason: (cancelLog.reason || '').replace(/^Apólice cancelada — /, '').replace(/\.$/, ''),
+        occurredAt: cancelLog.occurredAt,
+        actorUserId: cancelLog.userId,
+      });
+    }
+  }
   return withExpiryFlag(policy);
 }
 

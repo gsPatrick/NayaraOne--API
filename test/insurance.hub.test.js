@@ -35,7 +35,7 @@ test('Insurance Hub: fluxo feliz completo — cotação → emissão → sinistr
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     assert.equal(policy.status, 'DRAFT');
 
-    const quoted = await insuranceService.quotePolicy(policy.id, {}, withTenant({ userId: tenant.userId }), transaction);
+    const quoted = await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     assert.equal(quoted.status, 'QUOTED');
     assert.ok(quoted.premiumAmount);
 
@@ -104,7 +104,7 @@ test('Insurance Hub: openClaim recusa claimAmount negativo', async () => {
 test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments), e pagar uma dá baixa validada', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
       { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 3 },
@@ -193,6 +193,7 @@ test('Insurance Hub: quoteSnapshot mascara CPF/renda/endereço do locatário, nu
     const quoted = await insuranceService.quotePolicy(
       policy.id,
       {
+        estimatedValue: 10000,
         TenantData: {
           PublicIdNumber: '21331742498',
           Name: 'Locatário Teste',
@@ -272,7 +273,7 @@ test('Insurance Hub: extractEmbeddedDocument reconhece o documento embutido no s
 test('Insurance Hub: cotação sandbox (sem documento da seguradora) não cria FileLink espúrio', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
 
     const documents = await insuranceService.listPolicyDocuments(policy.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(documents.length, 0, 'sandbox não devolve documento — não pode inventar um FileLink');
@@ -330,7 +331,7 @@ test('Insurance Hub: confirmação de liquidação é idempotente — reprocessa
 test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo financialEntryId (sem dupla contagem)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
       { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
@@ -450,5 +451,64 @@ test('Insurance Hub: issuePolicy rejeita vigência inválida (expiryDate <= effe
       transaction
     );
     assert.ok(['ISSUED', 'ACTIVE'].includes(issued.status));
+  });
+});
+
+// Achados reais — auditoria Nayara (Claude Browser), 2026-10-14, Marco 7 (F6/F7):
+// F6a — "Cotar" sobrescrevia a cobertura digitada pelo usuário com o texto fixo do adapter
+// sandbox ("Cotação simulada..."), perda silenciosa de dado.
+// F6b — cotar sem "estimatedValue" era aceito e caía no prêmio fixo de fallback (R$ 100), sem
+// nenhum aviso ao usuário de que o valor não foi considerado.
+// F7 — o motivo do cancelamento ficava só no audit log, nunca exposto de volta na apólice.
+test('Insurance Hub: cotar preserva a cobertura digitada pelo usuário (não sobrescreve com o texto do adapter)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const policy = await insuranceService.createPolicy(
+      withTenant({ coverageSummary: 'AUDIT M7 Seguro-fianca ficticio — Casa 7' }),
+      tenant.userId,
+      transaction
+    );
+    const quoted = await insuranceService.quotePolicy(
+      policy.id,
+      { estimatedValue: 50000 },
+      withTenant({ userId: tenant.userId }),
+      transaction
+    );
+    assert.equal(quoted.coverageSummary, 'AUDIT M7 Seguro-fianca ficticio — Casa 7');
+  });
+});
+
+test('Insurance Hub: cotar sem estimatedValue (ausente, zero ou negativo) é rejeitado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+    for (const bad of [{}, { estimatedValue: 0 }, { estimatedValue: -1 }, { estimatedValue: 'abc' }]) {
+      // eslint-disable-next-line no-await-in-loop
+      await assert.rejects(
+        () => insuranceService.quotePolicy(policy.id, bad, withTenant({ userId: tenant.userId }), transaction),
+        (err) => {
+          assert.ok(err instanceof AppError);
+          assert.equal(err.code, 'INSURANCE_POLICY_VALIDATION');
+          return true;
+        },
+        `estimatedValue ${JSON.stringify(bad)} precisa ser rejeitado`
+      );
+    }
+  });
+});
+
+test('Insurance Hub: cancelar apólice expõe motivo/data no getPolicy depois de salvo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+    await insuranceService.cancelPolicy(
+      policy.id,
+      { reason: 'Imóvel vendido, apólice não é mais necessária' },
+      withTenant({ userId: tenant.userId }),
+      transaction
+    );
+    const reloaded = await insuranceService.getPolicy(policy.id, tenant.groupId, tenant.companyId, transaction);
+    const json = reloaded.toJSON();
+    assert.equal(json.status, 'CANCELED');
+    assert.ok(json.cancelInfo, 'cancelInfo precisa vir preenchido numa apólice cancelada');
+    assert.equal(json.cancelInfo.reason, 'Imóvel vendido, apólice não é mais necessária');
+    assert.ok(json.cancelInfo.occurredAt, 'cancelInfo.occurredAt precisa estar presente');
   });
 });
