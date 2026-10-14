@@ -59,6 +59,12 @@ const getItem = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => itemsService.getItem(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: item });
 });
+const updateItem = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    itemsService.updateItem(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data: item });
+});
 
 const createLocation = catchAsync(async (req, res) => {
   const location = await req.withTenantTransaction((t) => itemsService.createLocation(withTenant(req), req.auth.userId, t));
@@ -67,6 +73,12 @@ const createLocation = catchAsync(async (req, res) => {
 const listLocations = catchAsync(async (req, res) => {
   const locations = await req.withTenantTransaction((t) => itemsService.listLocations(req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: locations });
+});
+const updateLocation = catchAsync(async (req, res) => {
+  const location = await req.withTenantTransaction((t) =>
+    itemsService.updateLocation(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data: location });
 });
 
 const recordMovement = catchAsync(async (req, res) => {
@@ -77,6 +89,13 @@ const recordMovement = catchAsync(async (req, res) => {
 const listBalancesByItem = catchAsync(async (req, res) => {
   const balances = await req.withTenantTransaction((t) => movementsService.listBalancesByItem(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: balances });
+});
+const listMovements = catchAsync(async (req, res) => {
+  const { inventoryItemId, locationId, movementType, limit } = req.query;
+  const movements = await req.withTenantTransaction((t) =>
+    movementsService.listMovements({ inventoryItemId, locationId, movementType, limit }, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data: movements });
 });
 
 const createReceipt = catchAsync(async (req, res) => {
@@ -234,11 +253,14 @@ module.exports = {
   createItem,
   listItems,
   getItem,
+  updateItem,
   setItemStatus,
   createLocation,
   listLocations,
+  updateLocation,
   recordMovement,
   listBalancesByItem,
+  listMovements,
   createReceipt,
   listReceipts,
   getReceipt,

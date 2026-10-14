@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const {
   PurchaseRequest,
   PurchaseRequestItem,
+  Project,
   Quotation,
   SupplierOffer,
   SupplierOfferItem,
@@ -110,15 +111,28 @@ async function createPurchaseRequest(payload, actorUserId, transaction) {
 // groupId/companyId deixava qualquer tenant ler/decidir/adjudicar/cancelar sobre o registro de
 // OUTRA empresa só adivinhando o UUID. Mesmo padrão já corrigido em materialRequests.service.js.
 async function getPurchaseRequest(id, groupId, companyId, transaction) {
-  const request = await PurchaseRequest.findOne({ where: { id, groupId, companyId }, include: [{ model: PurchaseRequestItem, as: 'items' }], transaction });
+  const request = await PurchaseRequest.findOne({
+    where: { id, groupId, companyId },
+    include: [{ model: PurchaseRequestItem, as: 'items' }, { model: Project, as: 'project', attributes: ['id', 'name'] }],
+    transaction,
+  });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');
   return request;
 }
 
+// F8 (auditoria Marco 7, Nayara, 14/10/2026): a lista não trazia os itens nem o solicitante,
+// então o front só conseguia mostrar status e data — nada que identificasse a requisição (obra,
+// item, quantidade). `include` dos itens resolve isso sem N+1 no front.
 async function listPurchaseRequests(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return PurchaseRequest.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
+  return PurchaseRequest.findAll({
+    where,
+    include: [{ model: PurchaseRequestItem, as: 'items' }, { model: Project, as: 'project', attributes: ['id', 'name'] }],
+    order: [['created_at', 'DESC']],
+    limit: 1500,
+    transaction,
+  });
 }
 
 // --- 2. APPROVAL ---

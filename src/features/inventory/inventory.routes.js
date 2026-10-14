@@ -12,6 +12,7 @@ inventoryRouter.use(authMiddleware, tenantMiddleware);
 inventoryRouter.post('/inventory/items', requirePermission('inventory:create'), inventoryController.createItem);
 inventoryRouter.get('/inventory/items', requirePermission('inventory:read'), inventoryController.listItems);
 inventoryRouter.get('/inventory/items/:id', requirePermission('inventory:read'), inventoryController.getItem);
+inventoryRouter.patch('/inventory/items/:id', requirePermission('inventory:update'), inventoryController.updateItem);
 inventoryRouter.get('/inventory/items/:id/balances', requirePermission('inventory:read'), inventoryController.listBalancesByItem);
 // EST-012 — estoque mínimo/reposição vêm do Motor de Regras (REG-EST-001): política por item,
 // com sobreposição opcional por local (minStockRules.service.js).
@@ -23,10 +24,12 @@ inventoryRouter.post('/inventory/items/:id/status', requirePermission('inventory
 
 inventoryRouter.post('/inventory/locations', requirePermission('inventory:create'), inventoryController.createLocation);
 inventoryRouter.get('/inventory/locations', requirePermission('inventory:read'), inventoryController.listLocations);
+inventoryRouter.patch('/inventory/locations/:id', requirePermission('inventory:update'), inventoryController.updateLocation);
 
 // Movimento de estoque — único ponto de escrita de "inventory"."stock_balances" (EST-002).
 // ADJUSTMENT/LOSS/DISPOSAL exigem inventory:approve, validado dentro do service (movements.service.js).
 inventoryRouter.post('/inventory/movements', requirePermission('inventory:create'), inventoryController.recordMovement);
+inventoryRouter.get('/inventory/movements', requirePermission('inventory:read'), inventoryController.listMovements);
 
 // Receipts/NF (Guia do Marcelo §4) — DRAFT -> REVIEWED -> COMPLETED.
 inventoryRouter.post('/inventory/receipts', requirePermission('inventory:create'), inventoryController.createReceipt);

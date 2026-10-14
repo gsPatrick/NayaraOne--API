@@ -533,6 +533,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryCountItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryCount.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
   db.PurchaseRequest.hasMany(db.PurchaseRequestItem, { foreignKey: 'purchase_request_id', as: 'items', constraints: false });
+  // F8 (auditoria Marco 7): a lista de requisições de compra não mostrava a obra — só o
+  // projectId cru existia, sem nome resolvido. Associação só pra leitura (constraints: false,
+  // mesmo padrão já usado nas linhas acima pra não acoplar FK física onde não existe).
+  db.PurchaseRequest.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.PurchaseRequestItem.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
   db.Quotation.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
   db.Quotation.hasMany(db.SupplierOffer, { foreignKey: 'quotation_id', as: 'offers', constraints: false });
