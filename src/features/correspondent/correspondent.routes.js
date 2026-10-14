@@ -10,6 +10,7 @@ const submissionsController = require('./cases/submissions.controller');
 const appraisalsController = require('./cases/appraisals.controller');
 const commissionEntitlementsController = require('./cases/commissionEntitlements.controller');
 const webhooksController = require('./webhooks.controller');
+const nayController = require('./correspondentNay.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -115,6 +116,19 @@ correspondentRouter.post(
   '/financing-cases/:id/commissions/:entitlementId/chargeback',
   requirePermission('correspondent:create'),
   commissionEntitlementsController.chargebackCommissionEntitlement
+);
+
+// Fase 10 — NAY Correspondente (restrita, somente leitura). Mesmo nível de permissão de leitura
+// do caso — a NAY aqui só sinaliza/compara dados já existentes, nunca decide nem altera nada.
+correspondentRouter.get(
+  '/financing-cases/nay/stalled',
+  requirePermission('correspondent:read'),
+  nayController.getStalledCases
+);
+correspondentRouter.get(
+  '/financing-cases/:id/nay/compare-simulations',
+  requirePermission('correspondent:read'),
+  nayController.getCompareSimulations
 );
 
 module.exports = correspondentRouter;
