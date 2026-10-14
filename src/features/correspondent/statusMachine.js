@@ -23,6 +23,23 @@ const RANK = {
   CANCELED: 7,
 };
 
+// Pares de estados "irmãos" (mesmo rank) que são DECISÕES TERMINAIS mutuamente exclusivas — uma
+// vez que o case chega num deles, um webhook atrasado/repetido com o irmão oposto NUNCA deve
+// flipar o case (ex: um evento DENIED chegando fora de ordem depois de um APPROVED já aplicado
+// não pode reverter a aprovação, e vice-versa). Movimentos laterais entre rank iguais só são
+// permitidos quando NÃO fazem parte de um desses pares (ex: UNDER_ANALYSIS -> PENDING_CUSTOMER
+// continua livre, ambos são "em andamento", não uma decisão final).
+const EXCLUSIVE_TERMINAL_PAIRS = [
+  ['APPROVED', 'REJECTED'],
+  ['COMPLETED', 'CANCELED'],
+];
+
+function isExclusiveTerminalFlip(currentStatus, candidateStatus) {
+  return EXCLUSIVE_TERMINAL_PAIRS.some(
+    ([a, b]) => (currentStatus === a && candidateStatus === b) || (currentStatus === b && candidateStatus === a)
+  );
+}
+
 /**
  * shouldApplyTransition — "Status fora de ordem não regride o case" (Caderno). Uma transição é
  * aplicada quando o novo status tem rank MAIOR OU IGUAL ao atual (rank igual cobre movimentos
@@ -30,6 +47,11 @@ const RANK = {
  * considerado "fora de ordem" (ex: um evento atrasado de UNDER_ANALYSIS chegando depois do case
  * já estar APPROVED) — a transição NUNCA é aplicada ao `financing_case.status`, mas o evento
  * ainda é sempre registrado no histórico (ver provider_status_history, `applied: false`).
+ *
+ * ACHADO REAL (auditoria pós-DoD, Frente Motor de Regras): rank igual sozinho também permitiria
+ * um flip lateral entre decisões terminais opostas (ex: REJECTED -> APPROVED via webhook
+ * atrasado/repetido com resultado diferente) — bloqueado explicitamente por
+ * `isExclusiveTerminalFlip`, mesmo quando o rank bateria `>=`.
  *
  * Status não reconhecido pelo mapa (rank undefined) nunca é aplicado — fail closed: preferimos
  * não avançar a só ter certeza de não regredir por engano com um valor desconhecido.
@@ -39,6 +61,7 @@ function shouldApplyTransition(currentStatus, candidateStatus) {
   const candidateRank = RANK[candidateStatus];
   if (candidateRank === undefined) return false;
   if (currentRank === undefined) return true; // estado atual não reconhecido — qualquer status válido pode assumir
+  if (isExclusiveTerminalFlip(currentStatus, candidateStatus)) return false;
   return candidateRank >= currentRank;
 }
 

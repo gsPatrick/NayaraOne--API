@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const commissionsService = require('../src/features/correspondent/cases/commissionEntitlements.service');
+const { publishCommissionSplitVersion } = require('../src/features/correspondent/commissionSplit.service');
 const { Person, FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -223,7 +224,7 @@ test('CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro origina
       tenant.companyId,
       transaction
     );
-    await commissionsService.confirmCommissionEntitlement(
+    const confirmed = await commissionsService.confirmCommissionEntitlement(
       entitlement.id,
       { externalConfirmationId: `conf-cb-${uniqueSuffix()}` },
       tenant.userId,
@@ -232,6 +233,9 @@ test('CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro origina
       transaction
     );
     const originalAmount = Number(entitlement.amount);
+    assert.ok(confirmed.financialEntryId, 'confirmação deveria criar um FinancialEntry real');
+    const entryBefore = await FinancialEntry.findByPk(confirmed.financialEntryId, { transaction });
+    assert.equal(entryBefore.status, 'PENDING');
 
     const { entitlement: afterChargeback, adjustment } = await commissionsService.chargebackCommissionEntitlement(
       entitlement.id,
@@ -249,6 +253,14 @@ test('CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro origina
 
     const adjustments = await commissionsService.getCommissionEntitlementAdjustments(entitlement.id, transaction);
     assert.equal(adjustments.length, 1);
+
+    // Achado real (auditoria pós-DoD): o chargeback precisa estornar de verdade o lançamento
+    // financeiro real criado na confirmação — nunca deixar um recebível "fantasma" aberto no
+    // Financeiro depois que a comissão que o originou foi estornada aqui.
+    const entryAfter = await FinancialEntry.findByPk(confirmed.financialEntryId, { transaction });
+    assert.equal(entryAfter.status, 'REVERSED', 'o FinancialEntry original precisa ser estornado quando a comissão é charged back');
+    const reversal = await FinancialEntry.findOne({ where: { reversalOfEntryId: confirmed.financialEntryId }, transaction });
+    assert.ok(reversal, 'deveria existir um lançamento compensatório de estorno');
   });
 });
 
@@ -332,5 +344,25 @@ test('CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro', 
     assert.equal(list.length, 2);
     assert.equal(list[0].id, second.id);
     assert.equal(list[1].id, first.id);
+  });
+});
+
+test('CORRESPONDENT-COM-12: percentual de comissão acima de 100% (erro de configuração) é rejeitado, nunca gera comissão maior que a base', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    await publishCommissionSplitVersion(
+      tenant.groupId,
+      tenant.companyId,
+      { percentageByProvider: { sandbox: 150 }, defaultPercentage: 1 },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 10000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      (err) => {
+        assert.equal(err.code, 'COR_COMMISSION_SPLIT_PERCENTAGE_TOO_HIGH');
+        return true;
+      }
+    );
   });
 });

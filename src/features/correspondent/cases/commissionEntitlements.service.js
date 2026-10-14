@@ -5,7 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveCommissionSplit } = require('../commissionSplit.service');
 const { getOrCreateDefaultResultCenter } = require('../../finance/resultCenters.service');
-const { createFinancialEntry } = require('../../finance/financialEntries.service');
+const { createFinancialEntry, reverseFinancialEntry } = require('../../finance/financialEntries.service');
 const { publishCommissionEntitlementCreated, publishCommissionConfirmed } = require('../correspondentEvents.service');
 
 const COMMISSION_RESULT_CENTER_CODE = 'CORRESPONDENT_COMMISSION';
@@ -170,6 +170,13 @@ async function confirmCommissionEntitlement(entitlementId, payload, actorUserId,
  * registro de auditoria (`audit.audit_log`), nunca uma linha editada/apagada. `amount`/`status`
  * do entitlement original permanecem intocados — só o campo `status` muda para ADJUSTED, que é o
  * próprio registro sinalizando "este direito foi estornado", não uma reescrita do fato histórico.
+ *
+ * Achado real (auditoria pós-DoD, Frente Financeiro/CRM): quando a comissão já tinha sido
+ * CONFIRMADA (RECEIVABLE/RECEIVED, com um FinancialEntry real criado no Financeiro), o chargeback
+ * só marcava o entitlement como ADJUSTED e nunca tocava o lançamento financeiro correspondente —
+ * o recebível ficava aberto no Financeiro pra sempre, mesmo a comissão tendo sido estornada aqui.
+ * Agora, se `financialEntryId` existir, o lançamento é estornado de verdade via
+ * `reverseFinancialEntry` (mesmo mecanismo já usado por Procurement) antes de marcar o entitlement.
  */
 async function chargebackCommissionEntitlement(entitlementId, reasonText, actorUserId, groupId, companyId, transaction) {
   const entitlement = await CommissionEntitlement.findOne({ where: { id: entitlementId, groupId, companyId }, transaction });
@@ -188,6 +195,15 @@ async function chargebackCommissionEntitlement(entitlementId, reasonText, actorU
 
   const beforeJson = entitlement.toJSON();
   const statusBefore = entitlement.status;
+
+  if (entitlement.financialEntryId) {
+    await reverseFinancialEntry(
+      entitlement.financialEntryId,
+      `Chargeback da comissão de correspondente ${entitlement.id}: ${reasonText}`,
+      actorUserId,
+      transaction
+    );
+  }
 
   entitlement.status = 'ADJUSTED';
   entitlement.updatedBy = actorUserId || null;

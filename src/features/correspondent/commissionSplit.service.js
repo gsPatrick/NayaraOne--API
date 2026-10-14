@@ -142,6 +142,16 @@ async function resolveCommissionSplit(providerCode, groupId, companyId, actorUse
       'COR_COMMISSION_SPLIT_PERCENTAGE_NOT_CONFIGURED'
     );
   }
+  // Achado real (auditoria pós-DoD, Frente Motor de Regras): não havia teto superior — uma
+  // config publicada com percentual > 100 (erro de digitação do admin, ex: 150 em vez de 1.5)
+  // geraria uma comissão MAIOR que a própria base de cálculo, sem nenhum alerta. Comissão de
+  // correspondente nunca pode exceder 100% da base.
+  if (Number(percentage) > 100) {
+    throw AppError.unprocessable(
+      `Percentual de comissão configurado para o provider "${providerCode}" (${percentage}%) está acima do limite de 100%. Corrija a regra de comissão antes de continuar.`,
+      'COR_COMMISSION_SPLIT_PERCENTAGE_TOO_HIGH'
+    );
+  }
   return { percentage: Number(percentage), ruleVersionId: evaluation.ruleVersionId };
 }
 

@@ -263,3 +263,17 @@ test('CORRESPONDENT-WEBHOOK-09: GET status isola por empresa (RLS) — case de o
     (err) => err.code === 'FINANCING_CASE_NOT_FOUND'
   );
 });
+
+test('CORRESPONDENT-WEBHOOK-10: status terminal não flipa pro irmão oposto (REJECTED não vira APPROVED, COMPLETED não vira CANCELED)', () => {
+  const { shouldApplyTransition } = require('../src/features/correspondent/statusMachine');
+  assert.equal(shouldApplyTransition('REJECTED', 'APPROVED'), false);
+  assert.equal(shouldApplyTransition('APPROVED', 'REJECTED'), false);
+  assert.equal(shouldApplyTransition('COMPLETED', 'CANCELED'), false);
+  assert.equal(shouldApplyTransition('CANCELED', 'COMPLETED'), false);
+  // Movimentos laterais legítimos (mesmo rank, não são decisão terminal oposta) continuam livres.
+  assert.equal(shouldApplyTransition('UNDER_ANALYSIS', 'PENDING_CUSTOMER'), true);
+  assert.equal(shouldApplyTransition('PENDING_CUSTOMER', 'PENDING_PROPERTY'), true);
+  // Progresso normal continua funcionando.
+  assert.equal(shouldApplyTransition('SUBMITTED', 'UNDER_ANALYSIS'), true);
+  assert.equal(shouldApplyTransition('UNDER_ANALYSIS', 'APPROVED'), true);
+});
