@@ -5,6 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { publishFinancingCaseCreated } = require('../correspondentEvents.service');
+const { flagPossibleDuplicate } = require('../correspondentDuplicate.service');
 
 const APPLICANT_ROLES = ['PRINCIPAL', 'CO_APPLICANT'];
 const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
@@ -101,6 +102,10 @@ async function createFinancingCase(payload, actorUserId, transaction) {
   );
 
   await publishFinancingCaseCreated(financingCase, transaction);
+
+  // Marco 8 Fase 11 — sinaliza possível duplicata (fingerprint), nunca bloqueia a criação.
+  const principal = applicants.find((a) => (a.role || 'PRINCIPAL') === 'PRINCIPAL');
+  await flagPossibleDuplicate(financingCase, principal.personId, actorUserId, transaction);
 
   return getFinancingCase(financingCase.id, groupId, companyId, transaction);
 }

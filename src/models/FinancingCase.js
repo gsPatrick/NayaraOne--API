@@ -18,6 +18,10 @@ module.exports = (sequelize) => {
       // Oportunidade de CRM vinculada (opcional, Marco 8 Fase 9) — só referência; atualizada via
       // evento/audit log (correspondentCrmSync.service.js), nunca escrita direta na Opportunity.
       opportunityId: { type: DataTypes.UUID, allowNull: true, field: 'opportunity_id' },
+      // Sinalização de possível duplicata (Marco 8 Fase 11) — nunca bloqueia a criação, só
+      // sinaliza para revisão humana. Ver correspondentDuplicate.service.js.
+      duplicateFingerprint: { type: DataTypes.STRING(64), allowNull: true, field: 'duplicate_fingerprint' },
+      possibleDuplicateOfCaseId: { type: DataTypes.UUID, allowNull: true, field: 'possible_duplicate_of_case_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
