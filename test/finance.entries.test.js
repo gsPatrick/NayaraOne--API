@@ -140,6 +140,42 @@ test('listApprovalRequests resolve relatedEntityLabel com a descrição real do 
   });
 });
 
+test('listApprovalRequests nunca deixa relatedEntityLabel vazio, mesmo quando o lançamento não tem descrição (achado #2, verificação complementar rodada 4)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const entry = await createEntry(transaction, tenant.userId, { description: null, nature: 'PAYABLE', amount: 250.5 });
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.equal(list.length, 1);
+    assert.ok(list[0].relatedEntityLabel, 'relatedEntityLabel nunca pode ser null/vazio, mesmo sem description');
+    assert.notEqual(list[0].relatedEntityLabel, entry.id, 'o label não pode ser só o id cru');
+    assert.match(list[0].relatedEntityLabel, /Despesa|250,50/, 'o fallback deve usar natureza/valor do lançamento, não ficar genérico demais');
+
+    const found = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.ok(found[0].relatedEntityLabel.includes('250,50'), 'a busca por valor deve funcionar porque o label inclui o valor formatado');
+  });
+});
+
+test('listApprovalRequests gera um rótulo legível em português mesmo para uma entidade relacionada que não existe mais', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const fakeId = '11111111-1111-1111-1111-111111111111';
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: fakeId, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: fakeId });
+    assert.equal(list.length, 1);
+    assert.ok(list[0].relatedEntityLabel, 'mesmo sem a entidade existir, precisa haver um rótulo legível');
+    assert.notEqual(list[0].relatedEntityLabel, fakeId, 'nunca pode cair no id cru como rótulo');
+  });
+});
+
 test('conciliação: valores divergentes entre lançamento e extrato são bloqueados', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await bankAccountsService.createBankAccount(
