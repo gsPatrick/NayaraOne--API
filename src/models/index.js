@@ -147,6 +147,7 @@ const modelDefiners = {
   CaseApplicant: require('./CaseApplicant'),
   CaseRequirement: require('./CaseRequirement'),
   CaseDocument: require('./CaseDocument'),
+  Simulation: require('./Simulation'),
   PurchaseRequest: require('./PurchaseRequest'),
   PurchaseRequestItem: require('./PurchaseRequestItem'),
   Quotation: require('./Quotation'),
@@ -252,6 +253,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.CaseDocument.belongsTo(db.CaseRequirement, { foreignKey: 'requirement_id', as: 'requirement', constraints: false });
   db.CaseDocument.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
   db.CaseDocument.belongsTo(db.File, { foreignKey: 'file_id', as: 'file', constraints: false });
+
+  db.FinancingCase.hasMany(db.Simulation, { foreignKey: 'financing_case_id', as: 'simulations', constraints: false });
+  db.Simulation.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
   db.Person.hasMany(db.Person, { foreignKey: 'merged_into_id', as: 'mergedFrom', constraints: false });
   db.File.belongsTo(db.User, { foreignKey: 'uploaded_by_user_id', as: 'uploadedByUser', constraints: false });
   db.FileLink.belongsTo(db.File, { foreignKey: 'file_id', as: 'file', constraints: false });

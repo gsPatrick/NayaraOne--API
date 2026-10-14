@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
+const simulationsController = require('./cases/simulations.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -33,6 +34,19 @@ correspondentRouter.post(
   '/financing-cases/:id/documents',
   requirePermission('correspondent:create'),
   documentsController.uploadDocument
+);
+
+// Fase 3 — simulations. Criar exige correspondent:create (mesmo nível de criar o próprio caso);
+// listar segue correspondent:read (dado não-restrito, nenhum documento envolvido).
+correspondentRouter.post(
+  '/financing-cases/:id/simulations',
+  requirePermission('correspondent:create'),
+  simulationsController.createSimulation
+);
+correspondentRouter.get(
+  '/financing-cases/:id/simulations',
+  requirePermission('correspondent:read'),
+  simulationsController.listSimulations
 );
 
 module.exports = correspondentRouter;
