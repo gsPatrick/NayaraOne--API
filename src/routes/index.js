@@ -23,6 +23,7 @@ const inventoryRouter = require('../features/inventory/inventory.routes');
 const inventoryNayRouter = require('../features/inventory/inventoryNay.routes');
 const procurementRouter = require('../features/procurement/procurement.routes');
 const correspondentRouter = require('../features/correspondent/correspondent.routes');
+const correspondentWebhooksController = require('../features/correspondent/webhooks.controller');
 const insuranceController = require('../features/procurement/insurance.controller');
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
@@ -58,6 +59,9 @@ router.post('/v1/finance/webhooks/bank-payment', financeController.bankPaymentPu
 // Mesmo motivo acima, pro webhook de seguradora (Insurance Hub, Marco 7) — resolve o tenant via
 // InsuranceProviderSubmission (sem RLS).
 router.post('/v1/procurement/webhooks/insurance', insuranceController.insurancePublicWebhook);
+// Marco 8 Fase 6 — webhook de financiamento. Path segue a API mínima literal do Caderno
+// ("POST /webhooks/financing/:provider"), prefixado com /v1/correspondent como os demais.
+router.post('/v1/correspondent/webhooks/financing/:provider', correspondentWebhooksController.financingPublicWebhook);
 // Carrinho de imóveis compartilhável (crm.carts, item 3) — link PÚBLICO, sem JWT (quem recebe
 // o link é um lead/cliente final, não um usuário do sistema). Resolve o tenant via
 // CartShareRouting (sem RLS), mesmo padrão dos webhooks acima.

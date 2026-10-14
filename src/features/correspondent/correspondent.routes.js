@@ -7,6 +7,7 @@ const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
 const simulationsController = require('./cases/simulations.controller');
 const submissionsController = require('./cases/submissions.controller');
+const webhooksController = require('./webhooks.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -67,6 +68,14 @@ correspondentRouter.post(
   '/financing-cases/:id/submissions/:submissionId/acknowledge-unknown',
   requirePermission('correspondent:create'),
   submissionsController.acknowledgeUnknownSubmission
+);
+
+// Fase 6 — consulta de status consolidado (status atual + histórico append-only). Mesmo nível de
+// permissão de leitura do caso.
+correspondentRouter.get(
+  '/financing-cases/:id/status',
+  requirePermission('correspondent:read'),
+  webhooksController.getFinancingCaseStatus
 );
 
 module.exports = correspondentRouter;

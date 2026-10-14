@@ -129,6 +129,22 @@ class SandboxFinancingProviderAdapter {
   verifyWebhook(rawBody, headers, secret) {
     return verifyHmacSignature(rawBody, headers, secret);
   }
+
+  // Mapa de status por provider — citação literal do Caderno (Marco 8, Guia do Marcelo,
+  // "Status mapping"): "RECEIVED→SUBMITTED, ANALYSIS→UNDER_ANALYSIS, DOC_PENDING→PENDING_CUSTOMER,
+  // APPROVED→APPROVED, DENIED→REJECTED, CONTRACTED→COMPLETED." Retorna null (nunca lança) quando o
+  // status bruto não é reconhecido — o chamador decide o que fazer (nunca perder o evento bruto).
+  normalizeProviderStatus(rawStatus) {
+    const MAP = {
+      RECEIVED: 'SUBMITTED',
+      ANALYSIS: 'UNDER_ANALYSIS',
+      DOC_PENDING: 'PENDING_CUSTOMER',
+      APPROVED: 'APPROVED',
+      DENIED: 'REJECTED',
+      CONTRACTED: 'COMPLETED',
+    };
+    return MAP[String(rawStatus || '').toUpperCase()] || null;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -195,6 +211,12 @@ class ManualWorkflowFinancingProviderAdapter {
   // engano, sempre nega.
   verifyWebhook() {
     return false;
+  }
+
+  // Sem API do provider, não há vocabulário de status bruto pra normalizar — evolução de status
+  // é só por ação humana (ver comentário da classe).
+  normalizeProviderStatus() {
+    return null;
   }
 }
 

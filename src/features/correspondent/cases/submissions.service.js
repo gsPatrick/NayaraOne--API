@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { FinancingCase, CaseRequirement, Simulation, ProviderSubmission } = require('../../../models');
+const { FinancingCase, CaseRequirement, Simulation, ProviderSubmission, ExternalCaseRouting } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
@@ -167,6 +167,22 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
 
     financingCase.status = 'SUBMITTED';
     await financingCase.save({ transaction });
+
+    // Fase 6 (webhooks): grava o mapeamento externalCaseId -> tenant na tabela de roteamento
+    // sem RLS (ver ExternalCaseRouting) — é assim que o webhook consegue descobrir o tenant
+    // ANTES de poder abrir uma transação com SET LOCAL. upsert pelo PK (externalCaseId) porque,
+    // em teoria, uma resubmissão (após acknowledgeUnknownSubmission) pode gerar um novo
+    // externalCaseId pro MESMO case — nunca deve haver conflito de verdade, mas upsert é seguro.
+    await ExternalCaseRouting.upsert(
+      {
+        externalCaseId: result.externalId,
+        providerCode: financingCase.providerCode,
+        financingCaseId: financingCase.id,
+        groupId,
+        companyId,
+      },
+      { transaction }
+    );
 
     await registrarAuditoria(
       {

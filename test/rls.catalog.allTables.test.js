@@ -33,6 +33,9 @@ after(async () => {
 //   migrations/20260101000286-create-crm-carts.js (cart_share_routing — link público do carrinho de imóveis)
 //   migrations/20260101000272-create-procurement-insurance-hub.js (insurance_provider_submissions
 //     — webhook público da seguradora, mesmo motivo)
+//   migrations/20260101000345-create-correspondent-external-case-routing.js
+//     (correspondent.external_case_routing — webhook público de financiamento, Marco 8 Fase 6,
+//     mesmo motivo; mapeamento mínimo só de IDs, nunca fonte de verdade de negócio)
 // Qualquer outra tabela multiempresa fora desta lista precisa de RLS+FORCE RLS+policy — a
 // lista existe para que uma exceção nova precise ser adicionada aqui EXPLICITAMENTE (code
 // review visível), nunca passar silenciosamente.
@@ -41,6 +44,7 @@ const DELIBERATE_NO_RLS_EXCEPTIONS = new Set([
   'finance.bank_payment_provider_routing',
   'crm.cart_share_routing',
   'procurement.insurance_provider_submissions',
+  'correspondent.external_case_routing',
 ]);
 
 test('RLS/FORCE RLS habilitados em 100% das tabelas multiempresa (coluna company_id) do catálogo Postgres', async () => {
