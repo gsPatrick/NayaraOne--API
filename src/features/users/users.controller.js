@@ -38,4 +38,12 @@ const remove = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
-module.exports = { create, list, getOne, update, remove };
+const setPassword = catchAsync(async (req, res) => {
+  const user = await usersService.setUserPassword(req.params.id, req.body.password, req.auth.userId, {
+    groupId: req.auth.groupId,
+    companyId: req.auth.companyId,
+  });
+  return success(res, { data: user });
+});
+
+module.exports = { create, list, getOne, update, remove, setPassword };

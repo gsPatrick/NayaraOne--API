@@ -129,18 +129,12 @@ async function getUserSafe(id) {
 async function updateUser(id, payload, actorUserId, actorContext = {}) {
   const user = await getUser(id);
   const beforeJson = toSafeJson(user);
-  const { name, status, mfaEnabled, mfaMethod, password } = payload;
+  const { name, status, mfaEnabled, mfaMethod } = payload;
   const statusChanged = status !== undefined && status !== user.status;
   if (name !== undefined) user.name = name;
   if (status !== undefined) user.status = status;
   if (mfaEnabled !== undefined) user.mfaEnabled = Boolean(mfaEnabled);
   if (mfaMethod !== undefined) user.mfaMethod = mfaMethod;
-  if (password !== undefined) {
-    if (password.length < 8) {
-      throw AppError.badRequest('A senha deve ter ao menos 8 caracteres.', 'USER_WEAK_PASSWORD');
-    }
-    user.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  }
   user.updatedBy = actorUserId || null;
   await user.save();
 
@@ -195,4 +189,51 @@ async function deleteUser(id, actorUserId, actorContext = {}) {
   return { id };
 }
 
-module.exports = { createUser, listUsers, getUser, getUserSafe, updateUser, deleteUser, revokeAllSessionsForUser, toSafeJson };
+/**
+ * setUserPassword — define/reseta a senha de outro usuário. Ação sensível (equivalente em
+ * risco a conceder um papel — ambas dão acesso efetivo à conta): a rota exige `requireRecentMfa`
+ * (ver users.routes.js), igual a `POST /memberships`. Antes desta função, o único jeito de um
+ * usuário novo conseguir logar era definir a própria senha via algum fluxo de convite — que não
+ * existe neste marco — deixando qualquer usuário criado pelo admin sem forma de acessar o
+ * sistema. Revoga todas as sessões ativas do usuário-alvo (senha trocada invalida sessões
+ * antigas, mesmo padrão de `updateUser` ao suspender).
+ */
+async function setUserPassword(id, password, actorUserId, actorContext = {}) {
+  if (!password || password.length < 8) {
+    throw AppError.badRequest('A senha deve ter ao menos 8 caracteres.', 'USER_WEAK_PASSWORD');
+  }
+  const user = await getUser(id);
+  user.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  user.updatedBy = actorUserId || null;
+  await user.save();
+
+  const revokedSessions =
+    actorContext.groupId && actorContext.companyId ? await revokeAllSessionsForUser(id, actorContext) : 0;
+
+  if (actorContext.groupId && actorContext.companyId) {
+    await registrarAuditoria({
+      groupId: actorContext.groupId,
+      companyId: actorContext.companyId,
+      actorUserId,
+      action: 'user.set_password',
+      entityType: 'User',
+      entityId: user.id,
+      reason: `Senha do usuário "${user.name}" (${user.email}) definida/redefinida por um administrador.` +
+        (revokedSessions > 0 ? ` ${revokedSessions} sessão(ões) ativa(s) revogada(s) imediatamente.` : ''),
+    });
+  }
+
+  return toSafeJson(user);
+}
+
+module.exports = {
+  createUser,
+  listUsers,
+  getUser,
+  getUserSafe,
+  updateUser,
+  setUserPassword,
+  deleteUser,
+  revokeAllSessionsForUser,
+  toSafeJson,
+};
