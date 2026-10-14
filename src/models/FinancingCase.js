@@ -18,6 +18,11 @@ module.exports = (sequelize) => {
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
+      // Contador dedicado de idempotência de submissão (Marco 8 Fase 5) — DELIBERADAMENTE
+      // separado de `lockVersion` (controle otimista do Sequelize, que muda em QUALQUER save,
+      // inclusive como efeito colateral de uma submissão com sucesso). Só muda via
+      // acknowledgeUnknownSubmission. Ver migration 20260101000342.
+      submissionVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'submission_version' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

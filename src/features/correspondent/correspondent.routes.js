@@ -6,6 +6,7 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
 const simulationsController = require('./cases/simulations.controller');
+const submissionsController = require('./cases/submissions.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -47,6 +48,25 @@ correspondentRouter.get(
   '/financing-cases/:id/simulations',
   requirePermission('correspondent:read'),
   simulationsController.listSimulations
+);
+
+// Fase 5 — submissão idempotente. Submeter exige correspondent:create (mesmo nível de criar o
+// caso); "reconhecer UNKNOWN" (destrava nova tentativa, nunca reenvia cego) também, por ser uma
+// ação de mesmo peso de negócio.
+correspondentRouter.post(
+  '/financing-cases/:id/submissions',
+  requirePermission('correspondent:create'),
+  submissionsController.submitFinancingCase
+);
+correspondentRouter.get(
+  '/financing-cases/:id/submissions',
+  requirePermission('correspondent:read'),
+  submissionsController.listSubmissions
+);
+correspondentRouter.post(
+  '/financing-cases/:id/submissions/:submissionId/acknowledge-unknown',
+  requirePermission('correspondent:create'),
+  submissionsController.acknowledgeUnknownSubmission
 );
 
 module.exports = correspondentRouter;
