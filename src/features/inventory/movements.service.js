@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase } = require('../../models');
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -78,7 +78,7 @@ async function assertLocationsNotFrozenByCount(locationIds, groupId, companyId, 
   const openCount = await InventoryCount.findOne({ where: { locationId: ids, groupId, companyId, status: 'OPEN' }, transaction });
   if (openCount) {
     throw AppError.conflict(
-      `Local em inventário físico (contagem ${openCount.id} aberta) — movimentações neste local ficam bloqueadas até a contagem ser concluída (freeze lógico).`,
+      'Este local está em contagem de inventário físico — movimentações ficam bloqueadas temporariamente até a contagem ser concluída.',
       'INVENTORY_LOCATION_FROZEN_BY_COUNT'
     );
   }
@@ -177,7 +177,7 @@ async function recordMovement(payload, actor, transaction) {
   // ~157: `receipt:${receipt.id}:item:${line.id}`) — exigir aqui quebraria esses fluxos.
   if (APPROVAL_REQUIRED_TYPES.includes(movementType) && !idempotencyKey) {
     throw AppError.badRequest(
-      `Movimento "${movementType}" exige "idempotencyKey" (evento reexecutável não pode criar segunda obrigação — EST-TS-12).`,
+      'Não foi possível registrar o movimento — tente novamente em alguns instantes.',
       'INVENTORY_MOVEMENT_IDEMPOTENCY_KEY_REQUIRED'
     );
   }
@@ -236,6 +236,15 @@ async function recordMovement(payload, actor, transaction) {
   if ((movementType === 'OUT' || movementType === 'TRANSFER') && ['TOOL', 'ASSET'].includes(item.itemType) && !responsiblePersonId) {
     throw AppError.badRequest(`Movimento "${movementType}" de ferramenta/ativo exige "responsiblePersonId".`, 'INVENTORY_MOVEMENT_VALIDATION');
   }
+  // BUG REAL CORRIGIDO (auditoria Nayara, Marco 7, F17): uma "Saída" manual pela tela de
+  // Movimentos passava sem obra, responsável ou motivo — exatamente o risco "Baixa sem retirada"
+  // do Caderno (seção 13, "QR/responsável/evidência conforme risco"). Fluxos automatizados
+  // (requisição, devolução de ferramenta etc.) já chegam aqui com `sourceType` preenchido e
+  // controlado pelo próprio fluxo de origem — essa exigência vale só pra saída manual genuína
+  // (sem sourceType, ou MANUAL), que é onde a baixa sem controle de fato acontecia.
+  if (movementType === 'OUT' && (!sourceType || sourceType === 'MANUAL') && !responsiblePersonId) {
+    throw AppError.badRequest('Saída manual de estoque exige "responsiblePersonId" (quem está retirando).', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+  }
   // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): o endpoint genérico de movimentos
   // aceitava "movementType: LOSS" direto (com motivo/aprovação/evidência por valor já exigidos
   // acima), mas sem NENHUM vínculo obrigatório com um InventoryLossCase — permitindo registrar
@@ -260,7 +269,7 @@ async function recordMovement(payload, actor, transaction) {
         transaction
       );
       throw AppError.badRequest(
-        'Movimento "LOSS" exige vínculo com um caso de perda aprovado ("sourceType": "LOSS_CASE" e "sourceId" do caso) — registre e decida em lossCases antes.',
+        'Um movimento de perda só pode ser registrado a partir de um caso de perda já aprovado — abra o caso em "Perdas & Extravios" primeiro.',
         'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
       );
     }
@@ -280,20 +289,38 @@ async function recordMovement(payload, actor, transaction) {
         transaction
       );
       throw AppError.badRequest(
-        'O caso de perda informado ("sourceId") não existe, não pertence a este item, ou não está APROVADO.',
+        'O caso de perda informado não existe, não pertence a este item, ou ainda não foi aprovado.',
         'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
       );
     }
   }
   // EST-004: material atribuído à obra (entra/sai de um local PROJECT_SITE) precisa de projectId.
+  // BUG REAL CORRIGIDO (auditoria Nayara, Marco 7, F2): o formulário de movimento não tem (nem
+  // deveria ter) campo de obra — um canteiro pertence a UMA obra fixa, decidida no cadastro do
+  // local (items.service.js#createLocation já exige isso). Em vez de exigir "projectId" de novo
+  // aqui, deriva automaticamente da(s) obra(s) do(s) local(is) de obra tocados pelo movimento.
   const touchedLocationIds = [sourceLocationId, destinationLocationId].filter(Boolean);
-  if (touchedLocationIds.length > 0 && !projectId) {
+  let resolvedProjectId = projectId || null;
+  if (touchedLocationIds.length > 0) {
     const siteLocations = await InventoryLocation.findAll({
       where: { id: touchedLocationIds, groupId, companyId, locationType: 'PROJECT_SITE' },
       transaction,
     });
     if (siteLocations.length > 0) {
-      throw AppError.badRequest('Movimento envolvendo local de obra (PROJECT_SITE) exige "projectId" (EST-004).', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
+      const projectIdsFromSites = [...new Set(siteLocations.map((l) => l.projectId).filter(Boolean))];
+      if (!resolvedProjectId) {
+        if (projectIdsFromSites.length === 1) {
+          resolvedProjectId = projectIdsFromSites[0];
+        } else if (projectIdsFromSites.length > 1) {
+          // TRANSFER entre dois canteiros de obras DIFERENTES — caso raro, não dá pra
+          // escolher uma obra sozinho, exige que o chamador informe qual prevalece.
+          throw AppError.badRequest('Movimento entre locais de obras diferentes exige "projectId" explícito.', 'INVENTORY_MOVEMENT_PROJECT_AMBIGUOUS');
+        } else {
+          // Local PROJECT_SITE sem obra vinculada (dado legado anterior à exigência em
+          // createLocation) — fail closed, igual ao comportamento anterior.
+          throw AppError.badRequest('Este local é um canteiro de obra, mas não tem nenhuma obra vinculada no cadastro — edite o local e vincule a obra antes de movimentar.', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
+        }
+      }
     }
   }
 
@@ -313,7 +340,7 @@ async function recordMovement(payload, actor, transaction) {
       groupId,
       companyId,
       inventoryItemId,
-      projectId: projectId || null,
+      projectId: resolvedProjectId,
       stageId: stageId || null,
       movementType,
       quantity: qty,
@@ -398,6 +425,33 @@ async function getBalance(inventoryItemId, locationId, groupId, companyId, trans
   return balance ? Number(balance.quantityOnHand) : 0;
 }
 
+// BUG REAL CORRIGIDO (auditoria Nayara, Marco 7, F3): não existia NENHUM jeito de ver o
+// histórico (ledger) de movimentações — a tela "Movimentos" só mostrava o saldo atual agregado,
+// sem quem moveu o quê, quando e por quê. A tabela já grava tudo (append-only, ver model); só
+// faltava a listagem. Filtros opcionais por item/local/tipo, mais recente primeiro.
+async function listMovements(filters, groupId, companyId, transaction) {
+  const { inventoryItemId, locationId, movementType, limit } = filters || {};
+  const where = { groupId, companyId };
+  if (inventoryItemId) where.inventoryItemId = inventoryItemId;
+  if (movementType) where.movementType = movementType;
+  if (locationId) {
+    const { Op } = require('sequelize');
+    where[Op.or] = [{ sourceLocationId: locationId }, { destinationLocationId: locationId }];
+  }
+  return InventoryMovement.findAll({
+    where,
+    include: [
+      { model: InventoryItem, as: 'inventoryItem', attributes: ['id', 'name', 'sku'] },
+      { model: InventoryLocation, as: 'sourceLocation', attributes: ['id', 'name'] },
+      { model: InventoryLocation, as: 'destinationLocation', attributes: ['id', 'name'] },
+      { model: User, as: 'movedByUser', attributes: ['id', 'name'] },
+    ],
+    order: [['moved_at', 'DESC']],
+    limit: Math.min(Number(limit) || 100, 500),
+    transaction,
+  });
+}
+
 async function listBalancesByItem(inventoryItemId, groupId, companyId, transaction) {
   return InventoryStockBalance.findAll({
     where: { inventoryItemId, groupId, companyId },
@@ -408,4 +462,4 @@ async function listBalancesByItem(inventoryItemId, groupId, companyId, transacti
   });
 }
 
-module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem, assertLocationsNotFrozenByCount };
+module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem, listMovements, assertLocationsNotFrozenByCount };
