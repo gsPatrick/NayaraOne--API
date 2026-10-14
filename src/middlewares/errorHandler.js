@@ -84,6 +84,20 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
+  // BUG REAL CORRIGIDO (auditoria adversarial pós-DoD do Marco 8, Frente 8 — Validação/Casos
+  // extremos): um corpo JSON malformado (ex.: JSON.stringify quebrado, corpo truncado, cliente
+  // bugado) é rejeitado pelo `express.json()` ANTES de chegar em qualquer controller, como
+  // SyntaxError com `err.type === 'entity.parse.failed'` — caía no catch-all abaixo e virava 500
+  // INTERNAL_ERROR em vez de um 400 amigável. Mesma classe de vazamento de erro de
+  // infraestrutura já corrigida acima para UUID inválido / overflow numérico / payload grande.
+  if (err && (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in (err || {})))) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'INVALID_JSON_BODY',
+      message: 'O corpo da requisição não é um JSON válido.',
+    });
+  }
+
   if (err && err.name === 'SequelizeValidationError') {
     return failure(res, {
       statusCode: 400,
