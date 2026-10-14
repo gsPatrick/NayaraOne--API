@@ -22,7 +22,10 @@ const { startMissingDailyReportJob } = require('./src/engines/jobs/missingDailyR
 const { startToolLoanOverdueJob } = require('./src/engines/jobs/toolLoanOverdueJob');
 const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceRenewalAlertJob');
 const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
+const { startCaseDocumentExpiryJob } = require('./src/engines/jobs/caseDocumentExpiryJob');
 const { startBillingScheduleAutoGenerateJob } = require('./src/engines/jobs/billingScheduleAutoGenerateJob');
+const { startCorrespondentSubmissionWorkerJob } = require('./src/engines/jobs/correspondentSubmissionWorkerJob');
+const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/correspondentAppraisalWorkerJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -186,6 +189,24 @@ if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_RENEWAL_ALERT_JOB_D
 // dos jobs acima.
 if (process.env.NODE_ENV !== 'test' && process.env.INSURANCE_POLICY_EXPIRY_JOB_DISABLED !== 'true') {
   startInsurancePolicyExpiryJob();
+}
+
+// Expiração de documento do Correspondente gera novo requirement automaticamente (Marco 8,
+// Caderno: "Documento substituído preserva versão anterior; expiração gera requirement."). Mesmo
+// padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.CASE_DOCUMENT_EXPIRY_JOB_DISABLED !== 'true') {
+  startCaseDocumentExpiryJob();
+}
+
+// Worker assíncrono de submissão/avaliação do Correspondente (Marco 8, Caderno: "Worker chama
+// provider"). Os endpoints HTTP (POST .../submissions, POST .../appraisals) só persistem o
+// registro como PENDING/REQUESTED e devolvem na hora — estes jobs chamam o adapter de verdade
+// fora do ciclo de vida do request. Mesmo padrão dos jobs acima.
+if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_SUBMISSION_WORKER_DISABLED !== 'true') {
+  startCorrespondentSubmissionWorkerJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_APPRAISAL_WORKER_DISABLED !== 'true') {
+  startCorrespondentAppraisalWorkerJob();
 }
 
 module.exports = app;

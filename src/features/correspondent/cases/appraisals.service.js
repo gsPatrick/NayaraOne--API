@@ -7,17 +7,16 @@ const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFi
 const { publishAppraisalRequested, publishAppraisalCompleted } = require('../correspondentEvents.service');
 
 /**
- * createAppraisal — Marco 8 Fase 7. Chama `adapter.requestAppraisal()` do provider configurado
- * no case e persiste o resultado.
+ * requestAppraisalRecord — Marco 8 Fase 7 (worker assíncrono, pedido explícito do usuário após o
+ * DoD do Marco 8). Só valida e persiste a `Appraisal` com status `REQUESTED`, devolvendo
+ * imediatamente — quem chama `adapter.requestAppraisal()` de verdade é o job
+ * `correspondentAppraisalWorkerJob` (`processPendingAppraisal`, abaixo).
  *
  * INVARIANTE CRÍTICO DO CADERNO (citação literal): "Avaliação do provider nunca altera o preço
- * do imóvel automaticamente (é só informativo/consultivo)." — esta função NUNCA escreve em
- * `properties`/`property_offers`. `requestedValue` fica só nesta tabela, pra consulta manual por
- * quem decide o preço (um humano, fora deste módulo). Testado adversarialmente em
- * test/correspondent.appraisals.test.js (cria appraisal com valor diferente do preço atual,
- * confirma que o preço não mudou).
+ * do imóvel automaticamente (é só informativo/consultivo)." — nem esta função nem
+ * `processPendingAppraisal` jamais escrevem em `properties`/`property_offers`.
  */
-async function createAppraisal(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
+async function requestAppraisalRecord(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
   const financingCase = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
   if (!financingCase) {
     throw AppError.notFound('Caso de financiamento não encontrado.', 'FINANCING_CASE_NOT_FOUND');
@@ -40,7 +39,6 @@ async function createAppraisal(financingCaseId, payload, actorUserId, groupId, c
   }
 
   const requestSnapshot = { financingCaseId, referenceValue: referenceValue ?? null };
-  const result = await adapter.requestAppraisal(requestSnapshot);
 
   const appraisal = await Appraisal.create(
     {
@@ -48,22 +46,14 @@ async function createAppraisal(financingCaseId, payload, actorUserId, groupId, c
       companyId,
       financingCaseId,
       providerCode: financingCase.providerCode,
-      externalId: result.externalId || null,
-      status: result.status === 'COMPLETED' ? 'COMPLETED' : 'REQUESTED',
-      requestedValue: result.status === 'COMPLETED' ? result.value : null,
+      status: 'REQUESTED',
       requestSnapshot,
-      responseSnapshot: result,
       createdBy: actorUserId || null,
     },
     { transaction }
   );
 
   await publishAppraisalRequested(appraisal, transaction);
-  if (appraisal.status === 'COMPLETED') {
-    await publishAppraisalCompleted(appraisal, transaction);
-  }
-  // (já estava com await — mantido explícito para deixar claro que ambos os eventos são
-  // publicados dentro da MESMA transação da criação da appraisal, nunca depois do commit)
 
   await registrarAuditoria(
     {
@@ -73,15 +63,67 @@ async function createAppraisal(financingCaseId, payload, actorUserId, groupId, c
       action: 'correspondent.appraisal.requested',
       entityType: 'FinancingCase',
       entityId: financingCaseId,
-      reason:
-        `Avaliação do imóvel solicitada ao provider "${financingCase.providerCode}"` +
-        (appraisal.requestedValue != null ? ` — valor informativo retornado: R$ ${Number(appraisal.requestedValue).toFixed(2)}.` : '.') +
-        ' Nenhum preço de imóvel/oferta foi alterado por esta ação.',
+      reason: `Avaliação do imóvel solicitada ao provider "${financingCase.providerCode}" — processamento assíncrono pelo worker. Nenhum preço de imóvel/oferta foi alterado por esta ação.`,
     },
     transaction
   );
 
   return appraisal;
+}
+
+/**
+ * processPendingAppraisal — chamada pelo job `correspondentAppraisalWorkerJob`. Chama
+ * `adapter.requestAppraisal()` de verdade e atualiza a `Appraisal` já criada (status REQUESTED)
+ * para COMPLETED/FAILED. Mesma invariante: nunca escreve preço de imóvel.
+ */
+async function processPendingAppraisal(appraisal, financingCase, actorUserId, transaction) {
+  const adapter = resolveFinancingProviderAdapterByCode(financingCase.providerCode);
+  if (!adapter) {
+    throw AppError.internal(`Provider "${financingCase.providerCode}" configurado no caso não é suportado.`, 'APPRAISAL_PROVIDER_UNKNOWN');
+  }
+
+  try {
+    const result = await adapter.requestAppraisal(appraisal.requestSnapshot);
+    appraisal.status = result.status === 'COMPLETED' ? 'COMPLETED' : 'REQUESTED';
+    appraisal.externalId = result.externalId || null;
+    appraisal.requestedValue = result.status === 'COMPLETED' ? result.value : null;
+    appraisal.responseSnapshot = result;
+    await appraisal.save({ transaction });
+
+    if (appraisal.status === 'COMPLETED') {
+      await publishAppraisalCompleted(appraisal, transaction);
+      await registrarAuditoria(
+        {
+          groupId: appraisal.groupId,
+          companyId: appraisal.companyId,
+          actorUserId,
+          action: 'correspondent.appraisal.completed',
+          entityType: 'FinancingCase',
+          entityId: appraisal.financingCaseId,
+          reason: `Avaliação do imóvel concluída pelo worker — valor informativo: R$ ${Number(appraisal.requestedValue).toFixed(2)}. Nenhum preço de imóvel/oferta foi alterado.`,
+        },
+        transaction
+      );
+    }
+  } catch (err) {
+    appraisal.status = 'FAILED';
+    appraisal.responseSnapshot = { error: err?.message || 'Falha desconhecida ao avaliar o imóvel.' };
+    await appraisal.save({ transaction });
+  }
+
+  return appraisal;
+}
+
+/**
+ * createAppraisal — wrapper de compatibilidade (mesmo espírito de `submitFinancingCase` em
+ * `submissions.service.js`): `requestAppraisalRecord` + `processPendingAppraisal` na mesma
+ * transação, reproduzindo o comportamento síncrono anterior para não forçar reescrita de testes
+ * fora desta frente. O fluxo HTTP real usa só `requestAppraisalRecord`.
+ */
+async function createAppraisal(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
+  const appraisal = await requestAppraisalRecord(financingCaseId, payload, actorUserId, groupId, companyId, transaction);
+  const financingCase = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
+  return processPendingAppraisal(appraisal, financingCase, actorUserId, transaction);
 }
 
 async function listAppraisals(financingCaseId, groupId, companyId, transaction) {
@@ -96,4 +138,4 @@ async function listAppraisals(financingCaseId, groupId, companyId, transaction) 
   });
 }
 
-module.exports = { createAppraisal, listAppraisals };
+module.exports = { createAppraisal, requestAppraisalRecord, processPendingAppraisal, listAppraisals };

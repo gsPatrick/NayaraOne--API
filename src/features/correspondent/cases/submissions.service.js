@@ -99,11 +99,16 @@ async function resolveSubmissionAmount(financingCaseId, payload, groupId, compan
 }
 
 /**
- * submitFinancingCase — Marco 8 Fase 5. Ordem exata do Caderno/Guia do Marcelo: (1) case
- * READY_TO_SUBMIT (checklist completo), (2) elegibilidade, (3) gera
- * `idempotencyKey = financing:{caseId}:provider:{provider}:v{version}`, (4) se já existe
- * submission com essa key, RETORNA A EXISTENTE sem chamar o adapter de novo, (5) senão persiste
- * PENDING + snapshotHash, emite `financing.submission_requested`, chama o adapter.
+ * requestSubmission — Marco 8 Fase 5 (worker assíncrono, pedido explícito do usuário: "faz
+ * exatamente como ela tá pedindo" sobre o Caderno — "Worker chama provider"). Esta função roda
+ * DENTRO do request HTTP e só faz a parte síncrona/rápida: (1) case READY_TO_SUBMIT (checklist
+ * completo), (2) elegibilidade, (3) gera `idempotencyKey`, (4) se já existe submission com essa
+ * key, RETORNA A EXISTENTE, (5) senão persiste PENDING + snapshotHash, emite
+ * `financing.submission_requested`, e RETORNA IMEDIATAMENTE — a chamada ao provider acontece
+ * depois, fora do request, no job `correspondentSubmissionWorkerJob`
+ * (`processPendingSubmission`, abaixo), que varre submissions `PENDING` periodicamente. Antes
+ * desta mudança, o adapter era chamado SINCRONAMENTE aqui mesmo — mantido como simplificação
+ * documentada até o usuário pedir explicitamente o worker de verdade.
  *
  * `version` usa `financingCase.submissionVersion` — um contador PRÓPRIO, DELIBERADAMENTE
  * diferente de `lockVersion` (controle otimista do Sequelize). ACHADO REAL (teste
@@ -115,7 +120,7 @@ async function resolveSubmissionAmount(financingCaseId, payload, groupId, compan
  * fica estável entre chamadas idênticas, e só muda quando alguém genuinamente confirma que quer
  * tentar de novo depois de checar o status ("nunca reenviar cego").
  */
-async function submitFinancingCase(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
+async function requestSubmission(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
   const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
 
   await assertChecklistComplete(financingCaseId, groupId, companyId, transaction);
@@ -141,25 +146,65 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
   const requestSnapshot = { financingCaseId, amount, idempotencyKey };
   const snapshotHash = hashSnapshot(requestSnapshot);
 
-  const submission = await ProviderSubmission.create(
-    {
-      groupId,
-      companyId,
-      financingCaseId,
-      providerCode: financingCase.providerCode,
-      idempotencyKey,
-      snapshotHash,
-      requestSnapshot,
-      status: 'PENDING',
-      createdBy: actorUserId || null,
-    },
-    { transaction }
-  );
+  // ACHADO REAL (auditoria pós-DoD, Frente Idempotência/Concorrência, teste
+  // CORRESPONDENT-SUB-11): o findOne acima não protege contra duas requisições concorrentes de
+  // verdade (2 conexões/transações distintas) que passam pelo findOne antes de qualquer uma ter
+  // commitado o create — a 2ª `create()` batia no índice único
+  // `provider_submissions_idempotency_key_company_idx` e estourava um
+  // `SequelizeUniqueConstraintError` cru (500) em vez de um erro de negócio tratado. Reproduzido
+  // ao vivo com `Promise.allSettled` disparando 2 chamadas idênticas em paralelo. MESMO padrão
+  // já usado pelo mesmo tipo de corrida em `changeOrders.service.js` (Marco 6): não dá para
+  // simplesmente reconsultar e devolver o registro vencedor NA MESMA transação (o Postgres
+  // aborta toda a transação após a violação, até rollback) — por isso devolve um erro de
+  // conflito claro; o retry do cliente cria uma nova transação onde o findOne de idempotência no
+  // topo desta função já encontra o registro vencedor e devolve ele, sem duplicar nada.
+  let submission;
+  try {
+    submission = await ProviderSubmission.create(
+      {
+        groupId,
+        companyId,
+        financingCaseId,
+        providerCode: financingCase.providerCode,
+        idempotencyKey,
+        snapshotHash,
+        requestSnapshot,
+        status: 'PENDING',
+        createdBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Já existe uma submissão em andamento para este caso (corrida concorrente detectada) — tente novamente.',
+        'SUBMISSION_IDEMPOTENCY_RACE'
+      );
+    }
+    throw err;
+  }
 
   await publishSubmissionRequested(submission, transaction);
 
+  // Não chama o adapter aqui — fica para o worker (processPendingSubmission). Retorna PENDING.
+  return submission;
+}
+
+/**
+ * processPendingSubmission — a parte que ANTES rodava dentro do request HTTP, agora chamada pelo
+ * job `correspondentSubmissionWorkerJob`. Recebe uma `ProviderSubmission` com status PENDING já
+ * carregada (e o `financingCase` correspondente) e chama o adapter de verdade, com o mesmo
+ * timeout/tratamento de UNKNOWN de antes.
+ */
+async function processPendingSubmission(submission, financingCase, actorUserId, transaction) {
+  const { groupId, companyId, financingCaseId } = submission;
+  const adapter = resolveFinancingProviderAdapterByCode(financingCase.providerCode);
+  if (!adapter) {
+    throw AppError.internal(`Provider "${financingCase.providerCode}" configurado no caso não é suportado.`, 'SUBMISSION_PROVIDER_UNKNOWN');
+  }
+
   try {
-    const result = await withTimeout(adapter.submitCase(requestSnapshot), SUBMIT_TIMEOUT_MS);
+    const result = await withTimeout(adapter.submitCase(submission.requestSnapshot), SUBMIT_TIMEOUT_MS);
     submission.status = 'SUBMITTED';
     submission.externalCaseId = result.externalId;
     submission.responseSnapshot = result;
@@ -193,7 +238,7 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
         action: 'correspondent.submission.submitted',
         entityType: 'FinancingCase',
         entityId: financingCaseId,
-        reason: `Caso submetido ao provider "${financingCase.providerCode}" (externalCaseId "${result.externalId}").`,
+        reason: `Caso submetido ao provider "${financingCase.providerCode}" (externalCaseId "${result.externalId}") pelo worker assíncrono.`,
       },
       transaction
     );
@@ -225,8 +270,7 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
       { providerCode: financingCase.providerCode, reason: submission.failureReason, submissionId: submission.id },
       transaction
     );
-    // Nunca relança como erro genérico 500 — UNKNOWN é um estado de negócio válido, não uma
-    // falha da requisição em si; o chamador recebe a submission com status UNKNOWN no corpo 201.
+    // Nunca relança — UNKNOWN é um estado de negócio válido; o job segue pra próxima pendência.
   }
 
   return submission;
@@ -281,7 +325,29 @@ async function listSubmissions(financingCaseId, groupId, companyId, transaction)
   });
 }
 
+/**
+ * submitFinancingCase — wrapper de compatibilidade. Antes da introdução do worker assíncrono,
+ * esta era a função única que fazia tudo (request + chamada ao provider) numa só chamada
+ * síncrona. Mantida para não forçar reescrita de toda a suíte de testes existente (vários
+ * arquivos fora desta frente também chamam esta função) — faz `requestSubmission` seguido
+ * imediatamente de `processPendingSubmission` NA MESMA transação, reproduzindo o comportamento
+ * síncrono de antes. O fluxo HTTP real (`POST /financing-cases/:id/submissions`) agora usa só
+ * `requestSubmission` (rápido, devolve PENDING) — quem processa de fato é o job
+ * `correspondentSubmissionWorkerJob`.
+ */
+async function submitFinancingCase(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
+  const submission = await requestSubmission(financingCaseId, payload, actorUserId, groupId, companyId, transaction);
+  if (submission.status !== 'PENDING') {
+    // já existia (idempotência) com status != PENDING — nada a processar.
+    return submission;
+  }
+  const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  return processPendingSubmission(submission, financingCase, actorUserId, transaction);
+}
+
 module.exports = {
+  requestSubmission,
+  processPendingSubmission,
   submitFinancingCase,
   acknowledgeUnknownSubmission,
   listSubmissions,
