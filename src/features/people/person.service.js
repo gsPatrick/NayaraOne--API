@@ -53,7 +53,7 @@ async function createPerson(payload, actorUserId, transaction) {
     const duplicate = await findPotentialDuplicate({ taxIdNormalized: taxIdDigits, contacts }, transaction);
     if (duplicate) {
       throw AppError.conflict(
-        'Já existe uma pessoa cadastrada com o mesmo documento ou contato principal. Envie "allowDuplicate": true para criar mesmo assim.',
+        'Já existe uma pessoa cadastrada com o mesmo documento ou contato principal.',
         'PERSON_DUPLICATE',
         { existingPersonId: duplicate.id }
       );
