@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const diskStorage = require('../../utils/diskStorage');
 const { resolveAntivirusAdapter } = require('../people/adapters/resolveDocumentAdapters');
+const { encryptFileBuffer, decryptFileBuffer } = require('../../utils/fileCrypto');
 
 // 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -106,8 +107,12 @@ async function uploadFile(payload, actorUserId, transaction) {
     throw AppError.unprocessable('Arquivo rejeitado pelo antivírus: assinatura de malware detectada.', 'FILE_UPLOAD_MALWARE_DETECTED', { signature: scan.signature });
   }
 
+  // Checksum é sempre sobre o conteúdo PLAINTEXT (o que o cliente enviou/vai receber de volta),
+  // nunca sobre o blob criptografado — senão o checksum devolvido na resposta não bateria com o
+  // arquivo que o usuário efetivamente baixa depois.
   const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-  const storageKey = diskStorage.saveFile(resolveCategory(category), groupId, fileName, buffer);
+  const encryptedBuffer = encryptFileBuffer(buffer);
+  const storageKey = diskStorage.saveFile(resolveCategory(category), groupId, fileName, encryptedBuffer);
 
   const file = await File.create(
     {
@@ -175,7 +180,10 @@ async function getFileContent(id, transaction) {
   } catch (err) {
     throw AppError.notFound('Arquivo não encontrado em disco.', 'FILE_CONTENT_NOT_FOUND');
   }
-  metadata.setDataValue('content', buffer);
+  // decryptFileBuffer detecta sozinho se o arquivo é criptografado (uploads novos) ou legado
+  // (gravado em disco antes desta mudança) — nunca lança erro pra arquivo legado, devolve como
+  // está nesse caso.
+  metadata.setDataValue('content', decryptFileBuffer(buffer));
   return metadata;
 }
 
