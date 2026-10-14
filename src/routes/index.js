@@ -22,6 +22,7 @@ const constructionRouter = require('../features/construction/construction.routes
 const inventoryRouter = require('../features/inventory/inventory.routes');
 const inventoryNayRouter = require('../features/inventory/inventoryNay.routes');
 const procurementRouter = require('../features/procurement/procurement.routes');
+const correspondentRouter = require('../features/correspondent/correspondent.routes');
 const insuranceController = require('../features/procurement/insurance.controller');
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
@@ -82,6 +83,7 @@ router.use('/v1', constructionRouter);
 router.use('/v1', inventoryRouter);
 router.use('/v1', inventoryNayRouter);
 router.use('/v1', procurementRouter);
+router.use('/v1', correspondentRouter);
 router.use('/v1', auditRouter);
 router.use('/v1', billingRouter);
 router.use('/v1', settingsRouter);

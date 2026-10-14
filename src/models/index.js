@@ -143,6 +143,8 @@ const modelDefiners = {
   InventoryLossCase: require('./InventoryLossCase'),
   InventoryCount: require('./InventoryCount'),
   InventoryCountItem: require('./InventoryCountItem'),
+  FinancingCase: require('./FinancingCase'),
+  CaseApplicant: require('./CaseApplicant'),
   PurchaseRequest: require('./PurchaseRequest'),
   PurchaseRequestItem: require('./PurchaseRequestItem'),
   Quotation: require('./Quotation'),
@@ -235,6 +237,12 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.CommunicationConsent.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
   db.Person.hasMany(db.CommunicationConsent, { foreignKey: 'person_id', as: 'communicationConsents', constraints: false });
   db.Person.belongsTo(db.Person, { foreignKey: 'merged_into_id', as: 'mergedInto', constraints: false });
+
+  // Marco 8 — Correspondente Bancário (financing_cases/case_applicants).
+  db.FinancingCase.belongsTo(db.Property, { foreignKey: 'property_id', as: 'property', constraints: false });
+  db.FinancingCase.hasMany(db.CaseApplicant, { foreignKey: 'financing_case_id', as: 'applicants', constraints: false });
+  db.CaseApplicant.belongsTo(db.FinancingCase, { foreignKey: 'financing_case_id', as: 'financingCase', constraints: false });
+  db.CaseApplicant.belongsTo(db.Person, { foreignKey: 'person_id', as: 'person', constraints: false });
   db.Person.hasMany(db.Person, { foreignKey: 'merged_into_id', as: 'mergedFrom', constraints: false });
   db.File.belongsTo(db.User, { foreignKey: 'uploaded_by_user_id', as: 'uploadedByUser', constraints: false });
   db.FileLink.belongsTo(db.File, { foreignKey: 'file_id', as: 'file', constraints: false });
