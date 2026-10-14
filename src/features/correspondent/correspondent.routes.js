@@ -8,6 +8,7 @@ const documentsController = require('./cases/caseDocuments.controller');
 const simulationsController = require('./cases/simulations.controller');
 const submissionsController = require('./cases/submissions.controller');
 const appraisalsController = require('./cases/appraisals.controller');
+const commissionEntitlementsController = require('./cases/commissionEntitlements.controller');
 const webhooksController = require('./webhooks.controller');
 
 const correspondentRouter = Router();
@@ -90,6 +91,30 @@ correspondentRouter.get(
   '/financing-cases/:id/appraisals',
   requirePermission('correspondent:read'),
   appraisalsController.listAppraisals
+);
+
+// Fase 8 — comissões (NC). Criar/confirmar/estornar exigem correspondent:create (mesmo nível de
+// criar o próprio caso); listar é correspondent:read — valores de comissão não são documento
+// RESTRICTED, é informação de acompanhamento do negócio.
+correspondentRouter.post(
+  '/financing-cases/:id/commissions',
+  requirePermission('correspondent:create'),
+  commissionEntitlementsController.createCommissionEntitlement
+);
+correspondentRouter.get(
+  '/financing-cases/:id/commissions',
+  requirePermission('correspondent:read'),
+  commissionEntitlementsController.listCommissionEntitlements
+);
+correspondentRouter.post(
+  '/financing-cases/:id/commissions/:entitlementId/confirm',
+  requirePermission('correspondent:create'),
+  commissionEntitlementsController.confirmCommissionEntitlement
+);
+correspondentRouter.post(
+  '/financing-cases/:id/commissions/:entitlementId/chargeback',
+  requirePermission('correspondent:create'),
+  commissionEntitlementsController.chargebackCommissionEntitlement
 );
 
 module.exports = correspondentRouter;

@@ -77,4 +77,54 @@ function publishAppraisalCompleted(appraisal, transaction) {
   );
 }
 
-module.exports = { publishSubmissionRequested, publishAppraisalRequested, publishAppraisalCompleted };
+/**
+ * publishCommissionEntitlementCreated / publishCommissionConfirmed — "commission.entitlement.created"
+ * / "commission.confirmed" (Caderno, Fase 9: lista de eventos mínimos). idempotencyKey reaproveita
+ * o id do entitlement + o evento, pra nunca duplicar mesmo se o service for chamado de novo.
+ */
+function publishCommissionEntitlementCreated(entitlement, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entitlement.groupId,
+      companyId: entitlement.companyId,
+      aggregateType: 'CommissionEntitlement',
+      aggregateId: entitlement.id,
+      eventType: 'commission.entitlement.created',
+      payload: {
+        id: entitlement.id,
+        financingCaseId: entitlement.financingCaseId,
+        amount: entitlement.amount,
+      },
+      idempotencyKey: `commission.entitlement.created:${entitlement.id}`,
+    },
+    transaction
+  );
+}
+
+function publishCommissionConfirmed(entitlement, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entitlement.groupId,
+      companyId: entitlement.companyId,
+      aggregateType: 'CommissionEntitlement',
+      aggregateId: entitlement.id,
+      eventType: 'commission.confirmed',
+      payload: {
+        id: entitlement.id,
+        financingCaseId: entitlement.financingCaseId,
+        amount: entitlement.amount,
+        financialEntryId: entitlement.financialEntryId,
+      },
+      idempotencyKey: `commission.confirmed:${entitlement.id}`,
+    },
+    transaction
+  );
+}
+
+module.exports = {
+  publishSubmissionRequested,
+  publishAppraisalRequested,
+  publishAppraisalCompleted,
+  publishCommissionEntitlementCreated,
+  publishCommissionConfirmed,
+};
