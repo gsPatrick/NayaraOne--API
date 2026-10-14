@@ -7,6 +7,8 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const commissionsService = require('../src/features/correspondent/cases/commissionEntitlements.service');
 const { publishCommissionSplitVersion } = require('../src/features/correspondent/commissionSplit.service');
+const nfseService = require('../src/features/correspondent/fiscal/nfse.service');
+const reconciliationService = require('../src/features/correspondent/fiscal/reconciliation.service');
 const { Person, FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -364,5 +366,81 @@ test('CORRESPONDENT-COM-12: percentual de comissão acima de 100% (erro de confi
         return true;
       }
     );
+  });
+});
+
+test('CORRESPONDENT-COM-13: chargeback de comissão com NFS-e já emitida abre reconciliação fiscal (nunca cancela a nota sozinho)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    const entitlement = await commissionsService.createCommissionEntitlement(
+      financingCase.id,
+      { baseAmount: 60000 },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    await commissionsService.confirmCommissionEntitlement(
+      entitlement.id,
+      { externalConfirmationId: `conf-nfse-${uniqueSuffix()}` },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    const invoice = await nfseService.requestInvoice(
+      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: entitlement.id, amount: Number(entitlement.amount), description: 'NFS-e da comissão de teste' },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    assert.notEqual(invoice.status, 'CANCELED');
+
+    await commissionsService.chargebackCommissionEntitlement(
+      entitlement.id,
+      'Cliente desistiu do financiamento após a comissão já ter sido confirmada e faturada.',
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+
+    // A NFS-e NUNCA é cancelada automaticamente (decisão fiscal exige revisão humana).
+    const invoiceAfter = await nfseService.listInvoiceRequests(tenant.groupId, tenant.companyId, transaction);
+    const sameInvoice = invoiceAfter.find((i) => i.id === invoice.id);
+    assert.notEqual(sameInvoice.status, 'CANCELED', 'o chargeback não deve cancelar a NFS-e sozinho');
+
+    // Mas uma reconciliação fiscal precisa ter sido aberta — "diferença nunca ignorada silenciosamente".
+    const reconciliations = await reconciliationService.listReconciliations('OPEN', tenant.groupId, tenant.companyId, transaction);
+    const opened = reconciliations.find((r) => r.referenceId === entitlement.id && r.reconciliationType === 'COMMISSION_X_FISCAL');
+    assert.ok(opened, 'deveria ter aberto uma fiscal_reconciliation COMMISSION_X_FISCAL pra essa comissão');
+    assert.equal(Number(opened.expectedAmount), 0);
+    assert.equal(Number(opened.actualAmount), Number(invoice.amount));
+  });
+});
+
+test('CORRESPONDENT-COM-14: chargeback de comissão SEM NFS-e não abre reconciliação nenhuma', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await createCase(transaction);
+    const entitlement = await commissionsService.createCommissionEntitlement(
+      financingCase.id,
+      { baseAmount: 60000 },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    await commissionsService.chargebackCommissionEntitlement(
+      entitlement.id,
+      'Caso cancelado antes de qualquer confirmação ou nota fiscal.',
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    const reconciliations = await reconciliationService.listReconciliations('OPEN', tenant.groupId, tenant.companyId, transaction);
+    const opened = reconciliations.find((r) => r.referenceId === entitlement.id);
+    assert.equal(opened, undefined, 'sem NFS-e emitida, não deve abrir reconciliação nenhuma');
   });
 });

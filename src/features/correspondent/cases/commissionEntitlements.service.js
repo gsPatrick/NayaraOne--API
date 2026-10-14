@@ -1,12 +1,16 @@
 'use strict';
 
-const { FinancingCase, CommissionEntitlement, AuditLog } = require('../../../models');
+const { FinancingCase, CommissionEntitlement, AuditLog, InvoiceRequest } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveCommissionSplit } = require('../commissionSplit.service');
 const { getOrCreateDefaultResultCenter } = require('../../finance/resultCenters.service');
 const { createFinancialEntry, reverseFinancialEntry } = require('../../finance/financialEntries.service');
 const { publishCommissionEntitlementCreated, publishCommissionConfirmed } = require('../correspondentEvents.service');
+const { reconcile } = require('../fiscal/reconciliation.service');
+
+const INVOICE_SOURCE_TYPE_COMMISSION = 'COMMISSION_ENTITLEMENT';
+const INVOICE_NON_TERMINAL_STATUSES = ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'];
 
 const COMMISSION_RESULT_CENTER_CODE = 'CORRESPONDENT_COMMISSION';
 
@@ -177,6 +181,13 @@ async function confirmCommissionEntitlement(entitlementId, payload, actorUserId,
  * o recebível ficava aberto no Financeiro pra sempre, mesmo a comissão tendo sido estornada aqui.
  * Agora, se `financialEntryId` existir, o lançamento é estornado de verdade via
  * `reverseFinancialEntry` (mesmo mecanismo já usado por Procurement) antes de marcar o entitlement.
+ *
+ * Achado real adicional (mesma auditoria, ciclo 2): se já existia uma NFS-e emitida/autorizada
+ * para esta comissão (sourceType COMMISSION_ENTITLEMENT) e ela sofre chargeback, NUNCA cancelamos
+ * a nota fiscal automaticamente aqui (decisão fiscal exige revisão humana) — em vez disso, abrimos
+ * uma `fiscal_reconciliation` (tipo COMMISSION_X_FISCAL, esperado R$ 0,00 vs o valor real da nota),
+ * exatamente o comportamento que o Caderno exige: "qualquer diferença abre uma fiscal_reconciliation,
+ * nunca é ignorada silenciosamente".
  */
 async function chargebackCommissionEntitlement(entitlementId, reasonText, actorUserId, groupId, companyId, transaction) {
   const entitlement = await CommissionEntitlement.findOne({ where: { id: entitlementId, groupId, companyId }, transaction });
@@ -208,6 +219,29 @@ async function chargebackCommissionEntitlement(entitlementId, reasonText, actorU
   entitlement.status = 'ADJUSTED';
   entitlement.updatedBy = actorUserId || null;
   await entitlement.save({ transaction });
+
+  const openInvoice = await InvoiceRequest.findOne({
+    where: {
+      groupId,
+      companyId,
+      sourceType: INVOICE_SOURCE_TYPE_COMMISSION,
+      sourceId: entitlement.id,
+      status: INVOICE_NON_TERMINAL_STATUSES,
+    },
+    transaction,
+  });
+  if (openInvoice) {
+    await reconcile(
+      'COMMISSION_X_FISCAL',
+      entitlement.id,
+      0,
+      Number(openInvoice.amount),
+      actorUserId,
+      groupId,
+      companyId,
+      transaction
+    );
+  }
 
   await registrarAuditoria(
     {
