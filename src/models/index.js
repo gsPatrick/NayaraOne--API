@@ -505,6 +505,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryMovement.belongsTo(db.User, { foreignKey: 'moved_by_user_id', as: 'movedByUser', constraints: false });
   db.InventoryMovement.belongsTo(db.InventoryLocation, { foreignKey: 'source_location_id', as: 'sourceLocation', constraints: false });
   db.InventoryMovement.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  // Achado real (auditoria Marco 7, rodada "check"): a coluna "Responsável" do histórico mostrava
+  // sempre quem LANÇOU o movimento (movedByUser), nunca a pessoa escolhida como responsável pela
+  // retirada (responsiblePersonId) — o dado já era salvo certo, só nunca era resolvido/exibido.
+  db.InventoryMovement.belongsTo(db.Person, { foreignKey: 'responsible_person_id', as: 'responsiblePerson', constraints: false });
   db.InventoryLocation.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
   db.InventoryStockBalance.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryStockBalance.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
@@ -513,6 +517,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryReceiptItem.belongsTo(db.InventoryReceipt, { foreignKey: 'receipt_id', as: 'receipt', constraints: false });
   db.InventoryReceiptItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryReceipt.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  // Achado real (auditoria Marco 7, rodada final): a lista de recebimentos não mostrava o
+  // fornecedor — só o supplierPersonId cru existia. Associação só pra leitura.
+  db.InventoryReceipt.belongsTo(db.Person, { foreignKey: 'supplier_person_id', as: 'supplier', constraints: false });
   db.InventoryRequisition.hasMany(db.InventoryRequisitionItem, { foreignKey: 'requisition_id', as: 'items', constraints: false });
   db.InventoryRequisitionItem.belongsTo(db.InventoryRequisition, { foreignKey: 'requisition_id', as: 'requisition', constraints: false });
   db.InventoryRequisitionItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });

@@ -790,6 +790,27 @@ test('TAB-0750: createItem exige sku/unitOfMeasure e bloqueia SKU duplicado na m
   });
 });
 
+// Achado real (auditoria Marco 7, rodada "check", 2026-10-15): a checagem de SKU duplicado era
+// case-sensitive — "dup-x" passava ao lado de "DUP-x" já existente, criando item mestre duplicado
+// (EST-001). A checagem de tag de patrimônio já era case-insensitive; SKU segue o mesmo padrão.
+test('EST-001: createItem/updateItem bloqueiam SKU duplicado mesmo com caixa diferente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    await itemsService.createItem(withTenant({ name: `Item case 1 ${suffix}`, sku: `CASE-${suffix}`, unitOfMeasure: 'UN' }), tenant.userId, transaction);
+
+    await assert.rejects(
+      () => itemsService.createItem(withTenant({ name: `Item case 2 ${suffix}`, sku: `case-${suffix}`, unitOfMeasure: 'UN' }), tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'INVENTORY_ITEM_DUPLICATE_SKU'); return true; }
+    );
+
+    const other = await itemsService.createItem(withTenant({ name: `Item case 3 ${suffix}`, sku: `OUTRO-${suffix}`, unitOfMeasure: 'UN' }), tenant.userId, transaction);
+    await assert.rejects(
+      () => itemsService.updateItem(other.id, { sku: `Case-${suffix}` }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      (err) => { assert.equal(err.code, 'INVENTORY_ITEM_DUPLICATE_SKU'); return true; }
+    );
+  });
+});
+
 // Bug real corrigido nesta auditoria (rodada 47): TAB-0760 trata asset_tag como NOT NULL com
 // UNIQUE(company_id, asset_tag) — era possível criar patrimônio sem tag, e a checagem de
 // duplicidade não era escopada por empresa.

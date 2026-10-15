@@ -1,5 +1,6 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishItemCreated } = require('./inventoryEvents.service');
@@ -23,7 +24,10 @@ async function createItem(payload, actorUserId, transaction) {
   if (!unitOfMeasure) {
     throw AppError.badRequest('O campo "unitOfMeasure" é obrigatório (TAB-0750).', 'INVENTORY_ITEM_VALIDATION');
   }
-  const existing = await InventoryItem.findOne({ where: { companyId, sku }, transaction });
+  // Achado real (auditoria Marco 7, rodada "check"): a checagem era case-sensitive — "AUDIT-01" e
+  // "audit-01" passavam como SKUs diferentes, criando item mestre duplicado (EST-001). A tag de
+  // patrimônio já era case-insensitive (Op.iLike); SKU segue o mesmo padrão agora.
+  const existing = await InventoryItem.findOne({ where: { companyId, sku: { [Op.iLike]: sku } }, transaction });
   if (existing) {
     throw AppError.badRequest(`Já existe um item com o SKU "${sku}" nesta empresa.`, 'INVENTORY_ITEM_DUPLICATE_SKU');
   }
@@ -98,7 +102,7 @@ async function updateItem(itemId, payload, actorUserId, groupId, companyId, tran
     if (hasMovement) {
       throw AppError.badRequest('Este item já tem movimentação registrada — o SKU não pode mais ser alterado.', 'INVENTORY_ITEM_SKU_LOCKED');
     }
-    const existing = await InventoryItem.findOne({ where: { companyId, sku, id: { [require('sequelize').Op.ne]: item.id } }, transaction });
+    const existing = await InventoryItem.findOne({ where: { companyId, sku: { [Op.iLike]: sku }, id: { [Op.ne]: item.id } }, transaction });
     if (existing) {
       throw AppError.badRequest(`Já existe um item com o SKU "${sku}" nesta empresa.`, 'INVENTORY_ITEM_DUPLICATE_SKU');
     }
