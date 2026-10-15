@@ -954,6 +954,11 @@ async function listPolicies(filters, groupId, companyId, transaction) {
   const policies = await InsurancePolicy.findAll({
     where,
     include: [
+      // BUG REAL CORRIGIDO (revalidação Marco 7, 14/10/2026): a listagem não trazia `parties`,
+      // então a coluna "Cobertura/Segurado" e a busca por nome do segurado (ambas no front,
+      // app/painel/compras/seguros/page.js) nunca encontravam nada — `row.parties` vinha sempre
+      // undefined, mesmo quando a apólice tinha um segurado real cadastrado.
+      { model: InsurancePolicyParty, as: 'parties' },
       { model: InsuranceCoverage, as: 'coverages' },
       { model: InsuranceClaim, as: 'claims' },
       { model: InsuranceRenewalTask, as: 'renewalTasks' },

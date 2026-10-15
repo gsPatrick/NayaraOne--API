@@ -512,3 +512,26 @@ test('Insurance Hub: cancelar apólice expõe motivo/data no getPolicy depois de
     assert.ok(json.cancelInfo.occurredAt, 'cancelInfo.occurredAt precisa estar presente');
   });
 });
+
+// BUG REAL CORRIGIDO (revalidação Marco 7, 14/10/2026): listPolicies (usado na tela de listagem
+// e na busca por segurado) não incluía `parties` — só getPolicy (detalhe) incluía. A coluna
+// "Cobertura/Segurado" e a busca textual por nome do segurado no front nunca encontravam nada,
+// mesmo com o segurado cadastrado de verdade, porque `row.parties` vinha sempre undefined.
+test('Insurance Hub: listPolicies traz "parties" (segurado) — não só getPolicy', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { Person } = require('../src/models');
+    const person = await Person.create(
+      withTenant({ personType: 'PF', legalName: 'AUDIT Segurado Teste Listagem' }),
+      { transaction }
+    );
+    await insuranceService.createPolicy(
+      withTenant({ parties: [{ personId: person.id, partyRole: 'INSURED' }] }),
+      tenant.userId,
+      transaction
+    );
+    const list = await insuranceService.listPolicies({}, tenant.groupId, tenant.companyId, transaction);
+    const found = list.find((p) => (p.parties || []).some((party) => party.personId === person.id));
+    assert.ok(found, 'a apólice recém-criada com segurado precisa aparecer na listagem já com "parties" preenchido');
+    assert.equal(found.parties[0].partyRole, 'INSURED');
+  });
+});
