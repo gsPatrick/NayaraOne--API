@@ -561,7 +561,7 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   const order = await PurchaseOrder.findOne({ where: { id: purchaseOrderId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!order) throw AppError.notFound('Pedido de compra não encontrado.', 'PURCHASE_ORDER_NOT_FOUND');
   if (order.status !== 'OPEN') {
-    throw AppError.badRequest(`Só é possível receber um PO OPEN (atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
+    throw AppError.badRequest(`Só é possível registrar recebimento para um pedido de compra em aberto (status atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
   }
   order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
 
@@ -606,7 +606,7 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
 
   for (const line of items) {
     const poItem = order.items.find((i) => i.id === line.purchaseOrderItemId);
-    if (!poItem) throw AppError.notFound(`Item de PO "${line.purchaseOrderItemId}" não encontrado.`, 'PURCHASE_ORDER_ITEM_NOT_FOUND');
+    if (!poItem) throw AppError.notFound(`Item do pedido de compra não encontrado.`, 'PURCHASE_ORDER_ITEM_NOT_FOUND');
 
     const receivedQty = Number(line.receivedQuantity);
     // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 56, 2026-10-06): nenhuma validação
