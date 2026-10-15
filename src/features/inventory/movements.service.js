@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User } = require('../../models');
+const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -157,6 +157,17 @@ async function recordMovement(payload, actor, transaction) {
   }
   if (movementType === 'ADJUSTMENT' && !sourceLocationId && !destinationLocationId) {
     throw AppError.badRequest('Informe o local de origem (para diminuir o saldo) ou de destino (para aumentar o saldo) do ajuste.', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  // BUG GRAVE REAL CORRIGIDO (auditoria Marco 7, rodada "check"): preencher origem E destino num
+  // Ajuste passava pela checagem acima (nenhum dos dois estava vazio) e caía no ramo abaixo que só
+  // credita o destino — a origem nunca era debitada, criando saldo do nada (o histórico mostrava
+  // "de X para Y" como se fosse transferência, mas só o destino de fato mudava). Ajuste corrige o
+  // saldo de UM local por vez; mover entre dois locais é Transferência, nunca Ajuste.
+  if (movementType === 'ADJUSTMENT' && sourceLocationId && destinationLocationId) {
+    throw AppError.badRequest(
+      'Um ajuste corrige o saldo de um único local. Para mover quantidade entre dois locais, use "Transferência".',
+      'INVENTORY_MOVEMENT_VALIDATION'
+    );
   }
   // EST-008: ajuste/perda/descarte exigem motivo (evidência é recomendada, mas só obrigatória
   // quando a política da empresa exigir — isso é regra de negócio do Motor de Regras, fora de
@@ -445,6 +456,7 @@ async function listMovements(filters, groupId, companyId, transaction) {
       { model: InventoryLocation, as: 'sourceLocation', attributes: ['id', 'name'] },
       { model: InventoryLocation, as: 'destinationLocation', attributes: ['id', 'name'] },
       { model: User, as: 'movedByUser', attributes: ['id', 'name'] },
+      { model: Person, as: 'responsiblePerson', attributes: ['id', 'legalName'] },
     ],
     order: [['moved_at', 'DESC']],
     limit: Math.min(Number(limit) || 100, 500),

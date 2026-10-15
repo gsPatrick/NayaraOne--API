@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem, InventoryStockBalance } = require('../../models');
+const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem, InventoryStockBalance, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -61,6 +61,25 @@ async function createReceipt(payload, actorUserId, transaction) {
     }
   }
 
+  // BUG GRAVE REAL CORRIGIDO (auditoria Marco 7, rodada "check"): o "identificador único" acima
+  // é texto LIVRE digitado pelo usuário, não um hash real do arquivo — então a mesma nota fiscal
+  // confirmada duas vezes com um valor de identificador diferente (ou com erro de digitação)
+  // passava direto pela checagem de fingerprint. O número da nota fiscal é a chave de negócio real
+  // e nunca deveria aceitar duplicata nesta empresa, independente do que foi digitado no campo de
+  // identificador.
+  if (invoiceNumber) {
+    const existingByNumber = await InventoryReceipt.findOne({
+      where: { companyId, invoiceNumber: invoiceNumber.trim() },
+      transaction,
+    });
+    if (existingByNumber) {
+      throw AppError.badRequest(
+        `Já existe um recebimento registrado para a nota fiscal nº ${invoiceNumber.trim()}.`,
+        'INVENTORY_RECEIPT_DUPLICATE_INVOICE'
+      );
+    }
+  }
+
   const receipt = await InventoryReceipt.create(
     {
       groupId,
@@ -105,7 +124,10 @@ async function createReceipt(payload, actorUserId, transaction) {
 async function getReceipt(receiptId, groupId, companyId, transaction) {
   const receipt = await InventoryReceipt.findOne({
     where: { id: receiptId, groupId, companyId },
-    include: [{ model: InventoryReceiptItem, as: 'items' }],
+    include: [
+      { model: InventoryReceiptItem, as: 'items' },
+      { model: Person, as: 'supplier', attributes: ['id', 'legalName'], required: false },
+    ],
     transaction,
   });
   if (!receipt) throw AppError.notFound('Recebimento não encontrado.', 'INVENTORY_RECEIPT_NOT_FOUND');
@@ -115,7 +137,13 @@ async function getReceipt(receiptId, groupId, companyId, transaction) {
 async function listReceipts(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return InventoryReceipt.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
+  return InventoryReceipt.findAll({
+    where,
+    include: [{ model: Person, as: 'supplier', attributes: ['id', 'legalName'], required: false }],
+    order: [['created_at', 'DESC']],
+    limit: 1500,
+    transaction,
+  });
 }
 
 async function reviewReceipt(receiptId, actorUserId, groupId, companyId, transaction) {
