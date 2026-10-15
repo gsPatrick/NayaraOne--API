@@ -17,7 +17,7 @@ const {
   SupplierQualification,
   FinancialEntry,
 } = require('../../models');
-const { InventoryStockBalance, Person } = require('../../models');
+const { InventoryStockBalance, Person, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
@@ -113,7 +113,11 @@ async function createPurchaseRequest(payload, actorUserId, transaction) {
 async function getPurchaseRequest(id, groupId, companyId, transaction) {
   const request = await PurchaseRequest.findOne({
     where: { id, groupId, companyId },
-    include: [{ model: PurchaseRequestItem, as: 'items' }, { model: Project, as: 'project', attributes: ['id', 'name'] }],
+    include: [
+      { model: PurchaseRequestItem, as: 'items' },
+      { model: Project, as: 'project', attributes: ['id', 'name'] },
+      { model: User, as: 'requestedByUser', attributes: ['id', 'name'] },
+    ],
     transaction,
   });
   if (!request) throw AppError.notFound('Requisição de compra não encontrada.', 'PURCHASE_REQUEST_NOT_FOUND');

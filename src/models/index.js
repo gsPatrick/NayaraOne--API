@@ -537,6 +537,9 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   // projectId cru existia, sem nome resolvido. Associação só pra leitura (constraints: false,
   // mesmo padrão já usado nas linhas acima pra não acoplar FK física onde não existe).
   db.PurchaseRequest.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  // Achado real (auditoria Marco 7, rodada final): o detalhe da requisição não mostrava quem
+  // solicitou — só o requestedByUserId cru existia internamente. Associação só pra leitura.
+  db.PurchaseRequest.belongsTo(db.User, { foreignKey: 'requested_by_user_id', as: 'requestedByUser', constraints: false });
   db.PurchaseRequestItem.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
   db.Quotation.belongsTo(db.PurchaseRequest, { foreignKey: 'purchase_request_id', as: 'purchaseRequest', constraints: false });
   db.Quotation.hasMany(db.SupplierOffer, { foreignKey: 'quotation_id', as: 'offers', constraints: false });
