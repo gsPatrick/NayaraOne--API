@@ -18,15 +18,23 @@ const lossCasesService = require('../src/features/inventory/lossCases.service');
 const assetsService = require('../src/features/inventory/assets.service');
 const toolLoansService = require('../src/features/inventory/toolLoans.service');
 const filesService = require('../src/features/files/files.service');
-const { InventoryLossCase } = require('../src/models');
+const { InventoryLossCase, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
 let approver;
+let secondApprover;
 
 before(async () => {
   tenant = await getSeedTenant();
   approver = { userId: tenant.userId, canApprove: true };
+  // Achado real (auditoria Nayara, Marco 7): quem registra a perda não pode aprová-la — o caso
+  // deste arquivo é aberto como tenant.userId, então a DECISÃO precisa de outro ator.
+  const [user] = await User.findOrCreate({
+    where: { email: 'homo-qa-auditgapsround3-approver@nayaraone.dev' },
+    defaults: { name: 'HOMO QA — AuditGapsRound3 Approver', passwordHash: 'x', status: 'ACTIVE' },
+  });
+  secondApprover = { userId: user.id, canApprove: true };
 });
 
 after(async () => {
@@ -80,7 +88,7 @@ test('BUG 1 (resultingMovementId): aprovar SEM cobrar responsável e SEM trocar 
 
     // Caminho mais comum: decide SEM chargeResponsible e SEM responsiblePersonId — o bloco que
     // antigamente era o único a persistir resultingMovementId nunca roda aqui.
-    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver, transaction, {});
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover, transaction, {});
     assert.ok(decided.resultingMovementId, 'resultingMovementId deveria estar presente no objeto retornado');
 
     // A verificação real do bug: releitura do banco (findByPk força SELECT, não usa cache em

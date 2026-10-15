@@ -11,6 +11,7 @@ const filesService = require('../src/features/files/files.service');
 const itemsService = require('../src/features/inventory/items.service');
 const inventoryMovementsService = require('../src/features/inventory/movements.service');
 const { upsertApprovalThreshold } = require('../src/features/construction/lossRecords.service');
+const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -22,6 +23,14 @@ before(async () => {
 after(async () => {
   await sequelize.close();
 });
+
+async function createSecondUser(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-losscase-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — LossCase ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return user.id;
+}
 
 function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
@@ -59,7 +68,8 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
     );
     assert.equal(lossCase.status, 'OPEN');
 
-    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
+    const secondApproverId1 = await createSecondUser(`${suffix}-dec1`);
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: secondApproverId1, canApprove: true }, transaction);
     assert.equal(decided.status, 'APPROVED');
 
     await asset.reload({ transaction });
@@ -99,7 +109,8 @@ test('inventory: REJECTAR um loss_case de Asset não altera o status do patrimô
       transaction
     );
 
-    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'REJECTED', { userId: tenant.userId, canApprove: true }, transaction);
+    const secondApproverId2 = await createSecondUser(`${suffix}-dec2`);
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'REJECTED', { userId: secondApproverId2, canApprove: true }, transaction);
 
     await asset.reload({ transaction });
     assert.equal(asset.status, 'AVAILABLE', 'rejeitar o caso não pode alterar o asset');
@@ -131,7 +142,8 @@ test('inventory: aprovar a perda de um Asset ainda emprestado fecha o loan e blo
       tenant.userId,
       transaction
     );
-    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
+    const secondApproverId3 = await createSecondUser(`${suffix}-dec3`);
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: secondApproverId3, canApprove: true }, transaction);
 
     await loan.reload({ transaction });
     assert.equal(loan.status, 'LOST', 'empréstimo aberto precisa ser fechado (não fica "esquecido" OPEN) quando a perda do asset é aprovada');
@@ -200,12 +212,15 @@ test('inventory: loss_case de item ACIMA da alçada por valor nasce PENDING_APPR
     const balanceBeforeDecision = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceBeforeDecision, 50, 'saldo não pode cair antes da decisão humana explícita');
 
+    // Decisão explícita precisa ser de alguém diferente de quem registrou o caso (maker-checker,
+    // achado real da auditoria Nayara — quem registra não pode aprovar a própria perda).
+    const secondApproverId = await createSecondUser(suffix);
     const decided = await lossCasesService.decideLossCase(
       lossCase.id,
       tenant.groupId,
       tenant.companyId,
       'APPROVED',
-      { userId: tenant.userId, canApprove: true },
+      { userId: secondApproverId, canApprove: true },
       transaction
     );
     assert.equal(decided.status, 'APPROVED');

@@ -200,7 +200,7 @@ async function openLossCase(payload, actorUserId, transaction) {
       // movimento LOSS/atualiza o Asset — actor sintético com canApprove:true representa a
       // regra de negócio decidindo (valor dentro da alçada), não um bypass de permissão de um
       // usuário real (o ator que ABRIU o caso nunca precisou de inventory:approve pra isso).
-      const approved = await decideLossCase(lossCase.id, groupId, companyId, 'APPROVED', { userId: actorUserId, canApprove: true }, transaction);
+      const approved = await decideLossCase(lossCase.id, groupId, companyId, 'APPROVED', { userId: actorUserId, canApprove: true }, transaction, { systemAutoApprove: true });
       return approved;
     }
     // Acima da alçada: nasce PENDING_APPROVAL (em vez de OPEN) — deixa explícito que falta uma
@@ -305,6 +305,18 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
   // caso já APPROVED/REJECTED.
   if (lossCase.status !== 'OPEN' && lossCase.status !== 'PENDING_APPROVAL') {
     throw AppError.badRequest(`Só é possível decidir um caso em OPEN/PENDING_APPROVAL (atual: ${lossCase.status}).`, 'LOSS_CASE_INVALID_TRANSITION');
+  }
+  // ACHADO REAL (apontado em 3 rodadas independentes de auditoria, Marco 7): quem registrou a
+  // perda podia aprovar/rejeitar o próprio caso, inconsistente com o mesmo bloqueio já aplicado
+  // em Compras, Ajuste de inventário e Requisição de material. Mesmo padrão: fail closed.
+  // `options.systemAutoApprove` é o único bypass legítimo — representa a REGRA DE NEGÓCIO de
+  // alçada por valor decidindo automaticamente (ver openLossCase), nunca uma pessoa aprovando a
+  // própria perda; sem esse flag, o bloqueio vale sempre, mesmo pra quem tem inventory:approve.
+  if (!options.systemAutoApprove && lossCase.createdBy && actor?.userId && String(lossCase.createdBy) === String(actor.userId)) {
+    throw AppError.forbidden(
+      'Quem registrou esta perda não pode aprová-la/rejeitá-la — peça a decisão de outra pessoa com permissão.',
+      'LOSS_CASE_SELF_APPROVAL_BLOCKED'
+    );
   }
 
   // "Investigação e decisão humana determinam responsabilidade" (§11): a decisão pode atribuir

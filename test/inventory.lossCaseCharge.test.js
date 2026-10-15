@@ -9,7 +9,7 @@ const movementsService = require('../src/features/inventory/movements.service');
 const assetsService = require('../src/features/inventory/assets.service');
 const lossCasesService = require('../src/features/inventory/lossCases.service');
 const filesService = require('../src/features/files/files.service');
-const { FinancialEntry, ResultCenter, Person } = require('../src/models');
+const { FinancialEntry, ResultCenter, Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 // GAP CORRIGIDO (auditoria de conformidade Marco 7, contrato §11): "Investigação e decisão
@@ -18,9 +18,17 @@ const AppError = require('../src/utils/AppError');
 // responsável. Estes testes provam a integração real com o Financeiro.
 
 let tenant;
+let secondApproverId;
 
 before(async () => {
   tenant = await getSeedTenant();
+  // Achado real (auditoria Nayara, Marco 7): quem registra a perda não pode aprová-la — todos os
+  // casos deste arquivo são abertos como tenant.userId, então a decisão precisa de outro ator.
+  const [user] = await User.findOrCreate({
+    where: { email: 'homo-qa-losscasecharge-approver@nayaraone.dev' },
+    defaults: { name: 'HOMO QA — LossCaseCharge Approver', passwordHash: 'x', status: 'ACTIVE' },
+  });
+  secondApproverId = user.id;
 });
 
 after(async () => {
@@ -31,7 +39,7 @@ function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
 }
 
-const approver = () => ({ userId: tenant.userId, canApprove: true });
+const approver = () => ({ userId: secondApproverId, canApprove: true });
 
 async function evidence(transaction) {
   return filesService.uploadFile(
@@ -221,7 +229,7 @@ test('§11 (HTTP): controller repassa chargeResponsible/responsiblePersonId/char
     const { statusCode, body } = await callController(inventoryController.decideLossCase, {
       params: { id: lossCase.id },
       body: { decision: 'APPROVED', chargeResponsible: true, responsiblePersonId: person.id, chargeAmount: 125.5 },
-      auth: { userId: tenant.userId, groupId: tenant.groupId, companyId: tenant.companyId, permissions: ['inventory:approve'] },
+      auth: { userId: secondApproverId, groupId: tenant.groupId, companyId: tenant.companyId, permissions: ['inventory:approve'] },
       withTenantTransaction: (fn) => fn(transaction),
     });
     assert.equal(statusCode, 200);

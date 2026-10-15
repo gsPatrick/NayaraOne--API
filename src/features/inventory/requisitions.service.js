@@ -13,7 +13,9 @@ const { publishRequisitionCreated } = require('./inventoryEvents.service');
 const STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'ISSUED'];
 
 async function createRequisition(payload, actorUserId, transaction) {
-  const { groupId, companyId, warehouseLocationId, projectLocationId, projectId, stageId, notes, items } = payload;
+  const { groupId, companyId, warehouseLocationId, projectLocationId } = payload;
+  let { projectId, stageId } = payload;
+  const { notes, items } = payload;
 
   if (!groupId || !companyId || !warehouseLocationId || !Array.isArray(items) || items.length === 0) {
     throw AppError.badRequest(
@@ -31,19 +33,6 @@ async function createRequisition(payload, actorUserId, transaction) {
     }
   }
 
-  // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-004 exige
-  // project_id/stage_id — stageId era gravado sem nenhuma validação (aceitava etapa de OUTRA obra
-  // ou etapa sem obra nenhuma). Mesmo padrão de materialRequests.service.js#createMaterialRequest.
-  if (stageId) {
-    if (!projectId) {
-      throw AppError.badRequest('Informe a obra antes de escolher a etapa (a etapa pertence a uma obra).', 'INVENTORY_REQUISITION_VALIDATION');
-    }
-    const stage = await ProjectStage.findOne({ where: { id: stageId, projectId }, transaction });
-    if (!stage) {
-      throw AppError.badRequest('A etapa escolhida não pertence à obra selecionada.', 'INVENTORY_REQUISITION_STAGE_INVALID');
-    }
-  }
-
   const warehouse = await InventoryLocation.findByPk(warehouseLocationId, { transaction });
   if (!warehouse) throw AppError.notFound('Local de origem (almoxarifado) não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
 
@@ -54,14 +43,46 @@ async function createRequisition(payload, actorUserId, transaction) {
   // issueRequisition saía com projectId: null — um movimento tocando local de obra sem vínculo
   // de obra, quebrando a rastreabilidade exigida pelo EST-004 (mesmo padrão já corrigido em
   // movements.service.js#recordMovement e counts.service.js#openCount).
-  if (projectLocationId && !projectId) {
+  // ACHADO REAL (auditoria Nayara, Marco 7 final): a requisição aceitava uma "Obra" escolhida à
+  // mão divergente da obra REAL já vinculada ao canteiro de destino (desde a correção F2 desta
+  // sessão, todo canteiro já nasce vinculado a uma obra no cadastro) — o OUT acabava sendo
+  // gravado com a obra errada. A obra do canteiro é sempre a fonte de verdade: se o canteiro já
+  // tem uma obra, ela SOBRESCREVE qualquer projectId divergente enviado pelo front (nunca
+  // confiamos em obra escolhida solta no formulário quando o canteiro já sabe a dele). Roda ANTES
+  // da validação de stageId abaixo, pra validar a etapa contra a obra já corrigida/confirmada.
+  if (projectLocationId) {
     const projectLocation = await InventoryLocation.findOne({ where: { id: projectLocationId, groupId, companyId }, transaction });
     if (!projectLocation) throw AppError.notFound('Local de destino no canteiro não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
     if (projectLocation.locationType === 'PROJECT_SITE') {
-      throw AppError.badRequest(
-        'O local de destino é um canteiro de obra — selecione a obra (e a etapa, se aplicável) para vincular a requisição.',
-        'REQUISITION_PROJECT_LOCATION_REQUIRES_PROJECT'
-      );
+      if (projectLocation.projectId) {
+        // Canteiro já vinculado a uma obra no cadastro: essa é a única obra válida pra essa
+        // requisição, independente do que o formulário tiver enviado. Se a etapa enviada não
+        // pertencer a essa obra, descarta a etapa em vez de travar a requisição inteira.
+        if (String(projectId || '') !== String(projectLocation.projectId)) {
+          stageId = null;
+        }
+        projectId = projectLocation.projectId;
+      } else if (!projectId) {
+        // Canteiro legado (criado antes da correção F2), ainda sem obra no próprio cadastro —
+        // mantém a exigência antiga de informar a obra na requisição.
+        throw AppError.badRequest(
+          'O local de destino é um canteiro de obra — selecione a obra (e a etapa, se aplicável) para vincular a requisição.',
+          'REQUISITION_PROJECT_LOCATION_REQUIRES_PROJECT'
+        );
+      }
+    }
+  }
+
+  // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-004 exige
+  // project_id/stage_id — stageId era gravado sem nenhuma validação (aceitava etapa de OUTRA obra
+  // ou etapa sem obra nenhuma). Mesmo padrão de materialRequests.service.js#createMaterialRequest.
+  if (stageId) {
+    if (!projectId) {
+      throw AppError.badRequest('Informe a obra antes de escolher a etapa (a etapa pertence a uma obra).', 'INVENTORY_REQUISITION_VALIDATION');
+    }
+    const stage = await ProjectStage.findOne({ where: { id: stageId, projectId }, transaction });
+    if (!stage) {
+      throw AppError.badRequest('A etapa escolhida não pertence à obra selecionada.', 'INVENTORY_REQUISITION_STAGE_INVALID');
     }
   }
 
@@ -121,7 +142,10 @@ async function listRequisitions(groupId, companyId, transaction, { status, proje
   if (projectId) where.projectId = projectId;
   return InventoryRequisition.findAll({
     where,
-    include: [{ model: InventoryRequisitionItem, as: 'items' }],
+    include: [
+      { model: InventoryRequisitionItem, as: 'items' },
+      { model: Project, as: 'project', attributes: ['id', 'name'] },
+    ],
     order: [['created_at', 'DESC']],
     limit: 1500,
     transaction,
@@ -136,6 +160,15 @@ async function decideRequisition(requisitionId, decision, actorUserId, groupId, 
   if (!requisition) throw AppError.notFound('Requisição não encontrada.', 'INVENTORY_REQUISITION_NOT_FOUND');
   if (requisition.status !== 'REQUESTED') {
     throw AppError.badRequest(`Só é possível decidir uma requisição em REQUESTED (atual: ${requisition.status}).`, 'INVENTORY_REQUISITION_INVALID_TRANSITION');
+  }
+  // ACHADO REAL (apontado em 3 rodadas independentes de auditoria, Marco 7): quem cria a
+  // requisição podia aprovar/rejeitar a própria solicitação, inconsistente com o mesmo bloqueio
+  // já aplicado em Compras e no Ajuste de inventário. Mesmo padrão: fail closed, mensagem clara.
+  if (requisition.requestedByUserId && actorUserId && String(requisition.requestedByUserId) === String(actorUserId)) {
+    throw AppError.forbidden(
+      'Quem solicitou esta requisição não pode aprová-la/rejeitá-la — peça a decisão de outra pessoa com permissão.',
+      'INVENTORY_REQUISITION_SELF_APPROVAL_BLOCKED'
+    );
   }
   requisition.status = decision;
   requisition.approvedByUserId = actorUserId || null;
