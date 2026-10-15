@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryItem, InventoryLocation, InventoryMovement } = require('../../models');
+const { InventoryItem, InventoryLocation, InventoryMovement, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishItemCreated } = require('./inventoryEvents.service');
 const { createMinStockRule } = require('./minStockRules.service');
@@ -166,7 +166,16 @@ async function createLocation(payload, actorUserId, transaction) {
 }
 
 async function listLocations(groupId, companyId, transaction) {
-  return InventoryLocation.findAll({ where: { groupId, companyId, isActive: true }, order: [['name', 'ASC']], limit: 1500, transaction });
+  // Achado real (revalidação Marco 7 v2, Nayara): a lista não mostrava a obra vinculada ao
+  // canteiro (campo existe no cadastro desde a correção de F2, mas a listagem nunca incluía a
+  // relação). Include leve (só id+nome), não afeta volume/latência de forma relevante.
+  return InventoryLocation.findAll({
+    where: { groupId, companyId, isActive: true },
+    include: [{ model: Project, as: 'project', attributes: ['id', 'name'], required: false }],
+    order: [['name', 'ASC']],
+    limit: 1500,
+    transaction,
+  });
 }
 
 async function getLocation(locationId, groupId, companyId, transaction) {
