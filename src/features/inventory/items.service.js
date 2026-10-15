@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryItem, InventoryLocation, InventoryMovement, Project } = require('../../models');
+const { InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishItemCreated } = require('./inventoryEvents.service');
 const { createMinStockRule } = require('./minStockRules.service');
@@ -110,12 +110,38 @@ async function updateItem(itemId, payload, actorUserId, groupId, companyId, tran
   return item;
 }
 
+// BUG REAL CORRIGIDO (auditoria final Marco 7, Claude Browser, 14/10/2026): o front somava só
+// `averageCost` (custo UNITÁRIO) de cada item pra montar o KPI "Valor em custo médio" — nunca
+// multiplicava pelo saldo em estoque, então o número exibido não representava valor nenhum de
+// verdade (ex: 2 itens com custo R$ 100 cada mostravam "R$ 200" mesmo que um tivesse saldo 0 e o
+// outro saldo 1000). Agora cada item vem com `totalQuantity` (soma do saldo em todos os locais) e
+// `totalValue` (totalQuantity × averageCost), calculados aqui — o front usa esses campos prontos
+// em vez de reinventar a soma errada.
 async function listItems(groupId, companyId, transaction, { itemType, status } = {}) {
   const where = { groupId, companyId };
   if (status && status !== 'ALL') where.status = status;
   else if (!status) where.status = 'ACTIVE';
   if (itemType) where.itemType = itemType;
-  return InventoryItem.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
+  const items = await InventoryItem.findAll({ where, order: [['name', 'ASC']], limit: 1500, transaction });
+  if (items.length === 0) return items;
+
+  const balances = await InventoryStockBalance.findAll({
+    where: { groupId, companyId, inventoryItemId: items.map((i) => i.id) },
+    attributes: ['inventoryItemId', 'quantityOnHand'],
+    transaction,
+  });
+  const totalQuantityByItem = {};
+  for (const b of balances) {
+    totalQuantityByItem[b.inventoryItemId] = (totalQuantityByItem[b.inventoryItemId] || 0) + Number(b.quantityOnHand || 0);
+  }
+
+  return items.map((item) => {
+    const json = item.toJSON();
+    const totalQuantity = totalQuantityByItem[item.id] || 0;
+    json.totalQuantity = totalQuantity;
+    json.totalValue = item.averageCost != null ? totalQuantity * Number(item.averageCost) : null;
+    return json;
+  });
 }
 
 async function getItem(itemId, groupId, companyId, transaction) {
