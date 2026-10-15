@@ -15,7 +15,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const { AssetMovement } = require('../src/models');
+const { AssetMovement, User } = require('../src/models');
 const assetsService = require('../src/features/inventory/assets.service');
 const toolLoansService = require('../src/features/inventory/toolLoans.service');
 const maintenanceService = require('../src/features/inventory/maintenance.service');
@@ -25,16 +25,22 @@ const filesService = require('../src/features/files/files.service');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
-let approver;
 
 before(async () => {
   tenant = await getSeedTenant();
-  approver = { userId: tenant.userId, canApprove: true };
 });
 
 after(async () => {
   await sequelize.close();
 });
+
+async function createSecondUser(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-patrimoniogaps-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — PatrimonioGaps ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return user.id;
+}
 
 function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
@@ -93,6 +99,7 @@ test('Item 7: transferAsset recusa transferir uma ferramenta emprestada (LOANED)
 // Item 8 ---------------------------------------------------------------------------------------
 
 test('Item 8: aprovar um caso de perda de Asset gera um AssetMovement real documentando a perda', async () => {
+  const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     const evidence = await createEvidence(transaction);
@@ -105,7 +112,11 @@ test('Item 8: aprovar um caso de perda de Asset gera um AssetMovement real docum
     const beforeCount = await AssetMovement.count({ where: { assetId: asset.id }, transaction });
     assert.equal(beforeCount, 0, 'nenhum movimento antes da decisão');
 
-    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver, transaction);
+    // Achado real (auditoria Marco 7, maker-checker de Perdas): quem abre o caso não pode mais
+    // decidir o mesmo caso — precisa de um segundo aprovador.
+    const otherUserId = await createSecondUser(suffix);
+    const secondApprover = { userId: otherUserId, canApprove: true };
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover, transaction);
 
     await asset.reload({ transaction });
     assert.equal(asset.status, 'LOST');
