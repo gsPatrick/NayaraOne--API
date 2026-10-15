@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage } = require('../../models');
+const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -152,6 +152,13 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
   }
   const items = await InventoryRequisitionItem.findAll({ where: { requisitionId: requisition.id, groupId, companyId }, transaction });
 
+  const project = requisition.projectId
+    ? await Project.findOne({ where: { id: requisition.projectId, groupId, companyId }, transaction })
+    : null;
+  const issueReason = project
+    ? `Entrega de requisição de material — obra "${project.name}".`
+    : 'Entrega de requisição de material.';
+
   for (const line of items) {
     await recordMovement(
       {
@@ -166,6 +173,7 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
         sourceType: 'REQUISITION',
         sourceId: requisition.id,
         idempotencyKey: `req:${requisition.id}:item:${line.id}`,
+        reason: issueReason,
       },
       actor,
       transaction
@@ -196,6 +204,7 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
           sourceType: 'REQUISITION',
           sourceId: requisition.id,
           idempotencyKey: `req:${requisition.id}:item:${line.id}:site-in`,
+          reason: issueReason,
         },
         actor,
         transaction

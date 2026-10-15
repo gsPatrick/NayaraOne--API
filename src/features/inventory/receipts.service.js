@@ -169,6 +169,9 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction)
         sourceType: 'RECEIPT',
         sourceId: receipt.id,
         idempotencyKey: `receipt:${receipt.id}:item:${line.id}`,
+        reason: receipt.invoiceNumber
+          ? `Recebimento da nota fiscal nº ${receipt.invoiceNumber}.`
+          : 'Recebimento de mercadoria.',
       },
       actor,
       transaction
