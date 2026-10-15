@@ -160,6 +160,7 @@ async function receiveMaterialRequest(id, groupId, companyId, actorUserId, trans
   await materialRequest.save({ transaction });
 
   // Baixa real de saldo no Estoque — vincula item/local informados pelo recebimento.
+  const requestProject = await Project.findByPk(materialRequest.projectId, { transaction });
   const inventoryMovement = await recordMovement(
     {
       groupId: materialRequest.groupId,
@@ -173,7 +174,7 @@ async function receiveMaterialRequest(id, groupId, companyId, actorUserId, trans
       sourceType: 'REQUISITION',
       sourceId: materialRequest.id,
       idempotencyKey: `material_request.receive:${materialRequest.id}`,
-      reason: `Consumo da requisição de material "${materialRequest.description}" na obra ${materialRequest.projectId}.`,
+      reason: `Consumo da requisição de material "${materialRequest.description}" na obra ${requestProject ? requestProject.name : 'vinculada'}.`,
     },
     { userId: actorUserId, canApprove: false },
     transaction

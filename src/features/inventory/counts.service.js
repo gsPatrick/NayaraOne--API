@@ -178,7 +178,7 @@ async function applyAdjustment(countItemId, groupId, companyId, actor, transacti
         entityType: 'InventoryCountItem',
         entityId: countItemId,
         beforeJson: { countItemId, countId: count.id, openedBy: count.createdBy },
-        reason: 'Quem abriu o inventário não pode aprovar o próprio ajuste (EST-008).',
+        reason: 'Quem abriu o inventário não pode aprovar o próprio ajuste.',
       },
       transaction
     );
@@ -200,7 +200,7 @@ async function applyAdjustment(countItemId, groupId, companyId, actor, transacti
       sourceType: 'COUNT',
       sourceId: count.id,
       idempotencyKey: `count-item:${line.id}`,
-      reason: `Ajuste de inventário físico ${count.id} — divergência de ${divergence}.`,
+      reason: `Ajuste de inventário físico (contagem de ${new Date(count.createdAt).toLocaleDateString('pt-BR')}) — divergência de ${divergence}.`,
       evidenceFileId: evidenceFileId || undefined,
     },
     actor,

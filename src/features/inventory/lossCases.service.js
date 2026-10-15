@@ -366,7 +366,7 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
         sourceType: 'LOSS_CASE',
         sourceId: lossCase.id,
         idempotencyKey: `loss-case:${lossCase.id}`,
-        reason: `Perda aprovada — caso ${lossCase.id}.`,
+        reason: `Perda aprovada — ${lossCase.context}.`,
         evidenceFileId: lossCase.evidenceFileIds[0],
         responsiblePersonId: item?.itemType === 'TOOL' || item?.itemType === 'ASSET' ? lossCase.responsiblePersonId : undefined,
       },
