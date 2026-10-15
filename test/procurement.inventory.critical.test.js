@@ -10,6 +10,7 @@ const movementsService = require('../src/features/inventory/movements.service');
 const assetsService = require('../src/features/inventory/assets.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const countsService = require('../src/features/inventory/counts.service');
+const projectsService = require('../src/features/construction/projects.service');
 const { Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -150,10 +151,16 @@ test('EST-002: movimento OUT que deixaria o saldo negativo é bloqueado quando a
     await receiptsService.reviewReceipt(receipt.id, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await receiptsService.confirmReceipt(receipt.id, actorOf(), tenant.groupId, tenant.companyId, transaction);
 
+    const suffix = uniqueSuffix();
+    const person = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT EST-002 Responsável ${suffix}` },
+      { transaction }
+    );
+
     await assert.rejects(
       () =>
         movementsService.recordMovement(
-          withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 999, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+          withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 999, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: person.id }),
           actorOf(),
           transaction
         ),
@@ -172,27 +179,44 @@ test('EST-002: movimento OUT que deixaria o saldo negativo é bloqueado quando a
 // EST-004: movimento que toca um local do tipo PROJECT_SITE exige projectId — sem isso o custo
 // não pode ser rastreado corretamente até a obra.
 
-test('EST-004: movimento envolvendo local PROJECT_SITE sem projectId é bloqueado', async () => {
+// EST-004 — achado real do Marco 7 (F2): a exigência de obra pra um local tipo PROJECT_SITE foi
+// movida da hora do MOVIMENTO pra hora do CADASTRO do local (o canteiro passa a pertencer a uma
+// obra desde que é criado, não a cada movimento) — o movimento deriva o projectId automaticamente
+// do local, sem precisar que o formulário de movimento peça de novo.
+test('EST-004: criar local PROJECT_SITE sem projectId é bloqueado na própria criação', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await assert.rejects(
+      () =>
+        itemsService.createLocation(
+          withTenant({ name: `HOMO QA Canteiro ${Date.now()}`, locationType: 'PROJECT_SITE' }),
+          tenant.userId,
+          transaction
+        ),
+      (err) => {
+        assert.equal(err.code, 'INVENTORY_LOCATION_PROJECT_REQUIRED');
+        return true;
+      }
+    );
+  });
+});
+
+test('EST-004: movimento envolvendo local PROJECT_SITE com projectId vinculado no cadastro funciona, e o movimento herda a obra automaticamente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
     const { item } = await createItemAndWarehouse(transaction);
+    const project = await projectsService.createProject(withTenant({ name: `Obra AUDIT EST-004 ${suffix}` }), tenant.userId, transaction);
     const siteLocation = await itemsService.createLocation(
-      withTenant({ name: `HOMO QA Canteiro ${Date.now()}`, locationType: 'PROJECT_SITE' }),
+      withTenant({ name: `HOMO QA Canteiro ${suffix}`, locationType: 'PROJECT_SITE', projectId: project.id }),
       tenant.userId,
       transaction
     );
 
-    await assert.rejects(
-      () =>
-        movementsService.recordMovement(
-          withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 10, destinationLocationId: siteLocation.id, sourceType: 'MANUAL' }),
-          actorOf(),
-          transaction
-        ),
-      (err) => {
-        assert.equal(err.code, 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
-        return true;
-      }
+    const movement = await movementsService.recordMovement(
+      withTenant({ inventoryItemId: item.id, movementType: 'IN', quantity: 10, destinationLocationId: siteLocation.id, sourceType: 'MANUAL' }),
+      actorOf(),
+      transaction
     );
+    assert.ok(movement, 'movimento pra um canteiro já vinculado a uma obra deve ser aceito sem pedir projectId de novo');
   });
 });
 

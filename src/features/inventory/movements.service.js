@@ -243,7 +243,7 @@ async function recordMovement(payload, actor, transaction) {
   // controlado pelo próprio fluxo de origem — essa exigência vale só pra saída manual genuína
   // (sem sourceType, ou MANUAL), que é onde a baixa sem controle de fato acontecia.
   if (movementType === 'OUT' && (!sourceType || sourceType === 'MANUAL') && !responsiblePersonId) {
-    throw AppError.badRequest('Saída manual de estoque exige "responsiblePersonId" (quem está retirando).', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+    throw AppError.badRequest('Saída manual de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
   }
   // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): o endpoint genérico de movimentos
   // aceitava "movementType: LOSS" direto (com motivo/aprovação/evidência por valor já exigidos
