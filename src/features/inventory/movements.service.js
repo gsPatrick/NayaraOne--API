@@ -153,10 +153,10 @@ async function recordMovement(payload, actor, transaction) {
     throw AppError.badRequest(`Movimento "${movementType}" exige "destinationLocationId".`, 'INVENTORY_MOVEMENT_VALIDATION');
   }
   if (movementType === 'TRANSFER' && (!sourceLocationId || !destinationLocationId)) {
-    throw AppError.badRequest('Movimento "TRANSFER" exige "sourceLocationId" e "destinationLocationId".', 'INVENTORY_MOVEMENT_VALIDATION');
+    throw AppError.badRequest('Transferência exige o local de origem e o local de destino.', 'INVENTORY_MOVEMENT_VALIDATION');
   }
   if (movementType === 'ADJUSTMENT' && !sourceLocationId && !destinationLocationId) {
-    throw AppError.badRequest('Movimento "ADJUSTMENT" exige "sourceLocationId" ou "destinationLocationId".', 'INVENTORY_MOVEMENT_VALIDATION');
+    throw AppError.badRequest('Informe o local de origem (para diminuir o saldo) ou de destino (para aumentar o saldo) do ajuste.', 'INVENTORY_MOVEMENT_VALIDATION');
   }
   // EST-008: ajuste/perda/descarte exigem motivo (evidência é recomendada, mas só obrigatória
   // quando a política da empresa exigir — isso é regra de negócio do Motor de Regras, fora de
