@@ -10,7 +10,7 @@ const { publishCountCompleted } = require('./inventoryEvents.service');
 // fechamento só trava expected_quantity/divergence; ajuste de verdade é um ato separado e
 // aprovado (applyAdjustment -> movements.service ADJUSTMENT, com reason obrigatório).
 async function openCount(payload, actorUserId, transaction) {
-  const { groupId, companyId, locationId, projectId } = payload;
+  const { groupId, companyId, locationId } = payload;
   if (!groupId || !companyId || !locationId) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "locationId" são obrigatórios.', 'INVENTORY_COUNT_VALIDATION');
   }
@@ -26,8 +26,13 @@ async function openCount(payload, actorUserId, transaction) {
   // local (duas aberturas concorrentes esperam uma pela outra aqui).
   const location = await InventoryLocation.findByPk(locationId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!location) throw AppError.notFound('Local de estoque não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
+  // ACHADO REAL (auditoria Marco 7, rodada final): a obra era pedida de novo no formulário de
+  // abertura, podendo divergir da obra REAL já vinculada ao canteiro desde o cadastro (mesma
+  // inconsistência já corrigida em requisitions.service.js#createRequisition). A obra do
+  // canteiro é sempre a fonte de verdade — nunca confiamos num projectId solto vindo do payload.
+  const projectId = location.locationType === 'PROJECT_SITE' ? location.projectId : null;
   if (location.locationType === 'PROJECT_SITE' && !projectId) {
-    throw AppError.badRequest('Este local é um canteiro de obra e precisa estar vinculado a uma obra antes de abrir o inventário.', 'INVENTORY_COUNT_PROJECT_REQUIRED');
+    throw AppError.badRequest('Este canteiro ainda não está vinculado a uma obra no cadastro — vincule a obra no cadastro do local antes de abrir o inventário.', 'INVENTORY_COUNT_PROJECT_REQUIRED');
   }
   const alreadyOpen = await InventoryCount.findOne({ where: { locationId, status: 'OPEN' }, transaction });
   if (alreadyOpen) {
