@@ -8,6 +8,7 @@ const { Notification, Task, UserMembership, RolePermission, Permission } = requi
 const assetsService = require('../src/features/inventory/assets.service');
 const toolLoansService = require('../src/features/inventory/toolLoans.service');
 const { escalateOverdueToolLoans } = require('../src/engines/jobs/toolLoanOverdueJob');
+const { InventoryMaintenanceOrder } = require('../src/models');
 
 let tenant;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -166,5 +167,78 @@ test('inventory: o responsável notificado pela ferramenta atrasada realmente te
       transaction
     );
     assert.equal(returned.status, 'RETURNED', 'o responsável notificado precisa conseguir resolver o próprio alerta via returnTool');
+  });
+});
+
+// ACHADO REAL (revalidação Claude Browser, Marco 7, 14/10/2026, N2): "due_at" era DATE
+// (timestamptz) — uma data pura mandada pelo front ("2026-10-01") virava meia-noite UTC, e ao
+// reler/exibir no fuso local (America/Bahia, UTC-3) aparecia como o dia ANTERIOR ("2026-09-30").
+// Corrigido trocando a coluna pra DATEONLY (migration 20260101000362), que nunca sofre
+// conversão de fuso. Este teste prova ida-e-volta exata, sem depender de nenhum fuso específico
+// da máquina que roda o teste.
+test('inventory: dueAt do empréstimo nunca perde um dia por conversão de fuso (N2)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const asset = await assetsService.createAsset(
+      { groupId: tenant.groupId, companyId: tenant.companyId, name: `Serrote ${suffix}`, assetTag: `TOOL-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+
+    const loan = await toolLoansService.loanTool(
+      asset.id,
+      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: '2026-10-01' },
+      tenant.userId,
+      tenant.groupId, tenant.companyId,
+      transaction
+    );
+    assert.equal(loan.dueAt, '2026-10-01', 'a data prevista precisa ser EXATAMENTE a digitada, sem deslocar um dia');
+
+    await loan.reload({ transaction });
+    assert.equal(loan.dueAt, '2026-10-01', 'relendo do banco, continua exatamente a mesma data');
+
+    const movements = await assetsService.listAssetMovements(asset.id, tenant.groupId, tenant.companyId, transaction);
+    const loanEntry = movements.find((m) => m.movementType === 'LOAN');
+    assert.equal(loanEntry.dueAt, '2026-10-01', 'a listagem de histórico também precisa manter a data exata');
+  });
+});
+
+// ACHADO REAL (revalidação Claude Browser, Marco 7, 14/10/2026, N3): o atributo Sequelize deste
+// model é "created_at" (a opção `createdAt: 'created_at'` nas options do model RENOMEIA o
+// atributo em vez de só mapear a coluna, já que `underscored: true` já cuida do mapeamento) —
+// todo código que lia `loan.createdAt` sempre recebia undefined. Corrigido usando
+// `loan.created_at` em assets.service.js (histórico) e toolLoans.service.js (mensagem da OS).
+test('inventory: data do empréstimo é persistida e aparece no histórico e na OS de manutenção (N3)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const asset = await assetsService.createAsset(
+      { groupId: tenant.groupId, companyId: tenant.companyId, name: `Plaina ${suffix}`, assetTag: `TOOL-${suffix}` },
+      tenant.userId,
+      transaction
+    );
+
+    const loan = await toolLoansService.loanTool(
+      asset.id,
+      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id },
+      tenant.userId,
+      tenant.groupId, tenant.companyId,
+      transaction
+    );
+    assert.ok(loan.created_at, 'o empréstimo precisa ter uma data de criação persistida');
+
+    const movements = await assetsService.listAssetMovements(asset.id, tenant.groupId, tenant.companyId, transaction);
+    const loanEntry = movements.find((m) => m.movementType === 'LOAN');
+    assert.ok(loanEntry.movedAt, 'a entrada "Empréstimo" do histórico precisa ter uma data, nunca "—"/undefined');
+
+    const { maintenanceOrder } = await toolLoansService.returnTool(
+      loan.id,
+      { conditionCode: 'DAMAGED' },
+      tenant.userId,
+      tenant.groupId, tenant.companyId,
+      transaction
+    );
+    assert.ok(maintenanceOrder, 'devolução danificada precisa abrir uma OS');
+    const order = await InventoryMaintenanceOrder.findByPk(maintenanceOrder.id, { transaction });
+    assert.doesNotMatch(order.description, /data não registrada/, 'a OS precisa citar a data real do empréstimo, não "data não registrada"');
   });
 });

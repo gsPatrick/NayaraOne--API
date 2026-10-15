@@ -53,7 +53,7 @@ function assertNonNegativeAcquisitionValue(value) {
 function assertWarrantyNotBeforeAcquisition(acquiredAt, warrantyUntil) {
   if (!acquiredAt || !warrantyUntil) return;
   if (new Date(warrantyUntil).getTime() < new Date(acquiredAt).getTime()) {
-    throw AppError.badRequest('"warrantyUntil" não pode ser anterior à data de aquisição ("acquiredAt").', 'ASSET_VALIDATION');
+    throw AppError.badRequest('A data de garantia não pode ser anterior à data de aquisição.', 'ASSET_VALIDATION');
   }
 }
 
@@ -311,7 +311,11 @@ async function listAssetMovements(assetId, groupId, companyId, transaction) {
     loanEntries.push({
       id: `loan-${loan.id}-out`,
       movementType: 'LOAN',
-      movedAt: loan.createdAt,
+      // ACHADO REAL (revalidação Marco 7, N3): o atributo Sequelize deste model é "created_at"
+      // (não "createdAt") por causa da opção `createdAt: 'created_at'` nas options do model, que
+      // RENOMEIA o atributo em vez de só mapear a coluna — `loan.createdAt` sempre vinha
+      // undefined, e a data do empréstimo nunca aparecia no histórico/OS.
+      movedAt: loan.created_at,
       destinationLocationId: loan.destinationLocationId,
       assignedToUserId: loan.personUserId,
       dueAt: loan.dueAt,

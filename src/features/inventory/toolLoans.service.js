@@ -161,7 +161,7 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
         companyId: loan.companyId,
         assetId: asset.id,
         sourceToolLoanId: loan.id,
-        description: `Devolução danificada — ${asset.name || 'ferramenta'} (empréstimo de ${loan.createdAt ? new Date(loan.createdAt).toLocaleDateString('pt-BR') : 'data não registrada'}).`,
+        description: `Devolução danificada — ${asset.name || 'ferramenta'} (empréstimo de ${loan.created_at ? new Date(loan.created_at).toLocaleDateString('pt-BR') : 'data não registrada'}).`,
       },
       actorUserId,
       transaction
