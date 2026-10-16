@@ -186,7 +186,7 @@ test('resolveDiscrepancy: aceitar um OVER_RECEIPT cria um FinancialEntry adicion
 test('insurance.cancelPolicy: cancela uma apólice ISSUED/ACTIVE exigindo reason e bloqueia reemissão', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
-    await insuranceService.quotePolicy(policy.id, {}, actorWithTenant(), transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 50000 }, actorWithTenant(), transaction);
     await insuranceService.issuePolicy(
       policy.id,
       { effectiveDate: '2026-01-01', expiryDate: '2026-12-31' },
