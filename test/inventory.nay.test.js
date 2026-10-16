@@ -89,6 +89,24 @@ test('NAY Estoque (regra): consumo + obra pendente + lead time + mínimo compõe
   assert.equal(s.stockoutRisk, true);
 });
 
+// BUG REAL CORRIGIDO (auditoria Marco 7 "final/reconfirmação", 16/10/2026): logo depois de
+// aprovar uma reposição que já cobria a necessidade (ex.: 86 sacos), a NAY sugeria de novo um
+// resíduo minúsculo (ex.: 0,42 saco) pro mesmo item — ruído de arredondamento, não uma compra
+// acionável de verdade.
+test('NAY Estoque (regra): resíduo desprezível (< 1 unidade e < 5% do nível-alvo) não gera sugestão', () => {
+  // mínimo 100, saldo projetado 99.6 -> faltam só 0.4 pra bater o nível-alvo de 100 (0.4% dele).
+  const s = nay.computePurchaseSignals({ quantityOnHand: 99.6, minimumQuantity: 100, consumed: 0, windowDays: 90, leadTimeDays: 0, pendingQuantity: 0 });
+  assert.equal(s, null, 'resíduo de 0.4 numa meta de 100 (0.4%) é ruído de arredondamento, não compra real');
+});
+
+test('NAY Estoque (regra): sugestão pequena mas proporcionalmente relevante continua sendo sugerida', () => {
+  // mínimo 2, saldo projetado 1.5 -> faltam 0.5 de uma meta de 2 (25% dela) — item de baixo
+  // volume onde até uma fração pequena é uma compra real, não deve ser suprimido.
+  const s = nay.computePurchaseSignals({ quantityOnHand: 1.5, minimumQuantity: 2, consumed: 0, windowDays: 90, leadTimeDays: 0, pendingQuantity: 0 });
+  assert.ok(s, 'sugestão proporcionalmente relevante (25% do alvo) não pode ser suprimida pela tolerância de resíduo');
+  assert.equal(s.suggestedQuantity, 0.5);
+});
+
 // --- Fluxo completo com banco -----------------------------------------------------------
 
 test('EST-013/§12: NAY sugere compra a partir de consumo, obra ativa, lead time e mínimo — e NÃO cria pedido sozinha', async () => {

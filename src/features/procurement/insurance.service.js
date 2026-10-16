@@ -397,6 +397,24 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     }
   }
 
+  // BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "final/reconfirmação", 2026-10-16): emitir uma
+  // apólice direto de DRAFT (sem nunca passar por requestQuote) era aceito normalmente — a
+  // apólice virava ACTIVE, mas como premiumAmount nunca tinha sido definido (só requestQuote
+  // seta esse campo), generateInstallments abaixo recebia policy.premiumAmount null/undefined e
+  // silenciosamente gerava ZERO parcelas. Resultado observado: apólice "Ativa" sem nenhuma
+  // parcela, sem nenhum aviso ao usuário — nunca mais poderia ser corrigido depois, já que
+  // reemissão é bloqueada pelo guard acima (INSURANCE_POLICY_ALREADY_ISSUED não dispara porque
+  // não existe installment nenhuma, mas o status ACTIVE também bloqueia emitir de novo).
+  // Fail-closed: exige premiumAmount > 0 (ou seja, a apólice já ter passado por uma cotação)
+  // antes de permitir a emissão. Checado POR ÚLTIMO (depois das validações de input acima) pra
+  // não mudar a ordem/código de erro das validações de vigência/installmentsCount já existentes.
+  if (!(Number(policy.premiumAmount) > 0)) {
+    throw AppError.badRequest(
+      'A apólice precisa ter um prêmio definido (cote antes de emitir) para gerar as parcelas corretamente.',
+      'INSURANCE_POLICY_MISSING_PREMIUM'
+    );
+  }
+
   const tenant = { groupId: policy.groupId, companyId: policy.companyId };
   const providerName = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
   const idempotencyKey = `insurance-policy:${policy.id}`;

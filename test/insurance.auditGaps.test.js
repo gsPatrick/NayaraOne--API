@@ -179,6 +179,7 @@ test('Item 4: issuePolicy recusa installmentsCount não-inteiro ou fora do teto 
 test('Item 6: openClaim bloqueia sinistro duplicado (mesma descrição, ainda ativo) na mesma apólice', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
     await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, actor(), transaction);
 
     const claim = await insuranceService.openClaim(

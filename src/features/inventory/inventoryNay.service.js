@@ -58,6 +58,16 @@ const OBSERVED_LEAD_TIME_SAMPLE = 5;
 // Cobertura alvo depois da reposição: além de atravessar o lead time, a compra sugerida cobre
 // mais este período de consumo (ciclo de revisão), pra não gerar sugestão nova toda semana.
 const REVIEW_PERIOD_DAYS = 30;
+// BUG REAL CORRIGIDO (auditoria Marco 7 "final/reconfirmação", 16/10/2026): logo depois de
+// aprovar uma reposição que já cobria a necessidade (ex.: 86 sacos), a NAY sugeria de novo um
+// resíduo minúsculo (ex.: 0,42 saco / R$ 14,78) pro mesmo item — ruído de arredondamento entre
+// o cálculo que gerou a sugestão original e o recálculo seguinte (consumo continua acumulando
+// entre as duas chamadas, e targetLevel/projectedOnHand nunca ficam exatamente parados). Uma
+// fração desprezível do nível-alvo não é uma compra acionável de verdade. MIN_MEANINGFUL_FRACTION
+// ignora sugestões cuja quantidade é menor que 1 unidade E menor que 5% do nível-alvo — itens
+// cujo nível-alvo já é pequeno (ex.: alvo=2, sugestão=0,5 -> 25%) continuam sendo sugeridos
+// normalmente, só o ruído residual desprezível é suprimido.
+const MIN_MEANINGFUL_FRACTION = 0.05;
 // "Obras ativas" (projects.service.js, Caderno "4. Estados da obra"): em execução ou pausada
 // (pode retomar a qualquer momento) ou em vistoria final (ainda pode consumir material).
 const ACTIVE_PROJECT_STATUSES = ['ACTIVE', 'PAUSED', 'FINAL_INSPECTION'];
@@ -288,6 +298,7 @@ function computePurchaseSignals({ quantityOnHand, minimumQuantity, consumed, win
   const targetLevel = threshold + dailyRate * (leadTimeDays + REVIEW_PERIOD_DAYS);
   const suggestedQuantity = ceil2(targetLevel - projectedOnHand);
   if (!(suggestedQuantity > 0)) return null;
+  if (suggestedQuantity < 1 && targetLevel > 0 && suggestedQuantity / targetLevel < MIN_MEANINGFUL_FRACTION) return null;
 
   const daysOfCoverage = dailyRate > 0 ? round4(Math.max(projectedOnHand, 0) / dailyRate) : null;
   let riskLevel = 'LOW';

@@ -43,6 +43,9 @@ function addDays(dateOnly, days) {
 
 async function issuedPolicy(transaction, effectiveDate, expiryDate) {
   const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+  // issuePolicy agora exige premiumAmount definido (bug real corrigido na auditoria Marco 7
+  // "final/reconfirmação": emitir sem cotar gerava apólice ACTIVE com zero parcelas, sem aviso).
+  await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
   const issued = await insuranceService.issuePolicy(policy.id, { effectiveDate, expiryDate }, withTenant({ userId: tenant.userId }), transaction);
   assert.equal(issued.status, 'ACTIVE');
   return issued;
