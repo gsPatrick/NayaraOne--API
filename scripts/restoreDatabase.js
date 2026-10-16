@@ -13,7 +13,7 @@
 require('dotenv').config();
 const { execFile } = require('node:child_process');
 const { URL } = require('node:url');
-const { resolveConnection, resolveBinary } = require('./backupDatabase');
+const { resolveConnection, resolveDumpConnection, resolveBinary } = require('./backupDatabase');
 
 function parseArgs(argv) {
   const out = {};
@@ -30,7 +30,14 @@ async function main() {
     throw new Error('Uso: node scripts/restoreDatabase.js --file <dump> --target-db <banco-destino>');
   }
 
-  const conn = resolveConnection();
+  // GAP REAL CORRIGIDO (drill de restore/replay Financeiro/Jurídico, 16/10/2026): pg_restore
+  // precisa CRIAR schemas (finance, legal, core, etc.) no banco de destino recém-criado — a
+  // credencial de runtime não é dona desse banco e não tem privilégio CREATE nele, então toda
+  // CREATE SCHEMA falhava com "permission denied" e o restore terminava "com sucesso" sem
+  // nenhum dado de verdade (ver fix do bug de detecção de erro abaixo — a checagem antiga nunca
+  // pegava isso). Usa a mesma credencial de DDL com BYPASSRLS/privilégio de criação que o
+  // backup já usa (resolveDumpConnection em backupDatabase.js).
+  const conn = resolveDumpConnection();
   const mainDbName = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).pathname.replace(/^\//, '') : process.env.DB_NAME;
 
   if (targetDb === mainDbName) {
@@ -51,15 +58,32 @@ async function main() {
   ];
 
   await new Promise((resolve, reject) => {
-    execFile(resolveBinary('pg_restore'), args, { env: { ...process.env, PGPASSWORD: conn.password } }, (error, stdout, stderr) => {
-      // pg_restore devolve exit code != 0 em warnings não-fatais (ex. objeto já não existe pro
-      // --if-exists apagar) — por isso checamos a mensagem, não só o exit code.
-      if (error && !/already exists|does not exist/i.test(stderr || '')) {
-        reject(new Error(`pg_restore falhou: ${stderr || error.message}`));
-        return;
+    execFile(
+      resolveBinary('pg_restore'),
+      args,
+      { env: { ...process.env, PGPASSWORD: conn.password }, maxBuffer: 50 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        // GAP REAL CORRIGIDO (16/10/2026): a checagem antiga só olhava pro objeto `error` (que o
+        // pg_restore pode deixar nulo/exit-0 mesmo com dezenas de comandos individuais
+        // falhando — cada objeto é uma query separada dentro do dump) e, quando havia erro,
+        // tratava QUALQUER stderr contendo "does not exist" como inofensivo — um regex largo
+        // demais que escondeu "permission denied for database X" só porque a mensagem seguinte
+        // em cascata (ALTER SCHEMA ... OWNER TO — depois que o CREATE SCHEMA já tinha falhado)
+        // também continha a frase "does not exist". Resultado real observado: restore
+        // "concluído com sucesso" sem nenhum schema/tabela criado. Agora falha sempre que o
+        // stderr contém "permission denied" (nunca é um aviso inofensivo de --clean/--if-exists
+        // num banco novo vazio) — e só ignora o padrão específico e esperado de limpeza em
+        // banco vazio (objeto que --if-exists tentou derrubar e não existia).
+        const stderrText = stderr || '';
+        const hasPermissionDenied = /permission denied/i.test(stderrText);
+        const hasUnexpectedError = error && !/already exists|does not exist/i.test(stderrText);
+        if (hasPermissionDenied || hasUnexpectedError) {
+          reject(new Error(`pg_restore falhou:\n${stderrText || (error && error.message) || '(sem stderr)'}`));
+          return;
+        }
+        resolve();
       }
-      resolve();
-    });
+    );
   });
 
   console.log(`Restore concluído em "${targetDb}" a partir de ${file}`);

@@ -15,6 +15,16 @@
  */
 
 require('dotenv').config();
+// GAP REAL CORRIGIDO (drill de restore/replay Financeiro/Jurídico, 16/10/2026): além do problema
+// de SequelizeMeta acima, pg_dump de um banco INTEIRO também esbarra em RLS fail-closed — a
+// maioria das tabelas de negócio (finance.*, legal.*, ai.* etc.) tem policy de tenant_isolation
+// que depende de current_setting('app.group_id'/'app.company_id'), que pg_dump nunca define (ele
+// faz um único COPY por tabela, sem contexto de tenant). A role de runtime (nayara_runtime) não
+// tem BYPASSRLS — por design, nunca deveria ter. A credencial de DDL dedicada
+// (DB_MIGRATION_USER/PASSWORD, de .env.migration.local — mesma usada por `npm run migrate --env
+// migration`) tem BYPASSRLS, exatamente para operações administrativas como esta. Carregada aqui
+// do mesmo jeito que src/config/sequelize-cli.js já faz.
+require('dotenv').config({ path: require('node:path').resolve(process.cwd(), '.env.migration.local') });
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -39,6 +49,11 @@ function resolveBinary(name) {
   return name;
 }
 
+// IMPORTANTE: esta função é exportada e reaproveitada por restoreDatabase.js e pelos scripts
+// verifyRestore*.js — eles dependem de abrir conexão com a credencial de RUNTIME (sem
+// BYPASSRLS) para que os `SET LOCAL app.group_id/app.company_id` que já fazem tenham efeito de
+// verdade (RLS fail-closed real, não um no-op). NÃO troque a credencial usada aqui — ver
+// resolveDumpConnection() abaixo para a credencial elevada, usada só no pg_dump deste arquivo.
 function resolveConnection() {
   if (process.env.DATABASE_URL) {
     const u = new URL(process.env.DATABASE_URL);
@@ -59,6 +74,20 @@ function resolveConnection() {
   };
 }
 
+/**
+ * resolveDumpConnection — ver comentário no topo do arquivo: pg_dump precisa de BYPASSRLS
+ * (não tem como fazer SET LOCAL por tabela durante um COPY). Usado SÓ internamente neste
+ * arquivo, para o processo pg_dump em si — nunca exportado, nunca usado pelos scripts de
+ * restore/verificação, que precisam continuar enxergando RLS de verdade.
+ */
+function resolveDumpConnection() {
+  const base = resolveConnection();
+  if (process.env.DB_MIGRATION_USER && process.env.DB_MIGRATION_PASSWORD) {
+    return { ...base, user: process.env.DB_MIGRATION_USER, password: process.env.DB_MIGRATION_PASSWORD };
+  }
+  return base;
+}
+
 function parseArgs(argv) {
   const out = { outDir: path.join(__dirname, '..', 'backups') };
   for (let i = 0; i < argv.length; i += 1) {
@@ -71,7 +100,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const conn = resolveConnection();
+  const conn = resolveDumpConnection();
   if (!conn.host || !conn.database || !conn.user) {
     throw new Error('Configuração de banco incompleta — defina DATABASE_URL ou DB_HOST/DB_NAME/DB_USER no ambiente.');
   }
@@ -90,6 +119,16 @@ async function main() {
     '-d', conn.database,
     '-f', outFile,
     '--no-password',
+    // GAP REAL CORRIGIDO (drill de restore/replay Financeiro/Jurídico, 16/10/2026): a role de
+    // runtime (nayara_runtime) não tem permissão de LOCK/SELECT em public."SequelizeMeta"
+    // (tabela de controle interno do sequelize-cli, dona por outra role — nunca foi incluída
+    // nos GRANTs de schema aplicados a nayara_runtime, só tabelas de negócio o foram). pg_dump
+    // falha com "permission denied for table SequelizeMeta" antes mesmo de começar o dump real,
+    // porque tenta LOCK TABLE em TODAS as tabelas do banco por padrão. Excluir essa única tabela
+    // de bookkeeping (não é dado de negócio, nunca precisa ser restaurada — o banco de destino
+    // roda suas próprias migrations do zero quando precisar de histórico de schema) resolve sem
+    // precisar elevar privilégio da role de runtime só para backup.
+    '--exclude-table=public."SequelizeMeta"',
   ];
 
   await new Promise((resolve, reject) => {
@@ -114,4 +153,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, resolveConnection, resolveBinary };
+module.exports = { main, resolveConnection, resolveDumpConnection, resolveBinary };

@@ -12,6 +12,10 @@
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "smoke:test": "node scripts/smokeTest.js",
     "seed": "node scripts/seed-dev.js",
+    "backup": "node scripts/backupDatabase.js",
+    "restore": "node scripts/restoreDatabase.js",
+    "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
+    "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
