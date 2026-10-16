@@ -21,6 +21,13 @@ module.exports = (sequelize) => {
       projectId: { type: DataTypes.UUID, allowNull: false, field: 'project_id' },
       projectStageId: { type: DataTypes.UUID, allowNull: true, field: 'project_stage_id' },
       item: { type: DataTypes.STRING(255), allowNull: false, field: 'item' },
+      category: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: 'OUTROS',
+        field: 'category',
+        comment: 'PINTURA|HIDRAULICA|ELETRICA|ESTRUTURA|ACABAMENTO|ALVENARIA|OUTROS',
+      },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,

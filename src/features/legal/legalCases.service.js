@@ -94,6 +94,68 @@ async function getLegalCase(id, transaction) {
   return legalCase;
 }
 
+/**
+ * assertNotOnLegalHold — gap real (auditoria Nayara, §16/JUR-010/011): um processo em legal
+ * hold não pode ter status/fase alterados (é exatamente o que a retenção legal existe para
+ * impedir — mudar o estado do processo durante uma disputa/investigação, mesmo sem apagar
+ * nada). Campos puramente informativos (summary, responsável, escalonamento) continuam
+ * editáveis: a retenção trava o ESTADO processual, não a operação do caso no dia a dia.
+ */
+function assertNotOnLegalHold(legalCase, { statusChanging, phaseChanging }) {
+  if (legalCase.legalHold && (statusChanging || phaseChanging)) {
+    throw AppError.conflict(
+      `Este processo está em legal hold (retenção legal) desde ${legalCase.legalHoldSetAt ? new Date(legalCase.legalHoldSetAt).toISOString() : 'data desconhecida'}` +
+        `${legalCase.legalHoldReason ? ` — motivo: "${legalCase.legalHoldReason}"` : ''}. Remova o hold antes de alterar status/fase.`,
+      'LEGAL_CASE_ON_LEGAL_HOLD'
+    );
+  }
+}
+
+/**
+ * setLegalHold — ativa/desativa a retenção legal do processo. Motivo é obrigatório ao ATIVAR
+ * (nunca ao desativar — remover o hold não precisa justificar o estado anterior, só o próprio
+ * ato já fica na trilha de auditoria com antes/depois). Auditado separadamente de
+ * `legal.case.update` para ficar fácil de filtrar/relatar quantos processos entraram/saíram de
+ * hold, sem misturar com qualquer outra edição de campo.
+ */
+async function setLegalHold(id, payload, actorUserId, transaction) {
+  const legalCase = await getLegalCase(id, transaction);
+  const { legalHold, reason } = payload;
+  if (typeof legalHold !== 'boolean') {
+    throw AppError.badRequest('O campo "legalHold" (boolean) é obrigatório.', 'LEGAL_CASE_LEGAL_HOLD_VALIDATION');
+  }
+  if (legalHold && (!reason || !String(reason).trim())) {
+    throw AppError.badRequest('Um motivo é obrigatório para ativar a retenção legal (legal hold).', 'LEGAL_CASE_LEGAL_HOLD_REASON_REQUIRED');
+  }
+
+  const beforeJson = legalCase.toJSON();
+  legalCase.legalHold = legalHold;
+  legalCase.legalHoldReason = legalHold ? reason : null;
+  legalCase.legalHoldSetBy = actorUserId || null;
+  legalCase.legalHoldSetAt = new Date();
+  legalCase.updatedBy = actorUserId || null;
+  await legalCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: legalCase.groupId,
+      companyId: legalCase.companyId,
+      actorUserId,
+      action: legalHold ? 'legal.case.legal_hold_set' : 'legal.case.legal_hold_cleared',
+      entityType: 'LegalCase',
+      entityId: legalCase.id,
+      beforeJson,
+      afterJson: legalCase.toJSON(),
+      reason: legalHold
+        ? `Processo jurídico ${legalCase.id} colocado em legal hold: "${reason}".`
+        : `Legal hold removido do processo jurídico ${legalCase.id}.`,
+    },
+    transaction
+  );
+
+  return legalCase;
+}
+
 async function updateLegalCase(id, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(id, transaction);
   const beforeJson = legalCase.toJSON();
@@ -101,6 +163,10 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
   // com antes/depois explícitos no `reason`, não só no diff genérico.
   assertValidPhase(phase, payload.allowUnknownPhase);
+  assertNotOnLegalHold(legalCase, {
+    statusChanging: status !== undefined && status !== legalCase.status,
+    phaseChanging: phase !== undefined && phase !== legalCase.phase,
+  });
   const previousPhase = legalCase.phase;
   if (status !== undefined) legalCase.status = status;
   if (summary !== undefined) legalCase.summary = summary;
@@ -241,6 +307,7 @@ module.exports = {
   listLegalCases,
   getLegalCase,
   updateLegalCase,
+  setLegalHold,
   linkCaseToTask,
   addLegalCaseParty,
   listLegalCaseParties,

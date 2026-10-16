@@ -76,6 +76,13 @@ async function listPeriodClosures(transaction, filters = {}) {
   return PeriodClosure.findAll({ where, order: [['reference_month', 'DESC']], transaction });
 }
 
+/**
+ * closePeriod — ACHADO REAL CORRIGIDO (auditoria independente Nayara, 14/10/2026, A06): esta
+ * função pulava direto pra CLOSED, sem nenhuma etapa de REVIEW/revisão antes (o Caderno, páginas
+ * 121/128, pede OPEN → REVIEW → CLOSED). Agora ela só leva o período pra REVIEW — "fechamento
+ * solicitado, pendente de aprovação" — nunca fecha de verdade sozinha. Só `approvePeriodClosure`
+ * (ação separada, com permissão + MFA de step-up) move REVIEW → CLOSED.
+ */
 async function closePeriod(payload, actorUserId, transaction) {
   const { groupId, companyId } = payload;
   const referenceMonth = assertValidReferenceMonth(payload.referenceMonth);
@@ -87,6 +94,9 @@ async function closePeriod(payload, actorUserId, transaction) {
   if (closure && closure.status === 'CLOSED') {
     throw AppError.conflict(`O período ${referenceMonth} já está fechado.`, 'FINANCE_PERIOD_ALREADY_CLOSED');
   }
+  if (closure && closure.status === 'REVIEW') {
+    throw AppError.conflict(`O período ${referenceMonth} já está em revisão, aguardando aprovação do fechamento.`, 'FINANCE_PERIOD_ALREADY_IN_REVIEW');
+  }
 
   const beforeJson = closure ? closure.toJSON() : null;
   if (!closure) {
@@ -95,20 +105,16 @@ async function closePeriod(payload, actorUserId, transaction) {
         groupId,
         companyId,
         referenceMonth,
-        status: 'CLOSED',
-        closedAt: new Date(),
-        closedByUserId: actorUserId || null,
+        status: 'REVIEW',
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
       { transaction }
     );
   } else {
-    // Reabertura anterior existe: fechar de novo limpa os carimbos de reabertura (o motivo da
-    // reabertura já está preservado na trilha de auditoria — não se perde informação).
-    closure.status = 'CLOSED';
-    closure.closedAt = new Date();
-    closure.closedByUserId = actorUserId || null;
+    // Reabertura anterior existe: solicitar fechamento de novo limpa os carimbos de reabertura
+    // (o motivo da reabertura já está preservado na trilha de auditoria — não se perde informação).
+    closure.status = 'REVIEW';
     closure.reopenedAt = null;
     closure.reopenedByUserId = null;
     closure.reopenReason = null;
@@ -120,6 +126,57 @@ async function closePeriod(payload, actorUserId, transaction) {
     {
       groupId,
       companyId,
+      actorUserId,
+      action: 'finance.period_closure.request_review',
+      entityType: 'PeriodClosure',
+      entityId: closure.id,
+      beforeJson,
+      afterJson: closure.toJSON(),
+      reason: `Fechamento do período ${referenceMonth} solicitado — em revisão, ainda não bloqueado. Aguardando aprovação.`,
+    },
+    transaction
+  );
+
+  return closure;
+}
+
+/**
+ * approvePeriodClosure — único caminho que move REVIEW → CLOSED de verdade, bloqueando o período.
+ * Exige um ator DIFERENTE de quem solicitou o fechamento (mesmo princípio de segregação já usado
+ * em outros gates desta sessão — Compras, Ajuste de inventário, Perdas, Requisição de material).
+ */
+async function approvePeriodClosure(payload, actorUserId, transaction) {
+  const { companyId } = payload;
+  const referenceMonth = assertValidReferenceMonth(payload.referenceMonth);
+  if (!companyId) {
+    throw AppError.badRequest('O campo "companyId" é obrigatório.', 'FINANCE_PERIOD_VALIDATION');
+  }
+
+  const closure = await getClosureByMonth(companyId, referenceMonth, transaction);
+  if (!closure) {
+    throw AppError.notFound(`Não há solicitação de fechamento para o período ${referenceMonth}.`, 'FINANCE_PERIOD_NOT_FOUND');
+  }
+  if (closure.status !== 'REVIEW') {
+    throw AppError.conflict(`O período ${referenceMonth} não está aguardando aprovação de fechamento.`, 'FINANCE_PERIOD_NOT_IN_REVIEW');
+  }
+  if (actorUserId && closure.updatedBy && String(actorUserId) === String(closure.updatedBy)) {
+    throw AppError.forbidden(
+      'Quem solicitou o fechamento deste período não pode ser quem aprova — peça para outra pessoa confirmar.',
+      'FINANCE_PERIOD_SELF_APPROVAL_BLOCKED'
+    );
+  }
+
+  const beforeJson = closure.toJSON();
+  closure.status = 'CLOSED';
+  closure.closedAt = new Date();
+  closure.closedByUserId = actorUserId || null;
+  closure.updatedBy = actorUserId || null;
+  await closure.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: closure.groupId,
+      companyId: closure.companyId,
       actorUserId,
       action: 'finance.period_closure.close',
       entityType: 'PeriodClosure',
@@ -187,6 +244,7 @@ async function reopenPeriod(payload, actorUserId, transaction) {
 
 module.exports = {
   closePeriod,
+  approvePeriodClosure,
   reopenPeriod,
   listPeriodClosures,
   getClosureByMonth,

@@ -12,7 +12,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
@@ -72,6 +72,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const base = { groupId: tenant.groupId, companyId: tenant.companyId };
+    const resultCenterM401 = await createTestResultCenter(tenant, transaction);
 
     const root = await chartOfAccountsService.createAccount(
       { ...base, code: `4-${suffix}`, name: 'Receitas', accountType: 'REVENUE' },
@@ -109,7 +110,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
 
     // Lançamento vinculado à conta analítica.
     const linked = await financialEntriesService.createFinancialEntry(
-      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1200, description: `M4-01 vinculado ${suffix}`, chartOfAccountId: leaf.id },
+      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1200, description: `M4-01 vinculado ${suffix}`, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
       tenant.userId,
       transaction
     );
@@ -117,7 +118,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
 
     // Lançamento SEM plano de contas continua funcionando (coluna nullable — não quebra o legado).
     const unlinked = await financialEntriesService.createFinancialEntry(
-      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 800, description: `M4-01 sem conta ${suffix}` },
+      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 800, description: `M4-01 sem conta ${suffix}`, resultCenterId: resultCenterM401.id },
       tenant.userId,
       transaction
     );
@@ -138,7 +139,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
     await assert.rejects(
       () =>
         financialEntriesService.createFinancialEntry(
-          { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id },
+          { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
           tenant.userId,
           transaction
         ),
@@ -160,6 +161,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
 test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do snapshot (hash divergente)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
+    const costCenterM407a = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -168,6 +170,7 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
         nature: 'PAYABLE',
         amount: 2500,
         description: `M4-07 original ${suffix}`,
+        costCenterId: costCenterM407a.id,
       },
       tenant.userId,
       transaction
@@ -213,6 +216,7 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
 test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida o lançamento', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
+    const costCenterM407b = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -221,6 +225,7 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
         nature: 'PAYABLE',
         amount: 990.5,
         description: `M4-07 feliz ${suffix}`,
+        costCenterId: costCenterM407b.id,
       },
       tenant.userId,
       transaction
@@ -267,7 +272,8 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
 test('M4-16 dinheiro de terceiro exige referência e nunca entra na soma de receita própria', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
-    const base = { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE' };
+    const resultCenterM416 = await createTestResultCenter(tenant, transaction);
+    const base = { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', resultCenterId: resultCenterM416.id };
 
     // Sem referência: recusado.
     await assert.rejects(
@@ -433,7 +439,8 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
     // checagem também olha o mês de criação) nem em nada já existente no banco de homologação.
     const referenceMonth = '2031-07';
     const dueInsideClosedMonth = '2031-07-15T00:00:00.000Z';
-    const base = { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 640 };
+    const costCenterM419 = await createTestCostCenter(tenant, transaction);
+    const base = { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 640, costCenterId: costCenterM419.id };
 
     // Antes de fechar, o mês aceita lançamento normalmente.
     const before = await financialEntriesService.createFinancialEntry(
@@ -443,13 +450,42 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
     );
     assert.equal(before.status, 'PENDING');
 
-    const closure = await periodClosuresService.closePeriod(
+    // ACHADO REAL (auditoria independente Nayara, A06): closePeriod agora só leva o período pra
+    // REVIEW, nunca fecha de verdade sozinho — precisa de approvePeriodClosure, por um usuário
+    // diferente de quem solicitou, pra chegar em CLOSED.
+    const requested = await periodClosuresService.closePeriod(
       { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth },
       tenant.userId,
       transaction
     );
+    assert.equal(requested.status, 'REVIEW');
+
+    // Em REVIEW, o período ainda NÃO bloqueia lançamentos (só CLOSED bloqueia).
+    const duringReview = await financialEntriesService.createFinancialEntry(
+      { ...base, description: `M4-19 durante REVIEW ${suffix}`, dueAt: dueInsideClosedMonth },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(duringReview.status, 'PENDING');
+
+    // Quem solicitou o fechamento não pode ser quem aprova.
+    await assert.rejects(
+      () => periodClosuresService.approvePeriodClosure({ companyId: tenant.companyId, referenceMonth }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'FINANCE_PERIOD_SELF_APPROVAL_BLOCKED'); return true; }
+    );
+
+    const [approverUser] = await User.findOrCreate({
+      where: { email: `homo-qa-period-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA Aprovador Fechamento ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+
+    const closure = await periodClosuresService.approvePeriodClosure(
+      { companyId: tenant.companyId, referenceMonth },
+      approverUser.id,
+      transaction
+    );
     assert.equal(closure.status, 'CLOSED');
-    assert.equal(closure.closedByUserId, tenant.userId);
+    assert.equal(closure.closedByUserId, approverUser.id);
     assert.ok(closure.closedAt);
 
     // Criar lançamento com vencimento no mês fechado: bloqueado.
@@ -524,7 +560,9 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
 test('M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criados no teste', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
-    const base = { groupId: tenant.groupId, companyId: tenant.companyId };
+    const costCenterM420 = await createTestCostCenter(tenant, transaction);
+    const resultCenterM420 = await createTestResultCenter(tenant, transaction);
+    const base = { groupId: tenant.groupId, companyId: tenant.companyId, costCenterId: costCenterM420.id, resultCenterId: resultCenterM420.id };
     const now = new Date();
     const inThreeDays = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
     const inThirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -628,6 +666,7 @@ test('M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criado
 test('M4-25 replay do mesmo evento em transações distintas não duplica FinancialEntry (idempotencyKey)', async () => {
   const suffix = uniqueSuffix();
   const idempotencyKey = `replay-m425-${suffix}`;
+  const costCenterM425 = await withCommittedTenantTransaction(tenant, (t) => createTestCostCenter(tenant, t));
   const payload = {
     groupId: tenant.groupId,
     companyId: tenant.companyId,
@@ -636,6 +675,7 @@ test('M4-25 replay do mesmo evento em transações distintas não duplica Financ
     amount: 1875.25,
     description: `HOMO QA M4-25 replay ${suffix}`,
     idempotencyKey,
+    costCenterId: costCenterM425.id,
   };
 
   // 1ª passagem — transação COMMITADA (simula o processamento original, antes do incidente).
@@ -705,6 +745,7 @@ test('M4-25 replay do mesmo evento em transações distintas não duplica Financ
 test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
+    const costCenterM425b = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -713,6 +754,7 @@ test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', as
         nature: 'PAYABLE',
         amount: 640,
         description: `M4-25 settle replay ${suffix}`,
+        costCenterId: costCenterM425b.id,
       },
       tenant.userId,
       transaction

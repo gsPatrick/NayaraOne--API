@@ -17,6 +17,9 @@ module.exports = (sequelize) => {
       utilityObligationId: { type: DataTypes.UUID, allowNull: false, field: 'utility_obligation_id' },
       fromPersonId: { type: DataTypes.UUID, allowNull: true, field: 'from_person_id' },
       toPersonId: { type: DataTypes.UUID, allowNull: true, field: 'to_person_id' },
+      // ACHADO REAL (auditoria independente Nayara, A05): conclusão sem comprovante. Coluna
+      // opcional no schema (não quebra linhas antigas), exigida na validação do service.
+      evidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_file_id' },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'PENDING', field: 'status' },
       completedAt: { type: DataTypes.DATE, allowNull: true, field: 'completed_at' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },

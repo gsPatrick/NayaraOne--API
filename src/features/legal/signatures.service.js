@@ -10,6 +10,7 @@ const { getContract, transitionContractStatus, listContractParties, REQUIRED_ROL
 const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('./adapters/SignatureAdapter');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const diskStorage = require('../../utils/diskStorage');
+const { encryptFileBuffer } = require('../../utils/fileCrypto');
 
 /**
  * resolveSignatureAdapter — resolve o adapter de assinatura em runtime, por tenant, a partir
@@ -375,7 +376,15 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
   const contract = await getContract(contractVersion.contractId, transaction);
   const safeContractNumber = String(contract.contractNumber || contract.id).replace(/[^a-zA-Z0-9-]/g, '_');
   const fileName = downloaded.fileName || `contrato-assinado-${safeContractNumber}.pdf`;
-  const storageKey = diskStorage.saveFile('contracts-signed', contract.groupId, fileName, downloaded.buffer);
+  // Criptografa em repouso igual qualquer outro arquivo do storage genérico (ver
+  // src/utils/fileCrypto.js) — checksum continua sobre o PLAINTEXT, getFileContent descriptografa
+  // na leitura.
+  const storageKey = diskStorage.saveFile(
+    'contracts-signed',
+    contract.groupId,
+    fileName,
+    encryptFileBuffer(downloaded.buffer)
+  );
 
   const checksumSha256 = crypto.createHash('sha256').update(downloaded.buffer).digest('hex');
 

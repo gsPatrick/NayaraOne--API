@@ -13,12 +13,22 @@ const dedupService = require('./personDedup.service');
 
 // --- Persons ---
 
+// CRMX-010/seção 4 do Caderno ("match fraco... abre revisão; não mescla automaticamente"): a
+// checagem de nome+data de nascimento/endereço parecidos NÃO bloqueia a criação (diferente do
+// match forte/médio em createPerson, que bloqueia por padrão) — só avisa, mesmo padrão já usado
+// em properties.controller.js para CRMX-010 de imóvel (similarPropertyWarnings em `meta`, não
+// em `data`).
 const create = catchAsync(async (req, res) => {
   const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
-  const person = await req.withTenantTransaction((transaction) =>
-    peopleService.createPerson(payload, req.auth.userId, transaction)
-  );
-  return success(res, { statusCode: 201, data: person });
+  const { person, similarPersonWarnings } = await req.withTenantTransaction(async (transaction) => {
+    const createdPerson = await peopleService.createPerson(payload, req.auth.userId, transaction);
+    const warnings = await dedupService.findWeakDuplicateCandidates(
+      { legalName: payload.legalName, birthOrFoundationDate: payload.birthOrFoundationDate, addresses: payload.addresses, excludePersonId: createdPerson.id },
+      transaction
+    );
+    return { person: createdPerson, similarPersonWarnings: warnings };
+  });
+  return success(res, { statusCode: 201, data: person, meta: { similarPersonWarnings } });
 });
 
 const list = catchAsync(async (req, res) => {

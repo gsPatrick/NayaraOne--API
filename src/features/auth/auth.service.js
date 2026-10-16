@@ -185,7 +185,12 @@ async function login({ email, password, companyId }, meta = {}) {
       accessToken,
       refreshToken,
       sessionId: session.id,
-      user: { id: user.id, name: user.name, email: user.email },
+      // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 6, 2026-10-06): login nunca
+      // devolvia mfaEnabled — o front (app/painel/perfil/page.js) só inicializa o badge de
+      // segurança a partir deste objeto cacheado no login, nunca refaz fetch depois. Resultado:
+      // após qualquer login novo, "MFA não configurado" aparecia mesmo pra quem JÁ tinha MFA
+      // habilitado, e clicar em "Configurar" gerava o erro confuso "MFA já está habilitado".
+      user: { id: user.id, name: user.name, email: user.email, mfaEnabled: Boolean(user.mfaEnabled) },
       groupId: claims.group_id,
       companyId: claims.company_id,
       roles: claims.roles,
@@ -208,17 +213,31 @@ async function refresh({ refreshToken: rawToken }, meta = {}) {
   const decoded = verifyRefreshToken(rawToken);
   const tokenHash = hashRefreshToken(decoded.jti);
 
-  const session = await Session.findOne({ where: { refreshTokenHash: tokenHash } });
-  if (!session || session.revokedAt || session.expiresAt < new Date()) {
-    throw AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID');
-  }
-
-  const user = await User.findByPk(session.userId);
-  if (!user || user.status !== 'ACTIVE') {
-    throw AppError.unauthorized('Usuário inválido ou inativo.', 'SESSION_USER_INVALID');
-  }
-
+  // BUG REAL CORRIGIDO (auditoria Claude Browser, 13-14/10/2026, sessão caindo em ~15min mesmo
+  // com renovação proativa implementada): "core"."sessions" tem RLS FORCE com a policy
+  // `tenant_isolation` (company_id = current_setting('app.company_id')) — mas esta função fazia
+  // o `Session.findOne` ANTES de qualquer `SET LOCAL app.company_id`, fora de transação. Numa
+  // conexão sem BYPASSRLS (a de runtime), isso faz a policy filtrar TUDO, e a sessão recém-criada
+  // no login nunca é encontrada — falha com SESSION_INVALID na primeira tentativa de renovação,
+  // sempre, não é intermitente. O `company_id` já vem na claim do próprio refresh token (ver
+  // `issueTokensForSession`), então dá pra configurar o contexto antes mesmo de abrir a sessão —
+  // mesmo padrão já usado em `auth.middleware.js` para o access token.
   return sequelize.transaction(async (transaction) => {
+    await sequelize.query('SET LOCAL app.company_id = :companyId', {
+      replacements: { companyId: decoded.company_id },
+      transaction,
+    });
+
+    const session = await Session.findOne({ where: { refreshTokenHash: tokenHash }, transaction });
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      throw AppError.unauthorized('Sessão inválida, expirada ou revogada.', 'SESSION_INVALID');
+    }
+
+    const user = await User.findByPk(session.userId, { transaction });
+    if (!user || user.status !== 'ACTIVE') {
+      throw AppError.unauthorized('Usuário inválido ou inativo.', 'SESSION_USER_INVALID');
+    }
+
     // Rotação: revoga a sessão usada e emite uma nova (mitigação de refresh token reuse — IAM-TS).
     session.revokedAt = new Date();
     session.updatedBy = user.id;

@@ -46,6 +46,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'contract_id',
       },
+      constructionProjectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'construction_project_id',
+        comment: 'Dimensão de origem Obras (M6-97) — só preenchida quando o lançamento nasce de uma medição/obra.',
+      },
       chartOfAccountId: {
         type: DataTypes.UUID,
         allowNull: true,

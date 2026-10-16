@@ -64,6 +64,27 @@ const getHealth = catchAsync(async (req, res) => {
   });
 });
 
+// GAP REAL (auditoria externa Nayara, 15/10/2026, seção 5 #1): a auditoria tentou GET
+// /api/version e não obteve resposta — só existia /api/health, nome diferente do que foi
+// pedido/esperado. /api/version expõe exatamente o mesmo commit/deployedAt verificáveis que
+// /health já calcula no boot do processo (lido 1x do VERSION gerado pelo Dockerfile a partir
+// do --build-arg GIT_SHA real do build), sem depender de banco — é identificação de versão,
+// não verificação de saúde.
+const packageJson = require('../../../package.json');
+
+const getVersion = catchAsync(async (req, res) => {
+  return success(res, {
+    data: {
+      commit,
+      deployedAt,
+      uptimeSeconds: process.uptime(),
+      apiVersion: packageJson.version || 'unknown',
+      nodeVersion: process.version,
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 /**
  * GET /v1/ping
  * Sanity check simples da camada de API versionada.
@@ -92,4 +113,4 @@ const getDbReadiness = catchAsync(async (req, res) => {
   });
 });
 
-module.exports = { getHealth, getPing, getDbReadiness, withTimeout, HEALTH_CHECK_TIMEOUT_MS };
+module.exports = { getHealth, getVersion, getPing, getDbReadiness, withTimeout, HEALTH_CHECK_TIMEOUT_MS };

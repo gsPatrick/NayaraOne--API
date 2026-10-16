@@ -1,9 +1,17 @@
 'use strict';
 
-const { Commission, CommissionInstallment, FinancialEntry } = require('../../models');
+const { Commission, CommissionInstallment, FinancialEntry, AuditLog } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCommissionCreated } = require('./financeEvents.service');
+
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-09 — mesmo padrão do achado em
+// inventory.movements.service.js/recordMovement): criar uma comissão é uma operação
+// REEXECUTÁVEL (POST manual, retry de rede/duplo-clique reenvia o mesmo cálculo) que gera uma
+// obrigação financeira real (Commission + parcelas), e não tinha NENHUMA proteção contra
+// duplicidade — nem campo de idempotência, nem UNIQUE constraint que pegasse o caso. Fail
+// closed: idempotencyKey agora é obrigatória aqui, única por empresa (migration
+// 20260101000325-add-idempotency-key-to-commissions.js).
 
 const STATUSES = ['PENDING', 'APPROVED', 'PAID', 'CANCELLED'];
 
@@ -18,12 +26,26 @@ function round2(value) {
  * comentário do model).
  */
 async function createCommission(payload, actorUserId, transaction) {
-  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, baseAmount, percentage, ruleVersionId, installmentsCount, firstDueAt } = payload;
+  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, baseAmount, percentage, ruleVersionId, installmentsCount, firstDueAt, idempotencyKey } = payload;
 
   if (!groupId || !companyId || !beneficiaryUserId || baseAmount === undefined || percentage === undefined) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "beneficiaryUserId", "baseAmount" e "percentage" são obrigatórios.',
       'FINANCE_COMMISSION_VALIDATION'
+    );
+  }
+  if (!idempotencyKey) {
+    throw AppError.badRequest(
+      'O campo "idempotencyKey" é obrigatório — evita duplicar a obrigação de comissão em caso de retry/duplo-clique.',
+      'FINANCE_COMMISSION_IDEMPOTENCY_KEY_REQUIRED'
+    );
+  }
+  const existingByKey = await Commission.findOne({ where: { companyId, idempotencyKey }, transaction });
+  if (existingByKey) {
+    throw AppError.conflict(
+      'Já existe uma comissão criada com esta mesma chave de idempotência — envio duplicado bloqueado.',
+      'FINANCE_COMMISSION_DUPLICATE',
+      { existingId: existingByKey.id }
     );
   }
   const baseNumeric = Number(baseAmount);
@@ -49,6 +71,7 @@ async function createCommission(payload, actorUserId, transaction) {
       totalAmount,
       ruleVersionId: ruleVersionId || null,
       status: 'PENDING',
+      idempotencyKey,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -212,11 +235,111 @@ async function markInstallmentPaid(installmentId, financialEntryId, actorUserId,
   return installment;
 }
 
+// --- M4-contrato §14 "Comissões" — ajuste por cancelamento ----------------------------------
+//
+// Auditoria externa (contrato bruto, 2026-10-07): "Reversão/cancelamento gera ajuste, nunca
+// apaga histórico." / teste citado "FIN-TS-017 Comissão rollback | Contrato cancelado | Ajuste
+// auditável." / "Comissão pode ser parcelada na mesma proporção do recebimento." O status
+// CANCELLED já existia no enum, mas nenhuma função o usava — cancelar era, na prática,
+// impossível (nada setava esse status) e, se alguém setasse manualmente, não haveria ajuste
+// nenhum registrado, nem proporcionalidade com o que já foi pago.
+//
+// MODELAGEM (DDL indisponível nesta rodada — ver nota de infraestrutura no relatório final): o
+// AJUSTE é um registro de auditoria append-only (`audit.audit_log`, action
+// "finance.commission.cancel_adjustment") em vez de uma tabela dedicada — mesmo padrão já usado
+// em ownerRepasses.service.js (`getOwnerRepasseComposition`) para o mesmo problema de
+// infraestrutura. A `Commission` original NUNCA é apagada: só seu `status` muda para
+// CANCELLED, e todo o histórico de parcelas (`CommissionInstallment`) permanece intocado — o
+// que já foi PAID continua PAID (não se "desfaz" o passado), e o ajuste registra quanto da
+// comissão ainda estava em aberto (não pago) no momento do cancelamento, proporcional ao que
+// JÁ foi pago/recebido.
+async function cancelCommission(commissionId, reasonText, actorUserId, transaction) {
+  const commission = await Commission.findByPk(commissionId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!commission) throw AppError.notFound('Comissão não encontrada.', 'FINANCE_COMMISSION_NOT_FOUND');
+  if (commission.status === 'CANCELLED') {
+    throw AppError.conflict('Esta comissão já está cancelada.', 'FINANCE_COMMISSION_ALREADY_CANCELLED');
+  }
+  if (!reasonText || !String(reasonText).trim()) {
+    throw AppError.badRequest(
+      'O cancelamento de uma comissão exige um motivo documentado (ajuste auditável — FIN-TS-017).',
+      'FINANCE_COMMISSION_CANCEL_REASON_REQUIRED'
+    );
+  }
+
+  const installments = await CommissionInstallment.findAll({ where: { commissionId }, transaction });
+  const paidAmountBefore = round2(installments.filter((i) => i.status === 'PAID').reduce((acc, i) => acc + Number(i.amount), 0));
+  const totalAmountBefore = round2(commission.totalAmount);
+  // Ajuste = o que ainda estava em aberto (não pago) quando o cancelamento aconteceu — é esse
+  // valor que deixa de ser devido a partir daqui. Negativo por convenção (reduz o direito).
+  const adjustmentAmount = round2(-(totalAmountBefore - paidAmountBefore));
+
+  const beforeJson = { commission: commission.toJSON(), installments: installments.map((i) => i.toJSON()) };
+
+  commission.status = 'CANCELLED';
+  commission.updatedBy = actorUserId || null;
+  await commission.save({ transaction });
+
+  // Parcelas ainda não pagas são canceladas (preservando a linha — nunca DELETE); as já PAID
+  // permanecem PAID, intocadas, exatamente como "nunca apaga histórico" exige.
+  for (const installment of installments) {
+    if (installment.status === 'PENDING') {
+      // eslint-disable-next-line no-await-in-loop
+      installment.status = 'CANCELLED';
+      installment.updatedBy = actorUserId || null;
+      // eslint-disable-next-line no-await-in-loop
+      await installment.save({ transaction });
+    }
+  }
+
+  await registrarAuditoria(
+    {
+      groupId: commission.groupId,
+      companyId: commission.companyId,
+      actorUserId,
+      action: 'finance.commission.cancel_adjustment',
+      entityType: 'Commission',
+      entityId: commission.id,
+      beforeJson,
+      afterJson: {
+        commission: commission.toJSON(),
+        adjustment: {
+          adjustmentType: 'CANCELLATION_REVERSAL',
+          paidAmountBefore,
+          totalAmountBefore,
+          adjustmentAmount,
+        },
+      },
+      reason: `Comissão cancelada (contrato cancelado): ${reasonText}. Já pago/recebido ${paidAmountBefore} de ${totalAmountBefore} — ajuste de ${adjustmentAmount} sobre o saldo em aberto.`,
+    },
+    transaction
+  );
+
+  return {
+    commission,
+    adjustment: { adjustmentType: 'CANCELLATION_REVERSAL', paidAmountBefore, totalAmountBefore, adjustmentAmount },
+  };
+}
+
+/**
+ * getCommissionAdjustments — histórico de ajustes (cancelamentos) de uma comissão, lido do
+ * rastro de auditoria append-only (ver nota de modelagem acima).
+ */
+async function getCommissionAdjustments(commissionId, transaction) {
+  const logs = await AuditLog.findAll({
+    where: { action: 'finance.commission.cancel_adjustment', entityType: 'Commission', entityId: commissionId },
+    order: [['created_at', 'ASC']],
+    transaction,
+  });
+  return logs.map((log) => (log.afterJson || {}).adjustment).filter(Boolean);
+}
+
 module.exports = {
   createCommission,
   listCommissions,
   getCommission,
   listCommissionInstallments,
   markInstallmentPaid,
+  cancelCommission,
+  getCommissionAdjustments,
   STATUSES,
 };

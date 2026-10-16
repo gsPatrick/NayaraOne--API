@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const usersController = require('./users.controller');
 const mfaController = require('./mfa.controller');
@@ -15,6 +15,16 @@ usersRouter.get('/users', requirePermission('users:read'), usersController.list)
 usersRouter.get('/users/:id', requirePermission('users:read'), usersController.getOne);
 usersRouter.patch('/users/:id', requirePermission('users:update'), usersController.update);
 usersRouter.delete('/users/:id', requirePermission('users:delete'), usersController.remove);
+
+// Definir/resetar a senha de outro usuário é ação HIGH (mesmo risco de conceder papel — dá
+// acesso efetivo à conta) — exige MFA recente, igual a POST /memberships.
+usersRouter.patch(
+  '/users/:id/set-password',
+  tenantMiddleware,
+  requirePermission('users:update'),
+  requireRecentMfa,
+  usersController.setPassword
+);
 
 // MFA (TOTP) próprio — self-service, sem permissão granular dedicada (qualquer usuário
 // autenticado pode configurar/desligar o PRÓPRIO MFA). "core.mfa_credentials" tem RLS por

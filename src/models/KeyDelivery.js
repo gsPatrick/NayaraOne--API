@@ -65,6 +65,51 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'notes',
       },
+      // GAP REAL (verificação cética Marco 5, ciclo 4 — mesmo padrão já corrigido em
+      // src/models/Guarantee.js/replacedByGuaranteeId no início desta sessão): a migration
+      // 20260101000290 JÁ está aplicada neste banco (colunas físicas existem), mas os 7
+      // campos abaixo nunca foram declarados no model — keyDeliveries.service.js os atribuía
+      // na instância em memória (refletidos só na resposta HTTP/auditoria), e `save()` nunca
+      // persistia nada disso de fato, porque Sequelize só grava atributos declarados.
+      // Resultado prático: toda entrega de chave liberada perdia silenciosamente a
+      // quantidade/identificação das chaves, as fotos obrigatórias e quem assinou o termo.
+      keysCount: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'keys_count',
+      },
+      keysIdentification: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'keys_identification',
+      },
+      photosRequired: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'photos_required',
+      },
+      photosFileIds: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'photos_file_ids',
+      },
+      termType: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'term_type',
+        comment: 'KEY_DELIVERY|USED_PROPERTY_DELIVERY',
+      },
+      termSignedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'term_signed_at',
+      },
+      termSignedByPersonId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'term_signed_by_person_id',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

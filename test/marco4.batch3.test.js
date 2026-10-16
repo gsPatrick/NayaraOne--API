@@ -10,7 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -31,6 +31,15 @@ after(async () => {
 });
 
 async function createEntry(transaction, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  let resultCenterId = overrides.resultCenterId;
+  const nature = overrides.nature || 'PAYABLE';
+  if (!costCenterId && nature === 'PAYABLE') {
+    costCenterId = (await createTestCostCenter(tenant, transaction)).id;
+  }
+  if (!resultCenterId && nature === 'RECEIVABLE') {
+    resultCenterId = (await createTestResultCenter(tenant, transaction)).id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -39,6 +48,8 @@ async function createEntry(transaction, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'QA M4 batch3',
+      costCenterId,
+      resultCenterId,
       ...overrides,
     },
     tenant.userId,
@@ -126,6 +137,7 @@ test('M4-06 duas baixas parciais fecham o lançamento: soma bate no centavo e o 
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 1000.33, bankAccountId: account.id });
     const amountOriginal = String(entry.amount);
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     const primeira = await financialEntriesService.settleFinancialEntryPartial(entry.id, 400.11, tenant.userId, transaction);
     assert.equal(primeira.original.status, 'PARTIALLY_SETTLED');
@@ -150,23 +162,21 @@ test('M4-06 duas baixas parciais fecham o lançamento: soma bate no centavo e o 
   });
 });
 
-test('M4-06 baixa parcial maior que o saldo restante é rejeitada, e liquidar valor <= 0 também', async () => {
+test('M4-06/contrato §10 baixa parcial maior que o saldo restante é ACEITA (nunca rejeitada) e o excedente abre pendência de classificação; liquidar valor <= 0 continua rejeitado', async () => {
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
+  // parcelas"): "Valor excedente nunca é automaticamente tratado como receita; abre pendência
+  // de classificação." O comportamento ANTERIOR deste teste (rejeitar com
+  // FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING) contrariava o contrato — o recebimento acima do
+  // saldo precisa ser ACEITO, nunca bloqueado; só o excedente fica retido.
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 70, tenant.userId, transaction);
 
-    await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction),
-      (err) => {
-        assert.equal(err.code, 'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING');
-        return true;
-      },
-      'nem um centavo a mais que o saldo restante'
-    );
-
+    // Liquidar valor <= 0 continua rejeitado (validação de valor, independente do saldo).
     for (const valor of [0, -50]) {
       await assert.rejects(
         () => financialEntriesService.settleFinancialEntryPartial(entry.id, valor, tenant.userId, transaction),
@@ -176,9 +186,36 @@ test('M4-06 baixa parcial maior que o saldo restante é rejeitada, e liquidar va
         }
       );
     }
+    assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '30.00', 'saldo intacto depois das tentativas rejeitadas');
 
-    // Saldo segue intacto depois das tentativas rejeitadas.
-    assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '30.00');
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction);
+    assert.equal(result.remainingAmount, '0.00', 'os 30 que cabiam no saldo fecharam o lançamento original');
+    assert.equal(result.original.status, 'SETTLED');
+    assert.ok(result.classificationPending, 'o centavo excedente (0.01) abriu uma pendência de classificação');
+    assert.equal(String(result.classificationPending.amount), '0.01');
+    assert.equal(result.classificationPending.nature, 'PENDING_CLASSIFICATION');
+    assert.equal(result.classificationPending.status, 'PENDING', 'pendência NUNCA é SETTLED automaticamente — não é receita até alguém classificar');
+    assert.equal(result.classificationPending.parentEntryId, entry.id);
+  });
+});
+
+test('M4-contrato §10 recebimento ANTECIPADO (antes do vencimento) baixa o lançamento normalmente', async () => {
+  // Cenário citado no pedido do auditor como "funciona incidentalmente mas não tem teste
+  // dedicado": dueAt no futuro, baixa parcial/total hoje — nada no código impede/precisa saber
+  // disso, mas precisa ficar coberto por teste explícito (contrato §10: "Recebimento pode ser
+  // total, parcial, antecipado ou excedente.").
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+    const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias no futuro
+    const entry = await createEntry(transaction, { amount: 500, bankAccountId: account.id, dueAt: futureDueAt });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 500, tenant.userId, transaction);
+    assert.equal(result.original.status, 'SETTLED');
+    assert.equal(result.remainingAmount, '0.00');
+    assert.ok(!result.classificationPending, 'recebimento antecipado exato não gera excedente');
+    assert.ok(new Date(result.settlement.settledAt) < futureDueAt, 'settledAt é anterior ao vencimento — recebimento antecipado');
   });
 });
 
@@ -187,6 +224,7 @@ test('M4-06 lançamento com baixa parcial não aceita mais liquidação TOTAL pe
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 200, bankAccountId: account.id });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 50, tenant.userId, transaction);
 
     await assert.rejects(
@@ -316,7 +354,7 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
     // Histórico: dois pagamentos de 100 já liquidados nessa conta (média = 100).
     for (let i = 0; i < 2; i += 1) {
       const historico = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
-      await financialEntriesService.settleFinancialEntry(historico.id, tenant.userId, transaction);
+      await settleFinancialEntryWithApproval(tenant, historico.id, tenant.userId, transaction);
     }
 
     const normal = await createEntry(transaction, { amount: 120, bankAccountId: account.id });
@@ -337,6 +375,19 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
       notificacoes.some((n) => n.body && n.body.includes(suspeito.id)),
       'time financeiro notificado sobre o pagamento retido'
     );
+
+    // Aprova o pagamento (FIX FIN-004) pra isolar exatamente o que este teste quer provar: que
+    // a revisão manual (antifraude) bloqueia mesmo DEPOIS de aprovado.
+    const [approvadorM421] = await User.findOrCreate({
+      where: { email: `homo-qa-m421-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador M4-21 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequestM421 = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: suspeito.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequestM421.id, { decision: 'APPROVED' }, approvadorM421.id, transaction);
 
     // Fail closed: enquanto retido, não liquida nem total nem parcialmente.
     await assert.rejects(
@@ -382,7 +433,7 @@ test('M4-21 primeiro pagamento alto para conta sem histórico é flagado; revis�
     assert.equal(liberacao.userId, revisor.id, 'a trilha guarda QUEM revisou');
 
     // Liberado, agora liquida normalmente.
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    const settled = await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED');
 
     // Liberar de novo algo que não está retido é conflito (não é no-op silencioso).
@@ -422,6 +473,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     // 1) Conta bancária do beneficiário + lançamento a pagar com competência explícita.
     const account = await createActiveBankAccount(transaction, suffix);
+    const costCenterM428 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -434,6 +486,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
         dueAt: new Date(Date.UTC(2026, 9, 5)),
         competenceMonth: '2026-09',
         idempotencyKey: `qa-m428-${suffix}`,
+        costCenterId: costCenterM428.id,
       },
       tenant.userId,
       transaction

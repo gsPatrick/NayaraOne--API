@@ -31,6 +31,18 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'legal_case_id',
       },
+      sourceDocument: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'source_document',
+        comment: 'Caderno §15 "Prazo sempre tem source_document/source_event" — documento de origem do prazo.',
+      },
+      sourceEvent: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'source_event',
+        comment: 'Caderno §15 — evento de origem do prazo (ex: notificação recebida, decisão judicial).',
+      },
       description: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -63,6 +75,24 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'escalated_at',
+      },
+      // Auditoria técnica independente da Nayara (A07/A08/A09): responsável pelo
+      // acompanhamento do prazo; evidência/nota exigidas pra concluir; os dois ficam
+      // persistidos pra rastreabilidade, nunca inferidos.
+      responsibleUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'responsible_user_id',
+      },
+      conclusionEvidenceFileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'conclusion_evidence_file_id',
+      },
+      conclusionNote: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'conclusion_note',
       },
       createdBy: {
         type: DataTypes.UUID,

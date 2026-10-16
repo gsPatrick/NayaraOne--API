@@ -41,9 +41,16 @@ function tenantMiddleware(req, res, next) {
 
   req.withTenantTransaction = async (fn) => {
     return sequelize.transaction(async (transaction) => {
-      await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId }, transaction });
-      await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId }, transaction });
-      await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId }, transaction });
+      // GAP REAL CORRIGIDO (load test real, 08/10/2026 — GATE-DB-09/DB-TS-015): os 3 SET LOCAL
+      // eram 3 round-trips de rede SERIAIS até o Postgres (remoto) por requisição, antes de
+      // qualquer query de negócio rodar. `set_config(..., true)` faz exatamente o mesmo efeito
+      // de SET LOCAL (escopo da transação, `is_local=true`), mas os 3 cabem numa única ida —
+      // reduz de 3 round-trips pra 1 sem mudar nenhuma policy de RLS (continuam lendo os
+      // mesmos `current_setting('app.*', true)`).
+      await sequelize.query(
+        'SELECT set_config(\'app.group_id\', :groupId, true), set_config(\'app.company_id\', :companyId, true), set_config(\'app.user_id\', :userId, true)',
+        { replacements: { groupId, companyId, userId }, transaction }
+      );
       return fn(transaction);
     });
   };

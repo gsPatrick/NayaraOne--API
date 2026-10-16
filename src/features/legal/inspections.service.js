@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 const { Inspection, InspectionItem, InspectionSignature, File, FileLink } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishInspectionCompleted } = require('./legalEvents.service');
+const { publishInspectionCompleted, publishInspectionDifferenceDetected } = require('./legalEvents.service');
 
 const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC'];
 const CONDITIONS = ['GOOD', 'REGULAR', 'DAMAGED'];
@@ -13,6 +13,22 @@ const MEDIA_TYPES = ['PHOTO', 'VIDEO'];
 const PARTY_ROLES = ['LANDLORD', 'TENANT', 'INSPECTOR'];
 // M5-21: de quem é a responsabilidade pelo dano encontrado na vistoria.
 const RESPONSIBLE_PARTIES = ['TENANT', 'LANDLORD', 'SHARED', 'UNDETERMINED'];
+
+// FIX AUD-013 (auditoria externa Nayara, 11/10/2026, JUR-007 "Vistoria assinada é imutável"):
+// signInspection exigia a vistoria COMPLETED antes de assinar, mas nada impedia continuar
+// anexando foto/vídeo (attachInspectionItemMedia) ou criando item novo (addInspectionItem)
+// DEPOIS de já assinada — a auditora reproduziu isso ao vivo ("vistoria concluída ainda
+// oferece Anexar foto/vídeo"). Qualquer assinatura registrada (mesmo de só uma das partes)
+// trava o conteúdo: a parte já assinou em cima do que existia naquele momento.
+async function assertInspectionNotSigned(inspectionId, transaction) {
+  const anySignature = await InspectionSignature.findOne({ where: { inspectionId }, transaction });
+  if (anySignature) {
+    throw AppError.conflict(
+      'Esta vistoria já tem assinatura registrada e ficou imutável — itens e mídia não podem mais ser alterados.',
+      'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE'
+    );
+  }
+}
 
 async function createInspection(payload, actorUserId, transaction) {
   const { groupId, companyId, propertyId, contractId, inspectorUserId, inspectionType, scheduledAt } = payload;
@@ -131,6 +147,7 @@ async function completeInspection(id, actorUserId, transaction) {
 
 async function addInspectionItem(inspectionId, payload, actorUserId, transaction) {
   const inspection = await getInspection(inspectionId, transaction);
+  await assertInspectionNotSigned(inspectionId, transaction);
   const { itemName, condition, notes, damageDescription, estimatedBudget, responsibleParty } = payload;
   if (!itemName) {
     throw AppError.badRequest('O campo "itemName" é obrigatório.', 'LEGAL_INSPECTION_ITEM_VALIDATION');
@@ -291,6 +308,7 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
 async function attachInspectionItemMedia(itemId, payload, actorUserId, transaction) {
   const item = await InspectionItem.findByPk(itemId, { transaction });
   if (!item) throw AppError.notFound('Item de vistoria não encontrado.', 'LEGAL_INSPECTION_ITEM_NOT_FOUND');
+  await assertInspectionNotSigned(item.inspectionId, transaction);
 
   const { fileId, mediaType } = payload;
   if (!fileId) {
@@ -409,6 +427,25 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  // GAP REAL (verificação final Marco 5, §11/§18): assinar uma vistoria de SAÍDA (CHECK_OUT)
+  // com uma de ENTRADA (CHECK_IN) já registrada pro mesmo contrato é o gatilho natural pra
+  // comparar entrada x saída e alertar diferença — compareInspections() já existia e calculava
+  // certo, só nunca era chamado automaticamente nem publicava evento. idempotencyKey pelo par
+  // entrada+saída evita duplicar o alerta se a vistoria for assinada por mais de uma parte.
+  if (inspection.inspectionType === 'CHECK_OUT' && inspection.contractId) {
+    const entryInspection = await Inspection.findOne({
+      where: { contractId: inspection.contractId, inspectionType: 'CHECK_IN' },
+      order: [['completedAt', 'DESC']],
+      transaction,
+    });
+    if (entryInspection) {
+      const comparison = await compareInspections(entryInspection.id, inspection.id, transaction);
+      if (comparison.divergences.length > 0) {
+        await publishInspectionDifferenceDetected(entryInspection, inspection, comparison.divergences, transaction);
+      }
+    }
+  }
 
   return signature;
 }

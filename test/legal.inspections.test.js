@@ -7,8 +7,9 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const inspectionsService = require('../src/features/legal/inspections.service');
+const contractsService = require('../src/features/legal/contracts.service');
 const AppError = require('../src/utils/AppError');
-const { File } = require('../src/models');
+const { File, OutboxEvent } = require('../src/models');
 
 let tenant;
 
@@ -245,5 +246,118 @@ test('vistoria: compareInspections continua funcionando junto com os novos campo
     assert.equal(comparison.divergences.length, 1);
     assert.equal(comparison.divergences[0].entryCondition, 'GOOD');
     assert.equal(comparison.divergences[0].exitCondition, 'DAMAGED');
+  });
+});
+
+// AUD-013 (auditoria externa Nayara, 11/10/2026, JUR-007 "Vistoria assinada é imutável"): a
+// auditora reproduziu ao vivo que uma vistoria CONCLUÍDA ainda oferecia "Anexar foto/vídeo" —
+// nada no backend impedia editar itens/mídia depois de já assinada por uma das partes.
+test('JUR-007: vistoria com QUALQUER assinatura fica imutável — nem item novo, nem mídia nova', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const inspection = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    const item = await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Piso da sala', condition: 'GOOD' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
+
+    // Antes de assinar, ainda é possível editar — confirma que o bloqueio é por assinatura, não por COMPLETED.
+    await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Pia da cozinha', condition: 'GOOD' }, tenant.userId, transaction);
+
+    // Só UMA das partes assina.
+    await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'sig-tenant' }, tenant.userId, transaction);
+
+    await assert.rejects(
+      () => inspectionsService.addInspectionItem(inspection.id, { itemName: 'Janela do quarto', condition: 'GOOD' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE');
+        return true;
+      }
+    );
+
+    const file = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'foto.jpg', storageKey: `test/${uniqueSuffix()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 100, createdBy: tenant.userId },
+      { transaction }
+    );
+    await assert.rejects(
+      () => inspectionsService.attachInspectionItemMedia(item.id, { fileId: file.id, mediaType: 'PHOTO' }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE');
+        return true;
+      }
+    );
+  });
+});
+
+// GAP REAL (verificação final Marco 5, §11/§18 do Caderno: "NAY pode comparar entrada x saída"
+// + evento mínimo "inspection.difference.detected"): compareInspections() já calculava as
+// divergências certo, mas nada chamava automaticamente nem publicava evento — assinar a
+// vistoria de SAÍDA agora dispara a comparação contra a última vistoria de ENTRADA do mesmo
+// contrato.
+test('vistoria: assinar CHECK_OUT com divergência real publica inspection.difference.detected', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const suffix = uniqueSuffix();
+    const leaseContract = await contractsService.createContract({ groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractType: 'LEASE_RESIDENTIAL' }, tenant.userId, transaction);
+    const contractId = leaseContract.id;
+
+    const entry = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractId, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.addInspectionItem(entry.id, { itemName: `Piso ${suffix}`, condition: 'GOOD' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(entry.id, tenant.userId, transaction);
+    await inspectionsService.signInspection(entry.id, { partyRole: 'TENANT', signaturePayload: 'sig-entry' }, tenant.userId, transaction);
+
+    const exit = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractId, inspectionType: 'CHECK_OUT' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.addInspectionItem(exit.id, { itemName: `Piso ${suffix}`, condition: 'DAMAGED', damageDescription: 'Risco profundo', estimatedBudget: 300, responsibleParty: 'TENANT' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(exit.id, tenant.userId, transaction);
+
+    const before = await OutboxEvent.findOne({ where: { eventType: 'inspection.difference.detected', aggregateId: exit.id }, transaction });
+    assert.equal(before, null);
+
+    await inspectionsService.signInspection(exit.id, { partyRole: 'TENANT', signaturePayload: 'sig-exit' }, tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'inspection.difference.detected', aggregateId: exit.id }, transaction });
+    assert.ok(event, 'evento inspection.difference.detected deveria ter sido publicado no outbox');
+    assert.equal(event.payloadJson.entryInspectionId, entry.id);
+    assert.equal(event.payloadJson.divergenceCount, 1);
+  });
+});
+
+test('vistoria: assinar CHECK_OUT sem divergência NÃO publica inspection.difference.detected', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const property = await createTestProperty(transaction);
+    const suffix = uniqueSuffix();
+    const leaseContract = await contractsService.createContract({ groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractType: 'LEASE_RESIDENTIAL' }, tenant.userId, transaction);
+    const contractId = leaseContract.id;
+
+    const entry = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractId, inspectionType: 'CHECK_IN' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.addInspectionItem(entry.id, { itemName: `Piso ${suffix}`, condition: 'GOOD' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(entry.id, tenant.userId, transaction);
+    await inspectionsService.signInspection(entry.id, { partyRole: 'TENANT', signaturePayload: 'sig-entry' }, tenant.userId, transaction);
+
+    const exit = await inspectionsService.createInspection(
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, contractId, inspectionType: 'CHECK_OUT' },
+      tenant.userId,
+      transaction
+    );
+    await inspectionsService.addInspectionItem(exit.id, { itemName: `Piso ${suffix}`, condition: 'GOOD' }, tenant.userId, transaction);
+    await inspectionsService.completeInspection(exit.id, tenant.userId, transaction);
+    await inspectionsService.signInspection(exit.id, { partyRole: 'TENANT', signaturePayload: 'sig-exit' }, tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'inspection.difference.detected', aggregateId: exit.id }, transaction });
+    assert.equal(event, null, 'sem divergência real, o evento não deve ser publicado');
   });
 });

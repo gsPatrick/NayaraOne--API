@@ -9,8 +9,9 @@ const personContactsService = require('../src/features/people/personContacts.ser
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
+const requirementsService = require('../src/features/legal/requirements.service');
 const AppError = require('../src/utils/AppError');
-const { File, TenantSetting } = require('../src/models');
+const { File, TenantSetting, OutboxEvent } = require('../src/models');
 
 // O tenant de homologação compartilhado tem `legal.signature_provider=clicksign` configurado DE
 // VERDADE (token real) para testes manuais de assinatura eletrônica em andamento. O teste
@@ -96,12 +97,27 @@ async function createLeaseWithParties(transaction) {
   return contract;
 }
 
+// Dispensa todo o checklist documental (JUR-003/JUR-015) de um contrato, com motivo — usado
+// pelos testes abaixo que não são sobre o checklist em si (são sobre assinatura/versão), mas
+// agora precisam resolver o gate pra poder avançar, já que assertRequirementsSatisfied passou a
+// gerar e cobrar o checklist automaticamente (ver requirements.service.js).
+async function waiveAllRequirements(contractId, actorUserId, transaction) {
+  await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
+  const items = await requirementsService.listRequirements(contractId, transaction);
+  for (const item of items) {
+    if (item.status === 'PENDING') {
+      await requirementsService.satisfyRequirement(item.id, { waivedReason: 'Teste de regressão — fora do escopo deste cenário' }, actorUserId, transaction);
+    }
+  }
+}
+
 // Regressão do HOM-001 (homologação 28/08/2026): contrato virava ACTIVE sem nenhuma versão de
 // documento nem assinatura. Estes 3 testes travam exatamente o cenário que a cliente reportou.
 
 test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documento', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
@@ -120,6 +136,7 @@ test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documen
 test('HOM-001: contrato não avança para SIGNED sem todas as assinaturas confirmadas', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createFakeDocumentFile(transaction);
     await contractVersionsService.createContractVersion(contract.id, { content: 'HOMO QA — corpo do contrato de teste', documentFileId: file.id }, tenant.userId, transaction);
@@ -143,6 +160,7 @@ test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato 
     await clearSignatureSettings(transaction);
     const suffix = uniqueSuffix();
     const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createFakeDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
@@ -175,16 +193,186 @@ test('fluxo feliz: documento + todas as assinaturas confirmadas leva o contrato 
   });
 });
 
-test('máquina de estados: contrato ACTIVE não tem transição de saída (não se cancela pelo fluxo normal)', async () => {
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): o teste abaixo afirmava que
+// "contrato ACTIVE não tem transição de saída" — isso CONTRADIZ literalmente o Caderno (Anexo I,
+// "5. Estado do contrato"), que lista os status SUSPENDED/TERMINATED/CLOSED e define
+// ACTIVE -> ['SUSPENDED', 'TERMINATED']. Um contrato locado em vigor PRECISA poder ser suspenso
+// (inadimplência em negociação, decisão judicial) e encerrado (rescisão) sem perder histórico.
+// O teste antigo travava exatamente o comportamento que o contrato exige — substituído pelos
+// testes abaixo, que cobrem a máquina de estados real de fim-de-vida.
+test('máquina de estados: ACTIVE -> SUSPENDED (suspendContract) preserva histórico e exige motivo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
-    contract.status = 'ACTIVE'; // simula um contrato já ativo, sem passar pelas etapas
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
     await assert.rejects(
-      () => contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, transaction),
+      () => contractsService.suspendContract(contract.id, '', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_TRANSITION_REASON_REQUIRED');
+        return true;
+      }
+    );
+
+    const suspended = await contractsService.suspendContract(contract.id, 'Inadimplência em negociação.', tenant.userId, transaction);
+    assert.equal(suspended.status, 'SUSPENDED');
+
+    // Histórico preservado: é a MESMA linha (nunca apagada/recriada).
+    const reloaded = await contractsService.getContract(contract.id, transaction);
+    assert.equal(reloaded.id, contract.id);
+    assert.equal(reloaded.status, 'SUSPENDED');
+  });
+});
+
+test('máquina de estados: SUSPENDED -> ACTIVE (reactivateContract)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.suspendContract(contract.id, 'Decisão judicial liminar.', tenant.userId, transaction);
+
+    const reactivated = await contractsService.reactivateContract(contract.id, 'Inadimplência regularizada.', tenant.userId, transaction);
+    assert.equal(reactivated.status, 'ACTIVE');
+  });
+});
+
+test('máquina de estados: SUSPENDED -> TERMINATED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.suspendContract(contract.id, 'Inadimplência em negociação.', tenant.userId, transaction);
+
+    const terminated = await contractsService.terminateContract(contract.id, 'Rescisão por inadimplência não sanada.', tenant.userId, transaction);
+    assert.equal(terminated.status, 'TERMINATED');
+  });
+});
+
+test('máquina de estados: ACTIVE -> TERMINATED direto (sem passar por SUSPENDED)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
+    const terminated = await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+    assert.equal(terminated.status, 'TERMINATED');
+  });
+});
+
+test('máquina de estados: TERMINATED -> CLOSED (closeContract)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+
+    const closed = await contractsService.closeContract(contract.id, 'Arquivamento operacional.', tenant.userId, transaction);
+    assert.equal(closed.status, 'CLOSED');
+
+    // CLOSED é terminal: nada sai dele (sem renovação, sem ACTIVE->CLOSED direto já coberto
+    // abaixo pelo teste de transição inválida).
+    assert.deepEqual(contractsService.VALID_TRANSITIONS.CLOSED, []);
+  });
+});
+
+test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pendente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+    const parties = await contractsService.listContractParties(contract.id, transaction);
+    const tenantParty = parties.find((p) => p.partyRole === 'TENANT');
+    await guaranteesService.createGuarantee(
+      contract.id,
+      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      tenant.userId,
+      transaction
+    );
+    void tenantParty;
+
+    await assert.rejects(
+      () => contractsService.terminateContract(contract.id, 'Tentativa sem liberar garantia.', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+        return true;
+      }
+    );
+  });
+});
+
+test('máquina de estados: transições inválidas são bloqueadas (DRAFT -> ACTIVE direto, SUSPENDED -> CLOSED direto)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    // DRAFT -> ACTIVE não existe na máquina de estados.
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'ACTIVE', tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_CONTRACT_INVALID_TRANSITION');
         return true;
       }
     );
+
+    contract.status = 'SUSPENDED';
+    await contract.save({ transaction });
+    // SUSPENDED -> CLOSED não existe (precisa passar por TERMINATED).
+    await assert.rejects(
+      () => contractsService.transitionContractStatus(contract, 'CLOSED', tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_CONTRACT_INVALID_TRANSITION');
+        return true;
+      }
+    );
+  });
+});
+
+// GAP REAL (verificação final Marco 5, §18 "Eventos mínimos" do Caderno): "contract.activated"
+// e "contract.terminated" nunca eram publicados — só existia o evento genérico
+// "legal.contract.status_changed" (que continua existindo, sem quebrar consumidor nenhum).
+test('Eventos mínimos: contract.activated é publicado quando o contrato entra em ACTIVE', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await clearSignatureSettings(transaction);
+    const suffix = uniqueSuffix();
+    const contract = await createLeaseWithParties(transaction);
+    await waiveAllRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+    const file = await createFakeDocumentFile(transaction);
+    const version = await contractVersionsService.createContractVersion(
+      contract.id,
+      { content: `EVT-activated ${suffix}`, documentFileId: file.id },
+      tenant.userId,
+      transaction
+    );
+    await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
+    const parties = await contractsService.listContractParties(contract.id, transaction);
+    const signatures = await signaturesService.initiateSignature(version.id, parties.map((p) => p.personId), tenant.userId, transaction);
+    for (const signature of signatures) {
+      await signaturesService.handleSignatureWebhook(signature.externalSignatureId, {}, transaction);
+    }
+    const signedContract = await contractsService.getContract(contract.id, transaction);
+
+    const before = await OutboxEvent.findOne({ where: { eventType: 'contract.activated', aggregateId: contract.id }, transaction });
+    assert.equal(before, null, 'não deveria existir contract.activated antes da transição pra ACTIVE');
+
+    await contractsService.transitionContractStatus(signedContract, 'ACTIVE', tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'contract.activated', aggregateId: contract.id }, transaction });
+    assert.ok(event, 'evento contract.activated deveria ter sido publicado no outbox');
+    assert.equal(event.payloadJson.id, contract.id);
+  });
+});
+
+test('Eventos mínimos: contract.terminated é publicado ao encerrar um contrato ACTIVE', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseWithParties(transaction);
+    contract.status = 'ACTIVE';
+    await contract.save({ transaction });
+
+    await contractsService.terminateContract(contract.id, 'Rescisão amigável.', tenant.userId, transaction);
+
+    const event = await OutboxEvent.findOne({ where: { eventType: 'contract.terminated', aggregateId: contract.id }, transaction });
+    assert.ok(event, 'evento contract.terminated deveria ter sido publicado no outbox');
   });
 });

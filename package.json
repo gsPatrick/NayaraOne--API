@@ -12,6 +12,10 @@
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "smoke:test": "node scripts/smokeTest.js",
     "seed": "node scripts/seed-dev.js",
+    "backup": "node scripts/backupDatabase.js",
+    "restore": "node scripts/restoreDatabase.js",
+    "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
+    "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
@@ -27,11 +31,11 @@
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "prom-client": "^15.1.3",
-    "sequelize": "^6.37.3"
+    "sequelize": "^6.37.3",
+    "sequelize-cli": "^6.6.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
-    "sequelize-cli": "^6.6.2"
+    "nodemon": "^3.1.4"
   },
   "engines": {
     "node": ">=20.0.0"

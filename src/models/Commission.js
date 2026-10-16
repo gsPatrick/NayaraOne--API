@@ -68,6 +68,11 @@ module.exports = (sequelize) => {
         defaultValue: 'PENDING',
         field: 'status',
       },
+      idempotencyKey: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'idempotency_key',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

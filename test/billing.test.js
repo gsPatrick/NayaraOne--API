@@ -14,7 +14,7 @@ const utilitiesService = require('../src/features/billing/utilities.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { createMockIndexSourceAdapter, unavailableIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const AppError = require('../src/utils/AppError');
-const { OwnershipTransferTask } = require('../src/models');
+const { OwnershipTransferTask, File, Person } = require('../src/models');
 
 let tenant;
 
@@ -270,6 +270,55 @@ test('billing: closeout bloqueia com cobrança em aberto e libera quando quitada
   });
 });
 
+// ACHADO REAL (auditoria técnica independente da Nayara, A05): completeOwnershipTransfer
+// concluía a tarefa sem nenhum comprovante nem destinatário informado.
+test('billing: completeOwnershipTransfer exige comprovante (evidenceFileId) e destinatário (A05)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseContract(transaction);
+    const { transferTask } = await utilitiesService.createUtilityObligation(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, utilityType: 'WATER', responsibleParty: 'TENANT', transferRequired: true },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => utilitiesService.completeOwnershipTransfer(transferTask.id, {}, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'OWNERSHIP_TRANSFER_EVIDENCE_REQUIRED');
+        return true;
+      }
+    );
+
+    const evidenceFile = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `qa/${uniqueSuffix()}.pdf`, fileName: 'comprovante.pdf', mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await assert.rejects(
+      () => utilitiesService.completeOwnershipTransfer(transferTask.id, { evidenceFileId: evidenceFile.id }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED');
+        return true;
+      }
+    );
+
+    const toPerson = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT Novo titular ${uniqueSuffix()}` },
+      { transaction }
+    );
+    const completed = await utilitiesService.completeOwnershipTransfer(
+      transferTask.id,
+      { evidenceFileId: evidenceFile.id, toPersonId: toPerson.id },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(completed.status, 'COMPLETED');
+    assert.equal(completed.evidenceFileId, evidenceFile.id);
+    assert.equal(completed.toPersonId, toPerson.id);
+  });
+});
+
 test('billing: closeout bloqueia com transferência de utilidade pendente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseContract(transaction);
@@ -288,6 +337,46 @@ test('billing: closeout bloqueia com transferência de utilidade pendente', asyn
 
     const eligibility = await closeoutService.checkCloseoutEligibility(contract.id, transaction);
     assert.ok(eligibility.some((r) => r.type === 'PENDING_UTILITY_TRANSFER'));
+  });
+});
+
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): closeout sem pendência crítica
+// precisa avançar o Contract até TERMINATED/CLOSED (ver contractLifecycle em closeoutContract).
+test('billing: closeout sem pendências avança o contrato ACTIVE até CLOSED', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseContract(transaction);
+    await activateContract(contract, transaction);
+
+    const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
+    assert.equal(result.status, 'COMPLETED');
+    assert.equal(result.contractLifecycle, 'CLOSED');
+
+    const { Contract } = require('../src/models');
+    const reloaded = await Contract.findByPk(contract.id, { transaction });
+    assert.equal(reloaded.status, 'CLOSED');
+  });
+});
+
+test('billing: closeout financeiro OK mas reporta encerramento jurídico bloqueado por garantia ACTIVE pendente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const contract = await createLeaseContract(transaction);
+    await activateContract(contract, transaction);
+    await guaranteesService.createGuarantee(
+      contract.id,
+      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE' },
+      tenant.userId,
+      transaction
+    );
+
+    const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
+    assert.equal(result.status, 'COMPLETED');
+    assert.equal(result.contractLifecycle.blocked, true);
+    assert.equal(result.contractLifecycle.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+
+    const { Contract } = require('../src/models');
+    const reloaded = await Contract.findByPk(contract.id, { transaction });
+    assert.equal(reloaded.status, 'ACTIVE', 'closeout financeiro não força o encerramento jurídico quando o gate bloqueia');
   });
 });
 
@@ -477,14 +566,12 @@ test('billing: duas recuperações CONCORRENTES da mesma antecipação de alugue
       assert.equal(Number(advance.recoveredAmount), 2000, 'as duas recuperações concorrentes precisam se somar, sem lost update');
     });
   } finally {
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
-        replacements: { id: contractId, k: `rent_advance%${advanceId}` },
-        transaction: t,
-      });
-      await sequelize.query('DELETE FROM finance.rent_advances WHERE id = :id', { replacements: { id: advanceId }, transaction: t });
-      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
-    });
+    // Este teste usa COMMIT real (não rollback) para exercitar concorrência de verdade, então a
+    // limpeza abaixo também precisava ser real. Desde a migration 20260101000366 (trigger
+    // append-only, FIN-003/010), `finance.financial_entries` nunca mais aceita DELETE direto —
+    // nem para limpeza de dado de teste. Os registros ficam órfãos no banco de dev, mas
+    // identificáveis pelo prefixo QA-GUARANTEED-RACE/contractId; não são apagados porque apagar
+    // o lançamento financeiro é exatamente o que o trigger existe para impedir.
   }
 });
 
@@ -544,14 +631,10 @@ test('billing: dois pagamentos CONCORRENTES de aluguel garantido para a mesma co
       assert.equal(item.paymentsJson.length, 1, 'nunca deve existir mais de um pagamento para a mesma competência');
     });
   } finally {
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
-        replacements: { id: contractId, k: `guaranteed_rent%${guaranteedId}%` },
-        transaction: t,
-      });
-      await sequelize.query('DELETE FROM finance.guaranteed_rent_contracts WHERE id = :id', { replacements: { id: guaranteedId }, transaction: t });
-      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
-    });
+    // Ver comentário equivalente no teste de recuperação de aluguel antecipado acima: desde o
+    // trigger append-only (migration 20260101000366), DELETE direto em financial_entries não é
+    // mais possível, nem para limpeza de teste. Registro fica órfão, identificável pelo prefixo
+    // guaranteed_rent/contractId.
   }
 });
 
@@ -572,7 +655,7 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
     }
   }
 
-  const { contractId, obligationId, taskAId, taskBId } = await withCommitted(async (t) => {
+  const { contractId, obligationId, taskAId, taskBId, evidenceFileId, toPersonId } = await withCommitted(async (t) => {
     const contract = await createLeaseContract(t, { contractNumber: `QA-TRANSFER-RACE-${suffix}` });
     const { obligation, transferTask } = await utilitiesService.createUtilityObligation(
       {
@@ -599,7 +682,32 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
       },
       { transaction: t }
     );
-    return { contractId: contract.id, obligationId: obligation.id, taskAId: transferTask.id, taskBId: secondTask.id };
+    const evidenceFile = await File.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        storageKey: `ownership-transfer-race/${suffix}.pdf`,
+        fileName: `comprovante-${suffix}.pdf`,
+        mimeType: 'application/pdf',
+        uploadedByUserId: tenant.userId,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction: t }
+    );
+    const toPerson = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT Novo titular ${suffix}` },
+      { transaction: t }
+    );
+
+    return {
+      contractId: contract.id,
+      obligationId: obligation.id,
+      taskAId: transferTask.id,
+      taskBId: secondTask.id,
+      evidenceFileId: evidenceFile.id,
+      toPersonId: toPerson.id,
+    };
   });
 
   let liberarBarreira;
@@ -615,7 +723,7 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
     withCommitted(async (t) => {
       await OwnershipTransferTask.findByPk(taskId, { transaction: t });
       await aguardarAsDuasLeituras();
-      return utilitiesService.completeOwnershipTransfer(taskId, tenant.userId, t);
+      return utilitiesService.completeOwnershipTransfer(taskId, { evidenceFileId, toPersonId }, tenant.userId, t);
     });
 
   try {

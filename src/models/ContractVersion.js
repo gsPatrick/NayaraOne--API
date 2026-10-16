@@ -71,6 +71,20 @@ module.exports = (sequelize) => {
         field: 'template_id',
         comment: 'FK opcional para legal.contract_templates — modelo que originou esta versão (ver migration 20260101000178).',
       },
+      // GAP REAL (verificação cética Marco 5, varredura por nome de campo literal do Caderno,
+      // §3 "Versão gerada do contrato guarda template_version_id, clause_version_ids e
+      // conteúdo/hash final"): `template_id` já existia; `clause_version_ids` nunca foi
+      // persistido. Sem isso, se uma cláusula da biblioteca for editada (nova versão append-only
+      // em ContractClause) depois que um contrato foi gerado, não há como provar DEPOIS qual
+      // texto exato de cada cláusula estava em vigor nesta versão específica — renderTemplate()
+      // já calculava essa lista certinho (ver contractTemplates.service.js), só nunca era salva
+      // junto da versão. Snapshot imutável: [{ contractClauseId, code, versionNumber }].
+      clauseVersionIds: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'clause_version_ids',
+        comment: 'Snapshot das cláusulas (id+versão) de fato usadas para gerar esta versão — rastreabilidade mesmo se a cláusula for editada depois (migration 20260101000334).',
+      },
       effectiveFrom: {
         type: DataTypes.DATE,
         allowNull: false,

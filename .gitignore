@@ -4,3 +4,7 @@ uploads/
 .env.*.local
 npm-debug.log*
 *.log
+.DS_Store
+backups/
+scratchpad/
+.claude/

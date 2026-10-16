@@ -55,15 +55,28 @@ async function withTenantTransaction(tenant, fn) {
  * callback), permitindo que o próprio teste decida fazer rollback explícito no `finally` —
  * usado para que dados de teste nunca fiquem persistidos no banco de dev compartilhado.
  */
-async function withRollbackTenantTransaction(tenant, fn) {
+// Suíte completa roda dezenas de arquivos de teste em paralelo contra a mesma empresa semente
+// — isso pode formar deadlock real do Postgres (40P01) entre duas transações concorrentes de
+// arquivos DIFERENTES disputando recursos da mesma empresa em ordem invertida (ex.:
+// margin_rule de um lado, outra tabela do outro). Não é bug de produto: em runtime real, cada
+// requisição tem sua própria transação por request, não dezenas rodando ombro a ombro na MESMA
+// empresa de teste. Como a transação já é descartável por design aqui (rollback sempre), é
+// seguro reabrir uma transação nova e re-executar o teste do zero quando isso acontece.
+async function withRollbackTenantTransaction(tenant, fn, retriesLeft = 5) {
   const transaction = await sequelize.transaction();
   try {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
     return await fn(transaction);
+  } catch (err) {
+    const isDeadlock = err?.parent?.code === '40P01' || err?.original?.code === '40P01';
+    if (isDeadlock && retriesLeft > 0) {
+      return withRollbackTenantTransaction(tenant, fn, retriesLeft - 1);
+    }
+    throw err;
   } finally {
-    await transaction.rollback();
+    await transaction.rollback().catch(() => {});
   }
 }
 
@@ -71,10 +84,86 @@ function uniqueSuffix() {
   return `${Date.now()}${Math.floor(Math.random() * 100000)}`;
 }
 
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): createFinancialEntry agora exige costCenterId para despesa (PAYABLE) e
+// resultCenterId para receita (RECEIVABLE). Helpers de conveniência para os muitos testes que
+// já criavam lançamentos antes dessa exigência existir.
+async function createTestCostCenter(tenant, transaction, suffix = uniqueSuffix()) {
+  const { CostCenter } = require('../src/models');
+  return CostCenter.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, code: `CC-TEST-${suffix}`, name: `Centro de custo de teste ${suffix}` },
+    { transaction }
+  );
+}
+
+async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix()) {
+  const { ResultCenter } = require('../src/models');
+  return ResultCenter.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, code: `RC-TEST-${suffix}`, name: `Centro de resultado de teste ${suffix}` },
+    { transaction }
+  );
+}
+
+/**
+ * settleFinancialEntryWithApproval — FIX FIN-004 (ver comentário em
+ * financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE direto agora exige
+ * aprovação prévia (via payment_intent OU via ApprovalRequest aprovada). Testes que não são
+ * sobre o fluxo de aprovação em si (ex.: imutabilidade pós-SETTLED, antifraude, relatório
+ * semanal, idempotência de replay) usam este helper pra abrir+aprovar uma ApprovalRequest LOW
+ * (1 aprovador) antes de liquidar, em vez de repetir o boilerplate em cada teste.
+ */
+// Cria e aprova uma ApprovalRequest pro lançamento, sem liquidar — reusável tanto pra baixa
+// integral (settleFinancialEntry) quanto parcial (settleFinancialEntryPartial), já que o gate
+// de aprovação de PAYABLE+bankAccountId é idêntico nas duas (achado A01, auditoria Nayara
+// 15/10/2026: baixa parcial contornava a aprovação exigida da baixa integral).
+async function approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction) {
+  const approvalsService = require('../src/features/finance/approvals.service');
+  const { User } = require('../src/models');
+  const suffix = uniqueSuffix();
+  const [approver] = await User.findOrCreate({
+    where: { email: `homo-qa-settle-approver-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — Aprovador de liquidação ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  const request = await approvalsService.createApprovalRequest(
+    { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entryId, riskLevel: 'LOW' },
+    actorUserId,
+    transaction
+  );
+  return approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+}
+
+async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
+  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
+  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
+}
+
+// Dispensa todo o checklist documental (JUR-003/JUR-015) de um contrato, com motivo — para
+// testes que não são sobre o checklist em si, mas agora precisam resolvê-lo antes de avançar
+// o contrato além de DOCUMENTS_PENDING, já que assertRequirementsSatisfied passou a gerar e
+// cobrar o checklist automaticamente na primeira chamada (ver requirements.service.js). Chame
+// ANTES de transitionContractStatus(..., 'DOCUMENTS_PENDING', ...), nunca depois — o próprio
+// gate roda na transição de ENTRADA também.
+async function waiveAllContractRequirements(contractId, actorUserId, transaction) {
+  const requirementsService = require('../src/features/legal/requirements.service');
+  await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
+  const items = await requirementsService.listRequirements(contractId, transaction);
+  for (const item of items) {
+    if (item.status === 'PENDING') {
+      await requirementsService.satisfyRequirement(item.id, { waivedReason: 'Teste de regressão — fora do escopo deste cenário' }, actorUserId, transaction);
+    }
+  }
+}
+
 module.exports = {
+  settleFinancialEntryWithApproval,
+  approveFinancialEntryForSettlement,
   sequelize,
   getSeedTenant,
   withTenantTransaction,
   withRollbackTenantTransaction,
   uniqueSuffix,
+  createTestCostCenter,
+  createTestResultCenter,
+  waiveAllContractRequirements,
 };

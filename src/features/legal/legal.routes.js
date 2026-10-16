@@ -25,11 +25,39 @@ legalRouter.post('/legal/contracts', requirePermission('legal:create'), legalCon
 legalRouter.get('/legal/contracts', requirePermission('legal:read'), legalController.listContracts);
 legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalController.getContract);
 legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), legalController.transitionContract);
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): fim-de-vida do contrato (Caderno,
+// Anexo I "5. Estado do contrato") — SUSPENDED/TERMINATED/CLOSED. Ações HIGH, exigem motivo
+// (ver assertReason em contracts.service.js) e permissão de aprovação jurídica, mesmo padrão de
+// "/transition" acima (não é correção de dado — é máquina de estados).
+legalRouter.post('/legal/contracts/:id/suspend', requirePermission('legal:approve'), legalController.suspendContract);
+legalRouter.post('/legal/contracts/:id/reactivate', requirePermission('legal:approve'), legalController.reactivateContract);
+legalRouter.post('/legal/contracts/:id/terminate', requirePermission('legal:approve'), legalController.terminateContract);
+legalRouter.post('/legal/contracts/:id/close', requirePermission('legal:approve'), legalController.closeContract);
 legalRouter.post('/legal/contracts/:id/parties', requirePermission('legal:create'), legalController.addContractParty);
 legalRouter.get('/legal/contracts/:id/parties', requirePermission('legal:read'), legalController.listContractParties);
+legalRouter.get('/legal/contracts/:id/timeline', requirePermission('legal:read'), legalController.getContractTimeline);
 // AUD-004: correção auditada de dados já gravados (não é a máquina de estados) — ação HIGH,
 // exige MFA recente e motivo obrigatório (ver correctContractData em contracts.service.js).
 legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:update'), requireRecentMfa, legalController.correctContractData);
+
+// Contract requirements (checklist documental por tipo — Caderno Anexo I "7. Checklist
+// documental"). Migration 20260101000291 já aplicada; o gate correspondente roda fail-closed
+// de verdade dentro de transitionContractStatus (ver requirements.service.js).
+legalRouter.post('/legal/contracts/:id/requirements/generate', requirePermission('legal:create'), legalController.generateContractRequirements);
+legalRouter.get('/legal/contracts/:id/requirements', requirePermission('legal:read'), legalController.listContractRequirements);
+legalRouter.patch('/legal/requirements/:requirementId', requirePermission('legal:update'), legalController.satisfyContractRequirement);
+
+// Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). Migration
+// 20260101000292 já aplicada — módulo funcional ponta a ponta.
+legalRouter.post('/legal/notices', requirePermission('legal:create'), legalController.createNotice);
+legalRouter.get('/legal/notices', requirePermission('legal:read'), legalController.listNotices);
+legalRouter.get('/legal/notices/:id', requirePermission('legal:read'), legalController.getNotice);
+legalRouter.post('/legal/notices/:id/submit-for-review', requirePermission('legal:update'), legalController.submitNoticeForReview);
+legalRouter.post('/legal/notices/:id/approve', requirePermission('legal:approve'), legalController.approveNotice);
+legalRouter.post('/legal/notices/:id/reject', requirePermission('legal:approve'), legalController.rejectNotice);
+// Envio é ação HIGH (notificação formal, pode ter efeito jurídico) — exige MFA recente.
+legalRouter.post('/legal/notices/:id/send', requirePermission('legal:update'), requireRecentMfa, legalController.sendNotice);
+legalRouter.post('/legal/notices/:id/delivery-evidence', requirePermission('legal:update'), legalController.registerNoticeDeliveryEvidence);
 
 // Contract versions
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
@@ -44,6 +72,13 @@ legalRouter.post('/legal/contract-templates', requirePermission('legal:create'),
 legalRouter.get('/legal/contract-templates', requirePermission('legal:read'), legalController.listContractTemplates);
 legalRouter.get('/legal/contract-templates/:id', requirePermission('legal:read'), legalController.getContractTemplate);
 legalRouter.post('/legal/contract-templates/:id/clauses', requirePermission('legal:create'), legalController.addClauseToContractTemplate);
+// Biblioteca de cláusulas (JUR-002) — ordem importa: /legal/clauses/:code/versions antes de
+// qualquer coisa que capture :id, mesmo padrão já usado para classification-pendings no Marco 4.
+legalRouter.post('/legal/clauses', requirePermission('legal:create'), legalController.createClause);
+legalRouter.get('/legal/clauses', requirePermission('legal:read'), legalController.listClauses);
+legalRouter.get('/legal/clauses/:code/versions', requirePermission('legal:read'), legalController.listClauseVersions);
+legalRouter.post('/legal/clauses/:code/versions', requirePermission('legal:create'), legalController.createClauseVersion);
+legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:update'), legalController.deactivateClause);
 // Preview de renderização (só leitura — não persiste nada, ver renderContractTemplate).
 legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), legalController.renderContractTemplate);
 
@@ -96,6 +131,7 @@ legalRouter.get('/legal/cases', requirePermission('legal:read'), legalController
 legalRouter.get('/legal/cases/:id', requirePermission('legal:read'), legalController.getLegalCase);
 legalRouter.patch('/legal/cases/:id', requirePermission('legal:update'), legalController.updateLegalCase);
 legalRouter.post('/legal/cases/:id/link-task', requirePermission('legal:update'), legalController.linkCaseToTask);
+legalRouter.post('/legal/cases/:id/legal-hold', requirePermission('legal:update'), legalController.setLegalHold);
 
 // Legal deadlines
 legalRouter.post('/legal/cases/:id/deadlines', requirePermission('legal:create'), legalController.createLegalDeadline);
@@ -104,6 +140,9 @@ legalRouter.patch('/legal/deadlines/:id', requirePermission('legal:update'), leg
 
 // Evidence packages
 legalRouter.post('/legal/cases/:id/evidence-packages', requirePermission('legal:create'), legalController.createEvidencePackage);
+// AUD-016 (JUR-010): monta o manifesto automaticamente a partir de todo anexo conhecido do
+// contrato — ordem antes de qualquer rota que capture :id solto, mesmo padrão já usado alhures.
+legalRouter.post('/legal/cases/:id/evidence-packages/auto', requirePermission('legal:create'), legalController.createEvidencePackageFromContractAttachments);
 legalRouter.get('/legal/cases/:id/evidence-packages', requirePermission('legal:read'), legalController.listEvidencePackages);
 legalRouter.get('/legal/evidence-packages/:id', requirePermission('legal:read'), legalController.getEvidencePackage);
 // M5-28/M5-29: export verificável do dossiê e leitura da cadeia de custódia.

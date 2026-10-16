@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -36,6 +36,11 @@ after(async () => {
 });
 
 async function createEntry(transaction, actorUserId, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  if (!costCenterId && (overrides.nature || 'PAYABLE') === 'PAYABLE') {
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    costCenterId = costCenter.id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -44,6 +49,7 @@ async function createEntry(transaction, actorUserId, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'HOMO QA — lançamento de teste',
+      costCenterId,
       ...overrides,
     },
     actorUserId,
@@ -114,6 +120,59 @@ test('maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações in
         return true;
       }
     );
+  });
+});
+
+test('listApprovalRequests resolve relatedEntityLabel com a descrição real do lançamento (achado M4-R01, auditoria rodada 4)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const description = `HOMO QA — descrição real do lançamento ${suffix}`;
+    const entry = await createEntry(transaction, tenant.userId, { description });
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.equal(list.length, 1);
+    assert.equal(list[0].relatedEntityLabel, description, 'a listagem precisa trazer a descrição real do lançamento, não só o id');
+  });
+});
+
+test('listApprovalRequests nunca deixa relatedEntityLabel vazio, mesmo quando o lançamento não tem descrição (achado #2, verificação complementar rodada 4)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const entry = await createEntry(transaction, tenant.userId, { description: null, nature: 'PAYABLE', amount: 250.5 });
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.equal(list.length, 1);
+    assert.ok(list[0].relatedEntityLabel, 'relatedEntityLabel nunca pode ser null/vazio, mesmo sem description');
+    assert.notEqual(list[0].relatedEntityLabel, entry.id, 'o label não pode ser só o id cru');
+    assert.match(list[0].relatedEntityLabel, /Despesa|250,50/, 'o fallback deve usar natureza/valor do lançamento, não ficar genérico demais');
+
+    const found = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: entry.id });
+    assert.ok(found[0].relatedEntityLabel.includes('250,50'), 'a busca por valor deve funcionar porque o label inclui o valor formatado');
+  });
+});
+
+test('listApprovalRequests gera um rótulo legível em português mesmo para uma entidade relacionada que não existe mais', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const fakeId = '11111111-1111-1111-1111-111111111111';
+    await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: fakeId, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+
+    const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: fakeId });
+    assert.equal(list.length, 1);
+    assert.ok(list[0].relatedEntityLabel, 'mesmo sem a entidade existir, precisa haver um rótulo legível');
+    assert.notEqual(list[0].relatedEntityLabel, fakeId, 'nunca pode cair no id cru como rótulo');
   });
 });
 

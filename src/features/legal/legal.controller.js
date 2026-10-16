@@ -17,7 +17,11 @@ const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
+const contractClausesService = require('./contractClauses.service');
+const contractTimelineService = require('./contractTimeline.service');
 const contractPdfService = require('./contractPdf.service');
+const requirementsService = require('./requirements.service');
+const noticesService = require('./notices.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -45,6 +49,26 @@ const transitionContract = catchAsync(async (req, res) => {
   });
   return success(res, { data: item });
 });
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026) — endpoints de fim-de-vida do
+// contrato (ACTIVE -> SUSPENDED/TERMINATED, SUSPENDED -> ACTIVE/TERMINATED, TERMINATED -> CLOSED)
+// existiam como funções em contracts.service.js mas nunca eram expostos via controller/rota —
+// ver contracts.service.js#suspendContract/reactivateContract/terminateContract/closeContract.
+const suspendContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.suspendContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const reactivateContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.reactivateContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const terminateContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.terminateContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const closeContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.closeContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
 const addContractParty = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractsService.addContractParty(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
@@ -56,6 +80,63 @@ const correctContractData = catchAsync(async (req, res) => {
 const listContractParties = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => contractsService.listContractParties(req.params.id, t));
   return success(res, { data: items });
+});
+// AUD-017 (JUR-012, "timeline consolidada"): aditivos + notificações + inadimplência +
+// reparos de um contrato, derivados na leitura das tabelas de origem (nunca uma cópia que
+// possa divergir).
+const getContractTimeline = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTimelineService.getContractTimeline(req.params.id, t));
+  return success(res, { data });
+});
+
+// --- Contract requirements (checklist documental por tipo) ---
+const generateContractRequirements = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => requirementsService.generateRequirementsForContract(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: items });
+});
+const listContractRequirements = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => requirementsService.listRequirements(req.params.id, t));
+  return success(res, { data: items });
+});
+const satisfyContractRequirement = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => requirementsService.satisfyRequirement(req.params.requirementId, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Notices (notificações formais) ---
+const createNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.createNotice(req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listNotices = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    noticesService.listNotices(t, { contractId: req.query.contractId, legalCaseId: req.query.legalCaseId, status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const getNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.getNotice(req.params.id, t));
+  return success(res, { data: item });
+});
+const submitNoticeForReview = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.submitNoticeForReview(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const approveNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.approveNotice(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const rejectNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.rejectNotice(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const sendNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.sendNotice(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const registerNoticeDeliveryEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.registerDeliveryEvidence(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
 });
 
 // --- Contract versions ---
@@ -96,6 +177,35 @@ const getContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.getTemplate(req.params.id, t));
   return success(res, { data: item });
 });
+// --- Clause library (JUR-002) ---
+// Fix AUD-012 (auditoria externa Nayara, 11/10/2026): contractClauses.service.js já tinha
+// createClause/createClauseVersion/listClauses/listClauseVersions/deactivateClause prontos e
+// testados, mas NENHUMA rota expunha isso — addClauseToContractTemplate exige um
+// contractClauseId já existente, e não havia como criar uma cláusula em primeiro lugar sem
+// SQL direto. A biblioteca de cláusulas ficava inalcançável por qualquer usuário/tela.
+const createClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.createClause(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const createClauseVersion = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractClausesService.createClauseVersion(req.params.code, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listClauses = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractClausesService.listClauses(t, req.query));
+  return success(res, { data: items });
+});
+const listClauseVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractClausesService.listClauseVersions(req.params.code, t));
+  return success(res, { data: items });
+});
+const deactivateClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.deactivateClause(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
 const addClauseToContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
@@ -445,7 +555,7 @@ const getKeyDelivery = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 const releaseKeyDelivery = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => keyDeliveriesService.releaseKeyDelivery(req.params.id, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.releaseKeyDelivery(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
 });
 
@@ -472,6 +582,10 @@ const linkCaseToTask = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => legalCasesService.linkCaseToTask(req.params.id, req.body.taskId, req.auth.userId, t));
   return success(res, { data: item });
 });
+const setLegalHold = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.setLegalHold(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
 
 // --- Legal deadlines ---
 const createLegalDeadline = catchAsync(async (req, res) => {
@@ -493,6 +607,17 @@ const updateLegalDeadline = catchAsync(async (req, res) => {
 const createEvidencePackage = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     evidencePackagesService.createEvidencePackage(req.params.id, req.body.manifestItems, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+// AUD-016 (JUR-010, "custódia de todos os anexos"): monta o dossiê automaticamente a partir
+// de TODO anexo conhecido do contrato vinculado ao processo, em vez de depender do usuário
+// lembrar de listar cada um manualmente.
+const createEvidencePackageFromContractAttachments = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.createEvidencePackageFromContractAttachments(req.params.id, req.auth.userId, t, {
+      extraManifestItems: req.body && req.body.extraManifestItems,
+    })
   );
   return success(res, { statusCode: 201, data: item });
 });
@@ -523,9 +648,14 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createContract, listContracts, getContract, transitionContract, addContractParty, listContractParties, correctContractData,
+  createContract, listContracts, getContract, transitionContract,
+  suspendContract, reactivateContract, terminateContract, closeContract,
+  generateContractRequirements, listContractRequirements, satisfyContractRequirement,
+  createNotice, listNotices, getNotice, submitNoticeForReview, approveNotice, rejectNotice, sendNotice, registerNoticeDeliveryEvidence,
+  addContractParty, listContractParties, getContractTimeline, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
+  createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
@@ -533,7 +663,7 @@ module.exports = {
   createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
-  createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,
+  createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, setLegalHold,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
-  createEvidencePackage, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
+  createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
 };

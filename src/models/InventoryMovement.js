@@ -36,16 +36,69 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'project_id',
       },
+      // BUG REAL CORRIGIDO (reauditoria externa Nayara, 2026-10-08; EST-004: "Material consumido
+      // precisa de project_id/stage_id quando atribuído à obra"): stageId era validado na
+      // requisição mas nunca gravado no ledger real — propagado agora pelos chamadores
+      // (requisitions.service.js/counts.service.js/lossCases.service.js).
+      stageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'stage_id',
+      },
       movementType: {
         type: DataTypes.STRING(16),
         allowNull: false,
         field: 'movement_type',
-        comment: "IN|OUT|TRANSFER",
+        comment: "IN|OUT|RETURN|TRANSFER|ADJUSTMENT|LOSS|DISPOSAL",
       },
+      // BUG REAL CORRIGIDO (rodada 47): TAB-0751 exige numeric(18,4) — DECIMAL(9,6) dava
+      // overflow em movimentos acima de ~999 unidades.
       quantity: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: false,
         field: 'quantity',
+      },
+      sourceLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'source_location_id',
+      },
+      destinationLocationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'destination_location_id',
+      },
+      sourceType: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'source_type',
+        comment: 'RECEIPT|REQUISITION|TOOL_LOAN|ADJUSTMENT|COUNT|LOSS_CASE|MANUAL',
+      },
+      sourceId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'source_id',
+      },
+      idempotencyKey: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'idempotency_key',
+      },
+      responsiblePersonId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'responsible_person_id',
+      },
+      evidenceFileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'evidence_file_id',
+      },
+      reason: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: 'reason',
+        comment: 'EST-008: motivo obrigatório para ADJUSTMENT/LOSS/DISPOSAL.',
       },
       movedAt: {
         type: DataTypes.DATE,
@@ -57,9 +110,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'moved_by_user_id',
       },
+      // BUG REAL CORRIGIDO (rodada 47): TAB-0751 trata created_by como NOT NULL — ledger
+      // imutável de estoque sem autor quebra rastreabilidade. Validação fail-closed em
+      // movements.service.js#recordMovement garante que nunca chega null aqui.
       createdBy: {
         type: DataTypes.UUID,
-        allowNull: true,
+        allowNull: false,
         field: 'created_by',
       },
       updatedBy: {

@@ -47,6 +47,32 @@ const RULES = [
     conditionAstJson: { fact: 'daysWithoutSale', op: '>=', value: 90 },
     actionJson: { alert: 'REVIEW_STALE_LISTING' },
   },
+  {
+    // Guia do Marcelo §6 ("Gate de publicação"): "const minPhotos = await rules.evaluate(
+    // 'REG-IMO-PHOTO-MIN', ctx, facts, true); if (facts.media.approvedPhotoCount <
+    // minPhotos.value) throw NOT_ENOUGH_APPROVED_PHOTOS". E §18: "Não hard-code quantidade
+    // mínima de fotos/vídeo." — o número mínimo (3) fica no condition_ast_json, configurável
+    // por tenant/escopo via nova RuleVersion publicada, nunca em código.
+    code: 'REG-IMO-PHOTO-MIN',
+    name: 'Quantidade mínima de fotos aprovadas para publicação',
+    description: 'Bloqueia a publicação se o número de fotos com quality_status=APPROVED for menor que o mínimo configurado.',
+    domain: 'real_estate',
+    conditionAstJson: { fact: 'approvedPhotoCount', op: '>=', value: 3 },
+    actionJson: { allow: true, reason: 'MIN_APPROVED_PHOTOS_REQUIRED' },
+  },
+  {
+    // Caderno Pessoas/Imóveis/CRM/Radar §7 ("Publicação e qualidade"): "Publicação usa Motor
+    // de Regras para checar vídeo, quantidade/qualidade de fotos, documentos e campos
+    // obrigatórios." Documentos mínimos confirmados pela própria tabela do catálogo físico
+    // (real_estate.property_documents: "Matrícula, IPTU etc.") — exige ao menos REGISTRY
+    // (matrícula) e IPTU cadastrados antes de publicar.
+    code: 'REG-IMO-DOCS-001',
+    name: 'Documentos mínimos obrigatórios para publicação',
+    description: 'Bloqueia a publicação se faltar matrícula (REGISTRY) ou IPTU em real_estate.property_documents.',
+    domain: 'real_estate',
+    conditionAstJson: { fact: 'hasRequiredDocuments', op: '==', value: true },
+    actionJson: { allow: true, reason: 'REQUIRED_DOCUMENTS_MISSING' },
+  },
 ];
 
 function hashCondition(conditionAstJson) {

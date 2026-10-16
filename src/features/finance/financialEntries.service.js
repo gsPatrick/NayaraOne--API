@@ -3,10 +3,13 @@
 const { FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
+const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment, checkFrequentReversalAlert } = require('./financeAntifraud.service');
+const { createAnomalyCase } = require('./anomalyCases.service');
 const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed } = require('./financeEvents.service');
 const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
 const { assertPeriodOpenForEntry } = require('./periodClosures.service');
+const { isApprovalRequestApproved } = require('./approvals.service');
+const { getBankAccount } = require('./bankAccounts.service');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -16,7 +19,14 @@ const { assertPeriodOpenForEntry } = require('./periodClosures.service');
 // o original.
 
 const ENTRY_TYPES = ['DEBIT', 'CREDIT'];
-const NATURES = ['PAYABLE', 'RECEIVABLE', 'TRANSFER', 'ADJUSTMENT'];
+// PENDING_CLASSIFICATION (auditoria externa 2026-10-07, contrato bruto, Centro Financeiro §10):
+// "Valor excedente nunca é automaticamente tratado como receita; abre pendência de
+// classificação." Natureza usada EXCLUSIVAMENTE para o lançamento-filho que representa o valor
+// excedente de uma baixa parcial acima do saldo restante — nunca é RECEIVABLE/PAYABLE (não é
+// receita/despesa própria até um humano classificar) e fica PENDING até alguém decidir o
+// destino (ex.: reclassificar para RECEIVABLE de outro contrato, devolver, etc. — fora do
+// escopo desta função, que só ABRE a pendência).
+const NATURES = ['PAYABLE', 'RECEIVABLE', 'TRANSFER', 'ADJUSTMENT', 'PENDING_CLASSIFICATION'];
 // PARTIALLY_SETTLED (M4-06): lançamento que já recebeu uma ou mais baixas parciais mas ainda
 // tem saldo em aberto. Continua "vivo" (aceita novas baixas) até a soma fechar o total.
 const STATUSES = ['PENDING', 'PARTIALLY_SETTLED', 'SETTLED', 'REVERSED', 'CANCELLED'];
@@ -107,6 +117,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     costCenterId,
     resultCenterId,
     contractId,
+    constructionProjectId,
     entryType,
     nature,
     amount,
@@ -137,6 +148,25 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   assertReasonableDueDate(dueAt);
   const resolvedCompetenceMonth = resolveCompetenceMonth(competenceMonth, dueAt);
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+  // BLINDADO v1, §4 "Plano de contas e dimensões"): "Centro de custo obrigatório para
+  // despesa. Centro de resultado obrigatório para receita e análise de margem." A API aceitava
+  // PAYABLE (despesa) sem costCenterId e RECEIVABLE (receita) sem resultCenterId. TRANSFER/
+  // ADJUSTMENT/PENDING_CLASSIFICATION não são despesa nem receita própria (ver nota acima sobre
+  // PENDING_CLASSIFICATION), por isso ficam de fora desta exigência.
+  if (normalizedNature === 'PAYABLE' && !costCenterId) {
+    throw AppError.badRequest(
+      'Lançamento de despesa (nature "PAYABLE") exige "costCenterId".',
+      'FINANCE_ENTRY_COST_CENTER_REQUIRED'
+    );
+  }
+  if (normalizedNature === 'RECEIVABLE' && !resultCenterId) {
+    throw AppError.badRequest(
+      'Lançamento de receita (nature "RECEIVABLE") exige "resultCenterId".',
+      'FINANCE_ENTRY_RESULT_CENTER_REQUIRED'
+    );
+  }
+
   // M4-16 — dinheiro de terceiro (caução, depósito de garantia, valores que só transitam pela
   // imobiliária) só pode ser marcado como tal se vier com a referência de a QUEM pertence.
   // Sem isso, a marcação seria uma flag solta: dá pra tirar o valor da receita própria, mas não
@@ -153,6 +183,26 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
 
   await assertAccountUsableForEntry(chartOfAccountId, companyId, transaction);
 
+  // FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação —
+  // Bloqueado"): até aqui, usar uma bankAccountId de OUTRA empresa (inclusive de outra empresa
+  // do mesmo grupo, ex.: duas empresas da holding usando contas bancárias diferentes) só era
+  // barrado pela RLS bruta do Postgres no INSERT — reproduzido ao vivo: "new row violates
+  // row-level security policy for table \"financial_entries\"", um erro 500 sem nenhuma
+  // mensagem de negócio. Na prática, a RLS de SELECT em bank_accounts já torna uma conta de
+  // outra empresa invisível pra este getBankAccount (ele devolve FINANCE_BANK_ACCOUNT_NOT_FOUND,
+  // não "achou mas é de outra empresa") — então o teste explícito de companyId abaixo é defesa
+  // em profundidade (cobre um cenário só alcançável se a RLS de SELECT algum dia for
+  // enfraquecida), mas o efeito prático já é: erro de negócio claro, nunca mais um 500 cru.
+  if (bankAccountId) {
+    const bankAccount = await getBankAccount(bankAccountId, transaction);
+    if (bankAccount.companyId !== companyId) {
+      throw AppError.badRequest(
+        'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
+        'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
+      );
+    }
+  }
+
   // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
   // da própria criação).
   await assertPeriodOpenForEntry(companyId, [dueAt, new Date()], transaction);
@@ -167,6 +217,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       costCenterId: costCenterId || null,
       resultCenterId: resultCenterId || null,
       contractId: contractId || null,
+      // M6-97 — dimensão de origem Obras: só preenchida quando o lançamento nasce de uma
+      // medição/obra (ver stageMeasurements.service.js), permite relatório de margem por obra.
+      constructionProjectId: constructionProjectId || null,
       entryType: normalizedType,
       nature: normalizedNature,
       amount,
@@ -270,12 +323,39 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   if (competenceMonth !== undefined) {
     entry.competenceMonth = resolveCompetenceMonth(competenceMonth, dueAt !== undefined ? dueAt : entry.dueAt);
   }
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7/Procurement): trocar o
+  // beneficiário (bankAccountId) de um lançamento PENDING não passava por nenhuma checagem
+  // extra — dava pra redirecionar um payable pra uma conta diferente, já fora do cooldown
+  // antifraude, e liquidar sem nenhum alerta. Troca de conta bancária é exatamente o padrão de
+  // fraude que o módulo já defende em outro lugar (reabertura de cooldown quando os DADOS da
+  // conta mudam — ver bankAccounts.service.js); aqui o "dado que muda" é qual conta o
+  // lançamento aponta, não precisa reabrir cooldown da conta em si (ela pode já estar ACTIVE há
+  // meses), mas precisa de revisão humana antes de poder ser liquidado.
+  // FIX FIN-TS-004 — mesma checagem de createFinancialEntry: um redirecionamento de conta
+  // bancária (troca de favorecido) nunca pode apontar pra uma conta de outra empresa.
+  if (bankAccountId) {
+    const bankAccount = await getBankAccount(bankAccountId, transaction);
+    if (bankAccount.companyId !== entry.companyId) {
+      throw AppError.badRequest(
+        'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
+        'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
+      );
+    }
+  }
+
+  const isBankAccountRedirect = bankAccountId !== undefined && entry.bankAccountId && bankAccountId && bankAccountId !== entry.bankAccountId;
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;
   if (dueAt !== undefined) entry.dueAt = dueAt;
   if (description !== undefined) entry.description = description;
   entry.updatedBy = actorUserId || null;
+  if (isBankAccountRedirect) {
+    entry.requiresManualReview = true;
+    entry.manualReviewReason = `Beneficiário alterado após a criação do lançamento (conta bancária redirecionada) — revisão manual obrigatória antes de liquidar.`;
+    entry.manualReviewClearedAt = null;
+    entry.manualReviewClearedBy = null;
+  }
   await entry.save({ transaction });
 
   await registrarAuditoria(
@@ -299,8 +379,25 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
 /**
  * settleFinancialEntry — baixa/liquida o lançamento (marca como pago/recebido). Se houver
  * `bankAccountId`, valida elegibilidade antifraude (cooldown/bloqueio) antes de liquidar.
+ *
+ * FIX FIN-004 (auditoria externa Abacus AI, 11/10/2026): esta função é chamada TANTO pelo
+ * fluxo correto de pagamento (executePaymentIntent/confirmBankPayment, só depois de
+ * payment_intent aprovado com snapshot/hash — Caderno §8) QUANTO diretamente pela rota HTTP
+ * `POST /finance/entries/:id/settle`, que só exigia permissão + 2FA — sem NENHUMA checagem de
+ * que um PAGAMENTO (nature PAYABLE) passou pela aprovação prévia obrigatória. A auditora
+ * reproduziu isso ao vivo: "lançamento de teste não entrou na fila de aprovações; ação
+ * 'Liquidar' apareceu direto no detalhe". `options.viaApprovedPaymentIntent` é passado como
+ * `true` SÓ pelos dois chamadores internos legítimos (que só chegam aqui depois do
+ * payment_intent ter sido aprovado/executado). Alternativamente, a liquidação direta é
+ * liberada se já existir uma `ApprovalRequest` APPROVED para este FinancialEntry
+ * (`approvals.service.js#isApprovalRequestApproved` — helper que já existia pronto pra isso,
+ * mas nunca tinha sido chamado por nenhum outro service, como o próprio comentário dele
+ * admitia: "uso opcional... este módulo não força nenhum outro service a exigir aprovação").
+ * RECEIVABLE/TRANSFER/ADJUSTMENT não exigem isso: o Caderno (§10) descreve recebimento como
+ * fluxo direto, sem aprovação prévia.
  */
-async function settleFinancialEntry(id, actorUserId, transaction) {
+async function settleFinancialEntry(id, actorUserId, transaction, options = {}) {
+  const { viaApprovedPaymentIntent = false } = options;
   // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
   // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
   // de qualquer uma commitar e ambas liquidavam — evento de liquidação publicado 2x, com efeito
@@ -317,6 +414,27 @@ async function settleFinancialEntry(id, actorUserId, transaction) {
   if (entry.status !== 'PENDING') {
     throw AppError.conflict(`Só é possível liquidar um lançamento PENDING (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
   }
+  // Escopo do gate: só exige aprovação prévia quando o PAYABLE tem bankAccountId — ou seja,
+  // quando representa de fato uma EXECUÇÃO BANCÁRIA (Caderno §8, "Integração bancária retorna
+  // estado"). Um PAYABLE sem bankAccountId é um lançamento contábil (ex.: custo de medição em
+  // obra, nota de compra) que ainda não está ligado a uma saída de dinheiro de banco — settled
+  // aqui é só o registro contábil; a execução bancária real acontece depois, quando um
+  // bankAccountId for atribuído, e aí sim passa por este mesmo gate.
+  if (entry.nature === 'PAYABLE' && entry.bankAccountId && !viaApprovedPaymentIntent) {
+    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
+    if (!hasApprovedRequest) {
+      throw AppError.conflict(
+        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado sem aprovação prévia — crie um payment_intent com snapshot/hash, ou uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
+        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+      );
+    }
+  }
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A02, 15/10/2026): esta função nunca
+  // checava se a competência já estava num período FECHADO antes de liquidar — só a baixa
+  // PARCIAL fazia essa checagem. Dava pra liquidar um PAYABLE/RECEIVABLE integral num mês já
+  // fechado por este caminho, quebrando a garantia de `closePeriod` de que o número visto no
+  // fechamento não muda depois. Mesma checagem já usada em settleFinancialEntryPartial.
+  await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
   assertNotUnderManualReview(entry);
   const beforeJson = entry.toJSON();
 
@@ -370,6 +488,15 @@ function fromCents(cents) {
   return (cents / 100).toFixed(2);
 }
 
+// BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): a `description` do
+// lançamento de baixa parcial (visível em seletores de UI, ex.: baixa de parcela de seguro)
+// embutia o valor cru ("60.00") e o UUID do lançamento original — jargão técnico vazando pro
+// usuário final. `descriptionToBRL` formata em pt-BR; a description referencia o lançamento
+// original pela SUA PRÓPRIA descrição de negócio, nunca pelo UUID.
+function toBRLDisplay(decimalString) {
+  return Number(decimalString).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 /**
  * computeRemainingAmount — saldo em aberto do lançamento = amount - Σ(baixas parciais filhas
  * que estão SETTLED). Retorna string com 2 casas (mesma precisão do DECIMAL(18,2)).
@@ -400,6 +527,23 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       'FINANCE_ENTRY_INVALID_STATUS'
     );
   }
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A01, 15/10/2026): uma tentativa
+  // anterior de aplicar este mesmo gate aqui foi revertida porque quebrava os testes de
+  // aceite de M4-06 — mas aqueles testes baixavam PAYABLE com bankAccountId sem nunca
+  // aprovar, o que é exatamente a brecha que a auditora reproduziu: dava pra contornar a
+  // exigência de aprovação de um pagamento bancário fazendo a baixa em pedaços parciais (até
+  // 100% do valor, de uma vez) em vez de uma baixa integral só. O gate agora é IDÊNTICO ao de
+  // settleFinancialEntry (mesmo escopo: só PAYABLE com bankAccountId) — os testes antigos
+  // foram corrigidos para aprovar antes de baixar, não para contornar a aprovação.
+  if (entry.nature === 'PAYABLE' && entry.bankAccountId) {
+    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
+    if (!hasApprovedRequest) {
+      throw AppError.conflict(
+        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado (nem parcialmente) sem aprovação prévia — crie uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
+        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+      );
+    }
+  }
   assertNotUnderManualReview(entry);
   assertPositiveAmount(partialAmount);
 
@@ -413,12 +557,19 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
 
   const partialCents = toCents(partialAmount);
   const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
-  if (partialCents > remainingCents) {
-    throw AppError.badRequest(
-      `Valor da baixa parcial (${fromCents(partialCents)}) é maior que o saldo restante do lançamento (${fromCents(remainingCents)}).`,
-      'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING'
-    );
-  }
+
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
+  // parcelas"): "Recebimento pode ser total, parcial, antecipado ou excedente" e "Valor
+  // excedente nunca é automaticamente tratado como receita; abre pendência de classificação."
+  // O comportamento ANTERIOR rejeitava (400 FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING) qualquer
+  // baixa acima do saldo restante — isso é o CONTRÁRIO do que o contrato pede: o recebimento
+  // precisa ser ACEITO (nunca é bloqueio), e é o EXCEDENTE que precisa ficar retido como
+  // pendência (nunca reconhecido automaticamente como receita/despesa própria). Agora: a parte
+  // que cabe no saldo restante baixa o lançamento normalmente; a parte excedente (se houver)
+  // cria um lançamento-filho separado, nature=PENDING_CLASSIFICATION, status PENDING — não
+  // SETTLED, porque não é receita até alguém classificar.
+  const appliedCents = Math.min(partialCents, remainingCents);
+  const excessCents = partialCents - appliedCents;
 
   if (entry.bankAccountId) {
     await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
@@ -436,8 +587,8 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       contractId: entry.contractId,
       entryType: entry.entryType,
       nature: entry.nature,
-      amount: fromCents(partialCents),
-      description: `Baixa parcial de ${fromCents(partialCents)} do lançamento ${entry.id}.`,
+      amount: fromCents(appliedCents),
+      description: `Baixa parcial de ${toBRLDisplay(fromCents(appliedCents))} — ${entry.description || 'lançamento financeiro'}`,
       dueAt: entry.dueAt,
       // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
       // mesma; o que mudou foi só o momento do caixa).
@@ -453,7 +604,37 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
     { transaction }
   );
 
-  const newRemainingCents = remainingCents - partialCents;
+  let classificationPending = null;
+  if (excessCents > 0) {
+    classificationPending = await FinancialEntry.create(
+      {
+        groupId: entry.groupId,
+        companyId: entry.companyId,
+        bankAccountId: entry.bankAccountId,
+        costCenterId: null,
+        resultCenterId: null,
+        contractId: entry.contractId,
+        entryType: entry.entryType,
+        nature: 'PENDING_CLASSIFICATION',
+        amount: fromCents(excessCents),
+        description:
+          `Excedente de ${fromCents(excessCents)} recebido acima do saldo restante do lançamento ${entry.id} ` +
+          '— pendência de classificação (FIN: valor excedente nunca é automaticamente receita).',
+        dueAt: null,
+        competenceMonth: entry.competenceMonth,
+        settledAt: null,
+        status: 'PENDING',
+        idempotencyKey: null,
+        reversalOfEntryId: null,
+        parentEntryId: entry.id,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+
+  const newRemainingCents = remainingCents - appliedCents;
   entry.status = newRemainingCents === 0 ? 'SETTLED' : 'PARTIALLY_SETTLED';
   if (newRemainingCents === 0) entry.settledAt = new Date();
   entry.updatedBy = actorUserId || null;
@@ -473,17 +654,87 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       afterJson: {
         original: entry.toJSON(),
         settlementEntryId: settlement.id,
-        partialAmount: fromCents(partialCents),
+        appliedAmount: fromCents(appliedCents),
         remainingAmount: fromCents(newRemainingCents),
+        excessAmount: excessCents > 0 ? fromCents(excessCents) : '0.00',
+        classificationPendingEntryId: classificationPending ? classificationPending.id : null,
       },
       reason:
-        `Baixa parcial de ${fromCents(partialCents)} registrada no lançamento de ${entry.amount} ` +
-        `(saldo restante ${fromCents(newRemainingCents)}).`,
+        excessCents > 0
+          ? `Recebimento de ${fromCents(partialCents)} processado: ${fromCents(appliedCents)} baixou o ` +
+            `lançamento de ${entry.amount} (saldo restante ${fromCents(newRemainingCents)}) e ${fromCents(excessCents)} ` +
+            `excedente abriu pendência de classificação ${classificationPending.id} — nunca tratado como receita.`
+          : `Baixa parcial de ${fromCents(appliedCents)} registrada no lançamento de ${entry.amount} ` +
+            `(saldo restante ${fromCents(newRemainingCents)}).`,
     },
     transaction
   );
 
-  return { original: entry, settlement, remainingAmount: fromCents(newRemainingCents) };
+  return {
+    original: entry,
+    settlement,
+    remainingAmount: fromCents(newRemainingCents),
+    classificationPending,
+  };
+}
+
+/**
+ * listClassificationPendings — pendências de classificação abertas (M4-contrato §10):
+ * lançamentos-filhos nature=PENDING_CLASSIFICATION ainda PENDING, agrupados pelo lançamento
+ * original que gerou o excedente.
+ */
+async function listClassificationPendings(transaction, filters = {}) {
+  const where = { nature: 'PENDING_CLASSIFICATION' };
+  if (filters.status) where.status = String(filters.status).toUpperCase();
+  if (filters.parentEntryId) where.parentEntryId = filters.parentEntryId;
+  return FinancialEntry.findAll({ where, order: [['created_at', 'DESC']], transaction });
+}
+
+/**
+ * resolveClassificationPending — fecha a pendência: um humano decide a classificação final do
+ * excedente, convertendo a nature para a definitiva (ex.: RECEIVABLE de outro contrato,
+ * ADJUSTMENT, devolução). NUNCA automático (é exatamente o oposto do que o contrato proíbe).
+ */
+async function resolveClassificationPending(id, finalNature, actorUserId, transaction) {
+  const pending = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!pending) throw AppError.notFound('Pendência de classificação não encontrada.', 'FINANCE_CLASSIFICATION_PENDING_NOT_FOUND');
+  if (pending.nature !== 'PENDING_CLASSIFICATION') {
+    throw AppError.conflict('Este lançamento não é uma pendência de classificação.', 'FINANCE_CLASSIFICATION_PENDING_INVALID');
+  }
+  if (pending.status !== 'PENDING') {
+    throw AppError.conflict('Esta pendência já foi resolvida.', 'FINANCE_CLASSIFICATION_PENDING_ALREADY_RESOLVED');
+  }
+  const normalizedNature = String(finalNature || '').toUpperCase();
+  if (!['RECEIVABLE', 'PAYABLE', 'ADJUSTMENT'].includes(normalizedNature)) {
+    throw AppError.badRequest(
+      'O campo "finalNature" deve ser um de: RECEIVABLE, PAYABLE, ADJUSTMENT.',
+      'FINANCE_CLASSIFICATION_PENDING_VALIDATION'
+    );
+  }
+
+  const beforeJson = pending.toJSON();
+  pending.nature = normalizedNature;
+  pending.status = 'SETTLED';
+  pending.settledAt = new Date();
+  pending.updatedBy = actorUserId || null;
+  await pending.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: pending.groupId,
+      companyId: pending.companyId,
+      actorUserId,
+      action: 'finance.entry.classification_pending.resolve',
+      entityType: 'FinancialEntry',
+      entityId: pending.id,
+      beforeJson,
+      afterJson: pending.toJSON(),
+      reason: `Pendência de classificação resolvida manualmente como ${normalizedNature}.`,
+    },
+    transaction
+  );
+
+  return pending;
 }
 
 /**
@@ -557,6 +808,28 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
     transaction
   );
 
+  // GAP REAL CORRIGIDO (Caderno §17, "Estorno frequente → Anomaly case"): checkFrequentReversalAlert
+  // já calculava o sinal (N estornos na janela), mas nunca era chamada por nenhum fluxo real —
+  // só por teste. Agora, a cada estorno, confere se a empresa cruzou o limiar e abre um caso de
+  // anomalia (idempotente o bastante na prática: um caso por estorno que cruza o limiar; não é
+  // um problema duplicar o alerta aqui, ao contrário de duplicar dinheiro).
+  const reversalAlert = await checkFrequentReversalAlert(original.companyId, transaction);
+  if (reversalAlert.flagged) {
+    await createAnomalyCase(
+      {
+        groupId: original.groupId,
+        companyId: original.companyId,
+        caseType: 'FREQUENT_REVERSAL',
+        riskLevel: 'HIGH',
+        relatedEntityType: 'FinancialEntry',
+        relatedEntityId: original.id,
+        reason: `${reversalAlert.count} estornos nos últimos ${reversalAlert.windowDays} dias — acima do limiar configurado.`,
+      },
+      actorUserId,
+      transaction
+    );
+  }
+
   return { original, reversal };
 }
 
@@ -567,6 +840,8 @@ module.exports = {
   updateFinancialEntry,
   settleFinancialEntry,
   settleFinancialEntryPartial,
+  listClassificationPendings,
+  resolveClassificationPending,
   computeRemainingAmount,
   resolveCompetenceMonth,
   reverseFinancialEntry,
