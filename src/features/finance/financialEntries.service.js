@@ -429,6 +429,12 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
       );
     }
   }
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A02, 15/10/2026): esta função nunca
+  // checava se a competência já estava num período FECHADO antes de liquidar — só a baixa
+  // PARCIAL fazia essa checagem. Dava pra liquidar um PAYABLE/RECEIVABLE integral num mês já
+  // fechado por este caminho, quebrando a garantia de `closePeriod` de que o número visto no
+  // fechamento não muda depois. Mesma checagem já usada em settleFinancialEntryPartial.
+  await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
   assertNotUnderManualReview(entry);
   const beforeJson = entry.toJSON();
 
@@ -512,14 +518,23 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       'FINANCE_ENTRY_INVALID_STATUS'
     );
   }
-  // NOTA (avaliado para FIN-004, não aplicado aqui): cheguei a considerar bloquear baixa
-  // PARCIAL de PAYABLE pela mesma lacuna de aprovação prévia da liquidação TOTAL
-  // (settleFinancialEntry), mas os testes de aceite já existentes (M4-06, "contrato §10")
-  // exercitam deliberadamente baixa parcial sobre PAYABLE como comportamento correto — "§10.
-  // Recebimentos e parcelas" cobre tanto recebimento quanto parcelamento de pagamento. Reverti
-  // a restrição aqui para não quebrar esse comportamento já aceito; o gate de aprovação prévia
-  // fica só na liquidação TOTAL (settleFinancialEntry), que foi o cenário exato reproduzido
-  // pela auditora.
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A01, 15/10/2026): uma tentativa
+  // anterior de aplicar este mesmo gate aqui foi revertida porque quebrava os testes de
+  // aceite de M4-06 — mas aqueles testes baixavam PAYABLE com bankAccountId sem nunca
+  // aprovar, o que é exatamente a brecha que a auditora reproduziu: dava pra contornar a
+  // exigência de aprovação de um pagamento bancário fazendo a baixa em pedaços parciais (até
+  // 100% do valor, de uma vez) em vez de uma baixa integral só. O gate agora é IDÊNTICO ao de
+  // settleFinancialEntry (mesmo escopo: só PAYABLE com bankAccountId) — os testes antigos
+  // foram corrigidos para aprovar antes de baixar, não para contornar a aprovação.
+  if (entry.nature === 'PAYABLE' && entry.bankAccountId) {
+    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
+    if (!hasApprovedRequest) {
+      throw AppError.conflict(
+        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado (nem parcialmente) sem aprovação prévia — crie uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
+        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+      );
+    }
+  }
   assertNotUnderManualReview(entry);
   assertPositiveAmount(partialAmount);
 

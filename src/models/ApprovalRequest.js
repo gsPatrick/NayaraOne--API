@@ -53,6 +53,15 @@ module.exports = (sequelize) => {
         defaultValue: 'MEDIUM',
         field: 'risk_level',
       },
+      // Achado A10 (auditoria Nayara, 15/10/2026): snapshot do lock_version da entidade
+      // relacionada, capturado NO SERVIDOR no momento da criação da solicitação (nunca confiado
+      // do cliente). decideApprovalStep valida isso sempre que presente — omitir o campo na
+      // decisão não dispensa mais a checagem de staleness.
+      lockVersionAtRequest: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'lock_version_at_request',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

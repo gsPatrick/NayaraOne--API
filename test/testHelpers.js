@@ -112,9 +112,12 @@ async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix
  * semanal, idempotência de replay) usam este helper pra abrir+aprovar uma ApprovalRequest LOW
  * (1 aprovador) antes de liquidar, em vez de repetir o boilerplate em cada teste.
  */
-async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
+// Cria e aprova uma ApprovalRequest pro lançamento, sem liquidar — reusável tanto pra baixa
+// integral (settleFinancialEntry) quanto parcial (settleFinancialEntryPartial), já que o gate
+// de aprovação de PAYABLE+bankAccountId é idêntico nas duas (achado A01, auditoria Nayara
+// 15/10/2026: baixa parcial contornava a aprovação exigida da baixa integral).
+async function approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction) {
   const approvalsService = require('../src/features/finance/approvals.service');
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
   const { User } = require('../src/models');
   const suffix = uniqueSuffix();
   const [approver] = await User.findOrCreate({
@@ -126,7 +129,12 @@ async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, tr
     actorUserId,
     transaction
   );
-  await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+  return approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
+}
+
+async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
+  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
   return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
 }
 
@@ -149,6 +157,7 @@ async function waiveAllContractRequirements(contractId, actorUserId, transaction
 
 module.exports = {
   settleFinancialEntryWithApproval,
+  approveFinancialEntryForSettlement,
   sequelize,
   getSeedTenant,
   withTenantTransaction,

@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -194,6 +194,7 @@ test('ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredo
     const entry = await createEntry(transaction, { amount: 10.005, bankAccountId: account.id });
     const relido = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(String(relido.amount), '10.01', 'o ledger guarda exatamente 2 casas — nada de fração escondida');
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     // Tentar sacar a fração "extra" que o atacante acha que sobrou.
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction);
@@ -622,6 +623,7 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
   const { entryId, accountId } = await withCommitted(async (t) => {
     const account = await createActiveBankAccount(t, suffix);
     const entry = await createEntry(t, { amount: 100, bankAccountId: account.id, description: `QA ADV-F21 ${suffix}` });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
     return { entryId: entry.id, accountId: account.id };
   });
 

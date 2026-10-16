@@ -51,6 +51,19 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     });
   }
 
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): o snapshot de
+  // versão precisa ser capturado AQUI, no servidor, no momento da solicitação — nunca confiado
+  // do que o decisor manda depois (um cliente mal-intencionado ou desatualizado podia omitir
+  // `expectedLockVersion` na decisão e pular a checagem de staleness inteira).
+  let lockVersionAtRequest = null;
+  const RequestModel = ENTITY_MODELS[relatedEntityType];
+  if (RequestModel) {
+    const relatedEntity = await RequestModel.findByPk(relatedEntityId, { transaction });
+    if (relatedEntity && 'lockVersion' in relatedEntity.dataValues) {
+      lockVersionAtRequest = Number(relatedEntity.lockVersion);
+    }
+  }
+
   const approvalRequest = await ApprovalRequest.create(
     {
       groupId,
@@ -60,6 +73,7 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
       requestedByUserId: actorUserId,
       status: 'PENDING',
       riskLevel: normalizedRisk,
+      lockVersionAtRequest,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -219,11 +233,26 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
     await assertRecentMfa(approverUserId, transaction);
   }
 
-  if (expectedLockVersion !== undefined) {
-    const Model = ENTITY_MODELS[approvalRequest.relatedEntityType];
-    if (Model) {
-      const entity = await Model.findByPk(approvalRequest.relatedEntityId, { transaction });
-      if (entity && 'lockVersion' in entity.dataValues && Number(entity.lockVersion) !== Number(expectedLockVersion)) {
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): a validação de
+  // staleness ERA condicional a `expectedLockVersion !== undefined` — um cliente que omitisse
+  // esse campo (de propósito ou não) pulava a checagem inteira, mesmo que a entidade tivesse
+  // mudado de verdade desde a solicitação. Agora a checagem usa o snapshot CAPTURADO NO
+  // SERVIDOR (`approvalRequest.lockVersionAtRequest`, gravado em createApprovalRequest) e roda
+  // SEMPRE que esse snapshot existir — fail closed, nunca dispensável pelo payload do decisor.
+  // `expectedLockVersion`, se enviado pelo cliente, ainda precisa bater com o valor ATUAL
+  // também (defesa em profundidade, mesmo UI que já viu uma versão mais recente que a
+  // solicitação original não pode aprovar sem recarregar).
+  const RelatedModel = ENTITY_MODELS[approvalRequest.relatedEntityType];
+  if (RelatedModel) {
+    const entity = await RelatedModel.findByPk(approvalRequest.relatedEntityId, { transaction });
+    if (entity && 'lockVersion' in entity.dataValues) {
+      const currentLockVersion = Number(entity.lockVersion);
+      const staleAgainstSnapshot =
+        approvalRequest.lockVersionAtRequest !== null &&
+        approvalRequest.lockVersionAtRequest !== undefined &&
+        Number(approvalRequest.lockVersionAtRequest) !== currentLockVersion;
+      const staleAgainstClientValue = expectedLockVersion !== undefined && Number(expectedLockVersion) !== currentLockVersion;
+      if (staleAgainstSnapshot || staleAgainstClientValue) {
         throw AppError.conflict(
           'A entidade relacionada foi alterada desde que esta solicitação foi revisada — aprovação recusada por segurança (dado desatualizado).',
           'FINANCE_APPROVAL_STALE'

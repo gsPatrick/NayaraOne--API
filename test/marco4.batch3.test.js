@@ -10,7 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -137,6 +137,7 @@ test('M4-06 duas baixas parciais fecham o lançamento: soma bate no centavo e o 
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 1000.33, bankAccountId: account.id });
     const amountOriginal = String(entry.amount);
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     const primeira = await financialEntriesService.settleFinancialEntryPartial(entry.id, 400.11, tenant.userId, transaction);
     assert.equal(primeira.original.status, 'PARTIALLY_SETTLED');
@@ -171,6 +172,7 @@ test('M4-06/contrato §10 baixa parcial maior que o saldo restante é ACEITA (nu
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 70, tenant.userId, transaction);
 
@@ -207,6 +209,7 @@ test('M4-contrato §10 recebimento ANTECIPADO (antes do vencimento) baixa o lan�
     const account = await createActiveBankAccount(transaction, suffix);
     const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias no futuro
     const entry = await createEntry(transaction, { amount: 500, bankAccountId: account.id, dueAt: futureDueAt });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
     const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 500, tenant.userId, transaction);
     assert.equal(result.original.status, 'SETTLED');
@@ -221,6 +224,7 @@ test('M4-06 lançamento com baixa parcial não aceita mais liquidação TOTAL pe
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 200, bankAccountId: account.id });
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
     await financialEntriesService.settleFinancialEntryPartial(entry.id, 50, tenant.userId, transaction);
 
     await assert.rejects(
