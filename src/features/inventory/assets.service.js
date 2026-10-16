@@ -133,15 +133,23 @@ async function getAssetByTag(assetTag, groupId, companyId, transaction) {
   const asset = await Asset.findOne({ where: { assetTag: { [Op.iLike]: assetTag }, groupId, companyId }, transaction });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado para este QR Code.', 'ASSET_NOT_FOUND');
 
-  const [lastMovement, openMaintenance, activeLoan] = await Promise.all([
-    AssetMovement.findOne({ where: { assetId: asset.id, groupId, companyId }, order: [['moved_at', 'DESC']], transaction }),
+  // BUG REAL CORRIGIDO (auditoria Marco 7, rodada "check", 15/10/2026, achado 3): "lastMovement"
+  // devolvia a linha crua de AssetMovement (transferência/baixa), sem o campo "movementType" —
+  // que só é calculado em listAssetMovements(). O front lê `lastMovement.movementType` pra montar
+  // o rótulo ("Último movimento: ... em ..."), e como o campo nunca existia aqui, sempre mostrava
+  // "undefined". Além disso, empréstimo/devolução (InventoryToolLoan) nunca entravam nessa conta —
+  // mesmo gap que já tinha sido corrigido em listAssetMovements (achado F11), mas não replicado
+  // aqui. Reusa a MESMA fonte unificada de listAssetMovements, já com movementType calculado, e
+  // pega só o mais recente — elimina a duplicação de critério entre os dois endpoints.
+  const [unifiedMovements, openMaintenance, activeLoan] = await Promise.all([
+    listAssetMovements(asset.id, groupId, companyId, transaction),
     InventoryMaintenanceOrder.findOne({ where: { assetId: asset.id, groupId, companyId, status: 'OPEN' }, order: [['opened_at', 'DESC']], transaction }),
     InventoryToolLoan.findOne({ where: { assetId: asset.id, groupId, companyId, status: { [Op.in]: ['OPEN', 'OVERDUE'] } }, transaction }),
   ]);
 
   return {
     asset,
-    lastMovement: lastMovement || null,
+    lastMovement: unifiedMovements[0] || null,
     openMaintenance: openMaintenance || null,
     activeLoan: activeLoan || null,
     // GAP 2 (Caderno §9): depreciação informativa — ver computeEstimatedCurrentValue.

@@ -205,6 +205,48 @@ test('Item 11: getAssetByTag devolve ficha preenchida com último movimento, man
   });
 });
 
+// ACHADO REAL (auditoria Marco 7, rodada "check", 15/10/2026, achado 3): lastMovement devolvia a
+// linha crua de AssetMovement, sem "movementType" (só calculado em listAssetMovements) — o card
+// de busca por QR no front mostrava "Último movimento: undefined". Prova que getAssetByTag agora
+// devolve o mesmo formato unificado de listAssetMovements (com movementType já calculado).
+test('Item 11 (achado "check" #3): getAssetByTag devolve lastMovement com movementType preenchido (nunca undefined)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    await assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: destination.id }, tenant.userId, transaction);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(ficha.lastMovement.movementType, 'TRANSFER', 'front lê lastMovement.movementType pra montar o rótulo — não pode ficar undefined');
+  });
+});
+
+// ACHADO REAL (auditoria Marco 7, rodada "check", 15/10/2026, achado 3): "Último movimento" nunca
+// refletia empréstimo/devolução (só transferência/baixa) — mesmo gap que listAssetMovements já
+// tinha corrigido (achado F11), mas que getAssetByTag não herdava. Empresta e devolve (sem
+// nenhuma transferência) e confere que o card mostra a devolução como último movimento.
+test('Item 11 (achado "check" #3): getAssetByTag mostra empréstimo/devolução como lastMovement, não só transferência/baixa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    const loan = await toolLoansService.loanTool(
+      asset.id,
+      { personUserId: tenant.userId, destinationLocationId: destination.id },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+
+    const afterLoan = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(afterLoan.lastMovement.movementType, 'LOAN', 'logo após emprestar, o último movimento deveria ser o empréstimo, não "nenhum registrado"');
+
+    await toolLoansService.returnTool(loan.id, { conditionCode: 'OK' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+
+    const afterReturn = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(afterReturn.lastMovement.movementType, 'RETURN', 'após devolver, o último movimento deveria ser a devolução');
+  });
+});
+
 test('Item 11: getAssetByTag mostra a OS de manutenção aberta mais recente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
