@@ -582,6 +582,10 @@ const linkCaseToTask = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => legalCasesService.linkCaseToTask(req.params.id, req.body.taskId, req.auth.userId, t));
   return success(res, { data: item });
 });
+const setLegalHold = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.setLegalHold(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
 
 // --- Legal deadlines ---
 const createLegalDeadline = catchAsync(async (req, res) => {
@@ -659,7 +663,7 @@ module.exports = {
   createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
   createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
-  createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask,
+  createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, setLegalHold,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
   createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
 };

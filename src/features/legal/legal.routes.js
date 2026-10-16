@@ -131,6 +131,7 @@ legalRouter.get('/legal/cases', requirePermission('legal:read'), legalController
 legalRouter.get('/legal/cases/:id', requirePermission('legal:read'), legalController.getLegalCase);
 legalRouter.patch('/legal/cases/:id', requirePermission('legal:update'), legalController.updateLegalCase);
 legalRouter.post('/legal/cases/:id/link-task', requirePermission('legal:update'), legalController.linkCaseToTask);
+legalRouter.post('/legal/cases/:id/legal-hold', requirePermission('legal:update'), legalController.setLegalHold);
 
 // Legal deadlines
 legalRouter.post('/legal/cases/:id/deadlines', requirePermission('legal:create'), legalController.createLegalDeadline);
