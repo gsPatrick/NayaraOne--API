@@ -17,6 +17,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const receiptsService = require('../src/features/inventory/receipts.service');
+const filesService = require('../src/features/files/files.service');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -173,5 +174,32 @@ test('M7CHECK-02: nota fiscal com o mesmo número não pode ser confirmada duas 
         return true;
       }
     );
+  });
+});
+
+// BUG REAL CORRIGIDO (auditoria "check" rodada 2, 15/10/2026): recebimento com NF + arquivo
+// anexado (invoiceFileId) era recusado com "é preciso anexar o arquivo" porque a validação só
+// olhava o campo de texto livre "invoiceFingerprint", nunca o arquivo de verdade.
+test('M7CHECK-03: recebimento com invoiceNumber + arquivo anexado (invoiceFileId), SEM invoiceFingerprint, é aceito', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const { item, warehouseA } = await createItemAndTwoWarehouses(transaction, suffix);
+    const file = await filesService.uploadFile(
+      withTenant({ fileName: `nf-${suffix}.pdf`, mimeType: 'application/pdf', contentBase64: Buffer.from('NF M7CHECK-03').toString('base64'), category: 'generic' }),
+      tenant.userId,
+      transaction
+    );
+
+    const receipt = await receiptsService.createReceipt(
+      withTenant({
+        destinationLocationId: warehouseA.id,
+        invoiceNumber: `M7CHECK-03-NF-${suffix}`,
+        invoiceFileId: file.id,
+        items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 3 }],
+      }),
+      tenant.userId,
+      transaction
+    );
+    assert.ok(receipt.id, 'recebimento com NF + arquivo anexado (sem fingerprint) deve ser aceito, não recusado');
   });
 });

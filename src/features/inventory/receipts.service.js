@@ -36,15 +36,16 @@ async function createReceipt(payload, actorUserId, transaction) {
   const location = await InventoryLocation.findByPk(destinationLocationId, { transaction });
   if (!location) throw AppError.notFound('Local de destino não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
 
-  // GAP REAL CORRIGIDO (auditoria Marco 7, Caderno §6 EST-TS-08, 2026-10-08): a checagem de
-  // duplicidade por invoiceFingerprint só rodava SE o chamador decidisse mandar o campo — um
-  // recebimento vinculado a uma NF real (invoiceNumber e/ou supplierPersonId informados) podia
-  // simplesmente omitir invoiceFingerprint e pular a detecção de duplicidade inteira. Recebimento
-  // manual sem NF associada (sem invoiceNumber nem supplierPersonId) continua podendo não ter
-  // fingerprint — não há documento pra "impressão digital".
-  if ((invoiceNumber || supplierPersonId) && !invoiceFingerprint) {
+  // BUG REAL CORRIGIDO (auditoria Marco 7, rodada "check", 2026-10-15): esta checagem só olhava
+  // "invoiceFingerprint" (campo de texto livre opcional, "Identificador único"), mas o front manda
+  // o arquivo anexado em "invoiceFileId" — um usuário que anexa a NF de verdade mas não preenche o
+  // texto opcional era recusado com "é preciso anexar o arquivo", mesmo com o arquivo já anexado.
+  // Além disso, desde a correção anterior (EST-TS-08), a checagem por "invoiceNumber" abaixo já
+  // detecta duplicidade de verdade sozinha quando o número da nota é informado — então só falta
+  // uma evidência (arquivo OU fingerprint) quando NÃO há número de nota pra se apoiar.
+  if ((invoiceNumber || supplierPersonId) && !invoiceNumber && !invoiceFingerprint && !invoiceFileId) {
     throw AppError.badRequest(
-      'Quando o recebimento tem número de nota fiscal e/ou fornecedor, é preciso anexar o arquivo da nota para detectar duplicidade.',
+      'Quando o recebimento tem fornecedor mas não tem número de nota fiscal, é preciso anexar o arquivo da nota para detectar duplicidade.',
       'INVENTORY_RECEIPT_FINGERPRINT_REQUIRED'
     );
   }
