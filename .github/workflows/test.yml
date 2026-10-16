@@ -6,11 +6,16 @@ name: CI
 # mock), roda migrations + seeds + a suíte de testes completa a cada push/PR, e falha o
 # build se qualquer teste falhar — evidência objetiva e verificável no próprio GitHub Actions.
 
+# GAP REAL CORRIGIDO (auditoria complementar Marcos 4/5, Nayara, 14/10/2026, Seção 5 item #3:
+# "Logs e artefatos do CI do hash correspondente... Não basta o número agregado 'verde'"): até
+# aqui o trigger só cobria `main`, então o CI nunca rodou contra a branch de trabalho real
+# `marco-6-e-7-homologado-nayara` — o hash auditado pela cliente nunca teve uma execução deste
+# workflow correspondente. Adicionado o push/PR dessa branch também, sem remover `main`.
 on:
   push:
-    branches: [main]
+    branches: [main, marco-6-e-7-homologado-nayara]
   pull_request:
-    branches: [main]
+    branches: [main, marco-6-e-7-homologado-nayara]
 
 jobs:
   test:
@@ -140,9 +145,23 @@ jobs:
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"
           done
 
+      # Mesmo pedido acima: grava a saída completa (nome + resultado de cada teste do reporter
+      # "spec" do Node, mais o resumo "# pass"/"# fail" com contagem exata) em arquivo, e sobe
+      # como artifact do run — fica baixável e comprovável por hash/commit depois do workflow
+      # terminar, não só visível (e perdível) no log ao vivo do Actions.
       - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
         env:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
-        run: npm test
+        run: |
+          set -o pipefail
+          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee test-results.log
+
+      - name: Publicar artifact com resultado individual dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: test-results.log
+          retention-days: 90
