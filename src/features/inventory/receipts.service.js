@@ -1,7 +1,18 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { InventoryReceipt, InventoryReceiptItem, InventoryLocation, InventoryItem, InventoryStockBalance, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+
+// BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): a checagem de NF duplicada
+// comparava invoiceNumber por igualdade exata (case/espaço sensível) — "AUDIT-NF-0001" e
+// "audit-nf-0001" (ou com espaço extra) eram tratados como notas DIFERENTES, permitindo dupla
+// entrada de estoque pela mesma nota fiscal digitada de forma diferente. Número de NF é a chave
+// de negócio real; precisa normalizar (trim + colapsar espaços internos) e comparar
+// case-insensitive (ILIKE) antes de checar duplicidade.
+function normalizeInvoiceNumber(invoiceNumber) {
+  return invoiceNumber.trim().replace(/\s+/g, ' ');
+}
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishReceiptCompleted } = require('./inventoryEvents.service');
@@ -69,13 +80,14 @@ async function createReceipt(payload, actorUserId, transaction) {
   // e nunca deveria aceitar duplicata nesta empresa, independente do que foi digitado no campo de
   // identificador.
   if (invoiceNumber) {
+    const normalizedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
     const existingByNumber = await InventoryReceipt.findOne({
-      where: { companyId, invoiceNumber: invoiceNumber.trim() },
+      where: { companyId, invoiceNumber: { [Op.iLike]: normalizedInvoiceNumber } },
       transaction,
     });
     if (existingByNumber) {
       throw AppError.badRequest(
-        `Já existe um recebimento registrado para a nota fiscal nº ${invoiceNumber.trim()}.`,
+        `Já existe um recebimento registrado para a nota fiscal nº ${existingByNumber.invoiceNumber}.`,
         'INVENTORY_RECEIPT_DUPLICATE_INVOICE'
       );
     }
@@ -87,7 +99,7 @@ async function createReceipt(payload, actorUserId, transaction) {
       companyId,
       destinationLocationId,
       supplierPersonId: supplierPersonId || null,
-      invoiceNumber: invoiceNumber || null,
+      invoiceNumber: invoiceNumber ? normalizeInvoiceNumber(invoiceNumber) : null,
       invoiceFingerprint: invoiceFingerprint || null,
       invoiceFileId: invoiceFileId || null,
       notes: notes || null,

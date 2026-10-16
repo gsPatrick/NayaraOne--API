@@ -23,9 +23,13 @@ class SandboxInsuranceAdapter {
   }
 
   async issuePolicy(req) {
+    // BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): o número de apólice
+    // simulado usava o prefixo técnico "SANDBOX-", vazando pra UI final do usuário (lista,
+    // detalhe e número da apólice). Usuário não deveria ver jargão de ambiente de teste no
+    // documento; "APL-" (apólice) é o prefixo visível, igual ao que uma apólice real teria.
     return {
       externalId: `sandbox-policy-${req.idempotencyKey || Date.now()}`,
-      policyNumber: `SANDBOX-${Date.now()}`,
+      policyNumber: `APL-${Date.now()}`,
       status: 'ACTIVE',
       raw: { sandbox: true, req },
     };

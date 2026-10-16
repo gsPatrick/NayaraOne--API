@@ -488,6 +488,15 @@ function fromCents(cents) {
   return (cents / 100).toFixed(2);
 }
 
+// BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): a `description` do
+// lançamento de baixa parcial (visível em seletores de UI, ex.: baixa de parcela de seguro)
+// embutia o valor cru ("60.00") e o UUID do lançamento original — jargão técnico vazando pro
+// usuário final. `descriptionToBRL` formata em pt-BR; a description referencia o lançamento
+// original pela SUA PRÓPRIA descrição de negócio, nunca pelo UUID.
+function toBRLDisplay(decimalString) {
+  return Number(decimalString).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 /**
  * computeRemainingAmount — saldo em aberto do lançamento = amount - Σ(baixas parciais filhas
  * que estão SETTLED). Retorna string com 2 casas (mesma precisão do DECIMAL(18,2)).
@@ -579,7 +588,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       entryType: entry.entryType,
       nature: entry.nature,
       amount: fromCents(appliedCents),
-      description: `Baixa parcial de ${fromCents(appliedCents)} do lançamento ${entry.id}.`,
+      description: `Baixa parcial de ${toBRLDisplay(fromCents(appliedCents))} — ${entry.description || 'lançamento financeiro'}`,
       dueAt: entry.dueAt,
       // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
       // mesma; o que mudou foi só o momento do caixa).

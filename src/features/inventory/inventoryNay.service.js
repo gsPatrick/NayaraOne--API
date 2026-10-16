@@ -206,6 +206,25 @@ async function loadActiveProjectDemand({ companyId, since }, transaction) {
   return map;
 }
 
+// BUG MÉDIO REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): a NAY recalculava sugestão
+// de compra sem olhar se o item JÁ tinha uma requisição de compra em aberto (REQUESTED/APPROVED,
+// nascida de uma sugestão anterior aprovada por humano) — sugeria de novo o mesmo item, gerando
+// duas requisições pro mesmo material. Soma a quantidade já pedida (ainda não rejeitada) por
+// item, pra abater da projeção de saldo igual a um recebimento já a caminho.
+async function loadOpenPurchaseRequestQuantity({ companyId }, transaction) {
+  const rows = await sequelize.query(
+    `SELECT pri.inventory_item_id AS "inventoryItemId", SUM(pri.quantity) AS "openQuantity"
+       FROM procurement.purchase_requests pr
+       JOIN procurement.purchase_request_items pri ON pri.purchase_request_id = pr.id
+      WHERE pr.company_id = :companyId AND pr.status IN ('REQUESTED', 'APPROVED') AND pri.inventory_item_id IS NOT NULL
+      GROUP BY pri.inventory_item_id`,
+    { replacements: { companyId }, type: sequelize.QueryTypes.SELECT, transaction }
+  );
+  const map = new Map();
+  for (const r of rows) map.set(r.inventoryItemId, Number(r.openQuantity) || 0);
+  return map;
+}
+
 async function loadObservedLeadTimes({ companyId, itemIds }, transaction) {
   // Lead time OBSERVADO: tempo real entre o pedido de compra (purchase_orders.created_at) e o
   // recebimento físico (goods_receipts.created_at) do item — dado de verdade do próprio fluxo
@@ -249,13 +268,16 @@ async function resolveDefaultLeadTime(tenant, transaction) {
  * computePurchaseSignals — núcleo determinístico (puro, sem I/O) que transforma os sinais de um
  * par item/local numa sugestão (ou null). Exportado para teste unitário direto da regra.
  */
-function computePurchaseSignals({ quantityOnHand, minimumQuantity, consumed, windowDays, leadTimeDays, pendingQuantity }) {
+function computePurchaseSignals({ quantityOnHand, minimumQuantity, consumed, windowDays, leadTimeDays, pendingQuantity, openPurchaseQuantity }) {
   const onHand = Number(quantityOnHand) || 0;
   const hasThreshold = minimumQuantity != null && Number(minimumQuantity) > 0;
   const threshold = hasThreshold ? Number(minimumQuantity) : 0;
   const dailyRate = (Number(consumed) || 0) / windowDays;
   const pending = Number(pendingQuantity) || 0;
-  const projectedOnHand = onHand - pending;
+  // Requisição de compra já aberta pro item conta como recebimento a caminho — reduz a
+  // necessidade projetada, evitando sugerir compra duplicada do mesmo material.
+  const openPurchase = Number(openPurchaseQuantity) || 0;
+  const projectedOnHand = onHand - pending + openPurchase;
   const reorderPoint = threshold + dailyRate * leadTimeDays;
 
   // Sem nenhum sinal de demanda (sem mínimo, sem consumo, sem obra pedindo) não há base pra
@@ -275,6 +297,7 @@ function computePurchaseSignals({ quantityOnHand, minimumQuantity, consumed, win
   return {
     quantityOnHand: round4(onHand),
     pendingProjectDemand: round4(pending),
+    openPurchaseQuantity: round4(openPurchase),
     projectedOnHand: round4(projectedOnHand),
     minimumQuantity: hasThreshold ? round4(threshold) : null,
     consumedInWindow: round4(Number(consumed) || 0),
@@ -325,6 +348,7 @@ async function computePurchaseSuggestions(tenant, options, transaction) {
   // Sequencial de propósito: todas as queries compartilham a MESMA conexão da transação.
   const consumption = await loadConsumption({ companyId: tenant.companyId, since }, transaction);
   const projectDemand = await loadActiveProjectDemand({ companyId: tenant.companyId, since }, transaction);
+  const openPurchaseQuantityByItem = await loadOpenPurchaseRequestQuantity({ companyId: tenant.companyId }, transaction);
   const defaultLeadTime = await resolveDefaultLeadTime(tenant, transaction);
   const itemIds = [...new Set(balances.map((b) => b.inventoryItemId))];
   const observedLeadTimes = await loadObservedLeadTimes({ companyId: tenant.companyId, itemIds }, transaction);
@@ -351,6 +375,7 @@ async function computePurchaseSuggestions(tenant, options, transaction) {
       windowDays,
       leadTimeDays,
       pendingQuantity: demandEntry.pendingQuantity,
+      openPurchaseQuantity: openPurchaseQuantityByItem.get(b.inventoryItemId) || 0,
     });
     if (!signals) continue;
 
