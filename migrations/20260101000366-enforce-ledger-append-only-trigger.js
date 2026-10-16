@@ -15,20 +15,27 @@
  *  - DELETE: sempre bloqueado. O ledger nunca perde uma linha — nem para limpeza de dado de
  *    teste (os testes deste projeto sempre rodam em transação com ROLLBACK, nunca commitam).
  *  - UPDATE: bloqueia qualquer mudança nos campos que definem O FATO financeiro já ocorrido —
- *    group_id, company_id, bank_account_id, entry_type, nature, amount, due_at,
- *    idempotency_key, reversal_of_entry_id, created_at, created_by — em QUALQUER status. Mudar
- *    qualquer um desses depois de criado reescreveria história. Os únicos campos que o fluxo
- *    normal de fato precisa mutar depois da criação são: status, settled_at, lock_version,
- *    updated_by, updated_at, e as três dimensões gerenciais enquanto PENDING (cost_center_id,
- *    result_center_id, contract_id — já restrito a status=PENDING pelo próprio serviço; o
- *    trigger não duplica essa regra de status para não acoplar o banco à máquina de estados da
- *    aplicação, mas protege o fato financeiro em si de forma incondicional).
+ *    group_id, company_id, entry_type, nature, amount, due_at, idempotency_key,
+ *    reversal_of_entry_id, created_at, created_by — em QUALQUER status. Mudar qualquer um
+ *    desses depois de criado reescreveria história. Os únicos campos que o fluxo normal de
+ *    fato precisa mutar depois da criação são: status, settled_at, lock_version, updated_by,
+ *    updated_at, bank_account_id e as três dimensões gerenciais enquanto PENDING
+ *    (cost_center_id, result_center_id, contract_id).
+ *
+ *    CORREÇÃO (16/10/2026, achada pela própria regressão desta sessão): bank_account_id tinha
+ *    entrado na lista de imutáveis por engano. Existe um fluxo de negócio real e testado
+ *    (FIN-REDIR-01/02 em finance.bankAccountRedirect.test.js, ADV-F16 em adversarial.finance)
+ *    que troca o banco de um lançamento PENDING antes da liquidação, com revisão/auditoria —
+ *    redirectBankAccount em financialEntries.service.js já restringe isso a status=PENDING e
+ *    audita a mudança. O trigger não duplica essa regra de status (mesma lógica já aplicada às
+ *    três dimensões gerenciais), só protege o fato financeiro em si — e bank_account_id, assim
+ *    como as dimensões, NÃO é parte do fato já ocorrido enquanto o lançamento ainda não foi
+ *    liquidado.
  */
 
 const IMMUTABLE_COLUMNS = [
   'group_id',
   'company_id',
-  'bank_account_id',
   'entry_type',
   'nature',
   'amount',
