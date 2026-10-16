@@ -559,7 +559,7 @@ test('ADV-L13: prazo jurídico de outro tenant não pode ser lido nem "empurrado
     const dueAtOriginal = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: dueAtOriginal , sourceEvent: 'teste automatizado' },
+      { description: `Contestação ${suffix}`, dueAt: dueAtOriginal, sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

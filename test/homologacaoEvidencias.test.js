@@ -752,7 +752,7 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
     deadline = await withCommittedTenantTransaction(tenant, (t) =>
       legalDeadlinesService.createLegalDeadline(
         legalCase.id,
-        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
+        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
         tenant.userId,
         t
       )

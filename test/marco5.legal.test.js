@@ -451,7 +451,7 @@ test('M5-27: prazo OVERDUE há mais de 24h sem ação escala para o escalationUs
 
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

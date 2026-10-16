@@ -1,6 +1,6 @@
 'use strict';
 
-const { LegalDeadline } = require('../../models');
+const { LegalDeadline, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCase } = require('./legalCases.service');
@@ -25,7 +25,7 @@ function computeSeverity(deadline, now = new Date()) {
 
 async function createLegalDeadline(legalCaseId, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  const { description, dueAt, sourceDocument, sourceEvent } = payload;
+  const { description, dueAt, sourceDocument, sourceEvent, responsibleUserId } = payload;
   if (!description || !dueAt) {
     throw AppError.badRequest('Os campos "description" e "dueAt" são obrigatórios.', 'LEGAL_DEADLINE_VALIDATION');
   }
@@ -39,6 +39,19 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
     );
   }
 
+  // ACHADO REAL (auditoria técnica independente da Nayara, A07): um prazo que já nasce vencido
+  // (dueAt no passado — o cenário mais crítico que existe, equivalente a OVERDUE desde a
+  // criação) podia ser cadastrado sem nenhum responsável. O job de alerta só notifica um
+  // humano quando há responsável — sem ele, o prazo fica publicado só como evento, sem ninguém
+  // de fato avisado. Fail closed: prazo que nasce já vencido exige responsável definido.
+  const bornOverdue = new Date(dueAt).getTime() < Date.now();
+  if (bornOverdue && !responsibleUserId) {
+    throw AppError.badRequest(
+      'Um prazo que já nasce vencido precisa de um responsável definido, para que alguém seja notificado de verdade.',
+      'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
+    );
+  }
+
   const deadline = await LegalDeadline.create(
     {
       groupId: legalCase.groupId,
@@ -48,6 +61,7 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
       dueAt,
       sourceDocument: sourceDocument || null,
       sourceEvent: sourceEvent || null,
+      responsibleUserId: responsibleUserId || null,
       status: 'PENDING',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -102,7 +116,43 @@ async function getLegalDeadline(id, transaction) {
 async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   const deadline = await getLegalDeadline(id, transaction);
   const beforeJson = deadline.toJSON();
-  const { status, description, dueAt } = payload;
+  const { status, description, dueAt, conclusionEvidenceFileId, conclusionNote, changeReason } = payload;
+
+  // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
+  // DONE) era aceito sem nenhuma evidência nem nota documentando o que foi feito — "{status:
+  // 'DONE'}" sozinho bastava. Fail closed: concluir exige pelo menos evidência OU nota.
+  const concluding = status !== undefined && status === 'DONE' && deadline.status !== 'DONE';
+  if (concluding) {
+    const evidenceId = conclusionEvidenceFileId || deadline.conclusionEvidenceFileId;
+    const note = conclusionNote !== undefined ? conclusionNote : deadline.conclusionNote;
+    if (!evidenceId && !note) {
+      throw AppError.badRequest(
+        'Concluir um prazo exige uma evidência anexada ou uma nota explicando o que foi feito.',
+        'LEGAL_DEADLINE_CONCLUSION_PROOF_REQUIRED'
+      );
+    }
+    if (evidenceId) {
+      const file = await File.findOne({ where: { id: evidenceId, companyId: deadline.companyId }, transaction });
+      if (!file) {
+        throw AppError.badRequest(
+          'O arquivo de evidência informado não existe ou não pertence a esta empresa.',
+          'LEGAL_DEADLINE_EVIDENCE_FILE_NOT_FOUND'
+        );
+      }
+    }
+  }
+
+  // ACHADO REAL (auditoria técnica independente da Nayara, A09): mudar o vencimento de um prazo
+  // já criado era aceito só com o novo "dueAt", sem o usuário informar por quê — o histórico
+  // registrava um motivo genérico ("Prazo atualizado"), nunca a justificativa real. Fail closed:
+  // mudar dueAt exige "changeReason" preenchido pelo usuário, usado como motivo real na auditoria.
+  const dueAtChanged = dueAt !== undefined && new Date(dueAt).getTime() !== new Date(deadline.dueAt).getTime();
+  if (dueAtChanged && (!changeReason || !String(changeReason).trim())) {
+    throw AppError.badRequest(
+      'Mudar o vencimento de um prazo exige informar o motivo da mudança.',
+      'LEGAL_DEADLINE_CHANGE_REASON_REQUIRED'
+    );
+  }
 
   // FIX (homologação 22/09/2026 — auditoria proativa): reabrir um prazo (status volta pra
   // PENDING) ou adiar/antecipar dueAt depois que ele já tinha sido alertado como OVERDUE
@@ -115,7 +165,6 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // seja: um prazo reaberto ficava, na prática, sem alerta e sem escalonamento para sempre.
   // Agora, reabrir (status -> PENDING) ou mudar dueAt reseta o ciclo de alerta.
   const reopening = status !== undefined && status === 'PENDING' && deadline.status !== 'PENDING';
-  const dueAtChanged = dueAt !== undefined && new Date(dueAt).getTime() !== new Date(deadline.dueAt).getTime();
   if (reopening || dueAtChanged) {
     deadline.lastAlertedSeverity = null;
     deadline.firstOverdueAlertedAt = null;
@@ -125,6 +174,8 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   if (status !== undefined) deadline.status = status;
   if (description !== undefined) deadline.description = description;
   if (dueAt !== undefined) deadline.dueAt = dueAt;
+  if (conclusionEvidenceFileId !== undefined) deadline.conclusionEvidenceFileId = conclusionEvidenceFileId;
+  if (conclusionNote !== undefined) deadline.conclusionNote = conclusionNote;
   deadline.updatedBy = actorUserId || null;
   await deadline.save({ transaction });
 
@@ -138,7 +189,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
       entityId: deadline.id,
       beforeJson,
       afterJson: deadline.toJSON(),
-      reason: `Prazo ${deadline.id} atualizado.`,
+      reason: dueAtChanged ? String(changeReason).trim() : `Prazo ${deadline.id} atualizado.`,
     },
     transaction
   );

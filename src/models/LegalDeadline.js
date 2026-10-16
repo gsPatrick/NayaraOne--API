@@ -76,6 +76,24 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'escalated_at',
       },
+      // Auditoria técnica independente da Nayara (A07/A08/A09): responsável pelo
+      // acompanhamento do prazo; evidência/nota exigidas pra concluir; os dois ficam
+      // persistidos pra rastreabilidade, nunca inferidos.
+      responsibleUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'responsible_user_id',
+      },
+      conclusionEvidenceFileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'conclusion_evidence_file_id',
+      },
+      conclusionNote: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'conclusion_note',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
