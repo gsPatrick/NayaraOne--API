@@ -102,8 +102,11 @@ financeRouter.post('/finance/intercompany-transfers/:id/reconcile', requirePermi
 // Period closures + saúde financeira (M4-19/M4-20). Reabrir período é ação crítica (permite
 // voltar a mexer em mês fechado) — exige a permissão de aprovação, não a de edição comum.
 financeRouter.post('/finance/period-closures', requirePermission('finance:settle'), financeController.closePeriod);
+// ACHADO REAL CORRIGIDO (auditoria independente Nayara, A06): fechar de verdade (REVIEW→CLOSED)
+// é ação sensível, exige aprovação + MFA recente — mesmo padrão de /finance/entries/:id/settle.
+financeRouter.post('/finance/period-closures/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approvePeriodClosure);
 financeRouter.get('/finance/period-closures', requirePermission('finance:read'), financeController.listPeriodClosures);
-financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), financeController.reopenPeriod);
+financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), requireRecentMfa, financeController.reopenPeriod);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);
 
 // Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)

@@ -450,13 +450,42 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
     );
     assert.equal(before.status, 'PENDING');
 
-    const closure = await periodClosuresService.closePeriod(
+    // ACHADO REAL (auditoria independente Nayara, A06): closePeriod agora só leva o período pra
+    // REVIEW, nunca fecha de verdade sozinho — precisa de approvePeriodClosure, por um usuário
+    // diferente de quem solicitou, pra chegar em CLOSED.
+    const requested = await periodClosuresService.closePeriod(
       { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth },
       tenant.userId,
       transaction
     );
+    assert.equal(requested.status, 'REVIEW');
+
+    // Em REVIEW, o período ainda NÃO bloqueia lançamentos (só CLOSED bloqueia).
+    const duringReview = await financialEntriesService.createFinancialEntry(
+      { ...base, description: `M4-19 durante REVIEW ${suffix}`, dueAt: dueInsideClosedMonth },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(duringReview.status, 'PENDING');
+
+    // Quem solicitou o fechamento não pode ser quem aprova.
+    await assert.rejects(
+      () => periodClosuresService.approvePeriodClosure({ companyId: tenant.companyId, referenceMonth }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'FINANCE_PERIOD_SELF_APPROVAL_BLOCKED'); return true; }
+    );
+
+    const [approverUser] = await User.findOrCreate({
+      where: { email: `homo-qa-period-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA Aprovador Fechamento ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+
+    const closure = await periodClosuresService.approvePeriodClosure(
+      { companyId: tenant.companyId, referenceMonth },
+      approverUser.id,
+      transaction
+    );
     assert.equal(closure.status, 'CLOSED');
-    assert.equal(closure.closedByUserId, tenant.userId);
+    assert.equal(closure.closedByUserId, approverUser.id);
     assert.ok(closure.closedAt);
 
     // Criar lançamento com vencimento no mês fechado: bloqueado.

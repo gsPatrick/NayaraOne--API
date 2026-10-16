@@ -463,6 +463,10 @@ const closePeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.closePeriod(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+const approvePeriodClosure = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.approvePeriodClosure(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
 const reopenPeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
   return success(res, { data: item });
@@ -507,7 +511,7 @@ module.exports = {
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, bankPaymentPublicWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
-  closePeriod, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
+  closePeriod, approvePeriodClosure, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
