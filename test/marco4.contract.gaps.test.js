@@ -372,6 +372,53 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
   });
 });
 
+// Auditoria Nayara 14/10/2026, Seção 5 item 4 (pedido de evidência de sandbox bancário):
+// "callback válido/duplicado" — reentrega do MESMO status CONFIRMED pelo provedor (reenvio de
+// webhook, cenário real e comum) não pode liquidar o lançamento duas vezes nem criar ledger
+// duplicado. confirmBankPayment já tem a guarda `if (!['SUBMITTED'].includes(intent.status))
+// return intent` — este teste prova o efeito concreto no ledger financeiro, não só no status
+// da intenção.
+test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvio de webhook) liquida só uma vez — nenhum ledger duplicado', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await createActiveBankAccount(transaction, suffix);
+    account.pixKey = `qa-pix-dup-${suffix}@nayaraone.dev`;
+    await account.save({ transaction });
+
+    const entry = await createEntry(transaction, { bankAccountId: account.id, amount: 320 });
+
+    const { User } = require('../src/models');
+    const approver = await User.create(
+      { name: `QA FIN-TS-018b aprovador ${suffix}`, email: `qa-fints018b-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
+
+    const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
+    await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, transaction);
+    await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
+
+    const routing = await BankPaymentProviderRouting.findOne({ where: { paymentIntentId: intent.id }, transaction });
+
+    const beforeConfirm = await FinancialEntry.findByPk(entry.id, { transaction });
+    assert.equal(beforeConfirm.status, 'PENDING', 'nenhum ledger/liquidação antes da confirmação do banco');
+
+    const firstConfirm = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
+    assert.equal(firstConfirm.status, 'EXECUTED');
+    const afterFirst = await FinancialEntry.findByPk(entry.id, { transaction });
+    assert.equal(afterFirst.status, 'SETTLED');
+    const firstSettledAt = afterFirst.settledAt?.getTime();
+    assert.ok(firstSettledAt, 'liquidado na primeira confirmação');
+
+    // Reenvio do MESMO webhook (provedor reentregando por falta de 200 explícito, cenário
+    // comum em integrações bancárias reais) — não pode reliquidar nem mexer no settledAt.
+    const secondConfirm = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
+    assert.equal(secondConfirm.status, 'EXECUTED', 'idempotente: devolve o mesmo estado, sem reprocessar');
+    const afterSecond = await FinancialEntry.findByPk(entry.id, { transaction });
+    assert.equal(afterSecond.status, 'SETTLED');
+    assert.equal(afterSecond.settledAt?.getTime(), firstSettledAt, 'settledAt não muda — não houve segunda liquidação');
+  });
+});
+
 // ---------------------------------------------------------------------------------------
 // Item 6 — FIN-005 limiares de antifraude vêm do Motor de Regras
 // ---------------------------------------------------------------------------------------
