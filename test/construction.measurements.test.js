@@ -301,10 +301,10 @@ test('M6-55/M6-68 medição aprovada gera obrigação financeira real e aprovar 
         replacements: { id: measurementId },
         transaction: t,
       });
-      await sequelize.query(
-        `DELETE FROM finance.financial_entries WHERE idempotency_key = :key`,
-        { replacements: { key: `measurement.payable:${measurementId}` }, transaction: t }
-      );
+      // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+      // finance.financial_entries é bloqueado pelo banco; o UPDATE acima já desvinculou a
+      // medição desse lançamento, então ele fica órfão no banco de dev sem impedir o restante
+      // da limpeza.
       await sequelize.query(`DELETE FROM construction.measurement_items WHERE measurement_id = :id`, {
         replacements: { id: measurementId },
         transaction: t,

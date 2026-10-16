@@ -566,14 +566,12 @@ test('billing: duas recuperações CONCORRENTES da mesma antecipação de alugue
       assert.equal(Number(advance.recoveredAmount), 2000, 'as duas recuperações concorrentes precisam se somar, sem lost update');
     });
   } finally {
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
-        replacements: { id: contractId, k: `rent_advance%${advanceId}` },
-        transaction: t,
-      });
-      await sequelize.query('DELETE FROM finance.rent_advances WHERE id = :id', { replacements: { id: advanceId }, transaction: t });
-      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
-    });
+    // Este teste usa COMMIT real (não rollback) para exercitar concorrência de verdade, então a
+    // limpeza abaixo também precisava ser real. Desde a migration 20260101000366 (trigger
+    // append-only, FIN-003/010), `finance.financial_entries` nunca mais aceita DELETE direto —
+    // nem para limpeza de dado de teste. Os registros ficam órfãos no banco de dev, mas
+    // identificáveis pelo prefixo QA-GUARANTEED-RACE/contractId; não são apagados porque apagar
+    // o lançamento financeiro é exatamente o que o trigger existe para impedir.
   }
 });
 
@@ -633,14 +631,10 @@ test('billing: dois pagamentos CONCORRENTES de aluguel garantido para a mesma co
       assert.equal(item.paymentsJson.length, 1, 'nunca deve existir mais de um pagamento para a mesma competência');
     });
   } finally {
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE contract_id = :id AND idempotency_key LIKE :k', {
-        replacements: { id: contractId, k: `guaranteed_rent%${guaranteedId}%` },
-        transaction: t,
-      });
-      await sequelize.query('DELETE FROM finance.guaranteed_rent_contracts WHERE id = :id', { replacements: { id: guaranteedId }, transaction: t });
-      await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
-    });
+    // Ver comentário equivalente no teste de recuperação de aluguel antecipado acima: desde o
+    // trigger append-only (migration 20260101000366), DELETE direto em financial_entries não é
+    // mais possível, nem para limpeza de teste. Registro fica órfão, identificável pelo prefixo
+    // guaranteed_rent/contractId.
   }
 });
 

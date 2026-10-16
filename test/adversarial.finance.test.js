@@ -657,12 +657,9 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
       assert.equal(reloaded.status, 'SETTLED');
     });
   } finally {
-    // Limpeza: o ledger é append-only em runtime, mas estes são dados de teste num banco
-    // compartilhado — removidos via SQL direto pra não poluir os outros agentes/suítes.
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE parent_entry_id = :id', { replacements: { id: entryId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entryId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.bank_accounts WHERE id = :id', { replacements: { id: accountId }, transaction: t });
-    });
+    // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+    // finance.financial_entries é bloqueado pelo banco incondicionalmente — inclusive para
+    // limpeza de teste. Os registros ficam órfãos no banco de dev, identificáveis por entryId;
+    // bank_accounts também não é apagada pra não violar a FK que financial_entries mantém dela.
   }
 });

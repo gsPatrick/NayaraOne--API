@@ -763,8 +763,9 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
   } finally {
     await withCommitted(async (t) => {
       await sequelize.query('DELETE FROM finance.payment_intents WHERE id = :id', { replacements: { id: intentId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entryId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.bank_accounts WHERE id = :id', { replacements: { id: bankAccountId }, transaction: t });
+      // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+      // finance.financial_entries é bloqueado; bank_accounts também fica sem apagar pra não
+      // violar a FK que o lançamento órfão ainda mantém dela.
     });
   }
 });

@@ -312,6 +312,8 @@ test('DRILL 3 — duas aprovações concorrentes da MESMA medição: lock pessim
       replacements: { id: measurementId },
       transaction: t,
     });
-    await sequelize.query(`DELETE FROM finance.financial_entries WHERE id = :id`, { replacements: { id: rows[0].id }, transaction: t });
+    // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+    // finance.financial_entries é bloqueado; o UPDATE acima já desvinculou a medição, então o
+    // lançamento fica órfão sem impedir o restante da limpeza.
   });
 });

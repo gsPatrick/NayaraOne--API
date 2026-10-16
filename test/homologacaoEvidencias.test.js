@@ -411,12 +411,10 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
     assert.equal(succeeded, 1, 'exatamente uma das duas tentativas simultâneas deve ter sucesso');
     assert.equal(failed, 1, 'a outra deve falhar (conflito de versão ou status já SETTLED) — nunca as duas passarem');
   } finally {
-    // Limpeza: este teste precisa de commit real (concorrência de verdade não é simulável numa
-    // única transação), então remove explicitamente o registro criado — nunca fica no banco.
-    await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entry.id } });
-    if (resultCenterId) {
-      await sequelize.query('DELETE FROM finance.result_centers WHERE id = :id', { replacements: { id: resultCenterId } });
-    }
+    // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+    // finance.financial_entries é bloqueado pelo banco incondicionalmente — inclusive para
+    // limpeza de teste. O lançamento fica órfão (identificável por entry.id); result_centers
+    // também não é apagado pra não violar a FK que o lançamento órfão ainda mantém dele.
   }
 });
 
