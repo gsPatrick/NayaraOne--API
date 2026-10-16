@@ -107,10 +107,18 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   // chaves em si não checava nada. Mesmo espírito do gate de ativação: se o contrato tem alguma
   // Guarantee cadastrada, ao menos uma precisa estar ACTIVE (contrato sem nenhuma garantia
   // cadastrada não é bloqueado — "todo contrato exige garantia" não está no Caderno).
+  // ACHADO REAL (auditoria independente Nayara, A04): o job que marca garantia vencida como
+  // EXPIRED roda periodicamente — entre a data de vencimento real (`endsAt`) e a próxima
+  // execução do job, uma garantia pode estar com `endsAt` no passado mas `status` ainda ACTIVE
+  // no banco. Checar só `status === 'ACTIVE'` deixava passar essa janela. Agora comparamos
+  // `endsAt` contra a data atual DIRETAMENTE aqui também — fail closed, nunca confia só no
+  // campo que um job assíncrono ainda não teve chance de atualizar.
+  const now = new Date();
   const guarantees = await Guarantee.findAll({ where: { contractId: contract.id }, transaction });
-  if (guarantees.length > 0 && !guarantees.some((g) => g.status === 'ACTIVE')) {
+  const validGuarantee = guarantees.find((g) => g.status === 'ACTIVE' && (!g.endsAt || new Date(g.endsAt) >= now));
+  if (guarantees.length > 0 && !validGuarantee) {
     throw AppError.conflict(
-      'Não é possível liberar as chaves: existem garantias cadastradas para o contrato, mas nenhuma está com status "ACTIVE".',
+      'Não é possível liberar as chaves: existem garantias cadastradas para o contrato, mas nenhuma está ativa e dentro da vigência.',
       'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID'
     );
   }

@@ -69,6 +69,36 @@ async function createActiveLeaseWithInspection(transaction) {
 }
 
 // Caderno Anexo I "10. Entrega de chaves": "Exigir documentos e garantias válidos."
+// ACHADO REAL (auditoria técnica independente da Nayara, A04): o job que marca garantia vencida
+// como EXPIRED roda periodicamente — entre o vencimento real (endsAt no passado) e o job rodar,
+// o status no banco ainda podia estar ACTIVE, liberando a chave indevidamente. Reproduz
+// exatamente o cenário do achado: startsAt=2019-01-01, endsAt=2020-01-01, status ainda ACTIVE.
+test('releaseKeyDelivery bloqueia garantia com endsAt vencido mesmo com status ainda ACTIVE (A04)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    await guaranteesService.createGuarantee(
+      contract.id,
+      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE', startsAt: '2019-01-01', endsAt: '2020-01-01' },
+      tenant.userId,
+      transaction
+    );
+    const keyDelivery = await keyDeliveriesService.createKeyDelivery(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
+        return true;
+      }
+    );
+  });
+});
+
 test('releaseKeyDelivery bloqueia quando existe garantia cadastrada mas nenhuma ACTIVE', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);

@@ -14,7 +14,7 @@ const utilitiesService = require('../src/features/billing/utilities.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { createMockIndexSourceAdapter, unavailableIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const AppError = require('../src/utils/AppError');
-const { OwnershipTransferTask } = require('../src/models');
+const { OwnershipTransferTask, File, Person } = require('../src/models');
 
 let tenant;
 
@@ -267,6 +267,55 @@ test('billing: closeout bloqueia com cobrança em aberto e libera quando quitada
 
     const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
     assert.equal(result.status, 'COMPLETED');
+  });
+});
+
+// ACHADO REAL (auditoria técnica independente da Nayara, A05): completeOwnershipTransfer
+// concluía a tarefa sem nenhum comprovante nem destinatário informado.
+test('billing: completeOwnershipTransfer exige comprovante (evidenceFileId) e destinatário (A05)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseContract(transaction);
+    const { transferTask } = await utilitiesService.createUtilityObligation(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, utilityType: 'WATER', responsibleParty: 'TENANT', transferRequired: true },
+      tenant.userId,
+      transaction
+    );
+
+    await assert.rejects(
+      () => utilitiesService.completeOwnershipTransfer(transferTask.id, {}, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'OWNERSHIP_TRANSFER_EVIDENCE_REQUIRED');
+        return true;
+      }
+    );
+
+    const evidenceFile = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `qa/${uniqueSuffix()}.pdf`, fileName: 'comprovante.pdf', mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await assert.rejects(
+      () => utilitiesService.completeOwnershipTransfer(transferTask.id, { evidenceFileId: evidenceFile.id }, tenant.userId, transaction),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, 'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED');
+        return true;
+      }
+    );
+
+    const toPerson = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT Novo titular ${uniqueSuffix()}` },
+      { transaction }
+    );
+    const completed = await utilitiesService.completeOwnershipTransfer(
+      transferTask.id,
+      { evidenceFileId: evidenceFile.id, toPersonId: toPerson.id },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(completed.status, 'COMPLETED');
+    assert.equal(completed.evidenceFileId, evidenceFile.id);
+    assert.equal(completed.toPersonId, toPerson.id);
   });
 });
 
@@ -612,7 +661,7 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
     }
   }
 
-  const { contractId, obligationId, taskAId, taskBId } = await withCommitted(async (t) => {
+  const { contractId, obligationId, taskAId, taskBId, evidenceFileId, toPersonId } = await withCommitted(async (t) => {
     const contract = await createLeaseContract(t, { contractNumber: `QA-TRANSFER-RACE-${suffix}` });
     const { obligation, transferTask } = await utilitiesService.createUtilityObligation(
       {
@@ -639,7 +688,32 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
       },
       { transaction: t }
     );
-    return { contractId: contract.id, obligationId: obligation.id, taskAId: transferTask.id, taskBId: secondTask.id };
+    const evidenceFile = await File.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        storageKey: `ownership-transfer-race/${suffix}.pdf`,
+        fileName: `comprovante-${suffix}.pdf`,
+        mimeType: 'application/pdf',
+        uploadedByUserId: tenant.userId,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction: t }
+    );
+    const toPerson = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT Novo titular ${suffix}` },
+      { transaction: t }
+    );
+
+    return {
+      contractId: contract.id,
+      obligationId: obligation.id,
+      taskAId: transferTask.id,
+      taskBId: secondTask.id,
+      evidenceFileId: evidenceFile.id,
+      toPersonId: toPerson.id,
+    };
   });
 
   let liberarBarreira;
@@ -655,7 +729,7 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
     withCommitted(async (t) => {
       await OwnershipTransferTask.findByPk(taskId, { transaction: t });
       await aguardarAsDuasLeituras();
-      return utilitiesService.completeOwnershipTransfer(taskId, tenant.userId, t);
+      return utilitiesService.completeOwnershipTransfer(taskId, { evidenceFileId, toPersonId }, tenant.userId, t);
     });
 
   try {

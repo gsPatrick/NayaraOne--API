@@ -6,6 +6,7 @@ const {
   UtilityReimbursement,
   OwnershipTransferTask,
   Contract,
+  File,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -155,15 +156,43 @@ async function createUtilityAccount(payload, actorUserId, transaction) {
  * e (quando não há outra tarefa pendente para a mesma obrigação) marca a obrigação como
  * TRANSFERRED.
  */
-async function completeOwnershipTransfer(taskId, actorUserId, transaction) {
+async function completeOwnershipTransfer(taskId, payload, actorUserId, transaction) {
   const task = await OwnershipTransferTask.findByPk(taskId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!task) throw AppError.notFound('Tarefa de transferência não encontrada.', 'OWNERSHIP_TRANSFER_TASK_NOT_FOUND');
   if (task.status === 'COMPLETED') {
     throw AppError.conflict('Esta tarefa de transferência já está concluída.', 'OWNERSHIP_TRANSFER_TASK_ALREADY_COMPLETED');
   }
+
+  // ACHADO REAL (auditoria independente Nayara, A05): a conclusão não exigia nenhum comprovante
+  // nem destinatário informado — uma transferência de titularidade podia ser marcada concluída
+  // sem evidência nenhuma de que ela de fato aconteceu. Fail closed: exige os dois.
+  const evidenceFileId = payload?.evidenceFileId || null;
+  const toPersonId = payload?.toPersonId || task.toPersonId || null;
+  if (!evidenceFileId) {
+    throw AppError.badRequest(
+      'É preciso anexar o comprovante da transferência de titularidade antes de concluir.',
+      'OWNERSHIP_TRANSFER_EVIDENCE_REQUIRED'
+    );
+  }
+  if (!toPersonId) {
+    throw AppError.badRequest(
+      'É preciso informar quem é o novo titular antes de concluir a transferência.',
+      'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED'
+    );
+  }
+  const evidenceFile = await File.findOne({ where: { id: evidenceFileId, companyId: task.companyId }, transaction });
+  if (!evidenceFile) {
+    throw AppError.badRequest(
+      'O comprovante informado não existe ou não pertence a esta empresa.',
+      'OWNERSHIP_TRANSFER_EVIDENCE_NOT_FOUND'
+    );
+  }
+
   const beforeJson = task.toJSON();
   task.status = 'COMPLETED';
   task.completedAt = new Date();
+  task.evidenceFileId = evidenceFileId;
+  task.toPersonId = toPersonId;
   task.updatedBy = actorUserId || null;
   await task.save({ transaction });
 
