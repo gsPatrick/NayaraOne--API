@@ -75,6 +75,18 @@ const VALUE_HISTORY_MIN_SAMPLES = 2;
 function round4(value) {
   return Math.round(Number(value) * 10000) / 10000;
 }
+// Achado real (auditoria Marco 7, rodada "check" #2): os textos de buildReasons interpolavam o
+// número bruto de round4 (ex.: "0.0333/dia", "100.2333") — formato americano com até 4 casas
+// decimais, ilegível para o usuário final. fmt() formata em pt-BR com no máximo 2 casas.
+function fmt(value) {
+  if (value === null || value === undefined) return '';
+  return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+// Mesmo achado: thresholdSource interpolava a constante técnica ITEM_MINIMUM_QUANTITY direto no
+// texto ("fonte: ITEM_MINIMUM_QUANTITY"). Rótulo legível em português, mesma lógica de leadLabel.
+const THRESHOLD_SOURCE_LABEL = {
+  ITEM_MINIMUM_QUANTITY: 'quantidade mínima cadastrada no item',
+};
 function ceil2(value) {
   return Math.ceil(Number(value) * 100 - 1e-9) / 100;
 }
@@ -280,13 +292,14 @@ function computePurchaseSignals({ quantityOnHand, minimumQuantity, consumed, win
 function buildReasons(signals, ctx) {
   const reasons = [];
   if (signals.consumedInWindow > 0) {
-    reasons.push(`Consumo de ${signals.consumedInWindow} nos últimos ${ctx.windowDays} dia(s) (${signals.dailyConsumptionRate}/dia).`);
+    reasons.push(`Consumo de ${fmt(signals.consumedInWindow)} nos últimos ${ctx.windowDays} dia(s) (${fmt(signals.dailyConsumptionRate)}/dia).`);
   }
   if (ctx.projects.length > 0) {
-    reasons.push(`${ctx.projects.length} obra(s) ativa(s) requisitando o item, com ${signals.pendingProjectDemand} ainda pendente(s) de baixa.`);
+    reasons.push(`${ctx.projects.length} obra(s) ativa(s) requisitando o item, com ${fmt(signals.pendingProjectDemand)} ainda pendente(s) de baixa.`);
   }
   if (signals.minimumQuantity !== null) {
-    reasons.push(`Estoque mínimo do item: ${signals.minimumQuantity} (fonte: ${ctx.thresholdSource}).`);
+    const thresholdLabel = THRESHOLD_SOURCE_LABEL[ctx.thresholdSource] || ctx.thresholdSource;
+    reasons.push(`Estoque mínimo do item: ${fmt(signals.minimumQuantity)} (fonte: ${thresholdLabel}).`);
   }
   const leadLabel = {
     OBSERVED: `observado em ${ctx.leadTimeSampleSize} recebimento(s) reais`,
@@ -294,10 +307,10 @@ function buildReasons(signals, ctx) {
     DEFAULT: 'padrão do sistema — sem histórico de reposição nem configuração',
   }[ctx.leadTimeSource];
   reasons.push(`Lead time de ${signals.leadTimeDays} dia(s) (${leadLabel}).`);
-  reasons.push(`Saldo projetado ${signals.projectedOnHand} <= ponto de reposição ${signals.reorderPoint}.`);
+  reasons.push(`Saldo projetado ${fmt(signals.projectedOnHand)} <= ponto de reposição ${fmt(signals.reorderPoint)}.`);
   if (signals.stockoutRisk) {
     reasons.push(signals.daysOfCoverage !== null
-      ? `Risco de falta: cobertura de ${signals.daysOfCoverage} dia(s), menor que o lead time.`
+      ? `Risco de falta: cobertura de ${fmt(signals.daysOfCoverage)} dia(s), menor que o lead time.`
       : 'Risco de falta: saldo projetado zerado ou negativo.');
   }
   return reasons;
