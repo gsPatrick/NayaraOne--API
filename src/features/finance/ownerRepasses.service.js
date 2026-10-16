@@ -36,6 +36,34 @@ function round2(value) {
 // módulo (ex.: finance.financial_entries fazendo às vezes de "ledger" — ver nota em
 // financeAntifraud.service.js). `getOwnerRepasseComposition` abaixo consulta esse rastro.
 
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 15/10/2026, Seção 4 "Marco 4 — Financeiro",
+// grupo "Repasses e composição §12": "dois repasses não reutilizam o mesmo saldo"): o teto
+// elegível era recalculado do zero a cada chamada a partir do `amount` do lançamento-fonte,
+// sem nunca checar quanto desse mesmo lançamento já tinha sido usado por um repasse ANTERIOR.
+// Dois repasses distintos apontando para o mesmo `sourceEntryIds` passavam os dois, cada um
+// usando o valor cheio do recebimento como teto — dinheiro sendo "repassado" duas vezes a
+// partir do mesmo recebimento real. `getAlreadyAllocatedAmount` soma, por lançamento-fonte,
+// quanto já foi alocado por repasses anteriores NÃO cancelados (lidos do mesmo rastro de
+// auditoria append-only usado por `getOwnerRepasseComposition` — não há tabela de junção
+// dedicada nesta rodada, ver nota de modelagem acima) e deduz esse valor do teto disponível.
+async function getAlreadyAllocatedAmount(entryId, transaction) {
+  const logs = await AuditLog.findAll({
+    where: { action: 'finance.owner_repasse.create', entityType: 'OwnerRepass' },
+    transaction,
+  });
+  let allocatedCents = 0;
+  for (const log of logs) {
+    const afterJson = log.afterJson || {};
+    const composition = Array.isArray(afterJson.composition) ? afterJson.composition : [];
+    const match = composition.find((item) => item.financialEntryId === entryId);
+    if (!match) continue;
+    const repasse = await OwnerRepass.findByPk(log.entityId, { transaction });
+    if (!repasse || repasse.status === 'CANCELLED') continue; // repasse cancelado libera o saldo de volta.
+    allocatedCents += Math.round(Number(match.eligibleAmount || 0) * 100);
+  }
+  return allocatedCents / 100;
+}
+
 async function assertEligibleSources(companyId, sourceEntryIds, transaction) {
   if (!Array.isArray(sourceEntryIds) || sourceEntryIds.length === 0) {
     throw AppError.badRequest(
@@ -112,7 +140,16 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   }
 
   const sourceEntries = await assertEligibleSources(companyId, sourceEntryIds, transaction);
-  const eligibleCents = sourceEntries.reduce((acc, entry) => acc + Math.round(eligibleAmountOf(entry) * 100), 0);
+  // remainingCentsByEntry = quanto deste lançamento ainda não foi consumido por repasses
+  // anteriores não cancelados — é o "saldo disponível" real deste recebimento para repasse.
+  const remainingCentsByEntry = new Map();
+  let eligibleCents = 0;
+  for (const entry of sourceEntries) {
+    const alreadyAllocated = await getAlreadyAllocatedAmount(entry.id, transaction);
+    const remainingCents = Math.max(0, Math.round((eligibleAmountOf(entry) - alreadyAllocated) * 100));
+    remainingCentsByEntry.set(entry.id, remainingCents);
+    eligibleCents += remainingCents;
+  }
   const eligibleAmount = eligibleCents / 100;
 
   const grossNumeric = grossAmount === undefined || grossAmount === null ? eligibleAmount : Number(grossAmount);
@@ -168,13 +205,22 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   await publishOwnerRepasseCreated(repasse, transaction);
 
   // Composição (M4-contrato §12 "Extrato do proprietário mostra composição, não apenas valor
-  // líquido."): cada lançamento-fonte, com seu valor elegível, vai no afterJson — ver nota de
-  // modelagem no topo do arquivo sobre a ausência de tabela dedicada nesta rodada.
-  const composition = sourceEntries.map((entry) => ({
-    financialEntryId: entry.id,
-    description: entry.description,
-    eligibleAmount: round2(eligibleAmountOf(entry)),
-  }));
+  // líquido."): cada lançamento-fonte entra com o valor REALMENTE consumido por ESTE repasse
+  // (drenado greedily do saldo disponível de cada entry, respeitando a ordem informada em
+  // sourceEntryIds), não o teto cheio do lançamento — é esse valor que fica "reservado" e é
+  // descontado do saldo disponível de futuros repasses sobre o mesmo lançamento (ver
+  // getAlreadyAllocatedAmount). Isso é o que impede dois repasses reutilizarem o mesmo saldo.
+  let remainingGrossCentsToDraw = Math.round(grossNumeric * 100);
+  const composition = sourceEntries.map((entry) => {
+    const availableCents = remainingCentsByEntry.get(entry.id) || 0;
+    const drawnCents = Math.min(availableCents, remainingGrossCentsToDraw);
+    remainingGrossCentsToDraw -= drawnCents;
+    return {
+      financialEntryId: entry.id,
+      description: entry.description,
+      eligibleAmount: drawnCents / 100,
+    };
+  });
 
   await registrarAuditoria(
     {
