@@ -590,6 +590,31 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
     );
     throw AppError.conflict('O lançamento financeiro informado ainda não está liquidado (SETTLED).', 'INSURANCE_INSTALLMENT_ENTRY_NOT_SETTLED');
   }
+  // BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "r2", 2026-10-17): a baixa aceitava QUALQUER
+  // lançamento SETTLED de valor igual — inclusive um RECEBIMENTO de aluguel de outro contrato
+  // (nature RECEIVABLE). Prêmio de seguro é sempre uma DESPESA da empresa (nature PAYABLE);
+  // usar um recebimento para "quitar" uma parcela de prêmio mistura domínios e falsifica a
+  // conciliação. Defesa em profundidade: o front agora também filtra, mas a regra vale aqui
+  // mesmo para chamadas diretas à API com um id forçado.
+  if (entry.nature !== 'PAYABLE') {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), entry: entry.toJSON() },
+        reason: `Tentativa de dar baixa usando lançamento de natureza "${entry.nature}" — parcela de prêmio exige um pagamento (PAYABLE), nunca um recebimento.`,
+      },
+      transaction
+    );
+    throw AppError.conflict(
+      'O lançamento informado é um recebimento, não um pagamento. A baixa da parcela do prêmio exige um lançamento de pagamento (despesa) liquidado.',
+      'INSURANCE_INSTALLMENT_ENTRY_WRONG_NATURE'
+    );
+  }
   if (round2(entry.amount) !== round2(installment.amount)) {
     await registrarTentativaBloqueada(
       {

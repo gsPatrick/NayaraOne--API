@@ -524,6 +524,10 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   db.InventoryRequisitionItem.belongsTo(db.InventoryRequisition, { foreignKey: 'requisition_id', as: 'requisition', constraints: false });
   db.InventoryRequisitionItem.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryRequisition.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  // Nome do solicitante na lista de Requisições de material (auditoria Marco 7 "r2",
+  // 2026-10-17): a tela só tinha o UUID requestedByUserId, nunca o nome — mesmo padrão de
+  // movedByUser em InventoryMovement acima.
+  db.InventoryRequisition.belongsTo(db.User, { foreignKey: 'requested_by_user_id', as: 'requestedByUser', constraints: false });
   db.InventoryRequisition.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
   db.Asset.belongsTo(db.User, { foreignKey: 'assigned_to_user_id', as: 'assignedToUser', constraints: false });
   db.Asset.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });

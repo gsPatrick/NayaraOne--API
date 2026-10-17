@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage, Project } = require('../../models');
+const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage, Project, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -145,6 +145,8 @@ async function listRequisitions(groupId, companyId, transaction, { status, proje
     include: [
       { model: InventoryRequisitionItem, as: 'items' },
       { model: Project, as: 'project', attributes: ['id', 'name'] },
+      // Nome do solicitante (auditoria Marco 7 "r2", 2026-10-17): a tela só tinha o UUID.
+      { model: User, as: 'requestedByUser', attributes: ['id', 'name'] },
     ],
     order: [['created_at', 'DESC']],
     limit: 1500,
