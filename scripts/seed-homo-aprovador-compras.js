@@ -34,7 +34,10 @@ const ADMIN_USER_ID = '33477648-c752-4bed-83cb-a04114224f4d';
 const APPROVER_EMAIL = 'aprovador.compras@nayaraone.dev';
 const APPROVER_NAME = 'HOMO QA — Aprovador Compras';
 const ROLE_NAME = 'HOMO QA — Aprovador Compras';
-const PERMISSION_CODES = ['procurement:read', 'procurement:approve', 'inventory:read'];
+// construction:read e units:read adicionados em 17/10: a tela de Requisições de compra
+// resolve a obra vinculada (construction) e o Painel carrega as unidades (units) logo após
+// o login — sem elas o aprovador via "Permissão ausente" e nenhuma requisição listada.
+const PERMISSION_CODES = ['procurement:read', 'procurement:approve', 'inventory:read', 'construction:read', 'units:read'];
 
 async function main() {
   const approverPassword = process.env.APPROVER_SEED_PASSWORD;

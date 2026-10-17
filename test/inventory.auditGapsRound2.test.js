@@ -25,7 +25,15 @@ let approver;
 
 before(async () => {
   tenant = await getSeedTenant();
-  approver = { userId: tenant.userId, canApprove: true };
+  // FIX (17/10/2026): o aprovador precisa ser um usuário DIFERENTE do admin que registra a
+  // perda — a guarda de self-approval (LOSS_CASE_SELF_APPROVAL_BLOCKED, "quem registra não
+  // aprova") passou a bloquear a fixture antiga que usava tenant.userId pros dois papéis.
+  const { User } = require('../src/models');
+  const [approverUser] = await User.findOrCreate({
+    where: { email: 'homo-qa-round2-approver@nayaraone.dev' },
+    defaults: { name: 'HOMO QA — Aprovador Round2', passwordHash: 'x', status: 'ACTIVE' },
+  });
+  approver = { userId: approverUser.id, canApprove: true };
 });
 
 after(async () => {
@@ -65,12 +73,29 @@ async function createEvidence(transaction) {
 // Gap 1 — EST-004 (direção inversa): projectLocationId PROJECT_SITE sem projectId
 // ---------------------------------------------------------------------------------------------
 
-test('Gap 1 (EST-004): requisição recusa projectLocationId de PROJECT_SITE sem projectId', async () => {
+// ATUALIZADO (17/10/2026): desde a correção "obra do canteiro é fonte de verdade" (auditoria
+// Marco 7 final, commit cc86f56), um canteiro JÁ VINCULADO a uma obra preenche o projectId da
+// requisição sozinho — não rejeita mais. A rejeição antiga só sobrevive pro canteiro LEGADO
+// (criado antes da F2, sem obra no cadastro). Este teste cobre as duas direções do contrato
+// atual em vez da expectativa antiga de rejeição incondicional.
+test('Gap 1 (EST-004): canteiro com obra vinculada preenche projectId sozinho; canteiro legado sem obra ainda recusa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await projectsService.createProject(withTenant({ name: `Obra GAP R2 ${uniqueSuffix()}` }), tenant.userId, transaction);
     const warehouse = await createLocation(transaction);
     const site = await createLocation(transaction, 'PROJECT_SITE', { projectId: project.id });
     const item = await createItem(transaction);
+
+    const autoFilled = await requisitionsService.createRequisition(
+      withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, items: [{ inventoryItemId: item.id, quantity: 1 }] }),
+      tenant.userId,
+      transaction
+    );
+    assert.equal(autoFilled.projectId, project.id, 'a obra do canteiro é a fonte de verdade e deve ser preenchida sozinha');
+
+    // Simula canteiro legado (pré-F2, sem obra no cadastro) desvinculando a obra direto no
+    // registro — único jeito de reproduzir, já que a criação atual sempre vincula.
+    const { InventoryLocation } = require('../src/models');
+    await InventoryLocation.update({ projectId: null }, { where: { id: site.id }, transaction });
 
     await assert.rejects(
       () => requisitionsService.createRequisition(
