@@ -9,7 +9,7 @@
 // bug já corrigida globalmente no Marco 7, mas nunca testada especificamente para este módulo).
 // Mesmo padrão de `test/construction.httpRoutes.test.js`.
 
-process.env.PORT = process.env.CORRESPONDENT_HTTP_TEST_PORT || '34592';
+process.env.PORT = process.env.CORRESPONDENT_HTTP_TEST_PORT || '21592';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

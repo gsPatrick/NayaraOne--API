@@ -16,7 +16,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.PROCUREMENT_HTTP_TEST_PORT || '34593';
+process.env.PORT = process.env.PROCUREMENT_HTTP_TEST_PORT || '21596';
 
 const app = require('../app'); // eslint-disable-line no-unused-vars
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = require('./testHelpers');

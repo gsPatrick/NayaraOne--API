@@ -23,7 +23,7 @@ const assert = require('node:assert/strict');
 // do projeto em CLAUDE.md). Para bater HTTP real no app sem colidir com esse processo
 // (EADDRINUSE) nem precisar derrubá-lo, fixamos PORT para uma porta alternativa ANTES do
 // `require('../app')` — o require então sobe sua própria instância real nessa porta.
-process.env.PORT = process.env.CONSTRUCTION_HTTP_TEST_PORT || '34591';
+process.env.PORT = process.env.CONSTRUCTION_HTTP_TEST_PORT || '21591';
 
 const app = require('../app');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');

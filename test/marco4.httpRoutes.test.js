@@ -17,7 +17,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '34593';
+process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '21595';
 
 const app = require('../app');
 const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter } = require('./testHelpers');

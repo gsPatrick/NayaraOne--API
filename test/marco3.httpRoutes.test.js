@@ -13,7 +13,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.MARCO3_HTTP_TEST_PORT || '34592';
+process.env.PORT = process.env.MARCO3_HTTP_TEST_PORT || '21593';
 
 const app = require('../app');
 const { getSeedTenant, uniqueSuffix } = require('./testHelpers');

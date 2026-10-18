@@ -9,7 +9,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.INVENTORY_NAY_HTTP_TEST_PORT || '34613';
+process.env.PORT = process.env.INVENTORY_NAY_HTTP_TEST_PORT || '21599';
 
 require('../app');
 const { sequelize, getSeedTenant } = require('./testHelpers');
