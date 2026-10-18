@@ -115,7 +115,17 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   // campo que um job assíncrono ainda não teve chance de atualizar.
   const now = new Date();
   const guarantees = await Guarantee.findAll({ where: { contractId: contract.id }, transaction });
-  const validGuarantee = guarantees.find((g) => g.status === 'ACTIVE' && (!g.endsAt || new Date(g.endsAt) >= now));
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A04): o A04 fechou
+  // a ponta do VENCIMENTO (endsAt no passado), mas não a do INÍCIO — uma garantia ACTIVE cuja
+  // vigência só COMEÇA no futuro (startsAt > hoje) passava pelo gate e liberava a chave sem
+  // nenhuma garantia vigente no ato da entrega. Válida = status ACTIVE E hoje dentro da
+  // janela [startsAt, endsAt] (limites ausentes não restringem aquele lado).
+  const validGuarantee = guarantees.find(
+    (g) =>
+      g.status === 'ACTIVE' &&
+      (!g.startsAt || new Date(g.startsAt) <= now) &&
+      (!g.endsAt || new Date(g.endsAt) >= now)
+  );
   if (guarantees.length > 0 && !validGuarantee) {
     throw AppError.conflict(
       'Não é possível liberar as chaves: existem garantias cadastradas para o contrato, mas nenhuma está ativa e dentro da vigência.',

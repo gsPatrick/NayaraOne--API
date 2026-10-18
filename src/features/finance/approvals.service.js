@@ -336,12 +336,53 @@ async function isApprovalRequestApproved(relatedEntityType, relatedEntityId, tra
   return Boolean(approvalRequest);
 }
 
+/**
+ * markApprovalRequestsStale — BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 —
+ * variante do A10): a decisão já validava staleness (decideApprovalStep,
+ * FINANCE_APPROVAL_STALE), mas uma ApprovalRequest já APPROVED sobre a versão 1 do lançamento
+ * continuava valendo depois que ele mudava pra versão 2. "Alteração após aprovação deve
+ * invalidar efetivamente a decisão" (FIN-005).
+ *
+ * O ponto de invalidação é a EDIÇÃO do usuário (updateFinancialEntry), não uma comparação de
+ * lockVersion no consumo: a própria liquidação parcial incrementa o lockVersion do lançamento
+ * (optimistic locking do Sequelize) e uma comparação crua no consumo invalidaria a aprovação
+ * no meio de um fluxo de baixas parciais legítimo (provado por ADV-F21). Edição real do
+ * usuário → todas as aprovações APPROVED viram STALE (nunca mais contam em
+ * isApprovalRequestApproved); uma nova rodada de revisão sobre a versão atual volta a liberar.
+ */
+async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, reason, actorUserId, transaction) {
+  const approvedRequests = await ApprovalRequest.findAll({
+    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
+    transaction,
+  });
+  for (const request of approvedRequests) {
+    request.status = 'STALE';
+    request.updatedBy = actorUserId || null;
+    await request.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId: request.groupId,
+        companyId: request.companyId,
+        actorUserId,
+        action: 'finance.approval_request.stale',
+        entityType: 'ApprovalRequest',
+        entityId: request.id,
+        afterJson: { status: 'STALE' },
+        reason,
+      },
+      transaction
+    );
+  }
+  return approvedRequests.length;
+}
+
 module.exports = {
   createApprovalRequest,
   listApprovalRequests,
   getApprovalRequest,
   decideApprovalStep,
   isApprovalRequestApproved,
+  markApprovalRequestsStale,
   RISK_LEVELS,
   REQUIRED_STEPS_BY_RISK,
 };

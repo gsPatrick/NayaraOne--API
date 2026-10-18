@@ -358,6 +358,20 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   }
   await entry.save({ transaction });
 
+  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A10): qualquer
+  // edição do lançamento depois de uma aprovação invalida a aprovação (FIN-005 — a decisão foi
+  // tomada sobre a versão anterior). As ApprovalRequests APPROVED viram STALE e a liquidação
+  // volta a exigir uma rodada nova de revisão sobre a versão atual. Ver
+  // approvals.service.js#markApprovalRequestsStale.
+  const { markApprovalRequestsStale } = require('./approvals.service');
+  await markApprovalRequestsStale(
+    'FinancialEntry',
+    entry.id,
+    'Lançamento editado após a aprovação — decisão anterior invalidada (FIN-005, versão revisada obsoleta).',
+    actorUserId,
+    transaction
+  );
+
   await registrarAuditoria(
     {
       groupId: entry.groupId,
@@ -420,6 +434,10 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   // obra, nota de compra) que ainda não está ligado a uma saída de dinheiro de banco — settled
   // aqui é só o registro contábil; a execução bancária real acontece depois, quando um
   // bankAccountId for atribuído, e aí sim passa por este mesmo gate.
+  // A checagem de revisão manual roda ANTES do gate de aprovação: um redirecionamento de
+  // favorecido marca requiresManualReview E invalida a aprovação (STALE) — o erro mais
+  // específico (revisão manual pendente) é o que orienta o usuário certo.
+  assertNotUnderManualReview(entry);
   if (entry.nature === 'PAYABLE' && entry.bankAccountId && !viaApprovedPaymentIntent) {
     const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
     if (!hasApprovedRequest) {
@@ -435,7 +453,6 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   // fechado por este caminho, quebrando a garantia de `closePeriod` de que o número visto no
   // fechamento não muda depois. Mesma checagem já usada em settleFinancialEntryPartial.
   await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
-  assertNotUnderManualReview(entry);
   const beforeJson = entry.toJSON();
 
   if (entry.bankAccountId) {
@@ -535,6 +552,9 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   // 100% do valor, de uma vez) em vez de uma baixa integral só. O gate agora é IDÊNTICO ao de
   // settleFinancialEntry (mesmo escopo: só PAYABLE com bankAccountId) — os testes antigos
   // foram corrigidos para aprovar antes de baixar, não para contornar a aprovação.
+  // Revisão manual ANTES do gate de aprovação — mesmo motivo de settleFinancialEntry: um
+  // redirecionamento de favorecido marca as duas condições, e o erro mais específico vence.
+  assertNotUnderManualReview(entry);
   if (entry.nature === 'PAYABLE' && entry.bankAccountId) {
     const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
     if (!hasApprovedRequest) {
@@ -544,7 +564,6 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       );
     }
   }
-  assertNotUnderManualReview(entry);
   assertPositiveAmount(partialAmount);
 
   // FIX (homologação 22/09/2026 — auditoria proativa): createFinancialEntry e

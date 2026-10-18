@@ -117,15 +117,22 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
 
       await publishLegalDeadlineAlert(deadline, severity, transaction);
 
-      if (legalCase && legalCase.responsibleUserId) {
+      // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A07): o
+      // destinatário da notificação era SEMPRE o responsável do PROCESSO; um prazo com
+      // responsibleUserId próprio mas processo sem responsável contava o alerta
+      // (lastAlertedSeverity avançava) sem criar Notification pra ninguém. O responsável do
+      // PRAZO é o dono da obrigação — ele é o destinatário primário; o responsável do
+      // processo é o fallback quando o prazo não tem um próprio.
+      const recipientUserId = deadline.responsibleUserId || legalCase?.responsibleUserId || null;
+      if (recipientUserId) {
         await Notification.create(
           {
             groupId: deadline.groupId,
             companyId: deadline.companyId,
-            userId: legalCase.responsibleUserId,
+            userId: recipientUserId,
             channel: 'IN_APP',
             title: severity === 'OVERDUE' ? 'Prazo jurídico VENCIDO' : 'Prazo jurídico próximo de vencer',
-            body: `"${deadline.description}" (processo ${legalCase.caseNumber || legalCase.id}) vence em ${new Date(deadline.dueAt).toLocaleString('pt-BR')}.`,
+            body: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || legalCase.id : deadline.legalCaseId}) vence em ${new Date(deadline.dueAt).toLocaleString('pt-BR')}.`,
             createdBy: null,
             updatedBy: null,
           },
