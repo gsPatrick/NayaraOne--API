@@ -4,6 +4,8 @@ uploads/
 .env.*.local
 npm-debug.log*
 *.log
+# Logs de evidência do CI (cópia do artifact original) são versionados de propósito — ver docs/evidencias/ci/README.md.
+!docs/evidencias/ci/*.log
 .DS_Store
 backups/
 scratchpad/

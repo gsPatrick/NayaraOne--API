@@ -65,10 +65,31 @@ jobs:
       # roda localmente e em produção.
       APP_API_PREFIX: /api
       PORT: 3011
+      # Conferência Nayara 18/10/2026, roteiro item 4: senha dos usuários FICTÍCIOS do seed de
+      # dois tenants (scripts/seed-ci-two-tenants.js). Só existe dentro do Postgres descartável
+      # deste job; mesma categoria dos demais segredos "not-for-production" acima.
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Conferência Nayara 18/10/2026, E01: o artifact do run 39127433976 se chamava
+      # test-results-14e9580c… e não test-results-8f7c97c…. Causa: aquele run foi disparado pelo
+      # evento pull_request, em que github.sha é o commit de MERGE TEMPORÁRIO que o GitHub cria
+      # (refs/pull/1/merge, "Merge 8f7c97c into 19f5918"), não o commit da branch. Daqui em
+      # diante o nome do artifact e o cabeçalho do log usam o commit real da branch: o head do PR
+      # em pull_request, e github.sha em push. O sha do merge fica registrado ao lado, para
+      # conferência.
+      - name: Identificar o commit avaliado (evidência)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "EVIDENCE_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+            echo "EVIDENCE_MERGE_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          else
+            echo "EVIDENCE_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+            echo "EVIDENCE_MERGE_SHA=" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -125,6 +146,9 @@ jobs:
           node scripts/seed-dev.js
           node scripts/seedBillingRules.js
           node scripts/seedRealEstateRules.js
+          # Roteiro item 4 (Nayara, 18/10/2026): dois tenants fictícios com perfis
+          # maker/checker/leitura. Provado por test/ciTwoTenantsProfiles.test.js.
+          node scripts/seed-ci-two-tenants.js
 
       # GAP REAL CORRIGIDO (auditoria de entrega Marco 6/7, 08/10/2026): o schema "procurement"
       # (migration 20260101000267, Compras/Seguros) nunca estava nesta lista — toda a suíte de
@@ -175,12 +199,54 @@ jobs:
           NODE_ENV: test
         run: |
           set -o pipefail
-          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee test-results.log
+          {
+            echo "# Nayara One — resultado individual da suíte de testes (CI)"
+            echo "# evento: ${{ github.event_name }}"
+            echo "# commit avaliado (branch): ${EVIDENCE_SHA}"
+            echo "# commit de merge temporário do PR (só em pull_request): ${EVIDENCE_MERGE_SHA:-n/a}"
+            echo "# run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "# usuário do banco na suíte: nayara_ci_app (NOSUPERUSER NOBYPASSRLS)"
+            echo "#"
+          } > test-results.log
+          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee -a test-results.log
+
+      # E01 (Nayara, 18/10/2026): a API de download de artifacts do GitHub exige login mesmo em
+      # repositório público (a auditora recebeu HTTP 403). O resumo do job, ao contrário, é
+      # visível na página pública do run — então a contagem e a lista de falhas ficam ali também.
+      - name: Resumo público do resultado (visível na página do run, sem login)
+        if: always()
+        run: |
+          {
+            echo "## Resultado da suíte de testes"
+            echo ""
+            echo "- Evento: \`${{ github.event_name }}\`"
+            echo "- Commit avaliado: \`${EVIDENCE_SHA}\`"
+            [ -n "${EVIDENCE_MERGE_SHA}" ] && echo "- Commit de merge temporário do PR: \`${EVIDENCE_MERGE_SHA}\`"
+            echo "- Artifact: \`test-results-${EVIDENCE_SHA}\`"
+            echo ""
+            echo '```'
+            grep -E '^ℹ (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)' test-results.log | tail -8 || echo "(contagem indisponível)"
+            echo '```'
+            if grep -qE '^✖' test-results.log; then
+              echo ""
+              echo "### Testes com falha"
+              echo '```'
+              grep -E '^✖' test-results.log | sort -u | head -100
+              echo '```'
+            fi
+            if grep -qE '# SKIP|^﹣' test-results.log; then
+              echo ""
+              echo "### Testes pulados"
+              echo '```'
+              grep -E '^﹣' test-results.log | sort -u | head -100
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publicar artifact com resultado individual dos testes
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ github.sha }}
+          name: test-results-${{ env.EVIDENCE_SHA }}
           path: test-results.log
           retention-days: 90
