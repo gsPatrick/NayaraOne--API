@@ -625,6 +625,39 @@ test('F04-1: devolução e compensação ligadas à origem, contrato e titular, 
   });
 });
 
+test('F04-1b: o vínculo com a origem e o titular são imutáveis no BANCO — UPDATE cru é recusado pelo trigger', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract, holder } = await createLeaseWithTenantParty(transaction);
+    const deposit = await receiveDeposit(transaction, { contract, holder, amount: 2000 });
+    const otherDeposit = await receiveDeposit(transaction, { contract, holder, amount: 900 });
+    const release = await releaseDeposit(transaction, { amount: 300, thirdPartyOriginEntryId: deposit.id });
+
+    // Cada tentativa proibida aborta a transação no Postgres: SAVEPOINT por tentativa.
+    for (const [column, value] of [
+      ['third_party_origin_entry_id', otherDeposit.id],
+      ['third_party_holder_person_id', null],
+    ]) {
+      await sequelize.query('SAVEPOINT f04_1b', { transaction });
+      await assert.rejects(
+        () => sequelize.query(`UPDATE finance.financial_entries SET "${column}" = :value WHERE id = :id`, {
+          replacements: { value, id: release.id },
+          transaction,
+        }),
+        new RegExp(`append-only.*${column}`),
+        `${column} não pode ser reescrita por SQL direto`
+      );
+      await sequelize.query('ROLLBACK TO SAVEPOINT f04_1b', { transaction });
+    }
+
+    const [[row]] = await sequelize.query(
+      'SELECT third_party_origin_entry_id AS origin, third_party_holder_person_id AS holder FROM finance.financial_entries WHERE id = :id',
+      { replacements: { id: release.id }, transaction }
+    );
+    assert.equal(row.origin, deposit.id);
+    assert.equal(row.holder, holder.id);
+  });
+});
+
 test('F04-2: negativos — sem origem, origem inexistente, contrato divergente, titular divergente e valor acima do saldo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { contract, holder } = await createLeaseWithTenantParty(transaction);
