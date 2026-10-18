@@ -139,7 +139,12 @@ jobs:
               END IF;
             END $$;
           SQL
-          for schema in ai audit construction core crm finance integration inventory legal people procurement real_estate; do
+          # FIX (18/10/2026): a lista de schemas era hardcoded e o schema "correspondent"
+          # (Marco 8) ficou de fora — 395 testes falhavam com "permission denied for schema
+          # correspondent" no run 39123218154. Agora os schemas são enumerados do catálogo:
+          # qualquer schema novo criado por migration entra automaticamente, sem manutenção
+          # manual desta lista.
+          for schema in $(psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -t -A -c "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname NOT IN ('information_schema')"); do
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"

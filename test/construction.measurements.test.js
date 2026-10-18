@@ -317,7 +317,10 @@ test('M6-55/M6-68 medição aprovada gera obrigação financeira real e aprovar 
         `DELETE FROM construction.project_stages WHERE project_id = :pid`,
         { replacements: { pid: projectId }, transaction: t }
       );
-      await sequelize.query(`DELETE FROM construction.projects WHERE id = :id`, { replacements: { id: projectId }, transaction: t });
+      // A obra NÃO é mais apagada: o FinancialEntry órfão (que o trigger append-only impede de
+      // apagar) referencia construction_project_id — o DELETE violaria a FK
+      // financial_entries_construction_project_id_fkey (visto no CI run 39123218154). A obra de
+      // teste fica no banco, identificável pelo sufixo único do nome.
     });
   }
 });
