@@ -6,12 +6,13 @@ const bcrypt = require('bcryptjs');
 const { sequelize, Group, Company, User, UserMembership, Role, Permission, RolePermission } = require('../src/models');
 
 /**
- * Seed do ambiente isolado de CI — dois tenants fictícios, cada um com três perfis:
- *   MAKER   — cria/solicita (procurement:create, procurement:read)
- *   CHECKER — aprova (procurement:approve, procurement:read) e também pode solicitar
- *             (procurement:create): assim o teste prova que a segregação "quem cria não aprova"
- *             vem da REGRA de negócio, não da simples ausência de permissão.
- *   LEITURA — só lê (procurement:read)
+ * Seed do ambiente isolado de CI — dois tenants fictícios, cada um com três perfis, cobrindo
+ * Compras (Marco 7), Financeiro (Marco 4) e Jurídico (Marco 5):
+ *   MAKER   — cria/solicita e lê (procurement/finance/legal :create e :read)
+ *   CHECKER — aprova (procurement/finance/legal :approve) e também pode criar/solicitar
+ *             (:create): assim os testes provam que a segregação "quem cria não aprova" vem da
+ *             REGRA de negócio, não da simples ausência de permissão.
+ *   LEITURA — só lê (procurement/finance/legal :read)
  *
  * Pedido da conferência da Nayara (18/10/2026, roteiro item 4): "ambiente isolado e descartável
  * com fixtures fictícias, dois tenants e perfis maker/checker/leitura". Roda SÓ no workflow do
@@ -27,10 +28,24 @@ const TENANTS = [
   { key: 'B', groupName: 'CI — Grupo Fictício B', companyName: 'CI — Empresa Fictícia B' },
 ];
 
+// Financeiro e Jurídico entraram em 18/10/2026: a conferência dos Marcos 4/5 pede o ambiente
+// de dois tenants com maker/checker/leitura nesses módulos, não só em Compras.
 const PROFILES = [
-  { key: 'maker', roleName: 'CI MAKER', permissions: ['procurement:create', 'procurement:read'] },
-  { key: 'checker', roleName: 'CI CHECKER', permissions: ['procurement:approve', 'procurement:read', 'procurement:create'] },
-  { key: 'leitura', roleName: 'CI LEITURA', permissions: ['procurement:read'] },
+  {
+    key: 'maker',
+    roleName: 'CI MAKER',
+    permissions: ['procurement:create', 'procurement:read', 'finance:create', 'finance:read', 'legal:create', 'legal:read'],
+  },
+  {
+    key: 'checker',
+    roleName: 'CI CHECKER',
+    permissions: [
+      'procurement:approve', 'procurement:read', 'procurement:create',
+      'finance:approve', 'finance:read', 'finance:create',
+      'legal:approve', 'legal:read', 'legal:create',
+    ],
+  },
+  { key: 'leitura', roleName: 'CI LEITURA', permissions: ['procurement:read', 'finance:read', 'legal:read'] },
 ];
 
 function emailFor(tenantKey, profileKey) {

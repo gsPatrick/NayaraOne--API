@@ -17,10 +17,12 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { emailFor } = require('../scripts/seed-ci-two-tenants');
+const { emailFor, PROFILES } = require('../scripts/seed-ci-two-tenants');
 const { sequelize, User } = require('../src/models');
 
-process.env.PORT = process.env.CI_TWO_TENANTS_HTTP_TEST_PORT || '21600';
+// 21603 (antes 21600, que colidia com test/painelApproverPermissions.test.js — dois arquivos na
+// mesma porta derrubam um deles com EADDRINUSE quando o CI roda em paralelo).
+process.env.PORT = process.env.CI_TWO_TENANTS_HTTP_TEST_PORT || '21603';
 
 let skipReason = null;
 let appLoaded = false;
@@ -80,9 +82,11 @@ test('CI dois tenants: tokens reais carregam exatamente as permissões de cada p
   if (skipReason) return t.skip(skipReason);
   const permsOf = (who) => JSON.parse(Buffer.from(tokens[who].split('.')[1], 'base64').toString()).permissions.sort();
   for (const tenantKey of ['A', 'B']) {
-    assert.deepEqual(permsOf(`${tenantKey}:maker`), ['procurement:create', 'procurement:read']);
-    assert.deepEqual(permsOf(`${tenantKey}:checker`), ['procurement:approve', 'procurement:create', 'procurement:read']);
-    assert.deepEqual(permsOf(`${tenantKey}:leitura`), ['procurement:read']);
+    for (const profile of PROFILES) {
+      assert.deepEqual(permsOf(`${tenantKey}:${profile.key}`), [...profile.permissions].sort());
+    }
+    // Leitura nunca carrega permissão de escrita/aprovação em nenhum módulo.
+    assert.ok(permsOf(`${tenantKey}:leitura`).every((code) => code.endsWith(':read')));
   }
 });
 

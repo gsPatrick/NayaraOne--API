@@ -59,4 +59,36 @@ Quem tiver login no GitHub pode baixar o artifact original (`gh run download 391
 - O reporter `spec` imprime sub-testes indentados (`  ✔ …`). Por isso contar só linhas que começam com `✔` dá 1113 no run 39127433976; contando também os indentados dá 1137, igual à linha `ℹ tests` emitida pelo próprio `node --test`. Nenhuma linha `✖` ou `﹣` (pulado) em nenhum dos dois logs.
 - O log contém linhas de log HTTP dos testes de rota, incluindo cabeçalhos `Authorization: Bearer …`. São tokens de usuários **fictícios** de teste, assinados com o segredo exclusivo do CI (`ci-access-secret-not-for-production`, público no próprio workflow), com validade de 15 minutos e válidos só contra o banco descartável do job, destruído ao fim do run. Foram mantidos para que o arquivo continue idêntico ao do artifact.
 - Os testes rodam com o usuário `nayara_ci_app` (NOSUPERUSER, NOBYPASSRLS), criado pelo próprio workflow. Isso prova o comportamento com RLS ativo no banco do CI; não prova sozinho a configuração do usuário do banco publicado.
-- Ambiente isolado (roteiro item 4): a partir deste commit o CI também cria dois tenants fictícios, cada um com perfis maker/checker/leitura (`scripts/seed-ci-two-tenants.js`), e `test/ciTwoTenantsProfiles.test.js` prova pelo caminho HTTP real que maker não aprova, checker não aprova o próprio pedido, checker aprova o do maker, leitura recebe 403 ao criar e o tenant B não enxerga nem decide o pedido do tenant A. Esses testes ainda não aparecem nos dois logs acima (são posteriores a eles); aparecerão no próximo run.
+- Os testes de dois tenants (seção abaixo) são posteriores aos dois logs acima e não aparecem neles. Compras aparece a partir do run 39147600917 (commit `46b0ecb`); Financeiro e Jurídico, a partir do primeiro run que incluir `test/ciTwoTenantsFinanceLegal.test.js`.
+
+## Ambiente isolado com dois tenants e perfis maker/checker/leitura (roteiro item 4)
+
+O workflow cria, no Postgres descartável do job e depois do seed base, **dois tenants fictícios** (`CI — Empresa Fictícia A` e `B`), cada um com três usuários fictícios (`scripts/seed-ci-two-tenants.js`, senha só no workflow em `CI_TENANT_USERS_PASSWORD`). As permissões vêm do catálogo real (`core.permissions`); se faltar alguma, o seed falha em vez de inventar.
+
+| Perfil | Permissões | Papel no teste |
+|---|---|---|
+| maker | `procurement:create`, `procurement:read`, `finance:create`, `finance:read`, `legal:create`, `legal:read` | cria e solicita |
+| checker | `procurement:approve`, `procurement:create`, `procurement:read`, `finance:approve`, `finance:create`, `finance:read`, `legal:approve`, `legal:create`, `legal:read` | aprova; também pode criar, para provar que "quem cria não aprova" vem da regra de negócio e não da falta de permissão |
+| leitura | `procurement:read`, `finance:read`, `legal:read` | só lê |
+
+Os testes fazem login real (senha → JWT com as permissões lidas do banco) e usam as rotas HTTP reais, com o usuário `nayara_ci_app` sem bypass de RLS. Fora do CI são pulados com motivo explícito.
+
+**Compras (Marco 7) — `test/ciTwoTenantsProfiles.test.js`**
+- os tokens carregam exatamente as permissões da tabela, e o perfil leitura só tem `:read`;
+- maker cria pedido de compra e recebe 403 ao aprovar; checker aprova o pedido do maker;
+- checker recebe `PURCHASE_REQUEST_SELF_APPROVAL_FORBIDDEN` ao aprovar o próprio pedido;
+- leitura recebe 403 ao criar e consegue listar;
+- tenant B não vê o pedido de A na lista, recebe 404 ao ler e ao decidir, e o pedido de A continua `REQUESTED`.
+
+**Financeiro (Marco 4) — `test/ciTwoTenantsFinanceLegal.test.js`**
+- maker cria centro de custo e lançamento a pagar, abre a solicitação de aprovação e recebe 403 ao decidir; checker aprova (`APPROVED`);
+- checker recebe `FINANCE_APPROVAL_SELF_APPROVAL_FORBIDDEN` ao decidir a solicitação que ele mesmo abriu;
+- leitura recebe 403 ao criar lançamento e ao pedir aprovação, e consegue listar e ler o lançamento;
+- tenant B recebe 404 ao ler o lançamento de A e ao decidir a aprovação de A, não vê essa aprovação na lista, e ela continua `PENDING` para A.
+
+**Jurídico (Marco 5) — `test/ciTwoTenantsFinanceLegal.test.js`**
+- maker cria contrato (`DRAFT`); leitura recebe 403 ao criar e consegue ler;
+- tenant B não vê o contrato de A na lista, recebe 404 ao ler e ao tentar mudar o status (`/transition`), e o contrato de A continua `DRAFT`;
+- condição de cláusula (F01): maker cria a cláusula condicional (`PENDING_APPROVAL`) e recebe 403 ao aprovar; checker do tenant B recebe 404; checker de A aprova (`APPROVED`); checker recebe `LEGAL_CLAUSE_CONDITION_SELF_APPROVAL_BLOCKED` ao aprovar a que ele mesmo criou.
+
+Validação local antes do push (18/10/2026): Postgres 16 descartável, migrations do zero, `seed-dev` + regras + `seed-ci-two-tenants`, testes como `nayara_ci_app` (NOSUPERUSER, NOBYPASSRLS): 12 de 12 aprovados nos dois arquivos.
