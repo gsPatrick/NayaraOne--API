@@ -51,6 +51,11 @@ jobs:
       JWT_REFRESH_TTL: 7d
       PII_HASH_SECRET: ci-pii-hash-secret-not-for-production
       MFA_ENCRYPTION_KEY: 47f62af2f91a7ac9bb6ca3db95498c3ab311d033dd97f7e101b062a84c4781e0
+      # FIX (18/10/2026): a criptografia de arquivo em repouso (files.encryptionAtRest, desta
+      # rodada do Marco 8) exige esta chave — sem ela, 100 testes que tocam upload/evidência
+      # falhavam no CI com FILES_CRYPTO_CONFIG_MISSING (run 39123721868). Chave exclusiva do
+      # CI, sem relação com qualquer ambiente real.
+      FILES_ENCRYPTION_KEY: 9c1d41a6e7b8f2035d6a9c0e4b7f81d2c3a5e8f0b1d4c7a9e2f5b8d1c4a7e0f3
       # GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): com "/api/v1" aqui, o app monta as rotas
       # versionadas (router.use('/v1', ...) dentro de src/routes/index.js) sob
       # "/api/v1" + "/v1" = "/api/v1/v1/...". Os testes HTTP reais que sobem o app numa porta
