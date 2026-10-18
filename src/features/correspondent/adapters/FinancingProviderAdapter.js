@@ -131,7 +131,11 @@ class SandboxFinancingProviderAdapter {
     const seed = String(req?.idempotencyKey || externalId)
       .split('')
       .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    const variancePct = ((seed % 7) - 3) / 100; // -3% a +3%, determinístico
+    // -3% a +3% sem o 0%: com `(seed % 7) - 3`, 1 em cada 7 chaves dava variação zero e o valor
+    // avaliado saía idêntico ao de referência — o teste do invariante "avaliação nunca altera o
+    // preço" (CORRESPONDENT-APR-03) ficava sem prova nesses casos (falhou no CI run 39146923044).
+    const VARIANCES = [-3, -2, -1, 1, 2, 3];
+    const variancePct = VARIANCES[seed % VARIANCES.length] / 100;
     const value = referenceValue > 0 ? Number((referenceValue * (1 + variancePct)).toFixed(2)) : null;
     return {
       externalId,
