@@ -16,6 +16,7 @@
     "restore": "node scripts/restoreDatabase.js",
     "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
     "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
+    "restore-drill:legal-full": "node scripts/restoreDrill/legalFullDrill.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
