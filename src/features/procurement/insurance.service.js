@@ -64,6 +64,20 @@ function addMonthsDateOnly(dateOnlyStr, months) {
   return utcDate.toISOString().slice(0, 10);
 }
 
+// BUG REAL CORRIGIDO (auditoria Marco 7 "reconf", 18/10/2026): o payable de cada parcela
+// recebia `dueAt: dueDate` com a string DATEONLY crua ("2026-11-18"). FinancialEntry.dueAt é
+// timestamp (DATE) — o Sequelize interpretava a string como meia-noite UTC, que em
+// America/Sao_Paulo (UTC-3) é 21:00 do dia ANTERIOR: o Financeiro mostrava 17/11 pra uma
+// parcela de 18/11, e a 1ª parcela nascia "Vencida" no próprio dia da emissão (meia-noite UTC
+// já tinha passado). Mesma convenção do Front (lib/format.js#dateOnlyInputToIso): data pura
+// ancora no MEIO-DIA de São Paulo, que é SEMPRE 15:00 UTC (UTC-3 fixo, sem horário de verão
+// desde 2019) — o dia exibido nunca muda e a parcela emitida de manhã não nasce vencida.
+const SAO_PAULO_UTC_OFFSET_HOURS = 3;
+function dateOnlyToNoonSaoPauloInstant(dateOnlyStr) {
+  const [year, month, day] = String(dateOnlyStr).slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12 + SAO_PAULO_UTC_OFFSET_HOURS, 0, 0, 0));
+}
+
 // GAP REAL CORRIGIDO (auditoria contrato Marco 7, 2026-10-07 — "Apólice com ... vigência ...
 // renovação alerta"): o sistema alertava a renovação 30 dias antes, mas NADA agia quando a
 // vigência de fato acabava — a apólice continuava ACTIVE para sempre e `openClaim` só olhava
@@ -535,7 +549,7 @@ async function generateInstallments(policy, count, firstDueAt, actor, transactio
         entryType: 'DEBIT',
         nature: 'PAYABLE',
         amount,
-        dueAt: dueDate,
+        dueAt: dateOnlyToNoonSaoPauloInstant(dueDate),
         description: `Prêmio de seguro — parcela ${i}/${n} — apólice ${policyLabel}`,
         idempotencyKey: `insurance-installment:${installment.id}`,
         costCenterId: costCenter.id,

@@ -55,6 +55,15 @@ const PERMISSION_CODES = [
   'properties:read',
   'radar:read',
   'crm:opportunities:read',
+  // FIX (auditoria "reconf" 18/10/2026, 3ª permissão faltante em 3 rodadas): o conjunto agora
+  // foi levantado MAPEANDO todas as chamadas de app/painel/page.js (listProperties, listPeople,
+  // listDuplicatePairs, listOpportunities, listRadars, /companies, /units, /users,
+  // /memberships) contra o requirePermission de cada rota — e é TRAVADO pelo teste
+  // test/painelApproverPermissions.test.js, que chama cada endpoint do Painel com um usuário
+  // de exatamente estas permissões e exige 200 em todos. Permissão nova no Painel => o teste
+  // quebra antes de qualquer rodada de auditoria.
+  'companies:read',
+  'memberships:read',
 ];
 
 async function main() {
@@ -162,4 +171,11 @@ async function main() {
   }
 }
 
-main();
+// Exporta a lista pro teste test/painelApproverPermissions.test.js usar EXATAMENTE o mesmo
+// conjunto — qualquer divergência entre o que o Painel exige e o que o seed concede quebra o
+// teste, nunca mais uma rodada de auditoria.
+module.exports = { PERMISSION_CODES };
+
+if (require.main === module) {
+  main();
+}

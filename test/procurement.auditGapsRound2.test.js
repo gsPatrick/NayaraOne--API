@@ -139,8 +139,14 @@ test('confirmGoodsReceipt: over-receipt capa o payable no saldo do PO, excedente
     assert.equal(Number(entry.amount), 50);
 
     // Resolver REJECTANDO o excedente: nenhum lançamento financeiro adicional é criado.
+    // FIX (auditoria "reconf" 18/10): a divergência agora exige resolvedor DIFERENTE de quem
+    // registrou o recebimento (maker-checker) e justificativa na rejeição.
+    const resolver = await User.create(
+      { name: `QA GAP2 resolvedor ${Date.now()}`, email: `qa-gap2-resolver-${Date.now()}-a@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
     const resolvedReject = await procurementService.resolveDiscrepancy(
-      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED' }, actorOf(), transaction
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'Excedente devolvido ao fornecedor (teste).' }, { userId: resolver.id }, transaction
     );
     assert.equal(resolvedReject.status, 'REJECTED');
     const extraEntryAfterReject = await FinancialEntry.findOne({
@@ -165,8 +171,13 @@ test('resolveDiscrepancy: aceitar um OVER_RECEIPT cria um FinancialEntry adicion
     const overReceipt = discrepancies.find((d) => d.discrepancyType === 'OVER_RECEIPT');
     assert.ok(overReceipt);
 
+    // FIX (auditoria "reconf" 18/10): resolvedor precisa ser diferente de quem recebeu.
+    const resolver = await User.create(
+      { name: `QA GAP2 resolvedor ${Date.now()}`, email: `qa-gap2-resolver-${Date.now()}-b@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
     const resolved = await procurementService.resolveDiscrepancy(
-      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, actorOf(), transaction
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, { userId: resolver.id }, transaction
     );
     assert.equal(resolved.status, 'ACCEPTED');
 

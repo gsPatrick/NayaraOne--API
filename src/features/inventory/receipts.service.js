@@ -171,7 +171,11 @@ async function reviewReceipt(receiptId, actorUserId, groupId, companyId, transac
   return receipt;
 }
 
-async function confirmReceipt(receiptId, actor, groupId, companyId, transaction) {
+// `options.movementReason` (opcional): motivo explícito pros movimentos IN deste recebimento.
+// Usado pelo excedente aceito de Compras (procurement.resolveDiscrepancy), que é um recibo
+// COMPLEMENTAR da mesma NF já registrada — ele não pode reivindicar o `invoiceNumber` de novo
+// (a trava de NF duplicada, correta, recusaria), mas o movimento precisa citar a NF de origem.
+async function confirmReceipt(receiptId, actor, groupId, companyId, transaction, options = {}) {
   // Postgres rejeita FOR UPDATE combinado com include de hasMany (outer join nullable) — o lock
   // é feito só na linha do receipt; os itens (já imutáveis depois de criados) são lidos depois.
   const receipt = await InventoryReceipt.findOne({ where: { id: receiptId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
@@ -210,9 +214,10 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction)
         sourceType: 'RECEIPT',
         sourceId: receipt.id,
         idempotencyKey: `receipt:${receipt.id}:item:${line.id}`,
-        reason: receipt.invoiceNumber
-          ? `Recebimento da nota fiscal nº ${receipt.invoiceNumber}.`
-          : 'Recebimento de mercadoria.',
+        reason: options.movementReason
+          || (receipt.invoiceNumber
+            ? `Recebimento da nota fiscal nº ${receipt.invoiceNumber}.`
+            : 'Recebimento de mercadoria.'),
       },
       actor,
       transaction

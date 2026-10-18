@@ -17,7 +17,7 @@ const {
   SupplierQualification,
   FinancialEntry,
 } = require('../../models');
-const { InventoryStockBalance, Person, User } = require('../../models');
+const { InventoryStockBalance, Person, User, InventoryItem } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
@@ -777,7 +777,48 @@ async function listGoodsReceipts(groupId, companyId, transaction, { purchaseOrde
 async function listDiscrepancies(groupId, companyId, transaction, { status } = {}) {
   const where = { groupId, companyId };
   if (status) where.status = status;
-  return ReceiptDiscrepancy.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
+  const discrepancies = await ReceiptDiscrepancy.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
+
+  // FIX (auditoria Marco 7 "reconf", 18/10/2026): a listagem crua deixava duas linhas
+  // "25 / 30 / Em aberto" indistinguíveis — sem pedido, item nem NF, só olhando o banco dava
+  // pra saber qual era qual. Enriquece cada linha com a identificação de onde ela veio.
+  const grItemIds = [...new Set(discrepancies.map((d) => d.goodsReceiptItemId).filter(Boolean))];
+  if (grItemIds.length === 0) return discrepancies.map((d) => d.toJSON());
+
+  const grItems = await GoodsReceiptItem.findAll({ where: { id: grItemIds }, transaction });
+  const grIds = [...new Set(grItems.map((i) => i.goodsReceiptId))];
+  const poItemIds = [...new Set(grItems.map((i) => i.purchaseOrderItemId).filter(Boolean))];
+  const goodsReceipts = grIds.length ? await GoodsReceipt.findAll({ where: { id: grIds }, transaction }) : [];
+  const poItems = poItemIds.length ? await PurchaseOrderItem.findAll({ where: { id: poItemIds }, transaction }) : [];
+  const poIds = [...new Set(goodsReceipts.map((g) => g.purchaseOrderId).filter(Boolean))];
+  const orders = poIds.length ? await PurchaseOrder.findAll({ where: { id: poIds }, transaction }) : [];
+  const itemIds = [...new Set(poItems.map((i) => i.inventoryItemId).filter(Boolean))];
+  const inventoryItems = itemIds.length ? await InventoryItem.findAll({ where: { id: itemIds }, attributes: ['id', 'name', 'sku'], transaction }) : [];
+  const supplierIds = [...new Set(orders.map((o) => o.supplierPersonId).filter(Boolean))];
+  const suppliers = supplierIds.length ? await Person.findAll({ where: { id: supplierIds }, attributes: ['id', 'legalName'], transaction }) : [];
+
+  const grItemById = new Map(grItems.map((i) => [i.id, i]));
+  const grById = new Map(goodsReceipts.map((g) => [g.id, g]));
+  const poItemById = new Map(poItems.map((i) => [i.id, i]));
+  const orderById = new Map(orders.map((o) => [o.id, o]));
+  const invItemById = new Map(inventoryItems.map((i) => [i.id, i]));
+  const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+
+  return discrepancies.map((d) => {
+    const row = d.toJSON();
+    const grItem = grItemById.get(d.goodsReceiptItemId);
+    const gr = grItem ? grById.get(grItem.goodsReceiptId) : null;
+    const poItem = grItem ? poItemById.get(grItem.purchaseOrderItemId) : null;
+    const order = gr ? orderById.get(gr.purchaseOrderId) : null;
+    const invItem = poItem ? invItemById.get(poItem.inventoryItemId) : null;
+    const supplier = order ? supplierById.get(order.supplierPersonId) : null;
+    row.purchaseOrderId = order ? order.id : null;
+    row.supplierName = supplier ? supplier.legalName : null;
+    row.invoiceNumber = gr ? gr.invoiceFingerprint : null;
+    row.itemName = invItem ? invItem.name : null;
+    row.itemSku = invItem ? invItem.sku : null;
+    return row;
+  });
 }
 
 const DISCREPANCY_RESOLUTIONS = ['ACCEPTED', 'REJECTED'];
@@ -804,6 +845,33 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
   if (!discrepancy) throw AppError.notFound('Divergência não encontrada.', 'RECEIPT_DISCREPANCY_NOT_FOUND');
   if (discrepancy.status !== 'OPEN') {
     throw AppError.conflict(`Divergência com status "${discrepancy.status}" já foi resolvida.`, 'RECEIPT_DISCREPANCY_INVALID_STATUS');
+  }
+
+  // FIX (auditoria Marco 7 "reconf", 18/10/2026): rejeitar uma divergência sem dizer o porquê
+  // deixava a trilha muda — "Rejeitada" e nada mais. Mesmo princípio das demais decisões
+  // documentadas do projeto (perda, prazo jurídico, reajuste): recusa exige justificativa.
+  if (normalized === 'REJECTED' && !String(notes || '').trim()) {
+    throw AppError.badRequest(
+      'Rejeitar uma divergência exige uma justificativa ("notes").',
+      'RECEIPT_DISCREPANCY_REJECTION_REASON_REQUIRED'
+    );
+  }
+
+  // FIX (auditoria Marco 7 "reconf", 18/10/2026): o MESMO usuário que registrou o recebimento
+  // podia aceitar o próprio excedente — sem segregação, quem recebe "a mais" valida a si
+  // mesmo. Mesmo padrão maker-checker do resto do projeto (requisição, perda, aprovação
+  // financeira): quem criou o recebimento não decide a divergência dele.
+  const discrepancyGrItem = discrepancy.goodsReceiptItemId
+    ? await GoodsReceiptItem.findByPk(discrepancy.goodsReceiptItemId, { transaction })
+    : null;
+  const discrepancyGoodsReceipt = discrepancyGrItem
+    ? await GoodsReceipt.findByPk(discrepancyGrItem.goodsReceiptId, { transaction })
+    : null;
+  if (discrepancyGoodsReceipt && discrepancyGoodsReceipt.createdBy && actor.userId && discrepancyGoodsReceipt.createdBy === actor.userId) {
+    throw AppError.forbidden(
+      'Quem registrou o recebimento não pode decidir a própria divergência — peça a decisão a outra pessoa com permissão.',
+      'RECEIPT_DISCREPANCY_SELF_RESOLUTION_BLOCKED'
+    );
   }
 
   const beforeJson = discrepancy.toJSON();
@@ -890,6 +958,10 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
       // capar a entrada no saldo do PO (ver fix lá). Mesmo caminho delegado de lá
       // (inventory.receipts), nunca duplicando a lógica de IN/saldo/custo médio.
       if (overQuantity > 0 && poItem.inventoryItemId && goodsReceipt.destinationLocationId) {
+        // FIX (auditoria Marco 7 "reconf", 18/10/2026): a entrada do excedente aceito saía
+        // "Recebimento de mercadoria." genérico. O recibo complementar NÃO reivindica a NF de
+        // novo (a trava de NF duplicada recusaria — e com razão, é a mesma nota); o motivo do
+        // movimento cita a NF de origem explicitamente via confirmReceipt(..., { movementReason }).
         const overInventoryReceipt = await createInventoryReceipt(
           {
             groupId: goodsReceipt.groupId,
@@ -903,7 +975,11 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
         );
         const { reviewReceipt } = require('../inventory/receipts.service');
         await reviewReceipt(overInventoryReceipt.id, actor.userId, goodsReceipt.groupId, goodsReceipt.companyId, transaction);
-        await confirmInventoryReceipt(overInventoryReceipt.id, actor, goodsReceipt.groupId, goodsReceipt.companyId, transaction);
+        await confirmInventoryReceipt(overInventoryReceipt.id, actor, goodsReceipt.groupId, goodsReceipt.companyId, transaction, {
+          movementReason: goodsReceipt.invoiceFingerprint
+            ? `Excedente aceito — recebimento da nota fiscal nº ${goodsReceipt.invoiceFingerprint}.`
+            : 'Excedente aceito — recebimento de mercadoria.',
+        });
         discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${overQuantity} un. incorporado ao estoque — recebimento ${overInventoryReceipt.id}]`;
         await discrepancy.save({ transaction });
       }

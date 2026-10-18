@@ -507,8 +507,12 @@ test('Three-way match: resolveDiscrepancy fecha o case (ACCEPTED/REJECTED) e rej
     );
     const discrepancy = discrepancies[0];
 
+    // FIX (auditoria "reconf" 18/10): a divergência agora exige resolvedor DIFERENTE de quem
+    // registrou o recebimento (maker-checker) — resolvedor dedicado em vez de tenant.userId.
+    const discrepancyResolver = await createSecondApprover(transaction);
+
     await assert.rejects(
-      () => procurementService.resolveDiscrepancy(discrepancy.id, tenant.groupId, tenant.companyId, { resolution: 'MAYBE' }, { userId: tenant.userId }, transaction),
+      () => procurementService.resolveDiscrepancy(discrepancy.id, tenant.groupId, tenant.companyId, { resolution: 'MAYBE' }, { userId: discrepancyResolver.id }, transaction),
       (err) => {
         assert.equal(err.code, 'RECEIPT_DISCREPANCY_VALIDATION');
         return true;
@@ -518,15 +522,15 @@ test('Three-way match: resolveDiscrepancy fecha o case (ACCEPTED/REJECTED) e rej
     const resolved = await procurementService.resolveDiscrepancy(
       discrepancy.id, tenant.groupId, tenant.companyId,
       { resolution: 'accepted', notes: 'Excedente aceito pelo comprador.' },
-      { userId: tenant.userId },
+      { userId: discrepancyResolver.id },
       transaction
     );
     assert.equal(resolved.status, 'ACCEPTED');
-    assert.equal(resolved.resolvedByUserId, tenant.userId);
+    assert.equal(resolved.resolvedByUserId, discrepancyResolver.id);
     assert.ok(resolved.resolvedAt);
 
     await assert.rejects(
-      () => procurementService.resolveDiscrepancy(discrepancy.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED' }, { userId: tenant.userId }, transaction),
+      () => procurementService.resolveDiscrepancy(discrepancy.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'x' }, { userId: discrepancyResolver.id }, transaction),
       (err) => {
         assert.equal(err.code, 'RECEIPT_DISCREPANCY_INVALID_STATUS');
         return true;
@@ -721,7 +725,9 @@ test('Invoice match: rejeitar PRICE_MISMATCH estorna o payable errado e cria um 
     const wrongPayableId = goodsReceipt.financialEntryId;
     assert.ok(wrongPayableId);
 
-    await procurementService.resolveDiscrepancy(discrepancies[0].id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED' }, { userId: tenant.userId }, transaction);
+    // FIX (auditoria "reconf" 18/10): resolvedor distinto + justificativa obrigatória na rejeição.
+    const priceResolver = await createSecondApprover(transaction);
+    await procurementService.resolveDiscrepancy(discrepancies[0].id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'Valor da NF não confere com o pedido (teste).' }, { userId: priceResolver.id }, transaction);
 
     const { FinancialEntry } = require('../src/models');
     const wrongPayable = await FinancialEntry.findByPk(wrongPayableId, { transaction });

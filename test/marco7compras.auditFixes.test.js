@@ -110,8 +110,13 @@ test('C1: receber 30 de um PO de 25 sobe o saldo em 25; ACEITAR a divergência s
     const saldoAntesDaDecisao = await balanceOf(item.id, location.id, transaction);
     assert.equal(saldoAntesDaDecisao, 25, 'o excedente (5) não pode entrar no saldo antes da decisão humana da divergência');
 
+    // FIX (auditoria "reconf" 18/10): resolvedor precisa ser diferente de quem recebeu.
+    const resolver = await User.create(
+      { name: `QA M7C resolvedor ${uniqueSuffix()}`, email: `qa-m7c-resolver-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
     await procurementService.resolveDiscrepancy(
-      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, actorOf(), transaction
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, { userId: resolver.id }, transaction
     );
 
     const saldoDepoisDoAceite = await balanceOf(item.id, location.id, transaction);
@@ -132,8 +137,13 @@ test('C1: REJEITAR a divergência de over-receipt mantém o saldo em 25 e regist
     );
     const overReceipt = discrepancies.find((d) => d.discrepancyType === 'OVER_RECEIPT');
 
+    // FIX (auditoria "reconf" 18/10): resolvedor distinto + justificativa obrigatória.
+    const resolver = await User.create(
+      { name: `QA M7C resolvedor ${uniqueSuffix()}`, email: `qa-m7c-resolver-rej-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
     const resolved = await procurementService.resolveDiscrepancy(
-      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED' }, actorOf(), transaction
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'Excedente recusado no portão (teste).' }, { userId: resolver.id }, transaction
     );
 
     const saldo = await balanceOf(item.id, location.id, transaction);
@@ -294,5 +304,137 @@ test('C5: baixa com o PRÓPRIO lançamento vinculado (liquidado) funciona', asyn
     const paid = await insuranceService.payInsurancePolicyInstallment(inst.id, inst.financialEntryId, actorWithTenant(), transaction);
     assert.equal(paid.status, 'PAID');
     assert.equal(paid.financialEntryId, inst.financialEntryId);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// RECONF (auditoria Marco 7 "reconf", 18/10/2026) — achados finais da rodada de reconfirmação
+// ---------------------------------------------------------------------------------------------
+
+function saoPauloDateOf(date) {
+  return new Date(date).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+test('RECONF-1: payable da parcela vence no MESMO dia da parcela em São Paulo (nunca D-1 por fuso)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { installments } = await issuePolicyWithInstallments(transaction, 3);
+    assert.equal(installments.length, 3);
+    for (const inst of installments) {
+      const entry = await FinancialEntry.findByPk(inst.financialEntryId, { transaction });
+      assert.equal(
+        saoPauloDateOf(entry.dueAt),
+        String(inst.dueDate).slice(0, 10),
+        `parcela ${inst.dueDate} gerou lançamento vencendo em ${saoPauloDateOf(entry.dueAt)} (America/Sao_Paulo) — perdeu um dia por fuso`
+      );
+    }
+  });
+});
+
+test('RECONF-1: parcela com vencimento HOJE não nasce "Vencida" no momento da emissão', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const todaySaoPaulo = saoPauloDateOf(new Date());
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 50000 }, actorWithTenant(), transaction);
+    await insuranceService.issuePolicy(
+      policy.id,
+      { effectiveDate: todaySaoPaulo, expiryDate: `${Number(todaySaoPaulo.slice(0, 4)) + 1}${todaySaoPaulo.slice(4)}`, installmentsCount: 1 },
+      actorWithTenant(),
+      transaction
+    );
+    const [inst] = await insuranceService.listPolicyInstallments(policy.id, transaction);
+    const entry = await FinancialEntry.findByPk(inst.financialEntryId, { transaction });
+    assert.equal(saoPauloDateOf(entry.dueAt), todaySaoPaulo);
+    // Mesma regra de "Vencida" do Front (lib/mock/finance.js#isEntryOverdue): PENDING e dueAt < agora.
+    // Ancorado ao meio-dia de SP: só vence depois das 12:00 do próprio dia, nunca na emissão de
+    // madrugada/manhã (antes: meia-noite UTC = 21:00 do dia anterior => "Vencida" ao nascer).
+    const nowSaoPauloHour = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
+    if (nowSaoPauloHour < 12) {
+      assert.ok(new Date(entry.dueAt).getTime() > Date.now(), 'emitida antes do meio-dia, a parcela de hoje não pode nascer vencida');
+    }
+    assert.ok(new Date(entry.dueAt).getTime() > new Date(`${todaySaoPaulo}T03:00:00Z`).getTime(), 'o vencimento nunca pode cair antes do início do próprio dia em SP');
+  });
+});
+
+async function overReceiptScenario(transaction, { quantity = 25, received = 30, invoice } = {}) {
+  const { item, location } = await createItemAndWarehouse(transaction);
+  const { order } = await fullProcurementCycle(transaction, { item, quantity, unitPrice: 4 });
+  const { discrepancies } = await procurementService.confirmGoodsReceipt(
+    order.id, tenant.groupId, tenant.companyId,
+    { destinationLocationId: location.id, invoiceFingerprint: invoice, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity: received }] },
+    actorOf(),
+    transaction
+  );
+  const overReceipt = discrepancies.find((d) => d.discrepancyType === 'OVER_RECEIPT');
+  const resolver = await User.create(
+    { name: `QA RECONF resolvedor ${uniqueSuffix()}`, email: `qa-reconf-resolver-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
+  return { item, location, order, overReceipt, resolver };
+}
+
+test('RECONF-3: a listagem de divergências identifica item, fornecedor e NF de cada linha', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const invoice = `RECONF-NF-${uniqueSuffix()}`;
+    const { item, overReceipt } = await overReceiptScenario(transaction, { invoice });
+    const rows = await procurementService.listDiscrepancies(tenant.groupId, tenant.companyId, transaction);
+    const row = rows.find((r) => r.id === overReceipt.id);
+    assert.ok(row, 'a divergência precisa aparecer na listagem');
+    assert.equal(row.itemName, item.name, 'a linha precisa dizer QUAL item divergiu');
+    assert.equal(row.invoiceNumber, invoice, 'a linha precisa dizer de qual NF veio');
+    assert.ok(row.purchaseOrderId, 'a linha precisa apontar o pedido de compra');
+    assert.ok('supplierName' in row, 'a linha expõe o fornecedor');
+  });
+});
+
+test('RECONF-4: rejeitar divergência SEM justificativa é recusado; com justificativa, a trilha da devolução fica na resolução', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { overReceipt, resolver } = await overReceiptScenario(transaction);
+    await assert.rejects(
+      () => procurementService.resolveDiscrepancy(overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED' }, { userId: resolver.id }, transaction),
+      (err) => { assert.equal(err.code, 'RECEIPT_DISCREPANCY_REJECTION_REASON_REQUIRED'); return true; }
+    );
+    await assert.rejects(
+      () => procurementService.resolveDiscrepancy(overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: '   ' }, { userId: resolver.id }, transaction),
+      (err) => { assert.equal(err.code, 'RECEIPT_DISCREPANCY_REJECTION_REASON_REQUIRED'); return true; }
+    );
+    const resolved = await procurementService.resolveDiscrepancy(
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'Fornecedor levou o excedente de volta.' }, { userId: resolver.id }, transaction
+    );
+    assert.equal(resolved.status, 'REJECTED');
+    assert.match(String(resolved.resolutionNotes), /Fornecedor levou o excedente de volta/);
+    assert.match(String(resolved.resolutionNotes), /devolução ao fornecedor/i);
+  });
+});
+
+test('RECONF-5: quem registrou o recebimento NÃO pode decidir a própria divergência (maker-checker)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { overReceipt, resolver } = await overReceiptScenario(transaction);
+    await assert.rejects(
+      () => procurementService.resolveDiscrepancy(overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, { userId: tenant.userId }, transaction),
+      (err) => { assert.equal(err.code, 'RECEIPT_DISCREPANCY_SELF_RESOLUTION_BLOCKED'); return true; }
+    );
+    const accepted = await procurementService.resolveDiscrepancy(
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, { userId: resolver.id }, transaction
+    );
+    assert.equal(accepted.status, 'ACCEPTED', 'outra pessoa com permissão decide normalmente');
+  });
+});
+
+test('RECONF-6: a entrada de estoque do excedente ACEITO carrega o número da NF do recebimento original', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const invoice = `RECONF-EXC-${uniqueSuffix()}`;
+    const { item, location, overReceipt, resolver } = await overReceiptScenario(transaction, { invoice });
+    await procurementService.resolveDiscrepancy(
+      overReceipt.id, tenant.groupId, tenant.companyId, { resolution: 'ACCEPTED' }, { userId: resolver.id }, transaction
+    );
+    const movements = await InventoryMovement.findAll({
+      where: { inventoryItemId: item.id, destinationLocationId: location.id, movementType: 'IN' },
+      order: [['created_at', 'ASC']],
+      transaction,
+    });
+    assert.equal(movements.length, 2, 'duas entradas: o recebimento capado (25) e o excedente aceito (5)');
+    for (const m of movements) {
+      assert.match(String(m.reason), new RegExp(`nota fiscal nº ${invoice}`), `toda entrada (inclusive a do excedente) precisa citar a NF — achado: "${m.reason}"`);
+    }
   });
 });
