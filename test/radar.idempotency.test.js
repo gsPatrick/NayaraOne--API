@@ -65,8 +65,12 @@ test('radar idempotente: reprocessar o mesmo match (mesmo radar + mesmo imóvel)
     // dado de teste no banco compartilhado, chamamos processCompany passando a MESMA
     // transaction (mesma técnica usada no restante da suíte Marco 6 para rodar jobs que abrem
     // sua própria transação sob teste).
-    const run1 = await processCompanyInTransaction(group, company, transaction);
-    const run2 = await processCompanyInTransaction(group, company, transaction);
+    // Escopado ao radar DESTE teste: processar todos os radares ACTIVE da empresa fazia o
+    // contador somar matches pendentes de radares deixados por outros arquivos/rodadas no
+    // banco compartilhado (run1 dava 2 em vez de 1) — a idempotência provada aqui é a do par
+    // radar+imóvel, e o filtro não muda isso.
+    const run1 = await processCompanyInTransaction(group, company, transaction, radar.id);
+    const run2 = await processCompanyInTransaction(group, company, transaction, radar.id);
 
     assert.equal(run1.newMatches, 1, 'primeira rodada deve achar 1 match novo');
     assert.equal(run2.newMatches, 0, 'segunda rodada reprocessando o MESMO match não deve achar nada "novo"');
@@ -84,12 +88,15 @@ test('radar idempotente: reprocessar o mesmo match (mesmo radar + mesmo imóvel)
 // vez de abrir uma nova via sequelize.transaction() — necessário porque o teste todo roda
 // dentro de uma única transação com rollback no final (dado de teste nunca é persistido de
 // verdade no banco de dev compartilhado).
-async function processCompanyInTransaction(group, company, transaction) {
+async function processCompanyInTransaction(group, company, transaction, onlyRadarId = null) {
   const { PropertyRadar, Notification } = require('../src/models');
   const { matchRadarToProperties } = require('../src/features/radar/radarMatching.service');
   const { publishRadarMatched } = require('../src/features/radar/radarEvents.service');
 
-  const radars = await PropertyRadar.findAll({ where: { status: 'ACTIVE' }, transaction });
+  const radars = await PropertyRadar.findAll({
+    where: onlyRadarId ? { status: 'ACTIVE', id: onlyRadarId } : { status: 'ACTIVE' },
+    transaction,
+  });
   let totalNewMatches = 0;
 
   for (const radar of radars) {

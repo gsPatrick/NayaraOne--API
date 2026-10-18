@@ -55,22 +55,31 @@ async function createItem(transaction, extra = {}) {
 // Gap 1 — EST-TS-08: invoiceFingerprint obrigatório quando há invoiceNumber/supplierPersonId
 // ---------------------------------------------------------------------------------------------
 
-test('Gap 1 (EST-TS-08): recebimento com invoiceNumber mas sem invoiceFingerprint é recusado', async () => {
+// CONTRATO ATUALIZADO (auditoria Marco 7 "check"/"reval", commits f3b54d7/73b3268): quando o
+// recebimento TEM número de nota fiscal, a detecção de duplicidade usa o próprio número
+// (normalizado, case-insensitive) — fingerprint/arquivo deixou de ser exigido nesse caso. A
+// exigência de evidência só permanece quando há fornecedor SEM número de nota (teste seguinte).
+// Este teste agora prova o contrato novo: criar com número e sem fingerprint é aceito, e a
+// MESMA nota de novo é recusada como duplicada.
+test('Gap 1 (EST-TS-08): recebimento com invoiceNumber sem fingerprint é aceito, e o número duplicado é recusado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const location = await createLocation(transaction);
     const item = await createItem(transaction);
+    const invoiceNumber = `NF-${uniqueSuffix()}`;
+    const first = await receiptsService.createReceipt(
+      withTenant({ destinationLocationId: location.id, invoiceNumber, items: [{ inventoryItemId: item.id, quantity: 5 }] }),
+      tenant.userId,
+      transaction
+    );
+    assert.ok(first.id, 'com número de nota, a duplicidade é garantida pelo próprio número — não exige fingerprint');
     await assert.rejects(
       () =>
         receiptsService.createReceipt(
-          withTenant({
-            destinationLocationId: location.id,
-            invoiceNumber: `NF-${uniqueSuffix()}`,
-            items: [{ inventoryItemId: item.id, quantity: 5 }],
-          }),
+          withTenant({ destinationLocationId: location.id, invoiceNumber: invoiceNumber.toLowerCase(), items: [{ inventoryItemId: item.id, quantity: 5 }] }),
           tenant.userId,
           transaction
         ),
-      expectCode('INVENTORY_RECEIPT_FINGERPRINT_REQUIRED')
+      expectCode('INVENTORY_RECEIPT_DUPLICATE_INVOICE')
     );
   });
 });

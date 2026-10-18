@@ -427,9 +427,17 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
 
     const count = await countsService.openCount(withTenant({ locationId: frozen.id }), tenant.userId, transaction);
 
+    // Saída manual exige responsável (F17 do Marco 7) — sem ele o OUT era rejeitado por
+    // INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED antes de chegar na checagem de freeze.
+    const { Person } = require('../src/models');
+    const retirante = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `HOMO QA Gap4 retirante ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+
     for (const payload of [
       { movementType: 'IN', quantity: 1, destinationLocationId: frozen.id },
-      { movementType: 'OUT', quantity: 1, sourceLocationId: frozen.id },
+      { movementType: 'OUT', quantity: 1, sourceLocationId: frozen.id, responsiblePersonId: retirante.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: frozen.id, destinationLocationId: other.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: other.id, destinationLocationId: frozen.id },
       { movementType: 'ADJUSTMENT', quantity: 1, destinationLocationId: frozen.id, reason: 'ajuste manual', idempotencyKey: `gap4-frozen-adj-${uniqueSuffix()}` },
@@ -442,7 +450,7 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
     }
 
     // Local sem contagem continua movimentando normalmente.
-    await movementsService.recordMovement(withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 2, sourceLocationId: other.id }), approver, transaction);
+    await movementsService.recordMovement(withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 2, sourceLocationId: other.id, responsiblePersonId: retirante.id }), approver, transaction);
 
     // Esperado no fechamento == saldo na abertura (10), divergência só reflete a contagem.
     await countsService.addCountItem(count.id, tenant.groupId, tenant.companyId, { inventoryItemId: item.id, countedQuantity: 8 }, transaction);
@@ -469,7 +477,9 @@ test('Gap 4 (§10): baixa de requisição a partir de almoxarifado em contagem �
       tenant.userId,
       transaction
     );
-    await requisitionsService.decideRequisition(requisition.id, 'APPROVED', tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    // Segregação: quem criou a requisição (tenant.userId) não pode decidi-la.
+    const reqDecider = await secondApprover(uniqueSuffix());
+    await requisitionsService.decideRequisition(requisition.id, 'APPROVED', reqDecider.userId, tenant.groupId, tenant.companyId, transaction);
     await countsService.openCount(withTenant({ locationId: warehouse.id }), tenant.userId, transaction);
 
     await assert.rejects(() => requisitionsService.issueRequisition(requisition.id, approver, tenant.groupId, tenant.companyId, transaction), expectCode('INVENTORY_LOCATION_FROZEN_BY_COUNT'));

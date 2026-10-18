@@ -35,6 +35,17 @@ function withTenant(fields) {
 }
 const actor = () => ({ userId: tenant.userId, canApprove: true });
 
+// Segregação "quem cria/registra não aprova" (INVENTORY_REQUISITION_SELF_APPROVAL_BLOCKED /
+// LOSS_CASE_SELF_APPROVAL_BLOCKED): decisões precisam de um usuário DIFERENTE do criador.
+async function secondDecider(transaction) {
+  const suffix = uniqueSuffix();
+  const user = await User.create(
+    { name: `QA NAY decisor ${suffix}`, email: `qa-nay-decisor-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
+  return { userId: user.id, canApprove: true };
+}
+
 async function createItem(transaction, extra = {}) {
   const suffix = uniqueSuffix();
   return itemsService.createItem(withTenant({ name: `NAY QA Item ${suffix}`, sku: `NAY-${suffix}`, unitOfMeasure: 'UN', ...extra }), tenant.userId, transaction);
@@ -123,7 +134,9 @@ test('EST-013/§12: NAY sugere compra a partir de consumo, obra ativa, lead time
       tenant.userId,
       transaction
     );
-    await requisitionsService.decideRequisition(issued.id, 'APPROVED', tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    // Segregação: quem criou a requisição (tenant.userId) não pode decidi-la.
+    const decider = await secondDecider(transaction);
+    await requisitionsService.decideRequisition(issued.id, 'APPROVED', decider.userId, tenant.groupId, tenant.companyId, transaction);
     await requisitionsService.issueRequisition(issued.id, actor(), tenant.groupId, tenant.companyId, transaction);
     // Demanda comprometida da obra ativa ainda não baixada.
     await requisitionsService.createRequisition(
@@ -280,8 +293,13 @@ test('NAY Estoque: lead time OBSERVADO no histórico real de Compras (pedido -> 
     // Fixture: o pedido foi emitido 12 dias antes do recebimento.
     await sequelize.query("UPDATE procurement.purchase_orders SET created_at = NOW() - INTERVAL '12 days' WHERE id = :id", { replacements: { id: order.id }, transaction });
     await procurementService.confirmGoodsReceipt(order.id, tenant.groupId, tenant.companyId, { destinationLocationId: warehouse.id, items: [{ purchaseOrderItemId: order.items[0].id, receivedQuantity: 10 }] }, actor(), transaction);
+    // Saída manual exige responsável (INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED, F17 do Marco 7).
+    const retirante = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `QA NAY retirante ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
     await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 8, sourceLocationId: warehouse.id, sourceType: 'MANUAL' }),
+      withTenant({ inventoryItemId: item.id, movementType: 'OUT', quantity: 8, sourceLocationId: warehouse.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       actor(),
       transaction
     );
@@ -361,13 +379,14 @@ test('EST-TS-14: NAY sinaliza recorrência/valor anômalo em loss_cases SEM deci
     assert.equal(await InventoryMovement.count({ where: { sourceType: 'LOSS_CASE', sourceId: ids }, transaction }), 0);
 
     // A decisão humana continua soberana: rejeitar um caso tira ele da evidência de recorrência.
-    await lossCasesService.decideLossCase(a.id, tenant.groupId, tenant.companyId, 'REJECTED', actor(), transaction);
+    const lossDecider = await secondDecider(transaction);
+    await lossCasesService.decideLossCase(a.id, tenant.groupId, tenant.companyId, 'REJECTED', lossDecider, transaction);
     const afterReject = await nay.analyzeLossCaseAnomalies(tenant, { lossCaseId: b.id }, transaction);
     assert.equal(afterReject.cases.length, 1);
     assert.ok(!afterReject.cases[0].flags.some((f) => f.code.startsWith('RECURRENCE_')), 'com só 2 casos válidos não há recorrência');
 
     // E só a decisão humana (inventory:approve) gera baixa.
-    const approved = await lossCasesService.decideLossCase(c.id, tenant.groupId, tenant.companyId, 'APPROVED', actor(), transaction);
+    const approved = await lossCasesService.decideLossCase(c.id, tenant.groupId, tenant.companyId, 'APPROVED', lossDecider, transaction);
     assert.equal(approved.status, 'APPROVED');
     assert.ok(approved.resultingMovementId);
 

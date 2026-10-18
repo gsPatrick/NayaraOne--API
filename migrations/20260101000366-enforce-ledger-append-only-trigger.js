@@ -50,12 +50,20 @@ const FUNCTION_NAME = 'finance.enforce_financial_entries_append_only';
 const TRIGGER_NAME = 'trg_financial_entries_append_only';
 
 function buildFunctionSql() {
-  const comparisons = IMMUTABLE_COLUMNS.map(
-    (col) => `IF NEW."${col}" IS DISTINCT FROM OLD."${col}" THEN
+  const comparisons = IMMUTABLE_COLUMNS.map((col) => {
+    // EXCEÇÃO ESTREITA (18/10/2026, CI run 39123721868): "nature" muda UMA única vez, de
+    // PENDING_CLASSIFICATION (excedente aguardando decisão humana) para a classificação final —
+    // é exatamente o fluxo auditado de resolveClassificationPending (financialEntries.service).
+    // Fora desse caso (pendência ainda PENDING), nature segue imutável como as demais colunas.
+    const guard =
+      col === 'nature'
+        ? `IF NEW."${col}" IS DISTINCT FROM OLD."${col}" AND NOT (OLD."${col}" = 'PENDING_CLASSIFICATION' AND OLD."status" = 'PENDING') THEN`
+        : `IF NEW."${col}" IS DISTINCT FROM OLD."${col}" THEN`;
+    return `${guard}
       RAISE EXCEPTION 'finance.financial_entries é append-only (FIN-003/010): a coluna "%" não pode ser alterada após a criação do lançamento (id=%).', '${col}', OLD.id
         USING ERRCODE = '23514';
-    END IF;`
-  ).join('\n    ');
+    END IF;`;
+  }).join('\n    ');
 
   return `
     CREATE OR REPLACE FUNCTION ${FUNCTION_NAME}()

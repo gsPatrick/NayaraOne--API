@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { Rule, RuleVersion, RuleScope, RulePublication, sequelize } = require('../../models');
+const { Rule, RuleVersion, RuleScope, RulePublication, Property, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
@@ -173,6 +173,34 @@ async function assertEligible(financingCase, { amount } = {}, groupId, companyId
       `A finalidade "${purpose}" deste caso não está elegível para financiamento no momento.`,
       'COR_ELIGIBILITY_PURPOSE_NOT_ALLOWED'
     );
+  }
+
+  // GAP REAL FECHADO (18/10/2026 — CORRESPONDENT-ELIG-09 falhava porque esta checagem nunca
+  // tinha sido implementada, só o teste existia): elegibilidade por REGIÃO. Quando a
+  // RuleVersion define allowedStatesByProvider para o provider E o caso tem imóvel vinculado,
+  // a UF do imóvel precisa estar na lista — fora dela, bloqueia com motivo claro. Sem
+  // configuração de região pro provider (undefined/null) nada muda: a regra é opt-in, como os
+  // demais limiares desta mesma regra.
+  const allowedStatesByProvider = action.allowedStatesByProvider || {};
+  const allowedStates = allowedStatesByProvider[providerCode];
+  if (Array.isArray(allowedStates) && financingCase.propertyId) {
+    const property = await Property.findOne({ where: { id: financingCase.propertyId, groupId, companyId }, transaction });
+    const propertyState = property?.state ? String(property.state).toUpperCase() : null;
+    if (propertyState && !allowedStates.map((uf) => String(uf).toUpperCase()).includes(propertyState)) {
+      await logIneligible(
+        groupId,
+        companyId,
+        actorUserId,
+        financingCase.id,
+        ruleVersionId,
+        `Imóvel na UF "${propertyState}" fora das regiões habilitadas (${allowedStates.join(', ')}) para o provider "${providerCode}".`,
+        transaction
+      );
+      throw AppError.unprocessable(
+        `O imóvel deste caso fica em ${propertyState}, fora das regiões habilitadas para o provider "${providerCode}" (${allowedStates.join(', ')}).`,
+        'COR_ELIGIBILITY_REGION_NOT_ALLOWED'
+      );
+    }
   }
 
   const maxAmountByProvider = action.maxAmountByProvider || {};

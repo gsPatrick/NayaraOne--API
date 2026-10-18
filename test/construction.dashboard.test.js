@@ -77,9 +77,18 @@ test('dashboard: getConstructionDashboard agrega baseline/committed de MÚLTIPLA
     );
     // Reconstrução independente do total esperado, via query direta na MESMA transação/
     // visibilidade do dashboard — nunca um "antes vs depois" global.
-    const { data: allCompanyProjects } = await projectsService.listProjects(transaction, { pageSize: 200 });
+    // FIX (18/10/2026): a reconstrução anterior passava por listProjects({ pageSize: 200 }) e
+    // somava só as linhas dessas 200 obras — no banco de dev compartilhado (com centenas de
+    // obras acumuladas de QA) o dashboard soma TODAS e a reconstrução truncava, dando
+    // divergência falsa. Agora soma todas as BudgetLines da empresa direto (mesma visibilidade
+    // que o dashboard usa), sem paginação no meio.
+    // Mesmos projetos que o dashboard enxerga (Project.findAll por group+company, sem
+    // paginação): linhas órfãs de obras soft-deletadas por limpezas antigas de QA ficam fora
+    // dos dois lados da comparação.
+    const { Project } = require('../src/models');
+    const visibleProjects = await Project.findAll({ where: { groupId: tenant.groupId, companyId: tenant.companyId }, transaction });
     const allCompanyLines = await BudgetLine.findAll({
-      where: { projectId: { [Op.in]: allCompanyProjects.map((p) => p.id) } },
+      where: { projectId: { [Op.in]: visibleProjects.map((p) => p.id) } },
       transaction,
     });
     const expectedCommittedTotal = allCompanyLines.reduce((acc, l) => acc + Number(l.plannedAmount), 0);
@@ -88,7 +97,6 @@ test('dashboard: getConstructionDashboard agrega baseline/committed de MÚLTIPLA
       Math.round(expectedCommittedTotal * 100),
       'committedCostTotal do dashboard precisa bater com a soma recalculada na mesma visibilidade de transação'
     );
-    assert.ok(allCompanyProjects.some((p) => p.id === projectA.id) && allCompanyProjects.some((p) => p.id === projectB.id));
   });
 });
 
@@ -125,8 +133,14 @@ test('dashboard: projectedMarginTotal/projectedTotalCostTotal consideram consume
     // 45 sacos a R$30 = R$1350 consumidos pela obra — mais do que o committedCost (1000),
     // exatamente o cenário que expõe o viés: sem consumedInventoryCost, forecastToComplete
     // zera (Math.max(1000-0,0)=1000... mas projectedTotalCost ficaria só 0, inflando a margem).
+    // Saída manual exige responsável (INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED, F17 do Marco 7).
+    const { Person } = require('../src/models');
+    const retirante = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `QA Dashboard retirante ${Date.now()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );

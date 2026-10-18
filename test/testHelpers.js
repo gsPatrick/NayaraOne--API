@@ -72,6 +72,13 @@ async function withRollbackTenantTransaction(tenant, fn, retriesLeft = 5) {
   } catch (err) {
     const isDeadlock = err?.parent?.code === '40P01' || err?.original?.code === '40P01';
     if (isDeadlock && retriesLeft > 0) {
+      // Backoff com jitter antes de re-tentar: o retry imediato re-colidia com a MESMA
+      // transação longa do outro arquivo (visto no CI run 39124077182 — deadlock persistente
+      // em construction.dashboard mesmo com 5 retries). Espera crescente dá tempo do peer
+      // terminar antes da nova tentativa.
+      const attempt = 6 - retriesLeft;
+      const waitMs = 300 * attempt + Math.floor(Math.random() * 400);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
       return withRollbackTenantTransaction(tenant, fn, retriesLeft - 1);
     }
     throw err;

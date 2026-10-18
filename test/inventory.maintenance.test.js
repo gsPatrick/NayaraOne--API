@@ -253,7 +253,13 @@ test('inventory: não é possível abrir OS de manutenção sobre um asset decla
       tenant.userId,
       transaction
     );
-    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: true }, transaction);
+    // Segregação: quem registrou a perda (tenant.userId) não pode aprová-la.
+    const { User } = require('../src/models');
+    const decider = await User.create(
+      { name: `QA Maint decisor ${suffix}`, email: `qa-maint-decisor-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: decider.id, canApprove: true }, transaction);
     await asset.reload({ transaction });
     assert.equal(asset.status, 'LOST');
 

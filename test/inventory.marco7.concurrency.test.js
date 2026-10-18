@@ -104,9 +104,10 @@ test('EST-TS-02: duas saídas concorrentes disputando o último saldo — uma ve
   const suffix = uniqueSuffix();
   let itemId = null;
   let locationId = null;
+  let responsavelId = null;
   try {
     // Fixture COMMITADA: item + local + entrada de 10 unidades.
-    ({ itemId, locationId } = await withCommitted(async (t) => {
+    ({ itemId, locationId, responsavelId } = await withCommitted(async (t) => {
       const item = await itemsService.createItem(
         withTenant({ name: `HOMO QA EST-TS-02 ${suffix}`, sku: `ESTTS02-${suffix}`, unitOfMeasure: 'UN' }),
         tenant.userId,
@@ -122,7 +123,15 @@ test('EST-TS-02: duas saídas concorrentes disputando o último saldo — uma ve
         { userId: tenant.userId, canApprove: false },
         t
       );
-      return { itemId: item.id, locationId: location.id };
+      // Saída manual exige responsável (INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED, F17 do
+      // Marco 7) — sem ele as duas saídas eram rejeitadas ANTES do lock e a corrida nunca
+      // acontecia (lockedReads 0).
+      const { Person } = require('../src/models');
+      const responsavel = await Person.create(
+        { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `HOMO QA EST-TS-02 retirante ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+        { transaction: t }
+      );
+      return { itemId: item.id, locationId: location.id, responsavelId: responsavel.id };
     }));
 
     // Barreira no ponto exato do lock: applyBalanceDelta chama InventoryStockBalance.findOne
@@ -142,7 +151,7 @@ test('EST-TS-02: duas saídas concorrentes disputando o último saldo — uma ve
     const saida = (n) =>
       withCommitted((t) =>
         movementsService.recordMovement(
-          withTenant({ inventoryItemId: itemId, movementType: 'OUT', quantity: 7, sourceLocationId: locationId, reason: `Saída concorrente ${n}` }),
+          withTenant({ inventoryItemId: itemId, movementType: 'OUT', quantity: 7, sourceLocationId: locationId, reason: `Saída concorrente ${n}`, responsiblePersonId: responsavelId }),
           { userId: tenant.userId, canApprove: false },
           t
         )

@@ -261,8 +261,14 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     assert.equal(healthBefore.projectedMargin, 0);
 
     // Saída de 20 sacos a R$30 = R$600 consumidos pela obra.
+    // Saída manual exige responsável (INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED, F17 do Marco 7).
+    const { Person } = require('../src/models');
+    const retirante = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `QA M6-42 retirante ${Date.now()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 20, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 20, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );
@@ -286,7 +292,7 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     // custo total projetado SUBIR acima do orçado — prova de que consumedInventoryCost está de
     // fato integrado, não só exposto no JSON sem efeito.
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 25, sourceLocationId: location.id, sourceType: 'MANUAL' }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 25, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );
