@@ -20,7 +20,9 @@ const { validateCondition } = require('./clauseConditions');
  * cláusula de circulação para novos templates), nunca o conteúdo.
  */
 
-const CLAUSE_CATEGORIES = ['PAYMENT', 'TERMINATION', 'GUARANTEE', 'GENERAL'];
+// A tela da Biblioteca de cláusulas sempre ofereceu Multa/Obrigação/Outra, mas a API recusava
+// essas três com 400 — criar cláusula dessas categorias era impossível pela UI.
+const CLAUSE_CATEGORIES = ['PAYMENT', 'TERMINATION', 'GUARANTEE', 'GENERAL', 'PENALTY', 'OBLIGATION', 'OTHER'];
 
 function validateClausePayload({ code, title, bodyText, category }) {
   if (!code || !String(code).trim()) {

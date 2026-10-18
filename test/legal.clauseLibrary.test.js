@@ -55,6 +55,27 @@ test('JUR-002: biblioteca de cláusulas — criar v1, criar v2 (append-only), v1
   });
 });
 
+test('JUR-002: as 7 categorias oferecidas pela tela (inclusive Multa/Obrigação/Outra) são aceitas; categoria desconhecida não', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    for (const category of ['GENERAL', 'PAYMENT', 'GUARANTEE', 'TERMINATION', 'PENALTY', 'OBLIGATION', 'OTHER']) {
+      const clause = await contractClausesService.createClause(
+        { groupId: tenant.groupId, companyId: tenant.companyId, code: `CAT-${category}-${uniqueSuffix()}`, title: category, bodyText: 'Texto', category },
+        tenant.userId,
+        transaction
+      );
+      assert.equal(clause.category, category);
+    }
+    await assert.rejects(
+      () => contractClausesService.createClause(
+        { groupId: tenant.groupId, companyId: tenant.companyId, code: `CAT-X-${uniqueSuffix()}`, title: 'X', bodyText: 'Texto', category: 'INVENTADA' },
+        tenant.userId,
+        transaction
+      ),
+      (err) => err instanceof AppError
+    );
+  });
+});
+
 test('JUR-002: não é possível criar cláusula com código duplicado — tem que versionar', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const code = `CLA-${uniqueSuffix()}`;
