@@ -296,10 +296,55 @@ test('F06-RBAC-01 perfil da própria empresa SEM a permissão de leitura é barr
   assert.equal(await http(`/finance/entries/${fixtures.entryId}`, tenant.companyId, ['legal:read']), 403);
 });
 
-test(
-  'F06-RBAC-02 download de arquivo exige permissão de leitura do módulo dono do arquivo',
-  { todo: 'LACUNA REAL (F06, 18/10): GET /files/:id/content só exige autenticação + tenant (files.routes.js não tem requirePermission). Dentro da mesma empresa, um perfil sem legal:read baixa documento de contrato/foto de vistoria. Exige decisão de desenho (permissão por módulo dono do arquivo).' },
-  async () => {
-    assert.equal(await http(`/files/${fixtures.fileId}/content`, tenant.companyId, []), 403);
-  }
-);
+// RBAC-02 (corrigido 18/10): leitura de arquivo exige a permissão de leitura de um módulo dono
+// do arquivo, ou ser quem fez o upload (src/features/files/fileAccess.service.js). As fixtures
+// acima foram enviadas por tenant.userId — por isso estes testes usam um SEGUNDO usuário, senão
+// passariam pela regra do uploader e não pela de permissão.
+async function rbac02OtherUserId() {
+  const [user] = await User.findOrCreate({
+    where: { email: 'homo-qa-f06-rbac02@nayaraone.dev' },
+    defaults: { name: 'HOMO QA — F06 RBAC-02', passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return user.id;
+}
+
+async function rbac02Http(path, { userId, companyId = tenant.companyId, permissions = [], roles = ['f06'] }) {
+  const token = signAccessToken({ sub: userId, group_id: tenant.groupId, company_id: companyId, roles, permissions });
+  const res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  return res.status;
+}
+
+async function rbac02UploadCommitted(category) {
+  return withTenantTransaction(tenant, (t) =>
+    filesService.uploadFile(
+      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: `f06-rbac02-${category}-${uniqueSuffix()}.pdf`, mimeType: 'application/pdf', contentBase64: Buffer.from(`%PDF-1.4 RBAC02 ${category}`).toString('base64'), category },
+      tenant.userId,
+      t
+    )
+  );
+}
+
+test('F06-RBAC-02 download de arquivo exige permissão de leitura do módulo dono do arquivo', async () => {
+  const otherUserId = await rbac02OtherUserId();
+  const path = `/files/${fixtures.fileId}/content`;
+  // Arquivo de contrato/foto de vistoria (módulo Jurídico).
+  assert.equal(await rbac02Http(path, { userId: otherUserId, permissions: [] }), 403, 'sem permissão nenhuma');
+  assert.equal(await rbac02Http(path, { userId: otherUserId, permissions: ['finance:read', 'inventory:read'] }), 403, 'leitura de OUTRO módulo não basta');
+  assert.equal(await rbac02Http(`/files/${fixtures.fileId}`, { userId: otherUserId, permissions: ['inventory:read'] }), 403, 'o metadado também é protegido');
+  assert.equal(await rbac02Http(path, { userId: otherUserId, permissions: ['legal:read'] }), 200, 'com legal:read baixa');
+  assert.equal(await rbac02Http(path, { userId: tenant.userId, permissions: [] }), 200, 'quem fez o upload baixa');
+  assert.equal(await rbac02Http(path, { userId: otherUserId, companyId: otherCompanyId, permissions: ['legal:read'] }), 404, 'outra empresa continua 404');
+});
+
+test('F06-RBAC-02b arquivo do Estoque exige inventory:read; arquivo sem módulo dono só para uploader ou admin', async () => {
+  const otherUserId = await rbac02OtherUserId();
+
+  const invoice = await rbac02UploadCommitted('inventory-invoices');
+  assert.equal(await rbac02Http(`/files/${invoice.id}/content`, { userId: otherUserId, permissions: ['legal:read'] }), 403);
+  assert.equal(await rbac02Http(`/files/${invoice.id}/content`, { userId: otherUserId, permissions: ['inventory:read'] }), 200);
+
+  const orphan = await rbac02UploadCommitted('generic');
+  assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: otherUserId, permissions: ['legal:read', 'finance:read', 'inventory:read'] }), 403, 'sem módulo dono: leitura de módulo nenhum basta');
+  assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: otherUserId, permissions: [], roles: ['admin'] }), 200, 'admin baixa');
+  assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: tenant.userId, permissions: [] }), 200, 'uploader baixa');
+});

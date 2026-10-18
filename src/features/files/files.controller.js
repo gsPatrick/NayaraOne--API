@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
 const filesService = require('./files.service');
+const fileAccessService = require('./fileAccess.service');
 const { CaseDocument } = require('../../models');
 
 /**
@@ -43,6 +44,7 @@ const uploadFile = catchAsync(async (req, res) => {
 
 const getFileMetadata = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction(async (t) => {
+    await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     await assertNotRestrictedFile(req.params.id, req.auth.permissions, t);
     return filesService.getFileMetadata(req.params.id, t);
   });
@@ -57,6 +59,7 @@ const getFileMetadata = catchAsync(async (req, res) => {
  */
 const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction(async (t) => {
+    await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     await assertNotRestrictedFile(req.params.id, req.auth.permissions, t);
     return filesService.getFileContent(req.params.id, t);
   });
