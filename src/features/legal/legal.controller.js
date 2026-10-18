@@ -206,6 +206,11 @@ const deactivateClause = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+const approveClauseCondition = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.approveClauseCondition(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
 const addClauseToContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
@@ -214,7 +219,7 @@ const addClauseToContractTemplate = catchAsync(async (req, res) => {
 // — quem quiser usar o resultado como conteúdo de uma versão chama depois
 // POST /legal/contracts/:id/versions com { content, templateId }.
 const renderContractTemplate = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) => contractTemplatesService.renderTemplate(req.params.id, t, req.body && req.body.variables));
+  const data = await req.withTenantTransaction((t) => contractTemplatesService.renderTemplate(req.params.id, t, req.body && req.body.variables, req.body && req.body.conditionContext));
   return success(res, { data });
 });
 
@@ -655,7 +660,7 @@ module.exports = {
   addContractParty, listContractParties, getContractTimeline, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
-  createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause,
+  createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause, approveClauseCondition,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,

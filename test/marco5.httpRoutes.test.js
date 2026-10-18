@@ -129,6 +129,37 @@ test('Marco 5 ponta a ponta via HTTP real: biblioteca de cláusulas (JUR-002) ->
   assert.equal(versions.body.data.length, 2);
 });
 
+// F01 (conferência Nayara 18/10/2026): a condição declarativa chega pela rota real, texto
+// executável é recusado com 400 e o autor não aprova a própria regra (403). A avaliação no
+// render está coberta em test/legal.clauseConditions.test.js.
+test('F01 via HTTP real: cláusula condicional criada pendente, texto executável recusado, autor não aprova a própria condição', async () => {
+  const suffix = uniqueSuffix();
+  const created = await http('POST', '/legal/clauses', {
+    code: `HTTP-COND-${suffix}`,
+    title: 'Fiança',
+    bodyText: 'Obrigações do fiador',
+    category: 'GUARANTEE',
+    condition: { match: 'all', rules: [{ variable: 'guaranteeType', operator: 'eq', value: 'GUARANTOR' }] },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  createdClauseIds.push(created.body.data.id);
+  assert.equal(created.body.data.conditionStatus, 'PENDING_APPROVAL');
+
+  const executable = await http('POST', '/legal/clauses', {
+    code: `HTTP-COND-X-${suffix}`,
+    title: 'X',
+    bodyText: 'Y',
+    category: 'GENERAL',
+    condition: 'contractType === "LEASE" && process.exit()',
+  });
+  assert.equal(executable.status, 400);
+  assert.equal(executable.body.error.code, 'LEGAL_CLAUSE_CONDITION_INVALID');
+
+  const selfApprove = await http('POST', `/legal/clauses/${created.body.data.id}/approve-condition`);
+  assert.equal(selfApprove.status, 403);
+  assert.equal(selfApprove.body.error.code, 'LEGAL_CLAUSE_CONDITION_SELF_APPROVAL_BLOCKED');
+});
+
 test('Marco 5 ponta a ponta via HTTP real: notificação formal (seção 13) -> rascunho -> revisão -> aprovar', async () => {
   const suffix = uniqueSuffix();
 

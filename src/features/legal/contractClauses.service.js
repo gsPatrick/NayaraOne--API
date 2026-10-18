@@ -3,6 +3,7 @@
 const { ContractClause } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { validateCondition } = require('./clauseConditions');
 
 /**
  * contractClauses.service — M5-01 (Caderno CURRENT, Marco 5): biblioteca de cláusulas
@@ -45,6 +46,7 @@ async function createClause(payload, actorUserId, transaction) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'LEGAL_CONTRACT_CLAUSE_VALIDATION');
   }
   validateClausePayload(payload);
+  const condition = validateCondition(payload.condition);
 
   const existing = await ContractClause.findOne({ where: { companyId, code }, transaction });
   if (existing) {
@@ -64,6 +66,8 @@ async function createClause(payload, actorUserId, transaction) {
       category,
       versionNumber: 1,
       isActive: true,
+      conditionJson: condition,
+      conditionStatus: condition ? 'PENDING_APPROVAL' : null,
       createdBy: actorUserId || null,
     },
     { transaction }
@@ -99,6 +103,12 @@ async function createClauseVersion(code, payload, actorUserId, transaction) {
     category: payload.category !== undefined ? payload.category : latest.category,
   };
   validateClausePayload(nextPayload);
+  // F01: a condição faz parte da versão. Omitida = herda a da versão anterior; null = remove.
+  // Qualquer versão nova COM condição nasce pendente de aprovação, mesmo herdando a regra —
+  // quem aprovou a versão anterior aprovou aquele conjunto texto+regra, não este.
+  const condition = payload.condition === undefined
+    ? validateCondition(latest.conditionJson)
+    : validateCondition(payload.condition);
 
   const newVersion = await ContractClause.create(
     {
@@ -110,6 +120,8 @@ async function createClauseVersion(code, payload, actorUserId, transaction) {
       category: nextPayload.category,
       versionNumber: latest.versionNumber + 1,
       isActive: true,
+      conditionJson: condition,
+      conditionStatus: condition ? 'PENDING_APPROVAL' : null,
       createdBy: actorUserId || null,
     },
     { transaction }
@@ -192,7 +204,50 @@ async function deactivateClause(id, actorUserId, transaction) {
   return clause;
 }
 
+/**
+ * approveClauseCondition — F01: a regra declarativa só vale depois de aprovada. Segregação:
+ * quem criou a versão da cláusula não aprova a própria condição. Só os campos de aprovação
+ * mudam — texto e regra da versão ficam intactos.
+ */
+async function approveClauseCondition(id, actorUserId, transaction) {
+  const clause = await getClause(id, transaction);
+  if (!clause.conditionJson) {
+    throw AppError.badRequest('Esta versão da cláusula não tem condição para aprovar.', 'LEGAL_CLAUSE_CONDITION_ABSENT');
+  }
+  if (clause.conditionStatus === 'APPROVED') {
+    throw AppError.conflict('A condição desta versão já está aprovada.', 'LEGAL_CLAUSE_CONDITION_ALREADY_APPROVED');
+  }
+  if (clause.createdBy && actorUserId && String(clause.createdBy) === String(actorUserId)) {
+    throw AppError.forbidden(
+      'Quem criou esta versão da cláusula não pode aprovar a própria condição — peça a outra pessoa com permissão.',
+      'LEGAL_CLAUSE_CONDITION_SELF_APPROVAL_BLOCKED'
+    );
+  }
+  const beforeJson = clause.toJSON();
+  clause.conditionStatus = 'APPROVED';
+  clause.conditionApprovedBy = actorUserId || null;
+  clause.conditionApprovedAt = new Date();
+  await clause.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: clause.groupId,
+      companyId: clause.companyId,
+      actorUserId,
+      action: 'legal.contract_clause.condition_approved',
+      entityType: 'ContractClause',
+      entityId: clause.id,
+      beforeJson,
+      afterJson: clause.toJSON(),
+      reason: `Condição da cláusula "${clause.code}" v${clause.versionNumber} aprovada.`,
+    },
+    transaction
+  );
+  return clause;
+}
+
 module.exports = {
+  approveClauseCondition,
   createClause,
   createClauseVersion,
   getClause,

@@ -3,6 +3,7 @@
 const { ContractTemplate, ContractTemplateClause, ContractClause } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { validateCondition, validateContext, evaluateCondition } = require('./clauseConditions');
 
 /**
  * contractTemplates.service — M5-01: modelos de contrato compostos por cláusulas da
@@ -237,12 +238,49 @@ function applyTemplateVariables(text, variables) {
   });
 }
 
-async function renderTemplate(templateId, transaction, variables) {
+/**
+ * F01 (Caderno, Jurídico §6 — cláusula condicional por regra declarativa): `conditionContext`
+ * traz os dados do contrato que as regras consultam ({ contractType, guaranteeType, ... } — ver
+ * CONDITION_VARIABLES em clauseConditions.js). Regras:
+ *  - cláusula sem condição entra sempre;
+ *  - condição verdadeira entra, falsa sai — e a saída fica registrada em `excludedClauses`;
+ *  - cláusula ativa com condição AINDA NÃO APROVADA bloqueia a renderização inteira (nunca se
+ *    gera contrato com regra não aprovada, nem se exclui cláusula em silêncio por isso);
+ *  - variável que a regra consulta e não veio no contexto é erro, não "falso".
+ * A ordem (sort_order) das cláusulas que entram é preservada.
+ */
+async function renderTemplate(templateId, transaction, variables, conditionContext) {
   const template = await getTemplate(templateId, transaction);
   const entries = await listTemplateClauses(template.id, transaction);
   const active = entries.filter(({ clause }) => clause.isActive);
+  const context = validateContext(conditionContext);
 
-  const sections = active.map(({ clause }) => applyTemplateVariables(`${clause.title}\n${clause.bodyText}`, variables));
+  const pending = active.filter(({ clause }) => clause.conditionJson && clause.conditionStatus !== 'APPROVED');
+  if (pending.length) {
+    throw AppError.conflict(
+      `Condição ainda não aprovada nas cláusulas: ${pending.map(({ clause }) => `${clause.code} v${clause.versionNumber}`).join(', ')}.`,
+      'LEGAL_CLAUSE_CONDITION_NOT_APPROVED'
+    );
+  }
+
+  const included = [];
+  const excludedClauses = [];
+  for (const entry of active) {
+    const condition = validateCondition(entry.clause.conditionJson);
+    if (evaluateCondition(condition, context)) {
+      included.push(entry);
+    } else {
+      excludedClauses.push({
+        contractClauseId: entry.clause.id,
+        code: entry.clause.code,
+        versionNumber: entry.clause.versionNumber,
+        sortOrder: entry.link.sortOrder,
+        condition,
+      });
+    }
+  }
+
+  const sections = included.map(({ clause }) => applyTemplateVariables(`${clause.title}\n${clause.bodyText}`, variables));
   const content = [applyTemplateVariables(template.name, variables), ...sections].join('\n\n');
 
   return {
@@ -250,13 +288,16 @@ async function renderTemplate(templateId, transaction, variables) {
     name: template.name,
     contractType: template.contractType,
     content,
-    clauses: active.map(({ clause, link }) => ({
+    conditionContext: context,
+    clauses: included.map(({ clause, link }) => ({
       contractClauseId: clause.id,
       code: clause.code,
       versionNumber: clause.versionNumber,
       title: clause.title,
       sortOrder: link.sortOrder,
+      condition: clause.conditionJson || null,
     })),
+    excludedClauses,
   };
 }
 

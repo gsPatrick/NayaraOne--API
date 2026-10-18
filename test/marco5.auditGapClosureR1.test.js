@@ -275,8 +275,43 @@ test('G2: renderTemplate respeita sort_order e ignora cláusula desativada', asy
   });
 });
 
-test('G2 (honesto, não comprovado por falta de feature): não existe hoje suporte a "cláusulas condicionais" (renderização condicional por variável/regra) em contractTemplates.service.js — renderTemplate só concatena cláusulas ativas por sort_order e substitui placeholders {{var}}. Isso é um GAP REAL de escopo (Caderno §6 menciona cláusulas condicionais), não um bug — registrar para decisão de produto, não "corrigir" aqui sem especificação.', () => {
-  assert.ok(true, 'marcador documental — ver corpo do teste acima');
+// F01 (conferência Nayara 18/10/2026): o antigo marcador assert.ok(true) que documentava a
+// AUSÊNCIA de cláusulas condicionais foi substituído pela funcionalidade real (regra
+// declarativa na versão da cláusula, ver src/features/legal/clauseConditions.js). Cobertura
+// completa (operadores, all/any, aprovação, versão, hash) em test/legal.clauseConditions.test.js.
+test('G2: cláusula condicional por regra declarativa entra ou sai do documento conforme o contrato', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { User } = require('../src/models');
+    const [approver] = await User.findOrCreate({
+      where: { email: 'homo-qa-clause-condition-approver@nayaraone.dev' },
+      defaults: { name: 'HOMO QA — Aprovador de condição de cláusula', passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const created = await contractClausesService.createClause(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        code: `CLA-G2-COND-${uniqueSuffix()}`,
+        title: 'Fiança',
+        bodyText: 'Obrigações do fiador',
+        category: 'GUARANTEE',
+        condition: { match: 'all', rules: [{ variable: 'guaranteeType', operator: 'eq', value: 'GUARANTOR' }] },
+      },
+      tenant.userId,
+      transaction
+    );
+    await contractClausesService.approveClauseCondition(created.id, approver.id, transaction);
+    const template = await contractTemplatesService.createTemplate(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', name: `Template G2 cond ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    await contractTemplatesService.addClauseToTemplate(template.id, { contractClauseId: created.id }, tenant.userId, transaction);
+
+    const comFiador = await contractTemplatesService.renderTemplate(template.id, transaction, {}, { guaranteeType: 'GUARANTOR' });
+    const semFiador = await contractTemplatesService.renderTemplate(template.id, transaction, {}, { guaranteeType: 'DEPOSIT' });
+    assert.ok(comFiador.content.includes('Obrigações do fiador'));
+    assert.ok(!semFiador.content.includes('Obrigações do fiador'));
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
