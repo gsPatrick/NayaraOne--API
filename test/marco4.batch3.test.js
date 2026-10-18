@@ -10,7 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement, createManualSettlementEvidence } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -138,15 +138,17 @@ test('M4-06 duas baixas parciais fecham o lançamento: soma bate no centavo e o 
     const entry = await createEntry(transaction, { amount: 1000.33, bankAccountId: account.id });
     const amountOriginal = String(entry.amount);
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): baixa de pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
 
-    const primeira = await financialEntriesService.settleFinancialEntryPartial(entry.id, 400.11, tenant.userId, transaction);
+    const primeira = await financialEntriesService.settleFinancialEntryPartial(entry.id, 400.11, tenant.userId, transaction, { manualSettlement });
     assert.equal(primeira.original.status, 'PARTIALLY_SETTLED');
     assert.equal(primeira.remainingAmount, '600.22');
     assert.equal(String(primeira.settlement.amount), '400.11');
     assert.equal(primeira.settlement.parentEntryId, entry.id);
     assert.equal(primeira.settlement.status, 'SETTLED');
 
-    const segunda = await financialEntriesService.settleFinancialEntryPartial(entry.id, 600.22, tenant.userId, transaction);
+    const segunda = await financialEntriesService.settleFinancialEntryPartial(entry.id, 600.22, tenant.userId, transaction, { manualSettlement });
     assert.equal(segunda.remainingAmount, '0.00');
     assert.equal(segunda.original.status, 'SETTLED', 'quando a soma fecha o total, o original vira SETTLED');
     assert.ok(segunda.original.settledAt, 'settledAt preenchido ao fechar');
@@ -173,13 +175,15 @@ test('M4-06/contrato §10 baixa parcial maior que o saldo restante é ACEITA (nu
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): baixa de pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
 
-    await financialEntriesService.settleFinancialEntryPartial(entry.id, 70, tenant.userId, transaction);
+    await financialEntriesService.settleFinancialEntryPartial(entry.id, 70, tenant.userId, transaction, { manualSettlement });
 
     // Liquidar valor <= 0 continua rejeitado (validação de valor, independente do saldo).
     for (const valor of [0, -50]) {
       await assert.rejects(
-        () => financialEntriesService.settleFinancialEntryPartial(entry.id, valor, tenant.userId, transaction),
+        () => financialEntriesService.settleFinancialEntryPartial(entry.id, valor, tenant.userId, transaction, { manualSettlement }),
         (err) => {
           assert.equal(err.code, 'FINANCE_ENTRY_VALIDATION');
           return true;
@@ -188,7 +192,7 @@ test('M4-06/contrato §10 baixa parcial maior que o saldo restante é ACEITA (nu
     }
     assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '30.00', 'saldo intacto depois das tentativas rejeitadas');
 
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction);
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 30.01, tenant.userId, transaction, { manualSettlement });
     assert.equal(result.remainingAmount, '0.00', 'os 30 que cabiam no saldo fecharam o lançamento original');
     assert.equal(result.original.status, 'SETTLED');
     assert.ok(result.classificationPending, 'o centavo excedente (0.01) abriu uma pendência de classificação');
@@ -210,8 +214,10 @@ test('M4-contrato §10 recebimento ANTECIPADO (antes do vencimento) baixa o lan�
     const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias no futuro
     const entry = await createEntry(transaction, { amount: 500, bankAccountId: account.id, dueAt: futureDueAt });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): baixa de pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
 
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 500, tenant.userId, transaction);
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 500, tenant.userId, transaction, { manualSettlement });
     assert.equal(result.original.status, 'SETTLED');
     assert.equal(result.remainingAmount, '0.00');
     assert.ok(!result.classificationPending, 'recebimento antecipado exato não gera excedente');
@@ -225,10 +231,12 @@ test('M4-06 lançamento com baixa parcial não aceita mais liquidação TOTAL pe
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 200, bankAccountId: account.id });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
-    await financialEntriesService.settleFinancialEntryPartial(entry.id, 50, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): baixa de pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    await financialEntriesService.settleFinancialEntryPartial(entry.id, 50, tenant.userId, transaction, { manualSettlement });
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement }),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
@@ -526,8 +534,10 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
       true
     );
 
-    // 4) Liquidação (pagamento efetivo).
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // 4) Liquidação (pagamento efetivo). F03 (conferência 18/10/2026): sem confirmação do banco,
+    // a baixa de pagamento bancário é manual e exige comprovante + motivo.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
     assert.ok(settled.settledAt);
     assert.equal(String(settled.amount), '7500.45', 'o valor pago é exatamente o valor aprovado');
@@ -563,8 +573,13 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
       periodClosuresService = null;
     }
     if (periodClosuresService && typeof periodClosuresService.closePeriod === 'function') {
+      // F02 (conferência 18/10/2026): o fechamento confere extratos/conciliação/classificação do
+      // mês e exige as conferências do Caderno §16 — mês exclusivo + conferências registradas.
+      const { uniqueClosingTestMonth, confirmPeriodChecksForTest } = require('./testHelpers');
+      const closingMonth = uniqueClosingTestMonth();
+      await confirmPeriodChecksForTest(tenant, closingMonth, tenant.userId, transaction);
       const closure = await periodClosuresService.closePeriod(
-        { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth: '2026-09' },
+        { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth: closingMonth },
         tenant.userId,
         transaction
       );

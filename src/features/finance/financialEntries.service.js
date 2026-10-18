@@ -1,11 +1,12 @@
 'use strict';
 
-const { FinancialEntry } = require('../../models');
+const { Op } = require('sequelize');
+const { FinancialEntry, File, Person, ContractParty } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment, checkFrequentReversalAlert } = require('./financeAntifraud.service');
 const { createAnomalyCase } = require('./anomalyCases.service');
-const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed } = require('./financeEvents.service');
+const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed, publishThirdPartyFundsReleased } = require('./financeEvents.service');
 const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
 const { assertPeriodOpenForEntry } = require('./periodClosures.service');
 const { isApprovalRequestApproved } = require('./approvals.service');
@@ -86,6 +87,168 @@ function assertNotUnderManualReview(entry) {
 // ano dentro do range do tipo, e nada no backend rejeitava um valor absurdo digitado por engano
 // (typo de dígito extra) no front. Fail closed: vencimento precisa estar num intervalo humano
 // plausível (100 anos atrás a 50 anos à frente), nunca um valor literalmente impossível.
+// F03 (conferência Nayara 18/10/2026) — baixa direta versus confirmação bancária. Caderno
+// Financeiro §8: "integração bancária retorna estado; sistema nunca presume sucesso;
+// confirmação efetiva cria ledger". Um PAYABLE com conta bancária só vira SETTLED por um destes
+// caminhos, e o caminho fica gravado no lançamento (settlementMethod):
+//   BANK_CONFIRMED        confirmação efetiva do banco (bankPayments.confirmBankPayment, webhook
+//                         ou polling do provider).
+//   MANUAL_WITH_EVIDENCE  exceção formal para pagamento feito fora da integração (ex.: TED
+//                         digitada no internet banking): exige comprovante (arquivo real já
+//                         enviado), motivo, e a mesma aprovação prévia de outro usuário que o
+//                         pagamento já exigia. Nunca é apresentado como confirmação bancária —
+//                         a conciliação com o extrato continua sendo quem confirma o movimento.
+// Antes desta correção, a baixa direta (rota /settle, /settle-partial e a execução manual de
+// uma payment_intent) marcava SETTLED sem comprovante nenhum — presumia o sucesso.
+const SETTLEMENT_METHODS = { BANK_CONFIRMED: 'BANK_CONFIRMED', MANUAL_WITH_EVIDENCE: 'MANUAL_WITH_EVIDENCE' };
+
+async function resolveBankPayableSettlement(entry, options, transaction) {
+  if (!(entry.nature === 'PAYABLE' && entry.bankAccountId)) return null;
+  if (options && options.viaBankConfirmation) {
+    return { method: SETTLEMENT_METHODS.BANK_CONFIRMED, evidenceFileId: null, reason: null };
+  }
+  const manual = (options && options.manualSettlement) || null;
+  const evidenceFileId = manual && manual.evidenceFileId ? String(manual.evidenceFileId) : null;
+  const reason = manual && manual.reason ? String(manual.reason).trim() : '';
+  if (!evidenceFileId || !reason) {
+    throw AppError.conflict(
+      'Pagamento vinculado a conta bancária não pode ser dado como pago sem confirmação do banco. ' +
+        'Se o pagamento já foi feito fora da integração bancária, informe o comprovante (arquivo) e o motivo da baixa manual.',
+      'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION'
+    );
+  }
+  const evidence = await File.findOne({ where: { id: evidenceFileId, companyId: entry.companyId }, transaction });
+  if (!evidence) {
+    throw AppError.badRequest(
+      'O comprovante informado não foi encontrado nesta empresa — envie o arquivo do comprovante antes de dar a baixa manual.',
+      'FINANCE_SETTLEMENT_EVIDENCE_NOT_FOUND'
+    );
+  }
+  return { method: SETTLEMENT_METHODS.MANUAL_WITH_EVIDENCE, evidenceFileId, reason };
+}
+
+function settlementAuditSuffix(settlementInfo) {
+  if (!settlementInfo) return '';
+  return settlementInfo.method === SETTLEMENT_METHODS.BANK_CONFIRMED
+    ? ' Confirmado pelo banco.'
+    : ` Baixa manual com comprovante (arquivo ${settlementInfo.evidenceFileId}) — motivo: ${settlementInfo.reason}. Não é confirmação bancária.`;
+}
+
+// F04 (conferência Nayara 18/10/2026) — rastreabilidade de caução / dinheiro de terceiros.
+// Caderno Financeiro §13: "Movimentação exige vínculo com contrato e titular.
+// Devolução/compensação cria evento e ledger próprio." Antes, uma devolução de caução era um
+// PAYABLE solto: aceitava contrato diferente do recebimento, nenhum titular e qualquer valor.
+// Agora toda SAÍDA de dinheiro de terceiro (PAYABLE com isThirdPartyFunds) aponta para o
+// recebimento de origem e é validada contra ele: mesmo contrato, mesmo titular e valor até o
+// saldo ainda não devolvido/compensado daquela origem.
+
+async function receivedAmountCents(origin, transaction) {
+  if (origin.status === 'SETTLED') return toCents(origin.amount);
+  if (origin.status === 'PARTIALLY_SETTLED') {
+    const children = await FinancialEntry.findAll({ where: { parentEntryId: origin.id, status: 'SETTLED' }, transaction });
+    return children.reduce((acc, child) => acc + toCents(child.amount), 0);
+  }
+  return 0;
+}
+
+async function computeThirdPartyOriginBalance(originOrId, transaction) {
+  const origin = typeof originOrId === 'string' ? await FinancialEntry.findByPk(originOrId, { transaction }) : originOrId;
+  if (!origin) throw AppError.notFound('Recebimento de origem não encontrado.', 'FINANCE_THIRD_PARTY_ORIGIN_NOT_FOUND');
+  const received = await receivedAmountCents(origin, transaction);
+  const releases = await FinancialEntry.findAll({
+    where: {
+      thirdPartyOriginEntryId: origin.id,
+      parentEntryId: null,
+      status: { [Op.notIn]: ['REVERSED', 'CANCELLED'] },
+    },
+    transaction,
+  });
+  const released = releases.reduce((acc, release) => acc + toCents(release.amount), 0);
+  return {
+    originEntryId: origin.id,
+    contractId: origin.contractId,
+    holderPersonId: origin.thirdPartyHolderPersonId,
+    received: fromCents(received),
+    released: fromCents(released),
+    available: fromCents(received - released),
+    releases: releases.map((release) => ({ id: release.id, amount: release.amount, status: release.status, description: release.description })),
+  };
+}
+
+async function assertThirdPartyHolderIsContractParty(holderPersonId, contractId, transaction) {
+  const person = await Person.findByPk(holderPersonId, { transaction });
+  if (!person) {
+    throw AppError.badRequest('Titular do dinheiro de terceiro não encontrado.', 'FINANCE_THIRD_PARTY_HOLDER_NOT_FOUND');
+  }
+  if (contractId) {
+    const party = await ContractParty.findOne({ where: { contractId, personId: holderPersonId }, transaction });
+    if (!party) {
+      throw AppError.badRequest(
+        'O titular informado não é parte do contrato — o dinheiro de terceiro precisa pertencer a uma parte do contrato.',
+        'FINANCE_THIRD_PARTY_HOLDER_NOT_CONTRACT_PARTY'
+      );
+    }
+  }
+}
+
+async function resolveThirdPartyRelease({ companyId, contractId, holderPersonId, originEntryId, amount }, transaction) {
+  if (!originEntryId) {
+    throw AppError.badRequest(
+      'Devolução ou compensação de dinheiro de terceiro precisa indicar o recebimento de origem ("thirdPartyOriginEntryId") — é o que liga a saída ao contrato e ao titular corretos.',
+      'FINANCE_THIRD_PARTY_ORIGIN_REQUIRED'
+    );
+  }
+  // Lock no recebimento de origem: duas devoluções simultâneas da mesma caução não podem ler o
+  // mesmo saldo e, somadas, devolver mais do que foi recebido.
+  const origin = await FinancialEntry.findOne({
+    where: { id: originEntryId, companyId },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!origin) {
+    throw AppError.notFound('Recebimento de origem não encontrado nesta empresa.', 'FINANCE_THIRD_PARTY_ORIGIN_NOT_FOUND');
+  }
+  if (!origin.isThirdPartyFunds || origin.nature !== 'RECEIVABLE' || origin.parentEntryId) {
+    throw AppError.conflict(
+      'O lançamento de origem não é um recebimento de dinheiro de terceiro (caução).',
+      'FINANCE_THIRD_PARTY_ORIGIN_INVALID'
+    );
+  }
+  if (!['SETTLED', 'PARTIALLY_SETTLED'].includes(origin.status)) {
+    throw AppError.conflict(
+      'O recebimento de origem ainda não foi recebido — não há o que devolver ou compensar.',
+      'FINANCE_THIRD_PARTY_ORIGIN_NOT_RECEIVED'
+    );
+  }
+  if (!origin.contractId || !origin.thirdPartyHolderPersonId) {
+    throw AppError.conflict(
+      'O recebimento de origem não tem contrato e titular registrados — regularize o vínculo antes de devolver ou compensar.',
+      'FINANCE_THIRD_PARTY_ORIGIN_UNTRACEABLE'
+    );
+  }
+  if (contractId && String(contractId) !== String(origin.contractId)) {
+    throw AppError.conflict(
+      'O contrato da devolução/compensação é diferente do contrato em que a caução foi recebida.',
+      'FINANCE_THIRD_PARTY_CONTRACT_MISMATCH'
+    );
+  }
+  if (holderPersonId && String(holderPersonId) !== String(origin.thirdPartyHolderPersonId)) {
+    throw AppError.conflict(
+      'O titular da devolução/compensação é diferente do titular que entregou a caução.',
+      'FINANCE_THIRD_PARTY_HOLDER_MISMATCH'
+    );
+  }
+  const balance = await computeThirdPartyOriginBalance(origin, transaction);
+  if (toCents(amount) > toCents(balance.available)) {
+    throw AppError.conflict(
+      `O valor (${fromCents(toCents(amount))}) é maior que o saldo ainda disponível da caução (${balance.available}).`,
+      'FINANCE_THIRD_PARTY_RELEASE_EXCEEDS_BALANCE',
+      { available: balance.available, received: balance.received, released: balance.released }
+    );
+  }
+  return { origin, contractId: origin.contractId, holderPersonId: origin.thirdPartyHolderPersonId };
+}
+
 const DUE_DATE_MIN_YEAR = new Date().getUTCFullYear() - 100;
 const DUE_DATE_MAX_YEAR = new Date().getUTCFullYear() + 50;
 
@@ -128,6 +291,8 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     chartOfAccountId,
     isThirdPartyFunds,
     thirdPartyReference,
+    thirdPartyOriginEntryId,
+    thirdPartyHolderPersonId,
   } = payload;
 
   if (!groupId || !companyId || !entryType || !nature || amount === undefined || amount === null) {
@@ -181,6 +346,32 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     );
   }
 
+  // F04 — vínculo de origem, contrato e titular do dinheiro de terceiro.
+  if (thirdPartyOriginEntryId && !(normalizedThirdParty && normalizedNature === 'PAYABLE')) {
+    throw AppError.badRequest(
+      '"thirdPartyOriginEntryId" só se aplica a devolução/compensação de dinheiro de terceiro (nature "PAYABLE" com isThirdPartyFunds).',
+      'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
+    );
+  }
+  let resolvedContractId = contractId || null;
+  let resolvedHolderPersonId = thirdPartyHolderPersonId || null;
+  let thirdPartyRelease = null;
+  if (normalizedThirdParty && normalizedNature === 'PAYABLE') {
+    thirdPartyRelease = await resolveThirdPartyRelease(
+      { companyId, contractId, holderPersonId: thirdPartyHolderPersonId, originEntryId: thirdPartyOriginEntryId, amount },
+      transaction
+    );
+    resolvedContractId = thirdPartyRelease.contractId;
+    resolvedHolderPersonId = thirdPartyRelease.holderPersonId;
+  } else if (normalizedThirdParty && resolvedHolderPersonId) {
+    await assertThirdPartyHolderIsContractParty(resolvedHolderPersonId, resolvedContractId, transaction);
+  } else if (!normalizedThirdParty && resolvedHolderPersonId) {
+    throw AppError.badRequest(
+      '"thirdPartyHolderPersonId" só se aplica a dinheiro de terceiro (isThirdPartyFunds).',
+      'FINANCE_THIRD_PARTY_HOLDER_NOT_APPLICABLE'
+    );
+  }
+
   await assertAccountUsableForEntry(chartOfAccountId, companyId, transaction);
 
   // FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação —
@@ -216,7 +407,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       bankAccountId: bankAccountId || null,
       costCenterId: costCenterId || null,
       resultCenterId: resultCenterId || null,
-      contractId: contractId || null,
+      contractId: resolvedContractId,
       // M6-97 — dimensão de origem Obras: só preenchida quando o lançamento nasce de uma
       // medição/obra (ver stageMeasurements.service.js), permite relatório de margem por obra.
       constructionProjectId: constructionProjectId || null,
@@ -233,6 +424,8 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       chartOfAccountId: chartOfAccountId || null,
       isThirdPartyFunds: normalizedThirdParty,
       thirdPartyReference: normalizedThirdPartyReference,
+      thirdPartyOriginEntryId: thirdPartyRelease ? thirdPartyRelease.origin.id : null,
+      thirdPartyHolderPersonId: resolvedHolderPersonId,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -240,6 +433,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   );
 
   await publishFinancialEntryCreated(entry, transaction);
+  if (thirdPartyRelease) {
+    await publishThirdPartyFundsReleased(entry, transaction);
+  }
 
   await registrarAuditoria(
     {
@@ -250,7 +446,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       entityType: 'FinancialEntry',
       entityId: entry.id,
       afterJson: entry.toJSON(),
-      reason: `Lançamento ${normalizedNature === 'PAYABLE' ? 'a pagar' : normalizedNature === 'RECEIVABLE' ? 'a receber' : normalizedNature.toLowerCase()} de ${amount} criado.`,
+      reason: thirdPartyRelease
+        ? `Devolução/compensação de dinheiro de terceiro de ${amount} vinculada ao recebimento ${thirdPartyRelease.origin.id} (contrato ${thirdPartyRelease.contractId}, titular ${thirdPartyRelease.holderPersonId}).`
+        : `Lançamento ${normalizedNature === 'PAYABLE' ? 'a pagar' : normalizedNature === 'RECEIVABLE' ? 'a receber' : normalizedNature.toLowerCase()} de ${amount} criado.`,
     },
     transaction
   );
@@ -411,7 +609,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
  * fluxo direto, sem aprovação prévia.
  */
 async function settleFinancialEntry(id, actorUserId, transaction, options = {}) {
-  const { viaApprovedPaymentIntent = false } = options;
+  const { viaApprovedPaymentIntent = false } = options || {};
   // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
   // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
   // de qualquer uma commitar e ambas liquidavam — evento de liquidação publicado 2x, com efeito
@@ -459,8 +657,16 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
     await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
   }
 
+  // F03 — PAYABLE bancário: confirmação do banco ou baixa manual com comprovante.
+  const settlementInfo = await resolveBankPayableSettlement(entry, options, transaction);
+
   entry.status = 'SETTLED';
   entry.settledAt = new Date();
+  if (settlementInfo) {
+    entry.settlementMethod = settlementInfo.method;
+    entry.settlementEvidenceFileId = settlementInfo.evidenceFileId;
+    entry.settlementReason = settlementInfo.reason;
+  }
   entry.updatedBy = actorUserId || null;
   await entry.save({ transaction });
 
@@ -476,7 +682,7 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
       entityId: entry.id,
       beforeJson,
       afterJson: entry.toJSON(),
-      reason: `Lançamento de ${entry.amount} liquidado.`,
+      reason: `Lançamento de ${entry.amount} liquidado.${settlementAuditSuffix(settlementInfo)}`,
     },
     transaction
   );
@@ -532,7 +738,7 @@ async function computeRemainingAmount(entryOrId, transaction) {
  * settleFinancialEntryPartial — baixa parcial de `partialAmount` sobre o lançamento `id`.
  * Valida 0 < partialAmount <= saldo restante (tolerância zero, em centavos).
  */
-async function settleFinancialEntryPartial(id, partialAmount, actorUserId, transaction) {
+async function settleFinancialEntryPartial(id, partialAmount, actorUserId, transaction, options = {}) {
   // Lock pessimista no pai: sem ele, duas baixas parciais concorrentes poderiam ler o mesmo
   // saldo restante e, somadas, ultrapassar o total do lançamento.
   const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
@@ -594,6 +800,10 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
     await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
   }
 
+  // F03 — mesma regra da baixa integral: baixa parcial de PAYABLE bancário também não presume
+  // pagamento sem confirmação do banco ou comprovante.
+  const settlementInfo = await resolveBankPayableSettlement(entry, options, transaction);
+
   const beforeJson = entry.toJSON();
 
   const settlement = await FinancialEntry.create(
@@ -617,6 +827,9 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       idempotencyKey: null,
       reversalOfEntryId: null,
       parentEntryId: entry.id,
+      settlementMethod: settlementInfo ? settlementInfo.method : null,
+      settlementEvidenceFileId: settlementInfo ? settlementInfo.evidenceFileId : null,
+      settlementReason: settlementInfo ? settlementInfo.reason : null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -656,6 +869,11 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   const newRemainingCents = remainingCents - appliedCents;
   entry.status = newRemainingCents === 0 ? 'SETTLED' : 'PARTIALLY_SETTLED';
   if (newRemainingCents === 0) entry.settledAt = new Date();
+  if (newRemainingCents === 0 && settlementInfo) {
+    entry.settlementMethod = settlementInfo.method;
+    entry.settlementEvidenceFileId = settlementInfo.evidenceFileId;
+    entry.settlementReason = settlementInfo.reason;
+  }
   entry.updatedBy = actorUserId || null;
   await entry.save({ transaction });
 
@@ -684,7 +902,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
             `lançamento de ${entry.amount} (saldo restante ${fromCents(newRemainingCents)}) e ${fromCents(excessCents)} ` +
             `excedente abriu pendência de classificação ${classificationPending.id} — nunca tratado como receita.`
           : `Baixa parcial de ${fromCents(appliedCents)} registrada no lançamento de ${entry.amount} ` +
-            `(saldo restante ${fromCents(newRemainingCents)}).`,
+            `(saldo restante ${fromCents(newRemainingCents)}).${settlementAuditSuffix(settlementInfo)}`,
     },
     transaction
   );
@@ -867,4 +1085,6 @@ module.exports = {
   ENTRY_TYPES,
   NATURES,
   STATUSES,
+  SETTLEMENT_METHODS,
+  computeThirdPartyOriginBalance,
 };

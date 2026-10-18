@@ -106,6 +106,9 @@ financeRouter.post('/finance/period-closures', requirePermission('finance:settle
 // é ação sensível, exige aprovação + MFA recente — mesmo padrão de /finance/entries/:id/settle.
 financeRouter.post('/finance/period-closures/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approvePeriodClosure);
 financeRouter.get('/finance/period-closures', requirePermission('finance:read'), financeController.listPeriodClosures);
+// F02 — pré-condições do fechamento (Caderno §16) e as duas conferências humanas exigidas.
+financeRouter.get('/finance/period-closures/:referenceMonth/preconditions', requirePermission('finance:read'), financeController.getPeriodPreconditions);
+financeRouter.post('/finance/period-closures/checks', requirePermission('finance:settle'), financeController.confirmPeriodCheck);
 financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), requireRecentMfa, financeController.reopenPeriod);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);
 

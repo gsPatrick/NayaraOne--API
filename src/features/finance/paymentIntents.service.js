@@ -114,8 +114,11 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
     );
   }
 
+  // F06-PAY-04/06 (conferência 18/10/2026): SUBMITTED também é intenção em aberto — o pagamento
+  // está em trânsito no banco (inclusive com resposta incerta, que agora mantém SUBMITTED). Abrir
+  // outra intenção para o mesmo lançamento nesse estado permitia pagar duas vezes.
   const existing = await PaymentIntent.findOne({
-    where: { financialEntryId, status: ['PENDING', 'APPROVED'] },
+    where: { financialEntryId, status: ['PENDING', 'APPROVED', 'SUBMITTED'] },
     transaction,
   });
   if (existing) {
@@ -248,7 +251,7 @@ async function approvePaymentIntent(id, actorUserId, transaction) {
  * (entre aprovar e executar o lançamento também pode mudar). Liquidar é delegado a
  * settleFinancialEntry, que mantém as validações antifraude de conta bancária.
  */
-async function executePaymentIntent(id, actorUserId, transaction) {
+async function executePaymentIntent(id, actorUserId, transaction, options = {}) {
   const intent = await getPaymentIntentForUpdate(id, transaction);
   if (intent.status !== 'APPROVED') {
     throw AppError.conflict(
@@ -267,7 +270,13 @@ async function executePaymentIntent(id, actorUserId, transaction) {
     );
   }
 
-  const settled = await settleFinancialEntry(intent.financialEntryId, actorUserId, transaction, { viaApprovedPaymentIntent: true });
+  // F03 — execução MANUAL de uma intenção aprovada (sem passar pelo banco): é uma baixa manual
+  // e exige o mesmo comprovante + motivo. O caminho com confirmação bancária é
+  // submitPaymentIntentToBank -> bankPayments.confirmBankPayment.
+  const settled = await settleFinancialEntry(intent.financialEntryId, actorUserId, transaction, {
+    viaApprovedPaymentIntent: true,
+    manualSettlement: options.manualSettlement || null,
+  });
 
   const beforeJson = intent.toJSON();
   intent.status = 'EXECUTED';

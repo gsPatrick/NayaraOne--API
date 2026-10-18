@@ -9,7 +9,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval, createManualSettlementEvidence } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
@@ -94,7 +94,9 @@ test('FIN-REDIR-01: trocar bankAccountId de um lançamento PENDING já com conta
 
     const cleared = await antifraudService.clearManualReview(entry.id, tenant.userId, transaction, 'Confirmado com o fornecedor por telefone.');
     assert.equal(cleared.requiresManualReview, false);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): baixa direta de pagamento bancário exige comprovante + motivo.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });

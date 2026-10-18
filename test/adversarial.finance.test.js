@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement, createManualSettlementEvidence } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -195,11 +195,13 @@ test('ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredo
     const relido = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(String(relido.amount), '10.01', 'o ledger guarda exatamente 2 casas — nada de fração escondida');
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
 
     // Tentar sacar a fração "extra" que o atacante acha que sobrou.
-    await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction);
+    await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction, { manualSettlement });
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction),
+      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction, { manualSettlement }),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
@@ -620,11 +622,13 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     }
   }
 
-  const { entryId, accountId } = await withCommitted(async (t) => {
+  const { entryId, accountId, manualSettlement } = await withCommitted(async (t) => {
     const account = await createActiveBankAccount(t, suffix);
     const entry = await createEntry(t, { amount: 100, bankAccountId: account.id, description: `QA ADV-F21 ${suffix}` });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
-    return { entryId: entry.id, accountId: account.id };
+    // F03 (conferência 18/10/2026): pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
+    return { entryId: entry.id, accountId: account.id, manualSettlement };
   });
 
   try {
@@ -641,8 +645,8 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     // em vez de a chamada inteira falhar. O saldo do lançamento original continua nunca ficando
     // negativo (garantia que o teste existe para provar).
     const resultados = await Promise.allSettled([
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
+      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
+      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
     ]);
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');
     assert.equal(sucessos.length, 2, 'sob o novo contrato, recebimento nunca é rejeitado — ambas as baixas concorrentes são aceitas');

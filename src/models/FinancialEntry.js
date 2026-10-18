@@ -71,6 +71,14 @@ module.exports = (sequelize) => {
         field: 'third_party_reference',
         comment: 'Identificação do titular/origem do dinheiro de terceiro (ex.: "Caução contrato X")',
       },
+      // F04 — devolução/compensação de dinheiro de terceiro aponta para o recebimento de origem.
+      thirdPartyOriginEntryId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_origin_entry_id' },
+      // F04 — titular do dinheiro de terceiro (pessoa parte do contrato).
+      thirdPartyHolderPersonId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_holder_person_id' },
+      // F03 — como um PAYABLE com conta bancária foi liquidado: BANK_CONFIRMED | MANUAL_WITH_EVIDENCE.
+      settlementMethod: { type: DataTypes.STRING(32), allowNull: true, field: 'settlement_method' },
+      settlementEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'settlement_evidence_file_id' },
+      settlementReason: { type: DataTypes.TEXT, allowNull: true, field: 'settlement_reason' },
       entryType: {
         type: DataTypes.STRING(16),
         allowNull: false,

@@ -98,6 +98,7 @@ const modelDefiners = {
   BankPaymentProviderRouting: require('./BankPaymentProviderRouting'),
   IntercompanyTransfer: require('./IntercompanyTransfer'),
   PeriodClosure: require('./PeriodClosure'),
+  PeriodClosureSnapshot: require('./PeriodClosureSnapshot'),
   BankTransaction: require('./BankTransaction'),
   Reconciliation: require('./Reconciliation'),
   ApprovalRequest: require('./ApprovalRequest'),

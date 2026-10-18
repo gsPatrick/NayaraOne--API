@@ -170,7 +170,47 @@ function publishOwnerRepasseCreated(repasse, transaction) {
   );
 }
 
+// F02 — Guia §12: "emit finance.period.closed".
+function publishPeriodClosed(closure, snapshot, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: closure.groupId,
+      companyId: closure.companyId,
+      aggregateType: 'PeriodClosure',
+      aggregateId: closure.id,
+      eventType: 'finance.period.closed',
+      payload: { id: closure.id, referenceMonth: closure.referenceMonth, snapshotId: snapshot.id, snapshotHash: snapshot.snapshotHash },
+      idempotencyKey: `finance.period.closed:${snapshot.id}`,
+    },
+    transaction
+  );
+}
+
+// F04 — Caderno §13: "Devolução/compensação cria evento e ledger próprio".
+function publishThirdPartyFundsReleased(entry, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      aggregateType: 'FinancialEntry',
+      aggregateId: entry.id,
+      eventType: 'finance.third_party_funds.released',
+      payload: {
+        id: entry.id,
+        originEntryId: entry.thirdPartyOriginEntryId,
+        contractId: entry.contractId,
+        holderPersonId: entry.thirdPartyHolderPersonId,
+        amount: entry.amount,
+      },
+      idempotencyKey: `finance.third_party_funds.released:${entry.id}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
+  publishPeriodClosed,
+  publishThirdPartyFundsReleased,
   publishBankAccountCreated,
   publishBankAccountSensitiveDataChanged,
   publishFinancialEntryCreated,

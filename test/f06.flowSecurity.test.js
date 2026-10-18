@@ -216,7 +216,6 @@ test('F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada
 
 test(
   'F06-PAY-04 enquanto um pagamento está SUBMITTED (em trânsito no banco), abrir outra intenção para o mesmo lançamento é recusado',
-  { todo: 'LACUNA REAL (F06, 18/10): createPaymentIntent só considera PENDING/APPROVED como "em aberto" — com a primeira intenção SUBMITTED, uma segunda é aceita e pode ser submetida ao banco: pagamento em dobro. Correção em paymentIntents.service.js (arquivo do F03).' },
   async () => {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const entry = await makePayable(t);
@@ -231,7 +230,6 @@ test(
 
 test(
   'F06-PAY-05 resposta INCERTA do banco seguida da confirmação real: o pagamento é registrado no ledger exatamente uma vez',
-  { todo: 'LACUNA REAL (F06, 18/10): confirmBankPayment trata qualquer status diferente de CONFIRMED como FAILED, inclusive status não finais ("em processamento"). A confirmação real que chega depois é ignorada (a intenção já não está SUBMITTED): o banco pagou e o lançamento fica PENDING. Correção em bankPayments.service.js (arquivo do F03): status não final mantém SUBMITTED.' },
   async () => {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const entry = await makePayable(t);
@@ -247,7 +245,6 @@ test(
 
 test(
   'F06-PAY-06 depois de uma resposta INCERTA, não se abre um segundo pagamento para o mesmo lançamento',
-  { todo: 'LACUNA REAL (F06, 18/10): a resposta incerta marca a intenção como FAILED e libera uma nova intenção para o mesmo lançamento — se o banco tiver processado a primeira, paga-se duas vezes. Correção em paymentIntents.service.js/bankPayments.service.js (arquivos do F03).' },
   async () => {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const entry = await makePayable(t);

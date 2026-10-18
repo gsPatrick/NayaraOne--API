@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -354,7 +354,9 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     // Simula o banco respondendo TIMEOUT (nenhuma confirmação confiável) — "sistema nunca
     // presume sucesso" (Centro Financeiro §8, item 8).
     const afterTimeout = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
-    assert.equal(afterTimeout.status, 'FAILED', 'timeout nunca deixa a intenção como sucesso');
+    // F06-PAY-05/06 (conferência 18/10/2026): timeout é resposta INCERTA — o banco pode ter
+    // processado. A intenção continua SUBMITTED (antes virava FAILED e liberava um 2º pagamento).
+    assert.equal(afterTimeout.status, 'SUBMITTED', 'timeout não é sucesso nem falha: o pagamento segue em trânsito');
     assert.notEqual(afterTimeout.status, 'EXECUTED');
 
     const reloadedEntry = await FinancialEntry.findByPk(entry.id, { transaction });
@@ -364,9 +366,9 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     // Reprocessar o MESMO status de novo (reentrega de webhook) é idempotente: devolve o
     // estado atual, sem tentar liquidar por trás.
     const reloadedIntent = await PaymentIntent.findByPk(intent.id, { transaction });
-    assert.equal(reloadedIntent.status, 'FAILED');
+    assert.equal(reloadedIntent.status, 'SUBMITTED');
     const again = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
-    assert.equal(again.status, 'FAILED');
+    assert.equal(again.status, 'SUBMITTED');
     const reloadedEntryAgain = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(reloadedEntryAgain.status, 'PENDING');
   });
@@ -555,7 +557,10 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
       transaction
     );
     await paymentIntentsService.approvePaymentIntent(intent.id, intentApprover.id, transaction);
-    const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): executar a intenção sem passar pelo banco é baixa manual —
+    // exige comprovante + motivo; os passos 2 e 3 abaixo passam a informá-los.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(executed.intent.status, 'EXECUTED');
     assert.equal(executed.entry.status, 'SETTLED');
     const reread2 = await FinancialEntry.findByPk(entry2.id, { transaction });
@@ -575,7 +580,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
       transaction
     );
     await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
-    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction);
+    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled3.status, 'SETTLED');
 
     // 4) RECEIVABLE continua liquidando direto, sem exigir nenhuma aprovação (Caderno §10).
@@ -719,6 +724,7 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
   let entryId;
   let bankAccountId;
   let intentId;
+  let manualSettlement;
   try {
     const { User } = require('../src/models');
     const [maker] = await User.findOrCreate({
@@ -738,12 +744,14 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, maker.id, t);
       intentId = intent.id;
       await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, t);
+      // F03 (conferência 18/10/2026): execução manual exige comprovante + motivo.
+      manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
     });
 
     // Duas "execuções" concorrentes de verdade — cada uma na sua própria transação commitada.
     const resultados = await Promise.allSettled([
-      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t)),
-      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t)),
+      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t, { manualSettlement })),
+      withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t, { manualSettlement })),
     ]);
 
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');

@@ -28,6 +28,12 @@ function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
 }
 
+// F03 — baixa manual de pagamento bancário (exceção formal): comprovante + motivo vêm do corpo.
+function manualSettlementFromBody(body) {
+  if (!body || (!body.settlementEvidenceFileId && !body.settlementReason)) return null;
+  return { evidenceFileId: body.settlementEvidenceFileId, reason: body.settlementReason };
+}
+
 // --- Cost centers ---
 const createCostCenter = catchAsync(async (req, res) => {
   const costCenter = await req.withTenantTransaction((t) => costCentersService.createCostCenter(withTenant(req), req.auth.userId, t));
@@ -117,7 +123,7 @@ const updateFinancialEntry = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 const settleFinancialEntry = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
   return success(res, { data: item });
 });
 const reverseFinancialEntry = catchAsync(async (req, res) => {
@@ -132,7 +138,7 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
 // total via settleFinancialEntry.
 const settleFinancialEntryPartial = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
-    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t)
+    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) })
   );
   return success(res, { data: item });
 });
@@ -346,7 +352,7 @@ const approvePaymentIntent = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 const executePaymentIntent = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => paymentIntentsService.executePaymentIntent(req.params.id, req.auth.userId, t));
+  const result = await req.withTenantTransaction((t) => paymentIntentsService.executePaymentIntent(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
   return success(res, { data: result });
 });
 const cancelPaymentIntent = catchAsync(async (req, res) => {
@@ -471,6 +477,17 @@ const reopenPeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
   return success(res, { data: item });
 });
+// F02 — pré-condições do fechamento (Caderno §16) e conferências humanas.
+const getPeriodPreconditions = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    periodClosuresService.getPeriodPreconditions({ companyId: req.auth.companyId, referenceMonth: req.params.referenceMonth }, t)
+  );
+  return success(res, { data: result });
+});
+const confirmPeriodCheck = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.confirmPeriodCheck(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
 const listPeriodClosures = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
     periodClosuresService.listPeriodClosures(t, { status: req.query.status, referenceMonth: req.query.referenceMonth })
@@ -511,7 +528,7 @@ module.exports = {
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, bankPaymentPublicWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
-  closePeriod, approvePeriodClosure, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
+  closePeriod, approvePeriodClosure, reopenPeriod, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,

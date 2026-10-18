@@ -15,7 +15,7 @@ const financialEntriesService = require('../src/features/finance/financialEntrie
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const { Person, Contract } = require('../src/models');
+const { Person, Contract, ContractParty } = require('../src/models');
 
 async function createTestContract(tenant, transaction, suffix) {
   return Contract.create(
@@ -25,6 +25,19 @@ async function createTestContract(tenant, transaction, suffix) {
     },
     { transaction }
   );
+}
+
+// F04 (conferência Nayara 18/10/2026): caução tem titular, e o titular precisa ser parte do contrato.
+async function createTenantParty(tenant, transaction, contract, suffix) {
+  const holder = await Person.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Caução titular ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  await ContractParty.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, personId: holder.id, partyRole: 'TENANT' },
+    { transaction }
+  );
+  return holder;
 }
 
 let tenant;
@@ -218,13 +231,15 @@ test('Caução §13: receber caução vinculada ao contrato, excluída do caixa 
     const costCenter = await createTestCostCenter(tenant, transaction);
     const contract = await createTestContract(tenant, transaction, suffix);
     const fakeContractId = contract.id;
+    const holder = await createTenantParty(tenant, transaction, contract, suffix);
 
-    // RECEBER: caução entra como RECEIVABLE isThirdPartyFunds=true, vinculada ao contrato.
+    // RECEBER: caução entra como RECEIVABLE isThirdPartyFunds=true, vinculada ao contrato e ao titular.
     const caucaoRecebida = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE',
         amount: 2000, description: `Caução §13 recebida ${suffix}`, resultCenterId: resultCenter.id,
         contractId: fakeContractId, isThirdPartyFunds: true, thirdPartyReference: `Caução contrato ${fakeContractId}`,
+        thirdPartyHolderPersonId: holder.id,
       },
       tenant.userId, transaction
     );
@@ -238,6 +253,7 @@ test('Caução §13: receber caução vinculada ao contrato, excluída do caixa 
         groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
         amount: 2000, description: `Caução §13 devolvida ${suffix}`, costCenterId: costCenter.id,
         contractId: fakeContractId, isThirdPartyFunds: true, thirdPartyReference: `Caução contrato ${fakeContractId}`,
+        thirdPartyOriginEntryId: caucaoRecebida.id,
       },
       tenant.userId, transaction
     );
@@ -264,26 +280,50 @@ test('Caução §13: receber caução vinculada ao contrato, excluída do caixa 
   });
 });
 
-test('Caução §13: tentar devolver sem vincular ao mesmo contrato/referência ainda é permitido pelo serviço genérico, mas o extrato por contrato detecta a quebra de rastreabilidade (documentando o limite)', async () => {
-  // Nota de auditoria: o módulo financeiro usa um ledger genérico (FinancialEntry) com
-  // contractId + isThirdPartyFunds/thirdPartyReference, não um subledger de caução dedicado com
-  // validação cruzada de "devolução só pode referenciar uma caução específica já recebida". Isso
-  // é suficiente para separar o dinheiro do caixa livre e rastrear por contrato (provado acima),
-  // mas não impede uma devolução registrada com contractId diferente do recebimento original —
-  // esse nível de validação cruzada não existe hoje e fica registrado aqui como gap conhecido,
-  // não escondido.
+// F04 (conferência Nayara 18/10/2026): este teste documentava o gap ("devolução solta é aceita").
+// O vínculo agora é exigido — a mesma devolução sem origem, ou apontando outro contrato, é recusada.
+test('Caução §13: devolução sem vínculo com a caução recebida, ou com contrato diferente, é recusada', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const costCenter = await createTestCostCenter(tenant, transaction);
+    const resultCenter = await createTestResultCenter(tenant, transaction);
+    const contrato = await createTestContract(tenant, transaction, suffix);
+    const holder = await createTenantParty(tenant, transaction, contrato, suffix);
     const outroContrato = await createTestContract(tenant, transaction, `${suffix}b`);
-    const devolucaoSolta = await financialEntriesService.createFinancialEntry(
+
+    await assert.rejects(
+      () => financialEntriesService.createFinancialEntry(
+        {
+          groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
+          amount: 500, description: `Caução devolução solta ${suffix}`, costCenterId: costCenter.id,
+          contractId: outroContrato.id, isThirdPartyFunds: true, thirdPartyReference: `Caução sem vínculo real ${suffix}`,
+        },
+        tenant.userId, transaction
+      ),
+      (err) => { assert.equal(err.code, 'FINANCE_THIRD_PARTY_ORIGIN_REQUIRED'); return true; }
+    );
+
+    const recebida = await financialEntriesService.createFinancialEntry(
       {
-        groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
-        amount: 500, description: `Caução devolução solta ${suffix}`, costCenterId: costCenter.id,
-        contractId: outroContrato.id, isThirdPartyFunds: true, thirdPartyReference: `Caução sem vínculo real ${suffix}`,
+        groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE',
+        amount: 500, description: `Caução recebida ${suffix}`, resultCenterId: resultCenter.id,
+        contractId: contrato.id, isThirdPartyFunds: true, thirdPartyReference: `Caução contrato ${contrato.id}`,
+        thirdPartyHolderPersonId: holder.id,
       },
       tenant.userId, transaction
     );
-    assert.ok(devolucaoSolta.id, 'o serviço genérico aceita a criação — validação cruzada de origem é um gap conhecido, documentado, não corrigido nesta rodada');
+    await financialEntriesService.settleFinancialEntry(recebida.id, tenant.userId, transaction);
+    await assert.rejects(
+      () => financialEntriesService.createFinancialEntry(
+        {
+          groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
+          amount: 500, description: `Caução devolvida no contrato errado ${suffix}`, costCenterId: costCenter.id,
+          contractId: outroContrato.id, isThirdPartyFunds: true, thirdPartyReference: `Caução contrato ${outroContrato.id}`,
+          thirdPartyOriginEntryId: recebida.id,
+        },
+        tenant.userId, transaction
+      ),
+      (err) => { assert.equal(err.code, 'FINANCE_THIRD_PARTY_CONTRACT_MISMATCH'); return true; }
+    );
   });
 });

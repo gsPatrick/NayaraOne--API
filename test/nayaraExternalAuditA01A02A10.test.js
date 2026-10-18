@@ -22,6 +22,9 @@ const {
   uniqueSuffix,
   createTestCostCenter,
   approveFinancialEntryForSettlement,
+  uniqueClosingTestMonth,
+  confirmPeriodChecksForTest,
+  createManualSettlementEvidence,
 } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
@@ -93,8 +96,11 @@ test('A01 (controle positivo): baixa PARCIAL de PAYABLE com aprovação prévia 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { entry } = await createPayableEntry(transaction, suffix);
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    // F03 (conferência 18/10/2026): além da aprovação, pagamento bancário sem confirmação do
+    // banco precisa do comprovante da baixa manual.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
 
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction);
+    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction, { manualSettlement });
     assert.equal(result.original.status, 'PARTIALLY_SETTLED');
   });
 });
@@ -125,10 +131,12 @@ test('A01 (controle negativo): RECEIVABLE parcial continua sem exigir aprovaçã
 
 test('A02: baixa INTEGRAL em período já FECHADO é bloqueada (mesmo gate da baixa parcial)', async () => {
   const suffix = uniqueSuffix();
-  const referenceMonth = '2032-02';
+  // F02 (conferência 18/10/2026): mês exclusivo + as conferências do Caderno §16 antes de fechar.
+  const referenceMonth = uniqueClosingTestMonth();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { entry } = await createPayableEntry(transaction, suffix, { dueAt: `${referenceMonth}-10T00:00:00.000Z` });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
+    await confirmPeriodChecksForTest(tenant, referenceMonth, tenant.userId, transaction);
 
     const requested = await periodClosuresService.closePeriod(
       { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth },

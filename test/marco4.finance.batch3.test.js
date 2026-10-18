@@ -12,7 +12,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, uniqueClosingTestMonth, confirmPeriodChecksForTest } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
@@ -437,8 +437,13 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
     const suffix = uniqueSuffix();
     // Mês no futuro distante: fechá-lo não interfere na criação de lançamentos "de hoje" (a
     // checagem também olha o mês de criação) nem em nada já existente no banco de homologação.
-    const referenceMonth = '2031-07';
-    const dueInsideClosedMonth = '2031-07-15T00:00:00.000Z';
+    // F02 (conferência 18/10/2026): mês exclusivo bem no futuro — o fechamento agora confere
+    // extratos/conciliação/classificação do mês, e meses fixos acumulam dados de outros testes
+    // no banco de dev compartilhado.
+    const referenceMonth = uniqueClosingTestMonth();
+    const dueInsideClosedMonth = `${referenceMonth}-15T00:00:00.000Z`;
+    const [refYear, refMonth] = referenceMonth.split('-').map(Number);
+    const neighbourMonth = refMonth === 12 ? `${refYear + 1}-01` : `${refYear}-${String(refMonth + 1).padStart(2, '0')}`;
     const costCenterM419 = await createTestCostCenter(tenant, transaction);
     const base = { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 640, costCenterId: costCenterM419.id };
 
@@ -449,6 +454,9 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
       transaction
     );
     assert.equal(before.status, 'PENDING');
+
+    // F02 (conferência 18/10/2026): o pedido de fechamento exige as conferências do Caderno §16.
+    await confirmPeriodChecksForTest(tenant, referenceMonth, tenant.userId, transaction);
 
     // ACHADO REAL (auditoria independente Nayara, A06): closePeriod agora só leva o período pra
     // REVIEW, nunca fecha de verdade sozinho — precisa de approvePeriodClosure, por um usuário
@@ -511,7 +519,7 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
 
     // Um mês vizinho, que não foi fechado, continua livre.
     const neighbour = await financialEntriesService.createFinancialEntry(
-      { ...base, description: `M4-19 mes aberto ${suffix}`, dueAt: '2031-08-15T00:00:00.000Z' },
+      { ...base, description: `M4-19 mes aberto ${suffix}`, dueAt: `${neighbourMonth}-15T00:00:00.000Z` },
       tenant.userId,
       transaction
     );

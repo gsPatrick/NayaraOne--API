@@ -155,7 +155,9 @@ test('Resposta incerta do provedor (status desconhecido) não é tratada como co
     const submitted = await submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
 
     const uncertain = await confirmBankPayment(submitted.externalSubmissionId, 'PROCESSING_UNKNOWN', transaction);
-    assert.equal(uncertain.status, 'FAILED', 'qualquer status diferente de CONFIRMED é tratado como não-confirmado, nunca como sucesso silencioso');
+    // F06-PAY-05/06 (conferência 18/10/2026): resposta incerta não é sucesso NEM falha — a intenção
+    // continua SUBMITTED aguardando o status final (antes virava FAILED e liberava pagar de novo).
+    assert.equal(uncertain.status, 'SUBMITTED', 'resposta incerta mantém o pagamento em trânsito, nunca vira sucesso silencioso');
 
     await entry.reload({ transaction });
     assert.equal(entry.status, 'PENDING');

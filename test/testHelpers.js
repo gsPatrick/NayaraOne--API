@@ -139,10 +139,53 @@ async function approveFinancialEntryForSettlement(tenant, entryId, actorUserId, 
   return approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
 }
 
+// F03 (conferência Nayara 18/10/2026): PAYABLE com conta bancária não é mais dado como pago sem
+// confirmação do banco — a baixa direta virou exceção formal que exige comprovante (arquivo real)
+// e motivo. Este helper representa exatamente essa baixa manual: envia um comprovante de teste e
+// informa o motivo. Para lançamentos sem conta bancária o comprovante é simplesmente ignorado.
+async function createManualSettlementEvidence(tenant, actorUserId, transaction) {
+  const filesService = require('../src/features/files/files.service');
+  const file = await filesService.uploadFile(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      fileName: 'comprovante-pagamento-teste.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from(`COMPROVANTE DE TESTE ${uniqueSuffix()}`).toString('base64'),
+      category: 'generic',
+    },
+    actorUserId,
+    transaction
+  );
+  return { evidenceFileId: file.id, reason: 'Baixa manual de teste — pagamento feito fora da integração bancária, comprovante anexado.' };
+}
+
 async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
   const financialEntriesService = require('../src/features/finance/financialEntries.service');
   await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
-  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
+  const manualSettlement = await createManualSettlementEvidence(tenant, actorUserId, transaction);
+  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction, { manualSettlement });
+}
+
+// F02 (conferência Nayara 18/10/2026): fechar um período exige as conferências humanas do Caderno
+// §16 (caixa de terceiros; comissões/repasses) e mês sem pendência de extrato/conciliação/
+// classificação. Testes que fecham período usam um mês exclusivo bem no futuro (o banco de dev é
+// compartilhado e os meses correntes têm dados de outros testes) e registram as conferências.
+function uniqueClosingTestMonth() {
+  const year = 2066 + Math.floor(Math.random() * 10);
+  const month = 1 + Math.floor(Math.random() * 12);
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+async function confirmPeriodChecksForTest(tenant, referenceMonth, actorUserId, transaction) {
+  const periodClosuresService = require('../src/features/finance/periodClosures.service');
+  for (const checkType of ['THIRD_PARTY_CASH', 'COMMISSIONS_REPASSES']) {
+    await periodClosuresService.confirmPeriodCheck(
+      { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth, checkType, note: `Conferência de teste (${checkType})` },
+      actorUserId,
+      transaction
+    );
+  }
 }
 
 // Dispensa todo o checklist documental (JUR-003/JUR-015) de um contrato, com motivo — para
@@ -165,6 +208,9 @@ async function waiveAllContractRequirements(contractId, actorUserId, transaction
 module.exports = {
   settleFinancialEntryWithApproval,
   approveFinancialEntryForSettlement,
+  createManualSettlementEvidence,
+  uniqueClosingTestMonth,
+  confirmPeriodChecksForTest,
   sequelize,
   getSeedTenant,
   withTenantTransaction,

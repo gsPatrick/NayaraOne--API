@@ -116,6 +116,16 @@ async function submitPaymentIntentToBank(id, paymentMethod, actor, transaction) 
 // Chamado por webhook do provedor OU por job de polling (ambos devem ser idempotentes —
 // PROVIDER_BANCARIO.md §3.3). `externalStatus` é o valor cru retornado pelo adapter;
 // 'CONFIRMED' é o único que libera a liquidação real do lançamento.
+// F06-PAY-05/06 (conferência 18/10/2026): só um status FINAL de falha encerra a intenção como
+// FAILED. Antes, qualquer status diferente de CONFIRMED virava FAILED — inclusive respostas não
+// finais ou incertas ("em processamento", timeout, status desconhecido). Isso tinha dois efeitos
+// ruins: a confirmação real que chegasse depois era ignorada (o banco pagou e o lançamento
+// ficava PENDING), e uma nova intenção para o mesmo lançamento passava a ser aceita — pagamento
+// em dobro se o banco tivesse processado a primeira. Agora, resposta não final ou desconhecida
+// mantém a intenção SUBMITTED (só registra o status recebido): o sistema não presume nem sucesso
+// nem falha (Caderno §8, "sistema nunca presume sucesso").
+const FINAL_FAILURE_STATUSES = ['REJECTED', 'FAILED', 'CANCELLED', 'CANCELED', 'DENIED', 'ERROR', 'EXPIRED', 'RETURNED'];
+
 async function confirmBankPayment(externalSubmissionId, externalStatus, transaction) {
   const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId }, transaction });
   if (!routing) {
@@ -134,7 +144,8 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
   intent.externalStatus = externalStatus;
 
   if (externalStatus === 'CONFIRMED') {
-    const settled = await settleFinancialEntry(intent.financialEntryId, null, transaction, { viaApprovedPaymentIntent: true });
+    // F03 — único caminho que grava BANK_CONFIRMED: a confirmação efetiva do banco.
+    const settled = await settleFinancialEntry(intent.financialEntryId, null, transaction, { viaApprovedPaymentIntent: true, viaBankConfirmation: true });
     intent.status = 'EXECUTED';
     intent.executedAt = new Date();
     await intent.save({ transaction });
@@ -150,6 +161,23 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
         beforeJson,
         afterJson: intent.toJSON(),
         reason: `Pagamento confirmado pelo banco — lançamento ${settled.id} liquidado.`,
+      },
+      transaction
+    );
+  } else if (!FINAL_FAILURE_STATUSES.includes(String(externalStatus || '').toUpperCase())) {
+    // Resposta não final/incerta: continua SUBMITTED, aguardando o status final do banco.
+    await intent.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId: intent.groupId,
+        companyId: intent.companyId,
+        actorUserId: null,
+        action: 'finance.payment_intent.bank_payment_pending',
+        entityType: 'PaymentIntent',
+        entityId: intent.id,
+        beforeJson,
+        afterJson: intent.toJSON(),
+        reason: `Banco respondeu "${externalStatus}" (não final) — pagamento continua em trânsito, sem liquidação e sem liberar novo pagamento.`,
       },
       transaction
     );
@@ -181,4 +209,4 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
   return intent;
 }
 
-module.exports = { submitPaymentIntentToBank, confirmBankPayment };
+module.exports = { FINAL_FAILURE_STATUSES, submitPaymentIntentToBank, confirmBankPayment };
