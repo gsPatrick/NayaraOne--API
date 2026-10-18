@@ -154,6 +154,15 @@ jobs:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
+          # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js
+          # (harness HTTP) dispara os ~16 jobs periódicos de setInterval — as guardas de app.js
+          # são todas `NODE_ENV !== 'test'`. Os timers continuam vivos depois do fim da suíte e
+          # o processo node NUNCA sai: o step ficava pendurado até o timeout de 6h do runner
+          # (visto nos runs 39098788633 e anteriores — loop infinito de "ConnectionManager was
+          # closed" dos jobs depois do sequelize.close() do teste). O resto do workflow
+          # (migrations/seed) continua em development de propósito: runMigrationsOnBoot e afins
+          # não são afetados.
+          NODE_ENV: test
         run: |
           set -o pipefail
           node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee test-results.log
