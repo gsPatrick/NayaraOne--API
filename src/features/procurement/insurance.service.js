@@ -465,7 +465,7 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   // usado em `commissions.service.js` para Commission/CommissionInstallment), a última parcela
   // absorve a diferença de arredondamento de centavos.
   const installments = policy.premiumAmount
-    ? await generateInstallments(policy, issueRequest?.installmentsCount || 1, policy.effectiveDate, transaction)
+    ? await generateInstallments(policy, issueRequest?.installmentsCount || 1, policy.effectiveDate, actor, transaction)
     : [];
 
   await registrarAuditoria(
@@ -483,7 +483,16 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   return policy;
 }
 
-async function generateInstallments(policy, count, firstDueAt, transaction) {
+// BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): a parcela do prêmio nunca
+// gerava o próprio lançamento financeiro — a baixa dependia de o usuário escolher "qualquer
+// despesa liquidada de valor igual" num dropdown, o que misturava domínios (despesas de outros
+// centros de custo apareciam como opção). Agora cada parcela nasce com o SEU payable (mesmo
+// padrão de goods-receipt em procurement.service.js), vinculado via financialEntryId desde a
+// emissão: a baixa só aceita exatamente esse lançamento (ver payInsurancePolicyInstallment).
+const INSURANCE_PREMIUM_COST_CENTER_CODE = 'SEGUROS-PREMIOS';
+
+async function generateInstallments(policy, count, firstDueAt, actor, transaction) {
+  const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
   const n = Math.max(1, Number(count) || 1);
   const baseInstallment = Math.floor((policy.premiumAmount / n) * 100) / 100;
   const installments = [];
@@ -493,6 +502,9 @@ async function generateInstallments(policy, count, firstDueAt, transaction) {
   const startDateOnly = firstDueAt
     ? String(firstDueAt).slice(0, 10)
     : new Date().toISOString().slice(0, 10);
+
+  const costCenter = await getOrCreateDefaultCostCenter(policy.groupId, policy.companyId, INSURANCE_PREMIUM_COST_CENTER_CODE, 'Prêmios de seguro', transaction);
+  const policyLabel = policy.externalPolicyNumber || policy.id;
 
   for (let i = 1; i <= n; i += 1) {
     const isLast = i === n;
@@ -513,6 +525,28 @@ async function generateInstallments(policy, count, firstDueAt, transaction) {
       },
       { transaction }
     );
+
+    // eslint-disable-next-line no-await-in-loop
+    const premiumEntry = await createFinancialEntry(
+      {
+        groupId: policy.groupId,
+        companyId: policy.companyId,
+        contractId: policy.contractId || null,
+        entryType: 'DEBIT',
+        nature: 'PAYABLE',
+        amount,
+        dueAt: dueDate,
+        description: `Prêmio de seguro — parcela ${i}/${n} — apólice ${policyLabel}`,
+        idempotencyKey: `insurance-installment:${installment.id}`,
+        costCenterId: costCenter.id,
+      },
+      actor?.userId || null,
+      transaction
+    );
+    installment.financialEntryId = premiumEntry.id;
+    // eslint-disable-next-line no-await-in-loop
+    await installment.save({ transaction });
+
     installments.push(installment);
   }
 
@@ -520,7 +554,20 @@ async function generateInstallments(policy, count, firstDueAt, transaction) {
 }
 
 async function listPolicyInstallments(policyId, transaction) {
-  return InsuranceInstallment.findAll({ where: { policyId }, order: [['due_date', 'ASC']], transaction });
+  const installments = await InsuranceInstallment.findAll({ where: { policyId }, order: [['due_date', 'ASC']], transaction });
+  // Anexa o lançamento de prêmio vinculado (descrição/status) pra tela de baixa mostrar
+  // exatamente o payable da parcela, em vez de uma busca genérica por valor.
+  const entryIds = installments.map((i) => i.financialEntryId).filter(Boolean);
+  if (entryIds.length > 0) {
+    const entries = await FinancialEntry.findAll({ where: { id: entryIds }, attributes: ['id', 'description', 'status', 'amount'], transaction });
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    return installments.map((i) => {
+      const json = i.toJSON();
+      json.linkedEntry = i.financialEntryId ? (byId.get(i.financialEntryId)?.toJSON() || null) : null;
+      return json;
+    });
+  }
+  return installments;
 }
 
 // payInsurancePolicyInstallment — mesmo padrão de validação fail-closed de
@@ -563,6 +610,31 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
     throw AppError.badRequest(
       'O campo "financialEntryId" é obrigatório para dar baixa na parcela — precisa apontar para um lançamento financeiro já liquidado.',
       'INSURANCE_INSTALLMENT_ENTRY_REQUIRED'
+    );
+  }
+  // BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): o filtro anterior (nature
+  // PAYABLE + valor igual) ainda deixava escolher QUALQUER despesa de mesmo valor de outro
+  // contexto (ex.: centro de custo de teste). Desde que a parcela nasce com o próprio payable
+  // vinculado (generateInstallments), a baixa só aceita exatamente ESSE lançamento — mesmo via
+  // API direta com id forçado. Parcelas legadas (emitidas antes do vínculo) seguem no caminho
+  // antigo de validação (nature/valor/liquidado/não reutilizado), documentado abaixo.
+  if (installment.financialEntryId && String(financialEntryId) !== String(installment.financialEntryId)) {
+    await registrarTentativaBloqueada(
+      {
+        groupId: installment.groupId,
+        companyId: installment.companyId,
+        actorUserId: actor.userId,
+        action: 'procurement.insurance_installment.pay',
+        entityType: 'InsuranceInstallment',
+        entityId: installment.id,
+        beforeJson: { installment: installment.toJSON(), attemptedFinancialEntryId: financialEntryId },
+        reason: 'Tentativa de dar baixa usando um lançamento diferente do payable vinculado à própria parcela.',
+      },
+      transaction
+    );
+    throw AppError.conflict(
+      'Esta parcela já tem um lançamento de prêmio vinculado — a baixa só pode usar esse lançamento.',
+      'INSURANCE_INSTALLMENT_ENTRY_NOT_LINKED'
     );
   }
   // Trava o FinancialEntry também — é o recurso compartilhado que duas parcelas DIFERENTES

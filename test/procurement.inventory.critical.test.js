@@ -255,9 +255,11 @@ test('Three-way match: over-receipt no recebimento de um PO abre ReceiptDiscrepa
     assert.equal(Number(discrepancies[0].expectedValue), 10);
     assert.equal(Number(discrepancies[0].receivedValue), 15);
 
-    // A baixa física real ainda ocorre (quantidade efetivamente recebida), delegada a inventory.receipts.
+    // ATUALIZADO (auditoria Marco 7 Compras E2E, 2026-10-18): a entrada física no SALDO agora é
+    // capada ao saldo do PO — o excedente (5) só entra quando a divergência OVER_RECEIPT é
+    // ACEITA em resolveDiscrepancy (ver test/marco7compras.auditFixes.test.js, C1).
     const balance = await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
-    assert.equal(balance, 15);
+    assert.equal(balance, 10);
   });
 });
 

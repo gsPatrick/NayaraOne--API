@@ -37,7 +37,25 @@ const ROLE_NAME = 'HOMO QA — Aprovador Compras';
 // construction:read e units:read adicionados em 17/10: a tela de Requisições de compra
 // resolve a obra vinculada (construction) e o Painel carrega as unidades (units) logo após
 // o login — sem elas o aprovador via "Permissão ausente" e nenhuma requisição listada.
-const PERMISSION_CODES = ['procurement:read', 'procurement:approve', 'inventory:read', 'construction:read', 'units:read'];
+// 18/10 (auditoria Compras E2E): procurement:create adicionado — sem ele o aprovador não
+// consegue cotar/criar pedido/receber (rotas de cotação, oferta e goods-receipt exigem
+// create), nem criar a própria requisição pra provar o negativo do maker-checker (a
+// segregação é garantida pela REGRA "quem cria não aprova", não pela ausência da permissão).
+// users:read + leituras do Painel (people/properties/radar/crm:opportunities) adicionadas
+// pra tela inicial carregar sem "Permissão ausente".
+const PERMISSION_CODES = [
+  'procurement:read',
+  'procurement:approve',
+  'procurement:create',
+  'inventory:read',
+  'construction:read',
+  'units:read',
+  'users:read',
+  'people:read',
+  'properties:read',
+  'radar:read',
+  'crm:opportunities:read',
+];
 
 async function main() {
   const approverPassword = process.env.APPROVER_SEED_PASSWORD;

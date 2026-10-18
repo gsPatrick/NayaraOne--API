@@ -120,31 +120,43 @@ test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments
     assert.ok(Math.abs(sum - Number(issued.premiumAmount)) < 0.01, 'soma das parcelas precisa bater com o prêmio (sem perder centavos no arredondamento)');
     assert.ok(installments.every((i) => i.status === 'PENDING'));
 
-    // Pagar uma parcela exige um FinancialEntry real, SETTLED, com o mesmo valor — mesmo padrão
-    // fail-closed de commissions.service.js#markInstallmentPaid.
+    // ATUALIZADO (auditoria Marco 7 Compras E2E, 2026-10-18): a parcela agora nasce com o
+    // PRÓPRIO payable vinculado (financialEntryId) — a baixa só aceita exatamente esse
+    // lançamento. Um entry avulso (mesmo PAYABLE de mesmo valor) é rejeitado como NOT_LINKED,
+    // e a baixa legítima usa o lançamento vinculado após liquidá-lo.
     const firstInstallment = installments[0];
+    assert.ok(firstInstallment.financialEntryId, 'parcela nasce vinculada ao próprio payable do prêmio');
     const costCenter1 = await createTestCostCenter(tenant, transaction);
-    const entry = await createFinancialEntry(
+    const intruderEntry = await createFinancialEntry(
       withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(firstInstallment.amount), description: 'Pagamento de parcela de seguro (teste)', costCenterId: costCenter1.id }),
       tenant.userId,
       transaction
     );
     await assert.rejects(
-      () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, entry.id, withTenant({ userId: tenant.userId }), transaction),
+      () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, intruderEntry.id, withTenant({ userId: tenant.userId }), transaction),
+      (err) => {
+        assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_NOT_LINKED');
+        return true;
+      }
+    );
+
+    // O lançamento vinculado ainda não liquidado também não baixa (fail-closed preservado).
+    await assert.rejects(
+      () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, firstInstallment.financialEntryId, withTenant({ userId: tenant.userId }), transaction),
       (err) => {
         assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_NOT_SETTLED');
         return true;
       }
     );
 
-    const { settleFinancialEntry } = require('../src/features/finance/financialEntries.service');
-    await settleFinancialEntry(entry.id, tenant.userId, transaction);
-    const paid = await insuranceService.payInsurancePolicyInstallment(firstInstallment.id, entry.id, withTenant({ userId: tenant.userId }), transaction);
+    const { settleFinancialEntryWithApproval } = require('./testHelpers');
+    await settleFinancialEntryWithApproval(tenant, firstInstallment.financialEntryId, tenant.userId, transaction);
+    const paid = await insuranceService.payInsurancePolicyInstallment(firstInstallment.id, firstInstallment.financialEntryId, withTenant({ userId: tenant.userId }), transaction);
     assert.equal(paid.status, 'PAID');
-    assert.equal(paid.financialEntryId, entry.id);
+    assert.equal(paid.financialEntryId, firstInstallment.financialEntryId);
 
     await assert.rejects(
-      () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, entry.id, withTenant({ userId: tenant.userId }), transaction),
+      () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, firstInstallment.financialEntryId, withTenant({ userId: tenant.userId }), transaction),
       (err) => {
         assert.equal(err.code, 'INSURANCE_INSTALLMENT_ALREADY_PAID');
         return true;
@@ -347,26 +359,50 @@ test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo fina
     assert.equal(installments.length, 2);
     const [first, second] = installments;
 
-    const costCenter2 = await createTestCostCenter(tenant, transaction);
-    const entry = await createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(first.amount), description: 'Pagamento (teste concorrência)', costCenterId: costCenter2.id }),
-      tenant.userId,
-      transaction
-    );
-    const { settleFinancialEntry } = require('../src/features/finance/financialEntries.service');
-    await settleFinancialEntry(entry.id, tenant.userId, transaction);
-
-    // Mesmo valor nas duas parcelas pra o mesmo financialEntryId "passar" a validação de valor
-    // em ambas, isolando o teste na proteção de concorrência (não na validação de amount).
-    second.amount = first.amount;
-    await second.save({ transaction });
-
-    await insuranceService.payInsurancePolicyInstallment(first.id, entry.id, withTenant({ userId: tenant.userId }), transaction);
+    // ATUALIZADO (auditoria Marco 7 Compras E2E, 2026-10-18): as parcelas agora nascem cada uma
+    // com o PRÓPRIO payable vinculado (financialEntryId, índice único no banco). A dupla
+    // contagem ficou impossível por construção em DUAS camadas, e o teste prova as duas:
+    // (1) apontar a segunda parcela pro lançamento da primeira é rejeitado pelo índice único do
+    //     banco (última linha de defesa, nem dado corrompido consegue);
+    // (2) na API, dar baixa na segunda parcela com o lançamento da primeira cai em NOT_LINKED
+    //     (a baixa só aceita o lançamento da própria parcela).
+    const { settleFinancialEntryWithApproval } = require('./testHelpers');
+    const { InsuranceInstallment } = require('../src/models');
 
     await assert.rejects(
-      () => insuranceService.payInsurancePolicyInstallment(second.id, entry.id, withTenant({ userId: tenant.userId }), transaction),
+      () => InsuranceInstallment.update(
+        { financialEntryId: first.financialEntryId },
+        { where: { id: second.id }, transaction }
+      ),
       (err) => {
-        assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_ALREADY_USED');
+        assert.equal(err.name, 'SequelizeUniqueConstraintError');
+        return true;
+      },
+      'o índice único do banco precisa impedir duas parcelas apontando pro mesmo lançamento'
+    );
+  });
+});
+
+test('Insurance Hub: baixa da 2ª parcela com o lançamento da 1ª é rejeitada (NOT_LINKED)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
+    const issued = await insuranceService.issuePolicy(
+      policy.id,
+      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
+      withTenant({ userId: tenant.userId }),
+      transaction
+    );
+    const [first, second] = await insuranceService.listPolicyInstallments(issued.id, transaction);
+
+    const { settleFinancialEntryWithApproval } = require('./testHelpers');
+    await settleFinancialEntryWithApproval(tenant, first.financialEntryId, tenant.userId, transaction);
+    await insuranceService.payInsurancePolicyInstallment(first.id, first.financialEntryId, withTenant({ userId: tenant.userId }), transaction);
+
+    await assert.rejects(
+      () => insuranceService.payInsurancePolicyInstallment(second.id, first.financialEntryId, withTenant({ userId: tenant.userId }), transaction),
+      (err) => {
+        assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_NOT_LINKED');
         return true;
       }
     );

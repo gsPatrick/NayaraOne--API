@@ -115,37 +115,30 @@ test('R2-2: baixa de parcela de prêmio rejeita RECEBIMENTO (RECEIVABLE) de valo
     );
     await settleFinancialEntry(rentReceipt.id, tenant.userId, transaction);
 
+    // ATUALIZADO (auditoria Marco 7 Compras E2E, 2026-10-18): a regra ficou ainda mais forte —
+    // a parcela nasce com o PRÓPRIO payable vinculado, e QUALQUER outro lançamento (inclusive o
+    // recebimento de aluguel deste cenário) é rejeitado como NOT_LINKED antes mesmo da checagem
+    // de natureza. O achado original (aluguel quitando prêmio) continua provadamente bloqueado.
     await assert.rejects(
       () => insuranceService.payInsurancePolicyInstallment(firstInstallment.id, rentReceipt.id, withTenant({ userId: tenant.userId }), transaction),
       (err) => {
-        assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_WRONG_NATURE');
+        assert.equal(err.code, 'INSURANCE_INSTALLMENT_ENTRY_NOT_LINKED');
         return true;
       },
       'um recebimento nunca pode quitar parcela de prêmio, mesmo com valor idêntico e id forçado via API'
     );
 
-    // Caminho legítimo continua funcionando: pagamento (DEBIT/PAYABLE) liquidado do mesmo valor.
-    const costCenter = await createTestCostCenter(tenant, transaction);
-    const premiumPayment = await createFinancialEntry(
-      withTenant({
-        entryType: 'DEBIT',
-        nature: 'PAYABLE',
-        amount: Number(firstInstallment.amount),
-        description: `HOMO QA r2 — pagamento de prêmio ${uniqueSuffix()}`,
-        costCenterId: costCenter.id,
-      }),
-      tenant.userId,
-      transaction
-    );
-    await settleFinancialEntry(premiumPayment.id, tenant.userId, transaction);
+    // Caminho legítimo: liquidar o payable VINCULADO da parcela e dar baixa com ele.
+    const { settleFinancialEntryWithApproval } = require('./testHelpers');
+    await settleFinancialEntryWithApproval(tenant, firstInstallment.financialEntryId, tenant.userId, transaction);
     const paid = await insuranceService.payInsurancePolicyInstallment(
       firstInstallment.id,
-      premiumPayment.id,
+      firstInstallment.financialEntryId,
       withTenant({ userId: tenant.userId }),
       transaction
     );
     assert.equal(paid.status, 'PAID');
-    assert.equal(paid.financialEntryId, premiumPayment.id);
+    assert.equal(paid.financialEntryId, firstInstallment.financialEntryId);
   });
 });
 

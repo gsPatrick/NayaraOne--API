@@ -541,7 +541,22 @@ async function listPurchaseOrders(groupId, companyId, transaction, { status } = 
   const where = { groupId, companyId };
   if (status) where.status = status;
   const orders = await PurchaseOrder.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
-  return attachSupplierPersonNames(orders, transaction);
+  const withNames = await attachSupplierPersonNames(orders, transaction);
+  // FIX (auditoria Marco 7 Compras E2E, 2026-10-18): o número da NF informado no recebimento
+  // não aparecia em lugar nenhum do Pedido de compra. Anexa os números de NF dos recebimentos
+  // de cada PO pra tela mostrar a rastreabilidade PO → NF.
+  const orderIds = withNames.map((o) => o.id);
+  if (orderIds.length > 0) {
+    const receipts = await GoodsReceipt.findAll({ where: { purchaseOrderId: orderIds, groupId, companyId }, attributes: ['purchaseOrderId', 'invoiceFingerprint'], transaction });
+    const nfByOrder = new Map();
+    for (const r of receipts) {
+      if (!r.invoiceFingerprint) continue;
+      if (!nfByOrder.has(r.purchaseOrderId)) nfByOrder.set(r.purchaseOrderId, []);
+      nfByOrder.get(r.purchaseOrderId).push(r.invoiceFingerprint);
+    }
+    for (const o of withNames) o.invoiceNumbers = nfByOrder.get(o.id) || [];
+  }
+  return withNames;
 }
 
 // --- 7. RECEIPT -> 8. MATCH ---
@@ -628,8 +643,13 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     // criando o payable pelo valor cheio na MESMA transação, antes de qualquer resolução humana
     // do case. Capa a contribuição financeira no saldo do PO (`Math.min(receivedQty, remaining)`,
     // nunca negativo): o excedente fica registrado só como o OVER_RECEIPT, e só entra no payable
-    // se `resolveDiscrepancy` aceitar o excedente como válido (ver fix lá). A ENTRADA DE ESTOQUE
-    // (abaixo, `inventoryReceiptItems`) continua usando a quantidade física cheia — já aconteceu.
+    // se `resolveDiscrepancy` aceitar o excedente como válido (ver fix lá).
+    // BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): a ENTRADA DE ESTOQUE usava
+    // a quantidade física cheia ("já aconteceu") — mas isso deixava o excedente no SALDO antes de
+    // qualquer decisão humana da divergência, inconsistente com o próprio cap financeiro acima.
+    // Agora o estoque entra capado no saldo do PO também: o excedente só vira saldo quando a
+    // divergência OVER_RECEIPT é ACEITA em resolveDiscrepancy (movimento adicional lá); rejeitada,
+    // nunca entra (devolução ao fornecedor fica na trilha da resolução).
     const cappedQtyForAmount = Math.min(receivedQty, Math.max(remaining, 0));
     expectedAmount += cappedQtyForAmount * Number(poItem.unitPrice);
 
@@ -652,8 +672,8 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     poItem.receivedQuantity = Number(poItem.receivedQuantity) + receivedQty;
     await poItem.save({ transaction });
 
-    if (poItem.inventoryItemId && receivedQty > 0) {
-      inventoryReceiptItems.push({ inventoryItemId: poItem.inventoryItemId, quantity: receivedQty, unitCost: poItem.unitPrice });
+    if (poItem.inventoryItemId && cappedQtyForAmount > 0) {
+      inventoryReceiptItems.push({ inventoryItemId: poItem.inventoryItemId, quantity: cappedQtyForAmount, unitCost: poItem.unitPrice });
     }
   }
   expectedAmount = round2(expectedAmount);
@@ -674,8 +694,13 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
 
   // Delega a baixa física real a inventory.receipts — nunca duplica a lógica de IN/saldo/custo.
   if (inventoryReceiptItems.length > 0) {
+    // FIX (auditoria Marco 7 Compras E2E, 2026-10-18): o número da NF digitado no recebimento
+    // de Compras nunca chegava ao recibo de inventário como `invoiceNumber` — o movimento de
+    // estoque saía como "Recebimento de mercadoria." genérico, enquanto o fluxo de Estoque
+    // mostra "Recebimento da nota fiscal nº ...". Propaga o número pra rastreabilidade
+    // NF → movimento ficar idêntica nos dois fluxos.
     const inventoryReceipt = await createInventoryReceipt(
-      { groupId: order.groupId, companyId: order.companyId, destinationLocationId, invoiceFingerprint: invoiceFingerprint ? `${invoiceFingerprint}:po:${order.id}` : null, items: inventoryReceiptItems },
+      { groupId: order.groupId, companyId: order.companyId, destinationLocationId, invoiceNumber: invoiceFingerprint || null, invoiceFingerprint: invoiceFingerprint ? `${invoiceFingerprint}:po:${order.id}` : null, items: inventoryReceiptItems },
       actor.userId,
       transaction
     );
@@ -689,6 +714,19 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   order.status = allItemsFullyReceived ? 'RECEIVED' : 'OPEN';
   order.updatedBy = actor.userId || null;
   await order.save({ transaction });
+
+  // FIX (auditoria Marco 7 Compras E2E, 2026-10-18): a requisição de compra ficava parada em
+  // AWARDED ("Adjudicada") pra sempre — o recebimento total do PO não propagava nada pra
+  // máquina de estados da requisição que originou tudo. Recebido tudo, a requisição vira
+  // DELIVERED ("Entregue"), fechando o ciclo Solicitação → ... → Pedido → Recebimento.
+  if (allItemsFullyReceived && order.purchaseRequestId) {
+    const originRequest = await PurchaseRequest.findOne({ where: { id: order.purchaseRequestId, groupId: order.groupId, companyId: order.companyId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (originRequest && originRequest.status === 'AWARDED') {
+      originRequest.status = 'DELIVERED';
+      originRequest.updatedBy = actor.userId || null;
+      await originRequest.save({ transaction });
+    }
+  }
 
   goodsReceipt.status = 'CONFIRMED';
   goodsReceipt.updatedBy = actor.userId || null;
@@ -847,6 +885,38 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
         discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[payable ${overReceiptPayable.id} criado para o excedente de ${overAmount}]`;
         await discrepancy.save({ transaction });
       }
+      // BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): o excedente físico
+      // também só entra no SALDO DE ESTOQUE aqui, na aceitação — confirmGoodsReceipt passou a
+      // capar a entrada no saldo do PO (ver fix lá). Mesmo caminho delegado de lá
+      // (inventory.receipts), nunca duplicando a lógica de IN/saldo/custo médio.
+      if (overQuantity > 0 && poItem.inventoryItemId && goodsReceipt.destinationLocationId) {
+        const overInventoryReceipt = await createInventoryReceipt(
+          {
+            groupId: goodsReceipt.groupId,
+            companyId: goodsReceipt.companyId,
+            destinationLocationId: goodsReceipt.destinationLocationId,
+            invoiceFingerprint: null,
+            items: [{ inventoryItemId: poItem.inventoryItemId, quantity: overQuantity, unitCost: poItem.unitPrice }],
+          },
+          actor.userId,
+          transaction
+        );
+        const { reviewReceipt } = require('../inventory/receipts.service');
+        await reviewReceipt(overInventoryReceipt.id, actor.userId, goodsReceipt.groupId, goodsReceipt.companyId, transaction);
+        await confirmInventoryReceipt(overInventoryReceipt.id, actor, goodsReceipt.groupId, goodsReceipt.companyId, transaction);
+        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${overQuantity} un. incorporado ao estoque — recebimento ${overInventoryReceipt.id}]`;
+        await discrepancy.save({ transaction });
+      }
+    }
+  }
+
+  // Trilha explícita da devolução: excedente REJEITADO nunca entrou no saldo (cap em
+  // confirmGoodsReceipt) — registra na própria resolução que a diferença volta ao fornecedor.
+  if (discrepancy.discrepancyType === 'OVER_RECEIPT' && normalized === 'REJECTED') {
+    const rejectedOverQty = Number(discrepancy.receivedValue) - Number(discrepancy.expectedValue);
+    if (rejectedOverQty > 0) {
+      discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${rejectedOverQty} un. rejeitado — não entrou no estoque; devolução ao fornecedor]`;
+      await discrepancy.save({ transaction });
     }
   }
 
