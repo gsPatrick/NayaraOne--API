@@ -37,6 +37,11 @@ let baseUrl;
 
 after(async () => {
   await sequelize.close();
+  // Mesmo padrão dos demais *.httpRoutes.test.js: este arquivo importa ../app, cujo
+  // app.listen incondicional mantém o event loop vivo pra sempre — sem o exit explícito o
+  // processo deste arquivo NUNCA termina (causou o CI pendurar até o timeout de 6h do runner
+  // e o processo zumbi local de 17/10).
+  process.exit(0);
 });
 
 before(async () => {
