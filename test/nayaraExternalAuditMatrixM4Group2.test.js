@@ -112,7 +112,7 @@ test('Ledger append-only (SQL cru, banco real): DELETE direto em finance.financi
       {
         groupId: t.groupId,
         companyId: t.companyId,
-        entryType: 'PAYABLE',
+        entryType: 'DEBIT',
         nature: 'PAYABLE',
         amount: '150.00',
         dueAt: '2030-01-10',
@@ -141,7 +141,7 @@ test('Ledger append-only (SQL cru, banco real): UPDATE direto mudando "amount" �
       {
         groupId: t.groupId,
         companyId: t.companyId,
-        entryType: 'PAYABLE',
+        entryType: 'DEBIT',
         nature: 'PAYABLE',
         amount: '200.00',
         dueAt: '2030-01-10',
@@ -151,6 +151,10 @@ test('Ledger append-only (SQL cru, banco real): UPDATE direto mudando "amount" �
       transaction
     );
 
+    // SAVEPOINT antes do statement que DEVE falhar: no Postgres, qualquer erro aborta a
+    // transação inteira ("current transaction is aborted") — sem o savepoint, o UPDATE
+    // legítimo logo abaixo falharia por tabela, mascarando o resultado real do teste.
+    await sequelize.query('SAVEPOINT before_forbidden_update', { transaction });
     await assert.rejects(
       () =>
         sequelize.query('UPDATE finance.financial_entries SET amount = 999999.00 WHERE id = :id', {
@@ -160,6 +164,7 @@ test('Ledger append-only (SQL cru, banco real): UPDATE direto mudando "amount" �
       /append-only/i,
       'UPDATE cru mudando "amount" deveria ser recusado pelo banco (trigger), não silenciosamente aceito'
     );
+    await sequelize.query('ROLLBACK TO SAVEPOINT before_forbidden_update', { transaction });
 
     // Confirma que um UPDATE em campo que o fluxo normal de fato muta (ex.: updated_by) continua
     // funcionando — o trigger não deve travar a operação legítima da aplicação.

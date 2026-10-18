@@ -15,9 +15,16 @@ module.exports = {
       { type: Sequelize.UUID, allowNull: true }
     );
 
-    await queryInterface.sequelize.query(
-      'GRANT SELECT, INSERT, UPDATE ON "finance"."ownership_transfer_tasks" TO nayara_runtime;'
+    // Guard de existência do role: em banco recém-criado (CI descartável) nayara_runtime não
+    // existe — o grant é pulado; o runtime do CI (nayara_ci_app) recebe grants no workflow.
+    const [[{ exists: runtimeExists }]] = await queryInterface.sequelize.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;"
     );
+    if (runtimeExists) {
+      await queryInterface.sequelize.query(
+        'GRANT SELECT, INSERT, UPDATE ON "finance"."ownership_transfer_tasks" TO nayara_runtime;'
+      );
+    }
   },
 
   down: async (queryInterface) => {
