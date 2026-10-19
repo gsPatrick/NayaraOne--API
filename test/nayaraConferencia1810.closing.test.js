@@ -396,6 +396,45 @@ test('F02-C3: intenção de pagamento enviada ao banco e sem resposta bloqueia o
   });
 });
 
+test('F02-C3b: confirmação do banco que chega depois do fechamento liquida no período corrente com aviso POST_CLOSING_BANK_CONFIRMATION', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const referenceMonth = await freeMonth(transaction);
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    const bankAccount = await createBankAccount(transaction);
+    const entry = await financialEntriesService.createFinancialEntry(
+      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 410.5, description: `CLS confirmação tardia ${uniqueSuffix()}`, costCenterId: costCenter.id, bankAccountId: bankAccount.id, competenceMonth: referenceMonth, dueAt: `${referenceMonth}-20T15:00:00.000Z` }),
+      tenant.userId,
+      transaction
+    );
+    // Intenção aprovada mas ainda não enviada: não é "pagamento em trânsito", o mês pode fechar.
+    const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
+    await paymentIntentsService.approvePaymentIntent(intent.id, approverA.id, transaction);
+    await confirmChecks(referenceMonth, tenant.userId, transaction);
+    await periodClosuresService.closePeriod(withTenant({ referenceMonth }), tenant.userId, transaction);
+    await periodClosuresService.approvePeriodClosure(withTenant({ referenceMonth }), approverA.id, transaction);
+    await expectCode(periodClosuresService.assertCompetenceOpen(tenant.companyId, referenceMonth, transaction), 'FINANCE_PERIOD_CLOSED');
+
+    // Envio e confirmação do banco só depois do fechamento: o pagamento é FATO consumado — não
+    // pode ser recusado pelo mês fechado.
+    const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
+    const before = Date.now();
+    const confirmed = await bankPaymentsService.confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
+    assert.equal(confirmed.status, 'EXECUTED');
+
+    await entry.reload({ transaction });
+    assert.equal(entry.status, 'SETTLED');
+    // Referência ao período original preservada; o fato de caixa cai no período corrente (agora).
+    assert.equal(entry.competenceMonth, referenceMonth);
+    assert.ok(entry.settledAt && new Date(entry.settledAt).getTime() >= before - 60000, 'liquidação datada no período corrente');
+    assert.notEqual(new Date(entry.settledAt).toISOString().slice(0, 7), referenceMonth);
+
+    const { AnomalyCase } = require('../src/models');
+    const warnings = await AnomalyCase.findAll({ where: { relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, caseType: 'POST_CLOSING_BANK_CONFIRMATION' }, transaction });
+    assert.equal(warnings.length, 1, 'abre exatamente um aviso para o contador/revisor');
+    assert.ok(warnings[0].reason.includes(referenceMonth));
+  });
+});
+
 // =============================================================================================
 // Item 4 — caixa de terceiros
 // =============================================================================================
