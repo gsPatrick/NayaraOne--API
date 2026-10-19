@@ -75,6 +75,21 @@ async function main() {
         // num banco novo vazio) — e só ignora o padrão específico e esperado de limpeza em
         // banco vazio (objeto que --if-exists tentou derrubar e não existia).
         const stderrText = stderr || '';
+        // GAP REAL CORRIGIDO (drill F05, 18/10/2026): restaurar num cluster NOVO, onde a role de
+        // runtime ainda não existe, gera `role "nayara_runtime" does not exist` em cada GRANT —
+        // e o filtro abaixo ("does not exist" = aviso inofensivo de --clean num banco vazio)
+        // engolia isso. O restore terminava "com sucesso", mas sem nenhum privilégio para a
+        // aplicação: a API restaurada não conseguiria ler nada. Role ausente é sempre falha,
+        // com a instrução de criar as roles antes (ver runbook de restore).
+        const missingRoles = [...new Set([...stderrText.matchAll(/role "([^"]+)" does not exist/gi)].map((m) => m[1]))];
+        if (missingRoles.length > 0) {
+          reject(new Error(
+            `pg_restore falhou: role(s) ausente(s) no servidor de destino: ${missingRoles.join(', ')}. ` +
+            'Crie as roles antes do restore — nayara_runtime (LOGIN, NOSUPERUSER, NOBYPASSRLS) e nayara_migration (NOLOGIN) — ' +
+            'e refaça o restore num banco de destino vazio.'
+          ));
+          return;
+        }
         const hasPermissionDenied = /permission denied/i.test(stderrText);
         const hasUnexpectedError = error && !/already exists|does not exist/i.test(stderrText);
         if (hasPermissionDenied || hasUnexpectedError) {
