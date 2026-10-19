@@ -1,6 +1,6 @@
 # Mapa de segurança — Nayara One (API)
 
-> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T11:45:57.846Z, commit `1d51126`.
+> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T11:49:16.518Z, commit `3781ecd`.
 > Banco consultado: o do `DATABASE_URL` do ambiente (PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2)), transação READ ONLY, só catálogos.
 > Nenhum segredo, host ou connection string é impresso. Nenhum endpoint (inclusive MFA) foi chamado.
 > Regenerar no estado final antes do fechamento dos Marcos 4/5.
@@ -276,13 +276,14 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | `crm:visits:delete` | 1 | crm |
 | `crm:visits:read` | 2 | crm |
 | `crm:visits:update` | 1 | crm |
-| `finance:approve` | 7 | finance |
+| `finance:approve` | 11 | finance |
 | `finance:bankAccounts` | 4 | finance |
-| `finance:create` | 11 | finance |
-| `finance:read` | 25 | finance |
+| `finance:chartOfAccounts` | 3 | finance |
+| `finance:create` | 10 | finance |
+| `finance:read` | 29 | finance |
 | `finance:reconcile` | 2 | finance |
 | `finance:settle` | 12 | finance |
-| `finance:update` | 12 | finance |
+| `finance:update` | 10 | finance |
 | `groups:create` | 1 | groups |
 | `groups:delete` | 1 | groups |
 | `groups:read` | 2 | groups |
@@ -297,6 +298,7 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | `legal:read` | 36 | legal |
 | `legal:sign` | 4 | legal |
 | `legal:update` | 16 | legal |
+| `legal:waive` | 1 | legal |
 | `memberships:create` | 1 | memberships |
 | `memberships:delete` | 1 | memberships |
 | `memberships:read` | 2 | memberships |
@@ -339,7 +341,7 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 
 | Arquivo | Ocorrências |
 |---|---|
-| src/features/finance/finance.routes.js | 11 |
+| src/features/finance/finance.routes.js | 14 |
 | src/features/legal/legal.routes.js | 3 |
 | src/features/memberships/memberships.routes.js | 2 |
 | src/features/roles/roles.routes.js | 3 |
@@ -361,13 +363,14 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 |---|---|
 | SELECT | true |
 | INSERT | true |
-| UPDATE | true |
-| DELETE | true |
+| UPDATE | false |
+| DELETE | false |
 | TRUNCATE | false |
 
 - Triggers no schema `audit`:
 
-  (nenhum)
+  - `audit_log_no_truncate`: `CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON audit.audit_log FOR EACH STATEMENT EXECUTE FUNCTION audit.audit_log_block_mutation()`
+  - `audit_log_no_update_delete`: `CREATE TRIGGER audit_log_no_update_delete BEFORE DELETE OR UPDATE ON audit.audit_log FOR EACH ROW EXECUTE FUNCTION audit.audit_log_block_mutation()`
 
 ## 9. Evidências relacionadas
 

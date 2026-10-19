@@ -100,5 +100,6 @@ real 14,45
 
 - Drill usa volume pequeno; RTO de produção deve ser remedido com dump do tamanho real.
 - Sem backup agendado/PITR (RPO acima).
-- `audit.audit_log`: a role de runtime tem UPDATE/DELETE e não há trigger de imutabilidade
-  (ver MAPA_SEGURANCA.md §8) — a trilha não é append-only no banco.
+- `audit.audit_log` é append-only desde a migration 20260101000490 (REVOKE UPDATE/DELETE/TRUNCATE
+  do runtime + triggers que recusam UPDATE/DELETE/TRUNCATE; ver MAPA_SEGURANCA.md §8 e
+  `test/auditLogAppendOnly.test.js`). O restore via pg_restore só faz INSERT/COPY, não é afetado.
