@@ -34,6 +34,20 @@ async function createTestProperty(transaction) {
   );
 }
 
+// Determinismo (19/10/2026): o banco de dev é compartilhado — uma versão de REG-OBR-002 publicada
+// (e commitada) fora da suíte mudava o "default" visto aqui (HIGH=7 em vez de 5). Dentro da
+// transação de rollback, encerra a vigência de qualquer versão ativa da empresa de teste para que
+// o seed automático rode de verdade; nada disso persiste.
+async function resetActiveSlaRule(transaction) {
+  const { Rule: RuleModel, RuleVersion: RuleVersionModel } = require('../src/models');
+  const rule = await RuleModel.findOne({ where: { code: 'REG-OBR-002', groupId: tenant.groupId, companyId: tenant.companyId }, transaction });
+  if (!rule) return;
+  await RuleVersionModel.update(
+    { effectiveUntil: new Date(Date.now() - 1000) },
+    { where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction }
+  );
+}
+
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o prazo padrão de pós-obra (SEVERITY_SLA_DAYS)
 // era uma constante hardcoded — migrado pro Motor de Regras genérico com o código REG-OBR-002
 // do catálogo do contrato (mesmo padrão de REG-OBR-001/marginRules.service.js).
@@ -42,6 +56,7 @@ test('REG-OBR-002: SLA default (seed automático) bate com os valores anteriores
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { Rule: RuleModel, RuleVersion: RuleVersionModel } = require('../src/models');
 
+    await resetActiveSlaRule(transaction);
     const property = await createTestProperty(transaction);
 
     const cases = {};
@@ -77,6 +92,7 @@ test('REG-OBR-002: SLA default (seed automático) bate com os valores anteriores
 
 test('REG-OBR-002: publicar nova versão da regra passa a valer pra casos novos, preservando o SLA já calculado dos casos existentes', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await resetActiveSlaRule(transaction);
     const property = await createTestProperty(transaction);
 
     // Garante que a regra default já existe (idêntico ao primeiro teste) antes de criar o caso
