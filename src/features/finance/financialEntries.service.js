@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { FinancialEntry, File, Person, ContractParty, PaymentIntent } = require('../../models');
+const { FinancialEntry, File, Person, ContractParty, PaymentIntent, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment, checkFrequentReversalAlert } = require('./financeAntifraud.service');
@@ -262,9 +262,26 @@ async function attachSettlementEvidence(id, payload, actorUserId, transaction) {
   if (!SETTLEMENT_EVIDENCE_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
     throw AppError.badRequest('O comprovante precisa ser PDF ou imagem.', 'FINANCE_SETTLEMENT_EVIDENCE_INVALID_TYPE');
   }
+  // F2 (M45): o comprovante é único pelo CONTEÚDO (SHA-256), não só pelo fileId — o mesmo arquivo
+  // enviado duas vezes gera dois File com o mesmo hash. Escopo: empresa do lançamento.
+  let sameContentFileIds = [evidence.id];
+  if (evidence.checksumSha256) {
+    if (transaction) {
+      await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:k))', {
+        replacements: { k: `settlement-evidence:${entry.companyId}:${evidence.checksumSha256}` },
+        transaction,
+      });
+    }
+    const twins = await File.findAll({
+      attributes: ['id'],
+      where: { companyId: entry.companyId, checksumSha256: evidence.checksumSha256 },
+      transaction,
+    });
+    sameContentFileIds = Array.from(new Set([evidence.id, ...twins.map((f) => f.id)]));
+  }
   const reused = await FinancialEntry.findOne({
     where: {
-      settlementEvidenceFileId: evidence.id,
+      settlementEvidenceFileId: { [Op.in]: sameContentFileIds },
       id: { [Op.ne]: entry.id },
       [Op.or]: [{ parentEntryId: null }, { parentEntryId: { [Op.ne]: entry.id } }],
     },
