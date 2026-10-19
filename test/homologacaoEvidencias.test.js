@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements, createCommissionSource } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
@@ -703,8 +703,7 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
           groupId: tenant.groupId,
           companyId: tenant.companyId,
           beneficiaryUserId: tenant.userId,
-          baseAmount: testCase.baseAmount,
-          percentage: testCase.percentage,
+          ...(await createCommissionSource(tenant, transaction, { baseAmount: testCase.baseAmount, percentage: testCase.percentage })),
           installmentsCount: testCase.installmentsCount,
           idempotencyKey: `commission-${uniqueSuffix()}`,
         },

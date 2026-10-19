@@ -62,6 +62,22 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'net_amount',
       },
+      financialEntryId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'financial_entry_id',
+        comment: 'Lançamento a pagar que efetiva o repasse (aprovação + liquidação comuns)',
+      },
+      paidAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'paid_at',
+      },
+      approvedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'approved_by_user_id' },
+      approvedAt: { type: DataTypes.DATE, allowNull: true, field: 'approved_at' },
+      confirmedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'confirmed_by_user_id' },
+      paymentEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'payment_evidence_file_id' },
+      paymentSettlementMethod: { type: DataTypes.STRING(32), allowNull: true, field: 'payment_settlement_method' },
       referenceMonth: {
         type: DataTypes.STRING(7),
         allowNull: true,

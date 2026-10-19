@@ -69,6 +69,10 @@ financeRouter.get('/finance/commissions', requirePermission('finance:read'), fin
 financeRouter.get('/finance/commissions/:id/installments', requirePermission('finance:read'), financeController.listCommissionInstallments);
 financeRouter.post('/finance/commissions/:id/cancel', requirePermission('finance:update'), financeController.cancelCommission);
 financeRouter.get('/finance/commissions/:id/adjustments', requirePermission('finance:read'), financeController.getCommissionAdjustments);
+// Frente 3 (§14): regra de comissão no Motor de Regras + liberação proporcional ao recebido.
+financeRouter.post('/finance/commission-rule', requirePermission('finance:approve'), requireRecentMfa, financeController.publishCommissionRule);
+financeRouter.get('/finance/commission-rule', requirePermission('finance:read'), financeController.getCommissionRule);
+financeRouter.get('/finance/commissions/:id/release', requirePermission('finance:read'), financeController.getCommissionRelease);
 
 // --- Anomaly cases (antifraude, §17/§19) ---
 financeRouter.get('/finance/anomaly-cases', requirePermission('finance:read'), financeController.listAnomalyCases);
@@ -78,14 +82,18 @@ financeRouter.post('/finance/commission-installments/:installmentId/pay', requir
 // Owner repasses
 financeRouter.post('/finance/owner-repasses', requirePermission('finance:create'), financeController.createOwnerRepasse);
 financeRouter.get('/finance/owner-repasses', requirePermission('finance:read'), financeController.listOwnerRepasses);
+// Frente 3 (§12): aprovação por outra pessoa gera o lançamento a pagar; "pay" confirma o pagamento.
+financeRouter.post('/finance/owner-repasses/:id/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approveOwnerRepasse);
 financeRouter.post('/finance/owner-repasses/:id/pay', requirePermission('finance:settle'), financeController.payOwnerRepasse);
 financeRouter.get('/finance/owner-repasses/:id/composition', requirePermission('finance:read'), financeController.getOwnerRepasseComposition);
 
 // Chart of accounts (plano de contas — M4-01). Conta nunca é excluída: DELETE aqui desativa.
-financeRouter.post('/finance/chart-of-accounts', requirePermission('finance:create'), financeController.createChartAccount);
+financeRouter.post('/finance/chart-of-accounts', requirePermission('finance:chartOfAccounts'), financeController.createChartAccount);
 financeRouter.get('/finance/chart-of-accounts', requirePermission('finance:read'), financeController.listChartAccounts);
-financeRouter.patch('/finance/chart-of-accounts/:id', requirePermission('finance:update'), financeController.updateChartAccount);
-financeRouter.delete('/finance/chart-of-accounts/:id', requirePermission('finance:update'), financeController.deactivateChartAccount);
+// §4 (Frente 3): histórico de versões; criar/alterar/desativar exige governança (finance:chartOfAccounts).
+financeRouter.get('/finance/chart-of-accounts/:id/versions', requirePermission('finance:read'), financeController.listChartAccountVersions);
+financeRouter.patch('/finance/chart-of-accounts/:id', requirePermission('finance:chartOfAccounts'), financeController.updateChartAccount);
+financeRouter.delete('/finance/chart-of-accounts/:id', requirePermission('finance:chartOfAccounts'), financeController.deactivateChartAccount);
 
 // Payment intents (snapshot + hash dos dados aprovados — M4-07). Aprovar exige a permissão de
 // aprovação (maker-checker); executar é o ato que move dinheiro, logo step-up MFA como o settle.
@@ -101,6 +109,11 @@ financeRouter.post('/finance/payment-intents/:id/submit-to-bank', requirePermiss
 // Intercompany transfers (M4-18) — criar move dinheiro entre empresas: step-up MFA.
 financeRouter.post('/finance/intercompany-transfers', requirePermission('finance:settle'), requireRecentMfa, financeController.createIntercompanyTransfer);
 financeRouter.get('/finance/intercompany-transfers', requirePermission('finance:read'), financeController.listIntercompanyTransfers);
+// Frente 3 (§15): maker-checker — outra pessoa aprova (cria os dois lados) ou recusa.
+financeRouter.post('/finance/intercompany-transfers/:id/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approveIntercompanyTransfer);
+financeRouter.post('/finance/intercompany-transfers/:id/reject', requirePermission('finance:approve'), financeController.rejectIntercompanyTransfer);
+financeRouter.get('/finance/intercompany-transfers/destination-bank-accounts', requirePermission('finance:read'), financeController.listIntercompanyDestinationAccounts);
+financeRouter.get('/finance/reports/group-consolidated', requirePermission('finance:read'), financeController.getGroupConsolidatedReport);
 financeRouter.post('/finance/intercompany-transfers/:id/reconcile', requirePermission('finance:reconcile'), financeController.reconcileIntercompanyTransfer);
 
 // Period closures + saúde financeira (M4-19/M4-20). Reabrir período é ação crítica (permite

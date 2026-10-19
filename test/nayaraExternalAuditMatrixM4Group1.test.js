@@ -142,7 +142,7 @@ test('Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração us
     const repasse2 = await ownerRepassesService.createOwnerRepasse(
       {
         groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id,
-        bankAccountId: account.id, sourceEntryIds: [recebimento.id], grossAmount: 600, referenceMonth: '2026-09',
+        bankAccountId: account.id, sourceEntryIds: [recebimento.id], grossAmount: 600, referenceMonth: '2026-10', // Frente 3: um repasse por período
       },
       tenant.userId, transaction
     );
@@ -154,7 +154,7 @@ test('Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração us
         ownerRepassesService.createOwnerRepasse(
           {
             groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id,
-            bankAccountId: account.id, sourceEntryIds: [recebimento.id], grossAmount: 0.01, referenceMonth: '2026-09',
+            bankAccountId: account.id, sourceEntryIds: [recebimento.id], grossAmount: 0.01, referenceMonth: '2026-11',
           },
           tenant.userId, transaction
         ),

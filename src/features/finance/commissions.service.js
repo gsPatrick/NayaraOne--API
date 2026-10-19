@@ -1,9 +1,12 @@
 'use strict';
 
-const { Commission, CommissionInstallment, FinancialEntry, AuditLog } = require('../../models');
+const crypto = require('crypto');
+const { Commission, CommissionInstallment, FinancialEntry, AuditLog, Rule, RuleVersion, RuleScope, RulePublication, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { publishCommissionCreated } = require('./financeEvents.service');
+const { computeRemainingAmount } = require('./financialEntries.service');
 
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-09 — mesmo padrão do achado em
 // inventory.movements.service.js/recordMovement): criar uma comissão é uma operação
@@ -19,20 +22,172 @@ function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+// --- Caderno §14 / FIN-011 — regra de comissão no Motor de Regras ---------------------------
+//
+// Conferência Nayara 18/10/2026: o percentual vinha do payload e `ruleVersionId` era opcional.
+// §14: "Direito de comissão nasce de fato gerador definido pelo Motor de Regras. Percentual e
+// base guardam rule_version_id usado no cálculo. Comissão pode ser parcelada na mesma proporção
+// do recebimento. Comissão de gerente/corretor/correspondente são componentes separados.
+// Pagamento da comissão exige disponibilidade/condição prevista na regra."
+//
+// Agora:
+//  - REG-FIN-002 (Motor de Regras genérico, versionado) define o percentual de cada componente
+//    (BROKER/MANAGER/CORRESPONDENT) e a base (o valor do lançamento a receber de origem).
+//  - O fato gerador é um lançamento a RECEBER real (`sourceEntryId`); a base é o valor dele.
+//  - Percentual e base NUNCA vêm do payload; a comissão grava a versão da regra usada.
+//  - Sem regra publicada: fail closed (não existe percentual padrão inventado para dinheiro).
+//  - O pagamento é liberado na proporção do que o fato gerador já recebeu (ver
+//    getCommissionRelease / markInstallmentPaid).
+
+const RULE_CODE = 'REG-FIN-002';
+const RULE_NAME = 'Percentual de comissão por componente (fato gerador: recebimento)';
+const CONDITION_AST = { fact: 'commissionRuleActive', op: '==', value: true };
+const COMPONENTS = ['BROKER', 'MANAGER', 'CORRESPONDENT'];
+const BASE_TYPE = 'SOURCE_ENTRY_AMOUNT';
+
+function validateComponentPercentages(componentPercentages) {
+  if (!componentPercentages || typeof componentPercentages !== 'object' || Array.isArray(componentPercentages)) {
+    throw AppError.badRequest(
+      `"componentPercentages" é obrigatório: objeto com o percentual de cada componente (${COMPONENTS.join(', ')}).`,
+      'FINANCE_COMMISSION_RULE_VALIDATION'
+    );
+  }
+  const normalized = {};
+  for (const [key, value] of Object.entries(componentPercentages)) {
+    if (!COMPONENTS.includes(key)) {
+      throw AppError.badRequest(`Componente desconhecido "${key}". Use: ${COMPONENTS.join(', ')}.`, 'FINANCE_COMMISSION_RULE_VALIDATION');
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 100) {
+      throw AppError.badRequest(`O percentual de "${key}" deve estar entre 0 (exclusivo) e 100.`, 'FINANCE_COMMISSION_RULE_VALIDATION');
+    }
+    normalized[key] = numeric;
+  }
+  if (Object.keys(normalized).length === 0) {
+    throw AppError.badRequest('Informe o percentual de pelo menos um componente.', 'FINANCE_COMMISSION_RULE_VALIDATION');
+  }
+  return normalized;
+}
+
 /**
- * createCommission — registra o DIREITO à comissão (baseAmount × percentage = totalAmount).
- * `ruleVersionId` (opcional) rastreia qual versão da regra de comissionamento vigente gerou
- * esse cálculo, para auditoria futura (coluna já existe no schema, sem FK de banco — ver
- * comentário do model).
+ * publishCommissionRuleVersion — publica nova versão de REG-FIN-002 (a anterior tem a vigência
+ * encerrada; comissões já calculadas continuam apontando para a versão que usaram).
+ */
+async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
+  const { groupId, companyId, componentPercentages, description } = payload;
+  if (!groupId || !companyId) {
+    throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCE_COMMISSION_RULE_VALIDATION');
+  }
+  const normalized = validateComponentPercentages(componentPercentages);
+
+  const lockKey = `commission_rule:${groupId}:${companyId}:${RULE_CODE}`;
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:lockKey, 0))', { replacements: { lockKey }, transaction });
+
+  let rule = await Rule.findOne({ where: { code: RULE_CODE, groupId, companyId }, transaction });
+  if (!rule) {
+    rule = await Rule.create(
+      {
+        groupId,
+        companyId,
+        code: RULE_CODE,
+        name: RULE_NAME,
+        description: 'Percentual de comissão de corretor/gerente/correspondente sobre o valor do recebimento que gera o direito (Caderno §14).',
+        domain: 'finance',
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+  const now = new Date();
+  await RuleVersion.update(
+    { effectiveUntil: now, updatedBy: actorUserId || null },
+    { where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction }
+  );
+  const last = await RuleVersion.findOne({ where: { ruleId: rule.id }, order: [['versionNumber', 'DESC']], transaction });
+  const actionJson = { components: normalized, base: BASE_TYPE, description: description || null };
+  const version = await RuleVersion.create(
+    {
+      groupId,
+      companyId,
+      ruleId: rule.id,
+      versionNumber: last ? last.versionNumber + 1 : 1,
+      conditionAstJson: CONDITION_AST,
+      contentHash: crypto.createHash('sha256').update(JSON.stringify({ CONDITION_AST, actionJson })).digest('hex'),
+      actionJson,
+      effectiveFrom: now,
+      effectiveUntil: null,
+      status: 'PUBLISHED',
+      publishedByUserId: actorUserId || null,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+  await RuleScope.create(
+    { groupId, companyId, ruleVersionId: version.id, scopeType: 'GLOBAL', scopeRefId: null, precedence: 7, createdBy: actorUserId || null, updatedBy: actorUserId || null },
+    { transaction }
+  );
+  await RulePublication.create(
+    { groupId, companyId, ruleVersionId: version.id, publishedByUserId: actorUserId || null, publishedAt: now, createdBy: actorUserId || null, updatedBy: actorUserId || null },
+    { transaction }
+  );
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'finance.commission_rule.publish',
+      entityType: 'RuleVersion',
+      entityId: version.id,
+      afterJson: { ruleCode: RULE_CODE, versionNumber: version.versionNumber, ...actionJson },
+      reason: `Nova versão da regra de comissão (${RULE_CODE} v${version.versionNumber}) publicada.`,
+    },
+    transaction
+  );
+  return { id: version.id, ruleCode: RULE_CODE, versionNumber: version.versionNumber, components: normalized, base: BASE_TYPE };
+}
+
+async function resolveCommissionRule(groupId, companyId, transaction) {
+  const evaluation = await evaluateRule(RULE_CODE, { commissionRuleActive: true, groupId, companyId }, { groupId, companyId }, { transaction });
+  if (evaluation.decision !== 'APPLY') {
+    throw AppError.unprocessable(
+      `Não há regra de comissão publicada para esta empresa (${RULE_CODE}) — publique o percentual de cada componente antes de registrar comissões.`,
+      'FINANCE_COMMISSION_RULE_NOT_CONFIGURED',
+      { reason: evaluation.reason }
+    );
+  }
+  return { ruleVersionId: evaluation.ruleVersionId, action: evaluation.action || {} };
+}
+
+async function getActiveCommissionRule(groupId, companyId, transaction) {
+  const { ruleVersionId, action } = await resolveCommissionRule(groupId, companyId, transaction);
+  return { ruleVersionId, ruleCode: RULE_CODE, components: action.components || {}, base: action.base || BASE_TYPE };
+}
+
+/**
+ * createCommission — registra o DIREITO à comissão a partir do fato gerador (lançamento a
+ * receber `sourceEntryId`) e do componente. Percentual e base vêm da regra REG-FIN-002 vigente;
+ * a comissão grava a `ruleVersionId` usada.
  */
 async function createCommission(payload, actorUserId, transaction) {
-  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, baseAmount, percentage, ruleVersionId, installmentsCount, firstDueAt, idempotencyKey } = payload;
+  const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, sourceEntryId, component, installmentsCount, firstDueAt, idempotencyKey } = payload;
 
-  if (!groupId || !companyId || !beneficiaryUserId || baseAmount === undefined || percentage === undefined) {
+  if (!groupId || !companyId || !beneficiaryUserId || !sourceEntryId || !component) {
     throw AppError.badRequest(
-      'Os campos "groupId", "companyId", "beneficiaryUserId", "baseAmount" e "percentage" são obrigatórios.',
+      'Os campos "groupId", "companyId", "beneficiaryUserId", "sourceEntryId" (fato gerador) e "component" são obrigatórios.',
       'FINANCE_COMMISSION_VALIDATION'
     );
+  }
+  if (payload.percentage !== undefined || payload.baseAmount !== undefined || payload.ruleVersionId !== undefined) {
+    throw AppError.badRequest(
+      'Percentual, base e versão da regra não são informados no pedido: vêm da regra de comissão vigente (Caderno §14).',
+      'FINANCE_COMMISSION_VALUES_FROM_RULE'
+    );
+  }
+  const normalizedComponent = String(component).toUpperCase();
+  if (!COMPONENTS.includes(normalizedComponent)) {
+    throw AppError.badRequest(`O campo "component" deve ser um de: ${COMPONENTS.join(', ')}.`, 'FINANCE_COMMISSION_VALIDATION');
   }
   if (!idempotencyKey) {
     throw AppError.badRequest(
@@ -48,15 +203,42 @@ async function createCommission(payload, actorUserId, transaction) {
       { existingId: existingByKey.id }
     );
   }
-  const baseNumeric = Number(baseAmount);
-  const percentageNumeric = Number(percentage);
-  if (!Number.isFinite(baseNumeric) || baseNumeric <= 0) {
-    throw AppError.badRequest('O campo "baseAmount" deve ser um número positivo.', 'FINANCE_COMMISSION_VALIDATION');
+
+  const sourceEntry = await FinancialEntry.findOne({
+    where: { id: sourceEntryId, companyId },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!sourceEntry) {
+    throw AppError.notFound('O lançamento de origem (fato gerador) não existe nesta empresa.', 'FINANCE_COMMISSION_SOURCE_NOT_FOUND');
   }
-  if (!Number.isFinite(percentageNumeric) || percentageNumeric <= 0 || percentageNumeric > 100) {
-    throw AppError.badRequest('O campo "percentage" deve estar entre 0 (exclusivo) e 100.', 'FINANCE_COMMISSION_VALIDATION');
+  if (sourceEntry.nature !== 'RECEIVABLE' || sourceEntry.isThirdPartyFunds || ['CANCELLED', 'REVERSED'].includes(sourceEntry.status) || sourceEntry.parentEntryId) {
+    throw AppError.conflict(
+      'O fato gerador da comissão precisa ser um lançamento a receber próprio e válido (não caução, não cancelado/estornado, não baixa parcial).',
+      'FINANCE_COMMISSION_SOURCE_INVALID'
+    );
+  }
+  const duplicateFact = await Commission.findOne({
+    where: { companyId, sourceEntryId, component: normalizedComponent, beneficiaryUserId, status: ['PENDING', 'APPROVED', 'PAID'] },
+    transaction,
+  });
+  if (duplicateFact) {
+    throw AppError.conflict(
+      'Já existe comissão deste componente para este beneficiário sobre o mesmo fato gerador.',
+      'FINANCE_COMMISSION_DUPLICATE_FACT',
+      { existingId: duplicateFact.id }
+    );
   }
 
+  const { ruleVersionId, action } = await resolveCommissionRule(groupId, companyId, transaction);
+  const percentageNumeric = Number((action.components || {})[normalizedComponent]);
+  if (!Number.isFinite(percentageNumeric) || percentageNumeric <= 0) {
+    throw AppError.unprocessable(
+      `A regra de comissão vigente não define percentual para o componente ${normalizedComponent}.`,
+      'FINANCE_COMMISSION_RULE_COMPONENT_NOT_CONFIGURED'
+    );
+  }
+  const baseNumeric = Number(sourceEntry.amount);
   const totalAmount = round2(baseNumeric * (percentageNumeric / 100));
 
   const commission = await Commission.create(
@@ -64,12 +246,14 @@ async function createCommission(payload, actorUserId, transaction) {
       groupId,
       companyId,
       opportunityId: opportunityId || null,
-      contractId: contractId || null,
+      contractId: contractId || sourceEntry.contractId || null,
       beneficiaryUserId,
       baseAmount: baseNumeric,
       percentage: percentageNumeric,
       totalAmount,
-      ruleVersionId: ruleVersionId || null,
+      ruleVersionId,
+      sourceEntryId,
+      component: normalizedComponent,
       status: 'PENDING',
       idempotencyKey,
       createdBy: actorUserId || null,
@@ -90,13 +274,48 @@ async function createCommission(payload, actorUserId, transaction) {
       action: 'finance.commission.create',
       entityType: 'Commission',
       entityId: commission.id,
-      afterJson: { commission: commission.toJSON(), installments: installments.map((i) => i.toJSON()) },
-      reason: `Comissão de ${totalAmount} (${percentageNumeric}% sobre ${baseNumeric}) registrada.`,
+      afterJson: { commission: commission.toJSON(), installments: installments.map((i) => i.toJSON()), ruleVersionId, ruleCode: RULE_CODE },
+      reason: `Comissão ${normalizedComponent} de ${totalAmount} (${percentageNumeric}% sobre ${baseNumeric}, regra ${RULE_CODE} versão ${ruleVersionId}) registrada a partir do lançamento ${sourceEntryId}.`,
     },
     transaction
   );
 
   return { commission, installments };
+}
+
+/**
+ * getCommissionRelease — quanto da comissão já pode ser pago: a mesma proporção do que o fato
+ * gerador já recebeu (§14 "parcelada na mesma proporção do recebimento"; §10 "comissão
+ * proporcional usa valor efetivamente recebido").
+ */
+async function getCommissionRelease(commissionOrId, transaction) {
+  const commission = typeof commissionOrId === 'string' ? await getCommission(commissionOrId, transaction) : commissionOrId;
+  const installments = await CommissionInstallment.findAll({ where: { commissionId: commission.id }, transaction });
+  const paidCents = installments.filter((i) => i.status === 'PAID').reduce((acc, i) => acc + Math.round(Number(i.amount) * 100), 0);
+  const totalCents = Math.round(Number(commission.totalAmount) * 100);
+
+  if (!commission.sourceEntryId) {
+    // Comissão anterior à regra (sem fato gerador registrado): mantém o comportamento antigo.
+    return { legacy: true, totalAmount: totalCents / 100, receivedRatio: null, releasedAmount: totalCents / 100, paidAmount: paidCents / 100, availableAmount: (totalCents - paidCents) / 100 };
+  }
+  const source = await FinancialEntry.findByPk(commission.sourceEntryId, { transaction });
+  const baseCents = Math.round(Number(source.amount) * 100);
+  let receivedCents = 0;
+  if (source.status === 'SETTLED') receivedCents = baseCents;
+  else if (source.status === 'PARTIALLY_SETTLED') receivedCents = baseCents - Math.round(Number(await computeRemainingAmount(source, transaction)) * 100);
+  receivedCents = Math.max(0, Math.min(receivedCents, baseCents));
+  const releasedCents = baseCents > 0 ? Math.floor((totalCents * receivedCents) / baseCents) : 0;
+  return {
+    legacy: false,
+    totalAmount: totalCents / 100,
+    sourceEntryId: source.id,
+    sourceStatus: source.status,
+    receivedAmount: receivedCents / 100,
+    receivedRatio: baseCents > 0 ? receivedCents / baseCents : 0,
+    releasedAmount: releasedCents / 100,
+    paidAmount: paidCents / 100,
+    availableAmount: Math.max(0, releasedCents - paidCents) / 100,
+  };
 }
 
 /**
@@ -165,10 +384,28 @@ async function listCommissionInstallments(commissionId, transaction) {
  * do ledger, evitando dupla contagem.
  */
 async function markInstallmentPaid(installmentId, financialEntryId, actorUserId, transaction) {
-  const installment = await CommissionInstallment.findByPk(installmentId, { transaction });
+  const installment = await CommissionInstallment.findByPk(installmentId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!installment) throw AppError.notFound('Parcela de comissão não encontrada.', 'FINANCE_COMMISSION_INSTALLMENT_NOT_FOUND');
   if (installment.status === 'PAID') {
     throw AppError.conflict('Esta parcela já está paga.', 'FINANCE_COMMISSION_INSTALLMENT_ALREADY_PAID');
+  }
+  if (installment.status !== 'PENDING') {
+    throw AppError.conflict(`Só é possível pagar uma parcela pendente (atual: "${installment.status}").`, 'FINANCE_COMMISSION_INSTALLMENT_INVALID_STATUS');
+  }
+  // Trava a comissão: duas baixas simultâneas não podem somar acima do liberado.
+  const commission = await Commission.findByPk(installment.commissionId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!commission || commission.status === 'CANCELLED') {
+    throw AppError.conflict('A comissão desta parcela está cancelada.', 'FINANCE_COMMISSION_CANCELLED');
+  }
+  // §14 "Pagamento da comissão exige disponibilidade/condição prevista na regra": só o que o
+  // fato gerador já recebeu (proporcionalmente) pode ser pago.
+  const release = await getCommissionRelease(commission, transaction);
+  if (Math.round(Number(installment.amount) * 100) > Math.round(release.availableAmount * 100)) {
+    throw AppError.conflict(
+      `Parcela de ${installment.amount} acima do liberado para pagamento (${release.availableAmount}): a comissão é liberada na proporção do recebimento do fato gerador (recebido ${release.receivedAmount ?? '—'}).`,
+      'FINANCE_COMMISSION_NOT_RELEASED',
+      { release }
+    );
   }
 
   // FIX (homologação 22/09/2026 — auditoria proativa): o comentário da função já prometia que a
@@ -334,6 +571,11 @@ async function getCommissionAdjustments(commissionId, transaction) {
 }
 
 module.exports = {
+  publishCommissionRuleVersion,
+  getActiveCommissionRule,
+  getCommissionRelease,
+  RULE_CODE,
+  COMPONENTS,
   createCommission,
   listCommissions,
   getCommission,

@@ -6,7 +6,13 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
 const { publishOwnerRepasseCreated } = require('./financeEvents.service');
 
-const STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+// Carregado sob demanda: financialEntries.service importa módulos que importam este arquivo.
+function entriesService() {
+  // eslint-disable-next-line global-require
+  return require('./financialEntries.service');
+}
+
+const STATUSES = ['PENDING', 'APPROVED', 'PAID', 'CANCELLED'];
 
 function round2(value) {
   return Math.round(Number(value) * 100) / 100;
@@ -72,7 +78,14 @@ async function assertEligibleSources(companyId, sourceEntryIds, transaction) {
     );
   }
   const uniqueIds = [...new Set(sourceEntryIds)];
-  const entries = await FinancialEntry.findAll({ where: { id: uniqueIds, companyId }, transaction });
+  // FOR UPDATE (Frente 3, §12): dois repasses concorrentes sobre o mesmo recebimento ficam em
+  // fila — o segundo só lê o saldo já alocado depois que o primeiro terminar (sem repasse duplo).
+  const entries = await FinancialEntry.findAll({
+    where: { id: uniqueIds, companyId },
+    order: [['id', 'ASC']],
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
   if (entries.length !== uniqueIds.length) {
     throw AppError.notFound(
       'Um ou mais lançamentos informados em "sourceEntryIds" não foram encontrados nesta empresa.',
@@ -139,6 +152,23 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
     );
   }
 
+  // Período definido (§12, Frente 3): todo repasse é de uma competência — sem isso não há como
+  // impedir dois repasses do mesmo período (ver índice owner_repasses_one_per_period_uq).
+  if (!referenceMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(referenceMonth))) {
+    throw AppError.badRequest('O período do repasse ("referenceMonth", formato YYYY-MM) é obrigatório.', 'FINANCE_OWNER_REPASSE_PERIOD_REQUIRED');
+  }
+  const samePeriod = await OwnerRepass.findOne({
+    where: { companyId, ownerPersonId, propertyId, contractId: contractId || null, referenceMonth, status: ['PENDING', 'APPROVED', 'PAID'] },
+    transaction,
+  });
+  if (samePeriod) {
+    throw AppError.conflict(
+      `Já existe repasse para este proprietário/imóvel/contrato no período ${referenceMonth} (status ${samePeriod.status}).`,
+      'FINANCE_OWNER_REPASSE_PERIOD_DUPLICATE',
+      { existingId: samePeriod.id }
+    );
+  }
+
   const sourceEntries = await assertEligibleSources(companyId, sourceEntryIds, transaction);
   // remainingCentsByEntry = quanto deste lançamento ainda não foi consumido por repasses
   // anteriores não cancelados — é o "saldo disponível" real deste recebimento para repasse.
@@ -193,7 +223,7 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
       grossAmount: grossNumeric,
       deductionsAmount: deductionsNumeric,
       netAmount,
-      referenceMonth: referenceMonth || null,
+      referenceMonth,
       status: 'PENDING',
       idempotencyKey: idempotencyKey || null,
       createdBy: actorUserId || null,
@@ -269,28 +299,127 @@ async function listOwnerRepasses(transaction, filters = {}) {
   return OwnerRepass.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
-async function getOwnerRepasse(id, transaction) {
-  const repasse = await OwnerRepass.findByPk(id, { transaction });
+async function getOwnerRepasse(id, transaction, options = {}) {
+  const repasse = await OwnerRepass.findByPk(id, { transaction, lock: options.lock && transaction ? transaction.LOCK.UPDATE : undefined });
   if (!repasse) throw AppError.notFound('Repasse não encontrado.', 'FINANCE_OWNER_REPASSE_NOT_FOUND');
   return repasse;
 }
 
 /**
- * payOwnerRepasse — efetiva o pagamento do repasse. Passa pela MESMA checagem de elegibilidade
- * antifraude da conta bancária (cooldown/bloqueio) usada em financialEntries.settleFinancialEntry.
+ * approveOwnerRepasse — §12 / Frente 3: OUTRA pessoa (não quem registrou) aprova o repasse. Só
+ * aqui nasce o lançamento a pagar (PAYABLE) que efetiva o pagamento — o mesmo caminho de todo
+ * pagamento (intenção bancária com confirmação, ou baixa manual com comprovante aprovado).
+ * FOR UPDATE no repasse: duas aprovações simultâneas não criam dois lançamentos.
+ */
+async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
+  const repasse = await getOwnerRepasse(id, transaction, { lock: true });
+  if (repasse.status !== 'PENDING') {
+    throw AppError.conflict(`Só é possível aprovar um repasse PENDING (atual: "${repasse.status}").`, 'FINANCE_OWNER_REPASSE_INVALID_STATUS');
+  }
+  if (!actorUserId || (repasse.createdBy && String(repasse.createdBy) === String(actorUserId))) {
+    throw AppError.forbidden(
+      'Quem registrou o repasse não pode aprová-lo — a aprovação precisa ser de outra pessoa (maker-checker).',
+      'FINANCE_OWNER_REPASSE_SELF_APPROVAL_FORBIDDEN'
+    );
+  }
+  if (!repasse.referenceMonth) {
+    throw AppError.conflict('Repasse sem período definido não pode ser aprovado.', 'FINANCE_OWNER_REPASSE_PERIOD_REQUIRED');
+  }
+  const bankAccountId = repasse.bankAccountId || (payload && payload.bankAccountId);
+  if (!bankAccountId) {
+    throw AppError.badRequest('Informe a conta bancária de saída do repasse ("bankAccountId").', 'FINANCE_OWNER_REPASSE_BANK_ACCOUNT_REQUIRED');
+  }
+  const costCenterId = payload && payload.costCenterId;
+  if (!costCenterId) {
+    throw AppError.badRequest('Informe o centro de custo do pagamento do repasse ("costCenterId").', 'FINANCE_OWNER_REPASSE_VALIDATION');
+  }
+  await assertBankAccountEligibleForPayment(bankAccountId, transaction);
+
+  const entry = await entriesService().createFinancialEntry(
+    {
+      groupId: repasse.groupId,
+      companyId: repasse.companyId,
+      bankAccountId,
+      costCenterId,
+      contractId: repasse.contractId || null,
+      entryType: 'DEBIT',
+      nature: 'PAYABLE',
+      amount: Number(repasse.netAmount),
+      description: `Repasse ao proprietário — período ${repasse.referenceMonth}`,
+      dueAt: (payload && payload.dueAt) || null,
+      competenceMonth: (payload && payload.competenceMonth) || undefined,
+      idempotencyKey: `owner-repasse:${repasse.id}`,
+    },
+    actorUserId,
+    transaction
+  );
+
+  const beforeJson = repasse.toJSON();
+  repasse.status = 'APPROVED';
+  repasse.bankAccountId = bankAccountId;
+  repasse.financialEntryId = entry.id;
+  repasse.approvedByUserId = actorUserId;
+  repasse.approvedAt = new Date();
+  repasse.updatedBy = actorUserId;
+  await repasse.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: repasse.groupId,
+      companyId: repasse.companyId,
+      actorUserId,
+      action: 'finance.owner_repasse.approve',
+      entityType: 'OwnerRepass',
+      entityId: repasse.id,
+      beforeJson,
+      afterJson: repasse.toJSON(),
+      reason: `Repasse de ${repasse.netAmount} (período ${repasse.referenceMonth}) aprovado por outra pessoa — lançamento a pagar ${entry.id} criado.`,
+    },
+    transaction
+  );
+  return { repasse, financialEntry: entry };
+}
+
+/**
+ * payOwnerRepasse — CONFIRMAÇÃO do pagamento (§12 / Frente 3). Antes, marcava PAID direto, sem
+ * aprovação, sem comprovante e sem trava. Agora: FOR UPDATE no repasse; precisa estar APPROVED;
+ * o lançamento a pagar por trás precisa estar SETTLED — liquidado por confirmação do banco ou por
+ * baixa manual com comprovante aprovado (regras de financialEntries.settleFinancialEntry). O
+ * comprovante/método fica gravado no repasse.
  */
 async function payOwnerRepasse(id, actorUserId, transaction) {
-  const repasse = await getOwnerRepasse(id, transaction);
-  if (repasse.status !== 'PENDING') {
-    throw AppError.conflict(`Só é possível pagar um repasse PENDING (atual: "${repasse.status}").`, 'FINANCE_OWNER_REPASSE_INVALID_STATUS');
+  const repasse = await getOwnerRepasse(id, transaction, { lock: true });
+  if (repasse.status === 'PAID') {
+    throw AppError.conflict('Este repasse já foi pago.', 'FINANCE_OWNER_REPASSE_ALREADY_PAID');
   }
+  if (repasse.status !== 'APPROVED' || !repasse.financialEntryId) {
+    throw AppError.conflict(
+      `Só é possível confirmar o pagamento de um repasse APROVADO (atual: "${repasse.status}").`,
+      'FINANCE_OWNER_REPASSE_NOT_APPROVED'
+    );
+  }
+  const entry = await FinancialEntry.findByPk(repasse.financialEntryId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry || entry.status !== 'SETTLED') {
+    throw AppError.conflict(
+      'O pagamento do repasse ainda não foi confirmado: o lançamento a pagar precisa estar liquidado (confirmação do banco ou baixa manual com comprovante aprovado).',
+      'FINANCE_OWNER_REPASSE_PAYMENT_NOT_CONFIRMED',
+      { financialEntryId: repasse.financialEntryId, entryStatus: entry ? entry.status : null }
+    );
+  }
+  const bankConfirmed = ['BANK_CONFIRMED', 'SANDBOX_CONFIRMED'].includes(entry.settlementMethod);
+  if (!bankConfirmed && !entry.settlementEvidenceFileId) {
+    throw AppError.conflict(
+      'O pagamento do repasse não tem comprovante nem confirmação bancária.',
+      'FINANCE_OWNER_REPASSE_EVIDENCE_REQUIRED'
+    );
+  }
+
   const beforeJson = repasse.toJSON();
-
-  if (repasse.bankAccountId) {
-    await assertBankAccountEligibleForPayment(repasse.bankAccountId, transaction);
-  }
-
   repasse.status = 'PAID';
+  repasse.paidAt = entry.settledAt || new Date();
+  repasse.confirmedByUserId = actorUserId || null;
+  repasse.paymentSettlementMethod = entry.settlementMethod || 'MANUAL_WITH_EVIDENCE';
+  repasse.paymentEvidenceFileId = entry.settlementEvidenceFileId || null;
   repasse.updatedBy = actorUserId || null;
   await repasse.save({ transaction });
 
@@ -304,7 +433,7 @@ async function payOwnerRepasse(id, actorUserId, transaction) {
       entityId: repasse.id,
       beforeJson,
       afterJson: repasse.toJSON(),
-      reason: `Repasse de ${repasse.netAmount} pago ao proprietário.`,
+      reason: `Repasse de ${repasse.netAmount} (período ${repasse.referenceMonth}) confirmado como pago — ${repasse.paymentSettlementMethod}${repasse.paymentEvidenceFileId ? `, comprovante ${repasse.paymentEvidenceFileId}` : ''}.`,
     },
     transaction
   );
@@ -317,6 +446,7 @@ module.exports = {
   listOwnerRepasses,
   getOwnerRepasse,
   getOwnerRepasseComposition,
+  approveOwnerRepasse,
   payOwnerRepasse,
   STATUSES,
 };

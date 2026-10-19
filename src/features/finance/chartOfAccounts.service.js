@@ -1,6 +1,6 @@
 'use strict';
 
-const { ChartOfAccount, FinancialEntry } = require('../../models');
+const { ChartOfAccount, ChartOfAccountVersion, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -18,8 +18,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
 
-async function getAccount(id, transaction) {
-  const account = await ChartOfAccount.findByPk(id, { transaction });
+async function getAccount(id, transaction, options = {}) {
+  const account = await ChartOfAccount.findByPk(id, { transaction, lock: options.lock && transaction ? transaction.LOCK.UPDATE : undefined });
   if (!account) throw AppError.notFound('Conta do plano de contas não encontrada.', 'FINANCE_CHART_ACCOUNT_NOT_FOUND');
   return account;
 }
@@ -45,6 +45,103 @@ async function assertAccountUsableForEntry(chartOfAccountId, companyId, transact
     );
   }
   return account;
+}
+
+// --- §4 Plano de contas versionado (Frente 3) ------------------------------------------------
+//
+// Cada criação/alteração/desativação de conta grava uma VERSÃO append-only em
+// finance.chart_of_account_versions (trigger no banco: nunca apaga; só encerra a vigência da
+// versão aberta). O lançamento grava a versão vigente na data do fato, então renomear,
+// reclassificar ou desativar uma conta não reescreve a classificação de lançamentos passados.
+
+function snapshotOf(account) {
+  return {
+    code: account.code,
+    name: account.name,
+    accountType: account.accountType,
+    parentAccountId: account.parentAccountId || null,
+    isActive: Boolean(account.isActive),
+  };
+}
+
+async function recordAccountVersion(account, changeReason, actorUserId, transaction, effectiveFrom = new Date()) {
+  const open = await ChartOfAccountVersion.findOne({
+    where: { chartOfAccountId: account.id, effectiveUntil: null },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  const last = await ChartOfAccountVersion.findOne({
+    where: { chartOfAccountId: account.id },
+    order: [['versionNumber', 'DESC']],
+    transaction,
+  });
+  if (open) {
+    const snap = snapshotOf(account);
+    const unchanged = Object.keys(snap).every((k) => String(open[k] ?? '') === String(snap[k] ?? ''));
+    if (unchanged) return open;
+    open.effectiveUntil = effectiveFrom;
+    await open.save({ transaction });
+  }
+  return ChartOfAccountVersion.create(
+    {
+      groupId: account.groupId,
+      companyId: account.companyId,
+      chartOfAccountId: account.id,
+      versionNumber: last ? last.versionNumber + 1 : 1,
+      ...snapshotOf(account),
+      changeReason: changeReason || null,
+      effectiveFrom: open ? effectiveFrom : (last ? effectiveFrom : account.createdAt || effectiveFrom),
+      effectiveUntil: null,
+      createdBy: actorUserId || null,
+    },
+    { transaction }
+  );
+}
+
+async function listAccountVersions(chartOfAccountId, transaction) {
+  await getAccount(chartOfAccountId, transaction);
+  return ChartOfAccountVersion.findAll({ where: { chartOfAccountId }, order: [['versionNumber', 'ASC']], transaction });
+}
+
+/**
+ * resolveAccountVersionForEntry — versão da conta vigente em `factDate`. A conta precisa ser da
+ * empresa e estar ATIVA naquela data. Fato anterior à primeira versão usa a primeira versão
+ * (a conta nunca teve outra classificação). Conta sem nenhuma versão (criada fora do serviço)
+ * recebe a v1 aqui mesmo, a partir do estado atual.
+ */
+async function resolveAccountVersionForEntry(chartOfAccountId, companyId, factDate, transaction) {
+  if (!chartOfAccountId) return null;
+  const account = await ChartOfAccount.findByPk(chartOfAccountId, { transaction });
+  if (!account || (companyId && account.companyId !== companyId)) {
+    throw AppError.badRequest('A conta contábil informada não existe no plano de contas desta empresa.', 'FINANCE_CHART_ACCOUNT_NOT_FOUND');
+  }
+  const at = factDate ? new Date(factDate) : new Date();
+  if (Number.isNaN(at.getTime())) {
+    throw AppError.badRequest('Data do fato inválida.', 'FINANCE_ENTRY_VALIDATION');
+  }
+  const { Op } = require('sequelize'); // eslint-disable-line global-require
+  let version = await ChartOfAccountVersion.findOne({
+    where: {
+      chartOfAccountId,
+      effectiveFrom: { [Op.lte]: at },
+      [Op.or]: [{ effectiveUntil: null }, { effectiveUntil: { [Op.gt]: at } }],
+    },
+    order: [['versionNumber', 'DESC']],
+    transaction,
+  });
+  if (!version) {
+    version = await ChartOfAccountVersion.findOne({ where: { chartOfAccountId }, order: [['versionNumber', 'ASC']], transaction });
+  }
+  if (!version) {
+    version = await recordAccountVersion(account, 'Versão inicial (conta sem histórico).', null, transaction);
+  }
+  if (!version.isActive) {
+    throw AppError.conflict(
+      `A conta contábil "${version.code} — ${version.name}" estava inativa na data do fato e não aceita lançamentos.`,
+      'FINANCE_CHART_ACCOUNT_INACTIVE'
+    );
+  }
+  return version;
 }
 
 async function createAccount(payload, actorUserId, transaction) {
@@ -121,6 +218,8 @@ async function createAccount(payload, actorUserId, transaction) {
     transaction
   );
 
+  await recordAccountVersion(account, 'Versão inicial.', actorUserId, transaction);
+
   return account;
 }
 
@@ -159,7 +258,7 @@ async function listAccounts(transaction, filters = {}) {
 }
 
 async function updateAccount(id, payload, actorUserId, transaction) {
-  const account = await getAccount(id, transaction);
+  const account = await getAccount(id, transaction, { lock: true });
   const beforeJson = account.toJSON();
   const { code, name, accountType, parentAccountId } = payload;
 
@@ -217,6 +316,7 @@ async function updateAccount(id, payload, actorUserId, transaction) {
 
   try {
     await account.save({ transaction });
+    await recordAccountVersion(account, payload.changeReason || 'Conta alterada.', actorUserId, transaction);
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict(
@@ -251,7 +351,7 @@ async function updateAccount(id, payload, actorUserId, transaction) {
  * cima), senão sobraria uma filha ativa pendurada num pai inativo.
  */
 async function deactivateAccount(id, actorUserId, transaction) {
-  const account = await getAccount(id, transaction);
+  const account = await getAccount(id, transaction, { lock: true });
   if (!account.isActive) {
     throw AppError.conflict('Esta conta já está inativa.', 'FINANCE_CHART_ACCOUNT_ALREADY_INACTIVE');
   }
@@ -270,6 +370,7 @@ async function deactivateAccount(id, actorUserId, transaction) {
   account.isActive = false;
   account.updatedBy = actorUserId || null;
   await account.save({ transaction });
+  await recordAccountVersion(account, 'Conta desativada.', actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -297,4 +398,7 @@ module.exports = {
   deactivateAccount,
   assertAccountUsableForEntry,
   ACCOUNT_TYPES,
+  recordAccountVersion,
+  listAccountVersions,
+  resolveAccountVersionForEntry,
 };

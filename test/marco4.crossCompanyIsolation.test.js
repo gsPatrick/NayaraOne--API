@@ -14,7 +14,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createCommissionSource } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const commissionsService = require('../src/features/finance/commissions.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
@@ -80,7 +80,7 @@ test('FIN-TS-020: commissions é isolado por EMPRESA — outra empresa do mesmo 
     const { commission } = await commissionsService.createCommission(
       {
         groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id,
-        baseAmount: 1000, percentage: 5, idempotencyKey: `fin-ts-020-comm-${uniqueSuffix()}`,
+        ...(await createCommissionSource(tenant, transaction, { baseAmount: 1000, percentage: 5 })), idempotencyKey: `fin-ts-020-comm-${uniqueSuffix()}`,
       },
       tenant.userId,
       transaction

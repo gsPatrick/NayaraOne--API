@@ -94,6 +94,7 @@ const modelDefiners = {
   ResultCenter: require('./ResultCenter'),
   FinancialEntry: require('./FinancialEntry'),
   ChartOfAccount: require('./ChartOfAccount'),
+  ChartOfAccountVersion: require('./ChartOfAccountVersion'),
   PaymentIntent: require('./PaymentIntent'),
   BankPaymentProviderRouting: require('./BankPaymentProviderRouting'),
   IntercompanyTransfer: require('./IntercompanyTransfer'),

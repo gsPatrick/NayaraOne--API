@@ -512,6 +512,11 @@ const reopenPeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
   return success(res, { data: item });
 });
+// F02 (2ª rodada) — devolve um pedido de fechamento em REVIEW para OPEN, com motivo.
+const returnPeriodToOpen = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.returnPeriodToOpen(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
 // F02 — pré-condições do fechamento (Caderno §16) e conferências humanas.
 const getPeriodPreconditions = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) =>
@@ -558,13 +563,63 @@ const compareBudgetForecastToRealized = catchAsync(async (req, res) => {
   return success(res, { data: comparison });
 });
 
-// F02 (2ª rodada) — devolve um pedido de fechamento em REVIEW para OPEN, com motivo.
-const returnPeriodToOpen = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => periodClosuresService.returnPeriodToOpen(withTenant(req), req.auth.userId, t));
+// --- Frente 3 (Regras do Financeiro, Marco 4) ---
+const approveIntercompanyTransfer = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.approveIntercompanyTransfer(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: result });
+});
+const rejectIntercompanyTransfer = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.rejectIntercompanyTransfer(req.params.id, req.body, req.auth.userId, t)
+  );
   return success(res, { data: item });
+});
+const getGroupConsolidatedReport = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.getGroupConsolidatedReport(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      { referenceMonth: req.query.referenceMonth },
+      t
+    )
+  );
+  return success(res, { data: result });
+});
+const listIntercompanyDestinationAccounts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.listDestinationBankAccounts(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      req.query.toCompanyId,
+      t
+    )
+  );
+  return success(res, { data: items });
+});
+const publishCommissionRule = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.publishCommissionRuleVersion(withTenant(req), req.auth.userId, t));
+  return success(res, { data: result });
+});
+const getCommissionRule = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.getActiveCommissionRule(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: result });
+});
+const getCommissionRelease = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.getCommissionRelease(req.params.id, t));
+  return success(res, { data: result });
+});
+const approveOwnerRepasse = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => ownerRepassesService.approveOwnerRepasse(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: result });
+});
+const listChartAccountVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => chartOfAccountsService.listAccountVersions(req.params.id, t));
+  return success(res, { data: items });
 });
 
 module.exports = {
+  approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts,
+  publishCommissionRule, getCommissionRule, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, verifyBankWebhookSignature,

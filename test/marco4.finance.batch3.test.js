@@ -366,17 +366,40 @@ test('M4-18 createIntercompanyTransfer gera exatamente 2 lançamentos, um em cad
       { transaction }
     );
 
-    const { transfer, fromEntry, toEntry } = await intercompanyTransfersService.createIntercompanyTransfer(
+    // Frente 3 (§15): motivo, documento e contas correspondentes obrigatórios; o pedido nasce
+    // PENDING_APPROVAL e os dois lados só são criados quando OUTRA pessoa aprova.
+    const { BankAccount } = require('../src/models');
+    const fromAccount = await BankAccount.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `M418-O-${suffix}`, status: 'ACTIVE' },
+      { transaction }
+    );
+    const toAccount = await withCompanyContext(transaction, destination.id, () =>
+      BankAccount.create(
+        { groupId: tenant.groupId, companyId: destination.id, bankCode: '001', agency: '0001', accountNumber: `M418-D-${suffix}`, status: 'ACTIVE' },
+        { transaction }
+      )
+    );
+    const evidence = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    const { transfer: requested } = await intercompanyTransfersService.createIntercompanyTransfer(
       {
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         toCompanyId: destination.id,
         amount: 7500,
         reason: `Rateio administrativo ${suffix}`,
+        evidenceFileId: evidence.evidenceFileId,
+        fromBankAccountId: fromAccount.id,
+        toBankAccountId: toAccount.id,
       },
       tenant.userId,
       transaction
     );
+    assert.equal(requested.status, 'PENDING_APPROVAL');
+    const checker = await User.create(
+      { email: `m418-checker-${suffix}@nayaraone.dev`, name: 'M4-18 aprovador', passwordHash: 'x', status: 'ACTIVE' },
+      { transaction }
+    );
+    const { transfer, fromEntry, toEntry } = await intercompanyTransfersService.approveIntercompanyTransfer(requested.id, {}, checker.id, transaction);
 
     assert.equal(transfer.status, 'PENDING');
     assert.equal(transfer.companyId, tenant.companyId, 'company_id da transferência é a empresa de ORIGEM (decisão de RLS)');

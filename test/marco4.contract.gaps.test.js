@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence, createThirdPartyLink, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence, createThirdPartyLink, settleFinancialEntryWithApproval, createCommissionSource } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -266,7 +266,7 @@ test('FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pa
     );
 
     const { commission, installments } = await commissionsService.createCommission(
-      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 10000, percentage: 6, installmentsCount: 2, idempotencyKey: `commission-${uniqueSuffix()}` },
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, ...(await createCommissionSource(tenant, transaction, { baseAmount: 10000, percentage: 6 })), installmentsCount: 2, idempotencyKey: `commission-${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );
@@ -312,7 +312,7 @@ test('FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pa
 
     // Motivo é obrigatório.
     const { commission: commission2 } = await commissionsService.createCommission(
-      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, baseAmount: 1000, percentage: 5, idempotencyKey: `commission-${uniqueSuffix()}` },
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: beneficiary.id, ...(await createCommissionSource(tenant, transaction, { baseAmount: 1000, percentage: 5 })), idempotencyKey: `commission-${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );
@@ -809,7 +809,7 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
 
     // Comissão provisionada: PENDING, não paga.
     await commissionsService.createCommission(
-      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: tenant.userId, baseAmount: 1000, percentage: 10, idempotencyKey: `m420b-commission-${suffix}` },
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: tenant.userId, ...(await createCommissionSource(tenant, transaction, { baseAmount: 1000, percentage: 10, received: false })), idempotencyKey: `m420b-commission-${suffix}` },
       tenant.userId, transaction
     );
 

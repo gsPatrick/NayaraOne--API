@@ -131,7 +131,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
     await assert.rejects(
       () =>
         ownerRepassesService.createOwnerRepasse(
-          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id, grossAmount: 500 },
+          { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id, grossAmount: 500, referenceMonth: '2026-10' },
           tenant.userId,
           transaction
         ),
@@ -157,6 +157,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
             bankAccountId: account.id,
             sourceEntryIds: [outroRecebimento.id],
             grossAmount: 1000, // teto elegível real é só 200
+            referenceMonth: '2026-11',
           },
           tenant.userId,
           transaction
@@ -165,9 +166,13 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
       'repasse não pode exceder o valor elegível recebido, salvo ajuste formal'
     );
 
-    // Sem exigir cooldown vencido, o pagamento deve ser bloqueado (mesma trava do M4-11).
+    // Sem exigir cooldown vencido, o pagamento deve ser bloqueado (mesma trava do M4-11). Frente 3
+    // (§12): a trava agora vale na APROVAÇÃO (é ela que cria o lançamento a pagar na conta).
+    const { User } = require('../src/models');
+    const checker = await User.create({ email: `m415-checker-${suffix}@nayaraone.dev`, name: 'M4-15 aprovador', passwordHash: 'x', status: 'ACTIVE' }, { transaction });
+    const costCenterM415 = await createTestCostCenter(tenant, transaction);
     await assert.rejects(
-      () => ownerRepassesService.payOwnerRepasse(repasse.id, tenant.userId, transaction),
+      () => ownerRepassesService.approveOwnerRepasse(repasse.id, { costCenterId: costCenterM415.id }, checker.id, transaction),
       (err) => { assert.equal(err.code, 'FINANCE_BANK_ACCOUNT_COOLDOWN'); return true; },
       'repasse pra conta em cooldown não pode ser pago — prova que a segregação/antifraude vale também pra repasse'
     );
@@ -180,7 +185,12 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
 // teste fecha esse ângulo: pagar um repasse NUNCA cria nem toca um FinancialEntry da empresa
 // (não é dinheiro próprio, não entra na receita/despesa da empresa — é só a baixa de status
 // do repasse em si), diferente de qualquer outra liquidação do Financeiro.
-test('FIN-TS-015: pagar um repasse de proprietário NÃO cria nenhum FinancialEntry novo — repasse não é movimento de caixa próprio da empresa', async () => {
+//
+// ATUALIZADO (Frente 3, §12 — aprovação, comprovante e trava): o pagamento do repasse deixou de
+// ser uma troca de status sem rastro bancário. A aprovação (de outra pessoa) cria UM lançamento a
+// pagar vinculado ao repasse (financial_entry_id, único) — é por ele que passam intenção bancária,
+// comprovante e conciliação. A confirmação do repasse não cria mais nenhum lançamento.
+test('FIN-TS-015: repasse gera exatamente UM lançamento a pagar (na aprovação) e a confirmação não cria nenhum outro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const owner = await Person.create(
@@ -218,10 +228,33 @@ test('FIN-TS-015: pagar um repasse de proprietário NÃO cria nenhum FinancialEn
       tenant.userId,
       transaction
     );
+    const { User } = require('../src/models');
+    const checker = await User.create({ email: `fints015-checker-${suffix}@nayaraone.dev`, name: 'FIN-TS-015 aprovador', passwordHash: 'x', status: 'ACTIVE' }, { transaction });
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    const { financialEntry } = await ownerRepassesService.approveOwnerRepasse(repasse.id, { costCenterId: costCenter.id }, checker.id, transaction);
+    assert.equal(financialEntry.nature, 'PAYABLE');
+    assert.equal(Number(financialEntry.amount), 1000);
+    const countAposAprovar = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
+    assert.equal(countAposAprovar, countAntes + 1, 'a aprovação cria exatamente um lançamento a pagar');
+
+    // Baixa formal do lançamento a pagar: comprovante anexado -> aprovação de outra pessoa -> baixa.
+    const { createManualSettlementEvidence } = require('./testHelpers');
+    const approvalsService = require('../src/features/finance/approvals.service');
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    await financialEntriesService.attachSettlementEvidence(financialEntry.id, manualSettlement, tenant.userId, transaction);
+    const approval = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: financialEntry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approval.id, { decision: 'APPROVED' }, checker.id, transaction);
+    await financialEntriesService.settleFinancialEntry(financialEntry.id, tenant.userId, transaction, { manualSettlement });
+    const countAntesConfirmar = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
     const paid = await ownerRepassesService.payOwnerRepasse(repasse.id, tenant.userId, transaction);
     assert.equal(paid.status, 'PAID');
+    assert.ok(paid.paymentEvidenceFileId, 'confirmação grava o comprovante do pagamento');
 
     const countDepois = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
-    assert.equal(countDepois, countAntes, 'pagar o repasse não pode criar nenhum FinancialEntry novo — dinheiro do proprietário nunca passa pelo caixa/resultado da empresa');
+    assert.equal(countDepois, countAntesConfirmar, 'confirmar o repasse não cria nenhum lançamento novo');
   });
 });

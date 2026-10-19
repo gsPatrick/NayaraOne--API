@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '21595';
 
 const app = require('../app');
-const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter } = require('./testHelpers');
+const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter, createCommissionSource } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase, Person, Property } = require('../src/models');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
@@ -48,7 +48,7 @@ before(async () => {
     group_id: tenant.groupId,
     company_id: tenant.companyId,
     roles: ['admin'],
-    permissions: ['finance:create', 'finance:read', 'finance:update'],
+    permissions: ['finance:create', 'finance:read', 'finance:update', 'finance:chartOfAccounts'],
   });
 
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
@@ -164,8 +164,8 @@ test('FIN-TS-017 via HTTP: cancelar comissão exige motivo e gera ajuste auditá
   const suffix = uniqueSuffix();
   const commission = await http('POST', '/finance/commissions', {
     beneficiaryUserId: tenant.userId,
-    baseAmount: 5000,
-    percentage: 5,
+    // Frente 3 (§14): percentual/base vêm da regra REG-FIN-002 e do fato gerador, não do pedido.
+    ...(await withCommitted((t) => createCommissionSource(tenant, t, { baseAmount: 5000, percentage: 5 }))),
     idempotencyKey: `commission-http-${suffix}`,
   });
   assert.equal(commission.status, 201, JSON.stringify(commission.body));
@@ -325,8 +325,7 @@ test('GAP fechado via HTTP: histórico de ajustes de comissão é consultável p
   const suffix = uniqueSuffix();
   const commission = await http('POST', '/finance/commissions', {
     beneficiaryUserId: tenant.userId,
-    baseAmount: 2000,
-    percentage: 5,
+    ...(await withCommitted((t) => createCommissionSource(tenant, t, { baseAmount: 2000, percentage: 5 }))),
     idempotencyKey: `commission-http-${suffix}`,
   });
   assert.equal(commission.status, 201, JSON.stringify(commission.body));
@@ -368,6 +367,7 @@ test('GAP fechado via HTTP: composição do repasse de proprietário é consult�
         ownerPersonId: owner.id,
         sourceEntryIds: [recebimento.id],
         deductionsAmount: 50,
+        referenceMonth: '2026-09',
         idempotencyKey: `repasse-http-${suffix}`,
       },
       tenant.userId,

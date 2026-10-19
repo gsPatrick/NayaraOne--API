@@ -238,7 +238,30 @@ async function createThirdPartyLink(tenant, transaction) {
   return { contractId: contract.id, thirdPartyHolderPersonId: holder.id };
 }
 
+// Frente 3 (Caderno §14): comissão nasce de um fato gerador (lançamento a receber) e o percentual
+// vem da regra REG-FIN-002 do Motor de Regras — nunca do payload. Para testes que só precisam de
+// "uma comissão de X% sobre Y", publica a regra (na transação do teste) e cria o recebimento de
+// origem; `received` (padrão true) já liquida o recebimento, liberando 100% para pagamento.
+async function createCommissionSource(tenant, transaction, { baseAmount, percentage, component = 'BROKER', received = true }) {
+  const commissionsService = require('../src/features/finance/commissions.service');
+  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  await commissionsService.publishCommissionRuleVersion(
+    { groupId: tenant.groupId, companyId: tenant.companyId, componentPercentages: { [component]: percentage } },
+    tenant.userId,
+    transaction
+  );
+  const resultCenter = await createTestResultCenter(tenant, transaction);
+  const source = await financialEntriesService.createFinancialEntry(
+    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: baseAmount, resultCenterId: resultCenter.id, description: `Fato gerador de comissão ${uniqueSuffix()}` },
+    tenant.userId,
+    transaction
+  );
+  if (received) await financialEntriesService.settleFinancialEntry(source.id, tenant.userId, transaction);
+  return { sourceEntryId: source.id, component };
+}
+
 module.exports = {
+  createCommissionSource,
   createThirdPartyLink,
   prepareManualSettlement,
   settleFinancialEntryWithApproval,
