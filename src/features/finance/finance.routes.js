@@ -83,6 +83,7 @@ financeRouter.post('/finance/commission-installments/:installmentId/pay', requir
 // Owner repasses
 financeRouter.post('/finance/owner-repasses', requirePermission('finance:create'), financeController.createOwnerRepasse);
 financeRouter.get('/finance/owner-repasses', requirePermission('finance:read'), financeController.listOwnerRepasses);
+financeRouter.get('/finance/owner-repasses/eligible-sources', requirePermission('finance:read'), financeController.listEligibleRepasseSources);
 // Frente 3 (§12): aprovação por outra pessoa gera o lançamento a pagar; "pay" confirma o pagamento.
 financeRouter.post('/finance/owner-repasses/:id/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approveOwnerRepasse);
 financeRouter.post('/finance/owner-repasses/:id/pay', requirePermission('finance:settle'), financeController.payOwnerRepasse);

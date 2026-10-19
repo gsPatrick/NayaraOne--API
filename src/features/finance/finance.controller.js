@@ -316,6 +316,17 @@ const createOwnerRepasse = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => ownerRepassesService.createOwnerRepasse(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+// M45 F4: recebimentos elegíveis para o Novo repasse (imóvel/contrato/período).
+const listEligibleRepasseSources = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    ownerRepassesService.listEligibleRepasseSources(t, {
+      propertyId: req.query.propertyId,
+      contractId: req.query.contractId || null,
+      referenceMonth: req.query.referenceMonth || null,
+    })
+  );
+  return success(res, { data: items });
+});
 const listOwnerRepasses = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
     ownerRepassesService.listOwnerRepasses(t, { status: req.query.status, ownerPersonId: req.query.ownerPersonId, propertyId: req.query.propertyId })
@@ -656,6 +667,6 @@ module.exports = {
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
   createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments,
   listAnomalyCases, resolveAnomalyCase,
-  createOwnerRepasse, listOwnerRepasses, payOwnerRepasse, getOwnerRepasseComposition,
+  createOwnerRepasse, listOwnerRepasses, listEligibleRepasseSources, payOwnerRepasse, getOwnerRepasseComposition,
   createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized,
 };
