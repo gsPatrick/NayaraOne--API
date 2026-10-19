@@ -195,12 +195,20 @@ test('G2: publicar nova versão de cláusula NÃO altera templates/versões de c
     );
     await contractTemplatesService.addClauseToTemplate(template.id, { contractClauseId: v1.id }, tenant.userId, transaction);
 
-    // Renderiza ANTES da nova versão — este texto representa um documento "já usado".
-    const renderedBefore = await contractTemplatesService.renderTemplate(template.id, transaction);
-    assert.ok(renderedBefore.content.includes('Texto original v1'));
+    // Documento gerado ANTES da nova versão — pelo caminho real (o servidor monta o texto).
+    const { contract } = await createLeaseWithParties(transaction);
+    const docFile = await createFakeDocumentFile(transaction);
+    const version = await contractVersionsService.createContractVersion(
+      contract.id,
+      { documentFileId: docFile.id, templateId: template.id },
+      tenant.userId,
+      transaction
+    );
+    assert.ok(version.content.includes('Texto original v1'));
+    const hashBefore = version.contentHash;
 
     // Publica v2 da cláusula — isso NÃO deve alterar o vínculo já existente (que aponta pro
-    // ID específico da v1), nem o texto já renderizado anteriormente.
+    // ID específico da v1), nem o documento já emitido.
     const v2 = await contractClausesService.createClauseVersion(code, { bodyText: 'Texto revisado v2' }, tenant.userId, transaction);
     assert.notEqual(v2.id, v1.id);
 
@@ -211,28 +219,18 @@ test('G2: publicar nova versão de cláusula NÃO altera templates/versões de c
     assert.equal(links[0].clause.id, v1.id);
     assert.equal(links[0].clause.versionNumber, 1);
 
-    // createClauseVersion DESATIVA a versão anterior (isActive=false) como parte do fluxo
-    // append-only (ver contractClauses.service.js) — então renderTemplate (que só inclui
-    // cláusulas ativas) passa a omitir a v1 até que alguém deliberadamente vincule a v2 ao
-    // template. O ponto central do teste continua provado pelo asserts acima: o VÍNCULO do
-    // template (ContractTemplateClause) não foi migrado/reescrito para apontar para v2 — ele
-    // continua, imutável, apontando para o ID exato da v1, preservando qual cláusula estava em
-    // vigor quando aquele template foi efetivamente usado para gerar o documento anterior.
-    const renderedAfter = await contractTemplatesService.renderTemplate(template.id, transaction);
-    assert.ok(!renderedAfter.content.includes('Texto revisado v2'), 'nova versão nunca aparece sozinha no template antigo');
-    assert.equal(renderedAfter.clauses.length, 0, 'v1 saiu de circulação (desativada) e o vínculo não foi migrado para v2 automaticamente');
-
-    // Documento JÁ GERADO como ContractVersion preserva literalmente a v1, mesmo depois de v2 existir.
-    const { contract } = await createLeaseWithParties(transaction);
-    const docFile = await createFakeDocumentFile(transaction);
-    const version = await contractVersionsService.createContractVersion(
-      contract.id,
-      { content: renderedBefore.content, documentFileId: docFile.id, templateId: template.id, clauseVersionIds: renderedBefore.clauses.map((c) => c.contractClauseId) },
-      tenant.userId,
-      transaction
+    // I1 (revisão independente 19/10): antes, a v1 desativada sumia do documento em silêncio. Agora
+    // gerar a partir do modelo com vínculo para versão substituída é BLOQUEADO, com erro claro.
+    await assert.rejects(
+      () => contractTemplatesService.renderTemplate(template.id, transaction),
+      (err) => err.code === 'LEGAL_TEMPLATE_CLAUSE_SUPERSEDED'
     );
-    assert.ok(version.clauseVersionIds.includes(v1.id));
-    assert.ok(!version.clauseVersionIds.includes(v2.id), 'versão de contrato já criada não referencia a cláusula nova publicada depois');
+
+    // Documento JÁ EMITIDO preserva literalmente a v1, mesmo depois de v2 existir.
+    const reloaded = await contractVersionsService.getContractVersion(version.id, transaction);
+    assert.equal(reloaded.contentHash, hashBefore);
+    assert.deepEqual(reloaded.clauseVersionIds.map((c) => c.contractClauseId), [v1.id]);
+    assert.ok(!reloaded.content.includes('Texto revisado v2'));
   });
 });
 

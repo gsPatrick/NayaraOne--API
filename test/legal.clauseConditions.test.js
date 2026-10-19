@@ -248,9 +248,21 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const v1 = await clause(transaction, { title: 'Fiança', body: 'Texto do fiador', condition: FIADOR });
     const template = await templateWith(transaction, [v1]);
-    const rendered = await contractTemplatesService.renderTemplate(template.id, transaction, {}, { guaranteeType: 'GUARANTOR' });
-
     const { contract } = await createLease(transaction);
+    // Geração real (revisão 19/10): o contexto vem do contrato — com fiador ATIVO cadastrado, a
+    // cláusula de fiança entra; o texto é montado pelo servidor.
+    const guarantor = await require('../src/features/people/people.service').createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `HOMO QA Fiador ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    await require('../src/features/legal/guarantees.service').createGuarantee(
+      contract.id,
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, endsAt: '2030-12-31' },
+      tenant.userId,
+      transaction
+    );
+    const rendered = await contractTemplatesService.renderTemplateForContract(template.id, contract.id, transaction, {});
     const suffix = uniqueSuffix();
     const file = await File.create(
       { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `homo-qa/f01/${suffix}.pdf`, fileName: `contrato-${suffix}.pdf`, mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
@@ -258,7 +270,7 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
     );
     const emitted = await contractVersionsService.createContractVersion(
       contract.id,
-      { content: rendered.content, documentFileId: file.id, templateId: template.id, clauseVersionIds: rendered.clauses.map((c) => c.contractClauseId) },
+      { documentFileId: file.id, templateId: template.id },
       tenant.userId,
       transaction
     );
@@ -282,8 +294,9 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
     const emittedReloaded = await ContractVersion.findByPk(emitted.id, { transaction });
     assert.equal(emittedReloaded.contentHash, hashBefore, 'documento emitido mantém o hash');
     assert.equal(emittedReloaded.content, rendered.content);
-    assert.ok(emittedReloaded.clauseVersionIds.includes(v1.id));
-    assert.ok(!emittedReloaded.clauseVersionIds.includes(v2.id));
+    const emittedIds = emittedReloaded.clauseVersionIds.map((c) => c.contractClauseId);
+    assert.ok(emittedIds.includes(v1.id));
+    assert.ok(!emittedIds.includes(v2.id));
   });
 });
 

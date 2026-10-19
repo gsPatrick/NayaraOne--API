@@ -212,14 +212,32 @@ async function deactivateClause(id, actorUserId, transaction) {
  * mudam — texto e regra da versão ficam intactos.
  */
 async function approveClauseCondition(id, actorUserId, transaction) {
-  const clause = await getClause(id, transaction);
+  // FOR UPDATE: duas aprovações simultâneas da mesma versão são serializadas — a segunda enxerga
+  // APPROVED e é recusada, em vez de as duas gravarem e auditarem.
+  const clause = await ContractClause.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!clause) throw AppError.notFound('Cláusula contratual não encontrada.', 'LEGAL_CONTRACT_CLAUSE_NOT_FOUND');
   if (!clause.conditionJson) {
     throw AppError.badRequest('Esta versão da cláusula não tem condição para aprovar.', 'LEGAL_CLAUSE_CONDITION_ABSENT');
   }
   if (clause.conditionStatus === 'APPROVED') {
     throw AppError.conflict('A condição desta versão já está aprovada.', 'LEGAL_CLAUSE_CONDITION_ALREADY_APPROVED');
   }
-  if (clause.createdBy && actorUserId && String(clause.createdBy) === String(actorUserId)) {
+  if (!clause.isActive) {
+    throw AppError.conflict(
+      `A versão v${clause.versionNumber} da cláusula "${clause.code}" é histórica (fora de circulação) — só a versão vigente pode ter a condição aprovada.`,
+      'LEGAL_CLAUSE_CONDITION_VERSION_INACTIVE'
+    );
+  }
+  if (!actorUserId) {
+    throw AppError.forbidden('Aprovação de condição exige um usuário identificado.', 'LEGAL_CLAUSE_CONDITION_APPROVER_REQUIRED');
+  }
+  if (!clause.createdBy) {
+    throw AppError.forbidden(
+      'Esta versão não tem autor registrado — sem ele não é possível garantir que quem aprova não é quem criou a regra. Crie uma nova versão da cláusula.',
+      'LEGAL_CLAUSE_CONDITION_AUTHOR_UNKNOWN'
+    );
+  }
+  if (String(clause.createdBy) === String(actorUserId)) {
     throw AppError.forbidden(
       'Quem criou esta versão da cláusula não pode aprovar a própria condição — peça a outra pessoa com permissão.',
       'LEGAL_CLAUSE_CONDITION_SELF_APPROVAL_BLOCKED'

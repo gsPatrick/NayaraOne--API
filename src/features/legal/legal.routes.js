@@ -72,11 +72,13 @@ legalRouter.post('/legal/contract-templates', requirePermission('legal:create'),
 legalRouter.get('/legal/contract-templates', requirePermission('legal:read'), legalController.listContractTemplates);
 legalRouter.get('/legal/contract-templates/:id', requirePermission('legal:read'), legalController.getContractTemplate);
 legalRouter.post('/legal/contract-templates/:id/clauses', requirePermission('legal:create'), legalController.addClauseToContractTemplate);
+legalRouter.post('/legal/contract-templates/:id/clauses/:clauseId/upgrade', requirePermission('legal:create'), legalController.upgradeContractTemplateClause);
 // Biblioteca de cláusulas (JUR-002) — ordem importa: /legal/clauses/:code/versions antes de
 // qualquer coisa que capture :id, mesmo padrão já usado para classification-pendings no Marco 4.
 legalRouter.post('/legal/clauses', requirePermission('legal:create'), legalController.createClause);
 legalRouter.get('/legal/clauses', requirePermission('legal:read'), legalController.listClauses);
 legalRouter.get('/legal/clauses/:code/versions', requirePermission('legal:read'), legalController.listClauseVersions);
+legalRouter.get('/legal/clauses/:code/template-usage', requirePermission('legal:read'), legalController.listClauseTemplateUsage);
 legalRouter.post('/legal/clauses/:code/versions', requirePermission('legal:create'), legalController.createClauseVersion);
 legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:update'), legalController.deactivateClause);
 // F01: aprovação da regra declarativa de uma versão de cláusula (mesma alçada das transições de contrato).

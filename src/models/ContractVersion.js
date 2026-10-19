@@ -85,6 +85,19 @@ module.exports = (sequelize) => {
         field: 'clause_version_ids',
         comment: 'Snapshot das cláusulas (id+versão) de fato usadas para gerar esta versão — rastreabilidade mesmo se a cláusula for editada depois (migration 20260101000334).',
       },
+      // F01: contexto das cláusulas condicionais usado na geração ({ source, values }) e as
+      // cláusulas do modelo que ficaram de fora com o motivo — prova de por que cada cláusula
+      // entrou ou saiu (migration 20260101000383). Derivado do contrato pelo servidor.
+      conditionContext: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'condition_context',
+      },
+      excludedClauses: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'excluded_clauses',
+      },
       effectiveFrom: {
         type: DataTypes.DATE,
         allowNull: false,

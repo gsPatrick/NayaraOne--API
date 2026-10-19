@@ -18,6 +18,7 @@ const evidencePackagesService = require('./evidencePackages.service');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
 const contractClausesService = require('./contractClauses.service');
+const { deriveDraftConditionContext } = require('./clauseConditionContext');
 const contractTimelineService = require('./contractTimeline.service');
 const contractPdfService = require('./contractPdf.service');
 const requirementsService = require('./requirements.service');
@@ -215,11 +216,47 @@ const addClauseToContractTemplate = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
-// Preview: apenas RENDERIZA o texto (com as variáveis opcionais informadas), não persiste nada
-// — quem quiser usar o resultado como conteúdo de uma versão chama depois
-// POST /legal/contracts/:id/versions com { content, templateId }.
+// Preview: apenas RENDERIZA o texto, não persiste nada. A geração de verdade é
+// POST /legal/contracts/:id/versions com { templateId, variables } — o servidor monta o texto.
+// F01: o contexto das cláusulas condicionais NÃO vem livre do corpo. Fontes aceitas:
+//  - `contractId`: derivado do contrato existente (mesmo resultado da geração real);
+//  - `draftContract`: derivado dos dados da tela "Novo contrato" (imóvel e pessoas lidos do banco);
+//  - `simulationContext`: simulação explícita para quem edita o modelo — a resposta sai marcada
+//    `simulation: true` e esse contexto nunca é aceito na geração da versão.
 const renderContractTemplate = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) => contractTemplatesService.renderTemplate(req.params.id, t, req.body && req.body.variables, req.body && req.body.conditionContext));
+  const body = req.body || {};
+  if (Object.prototype.hasOwnProperty.call(body, 'conditionContext')) {
+    throw AppError.badRequest(
+      '"conditionContext" não é aceito: informe "contractId" (contrato existente), "draftContract" (contrato em criação) ou, só para simular o modelo, "simulationContext".',
+      'LEGAL_TEMPLATE_RENDER_CONTEXT_NOT_ACCEPTED'
+    );
+  }
+  const variables = body.variables;
+  const data = await req.withTenantTransaction(async (t) => {
+    if (body.contractId) {
+      return contractTemplatesService.renderTemplateForContract(req.params.id, String(body.contractId), t, variables);
+    }
+    if (body.draftContract) {
+      const { context, unresolved } = await deriveDraftConditionContext(body.draftContract, t);
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, context, { unresolved, contextSource: 'DRAFT_CONTRACT' });
+    }
+    if (body.simulationContext) {
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, body.simulationContext, { contextSource: 'SIMULATION' });
+    }
+    return contractTemplatesService.renderTemplate(req.params.id, t, variables, {}, { contextSource: 'NONE' });
+  });
+  return success(res, { data: { ...data, simulation: data.contextSource === 'SIMULATION' } });
+});
+
+const upgradeContractTemplateClause = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    contractTemplatesService.upgradeTemplateClause(req.params.id, req.params.clauseId, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+
+const listClauseTemplateUsage = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTemplatesService.listClauseTemplateUsage(req.params.code, t));
   return success(res, { data });
 });
 
@@ -659,6 +696,7 @@ module.exports = {
   createNotice, listNotices, getNotice, submitNoticeForReview, approveNotice, rejectNotice, sendNotice, registerNoticeDeliveryEvidence,
   addContractParty, listContractParties, getContractTimeline, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,
+  upgradeContractTemplateClause, listClauseTemplateUsage,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
   createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause, approveClauseCondition,
   initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,

@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractVersionCreated } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 const { getSetting } = require('../settings/settings.service');
+const { renderTemplateForContract } = require('./contractTemplates.service');
 
 /**
  * M5-07 (fechamento) — DECISÃO DOCUMENTADA: até aqui `documentFileId` era opcional na CRIAÇÃO
@@ -65,20 +66,61 @@ function computeContentHash(content) {
   return crypto.createHash('sha256').update(serialized).digest('hex');
 }
 
+function serializeContent(content) {
+  return typeof content === 'string' ? content : JSON.stringify(content);
+}
+
+function hasValue(content) {
+  return (
+    content !== undefined &&
+    content !== null &&
+    (typeof content === 'string' ? content.trim().length > 0 : Object.keys(content).length > 0)
+  );
+}
+
+function clauseIdsOf(list) {
+  return (Array.isArray(list) ? list : []).map((c) => (c && typeof c === 'object' ? c.contractClauseId : c));
+}
+
+/**
+ * F01 (conferência Nayara 18/10/2026, revisão independente 19/10): quando a versão vem de um
+ * MODELO (`templateId`), o documento é montado AQUI, no servidor, com o contexto das condições
+ * derivado do próprio contrato (renderTemplateForContract). Decisão documentada:
+ *  - o cliente envia só `variables` (preenchimento dos {{placeholders}}), nunca o texto final;
+ *  - se o cliente ainda mandar `content` e ele divergir do texto que o servidor monta, a versão
+ *    é RECUSADA (LEGAL_CONTRACT_VERSION_CONTENT_MISMATCH) — nunca gravamos um texto que inclua
+ *    cláusula com condição falsa ou não aprovada, nem que omita uma de condição verdadeira;
+ *  - `clauseVersionIds` também é calculado pelo servidor; lista enviada pelo cliente que diverge
+ *    do que o modelo de fato usou é recusada;
+ *  - `conditionContext` não é aceito no corpo: o contexto usado e as cláusulas excluídas (com o
+ *    motivo) ficam gravados na própria versão (condition_context / excluded_clauses), que é
+ *    append-only no banco.
+ * Sem `templateId` a versão é um documento avulso (ex.: arquivo enviado pela tela "Nova versão")
+ * — não há cláusula de biblioteca envolvida, e `clauseVersionIds` não pode ser informado.
+ */
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { content, documentFileId, effectiveFrom, templateId, clauseVersionIds } = payload;
+  const { documentFileId, effectiveFrom, templateId, variables } = payload;
+  let { content } = payload;
+  if (Object.prototype.hasOwnProperty.call(payload, 'conditionContext')) {
+    throw AppError.badRequest(
+      '"conditionContext" não é aceito na geração da versão: o contexto das cláusulas condicionais é derivado do próprio contrato (partes, garantias, imóvel, valor e prazo).',
+      'LEGAL_CONTRACT_VERSION_CONTEXT_NOT_ACCEPTED'
+    );
+  }
+  if (!templateId && clauseIdsOf(payload.clauseVersionIds).length) {
+    throw AppError.badRequest(
+      '"clauseVersionIds" só existe para versões geradas a partir de um modelo ("templateId") — e é calculado pelo servidor.',
+      'LEGAL_CONTRACT_VERSION_VALIDATION'
+    );
+  }
   // FIX AUD-008 (homologação 09/09/2026): `content === undefined || content === null` deixava
   // passar `content: ""` (ou só espaços) como se fosse um documento real — o hash de uma
   // string vazia é um hash "válido" tecnicamente, mas não representa nenhum conteúdo de
   // verdade, e isso permitia satisfazer assertDocumentGate (que só checa "existe alguma
   // versão") com uma versão vazia por trás. Content precisa ter conteúdo de fato: string não
   // pode ser vazia/só espaço; objeto/JSON não pode ser vazio.
-  const hasRealContent =
-    content !== undefined &&
-    content !== null &&
-    (typeof content === 'string' ? content.trim().length > 0 : Object.keys(content).length > 0);
-  if (!hasRealContent) {
+  if (!templateId && !hasValue(content)) {
     throw AppError.badRequest(
       'O campo "content" é obrigatório e não pode ser vazio — precisa representar o conteúdo real do documento usado para calcular o content_hash.',
       'LEGAL_CONTRACT_VERSION_VALIDATION'
@@ -115,6 +157,40 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
     attributes: ['id'],
   });
 
+  // F01: com modelo, o servidor monta o documento — depois do lock do contrato, para que partes
+  // e garantias lidas para o contexto sejam as mesmas do momento da gravação.
+  let clauseVersionIds = null;
+  let conditionContext = null;
+  let excludedClauses = null;
+  if (templateId) {
+    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables);
+    if (hasValue(content) && serializeContent(content) !== rendered.content) {
+      throw AppError.conflict(
+        'O texto enviado não corresponde ao documento que o modelo gera para este contrato (cláusulas e condições aprovadas). Envie apenas "variables" e deixe o servidor montar o texto.',
+        'LEGAL_CONTRACT_VERSION_CONTENT_MISMATCH'
+      );
+    }
+    const serverClauseIds = rendered.clauses.map((c) => c.contractClauseId);
+    const clientClauseIds = clauseIdsOf(payload.clauseVersionIds);
+    if (clientClauseIds.length && clientClauseIds.join('|') !== serverClauseIds.join('|')) {
+      throw AppError.conflict(
+        '"clauseVersionIds" informado não corresponde às cláusulas que o modelo de fato usa para este contrato.',
+        'LEGAL_CONTRACT_VERSION_CLAUSES_MISMATCH'
+      );
+    }
+    content = rendered.content;
+    clauseVersionIds = rendered.clauses.map((c) => ({ contractClauseId: c.contractClauseId, code: c.code, versionNumber: c.versionNumber }));
+    conditionContext = { source: rendered.contextSource, values: rendered.conditionContext };
+    excludedClauses = rendered.excludedClauses.map((c) => ({
+      contractClauseId: c.contractClauseId,
+      code: c.code,
+      versionNumber: c.versionNumber,
+      title: c.title,
+      reason: c.reason,
+      condition: c.condition,
+    }));
+  }
+
   const lastVersion = await ContractVersion.findOne({
     where: { contractId: contract.id },
     order: [['version_number', 'DESC']],
@@ -134,14 +210,14 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       // nenhum binário real pra subir ao provedor de assinatura. Quando `content` vem como
       // objeto/JSON (fluxos que não usam renderTemplate), serializa do mesmo jeito que
       // computeContentHash — mantém content_hash sempre coerente com o texto persistido.
-      content: typeof content === 'string' ? content : JSON.stringify(content),
+      content: serializeContent(content),
       contentHash: computeContentHash(content),
       templateId: templateId || null,
-      // GAP REAL (verificação cética Marco 5, §3): snapshot de rastreabilidade — se o
-      // chamador veio de renderTemplate() (contractTemplates.service.js), passa a lista
-      // `.clauses` direto como `clauseVersionIds`; caso contrário fica null (versão criada
-      // sem template, ex.: contrato de venda sem biblioteca de cláusulas).
-      clauseVersionIds: Array.isArray(clauseVersionIds) && clauseVersionIds.length ? clauseVersionIds : null,
+      // Snapshot de rastreabilidade calculado pelo servidor (nunca pelo cliente): qual versão de
+      // cada cláusula entrou, com que contexto, e quais ficaram de fora e por quê.
+      clauseVersionIds: clauseVersionIds && clauseVersionIds.length ? clauseVersionIds : null,
+      conditionContext,
+      excludedClauses,
       effectiveFrom: effectiveFrom || new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
