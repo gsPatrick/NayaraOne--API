@@ -100,6 +100,11 @@ async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
     );
   }
   const now = new Date();
+  // Auditoria antes/depois: a versão vigente antes desta publicação.
+  const previous = await RuleVersion.findOne({ where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, order: [['versionNumber', 'DESC']], transaction });
+  const beforeJson = previous
+    ? { ruleCode: RULE_CODE, versionNumber: previous.versionNumber, ...(previous.actionJson || {}), effectiveFrom: previous.effectiveFrom, effectiveUntil: null }
+    : { ruleCode: RULE_CODE, versionNumber: null, components: {}, situacao: 'nenhuma versão publicada' };
   await RuleVersion.update(
     { effectiveUntil: now, updatedBy: actorUserId || null },
     { where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction }
@@ -140,7 +145,8 @@ async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
       action: 'finance.commission_rule.publish',
       entityType: 'RuleVersion',
       entityId: version.id,
-      afterJson: { ruleCode: RULE_CODE, versionNumber: version.versionNumber, ...actionJson },
+      beforeJson,
+      afterJson: { ruleCode: RULE_CODE, versionNumber: version.versionNumber, ...actionJson, effectiveFrom: now, effectiveUntil: null },
       reason: `Nova versão da regra de comissão (${RULE_CODE} v${version.versionNumber}) publicada.`,
     },
     transaction
@@ -173,6 +179,35 @@ async function getActiveCommissionRule(groupId, companyId, transaction) {
     components: action.components || {},
     base: action.base || BASE_TYPE,
   };
+}
+
+/**
+ * listCommissionRuleVersions — M45-RECONF F3: histórico completo das versões publicadas da regra
+ * (número, percentuais, vigência, quem publicou e quando), da mais nova para a mais antiga.
+ */
+async function listCommissionRuleVersions(groupId, companyId, transaction) {
+  const { User } = require('../../models');
+  const rule = await Rule.findOne({ where: { code: RULE_CODE, groupId, companyId }, transaction });
+  if (!rule) return [];
+  const versions = await RuleVersion.findAll({ where: { ruleId: rule.id }, order: [['versionNumber', 'DESC']], transaction });
+  const publisherIds = [...new Set(versions.map((v) => v.publishedByUserId || v.createdBy).filter(Boolean))];
+  const users = publisherIds.length ? await User.findAll({ where: { id: publisherIds }, attributes: ['id', 'name', 'email'], transaction }) : [];
+  const nameById = new Map(users.map((u) => [u.id, u.name || u.email]));
+  return versions.map((v) => {
+    const publisherId = v.publishedByUserId || v.createdBy || null;
+    return {
+      id: v.id,
+      versionNumber: v.versionNumber,
+      status: v.status,
+      components: (v.actionJson && v.actionJson.components) || {},
+      base: (v.actionJson && v.actionJson.base) || BASE_TYPE,
+      effectiveFrom: v.effectiveFrom,
+      effectiveUntil: v.effectiveUntil,
+      current: v.status === 'PUBLISHED' && !v.effectiveUntil,
+      publishedByName: publisherId ? (nameById.get(publisherId) || 'Usuário removido') : 'Sistema (carga inicial)',
+      publishedAt: v.effectiveFrom || v.createdAt,
+    };
+  });
 }
 
 /**
@@ -595,6 +630,7 @@ async function getCommissionAdjustments(commissionId, transaction) {
 
 module.exports = {
   publishCommissionRuleVersion,
+  listCommissionRuleVersions,
   getActiveCommissionRule,
   getCommissionRelease,
   RULE_CODE,

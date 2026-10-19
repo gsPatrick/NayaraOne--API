@@ -658,6 +658,10 @@ const getCommissionRule = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) => commissionsService.getActiveCommissionRule(req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: result });
 });
+const listCommissionRuleVersions = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.listCommissionRuleVersions(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: result });
+});
 const getCommissionRelease = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) => commissionsService.getCommissionRelease(req.params.id, t));
   return success(res, { data: result });
@@ -673,7 +677,7 @@ const listChartAccountVersions = catchAsync(async (req, res) => {
 
 module.exports = {
   approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts, listIntercompanyDestinationCompanies,
-  publishCommissionRule, getCommissionRule, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
+  publishCommissionRule, getCommissionRule, listCommissionRuleVersions, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, processBankPaymentWebhook, verifyBankWebhookSignature,

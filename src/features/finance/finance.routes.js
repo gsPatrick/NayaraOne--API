@@ -73,6 +73,7 @@ financeRouter.get('/finance/commissions/:id/adjustments', requirePermission('fin
 // Frente 3 (§14): regra de comissão no Motor de Regras + liberação proporcional ao recebido.
 financeRouter.post('/finance/commission-rule', requirePermission('finance:approve'), requireRecentMfa, financeController.publishCommissionRule);
 financeRouter.get('/finance/commission-rule', requirePermission('finance:read'), financeController.getCommissionRule);
+financeRouter.get('/finance/commission-rule/versions', requirePermission('finance:read'), financeController.listCommissionRuleVersions);
 financeRouter.get('/finance/commissions/:id/release', requirePermission('finance:read'), financeController.getCommissionRelease);
 
 // --- Anomaly cases (antifraude, §17/§19) ---
