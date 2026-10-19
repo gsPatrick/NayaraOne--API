@@ -15,6 +15,10 @@ const contractsService = require('../legal/contracts.service');
  * e notificações. Retorna a lista de pendências (vazia = pode encerrar).
  */
 async function checkCloseoutEligibility(contractId, transaction) {
+  // JUR-015 (fail closed): contrato inexistente ou de outra empresa (invisível pela RLS) nunca
+  // é declarado "elegível" — antes a consulta devolvia eligible:true com zero pendências.
+  const contract = await Contract.findByPk(contractId, { transaction });
+  if (!contract) throw AppError.notFound('Contrato não encontrado.', 'CLOSEOUT_CONTRACT_NOT_FOUND');
   return collectContractClosurePendencies(contractId, transaction);
 }
 
