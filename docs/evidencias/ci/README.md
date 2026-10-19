@@ -32,6 +32,10 @@ REPRO_FORCE_LOCAL=1 REPRO_PG_PORT=55440 bash scripts/reproduzir-conferencia.sh  
 
 Execução de 19/10/2026 nesta máquina (sem Docker instalado, portanto cluster local PostgreSQL 16.14), commit `3f7e550`, Node v24.18.0, arquivos em série (`--test-concurrency=1`): **1429 testes, 1429 aprovados, 0 falhas, 0 pulados**, 205,8 s. Log em [`local-reproducao-3f7e550-test-results.log`](./local-reproducao-3f7e550-test-results.log). O conjunto de nomes de testes aprovados é idêntico ao do run 39301913793 (`diff` das listas ordenadas vazio). O cabeçalho registra "arquivos rastreados modificados: 1" — era `docs/evidencias/MAPA_SEGURANCA.md` (documentação, sem efeito na suíte).
 
+### Reprodução no código final (badc180)
+
+Depois do cruzamento integral dos cadernos dos Marcos 4/5 (commits `390b60d`, `e834c68`, `ace9b74`, `8eef9a8`), rodei de novo a suíte inteira com o mesmo script: **1463 testes, 1463 aprovados, 0 falhas, 0 pulados** (`local-reproducao-badc180-test-results.log`). Os 34 testes a mais em relação ao CI 39301913793 são os desta entrega (e um do Marco 7); entram no CI no próximo push. Drill de restore jurídico rodado no mesmo código: 133/133, log em `docs/evidencias/marco4-5/`.
+
 ## Por que o nome do artifact não bate com o commit
 
 Os dois runs abaixo foram disparados pelo evento `pull_request` (PR #1, branch `marco-6-e-7-homologado-nayara` → `main`). Nesse evento, a variável `github.sha` do GitHub Actions não é o commit da branch: é o **commit de merge temporário** que o GitHub cria em `refs/pull/1/merge` para testar como a branch ficaria mesclada. O workflow nomeava o artifact com `github.sha`, daí a diferença:
@@ -53,6 +57,7 @@ Pode ser conferido com `gh run view <run> --json event,headSha` e `gh api repos/
 | [`39137022521-0ab0e7b-test-results.log`](./39137022521-0ab0e7b-test-results.log) | `4a251a9edb6d482c1a15354d3077cb6e7016596bed1066bb0b814d91b2a39d57` | 1152 | 1152 | 0 | 0 | 0 | 0 |
 | [`39301913793-3f7e550-test-results.log`](./39301913793-3f7e550-test-results.log) — **run final dos Marcos 4/5** (evento `push`, sem commit de merge) | `46dd37c2e5b28156b15448c1b9bf272aeac9a9d3bebad5f9abdd073953d5638c` | 1429 | 1429 | 0 | 0 | 0 | 0 |
 | [`local-reproducao-3f7e550-test-results.log`](./local-reproducao-3f7e550-test-results.log) — reprodução local (`scripts/reproduzir-conferencia.sh`) | `31f5c74146dbd93646b5e05059a2a7924b91b84c3db41bf2c808407d1b18b410` | 1429 | 1429 | 0 | 0 | 0 | 0 |
+| [`local-reproducao-badc180-test-results.log`](./local-reproducao-badc180-test-results.log) — reprodução local no código final da entrega dos Marcos 4/5 (inclui os testes novos ainda sem CI) | `0a2a184ea135583a98d46f2528385aed5c644221f570b4f49253b25a8cd135f2` | 1463 | 1463 | 0 | 0 | 0 | 0 |
 
 Digest oficial do GitHub para o **zip** de cada artifact (não do log): run 39127433976 → `sha256:5276f6b18e8ced915175c2625b9a2902709ca8fcda413217684a8d3de89976c4` (artifact id 12137255014); run 39137022521 → `sha256:2b7a6b312d78d87417dbd80f6b1b81dfdd257b9aad0c449ac69978ed52e79cb0` (artifact id 12140006965). Ambos expiram em 16/01/2027 no GitHub; as cópias aqui não expiram.
 

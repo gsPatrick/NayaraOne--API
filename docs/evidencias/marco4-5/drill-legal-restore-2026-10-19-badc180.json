@@ -1,0 +1,1224 @@
+{
+  "commit": "badc180499481d17933de5df56117e3af98661bf",
+  "dirty": true,
+  "date": "2026-10-19T18:59:12.539Z",
+  "exitCode": 0,
+  "objectSummary": [
+    {
+      "objectName": "legal.contracts",
+      "records": 1,
+      "fields": [
+        "group_id",
+        "company_id",
+        "property_id",
+        "contract_type",
+        "contract_number",
+        "status",
+        "total_value",
+        "starts_at",
+        "ends_at",
+        "lock_version",
+        "created_by",
+        "created_at"
+      ],
+      "comparedWithValue": 12,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.contract_parties",
+      "records": 2,
+      "fields": [
+        "contract_id",
+        "person_id",
+        "party_role"
+      ],
+      "comparedWithValue": 6,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "people.persons (partes e signatários)",
+      "records": 2,
+      "fields": [
+        "company_id",
+        "person_type",
+        "legal_name",
+        "birth_or_foundation_date",
+        "status",
+        "lock_version",
+        "created_by"
+      ],
+      "comparedWithValue": 14,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "real_estate.properties",
+      "records": 1,
+      "fields": [
+        "company_id",
+        "title",
+        "internal_code",
+        "property_type",
+        "address_line",
+        "city",
+        "state",
+        "zip_code",
+        "description",
+        "bedrooms",
+        "parking_spots",
+        "lock_version"
+      ],
+      "comparedWithValue": 12,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "core.users (atores do drill)",
+      "records": 2,
+      "fields": [
+        "name",
+        "email",
+        "password_hash",
+        "status",
+        "mfa_enabled"
+      ],
+      "comparedWithValue": 10,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.contract_clauses",
+      "records": 3,
+      "fields": [
+        "code",
+        "title",
+        "body_text",
+        "category",
+        "version_number",
+        "is_active",
+        "condition_json",
+        "condition_status",
+        "condition_approved_by",
+        "condition_approved_at",
+        "created_by"
+      ],
+      "comparedWithValue": 29,
+      "bothNull": 4,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.contract_versions",
+      "records": 1,
+      "fields": [
+        "contract_id",
+        "version_number",
+        "document_file_id",
+        "signed_document_file_id",
+        "content_hash",
+        "content",
+        "template_id",
+        "clause_version_ids",
+        "condition_context",
+        "excluded_clauses",
+        "effective_from",
+        "created_by"
+      ],
+      "comparedWithValue": 12,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.signatures",
+      "records": 2,
+      "fields": [
+        "contract_version_id",
+        "person_id",
+        "status",
+        "signed_at",
+        "external_signature_id",
+        "provider_envelope_id"
+      ],
+      "comparedWithValue": 12,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.signature_provider_routing",
+      "records": 2,
+      "fields": [
+        "external_signature_id",
+        "provider_envelope_id",
+        "group_id",
+        "company_id"
+      ],
+      "comparedWithValue": 8,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.contract_requirements",
+      "records": 5,
+      "fields": [
+        "contract_id",
+        "requirement_code",
+        "description",
+        "requirement_type",
+        "status",
+        "satisfied_by_file_id",
+        "satisfied_at",
+        "waived_reason"
+      ],
+      "comparedWithValue": 31,
+      "bothNull": 9,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.guarantees",
+      "records": 1,
+      "fields": [
+        "contract_id",
+        "guarantee_type",
+        "value",
+        "status",
+        "starts_at",
+        "ends_at",
+        "lock_version"
+      ],
+      "comparedWithValue": 7,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.inspections",
+      "records": 1,
+      "fields": [
+        "contract_id",
+        "property_id",
+        "inspection_type",
+        "status",
+        "completed_at",
+        "report_hash",
+        "report_pdf_bytes",
+        "report_generated_at"
+      ],
+      "comparedWithValue": 8,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.inspection_items",
+      "records": 2,
+      "fields": [
+        "inspection_id",
+        "item_name",
+        "condition",
+        "notes"
+      ],
+      "comparedWithValue": 8,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.inspection_signatures",
+      "records": 2,
+      "fields": [
+        "inspection_id",
+        "party_role",
+        "signed_by_user_id",
+        "signature_hash",
+        "signed_at"
+      ],
+      "comparedWithValue": 10,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "people.file_links",
+      "records": 2,
+      "fields": [
+        "file_id",
+        "related_entity_type",
+        "related_entity_id",
+        "purpose"
+      ],
+      "comparedWithValue": 8,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "people.files (metadados)",
+      "records": 5,
+      "fields": [
+        "storage_key",
+        "file_name",
+        "mime_type",
+        "size_bytes",
+        "checksum_sha256",
+        "uploaded_by_user_id"
+      ],
+      "comparedWithValue": 29,
+      "bothNull": 1,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.legal_cases",
+      "records": 1,
+      "fields": [
+        "contract_id",
+        "property_id",
+        "responsible_user_id",
+        "escalation_user_id",
+        "case_number",
+        "case_type",
+        "status",
+        "summary",
+        "phase",
+        "legal_hold",
+        "legal_hold_reason",
+        "legal_hold_set_by",
+        "legal_hold_set_at"
+      ],
+      "comparedWithValue": 11,
+      "bothNull": 2,
+      "alwaysNullFields": [
+        "case_number",
+        "phase"
+      ],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.evidence_packages",
+      "records": 1,
+      "fields": [
+        "legal_case_id",
+        "manifest_json",
+        "package_hash",
+        "created_by"
+      ],
+      "comparedWithValue": 4,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "legal.evidence_package_access_log",
+      "records": 1,
+      "fields": [
+        "evidence_package_id",
+        "accessed_by_user_id",
+        "action",
+        "accessed_at"
+      ],
+      "comparedWithValue": 4,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "audit.audit_log (trilha dos objetos do drill)",
+      "records": 23,
+      "fields": [
+        "company_id",
+        "user_id",
+        "action",
+        "entity_type",
+        "entity_id",
+        "before_json",
+        "after_json",
+        "reason",
+        "occurred_at"
+      ],
+      "comparedWithValue": 191,
+      "bothNull": 16,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "records": 1,
+      "fields": [
+        "entry_type",
+        "nature",
+        "amount",
+        "status",
+        "due_at",
+        "settled_at",
+        "bank_account_id",
+        "idempotency_key",
+        "parent_entry_id",
+        "lock_version"
+      ],
+      "comparedWithValue": 8,
+      "bothNull": 2,
+      "alwaysNullFields": [
+        "idempotency_key",
+        "parent_entry_id"
+      ],
+      "failures": 0
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "records": 1,
+      "fields": [
+        "financial_entry_id",
+        "status",
+        "snapshot_hash",
+        "external_submission_id",
+        "external_status",
+        "idempotency_key",
+        "executed_at"
+      ],
+      "comparedWithValue": 7,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "records": 1,
+      "fields": [
+        "external_submission_id",
+        "payment_intent_id",
+        "group_id",
+        "company_id"
+      ],
+      "comparedWithValue": 4,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "records": 5,
+      "fields": [
+        "blob cifrado sha256 origem=destino",
+        "conteúdo decifrado sha256 = sha256 independente das fixtures",
+        "conteúdo decifrado sha256 = checksum_sha256 gravado",
+        "tamanho = size_bytes"
+      ],
+      "comparedWithValue": 20,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0
+    }
+  ],
+  "knownLimits": [],
+  "results": [
+    {
+      "objectName": "legal.contracts",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contracts",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contracts",
+      "label": "12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_parties",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_parties",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_parties",
+      "label": "6 comparações COM VALOR idênticas (2 registros × 3 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.persons (partes e signatários)",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.persons (partes e signatários)",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.persons (partes e signatários)",
+      "label": "14 comparações COM VALOR idênticas (2 registros × 7 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "real_estate.properties",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "real_estate.properties",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "real_estate.properties",
+      "label": "12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.users (atores do drill)",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.users (atores do drill)",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.users (atores do drill)",
+      "label": "10 comparações COM VALOR idênticas (2 registros × 5 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_clauses",
+      "label": "registros na origem: 3 (mínimo 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_clauses",
+      "label": "mesma quantidade de registros (origem 3, destino 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_clauses",
+      "label": "29 comparações COM VALOR idênticas (3 registros × 11 campos; 4 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_versions",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_versions",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_versions",
+      "label": "12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signatures",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signatures",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signatures",
+      "label": "12 comparações COM VALOR idênticas (2 registros × 6 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signature_provider_routing",
+      "label": "registros na origem: 2 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signature_provider_routing",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.signature_provider_routing",
+      "label": "8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_requirements",
+      "label": "registros na origem: 5 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_requirements",
+      "label": "mesma quantidade de registros (origem 5, destino 5)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.contract_requirements",
+      "label": "31 comparações COM VALOR idênticas (5 registros × 8 campos; 9 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.guarantees",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.guarantees",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.guarantees",
+      "label": "7 comparações COM VALOR idênticas (1 registros × 7 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspections",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspections",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspections",
+      "label": "8 comparações COM VALOR idênticas (1 registros × 8 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_items",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_items",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_items",
+      "label": "8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_signatures",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_signatures",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.inspection_signatures",
+      "label": "10 comparações COM VALOR idênticas (2 registros × 5 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.file_links",
+      "label": "registros na origem: 2 (mínimo 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.file_links",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.file_links",
+      "label": "8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (metadados)",
+      "label": "registros na origem: 5 (mínimo 5)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (metadados)",
+      "label": "mesma quantidade de registros (origem 5, destino 5)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (metadados)",
+      "label": "29 comparações COM VALOR idênticas (5 registros × 6 campos; 1 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.legal_cases",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.legal_cases",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.legal_cases",
+      "label": "11 comparações COM VALOR idênticas (1 registros × 13 campos; 2 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_packages",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_packages",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_packages",
+      "label": "4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_package_access_log",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_package_access_log",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "legal.evidence_package_access_log",
+      "label": "4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (trilha dos objetos do drill)",
+      "label": "registros na origem: 23 (mínimo 8)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (trilha dos objetos do drill)",
+      "label": "mesma quantidade de registros (origem 23, destino 23)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (trilha dos objetos do drill)",
+      "label": "191 comparações COM VALOR idênticas (23 registros × 9 campos; 16 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "8 comparações COM VALOR idênticas (1 registros × 10 campos; 2 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "7 comparações COM VALOR idênticas (1 registros × 7 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "registros na origem: 1 (mínimo 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "fixtures registraram SHA-256 independente para 5 arquivo(s)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-documento-checklist.pdf: blob cifrado restaurado idêntico ao de origem (2824 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-documento-checklist.pdf: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (4416091e88ce8b91…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-documento-checklist.pdf: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (2789 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-assinado.pdf: blob cifrado restaurado idêntico ao de origem (4214 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-assinado.pdf: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (4cd8d7646a9cabc4…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-assinado.pdf: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (4179 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-1.png: blob cifrado restaurado idêntico ao de origem (4158 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-1.png: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (70f6f8961173cc3c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-1.png: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (4123 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-v1.pdf: blob cifrado restaurado idêntico ao de origem (2826 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-v1.pdf: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (c6278ab1a7cdb8a9…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-contrato-v1.pdf: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (2791 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-2.png: blob cifrado restaurado idêntico ao de origem (4163 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-2.png: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (820f4dbcd0911a08…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "drill-foto-2.png: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (4128 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "todos os arquivos com SHA-256 independente foram encontrados e conferidos (5/5)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "documento assinado",
+      "label": "versão 139d9da4-115d-4335-80ef-2623d6a236cd tem documento assinado (signed_document_file_id preenchido)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "documento assinado",
+      "label": "bytes do documento assinado restaurado (4179 bytes) = SHA-256 independente",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relatório de vistoria (bytes)",
+      "label": "vistoria 11f4c1df-3ca5-489d-81ec-96827c8ef446: PDF restaurado não vazio (2025 bytes) e SHA-256 = report_hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "assinaturas a verificar (2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "assinatura 3d0db780-4a23-4f57-8dbd-e7b22c326725 → versão 139d9da4-115d-4335-80ef-2623d6a236cd e signatário 27c1e355-d719-4df4-a60b-a31ad9de17d8 existem no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "assinatura 6a9846d0-68b8-4821-8036-2d1916c46a48 → versão 139d9da4-115d-4335-80ef-2623d6a236cd e signatário 93b62a41-b721-4c13-94c3-0c53d85b187e existem no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "versão 139d9da4-115d-4335-80ef-2623d6a236cd → documento 67c713e8-ec74-4427-b2bc-c242962bb8cc existe no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "versão 139d9da4-115d-4335-80ef-2623d6a236cd → documento assinado 491687d4-1dfa-4b52-9f5c-fd8967e73b7f existe no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "versão 139d9da4-115d-4335-80ef-2623d6a236cd → modelo 7c3e0f28-07ef-4568-b923-67236ce9eb04 existe no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "vínculos polimórficos a verificar (2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "file_link 1596f6d6-3257-4606-b115-cb451ff9093d: arquivo 53bd8f30-07c6-4bbe-9e64-dd7638e14cbe existe e InspectionItem 104edc9f-c2f4-4d7b-bdb7-ff8ed609a7f8 existe no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "file_link 48919175-8029-4aa0-9722-c4f2d4af7475: arquivo f66580d8-0146-4105-bc06-2fe13dfda6c7 existe e InspectionItem 20e38bea-d42e-43a6-8b12-dbb400fe81b4 existe no destino",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiês a verificar (1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiê b9db7cd2-9475-4b1f-bc17-b2cae01c860e: manifesto não vazio (4 itens)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiê: item CONTRACT_VERSION_DOCUMENT → referência 139d9da4-115d-4335-80ef-2623d6a236cd resolve para arquivo restaurado com o mesmo hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiê: item REQUIREMENT_DOCUMENT → referência 9809d580-a3ea-45e1-b9a9-36e801cf32b6 resolve para arquivo restaurado com o mesmo hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiê: item INSPECTION_MEDIA → referência 1596f6d6-3257-4606-b115-cb451ff9093d resolve para arquivo restaurado com o mesmo hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "relações",
+      "label": "dossiê: item INSPECTION_MEDIA → referência 48919175-8029-4aa0-9722-c4f2d4af7475 resolve para arquivo restaurado com o mesmo hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "imutabilidade pós-restore",
+      "label": "trocar o documento assinado por outro arquivo → recusado pelo trigger do banco",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "imutabilidade pós-restore",
+      "label": "remover o documento assinado → recusado pelo trigger do banco",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "imutabilidade pós-restore",
+      "label": "alterar o conteúdo da versão → recusado pelo trigger do banco",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "manifesto exportado (4 itens) recalculado = hash gravado ANTES do backup (4a3a37d410dc4f3b…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "manifesto exportado não vazio (4 itens)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "item CONTRACT_VERSION_DOCUMENT: bytes servidos pelo serviço de arquivos têm o hash do manifesto",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "item REQUIREMENT_DOCUMENT: bytes servidos pelo serviço de arquivos têm o hash do manifesto",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "item INSPECTION_MEDIA: bytes servidos pelo serviço de arquivos têm o hash do manifesto",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "exportação pós-restore",
+      "label": "item INSPECTION_MEDIA: bytes servidos pelo serviço de arquivos têm o hash do manifesto",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "tenant B exportando o dossiê de A → LEGAL_EVIDENCE_PACKAGE_NOT_FOUND",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "tenant B baixando arquivo de A → FILE_NOT_FOUND",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "tenant B não enxerga contrato/versão/assinaturas/arquivos/dossiê/pessoas de A (0/0/0/0/0/0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "controle positivo: tenant B enxerga o próprio contrato (1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "tenant B tentando alterar contrato de A → 0 linha(s) afetada(s)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "perfil do tenant A SEM legal:read exportando o dossiê → HTTP 403",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "tenant B COM legal:read exportando o dossiê de A → HTTP 404",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "controle positivo: tenant A COM legal:read → HTTP 200, export íntegro contra o hash pré-backup",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "download do contrato assinado por perfil do tenant A SEM legal:read → HTTP 403",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "download do contrato assinado pelo tenant B COM legal:read → HTTP 404",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "controle positivo: perfil do tenant A COM legal:read baixa o contrato assinado → HTTP 200, bytes = SHA-256 independente",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "permissões pós-restore",
+      "label": "cadeia de custódia: só o export permitido gerou registro EXPORTED (1 → 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay pós-restore",
+      "label": "estado restaurado: lançamento liquidado uma vez (1) por uma intenção executada (1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay pós-restore",
+      "label": "callback com assinatura HMAC forjada → HTTP 401 (recusado)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay pós-restore",
+      "label": "entrega 1 do mesmo callback CONFIRMED com HMAC válido → HTTP 200, processado sem erro",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay pós-restore",
+      "label": "entrega 2 do mesmo callback CONFIRMED com HMAC válido → HTTP 200, processado sem erro",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay pós-restore",
+      "label": "nenhum lançamento novo (1 → 1), nenhum filho (0), lançamento intocado (lock_version 1 → 1), intenção continua uma só executada",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "adulteração",
+      "label": "um byte alterado no blob restaurado é detectado no arquivo (autenticação AES-GCM / checksum)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "adulteração",
+      "label": "a API recusa servir o arquivo adulterado → HTTP 409",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "adulteração",
+      "label": "marcador do formato cifrado alterado: a API recusa servir → HTTP 409",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
