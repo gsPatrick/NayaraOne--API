@@ -155,11 +155,23 @@ async function collectContractClosurePendencies(contractId, transaction) {
  * assertContractClosureAllowed — a ÚNICA função que decide se um contrato pode ser encerrado.
  * Lança 409 LEGAL_CONTRACT_CLOSURE_BLOCKED com a lista completa de pendências em `details`.
  */
+// O4 (auditoria M45): a mensagem mostrava o código cru ("OPEN_BILLING"). `type` segue em details.
+const PENDENCY_LABELS = {
+  OPEN_BILLING: 'cobrança em aberto',
+  OPEN_COLLECTION_CASE: 'caso de cobrança aberto',
+  PENDING_UTILITY_TRANSFER: 'transferência de consumo (água/luz/gás) pendente',
+  ACTIVE_GUARANTEE: 'garantia ainda ativa',
+  DEPOSIT_BALANCE: 'saldo de caução a devolver',
+  OPEN_LEGAL_CASE: 'processo jurídico aberto',
+  OPEN_LEGAL_DEADLINE: 'prazo jurídico em aberto',
+  OPEN_NOTICE: 'notificação em aberto',
+};
+
 async function assertContractClosureAllowed(contractId, transaction) {
   const pendencies = await collectContractClosurePendencies(contractId, transaction);
   if (pendencies.length > 0) {
     throw AppError.conflict(
-      `Não é possível encerrar o contrato: ${pendencies.length} pendência(s) — ${pendencies.map((p) => p.type).join(', ')}.`,
+      `Não é possível encerrar o contrato: ${pendencies.length} pendência(s) — ${[...new Set(pendencies.map((p) => PENDENCY_LABELS[p.type] || p.type))].join(', ')}.`,
       'LEGAL_CONTRACT_CLOSURE_BLOCKED',
       { pendencies }
     );
@@ -168,6 +180,7 @@ async function assertContractClosureAllowed(contractId, transaction) {
 }
 
 module.exports = {
+  PENDENCY_LABELS,
   collectContractClosurePendencies,
   assertContractClosureAllowed,
   CLOSURE_TARGET_STATUSES,
