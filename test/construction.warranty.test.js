@@ -113,6 +113,11 @@ test('warranty: createMaintenanceCase recusa propertyId que pertence a uma empre
     );
     if (!otherCompanyRow) return; // ambiente sem segunda empresa semeada — nada a testar aqui.
 
+    // 19/10/2026: este ramo só passou a rodar quando o banco ganhou empresas reais no grupo de
+    // teste. O imóvel da outra empresa é gravado no contexto DELA (RLS de INSERT), e volta-se ao
+    // tenant de teste antes da chamada. Com RLS ativo o imóvel nem é visível (PROPERTY_NOT_FOUND);
+    // sem RLS, a checagem explícita devolve MISMATCH — os dois recusam o vínculo cruzado.
+    await sequelize.query("SELECT set_config('app.company_id', :id, true)", { replacements: { id: otherCompanyRow.id }, transaction });
     const propertyOfOtherCompany = await Property.create(
       {
         groupId: otherCompanyRow.groupId,
@@ -125,6 +130,7 @@ test('warranty: createMaintenanceCase recusa propertyId que pertence a uma empre
       },
       { transaction }
     );
+    await sequelize.query("SELECT set_config('app.company_id', :id, true)", { replacements: { id: tenant.companyId }, transaction });
 
     await assert.rejects(
       () =>
@@ -133,7 +139,10 @@ test('warranty: createMaintenanceCase recusa propertyId que pertence a uma empre
           tenant.userId,
           transaction
         ),
-      rejectsWithCode('MAINTENANCE_CASE_PROPERTY_COMPANY_MISMATCH')
+      (err) => {
+        assert.ok(['PROPERTY_NOT_FOUND', 'MAINTENANCE_CASE_PROPERTY_COMPANY_MISMATCH'].includes(err.code), err.code);
+        return true;
+      }
     );
   });
 });

@@ -847,7 +847,11 @@ test('M6-NOVO-13: createBudgetLine recusa costCenterId que pertence a outra empr
       () => budgetLinesService.createBudgetLine(project.id, withTenant({ category: 'X', plannedAmount: 100, costCenterId: costCenterOfOtherCompanyId }), tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
-        assert.equal(err.code, 'COST_CENTER_COMPANY_MISMATCH');
+        // 19/10/2026: este ramo só passou a rodar quando o banco ganhou uma segunda empresa real.
+        // Com RLS ativo (usuário de runtime) o centro de custo da outra empresa nem é visível ->
+        // COST_CENTER_NOT_FOUND; sem RLS (superusuário) a checagem explícita -> MISMATCH. Os dois
+        // recusam o vínculo cruzado, que é o que o teste exige.
+        assert.ok(['COST_CENTER_NOT_FOUND', 'COST_CENTER_COMPANY_MISMATCH'].includes(err.code), err.code);
         return true;
       }
     );

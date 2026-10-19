@@ -264,6 +264,11 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
       { replacements: { companyId: tenant.companyId }, transaction }
     );
     if (otherCompanyRow) {
+      // O arquivo da outra empresa é gravado no contexto DELA (o RLS de people.files só aceita
+      // INSERT da empresa corrente). Este ramo só passou a rodar quando o grupo de teste ganhou
+      // empresas reais (F06/FACL, 18/10/2026) — antes não havia "outra empresa" visível e o
+      // cenário nunca era exercitado.
+      await sequelize.query("SELECT set_config('app.company_id', :companyId, true)", { replacements: { companyId: otherCompanyRow.id }, transaction });
       const foreignFile = await File.create(
         {
           groupId: tenant.groupId,
@@ -275,6 +280,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
         },
         { transaction }
       );
+      await sequelize.query("SELECT set_config('app.company_id', :companyId, true)", { replacements: { companyId: tenant.companyId }, transaction });
       await assert.rejects(
         () => movementsService.recordMovement(
           withTenant({
@@ -284,6 +290,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
             sourceLocationId: location.id,
             reason: 'Ajuste de alto valor com evidência de outro tenant.',
             evidenceFileId: foreignFile.id,
+            idempotencyKey: `test-item8-foreign-${foreignFile.id}`,
           }),
           actor({ canApprove: true }),
           transaction
