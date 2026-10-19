@@ -290,7 +290,7 @@ test('F7: prévia do termo KD-TERM-v2 antes de liberar e termo gravado com hash 
     );
     const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { keysCount: '3', termSignedByPersonId: landlord.id }, transaction);
     assert.equal(prev.preview, true);
-    assert.equal(prev.termVersion, 'KD-TERM-v2');
+    assert.equal(prev.termVersion, 'KD-TERM-v3');
     assert.match(prev.termText, /TERMO DE ENTREGA DE CHAVES/);
     assert.match(prev.termText, /Quantidade entregue: 3 chaves\/controles/);
     assert.match(prev.termText, /PRÉVIA/);
@@ -322,7 +322,7 @@ test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em 
       transaction
     );
     const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { keysCount: '1', termSignedByPersonId: landlord.id }, transaction);
-    assert.equal(prev.termVersion, 'KD-TERM-v2');
+    assert.equal(prev.termVersion, 'KD-TERM-v3');
     assert.doesNotMatch(prev.termText, UUID_RE);
     assert.match(prev.termText, /Locação/);
     assert.doesNotMatch(prev.termText, /\bLEASE\b|NOT_REQUIRED|REQUIRED_|CHECK_IN|LANDLORD|TENANT/);
@@ -334,7 +334,7 @@ test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em 
     assert.match(prev.termText, /concluída em \d{2}\/\d{2}\/\d{4}/);
 
     const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 1, keysIdentification: 'Porta principal', termSignedByPersonId: landlord.id }, tenant.userId, transaction);
-    assert.equal(released.termVersion, 'KD-TERM-v2');
+    assert.equal(released.termVersion, 'KD-TERM-v3');
     assert.doesNotMatch(released.termText, UUID_RE);
     assert.doesNotMatch(released.termText, /\d{4}-\d{2}-\d{2}T/);
     assert.match(released.termText, new RegExp(`Assinado por KD QA Locador .* \\(CPF ${cpfFmt}\\) — Locador\\(a\\) no contrato em \\d{2}/\\d{2}/\\d{4} às \\d{2}:\\d{2}`));

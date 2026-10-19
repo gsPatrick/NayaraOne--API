@@ -23,7 +23,9 @@ const TERM_TYPES = ['KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
 // v1 (KD-TERM-v1) continua válido para os termos JÁ gravados — texto e hash preservados, nada é
 // regerado. Toda nova liberação/prévia usa o modelo v2 (texto 100% humano, M45 19/10/2026).
 const KEY_DELIVERY_TERM_VERSION_V1 = 'KD-TERM-v1';
-const KEY_DELIVERY_TERM_VERSION = 'KD-TERM-v2';
+// v3 (M45-RECONF F7, 19/10/2026): mesmo texto do v2 sem a linha "Modelo KD-TERM-v2" (código
+// técnico no documento entregue à pessoa). v1/v2 já gravados continuam intactos (texto e hash).
+const KEY_DELIVERY_TERM_VERSION = 'KD-TERM-v3';
 const CLIENT_FORBIDDEN_FIELDS = ['photosRequired', 'photoPolicy', 'termText', 'termVersion', 'termHash', 'policy'];
 
 function resolveKeyDeliveryPhotoPolicy(contract, keyDelivery) {
@@ -155,7 +157,6 @@ function buildKeyDeliveryTermV2({ contract, keyDelivery, keysCount, keysIdentifi
     : 'a informar';
   const lines = [
     title,
-    `Modelo ${KEY_DELIVERY_TERM_VERSION}`,
     '',
     `Contrato: ${contract.contractNumber || 'sem número'} — ${typeLabel}${contractDate ? ` (início em ${contractDate})` : ''}`,
     `Imóvel: ${ctx.propertyText}`,
