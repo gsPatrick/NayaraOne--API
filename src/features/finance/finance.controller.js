@@ -558,12 +558,18 @@ const compareBudgetForecastToRealized = catchAsync(async (req, res) => {
   return success(res, { data: comparison });
 });
 
+// F02 (2ª rodada) — devolve um pedido de fechamento em REVIEW para OPEN, com motivo.
+const returnPeriodToOpen = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.returnPeriodToOpen(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
+
 module.exports = {
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
-  closePeriod, approvePeriodClosure, reopenPeriod, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
+  closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,

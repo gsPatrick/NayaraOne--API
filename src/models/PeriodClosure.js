@@ -41,6 +41,13 @@ module.exports = (sequelize) => {
       commissionsReviewNote: { type: DataTypes.TEXT, allowNull: true, field: 'commissions_review_note' },
       commissionsFingerprintAtReview: { type: DataTypes.STRING(64), allowNull: true, field: 'commissions_fingerprint_at_review' },
       currentSnapshotId: { type: DataTypes.UUID, allowNull: true, field: 'current_snapshot_id' },
+      // F02 (2ª rodada) — migration 20260101000387.
+      reviewRequestedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'review_requested_by_user_id' },
+      reviewRequestedAt: { type: DataTypes.DATE, allowNull: true, field: 'review_requested_at' },
+      thirdPartyFingerprintAtCheck: { type: DataTypes.STRING(64), allowNull: true, field: 'third_party_fingerprint_at_check' },
+      returnedToOpenAt: { type: DataTypes.DATE, allowNull: true, field: 'returned_to_open_at' },
+      returnedToOpenByUserId: { type: DataTypes.UUID, allowNull: true, field: 'returned_to_open_by_user_id' },
+      returnToOpenReason: { type: DataTypes.TEXT, allowNull: true, field: 'return_to_open_reason' },
       closedAt: { type: DataTypes.DATE, allowNull: true, field: 'closed_at' },
       closedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'closed_by_user_id' },
       reopenedAt: { type: DataTypes.DATE, allowNull: true, field: 'reopened_at' },

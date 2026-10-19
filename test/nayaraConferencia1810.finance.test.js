@@ -64,6 +64,15 @@ function dueAtIn(referenceMonth) {
   return `${referenceMonth}-15T12:00:00.000Z`;
 }
 
+// F02 (2ª rodada): o caixa do mês é contado pela data de LIQUIDAÇÃO (settled_at), que o serviço
+// grava como "agora"; o teste leva o fato de caixa para o mês testado.
+async function moveSettlementInto(entryIds, referenceMonth, transaction) {
+  await sequelize.query('UPDATE finance.financial_entries SET settled_at = :at WHERE id IN (:ids)', {
+    replacements: { at: dueAtIn(referenceMonth), ids: entryIds },
+    transaction,
+  });
+}
+
 function withTenant(fields) {
   return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
 }
@@ -225,11 +234,13 @@ test('F02-2: conta bancária movimentada no mês sem extrato importado bloqueia 
       transaction
     );
     await financialEntriesService.settleFinancialEntry(receipt.id, tenant.userId, transaction);
+    await moveSettlementInto([receipt.id], referenceMonth, transaction);
     await confirmBothChecks(referenceMonth, transaction);
 
     await expectPreconditionFailure(
       periodClosuresService.closePeriod(withTenant({ referenceMonth }), tenant.userId, transaction),
-      ['BANK_STATEMENTS_IMPORTED']
+      // O movimento bancário do mês também está sem conciliação (lado do lançamento, item 5).
+      ['BANK_STATEMENTS_IMPORTED', 'RECONCILIATION_PENDINGS']
     );
   });
 });
@@ -281,12 +292,17 @@ test('F02-5: conferência de caixa de terceiros fica desatualizada se o moviment
     const resultCenter = await createTestResultCenter(tenant, transaction);
     // Revisão 18/10/2026 (D2): caução exige contrato e titular (locatário).
     const { contract, holder } = await createLeaseWithTenantParty(transaction);
+    // A competência em REVIEW não aceita lançamento novo (guarda de competência): a caução tem
+    // competência noutro mês, mas o dinheiro entra no caixa do mês em revisão.
+    let otherMonth = randomMonth(2066, 2075);
+    while (otherMonth === referenceMonth) otherMonth = randomMonth(2066, 2075);
     const deposit = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 900, description: 'CONF1810 F02-5 caução', resultCenterId: resultCenter.id, dueAt: dueAtIn(referenceMonth), isThirdPartyFunds: true, thirdPartyReference: 'Caução F02-5', contractId: contract.id, thirdPartyHolderPersonId: holder.id }),
+      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 900, description: 'CONF1810 F02-5 caução', resultCenterId: resultCenter.id, competenceMonth: otherMonth, dueAt: dueAtIn(otherMonth), isThirdPartyFunds: true, thirdPartyReference: 'Caução F02-5', contractId: contract.id, thirdPartyHolderPersonId: holder.id }),
       tenant.userId,
       transaction
     );
     await financialEntriesService.settleFinancialEntry(deposit.id, tenant.userId, transaction);
+    await moveSettlementInto([deposit.id], referenceMonth, transaction);
 
     await expectPreconditionFailure(
       periodClosuresService.approvePeriodClosure(withTenant({ referenceMonth }), approverUser.id, transaction),
@@ -357,7 +373,11 @@ test('F02-7: o snapshot do fechamento é imutável no banco (UPDATE e DELETE rec
   });
 });
 
-test('F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições, expõe o checklist e fecha com tudo conferido', async () => {
+test('F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições e expõe o checklist — sem gravar fechamento', async () => {
+  // Item 7 da revisão independente (18/10): este teste commitava um fechamento CLOSED (com
+  // snapshot imutável) no banco compartilhado a cada execução. Agora só exercita, via HTTP, os
+  // caminhos que recusam sem gravar; o caminho feliz (REVIEW → CLOSED + snapshot) é provado pelo
+  // serviço em F02-6, dentro de transação com rollback.
   const referenceMonth = randomMonth(2066, 2075);
   const requesterToken = tokenFor(tenant.userId, ['finance:read', 'finance:settle']);
 
@@ -368,6 +388,7 @@ test('F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições, expõe o
     'BANK_STATEMENTS_IMPORTED',
     'RECONCILIATION_PENDINGS',
     'CLASSIFICATION_PENDINGS',
+    'PAYMENTS_IN_TRANSIT',
     'THIRD_PARTY_CASH_CHECKED',
     'COMMISSIONS_REPASSES_REVIEWED',
   ]);
@@ -376,23 +397,13 @@ test('F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições, expõe o
   assert.equal(blocked.status, 409);
   assert.equal(blocked.body.error.code, 'FINANCE_PERIOD_PRECONDITIONS_NOT_MET');
 
-  for (const checkType of ['THIRD_PARTY_CASH', 'COMMISSIONS_REPASSES']) {
-    const check = await http('POST', '/finance/period-closures/checks', requesterToken, { referenceMonth, checkType, note: `Conferência HTTP ${checkType}` });
-    assert.equal(check.status, 200, JSON.stringify(check.body));
-  }
-
-  const review = await http('POST', '/finance/period-closures', requesterToken, { referenceMonth });
-  assert.equal(review.status, 201, JSON.stringify(review.body));
-  assert.equal(review.body.data.status, 'REVIEW');
-
   const approverToken = tokenFor(mfaUser.id, ['finance:read', 'finance:approve']);
-  const approved = await http('POST', '/finance/period-closures/approve', approverToken, { referenceMonth });
-  assert.equal(approved.status, 200, JSON.stringify(approved.body));
-  assert.equal(approved.body.data.status, 'CLOSED');
+  const approveMissing = await http('POST', '/finance/period-closures/approve', approverToken, { referenceMonth });
+  assert.equal(approveMissing.status, 404, JSON.stringify(approveMissing.body));
 
   const after = await http('GET', `/finance/period-closures/${referenceMonth}/preconditions`, requesterToken);
-  assert.equal(after.body.data.status, 'CLOSED');
-  assert.ok(after.body.data.snapshot && after.body.data.snapshot.snapshotHash, 'snapshot exposto na leitura do fechamento');
+  assert.notEqual(after.body.data.status, 'CLOSED');
+  assert.notEqual(after.body.data.status, 'REVIEW');
 });
 
 // =============================================================================================

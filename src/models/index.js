@@ -99,6 +99,7 @@ const modelDefiners = {
   IntercompanyTransfer: require('./IntercompanyTransfer'),
   PeriodClosure: require('./PeriodClosure'),
   PeriodClosureSnapshot: require('./PeriodClosureSnapshot'),
+  BankStatementImport: require('./BankStatementImport'),
   BankTransaction: require('./BankTransaction'),
   Reconciliation: require('./Reconciliation'),
   ApprovalRequest: require('./ApprovalRequest'),

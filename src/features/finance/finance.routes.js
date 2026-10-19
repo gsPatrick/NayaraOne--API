@@ -114,6 +114,8 @@ financeRouter.get('/finance/period-closures', requirePermission('finance:read'),
 financeRouter.get('/finance/period-closures/:referenceMonth/preconditions', requirePermission('finance:read'), financeController.getPeriodPreconditions);
 financeRouter.post('/finance/period-closures/checks', requirePermission('finance:settle'), financeController.confirmPeriodCheck);
 financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), requireRecentMfa, financeController.reopenPeriod);
+// F02 (2ª rodada): pedido de fechamento em REVIEW volta para OPEN — mesma alçada da aprovação (finance:approve + MFA recente), motivo obrigatório.
+financeRouter.post('/finance/period-closures/return-to-open', requirePermission('finance:approve'), requireRecentMfa, financeController.returnPeriodToOpen);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);
 
 // Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)

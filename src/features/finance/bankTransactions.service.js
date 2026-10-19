@@ -1,8 +1,20 @@
 'use strict';
 
-const { BankTransaction } = require('../../models');
+const { BankTransaction, BankStatementImport } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { businessDateKey } = require('../../utils/businessDate');
+
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function dateKeyOf(value, fieldLabel) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw AppError.badRequest(`Data inválida em ${fieldLabel}: "${value}".`, 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_DATE');
+  }
+  // Data só (YYYY-MM-DD) é dia de calendário; instante é convertido para o dia em São Paulo.
+  return DATE_ONLY_REGEX.test(String(value).trim()) ? String(value).trim() : businessDateKey(parsed);
+}
 
 // finance.bank_transactions representa linhas de extrato importadas. `externalTransactionId`
 // (UNIQUE) é a idempotência natural de um import — reprocessar o mesmo arquivo/webhook não
@@ -123,6 +135,39 @@ async function importBankStatement(payload, actorUserId, transaction) {
     );
   }
 
+  // F02 (2ª rodada) — o período que o extrato cobre. Declarado por quem importa (periodStart/
+  // periodEnd, YYYY-MM-DD) ou, se não declarado, deduzido da primeira e da última linha. É o que
+  // a pré-condição "extratos importados" do fechamento confere: o mês inteiro precisa estar
+  // coberto por alguma importação — uma transação solta no mês não basta.
+  const rowDateKeys = rows.map((row, idx) => dateKeyOf(row.transactionDate, `linha ${idx + 2}`));
+  const firstLine = rowDateKeys.reduce((a, b) => (a < b ? a : b));
+  const lastLine = rowDateKeys.reduce((a, b) => (a > b ? a : b));
+  const periodDeclared = Boolean(payload.periodStart || payload.periodEnd);
+  if (periodDeclared && !(payload.periodStart && payload.periodEnd)) {
+    throw AppError.badRequest(
+      'Informe o início e o fim do período do extrato (ou nenhum dos dois, para usar as datas das linhas).',
+      'FINANCE_BANK_STATEMENT_IMPORT_PERIOD_INCOMPLETE'
+    );
+  }
+  const periodStart = periodDeclared ? dateKeyOf(payload.periodStart, 'periodStart') : firstLine;
+  const periodEnd = periodDeclared ? dateKeyOf(payload.periodEnd, 'periodEnd') : lastLine;
+  if (periodEnd < periodStart) {
+    throw AppError.badRequest('O fim do período do extrato não pode ser anterior ao início.', 'FINANCE_BANK_STATEMENT_IMPORT_PERIOD_INVALID');
+  }
+  if (firstLine < periodStart || lastLine > periodEnd) {
+    throw AppError.badRequest(
+      `O extrato tem linhas fora do período declarado (${periodStart} a ${periodEnd}): de ${firstLine} a ${lastLine}.`,
+      'FINANCE_BANK_STATEMENT_IMPORT_LINE_OUTSIDE_PERIOD'
+    );
+  }
+  let closingBalance = null;
+  if (payload.closingBalance !== undefined && payload.closingBalance !== null && payload.closingBalance !== '') {
+    closingBalance = Number(payload.closingBalance);
+    if (!Number.isFinite(closingBalance)) {
+      throw AppError.badRequest('O saldo final do extrato precisa ser um número.', 'FINANCE_BANK_STATEMENT_IMPORT_VALIDATION');
+    }
+  }
+
   const result = { imported: [], duplicates: [], total: rows.length };
   for (const row of rows) {
     // eslint-disable-next-line no-await-in-loop
@@ -140,6 +185,23 @@ async function importBankStatement(payload, actorUserId, transaction) {
     result.imported.push(created);
   }
 
+  const statementImport = await BankStatementImport.create(
+    {
+      groupId,
+      companyId,
+      bankAccountId,
+      periodStart,
+      periodEnd,
+      periodDeclared,
+      closingBalance: closingBalance === null ? null : closingBalance.toFixed(2),
+      linesTotal: result.total,
+      linesImported: result.imported.length,
+      createdBy: actorUserId || null,
+    },
+    { transaction }
+  );
+  result.statementImport = statementImport;
+
   await registrarAuditoria(
     {
       groupId,
@@ -148,8 +210,17 @@ async function importBankStatement(payload, actorUserId, transaction) {
       action: 'finance.bank_statement.import',
       entityType: 'BankAccount',
       entityId: bankAccountId,
-      afterJson: { total: result.total, importedCount: result.imported.length, duplicateCount: result.duplicates.length },
-      reason: `Extrato importado: ${result.imported.length} nova(s) linha(s), ${result.duplicates.length} já existente(s) (ignoradas).`,
+      afterJson: {
+        total: result.total,
+        importedCount: result.imported.length,
+        duplicateCount: result.duplicates.length,
+        statementImportId: statementImport.id,
+        periodStart,
+        periodEnd,
+        periodDeclared,
+        closingBalance: statementImport.closingBalance,
+      },
+      reason: `Extrato importado (${periodStart} a ${periodEnd}): ${result.imported.length} nova(s) linha(s), ${result.duplicates.length} já existente(s) (ignoradas).`,
     },
     transaction
   );
