@@ -1,5 +1,7 @@
 'use strict';
 
+const { formatMoneyBR } = require('../../utils/formatBR');
+
 const {
   UtilityObligation,
   UtilityAccount,
@@ -270,7 +272,9 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
         action: 'billing.utility_payment.record',
         entityType: 'UtilityObligation',
         entityId: obligation.id,
-        reason: `Pagamento de utilidade de ${numericAmount} registrado — pago pela parte responsável ("${normalizedPaidBy}"), sem reembolso.`,
+        beforeJson: { ...obligation.toJSON(), pagamentoRegistrado: false },
+        afterJson: { ...obligation.toJSON(), pagamentoRegistrado: true, amount: numericAmount, paidByParty: normalizedPaidBy, reembolso: 'não se aplica (pago pela parte responsável)' },
+        reason: `Pagamento de utilidade de ${formatMoneyBR(numericAmount)} registrado — pago pela parte responsável ("${normalizedPaidBy}"), sem reembolso.`,
       },
       transaction
     );
@@ -330,7 +334,7 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
       entityType: 'UtilityReimbursement',
       entityId: reimbursement.id,
       afterJson: reimbursement.toJSON(),
-      reason: `Reembolso de ${numericAmount} criado: pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
+      reason: `Reembolso de ${formatMoneyBR(numericAmount)} criado: pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
     },
     transaction
   );
@@ -378,7 +382,8 @@ async function flagOverdueLeaseObligations(transaction, { now = new Date(), over
         action: 'billing.lease_obligation.overdue',
         entityType: 'OwnershipTransferTask',
         entityId: task.id,
-        afterJson: { status: task.status, pendingSince: task.createdAt, overdueDays },
+        beforeJson: { status: task.status, pendingSince: task.createdAt, vencida: false },
+        afterJson: { status: task.status, pendingSince: task.createdAt, overdueDays, vencida: true },
         reason: `Troca de titularidade pendente há mais de ${overdueDays} dias — obrigação locatícia vencida.`,
       },
       transaction

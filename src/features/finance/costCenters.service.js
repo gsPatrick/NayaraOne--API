@@ -84,6 +84,7 @@ async function deleteCostCenter(id, actorUserId, transaction) {
       entityType: 'CostCenter',
       entityId: costCenter.id,
       beforeJson,
+      afterJson: { ...beforeJson, deletedAt: new Date(), deletedBy: actorUserId || null, situacao: 'excluído (exclusão lógica — o registro continua no banco)' },
       reason: `Centro de custo "${costCenter.code}" excluído.`,
     },
     transaction

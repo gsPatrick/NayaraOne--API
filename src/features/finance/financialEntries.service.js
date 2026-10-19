@@ -1172,7 +1172,7 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
       entityId: entry.id,
       beforeJson,
       afterJson: entry.toJSON(),
-      reason: `Lançamento de ${entry.amount} liquidado.${settlementAuditSuffix(settlementInfo)}${warnings.map((w) => ` ${w.reason}`).join('')}`,
+      reason: `Lançamento de ${toBRLDisplay(entry.amount)} liquidado.${settlementAuditSuffix(settlementInfo)}${warnings.map((w) => ` ${w.reason}`).join('')}`,
     },
     transaction
   );

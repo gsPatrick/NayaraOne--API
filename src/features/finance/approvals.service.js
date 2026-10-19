@@ -393,6 +393,7 @@ async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, rea
     transaction,
   });
   for (const request of approvedRequests) {
+    const beforeJson = request.toJSON();
     request.status = 'STALE';
     request.updatedBy = actorUserId || null;
     await request.save({ transaction });
@@ -404,7 +405,8 @@ async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, rea
         action: 'finance.approval_request.stale',
         entityType: 'ApprovalRequest',
         entityId: request.id,
-        afterJson: { status: 'STALE' },
+        beforeJson,
+        afterJson: request.toJSON(),
         reason,
       },
       transaction

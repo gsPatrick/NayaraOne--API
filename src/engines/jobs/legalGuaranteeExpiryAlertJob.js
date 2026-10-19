@@ -1,6 +1,6 @@
 'use strict';
 
-const { sequelize, Group, Company, Guarantee, LegalCase, Notification } = require('../../models');
+const { sequelize, Group, Company, Guarantee, LegalCase, Notification, Contract } = require('../../models');
 const { publishGuaranteeExpiring } = require('../../features/legal/legalEvents.service');
 const { getSetting } = require('../../features/settings/settings.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
@@ -22,6 +22,10 @@ const { registrarAuditoria } = require('../audit/auditLog.service');
  * com mais antecedência que caução). Fail-safe: getSetting nunca lança, cai no default se ausente.
  */
 const DEFAULT_ALERT_DAYS = 30;
+// M45-RECONF varredura: a notificação mostrava o tipo cru ("DEPOSIT") e o UUID do contrato.
+const GUARANTEE_TYPE_LABELS = {
+  GUARANTOR: 'Fiador', INSURANCE: 'Seguro-fiança', DEPOSIT: 'Caução', CAPITALIZATION_TITLE: 'Título de capitalização', OTHER: 'Outra garantia',
+};
 
 async function processGuaranteesInTransaction(transaction, nowOverride) {
   const now = nowOverride || new Date();
@@ -46,6 +50,9 @@ async function processGuaranteesInTransaction(transaction, nowOverride) {
     if (daysUntilExpiry > tenantAlertDays) continue;
 
     await publishGuaranteeExpiring(guarantee, daysUntilExpiry, transaction);
+    const contractRow = guarantee.contractId ? await Contract.findByPk(guarantee.contractId, { attributes: ['contractNumber'], transaction }) : null;
+    const contractLabel = contractRow && contractRow.contractNumber ? contractRow.contractNumber : 'sem número';
+    const typeLabel = GUARANTEE_TYPE_LABELS[guarantee.guaranteeType] || 'Garantia';
 
     const legalCase = await LegalCase.findOne({ where: { contractId: guarantee.contractId }, transaction });
     if (legalCase && legalCase.responsibleUserId) {
@@ -58,8 +65,8 @@ async function processGuaranteesInTransaction(transaction, nowOverride) {
           title: daysUntilExpiry < 0 ? 'Garantia VENCIDA' : 'Garantia próxima do vencimento',
           body:
             daysUntilExpiry < 0
-              ? `Garantia "${guarantee.guaranteeType}" do contrato ${guarantee.contractId} está vencida desde ${endsAt.toLocaleDateString('pt-BR')}.`
-              : `Garantia "${guarantee.guaranteeType}" do contrato ${guarantee.contractId} vence em ${endsAt.toLocaleDateString('pt-BR')} (${daysUntilExpiry} dia(s)).`,
+              ? `Garantia "${typeLabel}" do contrato ${contractLabel} está vencida desde ${endsAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`
+              : `Garantia "${typeLabel}" do contrato ${contractLabel} vence em ${endsAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} (${daysUntilExpiry} dia(s)).`,
           createdBy: null,
           updatedBy: null,
         },
@@ -75,8 +82,9 @@ async function processGuaranteesInTransaction(transaction, nowOverride) {
         action: 'legal.guarantee.job_expiry_alert',
         entityType: 'Guarantee',
         entityId: guarantee.id,
-        afterJson: { endsAt: guarantee.endsAt, daysUntilExpiry },
-        reason: `Job automático de garantias alertou vencimento (${daysUntilExpiry} dia(s)) da garantia "${guarantee.guaranteeType}".`,
+        beforeJson: { status: guarantee.status, endsAt: guarantee.endsAt, alertado: false },
+        afterJson: { status: guarantee.status, endsAt: guarantee.endsAt, daysUntilExpiry, alertado: true },
+        reason: `Job automático de garantias alertou vencimento (${daysUntilExpiry} dia(s)) da garantia "${typeLabel}" do contrato ${contractLabel}.`,
       },
       transaction
     );

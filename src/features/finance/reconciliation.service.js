@@ -1,5 +1,7 @@
 'use strict';
 
+const { formatMoneyBR } = require('../../utils/formatBR');
+
 const { randomUUID } = require('node:crypto');
 const { Op } = require('sequelize');
 
@@ -82,8 +84,9 @@ async function matchReconciliation(payload, actorUserId, transaction) {
       action: 'finance.reconciliation.match',
       entityType: 'Reconciliation',
       entityId: reconciliation.id,
+      beforeJson: { financialEntryId, bankTransactionId, conciliado: false },
       afterJson: reconciliation.toJSON(),
-      reason: `Lançamento financeiro conciliado com transação de extrato (valor ${entry.amount}).`,
+      reason: `Lançamento financeiro conciliado com transação de extrato (valor ${formatMoneyBR(entry.amount)}).`,
     },
     transaction
   );
@@ -213,6 +216,7 @@ async function matchReconciliationGroup(payload, actorUserId, transaction) {
       action: 'finance.reconciliation.match_group',
       entityType: 'Reconciliation',
       entityId: matchGroupId,
+      beforeJson: { financialEntryIds: entryIds, bankTransactionIds: txIds, conciliado: false },
       afterJson: {
         matchGroupId,
         financialEntryIds: entryIds,

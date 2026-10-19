@@ -282,6 +282,25 @@ async function clearManualReview(entityId, actorUserId, transaction, reviewNote)
   if (!entry.requiresManualReview) {
     throw AppError.conflict('Este lançamento não está retido para revisão manual.', 'FINANCE_MANUAL_REVIEW_NOT_PENDING');
   }
+  // Revisão Marco 7 (19/10/2026, B2): o payable de um recebimento de Compras com divergência
+  // (excedente/preço) em aberto nasce retido. Só a decisão da divergência, em Compras, libera —
+  // a liberação manual do Financeiro não pode furar a retenção enquanto a divergência existir.
+  const [openProcurementDiscrepancy] = await FinancialEntry.sequelize.query(
+    `SELECT 1 FROM procurement.goods_receipts gr
+       JOIN procurement.goods_receipt_items gi ON gi.goods_receipt_id = gr.id
+       JOIN procurement.receipt_discrepancies d ON d.goods_receipt_item_id = gi.id
+      WHERE gr.financial_entry_id = :entryId
+        AND d.status = 'OPEN'
+        AND d.discrepancy_type IN ('OVER_RECEIPT', 'PRICE_MISMATCH')
+      LIMIT 1`,
+    { replacements: { entryId: entry.id }, transaction, type: FinancialEntry.sequelize.QueryTypes.SELECT }
+  );
+  if (openProcurementDiscrepancy) {
+    throw AppError.conflict(
+      'Este pagamento está retido por uma divergência de recebimento em aberto em Compras — a liberação acontece quando a divergência for decidida.',
+      'PROCUREMENT_RECEIPT_DISCREPANCY_OPEN'
+    );
+  }
 
   const beforeJson = entry.toJSON();
   entry.requiresManualReview = false;

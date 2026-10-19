@@ -160,6 +160,7 @@ async function addClauseToTemplate(templateId, payload, actorUserId, transaction
       action: 'legal.contract_template.add_clause',
       entityType: 'ContractTemplateClause',
       entityId: link.id,
+      beforeJson: { contractTemplateId: template.id, contractClauseId: clause.id, situacao: 'cláusula não vinculada ao modelo' },
       afterJson: link.toJSON(),
       reason: `Cláusula "${clause.code}" v${clause.versionNumber} vinculada ao modelo ${template.id} na posição ${sortOrder}.`,
     },
@@ -204,6 +205,7 @@ async function removeClauseFromTemplate(templateId, contractClauseId, actorUserI
       entityType: 'ContractTemplateClause',
       entityId: beforeJson.id,
       beforeJson,
+      afterJson: { contractTemplateId: template.id, contractClauseId, situacao: 'cláusula desvinculada do modelo' },
       reason: `Cláusula ${contractClauseId} desvinculada do modelo ${template.id}.`,
     },
     transaction

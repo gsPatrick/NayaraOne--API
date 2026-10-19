@@ -59,6 +59,7 @@ async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
       action: 'finance.entries.export',
       entityType: 'FinancialEntryExport',
       entityId: null,
+      beforeJson: { filters: where, situacao: 'exportação somente leitura — nenhum lançamento alterado' },
       afterJson: { filters: where, rows: rows.length, limit: maxRows, sha256 },
       reason: `Exportação financeira de ${rows.length} lançamento(s) (limite ${maxRows}, MFA recente).`,
     },

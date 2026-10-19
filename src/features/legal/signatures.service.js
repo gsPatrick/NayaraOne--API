@@ -419,6 +419,7 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
     { transaction }
   );
 
+  const beforeSignedDoc = { signedDocumentFileId: contractVersion.signedDocumentFileId || null };
   contractVersion.signedDocumentFileId = file.id;
   contractVersion.updatedBy = null;
   await contractVersion.save({ transaction });
@@ -431,7 +432,8 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
       action: 'legal.contract_version.signed_document_downloaded',
       entityType: 'ContractVersion',
       entityId: contractVersion.id,
-      afterJson: { fileId: file.id, storageKey, sizeBytes: downloaded.buffer.length, checksumSha256 },
+      beforeJson: beforeSignedDoc,
+      afterJson: { signedDocumentFileId: file.id, fileId: file.id, storageKey, sizeBytes: downloaded.buffer.length, checksumSha256 },
       reason: `Documento assinado do contrato ${contract.contractNumber || contract.id} baixado do provedor e salvo permanentemente (envelope ${providerEnvelopeId} fechado).`,
     },
     transaction

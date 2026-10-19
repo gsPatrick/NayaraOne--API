@@ -370,7 +370,8 @@ async function attachInspectionItemMedia(itemId, payload, actorUserId, transacti
       action: 'legal.inspection_item.attach_media',
       entityType: 'InspectionItem',
       entityId: item.id,
-      afterJson: { fileLinkId: link.id, fileId, mediaType: normalizedMediaType },
+      beforeJson: { itemName: item.itemName, fileId, vinculado: false },
+      afterJson: { itemName: item.itemName, fileLinkId: link.id, fileId, mediaType: normalizedMediaType, vinculado: true },
       reason: `${normalizedMediaType === 'VIDEO' ? 'Vídeo' : 'Foto'} anexado ao item "${item.itemName}" da vistoria ${item.inspectionId}.`,
     },
     transaction
@@ -448,7 +449,8 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
       action: 'legal.inspection.sign',
       entityType: 'Inspection',
       entityId: inspection.id,
-      afterJson: { signatureId: signature.id, partyRole: normalizedRole, signatureHash },
+      beforeJson: { status: inspection.status, partyRole: normalizedRole, assinada: false },
+      afterJson: { status: inspection.status, signatureId: signature.id, partyRole: normalizedRole, signatureHash, signedAt, assinada: true },
       reason: `Vistoria ${inspection.id} assinada digitalmente por ${normalizedRole}.`,
     },
     transaction
@@ -673,6 +675,7 @@ async function createInspectionRevision(inspectionId, payload, actorUserId, tran
       action: 'legal.inspection.revision',
       entityType: 'Inspection',
       entityId: revision.id,
+      beforeJson: { originalInspectionId: original.id, originalStatus: original.status, revisao: 'não existia' },
       afterJson: { revisionOfInspectionId: original.id, reason, copiedItems: items.length },
       reason: `Revisão da vistoria assinada ${original.id}: ${reason}`,
     },

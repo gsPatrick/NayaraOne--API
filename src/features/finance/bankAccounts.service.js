@@ -229,6 +229,7 @@ async function deleteBankAccount(id, actorUserId, transaction) {
       entityType: 'BankAccount',
       entityId: bankAccount.id,
       beforeJson,
+      afterJson: { ...beforeJson, deletedAt: new Date(), deletedBy: actorUserId || null, situacao: 'excluído (exclusão lógica — o registro continua no banco)' },
       reason: 'Conta bancária excluída.',
     },
     transaction
