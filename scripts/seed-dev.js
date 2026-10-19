@@ -42,7 +42,7 @@ const ADMIN_PERMISSIONS = [
   'finance:settle', 'finance:approve', 'finance:reconcile', 'finance:bankAccounts',
   // Marco 5 — Contratos/Locação/Jurídico (nomes conferidos em src/features/legal/legal.routes.js)
   'legal:read', 'legal:create', 'legal:update',
-  'legal:sign', 'legal:approve', 'legal:deliverKeys',
+  'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
   // Marco 6 — Obras e Pós-obra (nomes conferidos em src/features/construction/construction.routes.js)
   'construction:read', 'construction:create', 'construction:update', 'construction:approve', 'construction:delete',
   // Atividades (trilha de auditoria — nome conferido em src/features/audit/audit.routes.js)

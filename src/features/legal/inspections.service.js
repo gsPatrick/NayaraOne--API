@@ -114,8 +114,23 @@ async function getInspection(id, transaction) {
   return inspection;
 }
 
-async function completeInspection(id, actorUserId, transaction) {
+// Frente 5 — versão (concorrência otimista): Inspection tem `lockVersion` (version do Sequelize:
+// UPDATE ... WHERE lock_version = N). Além disso o cliente pode mandar a versão que ele VIU
+// (`expectedLockVersion`); se a vistoria mudou desde então, 409 em vez de concluir por cima.
+function assertInspectionVersion(inspection, expectedLockVersion) {
+  if (expectedLockVersion === undefined || expectedLockVersion === null || expectedLockVersion === '') return;
+  if (Number(expectedLockVersion) !== Number(inspection.lockVersion)) {
+    throw AppError.conflict(
+      `A vistoria foi alterada por outra pessoa (versão atual ${inspection.lockVersion}, sua versão ${expectedLockVersion}). Recarregue antes de continuar.`,
+      'LEGAL_INSPECTION_VERSION_CONFLICT',
+      { currentLockVersion: inspection.lockVersion }
+    );
+  }
+}
+
+async function completeInspection(id, actorUserId, transaction, options = {}) {
   const inspection = await getInspection(id, transaction);
+  assertInspectionVersion(inspection, options.expectedLockVersion);
   if (inspection.status === 'COMPLETED') {
     throw AppError.conflict('Vistoria já está concluída.', 'LEGAL_INSPECTION_ALREADY_COMPLETED');
   }

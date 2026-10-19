@@ -357,7 +357,9 @@ test('billing: closeout sem pendências avança o contrato ACTIVE até CLOSED', 
   });
 });
 
-test('billing: closeout financeiro OK mas reporta encerramento jurídico bloqueado por garantia ACTIVE pendente', async () => {
+// Frente 5: gate ÚNICO de encerramento — garantia ACTIVE agora bloqueia o closeout inteiro
+// (antes o financeiro concluía e só o jurídico ficava bloqueado: dois gates diferentes).
+test('billing: closeout bloqueado por garantia ACTIVE pendente (gate único de encerramento)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const guaranteesService = require('../src/features/legal/guarantees.service');
     const contract = await createLeaseContract(transaction);
@@ -369,10 +371,11 @@ test('billing: closeout financeiro OK mas reporta encerramento jurídico bloquea
       transaction
     );
 
-    const result = await closeoutService.closeoutContract(contract.id, tenant.userId, transaction);
-    assert.equal(result.status, 'COMPLETED');
-    assert.equal(result.contractLifecycle.blocked, true);
-    assert.equal(result.contractLifecycle.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+    await assert.rejects(closeoutService.closeoutContract(contract.id, tenant.userId, transaction), (err) => {
+      assert.equal(err.code, 'CLOSEOUT_BLOCKED');
+      assert.ok(err.details.reasons.some((r) => r.type === 'ACTIVE_GUARANTEE'));
+      return true;
+    });
 
     const { Contract } = require('../src/models');
     const reloaded = await Contract.findByPk(contract.id, { transaction });

@@ -1,15 +1,59 @@
 'use strict';
 
-const { KeyDelivery, Inspection, InspectionSignature, Guarantee } = require('../../models');
+const crypto = require('crypto');
+const { KeyDelivery, Inspection, InspectionSignature, Guarantee, ContractParty, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishKeyDeliveryReleased, publishKeysDelivered } = require('./legalEvents.service');
-const { getContract } = require('./contracts.service');
+const { getContract, isSaleLikeContractType } = require('./contracts.service');
 
 // Caderno Anexo I "3. Tipos de contrato": termos específicos de entrega — KEY_DELIVERY (entrega
 // de chaves padrão) e USED_PROPERTY_DELIVERY (entrega de imóvel usado, termo específico
 // deixando clara a natureza/estado do imóvel — ver "7. Checklist documental").
 const TERM_TYPES = ['KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
+
+// Frente 5 (conferência 18/10/2026 item 11 — bug real): a política de fotos ("photosRequired") e
+// o termo vinham do PAYLOAD — o cliente decidia se foto era obrigatória e nada do termo era
+// gerado pelo servidor. Agora:
+//  - POLÍTICA: decidida aqui, pelo tipo de termo e de contrato. Entrega de imóvel usado e
+//    entrega de imóvel vendido (casa nova — checklist "Fotos" do Caderno §7) exigem fotos;
+//    locação já tem a vistoria de entrada assinada com mídia e não exige foto extra.
+//  - TERMO: texto gerado pelo servidor a partir de um modelo versionado, com hash SHA-256 gravado.
+//  - Campos de política/termo enviados pelo cliente são REJEITADOS (400), não ignorados.
+const KEY_DELIVERY_TERM_VERSION = 'KD-TERM-v1';
+const CLIENT_FORBIDDEN_FIELDS = ['photosRequired', 'photoPolicy', 'termText', 'termVersion', 'termHash', 'policy'];
+
+function resolveKeyDeliveryPhotoPolicy(contract, keyDelivery) {
+  if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') return { code: 'REQUIRED_USED_PROPERTY', photosRequired: true };
+  if (isSaleLikeContractType(contract.contractType)) return { code: 'REQUIRED_SALE_DELIVERY', photosRequired: true };
+  return { code: 'NOT_REQUIRED_LEASE_CHECKIN_SIGNED', photosRequired: false };
+}
+
+function buildKeyDeliveryTerm({ contract, keyDelivery, keysCount, keysIdentification, signerName, recipientName, checkIn, policy, signedAt }) {
+  const title = keyDelivery.termType === 'USED_PROPERTY_DELIVERY'
+    ? 'TERMO DE ENTREGA DE IMÓVEL USADO E CHAVES'
+    : 'TERMO DE ENTREGA DE CHAVES';
+  const lines = [
+    `${title} (${KEY_DELIVERY_TERM_VERSION})`,
+    `Contrato: ${contract.contractNumber || contract.id} (${contract.contractType})`,
+    `Imóvel: ${contract.propertyId || '-'}`,
+    `Recebedor: ${recipientName}`,
+    `Quantidade de chaves/controles: ${keysCount}`,
+    `Identificação: ${keysIdentification || 'não informada'}`,
+    `Vistoria de entrada: ${checkIn.id} (concluída e assinada por locador e locatário)`,
+    `Política de fotos aplicada: ${policy.code}`,
+  ];
+  if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') {
+    lines.push('O imóvel é entregue USADO, no estado descrito na vistoria acima, que integra este termo.');
+  }
+  lines.push(`Assinado por: ${signerName} em ${signedAt.toISOString()}`);
+  return lines.join('\n');
+}
+
+async function personName(personId, transaction) {
+  const person = await Person.findByPk(personId, { transaction });
+  return person ? (person.legalName || person.tradeName || person.id) : personId;
+}
 
 async function createKeyDelivery(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, inspectionId, deliveredToPersonId, notes, termType } = payload;
@@ -204,7 +248,17 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   // chaves/controles", "Fotos obrigatórias quando política exigir", "Assinatura do termo de
   // entrega." Fail closed: exige quantidade E assinatura do termo (pessoa que coletou/assinou)
   // sempre — fotos só quando `photosRequired` (política) estiver marcada.
-  const { keysCount, keysIdentification, photosRequired, photosFileIds, termSignedByPersonId } = payload || {};
+  const body = payload || {};
+  const forbidden = CLIENT_FORBIDDEN_FIELDS.filter((f) => body[f] !== undefined);
+  if (forbidden.length > 0) {
+    throw AppError.badRequest(
+      `Política de fotos e termo de entrega são definidos pelo servidor — não envie: ${forbidden.join(', ')}.`,
+      'LEGAL_KEY_DELIVERY_SERVER_POLICY'
+    );
+  }
+  const { keysCount, keysIdentification, photosFileIds, termSignedByPersonId } = body;
+  const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
+  const photosRequired = policy.photosRequired;
   if (keysCount === undefined || keysCount === null || Number(keysCount) <= 0) {
     throw AppError.badRequest(
       '"keysCount" (quantidade de chaves/controles entregues) é obrigatório e deve ser maior que zero.',
@@ -224,6 +278,27 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
     );
   }
 
+  // Quem assina o termo precisa ser parte do contrato ou o próprio recebedor das chaves.
+  const parties = await ContractParty.findAll({ where: { contractId: contract.id }, transaction });
+  if (termSignedByPersonId !== keyDelivery.deliveredToPersonId && !parties.some((p) => p.personId === termSignedByPersonId)) {
+    throw AppError.conflict(
+      'O termo de entrega precisa ser assinado pelo recebedor das chaves ou por uma parte do contrato.',
+      'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
+    );
+  }
+  const signedAt = new Date();
+  const termText = buildKeyDeliveryTerm({
+    contract,
+    keyDelivery,
+    keysCount: Number(keysCount),
+    keysIdentification,
+    signerName: await personName(termSignedByPersonId, transaction),
+    recipientName: await personName(keyDelivery.deliveredToPersonId, transaction),
+    checkIn,
+    policy,
+    signedAt,
+  });
+
   const beforeJson = keyDelivery.toJSON();
   keyDelivery.status = 'RELEASED';
   keyDelivery.deliveredAt = new Date();
@@ -236,7 +311,11 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   keyDelivery.photosRequired = Boolean(photosRequired);
   keyDelivery.photosFileIds = Array.isArray(photosFileIds) ? photosFileIds : null;
   keyDelivery.termSignedByPersonId = termSignedByPersonId;
-  keyDelivery.termSignedAt = new Date();
+  keyDelivery.termSignedAt = signedAt;
+  keyDelivery.termText = termText;
+  keyDelivery.termVersion = KEY_DELIVERY_TERM_VERSION;
+  keyDelivery.termHash = crypto.createHash('sha256').update(termText, 'utf8').digest('hex');
+  keyDelivery.photoPolicy = policy.code;
   await keyDelivery.save({ transaction });
 
   await publishKeyDeliveryReleased(keyDelivery, transaction);
@@ -260,4 +339,11 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
   return keyDelivery;
 }
 
-module.exports = { createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery };
+module.exports = {
+  createKeyDelivery,
+  listKeyDeliveries,
+  getKeyDelivery,
+  releaseKeyDelivery,
+  resolveKeyDeliveryPhotoPolicy,
+  KEY_DELIVERY_TERM_VERSION,
+};

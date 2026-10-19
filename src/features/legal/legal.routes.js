@@ -46,6 +46,7 @@ legalRouter.patch('/legal/contracts/:id/correct', requirePermission('legal:updat
 legalRouter.post('/legal/contracts/:id/requirements/generate', requirePermission('legal:create'), legalController.generateContractRequirements);
 legalRouter.get('/legal/contracts/:id/requirements', requirePermission('legal:read'), legalController.listContractRequirements);
 legalRouter.patch('/legal/requirements/:requirementId', requirePermission('legal:update'), legalController.satisfyContractRequirement);
+legalRouter.post('/legal/requirements/:requirementId/waive', requirePermission('legal:waive'), legalController.waiveContractRequirement);
 
 // Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). Migration
 // 20260101000292 já aplicada — módulo funcional ponta a ponta.

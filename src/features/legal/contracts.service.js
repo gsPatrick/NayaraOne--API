@@ -4,6 +4,7 @@ const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, 
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged, publishContractActivated, publishContractTerminated } = require('./legalEvents.service');
+const { assertContractClosureAllowed, CLOSURE_TARGET_STATUSES } = require('./contractClosureGate');
 
 // M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
 // empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
@@ -441,6 +442,11 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   if (targetStatus === 'ACTIVE') {
     await assertActivationGate(contract, transaction);
   }
+  // Frente 5: a transição genérica também encerra (ACTIVE -> TERMINATED, TERMINATED -> CLOSED)
+  // e antes passava sem gate nenhum. Mesmo gate único dos caminhos dedicados.
+  if (CLOSURE_TARGET_STATUSES.includes(targetStatus)) {
+    await assertContractClosureAllowed(contract.id, transaction);
+  }
 
   const beforeJson = contract.toJSON();
   contract.status = targetStatus;
@@ -505,6 +511,10 @@ async function applyGatedTransition(contract, targetStatus, actorUserId, reason,
       `Transição de status inválida: "${fromStatus}" -> "${targetStatus}". Transições permitidas a partir de "${fromStatus}": ${allowedTargets.join(', ') || '(nenhuma)'}.`,
       'LEGAL_CONTRACT_INVALID_TRANSITION'
     );
+  }
+  // Gate único de encerramento (Frente 5) — terminate E close passam por aqui.
+  if (CLOSURE_TARGET_STATUSES.includes(targetStatus)) {
+    await assertContractClosureAllowed(contract.id, transaction);
   }
 
   const beforeJson = contract.toJSON();
@@ -573,27 +583,8 @@ async function terminateContract(contractId, reason, actorUserId, transaction) {
   await assertReason(reason);
   const contract = await loadContractForTransition(contractId, transaction);
 
-  const openGuarantees = await Guarantee.findAll({ where: { contractId: contract.id, status: 'ACTIVE' }, transaction });
-  if (openGuarantees.length > 0) {
-    throw AppError.conflict(
-      'Não é possível ENCERRAR o contrato: existem garantias com status "ACTIVE" (não devolvidas/liberadas) — libere ou cancele todas as garantias antes do encerramento.',
-      'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING'
-    );
-  }
-
-  const { LegalCase } = require('../../models');
-  const openCases = await LegalCase.findAll({
-    where: { contractId: contract.id },
-    transaction,
-  });
-  const stillOpen = openCases.filter((c) => c.status !== 'CLOSED');
-  if (stillOpen.length > 0) {
-    throw AppError.conflict(
-      'Não é possível ENCERRAR o contrato: existe(m) processo(s) jurídico(s) vinculado(s) que ainda não está(ão) com status "CLOSED".',
-      'LEGAL_CONTRACT_TERMINATION_LEGAL_CASE_OPEN'
-    );
-  }
-
+  // Pendências (garantia, processo, cobrança, utilidades, caução, prazos, notificações) são
+  // checadas pelo gate único dentro de applyGatedTransition (contractClosureGate.js).
   return applyGatedTransition(contract, 'TERMINATED', actorUserId, reason, 'legal.contract.terminate', transaction);
 }
 

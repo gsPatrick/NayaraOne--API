@@ -294,7 +294,8 @@ test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pe
     await assert.rejects(
       () => contractsService.terminateContract(contract.id, 'Tentativa sem liberar garantia.', tenant.userId, transaction),
       (err) => {
-        assert.equal(err.code, 'LEGAL_CONTRACT_TERMINATION_GUARANTEE_PENDING');
+        assert.equal(err.code, 'LEGAL_CONTRACT_CLOSURE_BLOCKED'); // Frente 5: gate único
+        assert.ok(err.details.pendencies.some((p) => p.type === 'ACTIVE_GUARANTEE'));
         return true;
       }
     );

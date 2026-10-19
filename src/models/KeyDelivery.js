@@ -110,6 +110,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'term_signed_by_person_id',
       },
+      // Frente 5 (migration 20260101000460): termo e política gerados pelo SERVIDOR.
+      termText: { type: DataTypes.TEXT, allowNull: true, field: 'term_text' },
+      termVersion: { type: DataTypes.STRING(32), allowNull: true, field: 'term_version' },
+      termHash: { type: DataTypes.STRING(64), allowNull: true, field: 'term_hash' },
+      photoPolicy: { type: DataTypes.STRING(64), allowNull: true, field: 'photo_policy' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

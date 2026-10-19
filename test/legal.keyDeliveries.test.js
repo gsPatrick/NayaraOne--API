@@ -194,20 +194,30 @@ test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Cha
   });
 });
 
-test('releaseKeyDelivery exige fotos quando a política marca photosRequired', async () => {
+// Frente 5: a política de fotos é do SERVIDOR (imóvel usado exige fotos); o cliente não manda
+// mais "photosRequired" — se mandar, 400 LEGAL_KEY_DELIVERY_SERVER_POLICY.
+test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóvel usado)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
     const keyDelivery = await keyDeliveriesService.createKeyDelivery(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id, termType: 'USED_PROPERTY_DELIVERY' },
       tenant.userId,
       transaction
+    );
+
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: false }, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'LEGAL_KEY_DELIVERY_SERVER_POLICY');
+        return true;
+      }
     );
 
     await assert.rejects(
       () =>
         keyDeliveriesService.releaseKeyDelivery(
           keyDelivery.id,
-          { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: true },
+          { keysCount: 1, termSignedByPersonId: tenantPerson.id },
           tenant.userId,
           transaction
         ),
@@ -219,10 +229,12 @@ test('releaseKeyDelivery exige fotos quando a política marca photosRequired', a
 
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: true, photosFileIds: ['11111111-1111-1111-1111-111111111111'] },
+      { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosFileIds: ['11111111-1111-1111-1111-111111111111'] },
       tenant.userId,
       transaction
     );
     assert.equal(released.status, 'RELEASED');
+    assert.equal(released.photosRequired, true);
+    assert.equal(released.photoPolicy, 'REQUIRED_USED_PROPERTY');
   });
 });

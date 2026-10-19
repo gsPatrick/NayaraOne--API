@@ -36,7 +36,7 @@ before(async () => {
     group_id: tenant.groupId,
     company_id: tenant.companyId,
     roles: ['admin'],
-    permissions: ['legal:create', 'legal:read', 'legal:update', 'legal:approve'],
+    permissions: ['legal:create', 'legal:read', 'legal:update', 'legal:approve', 'legal:waive'],
   });
 
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;

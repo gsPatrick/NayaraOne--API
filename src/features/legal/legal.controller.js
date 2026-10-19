@@ -99,8 +99,25 @@ const listContractRequirements = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => requirementsService.listRequirements(req.params.id, t));
   return success(res, { data: items });
 });
+// Frente 5: DISPENSA (WAIVED) exige permissão própria legal:waive — antes bastava legal:update
+// no PATCH com "waivedReason". O PATCH continua servindo para SATISFIED (documento anexado); se
+// vier "waivedReason" sem legal:waive -> 403. Rota dedicada: POST /legal/requirements/:id/waive.
 const satisfyContractRequirement = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => requirementsService.satisfyRequirement(req.params.requirementId, req.body, req.auth.userId, t));
+  const body = req.body || {};
+  if (body.waivedReason !== undefined && body.waivedReason !== null && body.waivedReason !== '') {
+    if (!(req.auth.permissions || []).includes('legal:waive')) {
+      throw AppError.forbidden('Permissão ausente: legal:waive.', 'PERMISSION_DENIED', { required: 'legal:waive' });
+    }
+  }
+  const item = await req.withTenantTransaction((t) => requirementsService.satisfyRequirement(req.params.requirementId, body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const waiveContractRequirement = catchAsync(async (req, res) => {
+  const reason = req.body && typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason) throw AppError.badRequest('"reason" é obrigatório para dispensar um requisito.', 'LEGAL_REQUIREMENT_VALIDATION');
+  const item = await req.withTenantTransaction((t) =>
+    requirementsService.satisfyRequirement(req.params.requirementId, { waivedReason: reason }, req.auth.userId, t)
+  );
   return success(res, { data: item });
 });
 
@@ -530,7 +547,7 @@ const getInspection = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 const completeInspection = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => inspectionsService.completeInspection(req.params.id, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => inspectionsService.completeInspection(req.params.id, req.auth.userId, t, { expectedLockVersion: req.body ? req.body.lockVersion : undefined }));
   return success(res, { data: item });
 });
 const addInspectionItem = catchAsync(async (req, res) => {
@@ -692,7 +709,7 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
 module.exports = {
   createContract, listContracts, getContract, transitionContract,
   suspendContract, reactivateContract, terminateContract, closeContract,
-  generateContractRequirements, listContractRequirements, satisfyContractRequirement,
+  generateContractRequirements, listContractRequirements, satisfyContractRequirement, waiveContractRequirement,
   createNotice, listNotices, getNotice, submitNoticeForReview, approveNotice, rejectNotice, sendNotice, registerNoticeDeliveryEvidence,
   addContractParty, listContractParties, getContractTimeline, correctContractData,
   createContractVersion, listContractVersions, generateContractVersionPdf,

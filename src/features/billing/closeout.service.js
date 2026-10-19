@@ -1,65 +1,21 @@
 'use strict';
 
-const { Contract, BillingSchedule, CollectionCase, OwnershipTransferTask, UtilityObligation } = require('../../models');
-const { Op } = require('sequelize');
+const { Contract } = require('../../models');
+const { collectContractClosurePendencies } = require('../legal/contractClosureGate');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCloseoutBlocked, publishCloseoutCompleted } = require('./billingEvents.service');
 const contractsService = require('../legal/contracts.service');
 
 /**
- * checkCloseoutEligibility — verifica se um contrato de locação pode ser encerrado (closeout).
- * Pendências CRÍTICAS que bloqueiam (Caderno M07: "verifica obrigação crítica pendente"):
- *   - cobrança em aberto: qualquer BillingSchedule OPEN/PARTIALLY_PAID, ou CollectionCase não
- *     RESOLVED, do contrato;
- *   - transferência de utilidade não concluída: qualquer OwnershipTransferTask PENDING de
- *     qualquer UtilityObligation do contrato.
- * Retorna a lista de motivos de bloqueio (vazia = sem pendências).
+ * checkCloseoutEligibility — Frente 5: delega ao GATE ÚNICO de encerramento
+ * (legal/contractClosureGate.js). Antes este arquivo tinha sua própria lista (só cobrança e
+ * utilidades) e o jurídico outra (só garantia e processo) — agora é uma lista só para todos os
+ * caminhos: cobrança, caso de cobrança, utilidades, garantia, saldo de caução, processos, prazos
+ * e notificações. Retorna a lista de pendências (vazia = pode encerrar).
  */
 async function checkCloseoutEligibility(contractId, transaction) {
-  const reasons = [];
-
-  const openBillingSchedules = await BillingSchedule.findAll({
-    where: { contractId, status: { [Op.in]: ['OPEN', 'PARTIALLY_PAID'] } },
-    transaction,
-  });
-  if (openBillingSchedules.length > 0) {
-    reasons.push({
-      type: 'OPEN_BILLING',
-      detail: `${openBillingSchedules.length} competência(s) de cobrança ainda em aberto.`,
-      billingScheduleIds: openBillingSchedules.map((b) => b.id),
-    });
-  }
-
-  const openCollectionCases = await CollectionCase.findAll({
-    where: { contractId, status: { [Op.ne]: 'RESOLVED' } },
-    transaction,
-  });
-  if (openCollectionCases.length > 0) {
-    reasons.push({
-      type: 'OPEN_COLLECTION_CASE',
-      detail: `${openCollectionCases.length} caso(s) de cobrança ainda não resolvido(s).`,
-      collectionCaseIds: openCollectionCases.map((c) => c.id),
-    });
-  }
-
-  const utilityObligations = await UtilityObligation.findAll({ where: { contractId }, transaction });
-  const obligationIds = utilityObligations.map((o) => o.id);
-  if (obligationIds.length > 0) {
-    const pendingTransfers = await OwnershipTransferTask.findAll({
-      where: { utilityObligationId: { [Op.in]: obligationIds }, status: 'PENDING' },
-      transaction,
-    });
-    if (pendingTransfers.length > 0) {
-      reasons.push({
-        type: 'PENDING_UTILITY_TRANSFER',
-        detail: `${pendingTransfers.length} transferência(s) de titularidade de utilidade não concluída(s).`,
-        ownershipTransferTaskIds: pendingTransfers.map((t) => t.id),
-      });
-    }
-  }
-
-  return reasons;
+  return collectContractClosurePendencies(contractId, transaction);
 }
 
 /**
@@ -91,7 +47,7 @@ async function closeoutContract(contractId, actorUserId, transaction) {
       transaction
     );
     throw AppError.conflict(
-      'Não é possível encerrar a locação: há pendências críticas (cobrança em aberto e/ou transferência de utilidade não concluída).',
+      `Não é possível encerrar a locação: há pendências críticas (${reasons.map((r) => r.type).join(', ')}).`,
       'CLOSEOUT_BLOCKED',
       { reasons }
     );
