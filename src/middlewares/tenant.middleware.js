@@ -2,6 +2,7 @@
 
 const AppError = require('../utils/AppError');
 const { sequelize } = require('../config/database');
+const fileAttachGuard = require('./fileAttachGuard.middleware');
 
 /**
  * Middleware de contexto de tenant/RLS.
@@ -55,7 +56,8 @@ function tenantMiddleware(req, res, next) {
     });
   };
 
-  return next();
+  // Vínculo de arquivo: o ator só anexa arquivo que já pode ler (ver fileAttachGuard).
+  return fileAttachGuard(req, res, next);
 }
 
 module.exports = tenantMiddleware;

@@ -6,7 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const diskStorage = require('../../utils/diskStorage');
 const { resolveAntivirusAdapter } = require('../people/adapters/resolveDocumentAdapters');
-const { encryptFileBuffer, decryptFileBuffer } = require('../../utils/fileCrypto');
+const { encryptFileBuffer, decryptFileBuffer, isEncryptedBuffer } = require('../../utils/fileCrypto');
 
 // 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -123,6 +123,7 @@ async function uploadFile(payload, actorUserId, transaction) {
       mimeType: mimeType || 'application/octet-stream',
       sizeBytes: buffer.length,
       checksumSha256,
+      encryptedAtRest: true,
       uploadedByUserId: actorUserId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -162,28 +163,76 @@ async function uploadFile(payload, actorUserId, transaction) {
  * antigos pro disco aqui (efeito colateral de leitura), então o fallback fica permanente até
  * uma eventual migração de dados que mova esse binário legado pro disco.
  */
-async function getFileContent(id, transaction) {
-  const metadata = await File.findByPk(id, { transaction });
+/**
+ * Integridade na leitura (I4, revisão independente de 18/10/2026): antes, qualquer buffer sem o
+ * marcador de cifra era tratado como "legado" e servido sem verificação — bastava remover o
+ * marcador para a API entregar bytes adulterados. Agora:
+ *  - arquivo gravado já cifrado (`encryptedAtRest = true`, todos os uploads a partir da
+ *    migration 20260101000395) precisa vir com o marcador e decifrar com a tag de autenticação;
+ *  - TODO arquivo com `checksumSha256` (todos os uploads reais — o checksum é sobre o conteúdo
+ *    original) tem o conteúdo servido conferido contra o checksum gravado, inclusive os legados
+ *    em texto puro e os do BLOB `local-db/`.
+ * Divergência = 409 FILE_INTEGRITY_VIOLATION e registro de auditoria (gravado fora da transação
+ * da requisição, para não ser desfeito junto com o erro). Arquivo legado sem checksum só existe
+ * como fixture de teste gravada direto no banco; esse continua servido como está.
+ */
+async function rejectTamperedFile(metadata, actorUserId, detail) {
+  await registrarAuditoria({
+    groupId: metadata.groupId,
+    companyId: metadata.companyId,
+    actorUserId: actorUserId || null,
+    action: 'files.integrity_violation',
+    entityType: 'File',
+    entityId: metadata.id,
+    afterJson: { storageKey: metadata.storageKey, expectedChecksumSha256: metadata.checksumSha256, detail },
+    reason: `Leitura recusada: o conteúdo do arquivo "${metadata.fileName}" não confere com o que foi gravado (${detail}).`,
+  });
+  throw AppError.conflict(
+    'O conteúdo deste arquivo não confere com o que foi gravado no envio — a leitura foi bloqueada e o incidente registrado.',
+    'FILE_INTEGRITY_VIOLATION'
+  );
+}
+
+// `preloadedMetadata`: o File já lido pelo controller na checagem de acesso (evita repetir a
+// mesma consulta a cada download).
+async function getFileContent(id, transaction, actorUserId, preloadedMetadata) {
+  const metadata = preloadedMetadata || (await File.findByPk(id, { transaction }));
   if (!metadata) throw AppError.notFound('Arquivo não encontrado.', 'FILE_NOT_FOUND');
 
+  let content;
   if (metadata.storageKey && metadata.storageKey.startsWith('local-db/')) {
     const legacy = await File.scope('withContent').findByPk(id, { transaction });
     if (!legacy || !legacy.content) {
       throw AppError.notFound('Este arquivo não tem binário armazenado (metadado apenas).', 'FILE_CONTENT_NOT_FOUND');
     }
-    return legacy;
+    content = legacy.content;
+  } else {
+    let buffer;
+    try {
+      buffer = diskStorage.readFile(metadata.storageKey);
+    } catch (err) {
+      throw AppError.notFound('Arquivo não encontrado em disco.', 'FILE_CONTENT_NOT_FOUND');
+    }
+    if (metadata.encryptedAtRest && !isEncryptedBuffer(buffer)) {
+      await rejectTamperedFile(metadata, actorUserId, 'arquivo gravado cifrado está sem o marcador de cifra');
+    }
+    try {
+      // decryptFileBuffer devolve como está um buffer sem marcador (legado, encryptedAtRest=false).
+      content = decryptFileBuffer(buffer);
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      await rejectTamperedFile(metadata, actorUserId, 'falha na autenticação da cifra (AES-GCM)');
+    }
   }
 
-  let buffer;
-  try {
-    buffer = diskStorage.readFile(metadata.storageKey);
-  } catch (err) {
-    throw AppError.notFound('Arquivo não encontrado em disco.', 'FILE_CONTENT_NOT_FOUND');
+  if (metadata.checksumSha256) {
+    const actual = crypto.createHash('sha256').update(content).digest('hex');
+    if (actual !== metadata.checksumSha256) {
+      await rejectTamperedFile(metadata, actorUserId, 'checksum SHA-256 divergente');
+    }
   }
-  // decryptFileBuffer detecta sozinho se o arquivo é criptografado (uploads novos) ou legado
-  // (gravado em disco antes desta mudança) — nunca lança erro pra arquivo legado, devolve como
-  // está nesse caso.
-  metadata.setDataValue('content', decryptFileBuffer(buffer));
+
+  metadata.setDataValue('content', content);
   return metadata;
 }
 

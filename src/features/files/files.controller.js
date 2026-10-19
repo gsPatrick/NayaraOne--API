@@ -18,17 +18,21 @@ const { CaseDocument } = require('../../models');
  * permissão". Guarda aqui, no ponto único de leitura de bytes/metadado de qualquer arquivo —
  * nunca confiar só no filtro da listagem.
  */
-async function assertNotRestrictedFile(fileId, permissions, transaction) {
-  const restrictedLink = await CaseDocument.findOne({
-    where: { fileId, classification: 'RESTRICTED' },
-    transaction,
-  });
-  if (restrictedLink && !permissions.includes('correspondent:documents:read')) {
+function rejectRestrictedUnlessAllowed(restricted, permissions) {
+  if (restricted && !(permissions || []).includes('correspondent:documents:read')) {
     throw AppError.forbidden(
       'Este arquivo é um documento restrito. Você não tem permissão para acessá-lo.',
       'FILE_RESTRICTED_DOCUMENT'
     );
   }
+}
+
+async function assertNotRestrictedFile(fileId, permissions, transaction) {
+  const restrictedLink = await CaseDocument.findOne({
+    where: { fileId, classification: 'RESTRICTED' },
+    transaction,
+  });
+  rejectRestrictedUnlessAllowed(Boolean(restrictedLink), permissions);
 }
 
 const uploadFile = catchAsync(async (req, res) => {
@@ -44,9 +48,10 @@ const uploadFile = catchAsync(async (req, res) => {
 
 const getFileMetadata = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction(async (t) => {
-    await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
-    await assertNotRestrictedFile(req.params.id, req.auth.permissions, t);
-    return filesService.getFileMetadata(req.params.id, t);
+    // A checagem de documento RESTRICTED vem na mesma consulta de vínculos (fileAccess.service).
+    const { file, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
+    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
+    return file;
   });
   return success(res, { data: item });
 });
@@ -59,9 +64,9 @@ const getFileMetadata = catchAsync(async (req, res) => {
  */
 const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction(async (t) => {
-    await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
-    await assertNotRestrictedFile(req.params.id, req.auth.permissions, t);
-    return filesService.getFileContent(req.params.id, t);
+    const { file: metadata, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
+    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
+    return filesService.getFileContent(req.params.id, t, req.auth.userId, metadata);
   });
   const total = file.content.length;
   // Defesa em profundidade (auditoria E2E ao vivo, Marco 6, Ciclo 4): uploadFile agora bloqueia

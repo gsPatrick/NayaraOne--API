@@ -93,6 +93,9 @@ test('files: arquivo legado em disco (gravado sem criptografia) continua legíve
         mimeType: 'text/plain',
         sizeBytes: Buffer.byteLength(plainText),
         checksumSha256: require('crypto').createHash('sha256').update(plainText).digest('hex'),
+        // Registro legado: a migration 20260101000395 marcou todos os arquivos anteriores com
+        // encrypted_at_rest = false; arquivo novo nasce true e é recusado sem o marcador de cifra.
+        encryptedAtRest: false,
         createdBy: tenant.userId,
         updatedBy: tenant.userId,
       },

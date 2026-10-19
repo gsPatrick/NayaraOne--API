@@ -92,4 +92,9 @@ function decryptFileBuffer(diskBuffer) {
   return Buffer.concat([decipher.update(cipherText), decipher.final()]);
 }
 
-module.exports = { encryptFileBuffer, decryptFileBuffer };
+// isEncryptedBuffer — o buffer começa com o marcador de conteúdo cifrado por encryptFileBuffer.
+function isEncryptedBuffer(diskBuffer) {
+  return Buffer.isBuffer(diskBuffer) && diskBuffer.length >= MARKER.length && diskBuffer.subarray(0, MARKER.length).equals(MARKER);
+}
+
+module.exports = { encryptFileBuffer, decryptFileBuffer, isEncryptedBuffer };
