@@ -40,13 +40,17 @@ function buildKeyDeliveryTerm({ contract, keyDelivery, keysCount, keysIdentifica
     `Recebedor: ${recipientName}`,
     `Quantidade de chaves/controles: ${keysCount}`,
     `Identificação: ${keysIdentification || 'não informada'}`,
-    `Vistoria de entrada: ${checkIn.id} (concluída e assinada por locador e locatário)`,
+    checkIn
+      ? `Vistoria de entrada: ${checkIn.id} (concluída e assinada por locador e locatário)`
+      : 'Vistoria de entrada: pendente (exigida concluída e assinada para liberar)',
     `Política de fotos aplicada: ${policy.code}`,
   ];
   if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') {
     lines.push('O imóvel é entregue USADO, no estado descrito na vistoria acima, que integra este termo.');
   }
-  lines.push(`Assinado por: ${signerName} em ${signedAt.toISOString()}`);
+  lines.push(signedAt
+    ? `Assinado por: ${signerName} em ${signedAt.toISOString()}`
+    : `Assinado por: ${signerName || '(definido na liberação)'} — PRÉVIA, ainda não assinado`);
   return lines.join('\n');
 }
 
@@ -54,6 +58,23 @@ async function personName(personId, transaction) {
   const person = await Person.findByPk(personId, { transaction });
   return person ? (person.legalName || person.tradeName || person.id) : personId;
 }
+
+// F6 (auditoria M45, 19/10/2026): recebedor e signatário aceitavam QUALQUER pessoa da base.
+// O Caderno M5 §10 não prevê procurador/terceiro autorizado na entrega de chaves — então ambos
+// precisam ser PARTE do contrato (legal.contract_parties). Erro 400 com código próprio.
+async function assertContractParty(contractId, personId, transaction, { code, message }) {
+  const party = await ContractParty.findOne({ where: { contractId, personId }, transaction });
+  if (!party) throw AppError.badRequest(message, code);
+  return party;
+}
+const RECIPIENT_NOT_PARTY = {
+  code: 'LEGAL_KEY_DELIVERY_RECIPIENT_NOT_PARTY',
+  message: 'O recebedor das chaves precisa ser uma parte do contrato (cadastre-o em Partes do contrato antes).',
+};
+const SIGNER_NOT_PARTY = {
+  code: 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID',
+  message: 'O termo de entrega precisa ser assinado por uma parte do contrato.',
+};
 
 async function createKeyDelivery(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, inspectionId, deliveredToPersonId, notes, termType } = payload;
@@ -74,6 +95,7 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
   // aqui (404) — e o group/company gravados passam a vir do CONTRATO, não do payload, para que
   // um payload forjado não consiga plantar a linha no tenant errado.
   const contract = await getContract(contractId, transaction);
+  await assertContractParty(contract.id, deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
 
   const keyDelivery = await KeyDelivery.create(
     {
@@ -124,6 +146,45 @@ async function getKeyDelivery(id, transaction) {
   const keyDelivery = await KeyDelivery.findByPk(id, { transaction });
   if (!keyDelivery) throw AppError.notFound('Entrega de chaves não encontrada.', 'LEGAL_KEY_DELIVERY_NOT_FOUND');
   return keyDelivery;
+}
+
+/**
+ * F7 (auditoria M45): prévia do termo KD-TERM-v1 gerado pelo servidor, ANTES de liberar (com os
+ * valores que o usuário está preenchendo) — não grava nada. Depois de liberado devolve o termo
+ * gravado (texto + hash). Não aplica os gates de liberação: é só leitura.
+ */
+async function previewKeyDeliveryTerm(id, query, transaction) {
+  const keyDelivery = await getKeyDelivery(id, transaction);
+  if (keyDelivery.status === 'RELEASED' && keyDelivery.termText) {
+    return {
+      preview: false,
+      termVersion: keyDelivery.termVersion,
+      termText: keyDelivery.termText,
+      termHash: keyDelivery.termHash,
+      photoPolicy: keyDelivery.photoPolicy,
+    };
+  }
+  const contract = await getContract(keyDelivery.contractId, transaction);
+  const q = query || {};
+  let checkIn = null;
+  const where = keyDelivery.inspectionId
+    ? { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' }
+    : { contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' };
+  checkIn = await Inspection.findOne({ where, order: [['created_at', 'DESC']], transaction });
+  const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
+  const n = Number(q.keysCount);
+  const termText = buildKeyDeliveryTerm({
+    contract,
+    keyDelivery,
+    keysCount: Number.isFinite(n) && n > 0 ? n : '(a informar)',
+    keysIdentification: q.keysIdentification ? String(q.keysIdentification).slice(0, 500) : null,
+    signerName: /^[0-9a-f-]{36}$/i.test(String(q.termSignedByPersonId || '')) ? await personName(q.termSignedByPersonId, transaction) : null,
+    recipientName: await personName(keyDelivery.deliveredToPersonId, transaction),
+    checkIn,
+    policy,
+    signedAt: null,
+  });
+  return { preview: true, termVersion: KEY_DELIVERY_TERM_VERSION, termText, termHash: null, photoPolicy: policy.code, photosRequired: policy.photosRequired };
 }
 
 /**
@@ -278,14 +339,9 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
     );
   }
 
-  // Quem assina o termo precisa ser parte do contrato ou o próprio recebedor das chaves.
-  const parties = await ContractParty.findAll({ where: { contractId: contract.id }, transaction });
-  if (termSignedByPersonId !== keyDelivery.deliveredToPersonId && !parties.some((p) => p.personId === termSignedByPersonId)) {
-    throw AppError.conflict(
-      'O termo de entrega precisa ser assinado pelo recebedor das chaves ou por uma parte do contrato.',
-      'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
-    );
-  }
+  // Recebedor (entregas antigas, criadas antes da regra F6) e signatário precisam ser partes.
+  await assertContractParty(contract.id, keyDelivery.deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
+  await assertContractParty(contract.id, termSignedByPersonId, transaction, SIGNER_NOT_PARTY);
   const signedAt = new Date();
   const termText = buildKeyDeliveryTerm({
     contract,
@@ -344,6 +400,7 @@ module.exports = {
   listKeyDeliveries,
   getKeyDelivery,
   releaseKeyDelivery,
+  previewKeyDeliveryTerm,
   resolveKeyDeliveryPhotoPolicy,
   KEY_DELIVERY_TERM_VERSION,
 };

@@ -238,3 +238,66 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
     assert.equal(released.photoPolicy, 'REQUIRED_USED_PROPERTY');
   });
 });
+
+// F6 (auditoria M45, 19/10/2026): recebedor e signatário precisam ser partes do contrato.
+test('F6: createKeyDelivery recusa recebedor que não é parte do contrato (400)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract, inspection } = await createActiveLeaseWithInspection(transaction);
+    const outsider = await peopleService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `KD QA Estranho ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => keyDeliveriesService.createKeyDelivery(
+        { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: outsider.id },
+        tenant.userId,
+        transaction
+      ),
+      (err) => err.statusCode === 400 && err.code === 'LEGAL_KEY_DELIVERY_RECIPIENT_NOT_PARTY'
+    );
+  });
+});
+
+test('F6: releaseKeyDelivery recusa signatário que não é parte do contrato (400)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const outsider = await peopleService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `KD QA Estranho ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    const kd = await keyDeliveriesService.createKeyDelivery(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, transaction),
+      (err) => err.statusCode === 400 && err.code === 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
+    );
+  });
+});
+
+// F7: prévia do termo antes de liberar e termo gravado depois.
+test('F7: prévia do termo KD-TERM-v1 antes de liberar e termo gravado com hash depois', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { contract, inspection, landlord, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const kd = await keyDeliveriesService.createKeyDelivery(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
+      tenant.userId,
+      transaction
+    );
+    const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { keysCount: '3', termSignedByPersonId: landlord.id }, transaction);
+    assert.equal(prev.preview, true);
+    assert.equal(prev.termVersion, 'KD-TERM-v1');
+    assert.match(prev.termText, /TERMO DE ENTREGA DE CHAVES/);
+    assert.match(prev.termText, /Quantidade de chaves\/controles: 3/);
+    assert.match(prev.termText, /PRÉVIA/);
+    await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 3, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    const after = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, {}, transaction);
+    assert.equal(after.preview, false);
+    assert.match(after.termHash, /^[0-9a-f]{64}$/);
+    assert.doesNotMatch(after.termText, /PRÉVIA/);
+  });
+});

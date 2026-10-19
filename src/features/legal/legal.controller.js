@@ -613,6 +613,10 @@ const getKeyDelivery = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => keyDeliveriesService.getKeyDelivery(req.params.id, t));
   return success(res, { data: item });
 });
+const previewKeyDeliveryTerm = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.previewKeyDeliveryTerm(req.params.id, req.query, t));
+  return success(res, { data: item });
+});
 const releaseKeyDelivery = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => keyDeliveriesService.releaseKeyDelivery(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
