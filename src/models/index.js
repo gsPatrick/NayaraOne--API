@@ -187,6 +187,7 @@ const modelDefiners = {
   BillingSchedule: require('./BillingSchedule'),
   BillingScheduleItem: require('./BillingScheduleItem'),
   CollectionCase: require('./CollectionCase'),
+  CollectionCadenceStep: require('./CollectionCadenceStep'),
   RentAdjustment: require('./RentAdjustment'),
   GuaranteedRentContract: require('./GuaranteedRentContract'),
   RentAdvance: require('./RentAdvance'),

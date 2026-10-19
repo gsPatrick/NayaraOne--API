@@ -24,6 +24,7 @@ const { startInsuranceRenewalAlertJob } = require('./src/engines/jobs/insuranceR
 const { startInsurancePolicyExpiryJob } = require('./src/engines/jobs/insurancePolicyExpiryJob');
 const { startCaseDocumentExpiryJob } = require('./src/engines/jobs/caseDocumentExpiryJob');
 const { startBillingScheduleAutoGenerateJob } = require('./src/engines/jobs/billingScheduleAutoGenerateJob');
+const { startCollectionCadenceJob } = require('./src/engines/jobs/collectionCadenceJob');
 const { startCorrespondentSubmissionWorkerJob } = require('./src/engines/jobs/correspondentSubmissionWorkerJob');
 const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/correspondentAppraisalWorkerJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
@@ -146,6 +147,13 @@ if (process.env.NODE_ENV !== 'test' && process.env.CRM_TASK_OVERDUE_JOB_DISABLED
 // competência ainda não gerada para contratos de locação ACTIVE — 1x por dia.
 if (process.env.NODE_ENV !== 'test' && process.env.BILLING_SCHEDULE_AUTO_GENERATE_JOB_DISABLED !== 'true') {
   startBillingScheduleAutoGenerateJob();
+}
+
+// Régua de cobrança de locação (REG-LOC-004, conferência Nayara 18/10/2026: "cadência via Motor
+// de Regras"). Lembrete antes do vencimento, avisos e tarefas de atraso, escalonamento para
+// avaliação jurídica — só efeitos internos (Notification/Task/outbox). Roda a cada 1h.
+if (process.env.NODE_ENV !== 'test' && process.env.COLLECTION_CADENCE_JOB_DISABLED !== 'true') {
+  startCollectionCadenceJob();
 }
 
 // Escalonamento de SLA dos chamados de garantia/pós-obra (M6-63/M6-88). Roda a cada 30 min
