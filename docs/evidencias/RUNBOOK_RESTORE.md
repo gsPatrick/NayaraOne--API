@@ -51,7 +51,10 @@ Guardar o `.dump` e o diretório do storage juntos (mesmo timestamp), fora do se
 - Role: `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='nayara_runtime'` → `false/false`.
 - Segurança: `node scripts/generateSecurityMap.js --out <tmp>` contra o banco restaurado e
   comparar com `docs/evidencias/MAPA_SEGURANCA.md` (mesmas tabelas com RLS FORCE e políticas).
-- Dados: `npm run verify-restore:finance-legal` e `npm run verify-restore:construction`
+- Dados: `npm run verify-restore:finance-legal`, `npm run verify-restore:construction` e
+  `npm run verify-restore:inventory-procurement -- --source-url <origem> --target-url <destino>`
+  (Estoque/Compras/Seguros/Patrimônio: saldo × ledger, pedidos/recebimentos/divergências/payables,
+  apólices/parcelas, ativos, hash por tabela; drill: `npm run restore-drill:inventory-full`)
   (origem × destino, campo a campo, com `SET LOCAL` de tenant).
 - Funcional (segunda pessoa): login, abrir um contrato assinado e baixar o PDF, abrir extrato
   financeiro de um tenant; tentar acessar dado de outro tenant → negado.
@@ -62,7 +65,7 @@ Guardar o `.dump` e o diretório do storage juntos (mesmo timestamp), fora do se
 |---|---|---|
 | RTO — drill jurídico completo (19/10/2026) | **14,5 s** de ponta a ponta (2 clusters, 289 migrations, backup, restore com falha esperada + restore correto, 133 checagens, teardown) | Dump de 0,95 MB — dado de fixture, não volume real |
 | RTO — banco de dev real (09/10/2026, `scripts/README-backup-restore.md`) | **470 s** (backup 33 s + restore 437 s), dump ~2 MB | Referência mais realista de volume; meta do caderno ≤ 4 h |
-| RPO | **Não garantido** | Backup é manual (`npm run backup`); não há job agendado nem WAL/PITR configurado no repositório. O RPO real é o tempo desde o último backup manual. Meta do caderno (Financeiro ≤ 1 min) **não é atendida** sem backup contínuo do provedor (PITR) — decisão de infraestrutura pendente. |
+| RPO | **Camada A pronta no repositório; PITR depende do servidor** | `scripts/scheduledBackup.js` (pg_dump cifrado AES-256-GCM, verificação, retenção, cópia externa) agendado por systemd/cron → RPO = intervalo do agendamento (ex.: 1 h) **depois que o timer for instalado no servidor**. Meta Financeiro ≤ 1 min exige WAL archiving/PITR — passos exatos em `docs/runbooks/BACKUP_AGENDADO.md` §4, só o Patrick pode ligar. |
 
 ## 7. Saída real do drill (19/10/2026)
 
