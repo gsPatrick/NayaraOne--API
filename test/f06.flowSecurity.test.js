@@ -384,7 +384,10 @@ test('F06-RBAC-02 download de arquivo exige permissão de leitura do módulo don
   assert.equal(await rbac02Http(path, { userId: otherUserId, permissions: ['finance:read', 'inventory:read'] }), 403, 'leitura de OUTRO módulo não basta');
   assert.equal(await rbac02Http(`/files/${A().fileId}`, { userId: otherUserId, permissions: ['inventory:read'] }), 403, 'o metadado também é protegido');
   assert.equal(await rbac02Http(path, { userId: otherUserId, permissions: ['legal:read'] }), 200, 'com legal:read baixa');
-  assert.equal(await rbac02Http(path, { userId: tenant.userId, permissions: [] }), 200, 'quem fez o upload baixa');
+  // Regra I3 (revisão independente RBAC-02, 9acd0c1): arquivo COM dono — ter feito o upload não
+  // basta; é preciso a leitura do módulo dono.
+  assert.equal(await rbac02Http(path, { userId: tenant.userId, permissions: [] }), 403, 'uploader sem leitura do módulo dono não baixa arquivo com dono');
+  assert.equal(await rbac02Http(path, { userId: tenant.userId, permissions: ['legal:read'] }), 200, 'uploader com legal:read baixa');
   assert.equal(await rbac02Http(path, { userId: otherUserId, ctx: sameGroupTenant, permissions: ['legal:read'] }), 404, 'empresa B real (mesmo grupo) continua 404');
   assert.equal(await rbac02Http(path, { userId: otherUserId, ctx: otherGroupTenant, permissions: ['legal:read'] }), 404, 'empresa C real (outro grupo) continua 404');
 });
@@ -398,6 +401,8 @@ test('F06-RBAC-02b arquivo do Estoque exige inventory:read; arquivo sem módulo 
 
   const orphan = await rbac02UploadCommitted('generic');
   assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: otherUserId, permissions: ['legal:read', 'finance:read', 'inventory:read'] }), 403, 'sem módulo dono: leitura de módulo nenhum basta');
-  assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: otherUserId, permissions: [], roles: ['admin'] }), 200, 'admin baixa');
+  // Revisão RBAC-02 (9acd0c1): admin é a role de SISTEMA ADMIN (membership), nunca o nome no JWT —
+  // o caso positivo do admin real está em files.accessControl.test.js.
+  assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: otherUserId, permissions: [], roles: ['admin'] }), 403, 'role "admin" só no token não é admin');
   assert.equal(await rbac02Http(`/files/${orphan.id}/content`, { userId: tenant.userId, permissions: [] }), 200, 'uploader baixa');
 });
