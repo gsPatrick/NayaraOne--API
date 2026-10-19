@@ -1,8 +1,8 @@
 'use strict';
 
-const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification } = require('../../models');
+const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification, Task } = require('../../models');
 const { computeSeverity } = require('../../features/legal/legalDeadlines.service');
-const { publishLegalDeadlineAlert } = require('../../features/legal/legalEvents.service');
+const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../features/legal/legalEvents.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**
@@ -138,6 +138,34 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
           },
           { transaction }
         );
+      }
+
+      if (severity === 'OVERDUE') {
+        // M45 (Caderno M5 §18 "legal.deadline.overdue"): nome literal, uma vez por prazo.
+        await publishCadernoEvent('legal.deadline.overdue', 'LegalDeadline', deadline, { id: deadline.id, legalCaseId: deadline.legalCaseId, dueAt: deadline.dueAt, criticality: deadline.criticality }, 'v1', transaction);
+        // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): prazo de
+        // criticidade HIGH/CRITICAL vencido abre UMA ocorrência (tarefa) com essa prioridade,
+        // atribuída ao responsável; occurrence_task_id impede abrir de novo.
+        if (['HIGH', 'CRITICAL'].includes(deadline.criticality) && !deadline.occurrenceTaskId) {
+          const occurrence = await Task.create(
+            {
+              groupId: deadline.groupId,
+              companyId: deadline.companyId,
+              assignedToUserId: recipientUserId,
+              title: `Ocorrência ${deadline.criticality}: prazo jurídico vencido`,
+              description: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || legalCase.id : deadline.legalCaseId}) venceu em ${new Date(deadline.dueAt).toLocaleString('pt-BR')} sem conclusão.`,
+              relatedEntityType: 'legal.legal_deadlines',
+              relatedEntityId: deadline.id,
+              dueAt: now,
+              status: 'OPEN',
+              priority: deadline.criticality,
+              createdBy: null,
+              updatedBy: null,
+            },
+            { transaction }
+          );
+          deadline.occurrenceTaskId = occurrence.id;
+        }
       }
 
       deadline.lastAlertedSeverity = severity;

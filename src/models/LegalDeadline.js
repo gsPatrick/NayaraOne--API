@@ -94,6 +94,9 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'conclusion_note',
       },
+      // M45 (Caderno M5 §15): criticidade; vencido HIGH/CRITICAL abre ocorrência (tarefa).
+      criticality: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'MEDIUM', field: 'criticality' },
+      occurrenceTaskId: { type: DataTypes.UUID, allowNull: true, field: 'occurrence_task_id' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -338,7 +338,59 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
   return { reimbursement, financialEntry };
 }
 
+/**
+ * M45 (Caderno M5 §12 "Pendência gera alerta/cobrança; não some quando contrato encerra" e
+ * §18 "lease.obligation.overdue"): troca de titularidade pendente há mais de
+ * OVERDUE_TRANSFER_DAYS vira obrigação locatícia VENCIDA — publica o evento uma única vez por
+ * tarefa (idempotência no outbox) e registra auditoria. Nada é apagado nem fechado: a tarefa
+ * continua PENDING até a conclusão com comprovante (completeOwnershipTransfer). Roda dentro do
+ * job de cadência de cobrança, na transação com o contexto do tenant (RLS).
+ */
+const OVERDUE_TRANSFER_DAYS = 30;
+async function flagOverdueLeaseObligations(transaction, { now = new Date(), overdueDays = OVERDUE_TRANSFER_DAYS } = {}) {
+  const { Op } = require('sequelize');
+  const { publishDomainEvent } = require('../../engines/events/outbox');
+  const { OutboxEvent } = require('../../models');
+  const limit = new Date(now.getTime() - overdueDays * 24 * 60 * 60 * 1000);
+  const tasks = await OwnershipTransferTask.findAll({ where: { status: 'PENDING', created_at: { [Op.lt]: limit } }, transaction });
+  let flagged = 0;
+  for (const task of tasks) {
+    const idempotencyKey = `lease.obligation.overdue:${task.id}`;
+    if (await OutboxEvent.findOne({ where: { idempotencyKey }, transaction })) continue;
+    const obligation = await UtilityObligation.findByPk(task.utilityObligationId, { transaction });
+    await publishDomainEvent(
+      {
+        groupId: task.groupId,
+        companyId: task.companyId,
+        aggregateType: 'OwnershipTransferTask',
+        aggregateId: task.id,
+        eventType: 'lease.obligation.overdue',
+        payload: { id: task.id, utilityObligationId: task.utilityObligationId, contractId: obligation ? obligation.contractId : null, utilityType: obligation ? obligation.utilityType : null, pendingSince: task.createdAt },
+        idempotencyKey,
+      },
+      transaction
+    );
+    await registrarAuditoria(
+      {
+        groupId: task.groupId,
+        companyId: task.companyId,
+        actorUserId: null,
+        action: 'billing.lease_obligation.overdue',
+        entityType: 'OwnershipTransferTask',
+        entityId: task.id,
+        afterJson: { status: task.status, pendingSince: task.createdAt, overdueDays },
+        reason: `Troca de titularidade pendente há mais de ${overdueDays} dias — obrigação locatícia vencida.`,
+      },
+      transaction
+    );
+    flagged += 1;
+  }
+  return { checked: tasks.length, flagged };
+}
+
 module.exports = {
+  flagOverdueLeaseObligations,
+  OVERDUE_TRANSFER_DAYS,
   createUtilityObligation,
   getUtilityObligation,
   listUtilityObligations,

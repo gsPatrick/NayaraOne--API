@@ -23,9 +23,16 @@ function computeSeverity(deadline, now = new Date()) {
   return 'NORMAL';
 }
 
+const DEADLINE_CRITICALITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
 async function createLegalDeadline(legalCaseId, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
   const { description, dueAt, sourceDocument, sourceEvent, responsibleUserId } = payload;
+  // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): criticidade.
+  const criticality = payload.criticality ? String(payload.criticality).toUpperCase() : 'MEDIUM';
+  if (!DEADLINE_CRITICALITIES.includes(criticality)) {
+    throw AppError.badRequest(`"criticality" deve ser um de: ${DEADLINE_CRITICALITIES.join(', ')}.`, 'LEGAL_DEADLINE_VALIDATION');
+  }
   if (!description || !dueAt) {
     throw AppError.badRequest('Os campos "description" e "dueAt" são obrigatórios.', 'LEGAL_DEADLINE_VALIDATION');
   }
@@ -62,6 +69,7 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
       sourceDocument: sourceDocument || null,
       sourceEvent: sourceEvent || null,
       responsibleUserId: responsibleUserId || null,
+      criticality,
       status: 'PENDING',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -197,4 +205,4 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   return deadline;
 }
 
-module.exports = { createLegalDeadline, listLegalDeadlines, getLegalDeadline, updateLegalDeadline, computeSeverity };
+module.exports = { DEADLINE_CRITICALITIES, createLegalDeadline, listLegalDeadlines, getLegalDeadline, updateLegalDeadline, computeSeverity };

@@ -4,6 +4,7 @@ const { ContractRequirement } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getContract, isLeaseLikeContractType } = require('./contracts.service');
+const { publishCadernoEvent } = require('./legalEvents.service');
 
 /**
  * requirements.service.js — auditoria externa (contrato bruto, Anexo I "7. Checklist
@@ -205,6 +206,21 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
     },
     transaction
   );
+
+  // M45 (Caderno M5 §18 "contract.requirement.missing"): toda geração que deixa documento
+  // PENDENTE publica o evento com a lista do que falta. Publicado aqui (e não no gate que
+  // recusa a transição) porque o gate aborta a transação — o evento seria desfeito junto.
+  const pending = (await ContractRequirement.findAll({ where: { contractId: contract.id, status: 'PENDING' }, transaction })).map((r) => r.requirementCode);
+  if (pending.length) {
+    await publishCadernoEvent(
+      'contract.requirement.missing',
+      'Contract',
+      contract,
+      { id: contract.id, missingRequirementCodes: pending.sort() },
+      require('crypto').createHash('sha256').update(pending.sort().join(',')).digest('hex').slice(0, 16),
+      transaction
+    );
+  }
 
   return created;
 }

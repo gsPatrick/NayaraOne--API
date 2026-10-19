@@ -227,6 +227,28 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
 
   await publishContractVersionCreated(contractVersion, transaction);
 
+  // M45 (Caderno M5 §8 "Se o conteúdo muda depois de enviado para assinatura, envelope é
+  // cancelado e nova versão criada"): toda solicitação de assinatura ainda PENDENTE de versões
+  // anteriores é cancelada (no provedor e aqui), e um contrato em SIGNING volta para APPROVED —
+  // a nova versão precisa ser enviada de novo. Assinaturas já SIGNED nunca são tocadas.
+  if (lastVersion) {
+    const { Signature } = require('../../models');
+    const { cancelSignature } = require('./signatures.service');
+    const { transitionContractStatus } = require('./contracts.service');
+    const olderVersionIds = (await ContractVersion.findAll({ where: { contractId: contract.id }, attributes: ['id'], transaction }))
+      .map((v) => v.id)
+      .filter((vid) => vid !== contractVersion.id);
+    const pending = olderVersionIds.length
+      ? await Signature.findAll({ where: { contractVersionId: olderVersionIds, status: 'PENDING' }, transaction })
+      : [];
+    for (const sig of pending) {
+      await cancelSignature(sig.id, actorUserId, transaction);
+    }
+    if (contract.status === 'SIGNING') {
+      await transitionContractStatus(contract, 'APPROVED', actorUserId, transaction);
+    }
+  }
+
   await registrarAuditoria(
     {
       groupId: contract.groupId,

@@ -305,7 +305,30 @@ function publishEvidencePackageCreated(evidencePackage, transaction) {
   );
 }
 
+// M45 (Caderno M5 §18/Guia §15): eventos mínimos com o NOME LITERAL do Caderno, publicados
+// além dos eventos internos já existentes (sem substituí-los, para não quebrar consumidores).
+// aggregate precisa de groupId/companyId/id; idempotencyKey distingue cada ocorrência real.
+async function publishCadernoEvent(eventType, aggregateType, aggregate, payload, idempotencySuffix, transaction) {
+  const idempotencyKey = `${eventType}:${aggregate.id}:${idempotencySuffix}`;
+  // Mesma ocorrência já publicada (ex.: checklist regerado com as mesmas pendências) = no-op.
+  const { OutboxEvent } = require('../../models');
+  if (await OutboxEvent.findOne({ where: { idempotencyKey }, transaction })) return null;
+  return publishDomainEvent(
+    {
+      groupId: aggregate.groupId,
+      companyId: aggregate.companyId,
+      aggregateType,
+      aggregateId: aggregate.id,
+      eventType,
+      payload,
+      idempotencyKey,
+    },
+    transaction
+  );
+}
+
 module.exports = {
+  publishCadernoEvent,
   publishContractStatusChanged,
   publishContractActivated,
   publishContractTerminated,

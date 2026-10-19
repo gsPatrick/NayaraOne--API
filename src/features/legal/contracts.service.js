@@ -3,7 +3,7 @@
 const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishContractStatusChanged, publishContractActivated, publishContractTerminated } = require('./legalEvents.service');
+const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('./legalEvents.service');
 const { assertContractClosureAllowed, CLOSURE_TARGET_STATUSES } = require('./contractClosureGate');
 
 // M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
@@ -118,7 +118,8 @@ const VALID_TRANSITIONS = {
   DOCUMENTS_PENDING: ['LEGAL_REVIEW', 'CANCELLED'],
   LEGAL_REVIEW: ['APPROVED', 'DOCUMENTS_PENDING', 'CANCELLED'],
   APPROVED: ['SIGNING', 'CANCELLED'],
-  SIGNING: ['SIGNED', 'CANCELLED'],
+  // M45: SIGNING -> APPROVED (Guia M5 §3) — documento mudou durante a assinatura; envelope cancelado.
+  SIGNING: ['SIGNED', 'APPROVED', 'CANCELLED'],
   SIGNED: ['ACTIVE'],
   ACTIVE: ['SUSPENDED', 'TERMINATED'],
   SUSPENDED: ['ACTIVE', 'TERMINATED'],
@@ -384,6 +385,7 @@ async function createContract(payload, actorUserId, transaction) {
     transaction
   );
 
+  await publishCadernoEvent('contract.created', 'Contract', contract, { id: contract.id, contractType: contract.contractType, contractNumber: contract.contractNumber || null }, 'v0', transaction);
   return contract;
 }
 
@@ -464,6 +466,19 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   await publishContractStatusChanged(contract, fromStatus, transaction);
   if (targetStatus === 'ACTIVE') {
     await publishContractActivated(contract, transaction);
+  }
+  // M45 (Caderno M5 §18): eventos nomeados do ciclo de assinatura.
+  const cadernoEventByTarget = { APPROVED: 'contract.version.approved', SIGNING: 'contract.sent_for_signature', SIGNED: 'contract.signed' };
+  if (cadernoEventByTarget[targetStatus]) {
+    const currentVersion = await ContractVersion.findOne({ where: { contractId: contract.id }, order: [['version_number', 'DESC']], transaction });
+    await publishCadernoEvent(
+      cadernoEventByTarget[targetStatus],
+      'Contract',
+      contract,
+      { id: contract.id, fromStatus, contractVersionId: currentVersion ? currentVersion.id : null, contentHash: currentVersion ? currentVersion.contentHash : null },
+      contract.lockVersion,
+      transaction
+    );
   }
 
   await registrarAuditoria(

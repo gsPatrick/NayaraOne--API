@@ -2,6 +2,7 @@
 
 const { sequelize, Group, Company } = require('../../models');
 const { runCollectionCadence } = require('../../features/billing/collectionCadence.service');
+const { flagOverdueLeaseObligations } = require('../../features/billing/utilities.service');
 
 /**
  * collectionCadenceJob — executa a régua de cobrança de locação (REG-LOC-004) em todas as
@@ -14,7 +15,10 @@ async function processCompany(group, company, now) {
   return sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-    return runCollectionCadence(transaction, { now });
+    const result = await runCollectionCadence(transaction, { now });
+    // M45 (Caderno M5 §12/§18): obrigação locatícia pendente vencida publica lease.obligation.overdue.
+    await flagOverdueLeaseObligations(transaction, { now });
+    return result;
   });
 }
 

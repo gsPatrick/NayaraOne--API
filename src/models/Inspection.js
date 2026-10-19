@@ -84,6 +84,9 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'report_generated_at',
       },
+      // M45 (Caderno M5 §11): revisão pós-assinatura aponta para o laudo original, que fica intacto.
+      revisionOfInspectionId: { type: DataTypes.UUID, allowNull: true, field: 'revision_of_inspection_id' },
+      revisionReason: { type: DataTypes.TEXT, allowNull: true, field: 'revision_reason' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

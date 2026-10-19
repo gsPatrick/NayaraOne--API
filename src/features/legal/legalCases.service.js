@@ -32,6 +32,31 @@ function assertValidPhase(phase, allowUnknownPhase) {
   }
 }
 
+// M45 (Caderno M5 §14): órgão, classe, valor e risco do processo. O valor é sempre ESTIMADO
+// (estimated_amount) e nunca vira recebível sozinho: nenhum lançamento financeiro é criado a
+// partir do processo — "Não confundir estimativa processual com recebível confirmado".
+const CASE_RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+function readCaseDetails(payload) {
+  const out = {};
+  if (payload.court !== undefined) out.court = payload.court ? String(payload.court).trim().slice(0, 160) : null;
+  if (payload.caseClass !== undefined) out.caseClass = payload.caseClass ? String(payload.caseClass).trim().slice(0, 120) : null;
+  if (payload.riskLevel !== undefined && payload.riskLevel !== null) {
+    const risk = String(payload.riskLevel).toUpperCase();
+    if (!CASE_RISK_LEVELS.includes(risk)) {
+      throw AppError.badRequest(`"riskLevel" deve ser um de: ${CASE_RISK_LEVELS.join(', ')}.`, 'LEGAL_CASE_VALIDATION');
+    }
+    out.riskLevel = risk;
+  } else if (payload.riskLevel === null) out.riskLevel = null;
+  if (payload.estimatedAmount !== undefined && payload.estimatedAmount !== null && payload.estimatedAmount !== '') {
+    const amount = Number(payload.estimatedAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw AppError.badRequest('"estimatedAmount" deve ser um número maior ou igual a zero (valor estimado do processo).', 'LEGAL_CASE_VALIDATION');
+    }
+    out.estimatedAmount = amount.toFixed(2);
+  } else if (payload.estimatedAmount === null) out.estimatedAmount = null;
+  return out;
+}
+
 async function createLegalCase(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, propertyId, responsibleUserId, escalationUserId, caseNumber, caseType, summary, phase } = payload;
   if (!groupId || !companyId || !caseType) {
@@ -55,6 +80,7 @@ async function createLegalCase(payload, actorUserId, transaction) {
       status: 'OPEN',
       phase: phase || null,
       summary: summary || null,
+      ...readCaseDetails(payload),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -173,6 +199,7 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
   if (escalationUserId !== undefined) legalCase.escalationUserId = escalationUserId;
   if (phase !== undefined) legalCase.phase = phase;
+  Object.assign(legalCase, readCaseDetails(payload));
   legalCase.updatedBy = actorUserId || null;
   await legalCase.save({ transaction });
 
@@ -303,6 +330,7 @@ async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
 }
 
 module.exports = {
+  CASE_RISK_LEVELS,
   createLegalCase,
   listLegalCases,
   getLegalCase,

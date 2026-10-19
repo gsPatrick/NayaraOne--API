@@ -5,9 +5,19 @@ const PDFDocument = require('pdfkit');
 const { Inspection, InspectionItem, InspectionSignature, File, FileLink } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishInspectionCompleted, publishInspectionDifferenceDetected } = require('./legalEvents.service');
+const { publishInspectionCompleted, publishInspectionDifferenceDetected, publishCadernoEvent } = require('./legalEvents.service');
 
-const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC'];
+// M45 (Caderno M5 §11 "Inspection possui type ENTRY/EXIT/INTERMEDIATE/FINAL"): FINAL entra como
+// tipo próprio (vistoria final da entrega de casa nova); ENTRY/EXIT/INTERMEDIATE do Caderno são
+// aceitos como sinônimos dos códigos já gravados (CHECK_IN/CHECK_OUT/PERIODIC), para não
+// reescrever o histórico nem quebrar o gate de chaves que procura CHECK_IN.
+const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC', 'FINAL'];
+const INSPECTION_TYPE_ALIASES = { ENTRY: 'CHECK_IN', EXIT: 'CHECK_OUT', INTERMEDIATE: 'PERIODIC' };
+function normalizeInspectionType(value) {
+  if (!value) return value;
+  const upper = String(value).toUpperCase();
+  return INSPECTION_TYPE_ALIASES[upper] || upper;
+}
 const CONDITIONS = ['GOOD', 'REGULAR', 'DAMAGED'];
 const MEDIA_TYPES = ['PHOTO', 'VIDEO'];
 const PARTY_ROLES = ['LANDLORD', 'TENANT', 'INSPECTOR'];
@@ -31,7 +41,8 @@ async function assertInspectionNotSigned(inspectionId, transaction) {
 }
 
 async function createInspection(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, contractId, inspectorUserId, inspectionType, scheduledAt } = payload;
+  const { groupId, companyId, propertyId, contractId, inspectorUserId, scheduledAt } = payload;
+  const inspectionType = normalizeInspectionType(payload.inspectionType);
   if (!groupId || !companyId || !propertyId || !inspectionType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "propertyId" e "inspectionType" são obrigatórios.', 'LEGAL_INSPECTION_VALIDATION');
   }
@@ -104,7 +115,7 @@ async function listInspections(transaction, filters = {}) {
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.contractId) where.contractId = filters.contractId;
   if (filters.status) where.status = String(filters.status).toUpperCase();
-  if (filters.inspectionType) where.inspectionType = String(filters.inspectionType).toUpperCase();
+  if (filters.inspectionType) where.inspectionType = normalizeInspectionType(filters.inspectionType);
   return Inspection.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
@@ -443,6 +454,16 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
     transaction
   );
 
+  // M45 (Caderno M5 §18 "inspection.signed"): uma ocorrência por parte que assina.
+  await publishCadernoEvent(
+    'inspection.signed',
+    'Inspection',
+    inspection,
+    { id: inspection.id, contractId: inspection.contractId, partyRole: normalizedRole, signatureHash },
+    normalizedRole,
+    transaction
+  );
+
   // GAP REAL (verificação final Marco 5, §11/§18): assinar uma vistoria de SAÍDA (CHECK_OUT)
   // com uma de ENTRADA (CHECK_IN) já registrada pro mesmo contrato é o gatilho natural pra
   // comparar entrada x saída e alertar diferença — compareInspections() já existia e calculava
@@ -589,7 +610,80 @@ async function getInspectionReport(inspectionId, transaction) {
   return { pdfBytes: inspection.reportPdfBytes, reportHash: inspection.reportHash, reportGeneratedAt: inspection.reportGeneratedAt };
 }
 
+/**
+ * M45 (Caderno M5 §11 "Correção após assinatura cria addendum/revision, não altera laudo
+ * original"; JUR-TS-006 "Vistoria editada após assinatura -> Nova revisão, original intacto").
+ * A vistoria assinada continua imutável (JUR-007); a correção nasce como OUTRA vistoria, do
+ * mesmo tipo/imóvel/contrato, com os itens copiados, apontando para a original e com motivo.
+ * Só existe revisão de vistoria já assinada — antes da assinatura corrige-se a própria vistoria.
+ */
+async function createInspectionRevision(inspectionId, payload, actorUserId, transaction) {
+  const original = await getInspection(inspectionId, transaction);
+  const reason = payload && payload.reason ? String(payload.reason).trim() : '';
+  if (!reason) {
+    throw AppError.badRequest('Informe o motivo ("reason") da revisão da vistoria.', 'LEGAL_INSPECTION_REVISION_REASON_REQUIRED');
+  }
+  const anySignature = await InspectionSignature.findOne({ where: { inspectionId: original.id }, transaction });
+  if (!anySignature) {
+    throw AppError.conflict(
+      'A vistoria ainda não foi assinada — corrija a própria vistoria; revisão só existe para laudo assinado.',
+      'LEGAL_INSPECTION_REVISION_NOT_SIGNED'
+    );
+  }
+  const revision = await Inspection.create(
+    {
+      groupId: original.groupId,
+      companyId: original.companyId,
+      propertyId: original.propertyId,
+      contractId: original.contractId,
+      inspectorUserId: original.inspectorUserId,
+      inspectionType: original.inspectionType,
+      scheduledAt: new Date(),
+      revisionOfInspectionId: original.id,
+      revisionReason: reason,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+  const items = await InspectionItem.findAll({ where: { inspectionId: original.id }, order: [['created_at', 'ASC']], transaction });
+  for (const item of items) {
+    await InspectionItem.create(
+      {
+        groupId: item.groupId,
+        companyId: item.companyId,
+        itemName: item.itemName,
+        condition: item.condition,
+        notes: item.notes,
+        damageDescription: item.damageDescription,
+        estimatedBudget: item.estimatedBudget,
+        responsibleParty: item.responsibleParty,
+        inspectionId: revision.id,
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
+  await registrarAuditoria(
+    {
+      groupId: original.groupId,
+      companyId: original.companyId,
+      actorUserId,
+      action: 'legal.inspection.revision',
+      entityType: 'Inspection',
+      entityId: revision.id,
+      afterJson: { revisionOfInspectionId: original.id, reason, copiedItems: items.length },
+      reason: `Revisão da vistoria assinada ${original.id}: ${reason}`,
+    },
+    transaction
+  );
+  return revision;
+}
+
 module.exports = {
+  createInspectionRevision,
+  normalizeInspectionType,
   createInspection,
   createInspectionWithItems,
   listInspections,

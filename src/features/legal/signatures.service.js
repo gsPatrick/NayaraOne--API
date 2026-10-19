@@ -87,6 +87,8 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
         contractVersionId: contractVersion.id,
         personId,
         status: 'PENDING',
+        // M45 (Caderno M5 §8/JUR-004): a assinatura guarda o hash da versão exata enviada.
+        contentHash: contractVersion.contentHash || null,
         externalSignatureId: externalSignatureIdsByPerson[personId],
         providerEnvelopeId: providerEnvelopeId || null,
         createdBy: actorUserId || null,
@@ -161,6 +163,19 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
   // Idempotência: webhook duplicado do provedor não deve reaplicar efeito nem falhar.
   if (signature.status === 'SIGNED') {
     return { signature, contractTransitioned: false, alreadyProcessed: true };
+  }
+  // M45 (Caderno M5 §8 "envelope é cancelado e nova versão criada"; JUR-TS-002 "Signature aponta
+  // hash diferente -> Rejeitado"): assinatura de envelope cancelado não vale, e o provedor que
+  // informar o hash do documento assinado precisa informar o MESMO hash da versão solicitada.
+  if (signature.status === 'CANCELLED') {
+    throw AppError.conflict('Esta solicitação de assinatura foi cancelada (o documento mudou) — assine a versão nova.', 'LEGAL_SIGNATURE_CANCELLED');
+  }
+  const informedHash = payload && (payload.contentHash || payload.documentHash);
+  if (informedHash) {
+    const expectedHash = signature.contentHash || (await ContractVersion.findByPk(signature.contractVersionId, { transaction }))?.contentHash;
+    if (String(informedHash) !== String(expectedHash)) {
+      throw AppError.conflict('O hash do documento assinado não corresponde ao hash da versão do contrato enviada para assinatura.', 'LEGAL_SIGNATURE_HASH_MISMATCH');
+    }
   }
 
   const beforeJson = signature.toJSON();
@@ -425,7 +440,76 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
   return { acknowledged: true, processed: true, fileId: file.id };
 }
 
+/**
+ * M45 (Caderno M5 §8 "Manual exige evidence_file_id e identificação do responsável pela
+ * coleta"). Assinatura colhida em papel/presencial: exige o arquivo da via assinada (que o
+ * usuário consiga ler sob RLS), o signatário precisa ser parte do contrato, o contrato precisa
+ * estar em SIGNING e quem coletou fica identificado (o próprio usuário autenticado). Depois de
+ * registrada, segue EXATAMENTE o mesmo caminho de efeito da assinatura eletrônica
+ * (handleSignatureWebhook): auditoria "x de y", gate de partes obrigatórias e SIGNED.
+ * O banco também recusa MANUAL sem evidência/coletor (CHECK signatures_manual_evidence_chk).
+ */
+async function recordManualSignature(contractVersionId, payload, actorUserId, transaction) {
+  const { personId, evidenceFileId, signedAt } = payload || {};
+  if (!personId || !evidenceFileId) {
+    throw AppError.badRequest('Assinatura manual exige "personId" e "evidenceFileId" (arquivo da via assinada).', 'LEGAL_MANUAL_SIGNATURE_EVIDENCE_REQUIRED');
+  }
+  if (!actorUserId) {
+    throw AppError.badRequest('Assinatura manual exige o responsável pela coleta identificado.', 'LEGAL_MANUAL_SIGNATURE_COLLECTOR_REQUIRED');
+  }
+  const contractVersion = await getContractVersion(contractVersionId, transaction);
+  const contract = await getContract(contractVersion.contractId, transaction);
+  if (contract.status !== 'SIGNING') {
+    throw AppError.conflict(`Não é possível registrar assinatura: o contrato precisa estar em "SIGNING" (está em "${contract.status}").`, 'LEGAL_SIGNATURE_CONTRACT_NOT_SIGNING');
+  }
+  const latest = await ContractVersion.findOne({ where: { contractId: contract.id }, order: [['version_number', 'DESC']], transaction });
+  if (latest && latest.id !== contractVersion.id) {
+    throw AppError.conflict('Só a versão vigente do contrato pode ser assinada.', 'LEGAL_SIGNATURE_VERSION_SUPERSEDED');
+  }
+  const parties = await listContractParties(contract.id, transaction);
+  if (!parties.some((p) => p.personId === personId)) {
+    throw AppError.badRequest('O signatário precisa ser parte do contrato.', 'LEGAL_SIGNATURE_SIGNER_NOT_PARTY');
+  }
+  const evidence = await File.findByPk(evidenceFileId, { transaction });
+  if (!evidence) {
+    throw AppError.badRequest('Arquivo de evidência da assinatura não encontrado nesta empresa.', 'LEGAL_MANUAL_SIGNATURE_EVIDENCE_NOT_FOUND');
+  }
+  const externalSignatureId = `manual:${crypto.randomUUID()}`;
+  const signature = await Signature.create(
+    {
+      groupId: contractVersion.groupId,
+      companyId: contractVersion.companyId,
+      contractVersionId: contractVersion.id,
+      personId,
+      status: 'PENDING',
+      signatureMethod: 'MANUAL',
+      evidenceFileId,
+      collectedByUserId: actorUserId,
+      contentHash: contractVersion.contentHash || null,
+      externalSignatureId,
+      createdBy: actorUserId,
+      updatedBy: actorUserId,
+    },
+    { transaction }
+  );
+  await registrarAuditoria(
+    {
+      groupId: contractVersion.groupId,
+      companyId: contractVersion.companyId,
+      actorUserId,
+      action: 'legal.signature.manual_collect',
+      entityType: 'Signature',
+      entityId: signature.id,
+      afterJson: signature.toJSON(),
+      reason: `Assinatura manual de ${personId} coletada por ${actorUserId} com evidência ${evidenceFileId} (hash da versão ${contractVersion.contentHash}).`,
+    },
+    transaction
+  );
+  return handleSignatureWebhook(externalSignatureId, { signedAt: signedAt || new Date(), contentHash: contractVersion.contentHash }, transaction);
+}
+
 module.exports = {
+  recordManualSignature,
   initiateSignature,
   listSignaturesByContractVersion,
   handleSignatureWebhook,

@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { EvidencePackage, EvidencePackageAccessLog, ContractVersion, Signature, ContractRequirement, Inspection, InspectionItem, FileLink, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishEvidencePackageCreated } = require('./legalEvents.service');
+const { publishEvidencePackageCreated, publishCadernoEvent } = require('./legalEvents.service');
 const { getLegalCase } = require('./legalCases.service');
 
 /**
@@ -79,6 +79,8 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
   );
 
   await publishEvidencePackageCreated(evidencePackage, transaction);
+  // M45 (Caderno M5 §18): nome literal do evento mínimo, além do interno.
+  await publishCadernoEvent('evidence.package.created', 'EvidencePackage', evidencePackage, { id: evidencePackage.id, legalCaseId: evidencePackage.legalCaseId }, 'v1', transaction);
 
   await registrarAuditoria(
     {
@@ -279,10 +281,21 @@ async function listEvidenceAccessLog(evidencePackageId, transaction) {
  */
 async function exportEvidencePackage(id, actorUserId, transaction) {
   const evidencePackage = await getEvidencePackage(id, transaction);
-  await logEvidenceAccess(evidencePackage.id, actorUserId, 'EXPORTED', transaction);
+  const accessEntry = await logEvidenceAccess(evidencePackage.id, actorUserId, 'EXPORTED', transaction);
+  const exportedAt = new Date().toISOString();
+  // M45 (Caderno M5 §16 "Exportação gera novo package_id e hash do manifesto"): cada exportação
+  // ganha um id próprio (o da linha EXPORTED da cadeia de custódia, append-only) e o hash do
+  // manifesto exportado (que referencia o dossiê de origem e o hash gravado no banco).
+  const exportPackageId = accessEntry && accessEntry.id ? accessEntry.id : crypto.randomUUID();
+  const exportManifestHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ exportPackageId, evidencePackageId: evidencePackage.id, packageHash: evidencePackage.packageHash, exportedAt, manifest: evidencePackage.manifestJson }))
+    .digest('hex');
 
   return {
     formatVersion: 1,
+    exportPackageId,
+    exportManifestHash,
     evidencePackageId: evidencePackage.id,
     legalCaseId: evidencePackage.legalCaseId,
     groupId: evidencePackage.groupId,
@@ -292,7 +305,7 @@ async function exportEvidencePackage(id, actorUserId, transaction) {
     itemCount: evidencePackage.manifestJson.length,
     manifest: evidencePackage.manifestJson,
     packageHash: evidencePackage.packageHash,
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     exportedByUserId: actorUserId || null,
   };
 }
