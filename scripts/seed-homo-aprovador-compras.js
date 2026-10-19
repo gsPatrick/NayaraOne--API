@@ -43,27 +43,18 @@ const ROLE_NAME = 'HOMO QA — Aprovador Compras';
 // segregação é garantida pela REGRA "quem cria não aprova", não pela ausência da permissão).
 // users:read + leituras do Painel (people/properties/radar/crm:opportunities) adicionadas
 // pra tela inicial carregar sem "Permissão ausente".
+// Conjunto mínimo, levantado tela a tela no menu do aprovador (Estoque e Compras) — auditoria
+// Marco 7 "final2", 18/10/2026. Permissões que só existiam para o Painel abrir (units, companies,
+// memberships, properties, radar, crm) saíram: o Painel agora só carrega e só mostra cada seção
+// com a permissão dela. Travado por test/approverScreensPermissions.test.js.
 const PERMISSION_CODES = [
-  'procurement:read',
-  'procurement:approve',
-  'procurement:create',
-  'inventory:read',
-  'construction:read',
-  'units:read',
-  'users:read',
-  'people:read',
-  'properties:read',
-  'radar:read',
-  'crm:opportunities:read',
-  // FIX (auditoria "reconf" 18/10/2026, 3ª permissão faltante em 3 rodadas): o conjunto agora
-  // foi levantado MAPEANDO todas as chamadas de app/painel/page.js (listProperties, listPeople,
-  // listDuplicatePairs, listOpportunities, listRadars, /companies, /units, /users,
-  // /memberships) contra o requirePermission de cada rota — e é TRAVADO pelo teste
-  // test/painelApproverPermissions.test.js, que chama cada endpoint do Painel com um usuário
-  // de exatamente estas permissões e exige 200 em todos. Permissão nova no Painel => o teste
-  // quebra antes de qualquer rodada de auditoria.
-  'companies:read',
-  'memberships:read',
+  'procurement:read', // todas as telas de Compras
+  'procurement:create', // cotar, adjudicar, receber, criar requisição de compra
+  'procurement:approve', // decidir requisição de compra e divergência de recebimento
+  'inventory:read', // todas as telas de Estoque
+  'construction:read', // obra/etapa em Itens, Requisições de material, Contagem e Requisições de compra
+  'people:read', // seletor de pessoa (responsável, fornecedor) em Movimentos, Recebimentos, Perdas, Compras e Fornecedores
+  'users:read', // custodiante/responsável em Patrimônio, Manutenção e Contagem (só nome e status; e-mail exige users:update)
 ];
 
 async function main() {
@@ -107,6 +98,15 @@ async function main() {
       },
       transaction,
     });
+
+    // O seed também REMOVE do papel o que saiu da lista — antes ele só adicionava, e uma permissão
+    // retirada daqui continuaria valendo no banco.
+    const wantedPermissions = await Permission.findAll({ where: { code: PERMISSION_CODES }, transaction });
+    const wantedIds = new Set(wantedPermissions.map((p) => p.id));
+    const currentLinks = await RolePermission.findAll({ where: { roleId: role.id }, transaction });
+    for (const link of currentLinks) {
+      if (!wantedIds.has(link.permissionId)) await link.destroy({ transaction });
+    }
 
     for (const code of PERMISSION_CODES) {
       const permission = await Permission.findOne({ where: { code }, transaction });
@@ -171,7 +171,7 @@ async function main() {
   }
 }
 
-// Exporta a lista pro teste test/painelApproverPermissions.test.js usar EXATAMENTE o mesmo
+// Exporta a lista pro teste test/approverScreensPermissions.test.js usar EXATAMENTE o mesmo
 // conjunto — qualquer divergência entre o que o Painel exige e o que o seed concede quebra o
 // teste, nunca mais uma rodada de auditoria.
 module.exports = { PERMISSION_CODES };

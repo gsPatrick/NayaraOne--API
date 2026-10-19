@@ -13,6 +13,9 @@ const {
   File,
   FileLink,
   AuditLog,
+  Property,
+  Contract,
+  Person,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
@@ -1076,6 +1079,54 @@ async function cancelPolicy(policyId, payload, actor, transaction) {
   return policy;
 }
 
+// A tela de Seguros precisava de listContracts/listProperties/listPeople só para mostrar o nome do
+// imóvel, do contrato e do segurado — e listContracts exige legal:read. Para o aprovador de
+// Compras (sem acesso ao Jurídico) a tela inteira quebrava com "Permissão ausente: legal:read"
+// (auditoria Marco 7 "final2", 18/10/2026). A própria API de seguros devolve agora esses rótulos,
+// lidos sob o RLS do tenant, e quem só tem procurement:read vê a apólice completa.
+async function attachLinkedLabels(policies, transaction) {
+  const list = Array.isArray(policies) ? policies : [policies];
+  const propertyIds = new Set();
+  const contractIds = new Set();
+  const personIds = new Set();
+  for (const policy of list) {
+    if (policy.propertyId) propertyIds.add(policy.propertyId);
+    if (policy.contractId) contractIds.add(policy.contractId);
+    for (const party of policy.parties || []) if (party.personId) personIds.add(party.personId);
+  }
+  const contracts = contractIds.size
+    ? await Contract.findAll({ where: { id: [...contractIds] }, attributes: ['id', 'contractNumber', 'contractType', 'propertyId', 'created_at'], transaction })
+    : [];
+  for (const contract of contracts) if (contract.propertyId) propertyIds.add(contract.propertyId);
+  const [properties, people] = await Promise.all([
+    propertyIds.size ? Property.findAll({ where: { id: [...propertyIds] }, attributes: ['id', 'title'], transaction }) : [],
+    personIds.size ? Person.findAll({ where: { id: [...personIds] }, attributes: ['id', 'legalName'], transaction }) : [],
+  ]);
+  const propertyTitle = new Map(properties.map((p) => [p.id, p.title]));
+  const contractById = new Map(contracts.map((c) => [c.id, c]));
+  const personName = new Map(people.map((p) => [p.id, p.legalName]));
+
+  for (const policy of list) {
+    policy.setDataValue('linkedProperty', policy.propertyId
+      ? { id: policy.propertyId, title: propertyTitle.get(policy.propertyId) || null }
+      : null);
+    const contract = policy.contractId ? contractById.get(policy.contractId) : null;
+    policy.setDataValue('linkedContract', policy.contractId
+      ? {
+        id: policy.contractId,
+        contractNumber: contract?.contractNumber || null,
+        contractType: contract?.contractType || null,
+        createdAt: contract?.get('created_at') || null,
+        propertyTitle: contract?.propertyId ? propertyTitle.get(contract.propertyId) || null : null,
+      }
+      : null);
+    for (const party of policy.parties || []) {
+      party.setDataValue('personName', personName.get(party.personId) || null);
+    }
+  }
+  return policies;
+}
+
 async function listPolicies(filters, groupId, companyId, transaction) {
   const where = { groupId, companyId };
   if (filters?.status) where.status = filters.status;
@@ -1097,6 +1148,7 @@ async function listPolicies(filters, groupId, companyId, transaction) {
     transaction,
   });
   const now = new Date();
+  await attachLinkedLabels(policies, transaction);
   return policies.map((policy) => withExpiryFlag(policy, now));
 }
 
@@ -1132,6 +1184,7 @@ async function getPolicy(id, groupId, companyId, transaction) {
       });
     }
   }
+  await attachLinkedLabels(policy, transaction);
   return withExpiryFlag(policy);
 }
 

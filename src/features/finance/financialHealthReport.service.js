@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 
 const { FinancialEntry, BankTransaction, Reconciliation, Commission, OwnerRepass, sequelize } = require('../../models');
 const { countOpenHighRiskAnomalies } = require('./anomalyCases.service');
+const { startOfBusinessDay } = require('../../utils/businessDate');
 
 // M4-20 — Relatório semanal de saúde financeira.
 //
@@ -39,9 +40,14 @@ function round2(value) {
  */
 async function getWeeklyHealthReport(transaction, options = {}) {
   const now = options.now ? new Date(options.now) : new Date();
-  const horizon7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const horizon30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const horizon60 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+  // Vencimento é data de calendário em São Paulo (auditoria Marco 7 "final2", 18/10/2026: a
+  // parcela que vencia HOJE já aparecia como vencida à tarde, porque dueAt é gravado ao meio-dia
+  // e a comparação era com o instante atual). Vencido = vence antes de hoje; as janelas de N dias
+  // incluem hoje e vão até o fim do N-ésimo dia (limite superior exclusivo à meia-noite seguinte).
+  const startToday = startOfBusinessDay(now);
+  const horizon7 = startOfBusinessDay(now, 8);
+  const horizon30 = startOfBusinessDay(now, 31);
+  const horizon60 = startOfBusinessDay(now, 61);
 
   const pendingEntries = await FinancialEntry.findAll({
     where: { status: 'PENDING' },
@@ -94,18 +100,18 @@ async function getWeeklyHealthReport(transaction, options = {}) {
 
     if (entry.dueAt) {
       const dueAt = new Date(entry.dueAt);
-      if (dueAt < now) {
+      if (dueAt < startToday) {
         report.overdue[bucket].count += 1;
         report.overdue[bucket].total += amount;
-      } else if (dueAt <= horizon7) {
+      } else if (dueAt < horizon7) {
         report.dueNextSevenDays[bucket].count += 1;
         report.dueNextSevenDays[bucket].total += amount;
       }
-      if (dueAt >= now && dueAt <= horizon30) {
+      if (dueAt >= startToday && dueAt < horizon30) {
         report.dueNext30Days[bucket].count += 1;
         report.dueNext30Days[bucket].total += amount;
       }
-      if (dueAt >= now && dueAt <= horizon60) {
+      if (dueAt >= startToday && dueAt < horizon60) {
         report.dueNext60Days[bucket].count += 1;
         report.dueNext60Days[bucket].total += amount;
       }
@@ -260,7 +266,7 @@ async function countOverdueEntries(transaction, now = new Date()) {
       status: 'PENDING',
       isThirdPartyFunds: false,
       nature: { [Op.in]: ['PAYABLE', 'RECEIVABLE'] },
-      dueAt: { [Op.lt]: now },
+      dueAt: { [Op.lt]: startOfBusinessDay(now) },
     },
     transaction,
   });

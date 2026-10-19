@@ -31,6 +31,18 @@ const { getActiveSecondApprovalThreshold } = require('./approvalThresholdRules.s
 // custo informado — ver getOrCreateDefaultCostCenter em costCenters.service.js.
 const PROCUREMENT_COST_CENTER_CODE = 'COMPRAS-RECEBIMENTOS';
 
+// Texto de trilha legível (auditoria Marco 7 "final2", 18/10/2026): a nota da divergência aceita
+// saía "[payable <uuid> criado para o excedente de 30] [... recebimento <uuid>]" — identificador
+// técnico, termo em inglês e valor sem R$.
+const BRL_FORMAT = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const QTY_FORMAT = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
+function formatBRLText(value) {
+  return BRL_FORMAT.format(Number(value) || 0);
+}
+function formatQtyText(value, unit) {
+  return `${QTY_FORMAT.format(Number(value) || 0)} ${unit || 'un.'}`;
+}
+
 function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
@@ -793,7 +805,7 @@ async function listDiscrepancies(groupId, companyId, transaction, { status } = {
   const poIds = [...new Set(goodsReceipts.map((g) => g.purchaseOrderId).filter(Boolean))];
   const orders = poIds.length ? await PurchaseOrder.findAll({ where: { id: poIds }, transaction }) : [];
   const itemIds = [...new Set(poItems.map((i) => i.inventoryItemId).filter(Boolean))];
-  const inventoryItems = itemIds.length ? await InventoryItem.findAll({ where: { id: itemIds }, attributes: ['id', 'name', 'sku'], transaction }) : [];
+  const inventoryItems = itemIds.length ? await InventoryItem.findAll({ where: { id: itemIds }, attributes: ['id', 'name', 'sku', 'unitOfMeasure'], transaction }) : [];
   const supplierIds = [...new Set(orders.map((o) => o.supplierPersonId).filter(Boolean))];
   const suppliers = supplierIds.length ? await Person.findAll({ where: { id: supplierIds }, attributes: ['id', 'legalName'], transaction }) : [];
 
@@ -813,10 +825,18 @@ async function listDiscrepancies(groupId, companyId, transaction, { status } = {
     const invItem = poItem ? invItemById.get(poItem.inventoryItemId) : null;
     const supplier = order ? supplierById.get(order.supplierPersonId) : null;
     row.purchaseOrderId = order ? order.id : null;
+    // O pedido de compra não tem número próprio: a identificação de negócio é a mesma da tela de
+    // Pedidos (data de criação + valor comprometido), nunca o UUID.
+    row.purchaseOrderCreatedAt = order ? order.get('created_at') : null;
+    row.purchaseOrderAmount = order ? order.committedAmount : null;
     row.supplierName = supplier ? supplier.legalName : null;
     row.invoiceNumber = gr ? gr.invoiceFingerprint : null;
     row.itemName = invItem ? invItem.name : null;
     row.itemSku = invItem ? invItem.sku : null;
+    row.itemUnit = invItem ? invItem.unitOfMeasure : null;
+    // Quem registrou o recebimento não decide a própria divergência (regra no resolveDiscrepancy);
+    // a tela usa isto para nem oferecer Aceitar/Rejeitar a essa pessoa.
+    row.receivedByUserId = gr ? gr.createdBy : null;
     return row;
   });
 }
@@ -934,6 +954,11 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
     if (goodsReceipt && poItem) {
       const overQuantity = Number(discrepancy.receivedValue) - Number(discrepancy.expectedValue);
       const overAmount = round2(overQuantity * Number(poItem.unitPrice));
+      const overItem = poItem.inventoryItemId
+        ? await InventoryItem.findByPk(poItem.inventoryItemId, { attributes: ['name', 'unitOfMeasure'], transaction })
+        : null;
+      const overQtyText = formatQtyText(overQuantity, overItem?.unitOfMeasure);
+      const invoiceText = goodsReceipt.invoiceFingerprint ? `NF nº ${goodsReceipt.invoiceFingerprint}` : 'recebimento sem NF';
       if (overAmount > 0) {
         const costCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
         const overReceiptPayable = await createFinancialEntry(
@@ -943,14 +968,14 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
             entryType: 'DEBIT',
             nature: 'PAYABLE',
             amount: overAmount,
-            description: `Excedente de recebimento aceito (over-receipt) — recebimento ${goodsReceipt.id}, PO item ${poItem.id}.`,
+            description: `Excedente aceito no recebimento — ${overQtyText} de ${overItem?.name || 'item do pedido'} (${invoiceText}).`,
             idempotencyKey: `goods-receipt:${goodsReceipt.id}:over-receipt-accepted:${discrepancy.id}`,
             costCenterId: costCenter.id,
           },
           actor.userId,
           transaction
         );
-        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[payable ${overReceiptPayable.id} criado para o excedente de ${overAmount}]`;
+        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[lançamento a pagar de ${formatBRLText(overAmount)} gerado no Financeiro para o excedente]`;
         await discrepancy.save({ transaction });
       }
       // BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): o excedente físico
@@ -980,7 +1005,7 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
             ? `Excedente aceito — recebimento da nota fiscal nº ${goodsReceipt.invoiceFingerprint}.`
             : 'Excedente aceito — recebimento de mercadoria.',
         });
-        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${overQuantity} un. incorporado ao estoque — recebimento ${overInventoryReceipt.id}]`;
+        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${overQtyText} incorporado ao estoque — entrada da ${invoiceText}]`;
         await discrepancy.save({ transaction });
       }
     }
@@ -991,7 +1016,12 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
   if (discrepancy.discrepancyType === 'OVER_RECEIPT' && normalized === 'REJECTED') {
     const rejectedOverQty = Number(discrepancy.receivedValue) - Number(discrepancy.expectedValue);
     if (rejectedOverQty > 0) {
-      discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${rejectedOverQty} un. rejeitado — não entrou no estoque; devolução ao fornecedor]`;
+      const rejectedGrItem = discrepancy.goodsReceiptItemId ? await GoodsReceiptItem.findByPk(discrepancy.goodsReceiptItemId, { transaction }) : null;
+      const rejectedPoItem = rejectedGrItem ? await PurchaseOrderItem.findByPk(rejectedGrItem.purchaseOrderItemId, { transaction }) : null;
+      const rejectedItem = rejectedPoItem?.inventoryItemId
+        ? await InventoryItem.findByPk(rejectedPoItem.inventoryItemId, { attributes: ['unitOfMeasure'], transaction })
+        : null;
+      discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${formatQtyText(rejectedOverQty, rejectedItem?.unitOfMeasure)} rejeitado — não entrou no estoque; devolução ao fornecedor]`;
       await discrepancy.save({ transaction });
     }
   }

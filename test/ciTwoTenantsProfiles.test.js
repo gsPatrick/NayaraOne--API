@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const { emailFor, PROFILES } = require('../scripts/seed-ci-two-tenants');
 const { sequelize, User } = require('../src/models');
 
-// 21603 (antes 21600, que colidia com test/painelApproverPermissions.test.js — dois arquivos na
+// 21603 (antes 21600, que colidia com test/approverScreensPermissions.test.js — dois arquivos na
 // mesma porta derrubam um deles com EADDRINUSE quando o CI roda em paralelo).
 process.env.PORT = process.env.CI_TWO_TENANTS_HTTP_TEST_PORT || '21603';
 
