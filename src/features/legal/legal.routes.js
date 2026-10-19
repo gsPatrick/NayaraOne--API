@@ -130,6 +130,7 @@ legalRouter.get('/legal/key-deliveries', requirePermission('legal:read'), legalC
 legalRouter.get('/legal/key-deliveries/:id', requirePermission('legal:read'), legalController.getKeyDelivery);
 legalRouter.get('/legal/key-deliveries/:id/term-preview', requirePermission('legal:read'), legalController.previewKeyDeliveryTerm);
 legalRouter.post('/legal/key-deliveries/:id/release', requirePermission('legal:deliverKeys'), legalController.releaseKeyDelivery);
+legalRouter.post('/legal/key-deliveries/:id/cancel', requirePermission('legal:deliverKeys'), legalController.cancelKeyDelivery);
 
 // Legal cases
 legalRouter.post('/legal/cases', requirePermission('legal:create'), legalController.createLegalCase);

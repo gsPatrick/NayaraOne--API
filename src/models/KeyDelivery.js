@@ -58,7 +58,7 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'PENDING',
         field: 'status',
-        comment: "PENDING|RELEASED",
+        comment: "PENDING|RELEASED|CANCELLED",
       },
       notes: {
         type: DataTypes.TEXT,
@@ -115,6 +115,10 @@ module.exports = (sequelize) => {
       termVersion: { type: DataTypes.STRING(32), allowNull: true, field: 'term_version' },
       termHash: { type: DataTypes.STRING(64), allowNull: true, field: 'term_hash' },
       photoPolicy: { type: DataTypes.STRING(64), allowNull: true, field: 'photo_policy' },
+      // M45 (migration 20260101000540): cancelamento com motivo — nada é apagado.
+      cancelledAt: { type: DataTypes.DATE, allowNull: true, field: 'cancelled_at' },
+      cancelledBy: { type: DataTypes.UUID, allowNull: true, field: 'cancelled_by' },
+      cancelReason: { type: DataTypes.TEXT, allowNull: true, field: 'cancel_reason' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

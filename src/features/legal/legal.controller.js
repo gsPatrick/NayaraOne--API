@@ -617,6 +617,10 @@ const previewKeyDeliveryTerm = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => keyDeliveriesService.previewKeyDeliveryTerm(req.params.id, req.query, t));
   return success(res, { data: item });
 });
+const cancelKeyDelivery = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.cancelKeyDelivery(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
 const releaseKeyDelivery = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => keyDeliveriesService.releaseKeyDelivery(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
@@ -726,7 +730,7 @@ module.exports = {
   createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
   createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
-  createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery, previewKeyDeliveryTerm,
+  createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery, previewKeyDeliveryTerm, cancelKeyDelivery,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, setLegalHold,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
   createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
