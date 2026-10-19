@@ -247,6 +247,7 @@ async function transferAsset(assetId, groupId, companyId, payload, actorUserId, 
     { transaction }
   );
 
+  const auditBefore = { status: asset.status, currentLocationId: asset.currentLocationId, assignedToUserId: asset.assignedToUserId };
   if (destinationLocationId) asset.currentLocationId = destinationLocationId;
   if (destinationCustodianUserId) asset.assignedToUserId = destinationCustodianUserId;
   asset.updatedBy = actorUserId || null;
@@ -255,7 +256,10 @@ async function transferAsset(assetId, groupId, companyId, payload, actorUserId, 
   await publishAssetTransferred(movement, transaction);
 
   await registrarAuditoria(
-    { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'ASSET_TRANSFERRED', entityType: 'Asset', entityId: asset.id, reason: 'Transferência de patrimônio registrada.' },
+    { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'ASSET_TRANSFERRED', entityType: 'Asset', entityId: asset.id,
+      beforeJson: auditBefore,
+      afterJson: { status: asset.status, currentLocationId: asset.currentLocationId, assignedToUserId: asset.assignedToUserId, assetMovementId: movement.id },
+      reason: 'Transferência de patrimônio registrada.' },
     transaction
   );
 

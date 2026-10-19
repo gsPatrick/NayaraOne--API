@@ -115,7 +115,12 @@ async function createRequisition(payload, actorUserId, transaction) {
   await publishRequisitionCreated(requisition, transaction);
 
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'INVENTORY_REQUISITION_CREATED', entityType: 'InventoryRequisition', entityId: requisition.id, reason: 'Requisição de material criada.' },
+    { groupId, companyId, actorUserId, action: 'INVENTORY_REQUISITION_CREATED', entityType: 'InventoryRequisition', entityId: requisition.id,
+      afterJson: {
+        ...requisition.toJSON(),
+        items: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity })),
+      },
+      reason: 'Requisição de material criada.' },
     transaction
   );
 
@@ -172,10 +177,25 @@ async function decideRequisition(requisitionId, decision, actorUserId, groupId, 
       'INVENTORY_REQUISITION_SELF_APPROVAL_BLOCKED'
     );
   }
+  const auditBefore = { status: requisition.status, approvedByUserId: requisition.approvedByUserId, requestedByUserId: requisition.requestedByUserId };
   requisition.status = decision;
   requisition.approvedByUserId = actorUserId || null;
   requisition.updatedBy = actorUserId || null;
   await requisition.save({ transaction });
+  await registrarAuditoria(
+    {
+      groupId: requisition.groupId,
+      companyId: requisition.companyId,
+      actorUserId,
+      action: 'INVENTORY_REQUISITION_DECIDED',
+      entityType: 'InventoryRequisition',
+      entityId: requisition.id,
+      beforeJson: auditBefore,
+      afterJson: { status: requisition.status, approvedByUserId: requisition.approvedByUserId, requestedByUserId: requisition.requestedByUserId },
+      reason: decision === 'APPROVED' ? 'Requisição de material aprovada.' : 'Requisição de material rejeitada.',
+    },
+    transaction
+  );
   return requisition;
 }
 
@@ -217,6 +237,12 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
     await line.save({ transaction });
   }
 
+  const auditBefore = {
+    status: requisition.status,
+    warehouseLocationId: requisition.warehouseLocationId,
+    projectLocationId: requisition.projectLocationId,
+    lines: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, issuedQuantity: l.issuedQuantity })),
+  };
   requisition.status = 'ISSUED';
   requisition.updatedBy = actor.userId || null;
   await requisition.save({ transaction });
@@ -248,7 +274,15 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
   }
 
   await registrarAuditoria(
-    { groupId: requisition.groupId, companyId: requisition.companyId, actorUserId: actor.userId, action: 'INVENTORY_REQUISITION_ISSUED', entityType: 'InventoryRequisition', entityId: requisition.id, reason: 'Requisição entregue — baixa de estoque gerada.' },
+    { groupId: requisition.groupId, companyId: requisition.companyId, actorUserId: actor.userId, action: 'INVENTORY_REQUISITION_ISSUED', entityType: 'InventoryRequisition', entityId: requisition.id,
+      beforeJson: auditBefore,
+      afterJson: {
+        status: requisition.status,
+        warehouseLocationId: requisition.warehouseLocationId,
+        projectLocationId: requisition.projectLocationId,
+        lines: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, issuedQuantity: l.issuedQuantity })),
+      },
+      reason: 'Requisição entregue — baixa de estoque gerada.' },
     transaction
   );
 

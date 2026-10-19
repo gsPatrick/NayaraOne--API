@@ -173,7 +173,7 @@ async function openLossCase(payload, actorUserId, transaction) {
   await publishLossOpened(lossCase, transaction);
 
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'INVENTORY_LOSS_CASE_OPENED', entityType: 'InventoryLossCase', entityId: lossCase.id, reason: 'Caso de perda/quebra/extravio aberto.' },
+    { groupId, companyId, actorUserId, action: 'INVENTORY_LOSS_CASE_OPENED', entityType: 'InventoryLossCase', entityId: lossCase.id, afterJson: lossCase.toJSON(), reason: 'Caso de perda/quebra/extravio aberto.' },
     transaction
   );
 
@@ -356,6 +356,7 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
   // movements.service.js#recordMovement) — então a transição de status/decidedBy precisa ser
   // persistida ANTES de chamar recordMovement abaixo, e não só no final da função como antes.
   // Mesma transação: a escrita abaixo fica visível para a leitura feita dentro de recordMovement.
+  const auditBefore = { status: lossCase.status, responsiblePersonId: lossCase.responsiblePersonId, estimatedCost: lossCase.estimatedCost, decidedByUserId: lossCase.decidedByUserId ?? null };
   if (responsiblePerson) lossCase.responsiblePersonId = responsiblePerson.id;
   lossCase.status = decision;
   lossCase.decidedByUserId = actor.userId || null;
@@ -478,6 +479,7 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
       action: 'INVENTORY_LOSS_CASE_DECIDED',
       entityType: 'InventoryLossCase',
       entityId: lossCase.id,
+      beforeJson: auditBefore,
       afterJson: {
         status: decision,
         responsiblePersonId: lossCase.responsiblePersonId,

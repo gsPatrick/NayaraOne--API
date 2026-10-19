@@ -116,7 +116,7 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
   await publishMaintenanceOpened(order, transaction);
 
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'MAINTENANCE_ORDER_OPENED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, reason: 'Ordem de manutenção aberta.' },
+    { groupId, companyId, actorUserId, action: 'MAINTENANCE_ORDER_OPENED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, afterJson: order.toJSON(), reason: 'Ordem de manutenção aberta.' },
     transaction
   );
 
@@ -137,12 +137,14 @@ async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, t
     throw AppError.badRequest(`Só é possível fechar uma OS em OPEN (atual: ${order.status}).`, 'MAINTENANCE_INVALID_TRANSITION');
   }
 
+  const auditBefore = { status: order.status, openedAt: order.openedAt, closedAt: order.closedAt, assetId: order.assetId };
   order.status = 'CLOSED';
   order.closedAt = new Date();
   order.updatedBy = actorUserId || null;
   await order.save({ transaction });
 
   const asset = await Asset.findOne({ where: { id: order.assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  if (asset) auditBefore.assetStatus = asset.status;
   if (asset && asset.status === 'MAINTENANCE') {
     // BUG REAL CORRIGIDO (rodada 23): liberar o asset incondicionalmente ao fechar QUALQUER OS
     // ignorava a possibilidade de existir outra OS ainda OPEN pro mesmo asset — agora só libera
@@ -159,7 +161,10 @@ async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, t
   await publishMaintenanceClosed(order, transaction);
 
   await registrarAuditoria(
-    { groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'MAINTENANCE_ORDER_CLOSED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, reason: 'Ordem de manutenção fechada — patrimônio liberado.' },
+    { groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'MAINTENANCE_ORDER_CLOSED', entityType: 'InventoryMaintenanceOrder', entityId: order.id,
+      beforeJson: auditBefore,
+      afterJson: { status: order.status, openedAt: order.openedAt, closedAt: order.closedAt, assetId: order.assetId, assetStatus: asset ? asset.status : 'Patrimônio não localizado' },
+      reason: 'Ordem de manutenção fechada — patrimônio liberado.' },
     transaction
   );
 

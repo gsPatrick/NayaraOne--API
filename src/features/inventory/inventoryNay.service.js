@@ -552,6 +552,12 @@ async function generatePurchaseSuggestions(payload, actorUserId, transaction) {
       action: 'INVENTORY_NAY_SUGGESTIONS_GENERATED',
       entityType: 'AiRun',
       entityId: aiRun.id,
+      afterJson: {
+        aiRunId: aiRun.id,
+        activeSuggestionCount: results.length,
+        expiredCount,
+        suggestions: results.map((r) => ({ id: r.id, status: r.status, riskLevel: r.riskLevel })),
+      },
       reason: `NAY Estoque: ${results.length} sugestão(ões) de compra ativa(s), ${expiredCount} expirada(s). Nenhuma compra efetivada.`,
     },
     transaction
@@ -654,6 +660,7 @@ async function approvePurchaseSuggestion(suggestionId, groupId, companyId, paylo
     transaction
   );
 
+  const auditBefore = { status: rec.status, decidedByUserId: rec.decidedByUserId, suggestedQuantity: data.suggestedQuantity };
   rec.status = 'ACCEPTED';
   rec.decidedByUserId = actor.userId || null;
   rec.updatedBy = actor.userId || null;
@@ -678,6 +685,8 @@ async function approvePurchaseSuggestion(suggestionId, groupId, companyId, paylo
       action: 'INVENTORY_NAY_SUGGESTION_ACCEPTED',
       entityType: 'AiRecommendation',
       entityId: rec.id,
+      beforeJson: auditBefore,
+      afterJson: { status: rec.status, decidedByUserId: rec.decidedByUserId, approvedQuantity: finalQuantity, purchaseRequestId: purchaseRequest.id },
       reason: `Sugestão de compra aprovada por humano — requisição de compra ${purchaseRequest.id} aberta (${finalQuantity}).`,
     },
     transaction
@@ -689,6 +698,7 @@ async function approvePurchaseSuggestion(suggestionId, groupId, companyId, paylo
 async function rejectPurchaseSuggestion(suggestionId, groupId, companyId, payload, actor, transaction) {
   const { reason } = payload || {};
   const rec = await lockPendingSuggestion(suggestionId, groupId, companyId, transaction);
+  const auditBefore = { status: rec.status, decidedByUserId: rec.decidedByUserId };
   rec.status = 'REJECTED';
   rec.decidedByUserId = actor.userId || null;
   rec.updatedBy = actor.userId || null;
@@ -706,6 +716,8 @@ async function rejectPurchaseSuggestion(suggestionId, groupId, companyId, payloa
       action: 'INVENTORY_NAY_SUGGESTION_REJECTED',
       entityType: 'AiRecommendation',
       entityId: rec.id,
+      beforeJson: auditBefore,
+      afterJson: { status: rec.status, decidedByUserId: rec.decidedByUserId, reason: reason || 'Sem motivo informado' },
       reason: `Sugestão de compra rejeitada por humano${reason ? `: ${reason}` : '.'}`,
     },
     transaction

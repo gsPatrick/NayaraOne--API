@@ -43,7 +43,7 @@ async function openCount(payload, actorUserId, transaction) {
     { transaction }
   );
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'INVENTORY_COUNT_OPENED', entityType: 'InventoryCount', entityId: count.id, reason: 'Inventário físico aberto.' },
+    { groupId, companyId, actorUserId, action: 'INVENTORY_COUNT_OPENED', entityType: 'InventoryCount', entityId: count.id, afterJson: count.toJSON(), reason: 'Inventário físico aberto.' },
     transaction
   );
   return count;
@@ -105,6 +105,7 @@ async function completeCount(countId, groupId, companyId, actorUserId, transacti
     await line.save({ transaction });
   }
 
+  const auditBefore = { status: count.status, countedAt: count.countedAt, locationId: count.locationId, itemCount: items.length };
   count.status = 'COMPLETED';
   count.countedAt = new Date();
   count.updatedBy = actorUserId || null;
@@ -113,7 +114,16 @@ async function completeCount(countId, groupId, companyId, actorUserId, transacti
   await publishCountCompleted(count, transaction);
 
   await registrarAuditoria(
-    { groupId: count.groupId, companyId: count.companyId, actorUserId, action: 'INVENTORY_COUNT_COMPLETED', entityType: 'InventoryCount', entityId: count.id, reason: 'Inventário físico fechado — divergências calculadas, saldo não alterado.' },
+    { groupId: count.groupId, companyId: count.companyId, actorUserId, action: 'INVENTORY_COUNT_COMPLETED', entityType: 'InventoryCount', entityId: count.id,
+      beforeJson: auditBefore,
+      afterJson: {
+        status: count.status,
+        countedAt: count.countedAt,
+        locationId: count.locationId,
+        itemCount: items.length,
+        lines: items.map((l) => ({ inventoryItemId: l.inventoryItemId, countedQuantity: l.countedQuantity, expectedQuantity: l.expectedQuantity, divergence: l.divergence })),
+      },
+      reason: 'Inventário físico fechado — divergências calculadas, saldo não alterado.' },
     transaction
   );
 

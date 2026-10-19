@@ -127,7 +127,12 @@ async function createReceipt(payload, actorUserId, transaction) {
   }
 
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'INVENTORY_RECEIPT_CREATED', entityType: 'InventoryReceipt', entityId: receipt.id, reason: 'Recebimento criado (DRAFT).' },
+    { groupId, companyId, actorUserId, action: 'INVENTORY_RECEIPT_CREATED', entityType: 'InventoryReceipt', entityId: receipt.id,
+      afterJson: {
+        ...receipt.toJSON(),
+        items: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, unitCost: l.unitCost != null ? l.unitCost : null })),
+      },
+      reason: 'Recebimento criado (DRAFT).' },
     transaction
   );
 
@@ -224,6 +229,7 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
     );
   }
 
+  const auditBefore = { status: receipt.status, destinationLocationId: receipt.destinationLocationId, invoiceNumber: receipt.invoiceNumber, itemCount: items.length };
   receipt.status = 'COMPLETED';
   receipt.updatedBy = actor.userId || null;
   await receipt.save({ transaction });
@@ -231,7 +237,16 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
   await publishReceiptCompleted(receipt, transaction);
 
   await registrarAuditoria(
-    { groupId: receipt.groupId, companyId: receipt.companyId, actorUserId: actor.userId, action: 'INVENTORY_RECEIPT_COMPLETED', entityType: 'InventoryReceipt', entityId: receipt.id, reason: 'Recebimento confirmado — entrada de estoque gerada.' },
+    { groupId: receipt.groupId, companyId: receipt.companyId, actorUserId: actor.userId, action: 'INVENTORY_RECEIPT_COMPLETED', entityType: 'InventoryReceipt', entityId: receipt.id,
+      beforeJson: auditBefore,
+      afterJson: {
+        status: receipt.status,
+        destinationLocationId: receipt.destinationLocationId,
+        invoiceNumber: receipt.invoiceNumber,
+        itemCount: items.length,
+        stockIn: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, unitCost: l.unitCost })),
+      },
+      reason: 'Recebimento confirmado — entrada de estoque gerada.' },
     transaction
   );
 

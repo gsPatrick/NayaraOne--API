@@ -231,6 +231,14 @@ async function suggestReceiptFromInvoice(payload, actorUserId, transaction) {
       action: 'INVENTORY_RECEIPT_OCR_SUGGESTED',
       entityType: 'File',
       entityId: file.id,
+      afterJson: {
+        aiRunId: aiRun.id,
+        status,
+        provider,
+        confidence,
+        suggestedItemCount: suggestion ? suggestion.items.length : 0,
+        receiptCreated: false,
+      },
       reason: `OCR/IA de NF (${provider}): ${status}. Nada foi lançado no estoque.`,
     },
     transaction

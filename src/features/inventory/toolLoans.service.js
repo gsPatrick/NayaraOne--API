@@ -93,7 +93,9 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   await publishToolLoanCreated(loan, transaction);
 
   await registrarAuditoria(
-    { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'TOOL_LOAN_CREATED', entityType: 'InventoryToolLoan', entityId: loan.id, reason: 'Empréstimo de ferramenta registrado.' },
+    { groupId: asset.groupId, companyId: asset.companyId, actorUserId, action: 'TOOL_LOAN_CREATED', entityType: 'InventoryToolLoan', entityId: loan.id,
+      afterJson: { ...loan.toJSON(), assetStatus: asset.status, assetAssignedToUserId: asset.assignedToUserId, assetCurrentLocationId: asset.currentLocationId },
+      reason: 'Empréstimo de ferramenta registrado.' },
     transaction
   );
 
@@ -114,6 +116,7 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
     throw AppError.badRequest(`Só é possível devolver um empréstimo em OPEN/OVERDUE (atual: ${loan.status}).`, 'TOOL_LOAN_INVALID_TRANSITION');
   }
 
+  const auditBefore = { status: loan.status, returnedAt: loan.returnedAt, conditionCode: loan.conditionCode, personUserId: loan.personUserId, destinationLocationId: loan.destinationLocationId };
   loan.status = 'RETURNED';
   loan.returnedAt = new Date();
   loan.conditionCode = conditionCode;
@@ -141,6 +144,7 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
     );
     throw AppError.conflict('Patrimônio declarado perdido/extraviado — não pode ser devolvido como se estivesse em circulação.', 'TOOL_LOAN_ASSET_LOST');
   }
+  Object.assign(auditBefore, { assetStatus: asset.status, assetAssignedToUserId: asset.assignedToUserId, assetCurrentLocationId: asset.currentLocationId });
   asset.status = conditionCode === 'DAMAGED' ? 'MAINTENANCE' : 'AVAILABLE';
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 21, 2026-10-05): devolver a
   // ferramenta nunca limpava `assignedToUserId` (custodiante, EST-014 — "Asset possui
@@ -171,7 +175,19 @@ async function returnTool(loanId, payload, actorUserId, groupId, companyId, tran
   await publishToolReturned(loan, transaction);
 
   await registrarAuditoria(
-    { groupId: loan.groupId, companyId: loan.companyId, actorUserId, action: 'TOOL_LOAN_RETURNED', entityType: 'InventoryToolLoan', entityId: loan.id, reason: `Ferramenta devolvida (condição: ${conditionCode}).` },
+    { groupId: loan.groupId, companyId: loan.companyId, actorUserId, action: 'TOOL_LOAN_RETURNED', entityType: 'InventoryToolLoan', entityId: loan.id,
+      beforeJson: auditBefore,
+      afterJson: {
+        status: loan.status,
+        returnedAt: loan.returnedAt,
+        conditionCode: loan.conditionCode,
+        personUserId: loan.personUserId,
+        assetStatus: asset.status,
+        assetAssignedToUserId: asset.assignedToUserId,
+        assetCurrentLocationId: asset.currentLocationId,
+        maintenanceOrderId: maintenanceOrder ? maintenanceOrder.id : 'Sem manutenção aberta',
+      },
+      reason: `Ferramenta devolvida (condição: ${conditionCode}).` },
     transaction
   );
 

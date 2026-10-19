@@ -311,6 +311,7 @@ async function attachPolicyDocument(policyId, fileId, actor, transaction) {
   const file = await File.findOne({ where: { id: fileId, companyId: policy.companyId }, transaction });
   if (!file) throw AppError.notFound('Arquivo não encontrado.', 'INSURANCE_POLICY_DOCUMENT_FILE_NOT_FOUND');
 
+  const linkedDocumentCountBefore = await FileLink.count({ where: { relatedEntityType: 'InsurancePolicy', relatedEntityId: policy.id }, transaction });
   const link = await FileLink.create(
     {
       groupId: policy.groupId,
@@ -330,7 +331,8 @@ async function attachPolicyDocument(policyId, fileId, actor, transaction) {
       groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
       action: 'procurement.insurance_policy.attach_document',
       entityType: 'InsurancePolicy', entityId: policy.id,
-      afterJson: { fileLinkId: link.id, fileId },
+      beforeJson: { policyStatus: policy.status, linkedDocumentCount: linkedDocumentCountBefore },
+      afterJson: { policyStatus: policy.status, linkedDocumentCount: linkedDocumentCountBefore + 1, fileLinkId: link.id, fileId },
       reason: 'Documento anexado manualmente à apólice.',
     },
     transaction

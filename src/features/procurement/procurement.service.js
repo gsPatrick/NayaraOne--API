@@ -111,7 +111,9 @@ async function createPurchaseRequest(payload, actorUserId, transaction) {
       }
     }
   }
-  await registrarAuditoria({ groupId, companyId, actorUserId, action: 'PURCHASE_REQUEST_CREATED', entityType: 'PurchaseRequest', entityId: request.id, reason: 'Requisição de compra criada.' }, transaction);
+  await registrarAuditoria({ groupId, companyId, actorUserId, action: 'PURCHASE_REQUEST_CREATED', entityType: 'PurchaseRequest', entityId: request.id,
+    afterJson: { ...request.toJSON(), items: items.map((l) => ({ inventoryItemId: l.inventoryItemId || null, description: l.description, quantity: l.quantity })), stockWarningCount: stockWarnings.length },
+    reason: 'Requisição de compra criada.' }, transaction);
 
   const created = await getPurchaseRequest(request.id, groupId, companyId, transaction);
   return { ...created.toJSON(), stockWarnings };
@@ -213,10 +215,25 @@ async function decidePurchaseRequest(id, groupId, companyId, decision, actorUser
       'PURCHASE_REQUEST_SELF_APPROVAL_FORBIDDEN'
     );
   }
+  const auditBefore = { status: request.status, approvedByUserId: request.approvedByUserId, requestedByUserId: request.requestedByUserId };
   request.status = decision;
   request.approvedByUserId = actorUserId || null;
   request.updatedBy = actorUserId || null;
   await request.save({ transaction });
+  await registrarAuditoria(
+    {
+      groupId: request.groupId,
+      companyId: request.companyId,
+      actorUserId,
+      action: 'PURCHASE_REQUEST_DECIDED',
+      entityType: 'PurchaseRequest',
+      entityId: request.id,
+      beforeJson: auditBefore,
+      afterJson: { status: request.status, approvedByUserId: request.approvedByUserId, requestedByUserId: request.requestedByUserId },
+      reason: decision === 'APPROVED' ? 'Requisição de compra aprovada.' : 'Requisição de compra rejeitada.',
+    },
+    transaction
+  );
   return request;
 }
 
@@ -515,6 +532,7 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
     );
   }
 
+  const auditBefore = { offerStatus: offer.status, quotationStatus: quotation.status, purchaseRequestStatus: request.status, purchaseOrder: 'Não existia (pedido criado nesta ação)' };
   offer.status = 'AWARDED';
   await offer.save({ transaction });
   quotation.status = 'CLOSED';
@@ -523,7 +541,16 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
   request.updatedBy = actorUserId || null;
   await request.save({ transaction });
 
-  await registrarAuditoria({ groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'PURCHASE_ORDER_CREATED', entityType: 'PurchaseOrder', entityId: order.id, reason: `PO gerada a partir da oferta ${offer.id} — custo comprometido ${order.committedAmount}.` }, transaction);
+  await registrarAuditoria({ groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'PURCHASE_ORDER_CREATED', entityType: 'PurchaseOrder', entityId: order.id,
+    beforeJson: auditBefore,
+    afterJson: {
+      ...order.toJSON(),
+      offerStatus: offer.status,
+      quotationStatus: quotation.status,
+      purchaseRequestStatus: request.status,
+      items: offer.items.map((i) => ({ purchaseRequestItemId: i.purchaseRequestItemId, unitPrice: i.unitPrice })),
+    },
+    reason: `PO gerada a partir da oferta ${offer.id} — custo comprometido ${order.committedAmount}.` }, transaction);
 
   return getPurchaseOrder(order.id, order.groupId, order.companyId, transaction);
 }
@@ -619,6 +646,11 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     throw AppError.badRequest(`Só é possível registrar recebimento para um pedido de compra em aberto (status atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
   }
   order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
+  const auditBefore = {
+    purchaseOrderStatus: order.status,
+    goodsReceipt: 'Não existia (recebimento criado nesta ação)',
+    items: order.items.map((i) => ({ purchaseOrderItemId: i.id, quantity: i.quantity, receivedQuantity: i.receivedQuantity })),
+  };
 
   // BUG REAL CORRIGIDO (teste de carga de Estoque/Compras, Marco 7, 19/10/2026): dois
   // recebimentos simultâneos (pedidos diferentes) do MESMO item de estoque davam deadlock
@@ -788,7 +820,19 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   }
   await goodsReceipt.save({ transaction });
 
-  await registrarAuditoria({ groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId, action: 'GOODS_RECEIPT_CONFIRMED', entityType: 'GoodsReceipt', entityId: goodsReceipt.id, reason: `Recebimento confirmado — ${discrepancies.length} divergência(s).` }, transaction);
+  await registrarAuditoria({ groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId, action: 'GOODS_RECEIPT_CONFIRMED', entityType: 'GoodsReceipt', entityId: goodsReceipt.id,
+    beforeJson: auditBefore,
+    afterJson: {
+      goodsReceiptId: goodsReceipt.id,
+      goodsReceiptStatus: goodsReceipt.status,
+      purchaseOrderStatus: order.status,
+      destinationLocationId,
+      invoiceTotalAmount: invoiceTotalAmount != null ? invoiceTotalAmount : 'Não informado',
+      financialEntryId: goodsReceipt.financialEntryId || 'Sem lançamento (valor zero)',
+      discrepancyCount: discrepancies.length,
+      items: order.items.map((i) => ({ purchaseOrderItemId: i.id, quantity: i.quantity, receivedQuantity: i.receivedQuantity })),
+    },
+    reason: `Recebimento confirmado — ${discrepancies.length} divergência(s).` }, transaction);
 
   return { goodsReceipt, discrepancies };
 }
@@ -1107,6 +1151,11 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   }
 
   const items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
+  const auditBefore = {
+    status: order.status,
+    committedAmount: order.committedAmount,
+    items: items.map((i) => ({ purchaseOrderItemId: i.id, quantity: i.quantity, receivedQuantity: i.receivedQuantity })),
+  };
   const underReceivedItems = items.filter((i) => Number(i.receivedQuantity) < Number(i.quantity));
 
   const discrepancies = [];
@@ -1202,6 +1251,15 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
     {
       groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId,
       action: 'PURCHASE_ORDER_CANCELED', entityType: 'PurchaseOrder', entityId: order.id,
+      beforeJson: auditBefore,
+      afterJson: {
+        status: order.status,
+        committedAmount: order.committedAmount,
+        underReceivedItemCount: underReceivedItems.length,
+        discrepancyIds: discrepancies.map((d) => d.id),
+        reversedFinancialEntryIds,
+        reversedStockMovementIds,
+      },
       reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada)${reversedFinancialEntryIds.length > 0 ? `; payable(s) estornado(s): ${reversedFinancialEntryIds.join(', ')}` : ''}${reversedStockMovementIds.length > 0 ? `; estoque estornado via movimento(s): ${reversedStockMovementIds.join(', ')}` : ''}.`,
     },
     transaction
@@ -1235,6 +1293,9 @@ async function upsertSupplierQualification(payload, actorUserId, actor, transact
   }
 
   let qualification = await SupplierQualification.findOne({ where: { companyId, supplierPersonId }, transaction, lock: transaction.LOCK.UPDATE });
+  const auditBefore = qualification
+    ? { documentFileIds: qualification.documentFileIds, validUntil: qualification.validUntil, highRisk: qualification.highRisk, dueDiligenceStatus: qualification.dueDiligenceStatus }
+    : null;
   const isHighRisk = Boolean(highRisk);
   const fields = {
     documentFileIds: Array.isArray(documentFileIds) ? documentFileIds : (qualification?.documentFileIds || []),
@@ -1289,7 +1350,10 @@ async function upsertSupplierQualification(payload, actorUserId, actor, transact
   }
 
   await registrarAuditoria(
-    { groupId, companyId, actorUserId, action: 'SUPPLIER_QUALIFICATION_UPDATED', entityType: 'SupplierQualification', entityId: qualification.id, reason: `Documentos/vigência/risco atualizados (highRisk=${isHighRisk}).` },
+    { groupId, companyId, actorUserId, action: 'SUPPLIER_QUALIFICATION_UPDATED', entityType: 'SupplierQualification', entityId: qualification.id,
+      beforeJson: auditBefore || undefined,
+      afterJson: { documentFileIds: qualification.documentFileIds, validUntil: qualification.validUntil, highRisk: qualification.highRisk, dueDiligenceStatus: qualification.dueDiligenceStatus },
+      reason: `Documentos/vigência/risco atualizados (highRisk=${isHighRisk}).` },
     transaction
   );
 
@@ -1320,6 +1384,7 @@ async function decideSupplierDueDiligence(id, groupId, companyId, payload, actor
     );
   }
 
+  const auditBefore = { dueDiligenceStatus: qualification.dueDiligenceStatus, dueDiligenceNotes: qualification.dueDiligenceNotes, approvedByUserId: qualification.approvedByUserId, approvedAt: qualification.approvedAt };
   qualification.dueDiligenceStatus = normalized;
   qualification.dueDiligenceNotes = notes || null;
   qualification.approvedByUserId = actor.userId || null;
@@ -1328,7 +1393,10 @@ async function decideSupplierDueDiligence(id, groupId, companyId, payload, actor
   await qualification.save({ transaction });
 
   await registrarAuditoria(
-    { groupId: qualification.groupId, companyId: qualification.companyId, actorUserId: actor.userId, action: 'SUPPLIER_DUE_DILIGENCE_DECIDED', entityType: 'SupplierQualification', entityId: qualification.id, reason: `Due diligence ${normalized.toLowerCase()}.` },
+    { groupId: qualification.groupId, companyId: qualification.companyId, actorUserId: actor.userId, action: 'SUPPLIER_DUE_DILIGENCE_DECIDED', entityType: 'SupplierQualification', entityId: qualification.id,
+      beforeJson: auditBefore,
+      afterJson: { dueDiligenceStatus: qualification.dueDiligenceStatus, dueDiligenceNotes: qualification.dueDiligenceNotes, approvedByUserId: qualification.approvedByUserId, approvedAt: qualification.approvedAt },
+      reason: `Due diligence ${normalized.toLowerCase()}.` },
     transaction
   );
 
