@@ -9,6 +9,7 @@ const guaranteedRentService = require('./guaranteedRent.service');
 const rentAdvanceService = require('./rentAdvance.service');
 const utilitiesService = require('./utilities.service');
 const closeoutService = require('./closeout.service');
+const collectionCadenceService = require('./collectionCadence.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -126,6 +127,32 @@ const recoverRentAdvance = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 
+// --- Collection cadence (régua de cobrança, REG-LOC-004) ---
+const getCollectionCadence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => collectionCadenceService.getCadenceRule(t));
+  return success(res, { data: item });
+});
+const publishCollectionCadence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    collectionCadenceService.publishCadenceRuleVersionAudited(req.auth.groupId, req.auth.companyId, req.body && req.body.steps, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listCollectionCadenceSteps = catchAsync(async (req, res) => {
+  const { data, pagination } = await req.withTenantTransaction((t) =>
+    collectionCadenceService.listExecutedSteps(t, {
+      billingScheduleId: req.query.billingScheduleId,
+      contractId: req.query.contractId,
+      period: req.query.period,
+      outcome: req.query.outcome,
+      action: req.query.action,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    })
+  );
+  return success(res, { data, pagination });
+});
+
 // --- Utilities ---
 const createUtilityObligation = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => utilitiesService.createUtilityObligation(withTenant(req), req.auth.userId, t));
@@ -187,6 +214,9 @@ module.exports = {
   acceptRentAdvance,
   payRentAdvance,
   recoverRentAdvance,
+  getCollectionCadence,
+  publishCollectionCadence,
+  listCollectionCadenceSteps,
   createUtilityObligation,
   listUtilityObligations,
   getUtilityObligation,

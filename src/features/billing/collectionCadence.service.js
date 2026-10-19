@@ -464,6 +464,134 @@ async function listCadenceSteps(billingScheduleId, transaction) {
   return CollectionCadenceStep.findAll({ where: { billingScheduleId }, order: [['created_at', 'ASC']], transaction });
 }
 
+// --- Consulta/gestão da régua via HTTP (rotas /billing/collection-cadence) ---
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const OUTCOMES = ['EXECUTED', 'SKIPPED_SUPERSEDED'];
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function serializeVersion(version) {
+  return {
+    id: version.id,
+    versionNumber: version.versionNumber,
+    status: version.status,
+    effectiveFrom: version.effectiveFrom,
+    effectiveUntil: version.effectiveUntil,
+    publishedByUserId: version.publishedByUserId,
+    isCurrent: version.status === 'PUBLISHED' && !version.effectiveUntil,
+    steps: (version.actionJson && Array.isArray(version.actionJson.steps)) ? version.actionJson.steps : [],
+  };
+}
+
+/** Versão vigente + histórico de versões da REG-LOC-004 da empresa (RLS da transação). */
+async function getCadenceRule(transaction) {
+  const rule = await Rule.findOne({ where: { code: RULE_CODE }, transaction });
+  if (!rule) {
+    return { ruleCode: RULE_CODE, current: null, versions: [], defaultSteps: DEFAULT_CADENCE_STEPS, actions: ACTIONS, limits: { minOffset: MIN_OFFSET, maxOffset: MAX_OFFSET, maxSteps: 20 } };
+  }
+  const versions = await RuleVersion.findAll({ where: { ruleId: rule.id }, order: [['versionNumber', 'DESC']], transaction });
+  const serialized = versions.map(serializeVersion);
+  return {
+    ruleCode: RULE_CODE,
+    ruleId: rule.id,
+    current: serialized.find((v) => v.isCurrent) || null,
+    versions: serialized,
+    defaultSteps: DEFAULT_CADENCE_STEPS,
+    actions: ACTIONS,
+    limits: { minOffset: MIN_OFFSET, maxOffset: MAX_OFFSET, maxSteps: 20 },
+  };
+}
+
+async function publishCadenceRuleVersionAudited(groupId, companyId, steps, actorUserId, transaction) {
+  const before = await getCadenceRule(transaction);
+  const version = await publishCadenceRuleVersion(groupId, companyId, steps, actorUserId, transaction);
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId: actorUserId || null,
+      action: 'billing.collection_cadence.publish',
+      entityType: 'RuleVersion',
+      entityId: version.id,
+      beforeJson: before.current,
+      afterJson: serializeVersion(version),
+      reason: `Nova versão ${version.versionNumber} da régua de cobrança (${RULE_CODE}) publicada.`,
+    },
+    transaction
+  );
+  return serializeVersion(version);
+}
+
+/** Etapas executadas/puladas, com filtros (competência, contrato, cobrança, desfecho) e paginação. */
+async function listExecutedSteps(transaction, filters = {}) {
+  const where = {};
+  for (const key of ['billingScheduleId', 'contractId']) {
+    if (filters[key]) {
+      if (!UUID_PATTERN.test(String(filters[key]))) {
+        throw AppError.badRequest(`"${key}" deve ser um UUID válido.`, 'COLLECTION_CADENCE_FILTER_INVALID');
+      }
+      where[key] = filters[key];
+    }
+  }
+  if (filters.outcome) {
+    const outcome = String(filters.outcome).toUpperCase();
+    if (!OUTCOMES.includes(outcome)) {
+      throw AppError.badRequest(`"outcome" deve ser ${OUTCOMES.join(' ou ')}.`, 'COLLECTION_CADENCE_FILTER_INVALID');
+    }
+    where.outcome = outcome;
+  }
+  if (filters.action) {
+    if (!ACTIONS.includes(String(filters.action).toUpperCase())) {
+      throw AppError.badRequest(`"action" deve ser ${ACTIONS.join(', ')}.`, 'COLLECTION_CADENCE_FILTER_INVALID');
+    }
+    where.action = String(filters.action).toUpperCase();
+  }
+  if (filters.period) {
+    if (!PERIOD_PATTERN.test(String(filters.period))) {
+      throw AppError.badRequest('"period" deve estar no formato AAAA-MM.', 'COLLECTION_CADENCE_FILTER_INVALID');
+    }
+    const schedules = await BillingSchedule.findAll({ where: { period: String(filters.period) }, attributes: ['id'], transaction });
+    const ids = schedules.map((s) => s.id);
+    if (where.billingScheduleId) {
+      where.billingScheduleId = ids.includes(where.billingScheduleId) ? where.billingScheduleId : null;
+    } else {
+      where.billingScheduleId = { [Op.in]: ids };
+    }
+  }
+
+  const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(filters.pageSize, 10) || DEFAULT_PAGE_SIZE));
+
+  if (where.billingScheduleId === null || (where.billingScheduleId && where.billingScheduleId[Op.in] && where.billingScheduleId[Op.in].length === 0)) {
+    return { data: [], pagination: { page, pageSize, total: 0 } };
+  }
+
+  const { rows, count } = await CollectionCadenceStep.findAndCountAll({
+    where,
+    order: [['created_at', 'DESC']],
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    transaction,
+  });
+  const scheduleIds = [...new Set(rows.map((r) => r.billingScheduleId))];
+  const schedules = scheduleIds.length
+    ? await BillingSchedule.findAll({ where: { id: scheduleIds }, attributes: ['id', 'period', 'dueDate', 'status', 'balance'], transaction })
+    : [];
+  const byId = new Map(schedules.map((s) => [s.id, s]));
+  const data = rows.map((row) => {
+    const schedule = byId.get(row.billingScheduleId);
+    return {
+      ...row.toJSON(),
+      period: schedule ? schedule.period : null,
+      dueDate: schedule ? schedule.dueDate : null,
+      scheduleStatus: schedule ? schedule.status : null,
+    };
+  });
+  return { data, pagination: { page, pageSize, total: count } };
+}
+
 module.exports = {
   RULE_CODE,
   DEFAULT_CADENCE_STEPS,
@@ -473,4 +601,7 @@ module.exports = {
   businessDateSaoPaulo,
   runCollectionCadence,
   listCadenceSteps,
+  getCadenceRule,
+  publishCadenceRuleVersionAudited,
+  listExecutedSteps,
 };

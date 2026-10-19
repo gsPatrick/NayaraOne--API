@@ -41,6 +41,11 @@ billingRouter.post('/billing/rent-advances/:id/accept', requirePermission('billi
 billingRouter.post('/billing/rent-advances/:id/pay', requirePermission('billing:approve'), billingController.payRentAdvance);
 billingRouter.post('/billing/rent-advances/:id/recover', requirePermission('billing:update'), billingController.recoverRentAdvance);
 
+// Collection cadence (régua de cobrança via Motor de Regras, REG-LOC-004)
+billingRouter.get('/billing/collection-cadence', requirePermission('billing:read'), billingController.getCollectionCadence);
+billingRouter.post('/billing/collection-cadence/versions', requirePermission('billing:cadence:manage'), billingController.publishCollectionCadence);
+billingRouter.get('/billing/collection-cadence/steps', requirePermission('billing:read'), billingController.listCollectionCadenceSteps);
+
 // Utilities
 billingRouter.post('/billing/utility-obligations', requirePermission('billing:create'), billingController.createUtilityObligation);
 billingRouter.get('/billing/utility-obligations', requirePermission('billing:read'), billingController.listUtilityObligations);
