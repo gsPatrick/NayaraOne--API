@@ -1256,8 +1256,9 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
         nature: 'PENDING_CLASSIFICATION',
         amount: fromCents(excessCents),
         description:
-          `Excedente de ${fromCents(excessCents)} recebido acima do saldo restante do lançamento ${entry.id} ` +
-          '— pendência de classificação (FIN: valor excedente nunca é automaticamente receita).',
+          // Texto para o usuário (sem UUID): o vínculo com a origem fica em parentEntryId.
+          `Valor recebido a mais (${formatBRLText(excessCents)}) em "${entry.description || 'lançamento'}" ` +
+          '— aguardando classificação manual.',
         dueAt: null,
         competenceMonth: entry.competenceMonth,
         settledAt: null,
@@ -1334,7 +1335,27 @@ async function listClassificationPendings(transaction, filters = {}) {
   const where = { nature: 'PENDING_CLASSIFICATION' };
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.parentEntryId) where.parentEntryId = filters.parentEntryId;
-  return FinancialEntry.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const rows = await FinancialEntry.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  // Enriquecimento para a UI: data de abertura (createdAt) e dados do lançamento de origem
+  // (descrição/valor) — o id da origem continua em parentEntryId, separado do texto.
+  const parentIds = [...new Set(rows.map((r) => r.parentEntryId).filter(Boolean))];
+  const parents = parentIds.length
+    ? await FinancialEntry.findAll({ where: { id: parentIds }, attributes: ['id', 'description', 'amount', 'dueAt'], transaction })
+    : [];
+  const byId = new Map(parents.map((p) => [p.id, p]));
+  return rows.map((r) => {
+    const json = r.toJSON();
+    const parent = byId.get(r.parentEntryId);
+    return {
+      ...json,
+      createdAt: json.createdAt || json.created_at || null,
+      parentEntry: parent ? { id: parent.id, description: parent.description, amount: parent.amount, dueAt: parent.dueAt } : null,
+    };
+  });
+}
+
+function formatBRLText(cents) {
+  return (Number(cents) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 /**
