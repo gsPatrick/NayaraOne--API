@@ -246,6 +246,10 @@ test('F3-IC4 consolidado do grupo elimina os dois lados da transferência (sem d
     assert.ok(!withoutDest.eliminations.some((e) => e.transferId === transfer.id), 'sem as duas pontas no relatório não há o que eliminar');
 
     // Dá ao usuário a mesma role (com finance:read) também no destino.
+    // M45 F8: a tela recebe o indicador por empresa em vez de contas vazias.
+    let dests = await intercompanyService.listDestinationCompanies(actor, t);
+    assert.equal(dests.find((c) => c.id === destination.id).canReadFinance, false);
+    assert.ok(!dests.some((c) => c.id === tenant.companyId), 'a empresa atual não é destino');
     const membership = await UserMembership.findOne({ where: { userId: tenant.userId, companyId: tenant.companyId, status: 'ACTIVE' }, transaction: t });
     await inCompany(t, destination.id, () =>
       UserMembership.create({ groupId: tenant.groupId, companyId: destination.id, userId: tenant.userId, roleId: membership.roleId, status: 'ACTIVE' }, { transaction: t })
@@ -272,10 +276,16 @@ test('F3-IC5 contas do destino só são listadas com finance:read no destino (RL
     const actor = { groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId };
     await expectCode(() => intercompanyService.listDestinationBankAccounts(actor, destination.id, t), 'FINANCE_INTERCOMPANY_DESTINATION_FORBIDDEN');
     await expectCode(() => intercompanyService.listDestinationBankAccounts(actor, tenant.companyId, t), 'FINANCE_INTERCOMPANY_DESTINATION_INVALID');
+    // M45 F8: a tela recebe o indicador por empresa em vez de contas vazias.
+    let dests = await intercompanyService.listDestinationCompanies(actor, t);
+    assert.equal(dests.find((c) => c.id === destination.id).canReadFinance, false);
+    assert.ok(!dests.some((c) => c.id === tenant.companyId), 'a empresa atual não é destino');
     const membership = await UserMembership.findOne({ where: { userId: tenant.userId, companyId: tenant.companyId, status: 'ACTIVE' }, transaction: t });
     await inCompany(t, destination.id, () =>
       UserMembership.create({ groupId: tenant.groupId, companyId: destination.id, userId: tenant.userId, roleId: membership.roleId, status: 'ACTIVE' }, { transaction: t })
     );
+    dests = await intercompanyService.listDestinationCompanies(actor, t);
+    assert.equal(dests.find((c) => c.id === destination.id).canReadFinance, true);
     const accounts = await intercompanyService.listDestinationBankAccounts(actor, destination.id, t);
     assert.deepEqual(accounts.map((a) => a.id), [base.toBankAccountId]);
     // Contexto restaurado: a conta do destino continua invisível na origem.
@@ -638,5 +648,25 @@ test('F3-LG ledger: colunas mutáveis mudam, e toda mudança fica auditada pelo 
     const after = await AuditLog.findAll({ where: { entityType: 'FinancialEntryRow', entityId: entry.id }, order: [['occurred_at', 'ASC']], transaction: t });
     assert.ok(after.length >= 2);
     assert.ok(after.some((l) => l.afterJson.status === 'SETTLED'));
+  });
+});
+
+test('M45-O2 listCommissions(includeInstallments) traz as parcelas numa só consulta (sem N+1)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    await commissionsService.publishCommissionRuleVersion({ groupId: tenant.groupId, companyId: tenant.companyId, componentPercentages: { BROKER: 5 } }, tenant.userId, t);
+    const source = await newReceivable(t, 2000);
+    const { commission } = await commissionsService.createCommission(
+      { groupId: tenant.groupId, companyId: tenant.companyId, beneficiaryUserId: tenant.userId, sourceEntryId: source.id, component: 'BROKER', installmentsCount: 2, idempotencyKey: `m45-o2-${uniqueSuffix()}` },
+      tenant.userId,
+      t
+    );
+    const list = await commissionsService.listCommissions(t, { includeInstallments: true, beneficiaryUserId: tenant.userId });
+    const found = list.find((c) => c.id === commission.id);
+    assert.ok(found, 'comissão listada');
+    const expected = await commissionsService.listCommissionInstallments(commission.id, t);
+    assert.equal(found.installments.length, expected.length);
+    assert.ok(found.installments.length >= 1);
+    const plain = await commissionsService.listCommissions(t, { beneficiaryUserId: tenant.userId });
+    assert.equal(plain.find((c) => c.id === commission.id).installments, undefined, 'sem include, formato antigo');
   });
 });

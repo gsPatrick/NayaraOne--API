@@ -256,7 +256,11 @@ const createCommission = catchAsync(async (req, res) => {
 });
 const listCommissions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
-    commissionsService.listCommissions(t, { status: req.query.status, beneficiaryUserId: req.query.beneficiaryUserId })
+    commissionsService.listCommissions(t, {
+      status: req.query.status,
+      beneficiaryUserId: req.query.beneficiaryUserId,
+      includeInstallments: req.query.include === 'installments',
+    })
   );
   return success(res, { data: items });
 });

@@ -365,7 +365,20 @@ async function listCommissions(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.beneficiaryUserId) where.beneficiaryUserId = filters.beneficiaryUserId;
-  return Commission.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const commissions = await Commission.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  if (!filters.includeInstallments) return commissions;
+  // O2 (auditoria M45): a tela fazia 1 chamada /installments por comissão (N+1, ~3 min).
+  // Agora uma única consulta traz as parcelas de todas as comissões listadas.
+  const ids = commissions.map((c) => c.id);
+  const installments = ids.length
+    ? await CommissionInstallment.findAll({ where: { commissionId: ids }, order: [['installment_number', 'ASC']], transaction })
+    : [];
+  const byCommission = new Map();
+  for (const i of installments) {
+    if (!byCommission.has(i.commissionId)) byCommission.set(i.commissionId, []);
+    byCommission.get(i.commissionId).push(i.toJSON());
+  }
+  return commissions.map((c) => ({ ...c.toJSON(), installments: byCommission.get(c.id) || [] }));
 }
 
 async function getCommission(id, transaction) {
