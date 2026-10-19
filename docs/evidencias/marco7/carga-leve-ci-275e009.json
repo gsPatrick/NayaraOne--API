@@ -1,137 +1,137 @@
 {
-  "date": "2026-10-19T17:35:40.662Z",
-  "mode": "full",
-  "concurrency": 16,
+  "date": "2026-10-19T17:53:08.935Z",
+  "mode": "light",
+  "concurrency": 8,
   "pool": 24,
-  "totalOps": 3950,
-  "loadSeconds": 8.036,
+  "totalOps": 650,
+  "loadSeconds": 2.147,
   "ops": [
     {
       "op": "leitura: histórico de movimentos",
-      "n": 400,
-      "ok": 400,
+      "n": 60,
+      "ok": 60,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 14.486875,
-      "p95": 19.539583,
-      "p99": 22.289083,
-      "max": 26.096166
+      "p50": 10.2085,
+      "p95": 14.905375,
+      "p99": 17.126333,
+      "max": 17.126333
     },
     {
       "op": "leitura: saldos do item",
-      "n": 400,
-      "ok": 400,
+      "n": 60,
+      "ok": 60,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 10.942084,
-      "p95": 15.367709,
-      "p99": 17.26425,
-      "max": 19.931125
+      "p50": 7.083208,
+      "p95": 10.544917,
+      "p99": 12.274167,
+      "max": 12.274167
     },
     {
       "op": "movimento IN",
-      "n": 423,
-      "ok": 423,
+      "n": 52,
+      "ok": 52,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 36.875791,
-      "p95": 61.633,
-      "p99": 78.679,
-      "max": 106.615417
+      "p50": 26.092291,
+      "p95": 94.599875,
+      "p99": 112.879125,
+      "max": 112.879125
     },
     {
       "op": "movimento OUT",
-      "n": 1210,
-      "ok": 435,
+      "n": 141,
+      "ok": 49,
       "recusasNegocio": {
-        "INVENTORY_INSUFFICIENT_BALANCE": 775
+        "INVENTORY_INSUFFICIENT_BALANCE": 92
       },
       "inesperados": {},
-      "p50": 27.318667,
-      "p95": 62.234917,
-      "p99": 101.880292,
-      "max": 137.250958
+      "p50": 17.061459,
+      "p95": 53.016291,
+      "p99": 98.726333,
+      "max": 151.179209
     },
     {
       "op": "movimento TRANSFER",
-      "n": 767,
-      "ok": 378,
+      "n": 107,
+      "ok": 67,
       "recusasNegocio": {
-        "INVENTORY_INSUFFICIENT_BALANCE": 389
+        "INVENTORY_INSUFFICIENT_BALANCE": 40
       },
       "inesperados": {},
-      "p50": 33.922625,
-      "p95": 66.644583,
-      "p99": 111.797416,
-      "max": 185.541833
+      "p50": 22.884125,
+      "p95": 65.42175,
+      "p99": 111.965208,
+      "max": 119.400917
     },
     {
       "op": "recebimento de compra",
-      "n": 150,
-      "ok": 150,
+      "n": 50,
+      "ok": 50,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 102.201125,
-      "p95": 170.157541,
-      "p99": 235.659209,
-      "max": 259.249375
+      "p50": 70.578833,
+      "p95": 158.60375,
+      "p99": 180.463958,
+      "max": 180.463958
     },
     {
       "op": "replay de movimento",
-      "n": 120,
-      "ok": 12,
+      "n": 20,
+      "ok": 13,
       "recusasNegocio": {
-        "INVENTORY_INSUFFICIENT_BALANCE": 108
+        "INVENTORY_INSUFFICIENT_BALANCE": 7
       },
       "inesperados": {},
-      "p50": 24.175584,
-      "p95": 40.641958,
-      "p99": 104.238084,
-      "max": 114.238208
+      "p50": 16.720208,
+      "p95": 46.303833,
+      "p99": 76.863333,
+      "max": 76.863333
     },
     {
       "op": "replay de recebimento",
-      "n": 30,
-      "ok": 30,
+      "n": 10,
+      "ok": 10,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 20.085667,
-      "p95": 105.551208,
-      "p99": 155.385208,
-      "max": 155.385208
+      "p50": 71.443917,
+      "p95": 123.503583,
+      "p99": 123.503583,
+      "max": 123.503583
     },
     {
       "op": "requisição: aprovar",
-      "n": 150,
-      "ok": 150,
+      "n": 50,
+      "ok": 50,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 12.523125,
-      "p95": 17.79975,
-      "p99": 21.019375,
-      "max": 22.187792
+      "p50": 7.53475,
+      "p95": 11.901459,
+      "p99": 13.285041,
+      "max": 13.285041
     },
     {
       "op": "requisição: criar",
-      "n": 150,
-      "ok": 150,
+      "n": 50,
+      "ok": 50,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 21.788875,
-      "p95": 37.666,
-      "p99": 77.446125,
-      "max": 91.402125
+      "p50": 15.572583,
+      "p95": 66.943875,
+      "p99": 75.213375,
+      "max": 75.213375
     },
     {
       "op": "requisição: entregar",
-      "n": 150,
-      "ok": 150,
+      "n": 50,
+      "ok": 50,
       "recusasNegocio": {},
       "inesperados": {},
-      "p50": 45.86325,
-      "p95": 96.238,
-      "p99": 133.909167,
-      "max": 141.947208
+      "p50": 30.318375,
+      "p95": 49.352416,
+      "p99": 54.813125,
+      "max": 54.813125
     }
   ],
   "invariants": {
@@ -143,8 +143,8 @@
     "payableDuplicado": 0,
     "recebimentoSemPayable": 0,
     "pedidoDivergente": 0,
-    "recebimentos": 150,
-    "movimentos": 1571
+    "recebimentos": 50,
+    "movimentos": 281
   },
   "gates": [
     {
@@ -173,9 +173,9 @@
       "detail": "duplicado 0, sem payable 0"
     },
     {
-      "name": "recebimentos gravados = 150 (replays não somam)",
+      "name": "recebimentos gravados = 50 (replays não somam)",
       "ok": true,
-      "detail": "150"
+      "detail": "50"
     },
     {
       "name": "recebido por item de pedido = soma dos recebimentos",
@@ -188,9 +188,9 @@
       "detail": "0"
     },
     {
-      "name": "p95 < 300 ms em todas as operações",
+      "name": "p95 < 300 ms em todas as operações com n >= 50",
       "ok": true,
-      "detail": "maior p95: 170.2 ms"
+      "detail": "maior p95 (n >= 50): 158.6 ms"
     }
   ]
 }

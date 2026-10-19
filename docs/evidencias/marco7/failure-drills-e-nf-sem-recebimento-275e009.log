@@ -1,0 +1,19 @@
+[withDisposableDb] cluster descartável 127.0.0.1:5462/drill_app pronto (296 migrations, GRANT em 14 schemas) em 7.8 s
+✔ Drill 1: falha ao gravar o payable no meio do recebimento não deixa estado parcial; retry idempotente (219.475875ms)
+✔ Drill 2: falha na 2ª perna da transferência não deixa saída sem entrada; retry idempotente (37.904792ms)
+✔ Drill 3: falha na 2ª linha da entrega de requisição não entrega nada; retry entrega uma vez (60.776625ms)
+✔ T-invoice sem receipt (serviço): NF com valor e sem itens recebidos é recusada e não gera payable (394.258333ms)
+✔ T-invoice sem receipt (serviço): NF com linha de quantidade zero é recusada e não gera payable (46.553167ms)
+✔ T-invoice sem receipt (serviço): NF contra pedido cancelado é recusada e não gera payable (29.182291ms)
+✔ T-invoice sem receipt (Estoque): recibo com número de NF não confirmado não move saldo nem cria payable (10.610291ms)
+✔ Controle positivo: a mesma NF COM recebimento gera exatamente 1 payable do valor da nota (56.206708ms)
+✔ T-invoice sem receipt (rota): POST goods-receipts só com a NF → 400 e nada gravado; não existe rota de NF avulsa (98.784333ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2014.487375
+[withDisposableDb] cluster parado e diretório temporário apagado.
