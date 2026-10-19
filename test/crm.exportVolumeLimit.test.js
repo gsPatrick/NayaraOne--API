@@ -21,10 +21,25 @@ after(async () => {
 });
 
 async function setUpMfa(tenant, transaction) {
-  const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
-  const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
-  await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
-  await mfaService.verifyMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
+  // Determinismo (19/10/2026): o usuário semente do banco compartilhado já tem MFA configurado
+  // (commitado em 14/10) e setupMfa recusa reconfigurar. Este arquivo testa o LIMITE DE VOLUME (o
+  // fluxo de MFA está em marco3.crm/mfa.test): se não houver credencial, configura pelo service;
+  // havendo, só registra um step-up recente — tudo dentro da transação de rollback.
+  const { MfaCredential, MfaStepUp } = require('../src/models');
+  const existing = await MfaCredential.findOne({ where: { userId: tenant.userId }, transaction });
+  if (!existing) {
+    const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
+    const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
+    await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
+    await mfaService.verifyMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
+    return;
+  }
+  assert.ok(existing.enabled, 'credencial MFA do usuário semente deveria estar habilitada');
+  const stepUp = { verifiedAt: new Date(), expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
+  const [updated] = await MfaStepUp.update(stepUp, { where: { userId: tenant.userId }, transaction });
+  if (!updated) {
+    await MfaStepUp.create({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId, ...stepUp }, { transaction });
+  }
 }
 
 test('CRM-TS-013: exportação acima do limite de volume é recusada, não truncada', async () => {

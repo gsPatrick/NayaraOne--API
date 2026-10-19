@@ -775,8 +775,15 @@ test('M3-21: exportação SEM a permissão dedicada é bloqueada (403)', async (
   });
 });
 
+async function disableExistingMfa(transaction) {
+  const { sequelize: db } = require('./testHelpers');
+  await db.query('DELETE FROM core.mfa_step_ups WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+  await db.query('DELETE FROM core.mfa_credentials WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+}
+
 test('M3-21/CRM-TS-013: exportação SEM MFA recente é bloqueada mesmo com a permissão certa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await disableExistingMfa(transaction); // ver nota de determinismo no teste seguinte
     await assert.rejects(
       () =>
         exportService.exportOpportunities(
@@ -808,6 +815,10 @@ test('M3-21: exportação COM a permissão e MFA recente funciona, limita os cam
     await createActiveOpportunity(transaction, person.id);
 
     // CRM-TS-013: exportação exige MFA recente, mesmo mecanismo do step-up financeiro.
+    // Determinismo (19/10/2026): o usuário semente do banco compartilhado já tem MFA configurado
+    // (commitado em 14/10). Dentro da transação de rollback a credencial existente é desativada e
+    // o teste configura a sua pelo fluxo real (setup -> confirm -> verify).
+    await disableExistingMfa(transaction);
     const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
     const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
     await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
