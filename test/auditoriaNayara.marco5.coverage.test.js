@@ -221,13 +221,29 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   const legalDir = path.join(__dirname, '..', 'src', 'features', 'legal');
   const files = fs.readdirSync(legalDir).filter((f) => f.endsWith('.js'));
 
+  // Exceção controlada (NAY Jurídica, Caderno §17, 19/10/2026): o módulo de leitura
+  // legalNay.service.js (travado logo abaixo) e as linhas de rota /legal/nay/* — todas
+  // exigindo legal:read, conferidas abaixo.
+  const nayRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/[^']+', requirePermission\('legal:read'\), legalController\.nay\w+\);$/;
   for (const file of files) {
-    const content = fs.readFileSync(path.join(legalDir, file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    if (file === 'legalNay.service.js') continue;
+    let content = fs.readFileSync(path.join(legalDir, file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    if (file === 'legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l)).join('\n');
     assert.ok(
       !/\bNAY\b/i.test(content),
       `${file} não deveria referenciar NAY fora de comentário — nenhum agente de IA tem caminho de execução no jurídico.`
     );
   }
+
+  // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError, a única escrita
+  // é a auditoria da execução (AiRun.create) e não usa SQL cru.
+  const nay = fs.readFileSync(path.join(legalDir, 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../utils/AppError']);
+  assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 1, 'só AiRun.create');
+  assert.match(nay, /AiRun\.create\(/);
+  const routeLines = fs.readFileSync(path.join(legalDir, 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
+  assert.equal(routeLines.length, 6);
+  for (const l of routeLines) assert.match(l, nayRouteRe);
 
   // Toda criação/decisão jurídica crítica (processo, dossiê, mudança de status de contrato,
   // decisão de aprovação) exige actorUserId e passa por controller->rota protegida — nunca é

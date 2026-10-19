@@ -94,6 +94,8 @@ legalRouter.post('/legal/amendments/:id/sign', requirePermission('legal:update')
 
 // Signatures
 legalRouter.post('/legal/contract-versions/:id/signatures', requirePermission('legal:sign'), legalController.initiateSignature);
+// M45 (Caderno M5 §8): assinatura MANUAL exige arquivo da via assinada e coletor identificado.
+legalRouter.post('/legal/contract-versions/:id/manual-signatures', requirePermission('legal:sign'), legalController.recordManualSignature);
 legalRouter.get('/legal/contract-versions/:id/signatures', requirePermission('legal:read'), legalController.listSignaturesByContractVersion);
 legalRouter.post('/legal/signatures/:externalSignatureId/webhook', requirePermission('legal:sign'), legalController.signatureWebhook);
 legalRouter.get('/legal/signatures/:id/status', requirePermission('legal:sign'), legalController.checkSignatureStatus);
@@ -120,6 +122,8 @@ legalRouter.get('/legal/inspections/:id/items', requirePermission('legal:read'),
 legalRouter.post('/legal/inspections/items/:itemId/media', requirePermission('legal:create'), legalController.attachInspectionItemMedia);
 legalRouter.get('/legal/inspections/items/:itemId/media', requirePermission('legal:read'), legalController.listInspectionItemMedia);
 legalRouter.post('/legal/inspections/:id/sign', requirePermission('legal:update'), requireRecentMfa, legalController.signInspection);
+// M45 (Caderno M5 §11/JUR-TS-006): correção de vistoria assinada nasce como revisão.
+legalRouter.post('/legal/inspections/:id/revisions', requirePermission('legal:update'), legalController.createInspectionRevision);
 legalRouter.get('/legal/inspections/:id/signatures', requirePermission('legal:read'), legalController.listInspectionSignatures);
 legalRouter.post('/legal/inspections/:id/report', requirePermission('legal:update'), legalController.generateInspectionReport);
 legalRouter.get('/legal/inspections/:id/report', requirePermission('legal:read'), legalController.getInspectionReport);
@@ -155,5 +159,14 @@ legalRouter.get('/legal/evidence-packages/:id', requirePermission('legal:read'),
 // M5-28/M5-29: export verificável do dossiê e leitura da cadeia de custódia.
 legalRouter.get('/legal/evidence-packages/:id/export', requirePermission('legal:read'), legalController.exportEvidencePackage);
 legalRouter.get('/legal/evidence-packages/:id/access-log', requirePermission('legal:read'), legalController.listEvidencePackageAccessLog);
+
+// NAY Jurídica (Caderno M5 §17, JUR-008, JUR-TS-012): resume, compara e sugere — somente leitura.
+// A extração de prazos é POST só porque recebe texto; ela não cria prazo (status PENDING_CONFIRMATION).
+legalRouter.get('/legal/nay/contracts/:id/summary', requirePermission('legal:read'), legalController.nayContractSummary);
+legalRouter.get('/legal/nay/contracts/:id/compare', requirePermission('legal:read'), legalController.nayContractCompare);
+legalRouter.get('/legal/nay/cases/:id/summary', requirePermission('legal:read'), legalController.nayCaseSummary);
+legalRouter.get('/legal/nay/cases/:id/dossier', requirePermission('legal:read'), legalController.nayCaseDossier);
+legalRouter.get('/legal/nay/clause-suggestions', requirePermission('legal:read'), legalController.nayClauseSuggestions);
+legalRouter.post('/legal/nay/deadline-suggestions', requirePermission('legal:read'), legalController.nayDeadlineSuggestions);
 
 module.exports = legalRouter;

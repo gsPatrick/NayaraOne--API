@@ -133,6 +133,8 @@ financeRouter.post('/finance/period-closures/reopen', requirePermission('finance
 // F02 (2ª rodada): pedido de fechamento em REVIEW volta para OPEN — mesma alçada da aprovação (finance:approve + MFA recente), motivo obrigatório.
 financeRouter.post('/finance/period-closures/return-to-open', requirePermission('finance:approve'), requireRecentMfa, financeController.returnPeriodToOpen);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);
+// Caderno M4 §18 (NAY Financeira): explicações/sugestões, só leitura (GET, finance:read).
+financeRouter.get('/finance/nay/insights', requirePermission('finance:read'), financeController.getFinanceInsights);
 
 // Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)
 financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), financeController.createBudgetForecast);

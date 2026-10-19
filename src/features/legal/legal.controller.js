@@ -23,6 +23,7 @@ const contractTimelineService = require('./contractTimeline.service');
 const contractPdfService = require('./contractPdf.service');
 const requirementsService = require('./requirements.service');
 const noticesService = require('./notices.service');
+const legalNayService = require('./legalNay.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -580,6 +581,20 @@ const signInspection = catchAsync(async (req, res) => {
   );
   return success(res, { statusCode: 201, data: signature });
 });
+// M45 (Caderno M5 §11): revisão de vistoria assinada (original intacto).
+const createInspectionRevision = catchAsync(async (req, res) => {
+  const revision = await req.withTenantTransaction((t) =>
+    inspectionsService.createInspectionRevision(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: revision });
+});
+// M45 (Caderno M5 §8): assinatura manual com evidência e coletor identificado.
+const recordManualSignature = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    signaturesService.recordManualSignature(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
 const listInspectionSignatures = catchAsync(async (req, res) => {
   const signatures = await req.withTenantTransaction((t) => inspectionsService.listInspectionSignatures(req.params.id, t));
   return success(res, { data: signatures });
@@ -714,7 +729,38 @@ const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
   return success(res, { data });
 });
 
+// --- NAY Jurídica (Caderno M5 §17): somente leitura/sugestão ---
+const nayTenant = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId });
+const nayContractSummary = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.summarizeContract(nayTenant(req), req.params.id, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayContractCompare = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    legalNayService.compareContractVersions(nayTenant(req), req.params.id, req.query.from, req.query.to, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+const nayCaseSummary = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.summarizeCase(nayTenant(req), req.params.id, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayCaseDossier = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.organizeDossier(nayTenant(req), req.params.id, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayClauseSuggestions = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.suggestClauses(nayTenant(req), { category: req.query.category }, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayDeadlineSuggestions = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.suggestDeadlines(nayTenant(req), req.body || {}, req.auth.userId, t));
+  return success(res, { data });
+});
+
 module.exports = {
+  createInspectionRevision, recordManualSignature,
+  nayContractSummary, nayContractCompare, nayCaseSummary, nayCaseDossier, nayClauseSuggestions, nayDeadlineSuggestions,
   createContract, listContracts, getContract, transitionContract,
   suspendContract, reactivateContract, terminateContract, closeContract,
   generateContractRequirements, listContractRequirements, satisfyContractRequirement, waiveContractRequirement,

@@ -23,6 +23,7 @@ const bankPaymentsService = require('./bankPayments.service');
 const intercompanyTransfersService = require('./intercompanyTransfers.service');
 const periodClosuresService = require('./periodClosures.service');
 const financialHealthReportService = require('./financialHealthReport.service');
+const financeInsightsService = require('./financeNay.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -577,6 +578,14 @@ const getWeeklyHealthReport = catchAsync(async (req, res) => {
   return success(res, { data: report });
 });
 
+// Caderno M4 §18 — explicações e sugestões somente leitura (financeNay.service.js).
+const getFinanceInsights = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    financeInsightsService.getFinanceInsights({ groupId: req.auth.groupId, companyId: req.auth.companyId }, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+
 // GAP REAL CORRIGIDO (varredura completa Marco 4, 11/10/2026): finance.budgets_forecasts
 // (Caderno §5) tinha service mas nenhuma rota HTTP.
 const createBudgetForecast = catchAsync(async (req, res) => {
@@ -669,7 +678,7 @@ module.exports = {
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
   submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, processBankPaymentWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
-  closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
+  closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport, getFinanceInsights,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
