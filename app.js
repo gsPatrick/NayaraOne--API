@@ -27,6 +27,7 @@ const { startBillingScheduleAutoGenerateJob } = require('./src/engines/jobs/bill
 const { startCollectionCadenceJob } = require('./src/engines/jobs/collectionCadenceJob');
 const { startCorrespondentSubmissionWorkerJob } = require('./src/engines/jobs/correspondentSubmissionWorkerJob');
 const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/correspondentAppraisalWorkerJob');
+const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -215,6 +216,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_SUBMISSION_WORK
 }
 if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_APPRAISAL_WORKER_DISABLED !== 'true') {
   startCorrespondentAppraisalWorkerJob();
+}
+
+// B2 — reconciliação de pagamentos com resposta incerta do banco (revisão 18/10/2026).
+if (process.env.NODE_ENV !== 'test' && process.env.BANK_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
+  startBankPaymentReconciliationJob();
 }
 
 module.exports = app;

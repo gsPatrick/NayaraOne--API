@@ -10,7 +10,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestResultCenter, createTestCostCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestResultCenter, createTestCostCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
@@ -257,7 +257,8 @@ test('Caução §13: receber caução vinculada ao contrato, excluída do caixa 
       },
       tenant.userId, transaction
     );
-    await financialEntriesService.settleFinancialEntry(caucaoDevolvida.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): devolução é saída de caixa — aprovação + comprovante (ou banco).
+    await settleFinancialEntryWithApproval(tenant, caucaoDevolvida.id, tenant.userId, transaction);
 
     // EXTRATO do contrato: os dois lançamentos (receber + devolver) aparecem juntos, e AMBOS
     // seguem marcados como dinheiro de terceiro — nunca somados à receita/despesa própria.

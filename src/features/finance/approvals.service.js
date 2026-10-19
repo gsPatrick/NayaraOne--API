@@ -41,6 +41,25 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     throw AppError.badRequest(`O campo "riskLevel" deve ser um de: ${RISK_LEVELS.join(', ')}.`, 'FINANCE_APPROVAL_VALIDATION');
   }
 
+  // E1 (revisão independente, conferência 18/10/2026): a fila aceitava qualquer tipo e qualquer
+  // id — inclusive entidade de outra empresa ou inexistente — criando pedidos órfãos. Agora o
+  // tipo precisa ser um dos aprováveis e a entidade precisa existir NESTA empresa (a busca roda
+  // sob o RLS do tenant, então uma entidade de outra empresa simplesmente não é encontrada).
+  const RelatedModel = ENTITY_MODELS[relatedEntityType];
+  if (!RelatedModel) {
+    throw AppError.badRequest(
+      `O campo "relatedEntityType" deve ser um de: ${Object.keys(ENTITY_MODELS).join(', ')}.`,
+      'FINANCE_APPROVAL_VALIDATION'
+    );
+  }
+  const relatedEntityForCheck = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
+  if (!relatedEntityForCheck) {
+    throw AppError.notFound(
+      'A entidade a ser aprovada não foi encontrada nesta empresa.',
+      'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND'
+    );
+  }
+
   const existingPending = await ApprovalRequest.findOne({
     where: { relatedEntityType, relatedEntityId, status: 'PENDING' },
     transaction,
@@ -337,6 +356,24 @@ async function isApprovalRequestApproved(relatedEntityType, relatedEntityId, tra
 }
 
 /**
+ * listApprovedDeciders — quem decidiu (APPROVED) as solicitações ainda válidas (não STALE) de
+ * uma entidade. Usado pela baixa manual com comprovante (F03/A4): quem anexou o comprovante não
+ * pode ser quem aprovou a exceção.
+ */
+async function listApprovedDeciders(relatedEntityType, relatedEntityId, transaction) {
+  const approved = await ApprovalRequest.findAll({
+    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
+    transaction,
+  });
+  if (approved.length === 0) return [];
+  const steps = await ApprovalStep.findAll({
+    where: { approvalRequestId: approved.map((r) => r.id), decision: 'APPROVED' },
+    transaction,
+  });
+  return steps.map((s) => s.approverUserId).filter(Boolean);
+}
+
+/**
  * markApprovalRequestsStale — BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 —
  * variante do A10): a decisão já validava staleness (decideApprovalStep,
  * FINANCE_APPROVAL_STALE), mas uma ApprovalRequest já APPROVED sobre a versão 1 do lançamento
@@ -382,6 +419,7 @@ module.exports = {
   getApprovalRequest,
   decideApprovalStep,
   isApprovalRequestApproved,
+  listApprovedDeciders,
   markApprovalRequestsStale,
   RISK_LEVELS,
   REQUIRED_STEPS_BY_RISK,

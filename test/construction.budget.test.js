@@ -3,7 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
 const { Company } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
@@ -345,7 +345,8 @@ test('M6-NOVO-14: projectedMargin consegue ficar POSITIVA, ZERO e NEGATIVA confo
       await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
       await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
       const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
-      await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+      // Revisão 18/10/2026 (A1): custo real (PAYABLE) só liquida com aprovação + comprovante.
+      await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
     }
 
     // Orçamento (B) = 1000. Etapa medida em 50% concluída, com 400 já gasto (realizedCost).
@@ -426,7 +427,8 @@ test('M6-NOVO-15: economyAmount/commissionAmount são calculados a partir da mar
     await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
     await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
     const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): custo real (PAYABLE) só liquida com aprovação + comprovante.
+    await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
 
     const health = await projectHealthService.getProjectHealth(project.id, transaction);
     assert.equal(health.projectedMargin, 200);

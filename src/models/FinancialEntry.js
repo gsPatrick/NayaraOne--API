@@ -58,6 +58,12 @@ module.exports = (sequelize) => {
         field: 'chart_of_account_id',
         comment: 'Classificação contábil opcional (finance.chart_of_accounts — M4-01)',
       },
+      chartOfAccountVersionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'chart_of_account_version_id',
+        comment: '§4: versão da conta vigente na data do fato (finance.chart_of_account_versions)',
+      },
       isThirdPartyFunds: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -79,6 +85,11 @@ module.exports = (sequelize) => {
       settlementMethod: { type: DataTypes.STRING(32), allowNull: true, field: 'settlement_method' },
       settlementEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'settlement_evidence_file_id' },
       settlementReason: { type: DataTypes.TEXT, allowNull: true, field: 'settlement_reason' },
+      settlementEvidenceAttachedBy: { type: DataTypes.UUID, allowNull: true, field: 'settlement_evidence_attached_by' },
+      settlementEvidenceAttachedAt: { type: DataTypes.DATE, allowNull: true, field: 'settlement_evidence_attached_at' },
+      // RETURN (devolução em dinheiro) | COMPENSATION (abate de dívida do titular, sem caixa).
+      thirdPartyReleaseType: { type: DataTypes.STRING(16), allowNull: true, field: 'third_party_release_type' },
+      thirdPartyCompensatedEntryId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_compensated_entry_id' },
       entryType: {
         type: DataTypes.STRING(16),
         allowNull: false,

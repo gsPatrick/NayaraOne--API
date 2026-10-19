@@ -24,6 +24,7 @@ const {
   createTestCostCenter,
   createTestResultCenter,
   approveFinancialEntryForSettlement,
+  settleFinancialEntryWithApproval,
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { encryptSecret } = require('../src/utils/mfaCrypto');
@@ -278,8 +279,10 @@ test('F02-5: conferência de caixa de terceiros fica desatualizada se o moviment
 
     // Depois do pedido de revisão, entra uma caução no mês: o caixa conferido já não é o atual.
     const resultCenter = await createTestResultCenter(tenant, transaction);
+    // Revisão 18/10/2026 (D2): caução exige contrato e titular (locatário).
+    const { contract, holder } = await createLeaseWithTenantParty(transaction);
     const deposit = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 900, description: 'CONF1810 F02-5 caução', resultCenterId: resultCenter.id, dueAt: dueAtIn(referenceMonth), isThirdPartyFunds: true, thirdPartyReference: 'Caução F02-5' }),
+      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 900, description: 'CONF1810 F02-5 caução', resultCenterId: resultCenter.id, dueAt: dueAtIn(referenceMonth), isThirdPartyFunds: true, thirdPartyReference: 'Caução F02-5', contractId: contract.id, thirdPartyHolderPersonId: holder.id }),
       tenant.userId,
       transaction
     );
@@ -422,28 +425,29 @@ test('F03-2: comprovante inexistente ou motivo vazio não servem como exceção'
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
     const evidence = await createEvidenceFile(transaction);
 
+    // Revisão 18/10/2026 (A4): o comprovante é ANEXADO antes (attachSettlementEvidence) — as
+    // mesmas recusas valem no anexo; sem anexo, a baixa continua recusada.
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, {
-        manualSettlement: { evidenceFileId: '00000000-0000-4000-8000-000000000000', reason: 'TED feita no internet banking' },
-      }),
+      financialEntriesService.attachSettlementEvidence(entry.id, { evidenceFileId: '00000000-0000-4000-8000-000000000000', reason: 'TED feita no internet banking' }, tenant.userId, transaction),
       'FINANCE_SETTLEMENT_EVIDENCE_NOT_FOUND'
     );
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement: { evidenceFileId: evidence.id, reason: '   ' } }),
-      'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION'
+      financialEntriesService.attachSettlementEvidence(entry.id, { evidenceFileId: evidence.id, reason: '   ' }, tenant.userId, transaction),
+      'FINANCE_SETTLEMENT_EVIDENCE_VALIDATION'
     );
+    await expectCode(financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction), 'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION');
   });
 });
 
 test('F03-3: exceção formal — baixa manual com comprovante, motivo e aprovação fica marcada como manual, nunca como confirmação bancária', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { entry } = await createBankPayable(transaction);
-    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
     const evidence = await createEvidenceFile(transaction);
+    // Revisão 18/10/2026 (A4): anexa o comprovante e SÓ DEPOIS a aprovação (de outra pessoa).
+    await financialEntriesService.attachSettlementEvidence(entry.id, { evidenceFileId: evidence.id, reason: 'TED feita no internet banking em 18/10' }, tenant.userId, transaction);
+    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
 
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, {
-      manualSettlement: { evidenceFileId: evidence.id, reason: 'TED feita no internet banking em 18/10' },
-    });
+    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED');
     assert.equal(settled.settlementMethod, 'MANUAL_WITH_EVIDENCE');
     assert.equal(settled.settlementEvidenceFileId, evidence.id);
@@ -474,11 +478,17 @@ test('F03-5: executar manualmente uma intenção aprovada sem passar pelo banco 
       paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction),
       'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION'
     );
+    // Revisão 18/10/2026 (A4): comprovante anexado DEPOIS da aprovação da intenção não serve —
+    // a intenção precisa ser aprovada vendo o comprovante.
     const evidence = await createEvidenceFile(transaction);
-    const result = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction, {
-      manualSettlement: { evidenceFileId: evidence.id, reason: 'Pago fora da integração' },
-    });
+    await financialEntriesService.attachSettlementEvidence(entry.id, { evidenceFileId: evidence.id, reason: 'Pago fora da integração' }, tenant.userId, transaction);
+    await expectCode(paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction), 'FINANCE_SETTLEMENT_EVIDENCE_NOT_REVIEWED');
+    await paymentIntentsService.cancelPaymentIntent(intent.id, 'recriar depois do comprovante', tenant.userId, transaction);
+    const reviewed = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
+    await paymentIntentsService.approvePaymentIntent(reviewed.id, approverUser.id, transaction);
+    const result = await paymentIntentsService.executePaymentIntent(reviewed.id, tenant.userId, transaction);
     assert.equal(result.entry.settlementMethod, 'MANUAL_WITH_EVIDENCE');
+    assert.equal(result.entry.settlementEvidenceFileId, evidence.id);
   });
 });
 
@@ -500,7 +510,9 @@ test('F03-6: caminho do banco — só a confirmação efetiva liquida, e fica ma
   });
 });
 
-test('F03-7: recebimentos e pagamentos sem conta bancária seguem o fluxo direto de antes (sem regressão)', async () => {
+// Revisão 18/10/2026 (A1, regra nova legítima): PAYABLE SEM conta bancária deixou de liquidar
+// direto (era o atalho do achado A1) — segue aprovação + comprovante. Recebimento segue direto.
+test('F03-7: recebimento sem conta segue direto; pagamento sem conta exige aprovação e comprovante', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const costCenter = await createTestCostCenter(tenant, transaction);
@@ -515,11 +527,12 @@ test('F03-7: recebimentos e pagamentos sem conta bancária seguem o fluxo direto
       transaction
     );
     const r = await financialEntriesService.settleFinancialEntry(receivable.id, tenant.userId, transaction);
-    const p = await financialEntriesService.settleFinancialEntry(payableNoBank.id, tenant.userId, transaction);
     assert.equal(r.status, 'SETTLED');
-    assert.equal(p.status, 'SETTLED');
     assert.equal(r.settlementMethod, null);
-    assert.equal(p.settlementMethod, null);
+    await expectCode(financialEntriesService.settleFinancialEntry(payableNoBank.id, tenant.userId, transaction), 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
+    const p = await settleFinancialEntryWithApproval(tenant, payableNoBank.id, tenant.userId, transaction);
+    assert.equal(p.status, 'SETTLED');
+    assert.equal(p.settlementMethod, 'MANUAL_WITH_EVIDENCE');
   });
 });
 
@@ -527,7 +540,12 @@ test('F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e ac
   const { entryId, evidenceId } = await withCommitted(async (t) => {
     const { entry } = await createBankPayable(t, { amount: 210, referenceMonth: randomMonth(2056, 2063) });
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
-    const evidence = await createEvidenceFile(t, 'comprovante-http.pdf');
+    // O comprovante é enviado por quem vai anexá-lo pela rota (o anexo exige poder ler o arquivo).
+    const evidence = await filesService.uploadFile(
+      withTenant({ fileName: 'comprovante-http.pdf', mimeType: 'application/pdf', contentBase64: Buffer.from(`COMPROVANTE ${uniqueSuffix()}`).toString('base64'), category: 'generic' }),
+      mfaUser.id,
+      t
+    );
     return { entryId: entry.id, evidenceId: evidence.id };
   });
   const token = tokenFor(mfaUser.id, ['finance:read', 'finance:settle']);
@@ -536,10 +554,26 @@ test('F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e ac
   assert.equal(refused.status, 409, JSON.stringify(refused.body));
   assert.equal(refused.body.error.code, 'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION');
 
-  const accepted = await http('POST', `/finance/entries/${entryId}/settle`, token, {
+  // Revisão 18/10/2026 (A4): comprovante informado só na baixa é recusado — precisa ser anexado
+  // antes, e a aprovação anterior ao anexo fica inválida.
+  const notAttached = await http('POST', `/finance/entries/${entryId}/settle`, token, {
     settlementEvidenceFileId: evidenceId,
     settlementReason: 'TED feita no internet banking — comprovante anexado',
   });
+  assert.equal(notAttached.status, 409, JSON.stringify(notAttached.body));
+  assert.equal(notAttached.body.error.code, 'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED');
+
+  const attached = await http('POST', `/finance/entries/${entryId}/settlement-evidence`, token, {
+    settlementEvidenceFileId: evidenceId,
+    settlementReason: 'TED feita no internet banking — comprovante anexado',
+  });
+  assert.equal(attached.status, 200, JSON.stringify(attached.body));
+  const staleApproval = await http('POST', `/finance/entries/${entryId}/settle`, token, {});
+  assert.equal(staleApproval.status, 409, JSON.stringify(staleApproval.body));
+  assert.equal(staleApproval.body.error.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
+  await withCommitted((t) => approveFinancialEntryForSettlement(tenant, entryId, tenant.userId, t));
+
+  const accepted = await http('POST', `/finance/entries/${entryId}/settle`, token, {});
   assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.equal(accepted.body.data.status, 'SETTLED');
   assert.equal(accepted.body.data.settlementMethod, 'MANUAL_WITH_EVIDENCE');
@@ -620,7 +654,12 @@ test('F04-1: devolução e compensação ligadas à origem, contrato e titular, 
     assert.equal(balance.available, '0.00');
     assert.equal(balance.releases.length, 2);
 
-    const event = await OutboxEvent.findOne({ where: { idempotencyKey: `finance.third_party_funds.released:${partialReturn.id}` }, transaction });
+    // Revisão 18/10/2026 (D3): o evento de saída sai quando o dinheiro sai (liquidação), não na
+    // criação da devolução ainda pendente.
+    const key = `finance.third_party_funds.released:${partialReturn.id}`;
+    assert.equal(await OutboxEvent.findOne({ where: { idempotencyKey: key }, transaction }), null, 'devolução pendente ainda não é saída');
+    await settleFinancialEntryWithApproval(tenant, partialReturn.id, tenant.userId, transaction);
+    const event = await OutboxEvent.findOne({ where: { idempotencyKey: key }, transaction });
     assert.ok(event, 'devolução gera evento próprio (Caderno §13)');
   });
 });
@@ -697,13 +736,16 @@ test('F04-3: origem que não é caução recebida (não recebida, ou sem contrat
     );
     await expectCode(releaseDeposit(transaction, { amount: 100, thirdPartyOriginEntryId: notReceived.id }), 'FINANCE_THIRD_PARTY_ORIGIN_NOT_RECEIVED');
 
-    const untraceable = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'CONF1810 terceiro sem vínculo', resultCenterId: resultCenter.id, isThirdPartyFunds: true, thirdPartyReference: 'Valor de terceiro' }),
-      tenant.userId,
-      transaction
+    // Revisão 18/10/2026 (D2): a caução sem contrato/titular nem chega a ser recebida — a
+    // recusa subiu para a criação (antes só travava na devolução).
+    await expectCode(
+      financialEntriesService.createFinancialEntry(
+        withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'CONF1810 terceiro sem vínculo', resultCenterId: resultCenter.id, isThirdPartyFunds: true, thirdPartyReference: 'Valor de terceiro' }),
+        tenant.userId,
+        transaction
+      ),
+      'FINANCE_THIRD_PARTY_LINK_REQUIRED'
     );
-    await financialEntriesService.settleFinancialEntry(untraceable.id, tenant.userId, transaction);
-    await expectCode(releaseDeposit(transaction, { amount: 100, thirdPartyOriginEntryId: untraceable.id }), 'FINANCE_THIRD_PARTY_ORIGIN_UNTRACEABLE');
 
     const ownRevenue = await financialEntriesService.createFinancialEntry(
       withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'CONF1810 receita própria', resultCenterId: resultCenter.id }),

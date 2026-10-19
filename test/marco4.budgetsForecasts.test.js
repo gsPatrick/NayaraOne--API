@@ -7,7 +7,7 @@
 const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const budgetsForecastsService = require('../src/features/finance/budgetsForecasts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 
@@ -72,7 +72,7 @@ test('createBudgetForecast + listBudgetForecasts + compareForecastToRealized: or
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(custo.id, tenant.userId, transaction);
+    await settleFinancialEntryWithApproval(tenant, custo.id, tenant.userId, transaction); // A1 (revisão 18/10): PAYABLE exige aprovação + comprovante
 
     const comparison = await budgetsForecastsService.compareForecastToRealized(month, transaction);
     const payable = comparison.find((c) => c.nature === 'PAYABLE');

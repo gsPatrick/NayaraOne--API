@@ -26,7 +26,10 @@ const { isApprovalRequestApproved, getApprovalRequest } = require('./approvals.s
 // SUBMITTED/FAILED fazem parte do ciclo de vida desde o adapter bancário (PROVIDER_BANCARIO.md,
 // bankPayments.service.js) — faltavam aqui e qualquer validação futura que use STATUSES.includes()
 // rejeitaria esses dois valores como inválidos.
-const STATUSES = ['PENDING', 'APPROVED', 'SUBMITTED', 'EXECUTED', 'FAILED', 'CANCELLED'];
+// SUBMITTING (revisão independente, B1): estado gravado ANTES da chamada ao banco — se a
+// resposta não chegar, a intenção fica incerta e só a reconciliação decide.
+const STATUSES = ['PENDING', 'APPROVED', 'SUBMITTING', 'SUBMITTED', 'EXECUTED', 'FAILED', 'CANCELLED'];
+const OPEN_STATUSES = ['PENDING', 'APPROVED', 'SUBMITTING', 'SUBMITTED'];
 
 /**
  * buildEntrySnapshot — extrai do lançamento exatamente os campos que, se mudarem, mudam o
@@ -106,7 +109,11 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
 
   // Relê o lançamento do banco (em vez de confiar num objeto passado pelo chamador) para que o
   // snapshot represente o estado PERSISTIDO — é esse estado que a aprovação vai reconferir.
-  const entry = await getFinancialEntry(financialEntryId, transaction);
+  // B3 (revisão independente): sem lock no lançamento, duas requisições simultâneas passavam
+  // pela checagem "já existe intenção aberta" e criavam duas intenções (pagamento em dobro). O
+  // lock serializa; o índice único parcial payment_intents_one_open_per_entry é a garantia final.
+  const entry = await FinancialEntry.findByPk(financialEntryId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   if (entry.status !== 'PENDING') {
     throw AppError.conflict(
       `Só é possível criar intenção de pagamento para um lançamento PENDING (atual: "${entry.status}").`,
@@ -118,7 +125,7 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
   // está em trânsito no banco (inclusive com resposta incerta, que agora mantém SUBMITTED). Abrir
   // outra intenção para o mesmo lançamento nesse estado permitia pagar duas vezes.
   const existing = await PaymentIntent.findOne({
-    where: { financialEntryId, status: ['PENDING', 'APPROVED', 'SUBMITTED'] },
+    where: { financialEntryId, status: OPEN_STATUSES },
     transaction,
   });
   if (existing) {
@@ -140,7 +147,9 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
   }
 
   const snapshot = buildEntrySnapshot(entry);
-  const intent = await PaymentIntent.create(
+  let intent;
+  try {
+  intent = await PaymentIntent.create(
     {
       groupId: entry.groupId,
       companyId: entry.companyId,
@@ -154,6 +163,12 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  } catch (err) {
+    if (err && err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict('Já existe uma intenção de pagamento em aberto para este lançamento.', 'FINANCE_PAYMENT_INTENT_ALREADY_OPEN');
+    }
+    throw err;
+  }
 
   await registrarAuditoria(
     {
@@ -275,6 +290,7 @@ async function executePaymentIntent(id, actorUserId, transaction, options = {}) 
   // submitPaymentIntentToBank -> bankPayments.confirmBankPayment.
   const settled = await settleFinancialEntry(intent.financialEntryId, actorUserId, transaction, {
     viaApprovedPaymentIntent: true,
+    paymentIntent: intent,
     manualSettlement: options.manualSettlement || null,
   });
 
@@ -309,7 +325,7 @@ async function cancelPaymentIntent(id, reasonText, actorUserId, transaction) {
   // confirmar depois criaria uma divergência silenciosa — confirmBankPayment só liquida quando
   // o status ainda é SUBMITTED, então um CANCELLED prematuro faz a confirmação real ser
   // descartada sem rastro (dinheiro sai do banco, lançamento nunca liquida no ERP).
-  if (['SUBMITTED', 'EXECUTED', 'CANCELLED'].includes(intent.status)) {
+  if (['SUBMITTING', 'SUBMITTED', 'EXECUTED', 'CANCELLED'].includes(intent.status)) {
     throw AppError.conflict(
       `Intenção com status "${intent.status}" não pode ser cancelada.`,
       'FINANCE_PAYMENT_INTENT_INVALID_STATUS'
@@ -358,4 +374,5 @@ module.exports = {
   buildEntrySnapshot,
   computeSnapshotHash,
   STATUSES,
+  OPEN_STATUSES,
 };

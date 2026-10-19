@@ -163,10 +163,12 @@ test('listApprovalRequests nunca deixa relatedEntityLabel vazio, mesmo quando o 
 test('listApprovalRequests gera um rótulo legível em português mesmo para uma entidade relacionada que não existe mais', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const fakeId = '11111111-1111-1111-1111-111111111111';
-    await approvalsService.createApprovalRequest(
-      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: fakeId, riskLevel: 'LOW' },
-      tenant.userId,
-      transaction
+    // E1 (revisão 18/10/2026): a criação agora recusa entidade inexistente. O cenário deste teste
+    // (pedido legado cuja entidade não existe mais) é reproduzido gravando o registro direto.
+    const { ApprovalRequest } = require('../src/models');
+    await ApprovalRequest.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: fakeId, requestedByUserId: tenant.userId, status: 'PENDING', riskLevel: 'LOW' },
+      { transaction }
     );
 
     const list = await approvalsService.listApprovalRequests(transaction, { relatedEntityId: fakeId });

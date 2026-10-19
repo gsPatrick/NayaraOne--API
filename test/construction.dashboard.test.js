@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { Op } = require('sequelize');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
@@ -205,7 +205,8 @@ test('dashboard: projectedMarginTotal consegue ficar POSITIVA quando a obra agre
     await stageMeasurementsService.reviewStageMeasurement(measurement.id, {}, tenant.userId, transaction);
     await stageMeasurementsService.decideStageMeasurement(measurement.id, { decision: 'APPROVED' }, tenant.userId, transaction);
     const entry = await FinancialEntry.findOne({ where: { idempotencyKey: `measurement.payable:${measurement.id}` }, transaction });
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): custo real (PAYABLE) só liquida com aprovação + comprovante.
+    await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
 
     const projectHealthService = require('../src/features/construction/projectHealth.service');
     const health = await projectHealthService.getProjectHealth(project.id, transaction);

@@ -25,6 +25,7 @@ const {
   uniqueClosingTestMonth,
   confirmPeriodChecksForTest,
   createManualSettlementEvidence,
+  prepareManualSettlement,
 } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
@@ -95,10 +96,9 @@ test('A01 (controle positivo): baixa PARCIAL de PAYABLE com aprovação prévia 
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { entry } = await createPayableEntry(transaction, suffix);
-    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
-    // F03 (conferência 18/10/2026): além da aprovação, pagamento bancário sem confirmação do
+        // F03 (conferência 18/10/2026): além da aprovação, pagamento bancário sem confirmação do
     // banco precisa do comprovante da baixa manual.
-    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
 
     const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction, { manualSettlement });
     assert.equal(result.original.status, 'PARTIALLY_SETTLED');

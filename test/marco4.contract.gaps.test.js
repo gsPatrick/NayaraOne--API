@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence, createThirdPartyLink, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -551,15 +551,16 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
       where: { email: `homo-qa-fin004-intent-approver-${suffix}@nayaraone.dev` },
       defaults: { name: `HOMO QA — Aprovador intent FIN-004 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
     });
+    // F03/A4 (conferência 18/10/2026 + revisão): executar a intenção sem passar pelo banco é
+    // baixa manual — o comprovante é anexado ANTES da aprovação da intenção.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    await financialEntriesService.attachSettlementEvidence(entry2.id, manualSettlement, tenant.userId, transaction);
     const intent = await paymentIntentsService.createPaymentIntent(
       { groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: entry2.id, idempotencyKey: `fin004-intent-${suffix}` },
       tenant.userId,
       transaction
     );
     await paymentIntentsService.approvePaymentIntent(intent.id, intentApprover.id, transaction);
-    // F03 (conferência 18/10/2026): executar a intenção sem passar pelo banco é baixa manual —
-    // exige comprovante + motivo; os passos 2 e 3 abaixo passam a informá-los.
-    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
     const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(executed.intent.status, 'EXECUTED');
     assert.equal(executed.entry.status, 'SETTLED');
@@ -574,13 +575,15 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
       where: { email: `homo-qa-fin004-approver-${suffix}@nayaraone.dev` },
       defaults: { name: `HOMO QA — Aprovador FIN-004 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
     });
+    const manualSettlement3 = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    await financialEntriesService.attachSettlementEvidence(entry3.id, manualSettlement3, tenant.userId, transaction);
     const request = await approvalsService.createApprovalRequest(
       { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry3.id, riskLevel: 'LOW' },
       tenant.userId,
       transaction
     );
     await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
-    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction, { manualSettlement });
+    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction, { manualSettlement: manualSettlement3 });
     assert.equal(settled3.status, 'SETTLED');
 
     // 4) RECEIVABLE continua liquidando direto, sem exigir nenhuma aprovação (Caderno §10).
@@ -741,11 +744,12 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       bankAccountId = account.id;
       const entry = await createEntry(t, { amount: 500, bankAccountId: account.id, idempotencyKey: `fints002-entry-${suffix}` });
       entryId = entry.id;
+      // F03/A4: execução manual exige comprovante anexado ANTES da aprovação da intenção.
+      manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
+      await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
       const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, maker.id, t);
       intentId = intent.id;
       await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, t);
-      // F03 (conferência 18/10/2026): execução manual exige comprovante + motivo.
-      manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
     });
 
     // Duas "execuções" concorrentes de verdade — cada uma na sua própria transação commitada.
@@ -902,6 +906,7 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
         thirdPartyReference: `M4-20c caução ${suffix}`,
         description: `M4-20c caução ${suffix}`,
         resultCenterId: caucaoResultCenter.id,
+        ...(await createThirdPartyLink(tenant, transaction)),
       },
       tenant.userId,
       transaction
@@ -922,7 +927,8 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(custo.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): PAYABLE, com ou sem conta, só liquida com aprovação + comprovante.
+    await settleFinancialEntryWithApproval(tenant, custo.id, tenant.userId, transaction);
 
     const after = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
 

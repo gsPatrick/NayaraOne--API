@@ -122,6 +122,19 @@ const updateFinancialEntry = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => financialEntriesService.updateFinancialEntry(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
 });
+// A4 — comprovante da baixa manual é anexado ANTES da aprovação.
+const attachSettlementEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.attachSettlementEvidence(
+      req.params.id,
+      { evidenceFileId: req.body.settlementEvidenceFileId || req.body.evidenceFileId, reason: req.body.settlementReason || req.body.reason },
+      req.auth.userId,
+      t
+    )
+  );
+  return success(res, { data: item });
+});
+
 const settleFinancialEntry = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
   return success(res, { data: item });
@@ -150,7 +163,7 @@ const listFinancialEntryClassificationPendings = catchAsync(async (req, res) => 
 });
 const resolveFinancialEntryClassificationPending = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
-    financialEntriesService.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t)
+    financialEntriesService.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t, { costCenterId: req.body.costCenterId })
   );
   return success(res, { data: item });
 });
@@ -363,12 +376,32 @@ const cancelPaymentIntent = catchAsync(async (req, res) => {
 });
 
 // --- Submissão bancária real (BankAdapter — ver PROVIDER_BANCARIO.md) ---
+// B1 (revisão independente): 3 fases em transações separadas — SUBMITTING é gravado e
+// COMMITADO antes da chamada ao banco; a chamada roda fora de transação; o resultado é gravado
+// depois. Uma queda entre o banco e o commit deixa a intenção incerta (SUBMITTING), nunca um
+// pagamento no banco sem registro local.
 const submitPaymentIntentToBank = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId };
-  const intent = await req.withTenantTransaction((t) =>
-    bankPaymentsService.submitPaymentIntentToBank(req.params.id, req.body.paymentMethod, actor, t)
+  const { adapter, request } = await req.withTenantTransaction((t) =>
+    bankPaymentsService.prepareBankSubmission(req.params.id, req.body.paymentMethod, actor, t)
   );
+  const result = await bankPaymentsService.callBankSubmit(adapter, request);
+  const intent = await req.withTenantTransaction((t) => bankPaymentsService.finalizeBankSubmission(req.params.id, result, actor, t));
   return success(res, { data: intent });
+});
+
+// B2 — consulta o banco para uma intenção incerta (o job faz o mesmo periodicamente).
+const reconcilePaymentIntent = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => bankPaymentsService.reconcilePaymentIntent(req.params.id, { userId: req.auth.userId }, t));
+  return success(res, { data: result });
+});
+
+// B2 — saída controlada (motivo + auditoria); só dá como falha com resposta do banco.
+const resolveUncertainPaymentIntent = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    bankPaymentsService.resolveUncertainPaymentIntent(req.params.id, { reason: req.body.reason }, { userId: req.auth.userId }, t)
+  );
+  return success(res, { data: result });
 });
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 38, 2026-10-05): mesma falha de
@@ -426,19 +459,21 @@ const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: routing.companyId }, transaction: t });
 
     const tenant = { groupId: routing.groupId, companyId: routing.companyId };
+    // B5 (revisão independente): antes, em sandbox (o padrão) o webhook NÃO conferia assinatura —
+    // com o id externo previsível, qualquer pessoa marcava um pagamento como confirmado. Agora a
+    // assinatura HMAC é exigida SEMPRE (o sandbox usa o próprio segredo configurado); sem segredo
+    // configurado, falha fechado. Confirmação via sandbox é gravada como SANDBOX_CONFIRMED.
     const providerName = await getSetting('finance.payment_provider', tenant, t, 'sandbox');
-    if (providerName !== 'sandbox') {
-      const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
-      const isValid = verifyBankWebhookSignature(req.rawBody, req.headers, webhookSecret);
-      if (!isValid) {
-        throw AppError.unauthorized(
-          'Assinatura HMAC do webhook bancário ausente ou inválida para o provedor configurado.',
-          'BANK_PAYMENT_WEBHOOK_HMAC_INVALID'
-        );
-      }
+    const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
+    const isValid = verifyBankWebhookSignature(req.rawBody, req.headers, webhookSecret);
+    if (!isValid) {
+      throw AppError.unauthorized(
+        'Assinatura HMAC do webhook bancário ausente ou inválida.',
+        'BANK_PAYMENT_WEBHOOK_HMAC_INVALID'
+      );
     }
 
-    await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t);
+    await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t, { sandbox: providerName === 'sandbox' });
     return { received: true, processed: true };
   });
   return success(res, { data: result });
@@ -526,14 +561,14 @@ const compareBudgetForecastToRealized = catchAsync(async (req, res) => {
 module.exports = {
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
-  submitPaymentIntentToBank, bankPaymentPublicWebhook, verifyBankWebhookSignature,
+  submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
   closePeriod, approvePeriodClosure, reopenPeriod, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
-  clearFinancialEntryManualReview, settleFinancialEntryPartial,
+  clearFinancialEntryManualReview, settleFinancialEntryPartial, attachSettlementEvidence,
   listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending,
   createBankTransaction, listBankTransactions, importBankStatement,
   matchReconciliation, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,

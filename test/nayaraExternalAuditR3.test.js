@@ -27,6 +27,7 @@ const {
   createTestCostCenter,
   approveFinancialEntryForSettlement,
   createManualSettlementEvidence,
+  prepareManualSettlement,
 } = require('./testHelpers');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
@@ -195,9 +196,8 @@ test('R3-2 (controle): aprovação sem edição posterior continua liberando a b
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const entry = await createPayableEntry(transaction, suffix);
-    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
-    // F03 (conferência 18/10/2026): baixa direta de pagamento bancário exige comprovante.
-    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+        // F03 (conferência 18/10/2026): baixa direta de pagamento bancário exige comprovante.
+    const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
     const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
@@ -217,8 +217,7 @@ test('R3-2 (reaprovação): depois de editar, uma NOVA aprovação sobre a vers�
     );
 
     // Nova rodada de revisão sobre a versão ATUAL — caminho legítimo pós-edição.
-    await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, transaction);
-    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+        const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
     const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });

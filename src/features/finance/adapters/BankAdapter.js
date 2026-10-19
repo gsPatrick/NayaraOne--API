@@ -43,6 +43,11 @@ function httpsRequestJson({ method, url, headers, body, agent }) {
 // (Guia Marcelo • Centro Financeiro, seção 6 "Adapter bancário")
 
 class SandboxBankAdapter {
+  constructor() {
+    // B5 (revisão independente): confirmação vinda daqui é gravada como SANDBOX_CONFIRMED.
+    this.isSandbox = true;
+  }
+
   async submitPayment(req) {
     const externalId = `sandbox-${req.idempotencyKey || Date.now()}`;
     return { externalId, status: 'PENDING_EXTERNAL', raw: { sandbox: true, req } };
@@ -99,7 +104,7 @@ class SantanderBankAdapter {
     return this._accessToken;
   }
 
-  async _request(method, path, payload) {
+  async _request(method, path, payload, extraHeaders = {}) {
     const token = await this._getAccessToken();
     const bodyStr = payload ? JSON.stringify(payload) : undefined;
     const { statusCode, body } = await httpsRequestJson({
@@ -109,6 +114,7 @@ class SantanderBankAdapter {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'X-Application-Key': this.clientId,
+        ...extraHeaders,
         ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
       },
       body: bodyStr,
@@ -127,7 +133,9 @@ class SantanderBankAdapter {
     const path = req.paymentMethod === 'PIX'
       ? `/pix/v1/workspaces/${this.workspaceId}/pix-payments`
       : `/collection_bill_management/v2/workspaces/${this.workspaceId}/bank_slips`;
-    const raw = await this._request('POST', path, req.providerPayload);
+    // B1 (revisão independente): a chave de idempotência vai ao provedor — reenviar a mesma
+    // submissão depois de um timeout devolve o pagamento já criado, nunca cria um segundo.
+    const raw = await this._request('POST', path, req.providerPayload, req.idempotencyKey ? { 'X-Idempotency-Key': req.idempotencyKey } : {});
     return { externalId: raw?.id || raw?.paymentId, status: 'PENDING_EXTERNAL', raw };
   }
 

@@ -1,15 +1,29 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { FinancialEntry, File, Person, ContractParty } = require('../../models');
+const { FinancialEntry, File, Person, ContractParty, PaymentIntent } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment, checkFrequentReversalAlert } = require('./financeAntifraud.service');
 const { createAnomalyCase } = require('./anomalyCases.service');
 const { publishFinancialEntryCreated, publishFinancialEntrySettled, publishFinancialEntryReversed, publishThirdPartyFundsReleased } = require('./financeEvents.service');
-const { assertAccountUsableForEntry } = require('./chartOfAccounts.service');
-const { assertPeriodOpenForEntry } = require('./periodClosures.service');
-const { isApprovalRequestApproved } = require('./approvals.service');
+const { resolveAccountVersionForEntry } = require('./chartOfAccounts.service');
+const periodClosuresService = require('./periodClosures.service');
+
+const { assertPeriodOpenForEntry, isPeriodClosed } = periodClosuresService;
+
+// C1 (coordenação com a frente "fechamento"): a guarda de COMPETÊNCIA (assertCompetenceOpen —
+// bloqueia CLOSED e REVIEW, nos dois sentidos: entrar e sair do mês) é da frente de fechamento
+// (periodClosures.service.js). Enquanto ela não estiver disponível, cai na guarda antiga por
+// mês (assertPeriodOpenForEntry, que aceita "YYYY-MM" e bloqueia só CLOSED) — a chamada daqui
+// já é a definitiva e não precisa mudar quando a guarda nova chegar.
+function assertCompetenceOpen(companyId, competenceMonths, transaction) {
+  if (typeof periodClosuresService.assertCompetenceOpen === 'function') {
+    return periodClosuresService.assertCompetenceOpen(companyId, competenceMonths, transaction);
+  }
+  return assertPeriodOpenForEntry(companyId, [].concat(competenceMonths), transaction);
+}
+const { isApprovalRequestApproved, listApprovedDeciders, markApprovalRequestsStale } = require('./approvals.service');
 const { getBankAccount } = require('./bankAccounts.service');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
@@ -100,38 +114,237 @@ function assertNotUnderManualReview(entry) {
 //                         a conciliação com o extrato continua sendo quem confirma o movimento.
 // Antes desta correção, a baixa direta (rota /settle, /settle-partial e a execução manual de
 // uma payment_intent) marcava SETTLED sem comprovante nenhum — presumia o sucesso.
-const SETTLEMENT_METHODS = { BANK_CONFIRMED: 'BANK_CONFIRMED', MANUAL_WITH_EVIDENCE: 'MANUAL_WITH_EVIDENCE' };
+//   SANDBOX_CONFIRMED     confirmação vinda do provedor SANDBOX (simulação): nunca é apresentada
+//                         como confirmação de um banco real (revisão independente, B5).
+//   COMPENSATION          saída de dinheiro de terceiro que abate dívida do próprio titular —
+//                         não move caixa; exige aprovação de outro usuário (revisão, D3).
+//
+// REVISÃO INDEPENDENTE (18/10/2026, achados A1/A4):
+//   A1 — a regra acima só valia para PAYABLE COM conta bancária: tirar a conta (PATCH com
+//        bankAccountId null) ou criar o PAYABLE sem conta permitia liquidar sem aprovação, sem
+//        comprovante e sem banco — e o lançamento contava como saída de caixa nos relatórios.
+//        Agora TODA baixa de PAYABLE segue a regra: confirmação do banco, compensação aprovada,
+//        ou baixa manual com comprovante e aprovação. E a conta de um PAYABLE não pode mais ser
+//        removida (FINANCE_ENTRY_BANK_ACCOUNT_REMOVAL_FORBIDDEN).
+//   A4 — o comprovante era informado só na hora da baixa: qualquer arquivo da empresa servia, o
+//        mesmo arquivo podia pagar dois lançamentos e a aprovação era anterior ao comprovante
+//        (ninguém aprovava a exceção vendo o arquivo). Agora o comprovante é ANEXADO ao
+//        lançamento antes (attachSettlementEvidence): PDF ou imagem, de uso único (índice único +
+//        checagem), o anexo invalida aprovações anteriores (STALE) e a aprovação tem de vir
+//        depois, de OUTRA pessoa — que consegue abrir o arquivo, pois a coluna
+//        settlement_evidence_file_id é mapeada para finance:read na regra de leitura de arquivos.
+const SETTLEMENT_METHODS = {
+  BANK_CONFIRMED: 'BANK_CONFIRMED',
+  SANDBOX_CONFIRMED: 'SANDBOX_CONFIRMED',
+  MANUAL_WITH_EVIDENCE: 'MANUAL_WITH_EVIDENCE',
+  COMPENSATION: 'COMPENSATION',
+};
 
-async function resolveBankPayableSettlement(entry, options, transaction) {
-  if (!(entry.nature === 'PAYABLE' && entry.bankAccountId)) return null;
-  if (options && options.viaBankConfirmation) {
-    return { method: SETTLEMENT_METHODS.BANK_CONFIRMED, evidenceFileId: null, reason: null };
-  }
-  const manual = (options && options.manualSettlement) || null;
-  const evidenceFileId = manual && manual.evidenceFileId ? String(manual.evidenceFileId) : null;
-  const reason = manual && manual.reason ? String(manual.reason).trim() : '';
-  if (!evidenceFileId || !reason) {
+const OPEN_PAYMENT_INTENT_STATUSES = ['PENDING', 'APPROVED', 'SUBMITTING', 'SUBMITTED'];
+const SETTLEMENT_EVIDENCE_MIME_PREFIXES = ['application/pdf', 'image/'];
+
+async function assertManualSettlementApprovedAfterEvidence(entry, transaction) {
+  const deciders = await listApprovedDeciders('FinancialEntry', entry.id, transaction);
+  if (deciders.length === 0) {
     throw AppError.conflict(
-      'Pagamento vinculado a conta bancária não pode ser dado como pago sem confirmação do banco. ' +
-        'Se o pagamento já foi feito fora da integração bancária, informe o comprovante (arquivo) e o motivo da baixa manual.',
+      'A baixa manual precisa ser aprovada por outra pessoa depois que o comprovante foi anexado — peça a aprovação deste lançamento.',
+      'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+    );
+  }
+  if (entry.settlementEvidenceAttachedBy && deciders.every((d) => String(d) === String(entry.settlementEvidenceAttachedBy))) {
+    throw AppError.forbidden(
+      'Quem anexou o comprovante não pode ser quem aprovou a baixa manual (segregação de funções).',
+      'FINANCE_SETTLEMENT_EVIDENCE_SELF_APPROVAL'
+    );
+  }
+}
+
+/**
+ * resolvePayableSettlement — decide COMO um PAYABLE pode ser liquidado (ver comentário acima).
+ * Retorna null para lançamentos que não são PAYABLE (recebimentos seguem o fluxo direto, §10).
+ */
+async function resolvePayableSettlement(entry, options, transaction) {
+  if (entry.nature !== 'PAYABLE') return null;
+  const opts = options || {};
+  if (opts.viaBankConfirmation) {
+    return {
+      method: opts.sandboxConfirmation ? SETTLEMENT_METHODS.SANDBOX_CONFIRMED : SETTLEMENT_METHODS.BANK_CONFIRMED,
+      evidenceFileId: null,
+      reason: null,
+    };
+  }
+  if (opts.viaCompensation) {
+    return { method: SETTLEMENT_METHODS.COMPENSATION, evidenceFileId: null, reason: opts.compensationReason || null };
+  }
+
+  const attachedFileId = entry.settlementEvidenceFileId ? String(entry.settlementEvidenceFileId) : null;
+  const manual = opts.manualSettlement || null;
+  const informedFileId = manual && manual.evidenceFileId ? String(manual.evidenceFileId) : null;
+  if (!attachedFileId) {
+    if (informedFileId) {
+      throw AppError.conflict(
+        'O comprovante precisa ser anexado ao lançamento ANTES da aprovação (quem aprova vê o arquivo). Anexe o comprovante, peça a aprovação e então dê a baixa.',
+        'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED'
+      );
+    }
+    throw AppError.conflict(
+      'Pagamento não pode ser dado como pago sem confirmação do banco. ' +
+        'Se o pagamento já foi feito fora da integração bancária, anexe o comprovante e o motivo, peça a aprovação de outra pessoa e então dê a baixa manual.',
       'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION'
     );
   }
-  const evidence = await File.findOne({ where: { id: evidenceFileId, companyId: entry.companyId }, transaction });
-  if (!evidence) {
-    throw AppError.badRequest(
-      'O comprovante informado não foi encontrado nesta empresa — envie o arquivo do comprovante antes de dar a baixa manual.',
-      'FINANCE_SETTLEMENT_EVIDENCE_NOT_FOUND'
+  if (informedFileId && informedFileId !== attachedFileId) {
+    throw AppError.conflict(
+      'O comprovante informado na baixa é diferente do comprovante anexado e aprovado para este lançamento.',
+      'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED'
     );
   }
-  return { method: SETTLEMENT_METHODS.MANUAL_WITH_EVIDENCE, evidenceFileId, reason };
+  return { method: SETTLEMENT_METHODS.MANUAL_WITH_EVIDENCE, evidenceFileId: attachedFileId, reason: entry.settlementReason };
 }
 
 function settlementAuditSuffix(settlementInfo) {
   if (!settlementInfo) return '';
-  return settlementInfo.method === SETTLEMENT_METHODS.BANK_CONFIRMED
-    ? ' Confirmado pelo banco.'
-    : ` Baixa manual com comprovante (arquivo ${settlementInfo.evidenceFileId}) — motivo: ${settlementInfo.reason}. Não é confirmação bancária.`;
+  switch (settlementInfo.method) {
+    case SETTLEMENT_METHODS.BANK_CONFIRMED:
+      return ' Confirmado pelo banco.';
+    case SETTLEMENT_METHODS.SANDBOX_CONFIRMED:
+      return ' Confirmado pelo provedor SANDBOX (simulação) — não é confirmação de banco real.';
+    case SETTLEMENT_METHODS.COMPENSATION:
+      return ' Compensação com dívida do titular — sem movimento de caixa.';
+    default:
+      return ` Baixa manual com comprovante (arquivo ${settlementInfo.evidenceFileId}) — motivo: ${settlementInfo.reason}. Não é confirmação bancária.`;
+  }
+}
+
+// A2 (revisão independente): a baixa direta/parcial era aceita com uma intenção de pagamento
+// em aberto — inclusive já SUBMITTED ao banco. Depois o banco confirmava e a confirmação dava
+// erro em loop (lançamento já liquidado), com risco de pagamento em dobro.
+async function assertNoOpenPaymentIntent(entry, exceptIntentId, transaction) {
+  const where = { financialEntryId: entry.id, status: OPEN_PAYMENT_INTENT_STATUSES };
+  const open = await PaymentIntent.findOne({ where, transaction });
+  if (open && String(open.id) !== String(exceptIntentId || '')) {
+    throw AppError.conflict(
+      `Este lançamento tem uma intenção de pagamento em aberto (status "${open.status}") — a baixa só pode acontecer por ela. ` +
+        'Aguarde a resposta do banco ou cancele/resolva a intenção antes.',
+      'FINANCE_ENTRY_HAS_OPEN_PAYMENT_INTENT',
+      { paymentIntentId: open.id, paymentIntentStatus: open.status }
+    );
+  }
+}
+
+/**
+ * attachSettlementEvidence — anexa o comprovante (e o motivo) de uma baixa manual ao PAYABLE,
+ * ANTES da aprovação (A4). Invalida aprovações anteriores: a decisão precisa ser tomada vendo o
+ * comprovante.
+ */
+async function attachSettlementEvidence(id, payload, actorUserId, transaction) {
+  const { evidenceFileId, reason } = payload || {};
+  const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
+  if (entry.nature !== 'PAYABLE') {
+    throw AppError.conflict('Comprovante de baixa manual só se aplica a pagamento (PAYABLE).', 'FINANCE_SETTLEMENT_EVIDENCE_NOT_APPLICABLE');
+  }
+  if (!['PENDING', 'PARTIALLY_SETTLED'].includes(entry.status)) {
+    throw AppError.conflict(`Lançamento com status "${entry.status}" não aceita comprovante de baixa.`, 'FINANCE_ENTRY_INVALID_STATUS');
+  }
+  const normalizedReason = reason ? String(reason).trim() : '';
+  if (!evidenceFileId || !normalizedReason) {
+    throw AppError.badRequest('Informe o comprovante (arquivo) e o motivo da baixa manual.', 'FINANCE_SETTLEMENT_EVIDENCE_VALIDATION');
+  }
+  const evidence = await File.findOne({ where: { id: evidenceFileId, companyId: entry.companyId }, transaction });
+  if (!evidence) {
+    throw AppError.badRequest(
+      'O comprovante informado não foi encontrado nesta empresa — envie o arquivo do comprovante antes.',
+      'FINANCE_SETTLEMENT_EVIDENCE_NOT_FOUND'
+    );
+  }
+  const mime = String(evidence.mimeType || '').toLowerCase();
+  if (!SETTLEMENT_EVIDENCE_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
+    throw AppError.badRequest('O comprovante precisa ser PDF ou imagem.', 'FINANCE_SETTLEMENT_EVIDENCE_INVALID_TYPE');
+  }
+  const reused = await FinancialEntry.findOne({
+    where: {
+      settlementEvidenceFileId: evidence.id,
+      id: { [Op.ne]: entry.id },
+      [Op.or]: [{ parentEntryId: null }, { parentEntryId: { [Op.ne]: entry.id } }],
+    },
+    transaction,
+  });
+  if (reused) {
+    throw AppError.conflict(
+      'Este comprovante já foi usado em outra baixa — cada baixa manual exige o próprio comprovante.',
+      'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED',
+      { usedByEntryId: reused.id }
+    );
+  }
+
+  const beforeJson = entry.toJSON();
+  entry.settlementEvidenceFileId = evidence.id;
+  entry.settlementReason = normalizedReason;
+  entry.settlementEvidenceAttachedBy = actorUserId || null;
+  entry.settlementEvidenceAttachedAt = new Date();
+  entry.updatedBy = actorUserId || null;
+  try {
+    await entry.save({ transaction });
+  } catch (err) {
+    if (err && err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(
+        'Este comprovante já foi usado em outra baixa — cada baixa manual exige o próprio comprovante.',
+        'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED'
+      );
+    }
+    throw err;
+  }
+
+  await markApprovalRequestsStale(
+    'FinancialEntry',
+    entry.id,
+    'Comprovante de baixa manual anexado — a aprovação precisa ser feita sobre o comprovante.',
+    actorUserId,
+    transaction
+  );
+
+  await registrarAuditoria(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      actorUserId,
+      action: 'finance.entry.settlement_evidence.attach',
+      entityType: 'FinancialEntry',
+      entityId: entry.id,
+      beforeJson,
+      afterJson: entry.toJSON(),
+      reason: `Comprovante de baixa manual anexado (arquivo ${evidence.id}) — motivo: ${normalizedReason}.`,
+    },
+    transaction
+  );
+  return entry;
+}
+
+// D1/D3 (revisão independente): a liquidação de uma devolução/compensação de caução revalida o
+// saldo da origem com lock (a validação só na criação deixava liquidar depois que a origem foi
+// estornada, ou com saldo já consumido).
+async function assertThirdPartyReleaseStillCovered(entry, transaction) {
+  if (!(entry.nature === 'PAYABLE' && entry.isThirdPartyFunds && entry.thirdPartyOriginEntryId)) return;
+  const origin = await FinancialEntry.findOne({
+    where: { id: entry.thirdPartyOriginEntryId, companyId: entry.companyId },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!origin || !['SETTLED', 'PARTIALLY_SETTLED'].includes(origin.status)) {
+    throw AppError.conflict(
+      'A caução de origem desta devolução não está mais recebida (foi estornada ou cancelada) — a devolução não pode ser paga.',
+      'FINANCE_THIRD_PARTY_ORIGIN_NOT_RECEIVED'
+    );
+  }
+  const balance = await computeThirdPartyOriginBalance(origin, transaction);
+  if (toCents(balance.available) < 0) {
+    throw AppError.conflict(
+      `As saídas desta caução (${balance.released}) passam do valor recebido (${balance.received}).`,
+      'FINANCE_THIRD_PARTY_RELEASE_EXCEEDS_BALANCE',
+      { available: balance.available, received: balance.received, released: balance.released }
+    );
+  }
 }
 
 // F04 (conferência Nayara 18/10/2026) — rastreabilidade de caução / dinheiro de terceiros.
@@ -175,20 +388,71 @@ async function computeThirdPartyOriginBalance(originOrId, transaction) {
   };
 }
 
+// D2 (revisão independente): o titular podia ser qualquer parte do contrato (o proprietário foi
+// aceito como "dono" da caução). Caução/depósito de garantia é dinheiro de quem a entrega: o
+// locatário/comprador ou o fiador — nunca o proprietário/vendedor.
+const THIRD_PARTY_HOLDER_ROLES = ['TENANT', 'GUARANTOR', 'BUYER'];
+
 async function assertThirdPartyHolderIsContractParty(holderPersonId, contractId, transaction) {
   const person = await Person.findByPk(holderPersonId, { transaction });
   if (!person) {
     throw AppError.badRequest('Titular do dinheiro de terceiro não encontrado.', 'FINANCE_THIRD_PARTY_HOLDER_NOT_FOUND');
   }
-  if (contractId) {
-    const party = await ContractParty.findOne({ where: { contractId, personId: holderPersonId }, transaction });
-    if (!party) {
-      throw AppError.badRequest(
-        'O titular informado não é parte do contrato — o dinheiro de terceiro precisa pertencer a uma parte do contrato.',
-        'FINANCE_THIRD_PARTY_HOLDER_NOT_CONTRACT_PARTY'
-      );
-    }
+  const parties = await ContractParty.findAll({ where: { contractId, personId: holderPersonId }, transaction });
+  if (parties.length === 0) {
+    throw AppError.badRequest(
+      'O titular informado não é parte do contrato — o dinheiro de terceiro precisa pertencer a uma parte do contrato.',
+      'FINANCE_THIRD_PARTY_HOLDER_NOT_CONTRACT_PARTY'
+    );
   }
+  if (!parties.some((party) => THIRD_PARTY_HOLDER_ROLES.includes(party.partyRole))) {
+    throw AppError.badRequest(
+      `O titular da caução precisa ser locatário, comprador ou fiador do contrato (papel atual: ${parties.map((p) => p.partyRole).join(', ')}).`,
+      'FINANCE_THIRD_PARTY_HOLDER_ROLE_INVALID'
+    );
+  }
+}
+
+// D3 (revisão independente): devolução (RETURN, sai dinheiro) e compensação (COMPENSATION, abate
+// dívida do titular, sem caixa) eram indistinguíveis; a compensação não apontava a dívida.
+const THIRD_PARTY_RELEASE_TYPES = ['RETURN', 'COMPENSATION'];
+
+async function resolveCompensatedDebt({ companyId, compensatedEntryId, contractId, holderPersonId, amount }, transaction) {
+  if (!compensatedEntryId) {
+    throw AppError.badRequest(
+      'Compensação de caução precisa indicar a dívida compensada ("thirdPartyCompensatedEntryId").',
+      'FINANCE_THIRD_PARTY_COMPENSATED_DEBT_REQUIRED'
+    );
+  }
+  const debt = await FinancialEntry.findOne({
+    where: { id: compensatedEntryId, companyId },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (!debt) {
+    throw AppError.notFound('Dívida a compensar não encontrada nesta empresa.', 'FINANCE_THIRD_PARTY_COMPENSATED_DEBT_NOT_FOUND');
+  }
+  if (debt.nature !== 'RECEIVABLE' || debt.isThirdPartyFunds || !['PENDING', 'PARTIALLY_SETTLED'].includes(debt.status)) {
+    throw AppError.conflict(
+      'A dívida compensada precisa ser um valor a receber em aberto (não dinheiro de terceiro).',
+      'FINANCE_THIRD_PARTY_COMPENSATED_DEBT_INVALID'
+    );
+  }
+  if (String(debt.contractId || '') !== String(contractId)) {
+    throw AppError.conflict(
+      'A dívida compensada é de outro contrato — a caução só compensa dívida do mesmo contrato.',
+      'FINANCE_THIRD_PARTY_COMPENSATED_DEBT_CONTRACT_MISMATCH'
+    );
+  }
+  const remaining = await computeRemainingAmount(debt, transaction);
+  if (toCents(amount) > toCents(remaining)) {
+    throw AppError.conflict(
+      `A compensação (${fromCents(toCents(amount))}) passa do saldo em aberto da dívida (${remaining}).`,
+      'FINANCE_THIRD_PARTY_COMPENSATION_EXCEEDS_DEBT'
+    );
+  }
+  void holderPersonId;
+  return debt;
 }
 
 async function resolveThirdPartyRelease({ companyId, contractId, holderPersonId, originEntryId, amount }, transaction) {
@@ -293,6 +557,8 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     thirdPartyReference,
     thirdPartyOriginEntryId,
     thirdPartyHolderPersonId,
+    thirdPartyReleaseType,
+    thirdPartyCompensatedEntryId,
   } = payload;
 
   if (!groupId || !companyId || !entryType || !nature || amount === undefined || amount === null) {
@@ -356,13 +622,55 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   let resolvedContractId = contractId || null;
   let resolvedHolderPersonId = thirdPartyHolderPersonId || null;
   let thirdPartyRelease = null;
+  let resolvedReleaseType = null;
+  let compensatedDebt = null;
+  if ((thirdPartyReleaseType || thirdPartyCompensatedEntryId) && !(normalizedThirdParty && normalizedNature === 'PAYABLE')) {
+    throw AppError.badRequest(
+      '"thirdPartyReleaseType"/"thirdPartyCompensatedEntryId" só se aplicam a devolução/compensação de dinheiro de terceiro.',
+      'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
+    );
+  }
   if (normalizedThirdParty && normalizedNature === 'PAYABLE') {
+    resolvedReleaseType = thirdPartyReleaseType ? String(thirdPartyReleaseType).toUpperCase() : 'RETURN';
+    if (!THIRD_PARTY_RELEASE_TYPES.includes(resolvedReleaseType)) {
+      throw AppError.badRequest(
+        `O campo "thirdPartyReleaseType" deve ser um de: ${THIRD_PARTY_RELEASE_TYPES.join(', ')}.`,
+        'FINANCE_ENTRY_VALIDATION'
+      );
+    }
     thirdPartyRelease = await resolveThirdPartyRelease(
       { companyId, contractId, holderPersonId: thirdPartyHolderPersonId, originEntryId: thirdPartyOriginEntryId, amount },
       transaction
     );
     resolvedContractId = thirdPartyRelease.contractId;
     resolvedHolderPersonId = thirdPartyRelease.holderPersonId;
+    if (resolvedReleaseType === 'COMPENSATION') {
+      if (bankAccountId) {
+        throw AppError.badRequest(
+          'Compensação não movimenta caixa — não informe conta bancária.',
+          'FINANCE_THIRD_PARTY_COMPENSATION_NO_BANK_ACCOUNT'
+        );
+      }
+      compensatedDebt = await resolveCompensatedDebt(
+        { companyId, compensatedEntryId: thirdPartyCompensatedEntryId, contractId: resolvedContractId, holderPersonId: resolvedHolderPersonId, amount },
+        transaction
+      );
+    } else if (thirdPartyCompensatedEntryId) {
+      throw AppError.badRequest(
+        '"thirdPartyCompensatedEntryId" só se aplica a compensação (thirdPartyReleaseType "COMPENSATION").',
+        'FINANCE_ENTRY_VALIDATION'
+      );
+    }
+  } else if (normalizedThirdParty && normalizedNature === 'RECEIVABLE') {
+    // D2 (revisão independente): recebimento de dinheiro de terceiro sem contrato e sem titular
+    // era aceito e só travava na devolução. §13: toda movimentação exige vínculo.
+    if (!resolvedContractId || !resolvedHolderPersonId) {
+      throw AppError.badRequest(
+        'Recebimento de dinheiro de terceiro (caução) exige o contrato ("contractId") e o titular ("thirdPartyHolderPersonId").',
+        'FINANCE_THIRD_PARTY_LINK_REQUIRED'
+      );
+    }
+    await assertThirdPartyHolderIsContractParty(resolvedHolderPersonId, resolvedContractId, transaction);
   } else if (normalizedThirdParty && resolvedHolderPersonId) {
     await assertThirdPartyHolderIsContractParty(resolvedHolderPersonId, resolvedContractId, transaction);
   } else if (!normalizedThirdParty && resolvedHolderPersonId) {
@@ -372,7 +680,9 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
     );
   }
 
-  await assertAccountUsableForEntry(chartOfAccountId, companyId, transaction);
+  // §4 (Frente 3): a classificação gravada é a VERSÃO da conta vigente na data do fato
+  // (`factDate` informado, senão o vencimento, senão agora) — não a conta "como está hoje".
+  const chartVersion = await resolveAccountVersionForEntry(chartOfAccountId, companyId, payload.factDate || dueAt || new Date(), transaction);
 
   // FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação —
   // Bloqueado"): até aqui, usar uma bankAccountId de OUTRA empresa (inclusive de outra empresa
@@ -395,8 +705,11 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
   }
 
   // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
-  // da própria criação).
+  // da própria criação). C1 (revisão independente): a COMPETÊNCIA informada também é conferida —
+  // antes dava para criar um lançamento com vencimento futuro e competenceMonth de um mês já
+  // fechado, mudando os números do fechamento depois do snapshot (Caderno §16).
   await assertPeriodOpenForEntry(companyId, [dueAt, new Date()], transaction);
+  await assertCompetenceOpen(companyId, resolvedCompetenceMonth, transaction);
 
   await assertNoDuplicatePayment(FinancialEntry, idempotencyKey, transaction);
 
@@ -422,20 +735,22 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       idempotencyKey: idempotencyKey || null,
       reversalOfEntryId: null,
       chartOfAccountId: chartOfAccountId || null,
+      chartOfAccountVersionId: chartVersion ? chartVersion.id : null,
       isThirdPartyFunds: normalizedThirdParty,
       thirdPartyReference: normalizedThirdPartyReference,
       thirdPartyOriginEntryId: thirdPartyRelease ? thirdPartyRelease.origin.id : null,
       thirdPartyHolderPersonId: resolvedHolderPersonId,
+      thirdPartyReleaseType: resolvedReleaseType,
+      thirdPartyCompensatedEntryId: compensatedDebt ? compensatedDebt.id : null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
 
+  // D3 (revisão independente): o evento finance.third_party_funds.released era emitido na
+  // CRIAÇÃO da devolução (ainda PENDING, nenhum dinheiro saiu). Agora sai na liquidação.
   await publishFinancialEntryCreated(entry, transaction);
-  if (thirdPartyRelease) {
-    await publishThirdPartyFundsReleased(entry, transaction);
-  }
 
   await registrarAuditoria(
     {
@@ -447,7 +762,7 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       entityId: entry.id,
       afterJson: entry.toJSON(),
       reason: thirdPartyRelease
-        ? `Devolução/compensação de dinheiro de terceiro de ${amount} vinculada ao recebimento ${thirdPartyRelease.origin.id} (contrato ${thirdPartyRelease.contractId}, titular ${thirdPartyRelease.holderPersonId}).`
+        ? `${resolvedReleaseType === 'COMPENSATION' ? `Compensação (abate da dívida ${compensatedDebt.id})` : 'Devolução'} de dinheiro de terceiro de ${amount} vinculada ao recebimento ${thirdPartyRelease.origin.id} (contrato ${thirdPartyRelease.contractId}, titular ${thirdPartyRelease.holderPersonId}).`
         : `Lançamento ${normalizedNature === 'PAYABLE' ? 'a pagar' : normalizedNature === 'RECEIVABLE' ? 'a receber' : normalizedNature.toLowerCase()} de ${amount} criado.`,
     },
     transaction
@@ -502,24 +817,44 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   const { bankAccountId, costCenterId, resultCenterId, dueAt, description, chartOfAccountId, competenceMonth } = payload;
   if (dueAt !== undefined) assertReasonableDueDate(dueAt);
 
+  // A1 (revisão independente, provado): remover a conta bancária de um PAYABLE e depois dar a
+  // baixa contornava aprovação, comprovante e banco. A conta de um pagamento pode ser trocada
+  // (redirecionamento, com revisão manual), nunca removida.
+  if (entry.nature === 'PAYABLE' && entry.bankAccountId && bankAccountId === null) {
+    throw AppError.conflict(
+      'A conta bancária de um pagamento não pode ser removida — troque por outra conta (com revisão) ou cancele o lançamento.',
+      'FINANCE_ENTRY_BANK_ACCOUNT_REMOVAL_FORBIDDEN'
+    );
+  }
+
   // M4-19 — não se edita lançamento cuja competência (vencimento atual, vencimento novo ou
-  // criação) caia num mês já fechado.
+  // criação) caia num mês já fechado. C1 (revisão independente, provado): a competência atual
+  // e a nova também contam — antes dava para mover um lançamento PARA ou DE um mês fechado.
+  const nextCompetenceMonth =
+    competenceMonth !== undefined ? resolveCompetenceMonth(competenceMonth, dueAt !== undefined ? dueAt : entry.dueAt) : null;
   await assertPeriodOpenForEntry(
     entry.companyId,
-    [entry.dueAt, dueAt !== undefined ? dueAt : null, entry.createdAt],
+    [entry.dueAt, dueAt !== undefined ? dueAt : null, entry.createdAt, entry.competenceMonth],
     transaction
   );
+  if (nextCompetenceMonth && nextCompetenceMonth !== entry.competenceMonth) {
+    await assertCompetenceOpen(entry.companyId, [entry.competenceMonth, nextCompetenceMonth], transaction);
+  }
 
   if (chartOfAccountId !== undefined) {
     if (chartOfAccountId === null) {
       entry.chartOfAccountId = null;
+      entry.chartOfAccountVersionId = null;
     } else {
-      await assertAccountUsableForEntry(chartOfAccountId, entry.companyId, transaction);
+      const chartVersion = await resolveAccountVersionForEntry(
+        chartOfAccountId, entry.companyId, payload.factDate || payload.dueAt || entry.dueAt || entry.createdAt, transaction
+      );
       entry.chartOfAccountId = chartOfAccountId;
+      entry.chartOfAccountVersionId = chartVersion.id;
     }
   }
   if (competenceMonth !== undefined) {
-    entry.competenceMonth = resolveCompetenceMonth(competenceMonth, dueAt !== undefined ? dueAt : entry.dueAt);
+    entry.competenceMonth = nextCompetenceMonth;
   }
   // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7/Procurement): trocar o
   // beneficiário (bankAccountId) de um lançamento PENDING não passava por nenhuma checagem
@@ -561,7 +896,6 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   // tomada sobre a versão anterior). As ApprovalRequests APPROVED viram STALE e a liquidação
   // volta a exigir uma rodada nova de revisão sobre a versão atual. Ver
   // approvals.service.js#markApprovalRequestsStale.
-  const { markApprovalRequestsStale } = require('./approvals.service');
   await markApprovalRequestsStale(
     'FinancialEntry',
     entry.id,
@@ -608,13 +942,118 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
  * RECEIVABLE/TRANSFER/ADJUSTMENT não exigem isso: o Caderno (§10) descreve recebimento como
  * fluxo direto, sem aprovação prévia.
  */
+async function assertIntentApprovedAfterEvidence(entry, intent) {
+  if (!intent) return;
+  if (!intent.approvedAt || !entry.settlementEvidenceAttachedAt || new Date(intent.approvedAt) <= new Date(entry.settlementEvidenceAttachedAt)) {
+    throw AppError.conflict(
+      'A intenção de pagamento foi aprovada antes de o comprovante ser anexado — a execução manual exige aprovação feita vendo o comprovante. Cancele e recrie a intenção depois de anexar.',
+      'FINANCE_SETTLEMENT_EVIDENCE_NOT_REVIEWED'
+    );
+  }
+  if (entry.settlementEvidenceAttachedBy && String(intent.approvedByUserId) === String(entry.settlementEvidenceAttachedBy)) {
+    throw AppError.forbidden(
+      'Quem anexou o comprovante não pode ser quem aprovou a intenção de pagamento (segregação de funções).',
+      'FINANCE_SETTLEMENT_EVIDENCE_SELF_APPROVAL'
+    );
+  }
+}
+
+/**
+ * runSettlementGates — todas as travas de uma baixa (integral ou parcial), na ordem:
+ *   - confirmação do banco (viaBankConfirmation): é registro de um FATO já ocorrido. Não é
+ *     recusada por controles de pré-pagamento (conta bloqueada/revisão manual depois do envio —
+ *     B6) nem por período fechado (C1): nesses casos liquida no período corrente com referência
+ *     ao original e abre caso de anomalia para o contador/revisor.
+ *   - demais caminhos: revisão manual, intenção de pagamento em aberto (A2), aprovação prévia
+ *     de PAYABLE (A1: com ou sem conta bancária), período aberto, elegibilidade da conta, e
+ *     comprovante anexado + aprovação posterior de outra pessoa (A4).
+ *   - devolução de caução: saldo da origem revalidado com lock (D1).
+ */
+async function runSettlementGates(entry, options, transaction) {
+  const opts = options || {};
+  const viaBankConfirmation = Boolean(opts.viaBankConfirmation);
+  const viaCompensation = entry.nature === 'PAYABLE' && entry.thirdPartyReleaseType === 'COMPENSATION';
+  const effectiveOptions = { ...opts, viaCompensation };
+  const warnings = [];
+
+  if (viaBankConfirmation) {
+    if (entry.competenceMonth && (await isPeriodClosed(entry.companyId, entry.competenceMonth, transaction))) {
+      warnings.push({
+        caseType: 'POST_CLOSING_BANK_CONFIRMATION',
+        reason: `Confirmação do banco chegou depois do fechamento de ${entry.competenceMonth} — liquidado no período corrente com referência ao período original (Caderno §16).`,
+      });
+    }
+    if (entry.requiresManualReview) {
+      warnings.push({
+        caseType: 'BANK_CONFIRMATION_UNDER_REVIEW',
+        reason: 'O banco confirmou um pagamento cujo lançamento estava retido para revisão manual — o pagamento já ocorreu; revisar.',
+      });
+    }
+  } else {
+    assertNotUnderManualReview(entry);
+    await assertNoOpenPaymentIntent(entry, opts.paymentIntent ? opts.paymentIntent.id : null, transaction);
+    if (entry.nature === 'PAYABLE' && !opts.viaApprovedPaymentIntent) {
+      const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
+      if (!hasApprovedRequest) {
+        throw AppError.conflict(
+          'Pagamento (PAYABLE) não pode ser liquidado sem aprovação prévia — crie um payment_intent com snapshot/hash, ou uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
+          'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
+        );
+      }
+    }
+    // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A02, 15/10/2026): período fechado.
+    await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
+    if (entry.bankAccountId && !viaCompensation) {
+      await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
+    }
+  }
+
+  const settlementInfo = await resolvePayableSettlement(entry, effectiveOptions, transaction);
+  if (settlementInfo && settlementInfo.method === SETTLEMENT_METHODS.MANUAL_WITH_EVIDENCE) {
+    if (opts.viaApprovedPaymentIntent) {
+      await assertIntentApprovedAfterEvidence(entry, opts.paymentIntent);
+    } else {
+      await assertManualSettlementApprovedAfterEvidence(entry, transaction);
+    }
+  }
+  await assertThirdPartyReleaseStillCovered(entry, transaction);
+  return { settlementInfo, warnings, viaCompensation };
+}
+
+async function recordSettlementWarnings(entry, warnings, actorUserId, transaction) {
+  for (const warning of warnings) {
+    await createAnomalyCase(
+      {
+        groupId: entry.groupId,
+        companyId: entry.companyId,
+        caseType: warning.caseType,
+        riskLevel: 'MEDIUM',
+        relatedEntityType: 'FinancialEntry',
+        relatedEntityId: entry.id,
+        reason: warning.reason,
+      },
+      actorUserId,
+      transaction
+    );
+  }
+}
+
+// D3: efeitos da liquidação de uma saída de dinheiro de terceiro — o evento sai quando o
+// dinheiro sai (ou a dívida é abatida), e a compensação baixa a dívida do titular.
+async function applyThirdPartySettlementEffects(entry, settledAmount, actorUserId, transaction) {
+  if (!(entry.nature === 'PAYABLE' && entry.isThirdPartyFunds && entry.thirdPartyOriginEntryId)) return;
+  if (entry.thirdPartyReleaseType === 'COMPENSATION' && entry.thirdPartyCompensatedEntryId) {
+    await settleFinancialEntryPartial(entry.thirdPartyCompensatedEntryId, settledAmount, actorUserId, transaction, {
+      viaCompensationOf: entry.id,
+    });
+  }
+  await publishThirdPartyFundsReleased(entry, transaction);
+}
+
 async function settleFinancialEntry(id, actorUserId, transaction, options = {}) {
-  const { viaApprovedPaymentIntent = false } = options || {};
   // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
   // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
-  // de qualquer uma commitar e ambas liquidavam — evento de liquidação publicado 2x, com efeito
-  // duplicado a jusante (ex.: comissão baixada duas vezes). Mesmo padrão já usado em
-  // settleFinancialEntryPartial.
+  // de qualquer uma commitar e ambas liquidavam.
   const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   if (entry.status === 'PARTIALLY_SETTLED') {
@@ -626,39 +1065,8 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   if (entry.status !== 'PENDING') {
     throw AppError.conflict(`Só é possível liquidar um lançamento PENDING (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
   }
-  // Escopo do gate: só exige aprovação prévia quando o PAYABLE tem bankAccountId — ou seja,
-  // quando representa de fato uma EXECUÇÃO BANCÁRIA (Caderno §8, "Integração bancária retorna
-  // estado"). Um PAYABLE sem bankAccountId é um lançamento contábil (ex.: custo de medição em
-  // obra, nota de compra) que ainda não está ligado a uma saída de dinheiro de banco — settled
-  // aqui é só o registro contábil; a execução bancária real acontece depois, quando um
-  // bankAccountId for atribuído, e aí sim passa por este mesmo gate.
-  // A checagem de revisão manual roda ANTES do gate de aprovação: um redirecionamento de
-  // favorecido marca requiresManualReview E invalida a aprovação (STALE) — o erro mais
-  // específico (revisão manual pendente) é o que orienta o usuário certo.
-  assertNotUnderManualReview(entry);
-  if (entry.nature === 'PAYABLE' && entry.bankAccountId && !viaApprovedPaymentIntent) {
-    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
-    if (!hasApprovedRequest) {
-      throw AppError.conflict(
-        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado sem aprovação prévia — crie um payment_intent com snapshot/hash, ou uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
-        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
-      );
-    }
-  }
-  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A02, 15/10/2026): esta função nunca
-  // checava se a competência já estava num período FECHADO antes de liquidar — só a baixa
-  // PARCIAL fazia essa checagem. Dava pra liquidar um PAYABLE/RECEIVABLE integral num mês já
-  // fechado por este caminho, quebrando a garantia de `closePeriod` de que o número visto no
-  // fechamento não muda depois. Mesma checagem já usada em settleFinancialEntryPartial.
-  await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
+  const { settlementInfo, warnings } = await runSettlementGates(entry, options, transaction);
   const beforeJson = entry.toJSON();
-
-  if (entry.bankAccountId) {
-    await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
-  }
-
-  // F03 — PAYABLE bancário: confirmação do banco ou baixa manual com comprovante.
-  const settlementInfo = await resolveBankPayableSettlement(entry, options, transaction);
 
   entry.status = 'SETTLED';
   entry.settledAt = new Date();
@@ -671,6 +1079,8 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   await entry.save({ transaction });
 
   await publishFinancialEntrySettled(entry, transaction);
+  await applyThirdPartySettlementEffects(entry, entry.amount, actorUserId, transaction);
+  await recordSettlementWarnings(entry, warnings, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -682,7 +1092,7 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
       entityId: entry.id,
       beforeJson,
       afterJson: entry.toJSON(),
-      reason: `Lançamento de ${entry.amount} liquidado.${settlementAuditSuffix(settlementInfo)}`,
+      reason: `Lançamento de ${entry.amount} liquidado.${settlementAuditSuffix(settlementInfo)}${warnings.map((w) => ` ${w.reason}`).join('')}`,
     },
     transaction
   );
@@ -750,59 +1160,39 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       'FINANCE_ENTRY_INVALID_STATUS'
     );
   }
-  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A01, 15/10/2026): uma tentativa
-  // anterior de aplicar este mesmo gate aqui foi revertida porque quebrava os testes de
-  // aceite de M4-06 — mas aqueles testes baixavam PAYABLE com bankAccountId sem nunca
-  // aprovar, o que é exatamente a brecha que a auditora reproduziu: dava pra contornar a
-  // exigência de aprovação de um pagamento bancário fazendo a baixa em pedaços parciais (até
-  // 100% do valor, de uma vez) em vez de uma baixa integral só. O gate agora é IDÊNTICO ao de
-  // settleFinancialEntry (mesmo escopo: só PAYABLE com bankAccountId) — os testes antigos
-  // foram corrigidos para aprovar antes de baixar, não para contornar a aprovação.
-  // Revisão manual ANTES do gate de aprovação — mesmo motivo de settleFinancialEntry: um
-  // redirecionamento de favorecido marca as duas condições, e o erro mais específico vence.
-  assertNotUnderManualReview(entry);
-  if (entry.nature === 'PAYABLE' && entry.bankAccountId) {
-    const hasApprovedRequest = await isApprovalRequestApproved('FinancialEntry', entry.id, transaction);
-    if (!hasApprovedRequest) {
-      throw AppError.conflict(
-        'Pagamento (PAYABLE) vinculado a conta bancária não pode ser liquidado (nem parcialmente) sem aprovação prévia — crie uma ApprovalRequest aprovada para este lançamento, conforme o fluxo de pagamento do Caderno Técnico.',
-        'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
-      );
-    }
+  // A01/A1/A2/A4/D1 — mesmas travas da baixa integral (runSettlementGates). Baixa parcial não é
+  // caminho alternativo para contornar aprovação, comprovante, intenção em aberto ou período.
+  if (entry.thirdPartyReleaseType === 'COMPENSATION') {
+    throw AppError.conflict(
+      'Compensação de caução é liquidada de uma vez (baixa integral), não em parcelas.',
+      'FINANCE_THIRD_PARTY_COMPENSATION_PARTIAL_FORBIDDEN'
+    );
   }
   assertPositiveAmount(partialAmount);
-
-  // FIX (homologação 22/09/2026 — auditoria proativa): createFinancialEntry e
-  // updateFinancialEntry sempre chamam assertPeriodOpenForEntry (M4-19), mas esta função criava
-  // um NOVO FinancialEntry (a baixa parcial, status SETTLED, na mesma competência do pai) sem
-  // checar se esse mês já estava fechado — dava pra inserir lançamento novo num período fechado
-  // por este caminho, quebrando a garantia de "o número que o contador viu no fechamento
-  // continua sendo o mesmo amanhã" que closePeriod promete.
-  await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
+  const compensationOf = options && options.viaCompensationOf ? options.viaCompensationOf : null;
+  const gates = compensationOf
+    ? { settlementInfo: null, warnings: [] }
+    : await runSettlementGates(entry, options, transaction);
+  if (compensationOf) {
+    // Baixa da DÍVIDA do titular abatida por uma compensação de caução já aprovada e liquidada
+    // na mesma transação (applyThirdPartySettlementEffects) — período e lançamento conferidos.
+    await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth, new Date()], transaction);
+  }
+  const settlementInfo = compensationOf
+    ? { method: SETTLEMENT_METHODS.COMPENSATION, evidenceFileId: null, reason: `Abatida por compensação de caução (lançamento ${compensationOf}).` }
+    : gates.settlementInfo;
 
   const partialCents = toCents(partialAmount);
   const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
-
-  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
-  // parcelas"): "Recebimento pode ser total, parcial, antecipado ou excedente" e "Valor
-  // excedente nunca é automaticamente tratado como receita; abre pendência de classificação."
-  // O comportamento ANTERIOR rejeitava (400 FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING) qualquer
-  // baixa acima do saldo restante — isso é o CONTRÁRIO do que o contrato pede: o recebimento
-  // precisa ser ACEITO (nunca é bloqueio), e é o EXCEDENTE que precisa ficar retido como
-  // pendência (nunca reconhecido automaticamente como receita/despesa própria). Agora: a parte
-  // que cabe no saldo restante baixa o lançamento normalmente; a parte excedente (se houver)
-  // cria um lançamento-filho separado, nature=PENDING_CLASSIFICATION, status PENDING — não
-  // SETTLED, porque não é receita até alguém classificar.
-  const appliedCents = Math.min(partialCents, remainingCents);
-  const excessCents = partialCents - appliedCents;
-
-  if (entry.bankAccountId) {
-    await assertBankAccountEligibleForPayment(entry.bankAccountId, transaction);
+  if (compensationOf && partialCents > remainingCents) {
+    throw AppError.conflict('A compensação passa do saldo em aberto da dívida.', 'FINANCE_THIRD_PARTY_COMPENSATION_EXCEEDS_DEBT');
   }
 
-  // F03 — mesma regra da baixa integral: baixa parcial de PAYABLE bancário também não presume
-  // pagamento sem confirmação do banco ou comprovante.
-  const settlementInfo = await resolveBankPayableSettlement(entry, options, transaction);
+  // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10 "Recebimentos e
+  // parcelas"): recebimento é sempre ACEITO; o EXCEDENTE acima do saldo restante vira pendência
+  // de classificação (nature=PENDING_CLASSIFICATION, status PENDING) — nunca receita automática.
+  const appliedCents = Math.min(partialCents, remainingCents);
+  const excessCents = partialCents - appliedCents;
 
   const beforeJson = entry.toJSON();
 
@@ -830,6 +1220,14 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       settlementMethod: settlementInfo ? settlementInfo.method : null,
       settlementEvidenceFileId: settlementInfo ? settlementInfo.evidenceFileId : null,
       settlementReason: settlementInfo ? settlementInfo.reason : null,
+      // D3 (revisão independente, provado): a baixa parcial de uma caução nascia com
+      // isThirdPartyFunds=false — relatórios que somam receita própria (isThirdPartyFunds:false)
+      // passavam a contar caução como receita. A filha herda a marca e o vínculo do pai.
+      isThirdPartyFunds: Boolean(entry.isThirdPartyFunds),
+      thirdPartyReference: entry.thirdPartyReference || null,
+      thirdPartyOriginEntryId: entry.thirdPartyOriginEntryId || null,
+      thirdPartyHolderPersonId: entry.thirdPartyHolderPersonId || null,
+      thirdPartyReleaseType: entry.thirdPartyReleaseType || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -878,6 +1276,10 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   await entry.save({ transaction });
 
   await publishFinancialEntrySettled(settlement, transaction);
+  if (entry.nature === 'PAYABLE' && entry.isThirdPartyFunds && entry.thirdPartyOriginEntryId) {
+    await publishThirdPartyFundsReleased(settlement, transaction);
+  }
+  await recordSettlementWarnings(entry, gates.warnings, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -932,7 +1334,7 @@ async function listClassificationPendings(transaction, filters = {}) {
  * excedente, convertendo a nature para a definitiva (ex.: RECEIVABLE de outro contrato,
  * ADJUSTMENT, devolução). NUNCA automático (é exatamente o oposto do que o contrato proíbe).
  */
-async function resolveClassificationPending(id, finalNature, actorUserId, transaction) {
+async function resolveClassificationPending(id, finalNature, actorUserId, transaction, options = {}) {
   const pending = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!pending) throw AppError.notFound('Pendência de classificação não encontrada.', 'FINANCE_CLASSIFICATION_PENDING_NOT_FOUND');
   if (pending.nature !== 'PENDING_CLASSIFICATION') {
@@ -949,10 +1351,28 @@ async function resolveClassificationPending(id, finalNature, actorUserId, transa
     );
   }
 
+  // A3 (revisão independente): transformava qualquer excedente em PAYABLE SETTLED com a conta
+  // herdada — sem aprovação, sem comprovante, sem método de liquidação e sem conferir período.
+  // Agora: o período da competência precisa estar aberto; RECEIVABLE/ADJUSTMENT apenas
+  // classificam um dinheiro que JÁ entrou (fica SETTLED); PAYABLE vira uma OBRIGAÇÃO a pagar
+  // (PENDING, com centro de custo) que segue o fluxo normal de pagamento (aprovação + banco ou
+  // comprovante) — nunca uma saída de caixa automática.
+  await assertPeriodOpenForEntry(pending.companyId, [pending.competenceMonth, new Date()], transaction);
+  // C1: classificar muda os números da competência (o excedente passa a contar como receita,
+  // despesa ou ajuste) — a competência precisa estar aberta (nem CLOSED nem em REVIEW).
+  await assertCompetenceOpen(pending.companyId, pending.competenceMonth, transaction);
+  const costCenterId = options && options.costCenterId ? options.costCenterId : null;
+  if (normalizedNature === 'PAYABLE' && !costCenterId) {
+    throw AppError.badRequest('Classificar como despesa (PAYABLE) exige "costCenterId".', 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
+  }
   const beforeJson = pending.toJSON();
   pending.nature = normalizedNature;
-  pending.status = 'SETTLED';
-  pending.settledAt = new Date();
+  if (normalizedNature === 'PAYABLE') {
+    pending.costCenterId = costCenterId;
+  } else {
+    pending.status = 'SETTLED';
+    pending.settledAt = new Date();
+  }
   pending.updatedBy = actorUserId || null;
   await pending.save({ transaction });
 
@@ -990,6 +1410,22 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
   }
   if (original.status === 'CANCELLED') {
     throw AppError.conflict('Lançamento cancelado não pode ser estornado.', 'FINANCE_ENTRY_INVALID_STATUS');
+  }
+
+  // D1 (revisão independente, provado): estornar o recebimento de uma caução já devolvida
+  // deixava o saldo da origem negativo. Com devolução/compensação ativa, estorne a saída antes.
+  if (original.isThirdPartyFunds && original.nature === 'RECEIVABLE') {
+    const activeRelease = await FinancialEntry.findOne({
+      where: { thirdPartyOriginEntryId: original.id, parentEntryId: null, status: { [Op.notIn]: ['REVERSED', 'CANCELLED'] } },
+      transaction,
+    });
+    if (activeRelease) {
+      throw AppError.conflict(
+        'Esta caução já tem devolução/compensação registrada — estorne a saída antes de estornar o recebimento.',
+        'FINANCE_THIRD_PARTY_ORIGIN_HAS_RELEASES',
+        { releaseEntryId: activeRelease.id }
+      );
+    }
   }
 
   // FIX (homologação 22/09/2026 — auditoria proativa): mesma lacuna de settleFinancialEntryPartial
@@ -1086,5 +1522,7 @@ module.exports = {
   NATURES,
   STATUSES,
   SETTLEMENT_METHODS,
+  OPEN_PAYMENT_INTENT_STATUSES,
   computeThirdPartyOriginBalance,
+  attachSettlementEvidence,
 };

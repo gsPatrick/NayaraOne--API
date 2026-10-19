@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const { assertBankAccountEligibleForPayment } = require('../src/features/finance/financeAntifraud.service');
@@ -33,7 +33,8 @@ test('M4-05 updateFinancialEntry bloqueia edição de lançamento SETTLED — le
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): PAYABLE, mesmo sem conta bancária, só liquida com aprovação e comprovante.
+    await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
 
     await assert.rejects(
       () => financialEntriesService.updateFinancialEntry(entry.id, { description: 'tentando editar valor liquidado' }, tenant.userId, transaction),

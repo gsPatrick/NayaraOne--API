@@ -41,6 +41,8 @@ financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'),
 // Liquidação de lançamento é step-up MFA obrigatório (Caderno §3.3/3.4: "aprovação de
 // pagamento" — liquidar é o ato que efetivamente movimenta o pagamento).
 financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntry);
+// A4 (revisão 18/10/2026): comprovante da baixa manual é anexado ANTES da aprovação.
+financeRouter.post('/finance/entries/:id/settlement-evidence', requirePermission('finance:settle'), financeController.attachSettlementEvidence);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);
@@ -92,6 +94,8 @@ financeRouter.get('/finance/payment-intents', requirePermission('finance:read'),
 financeRouter.post('/finance/payment-intents/:id/approve', requirePermission('finance:approve'), financeController.approvePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/execute', requirePermission('finance:settle'), requireRecentMfa, financeController.executePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/cancel', requirePermission('finance:update'), financeController.cancelPaymentIntent);
+financeRouter.post('/finance/payment-intents/:id/reconcile', requirePermission('finance:settle'), financeController.reconcilePaymentIntent);
+financeRouter.post('/finance/payment-intents/:id/resolve-uncertainty', requirePermission('finance:approve'), requireRecentMfa, financeController.resolveUncertainPaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/submit-to-bank', requirePermission('finance:settle'), requireRecentMfa, financeController.submitPaymentIntentToBank);
 
 // Intercompany transfers (M4-18) — criar move dinheiro entre empresas: step-up MFA.

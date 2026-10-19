@@ -160,11 +160,26 @@ async function createManualSettlementEvidence(tenant, actorUserId, transaction) 
   return { evidenceFileId: file.id, reason: 'Baixa manual de teste — pagamento feito fora da integração bancária, comprovante anexado.' };
 }
 
+// Revisão independente (A4): o comprovante é ANEXADO ao lançamento antes da aprovação, e a
+// aprovação (de outra pessoa) vem depois — quem aprova vê o comprovante. Este helper faz a
+// sequência completa: envia o comprovante, anexa, aprova e devolve o objeto de baixa manual.
+async function prepareManualSettlement(tenant, entryId, actorUserId, transaction) {
+  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const manualSettlement = await createManualSettlementEvidence(tenant, actorUserId, transaction);
+  await financialEntriesService.attachSettlementEvidence(entryId, manualSettlement, actorUserId, transaction);
+  await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
+  return manualSettlement;
+}
+
 async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
   const financialEntriesService = require('../src/features/finance/financialEntries.service');
-  await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
-  const manualSettlement = await createManualSettlementEvidence(tenant, actorUserId, transaction);
-  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction, { manualSettlement });
+  const { FinancialEntry } = require('../src/models');
+  const entry = await FinancialEntry.findByPk(entryId, { transaction });
+  if (entry && entry.nature === 'PAYABLE') {
+    const manualSettlement = await prepareManualSettlement(tenant, entryId, actorUserId, transaction);
+    return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction, { manualSettlement });
+  }
+  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
 }
 
 // F02 (conferência Nayara 18/10/2026): fechar um período exige as conferências humanas do Caderno
@@ -205,7 +220,27 @@ async function waiveAllContractRequirements(contractId, actorUserId, transaction
   }
 }
 
+
+// Revisão 18/10/2026 (D2): todo recebimento de dinheiro de terceiro (caução) exige contrato e
+// titular (locatário/comprador/fiador). Cria um contrato de locação com um locatário de teste.
+async function createThirdPartyLink(tenant, transaction) {
+  const { Contract, Person, ContractParty } = require('../src/models');
+  const suffix = uniqueSuffix();
+  const contract = await Contract.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', contractNumber: `TP-LINK-${suffix}`, status: 'ACTIVE', createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  const holder = await Person.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Locatário teste ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  await ContractParty.create({ groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, personId: holder.id, partyRole: 'TENANT' }, { transaction });
+  return { contractId: contract.id, thirdPartyHolderPersonId: holder.id };
+}
+
 module.exports = {
+  createThirdPartyLink,
+  prepareManualSettlement,
   settleFinancialEntryWithApproval,
   approveFinancialEntryForSettlement,
   createManualSettlementEvidence,

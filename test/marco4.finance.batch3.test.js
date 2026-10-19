@@ -12,7 +12,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, uniqueClosingTestMonth, confirmPeriodChecksForTest } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, uniqueClosingTestMonth, confirmPeriodChecksForTest, createThirdPartyLink, settleFinancialEntryWithApproval, createManualSettlementEvidence } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
@@ -231,6 +231,10 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
       transaction
     );
 
+    // Revisão 18/10/2026 (A1/A4): PAYABLE sem conta também é saída de caixa — a execução manual
+    // da intenção exige comprovante anexado antes da aprovação.
+    const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
+    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, transaction);
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
 
     const approver = await User.create(
@@ -251,7 +255,8 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
     const { intent: executed, entry: settled } = await paymentIntentsService.executePaymentIntent(
       intent.id,
       approver.id,
-      transaction
+      transaction,
+      { manualSettlement }
     );
     assert.equal(executed.status, 'EXECUTED');
     assert.equal(settled.status, 'SETTLED');
@@ -304,6 +309,7 @@ test('M4-16 dinheiro de terceiro exige referência e nunca entra na soma de rece
         description: `M4-16 caucao ${suffix}`,
         isThirdPartyFunds: true,
         thirdPartyReference: `Caução contrato ${suffix}`,
+        ...(await createThirdPartyLink(tenant, transaction)),
       },
       tenant.userId,
       transaction
@@ -468,13 +474,18 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
     );
     assert.equal(requested.status, 'REVIEW');
 
-    // Em REVIEW, o período ainda NÃO bloqueia lançamentos (só CLOSED bloqueia).
-    const duringReview = await financialEntriesService.createFinancialEntry(
-      { ...base, description: `M4-19 durante REVIEW ${suffix}`, dueAt: dueInsideClosedMonth },
-      tenant.userId,
-      transaction
+    // C1 (revisão 18/10/2026 + guarda de competência da frente "fechamento", Caderno §16): em
+    // REVIEW a COMPETÊNCIA já não recebe lançamento novo — o retrato do mês está em aprovação;
+    // se algo precisa entrar, o aprovador devolve o período para OPEN. (Antes: REVIEW não
+    // bloqueava nada.)
+    await assert.rejects(
+      () => financialEntriesService.createFinancialEntry(
+        { ...base, description: `M4-19 durante REVIEW ${suffix}`, dueAt: dueInsideClosedMonth },
+        tenant.userId,
+        transaction
+      ),
+      (err) => { assert.equal(err.code, 'FINANCE_PERIOD_IN_REVIEW'); return true; }
     );
-    assert.equal(duringReview.status, 'PENDING');
 
     // Quem solicitou o fechamento não pode ser quem aprova.
     await assert.rejects(
@@ -611,6 +622,7 @@ test('M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criado
         description: `M4-20 caucao ${suffix}`,
         isThirdPartyFunds: true,
         thirdPartyReference: `Caução contrato ${suffix}`,
+        ...(await createThirdPartyLink(tenant, transaction)),
       },
       tenant.userId,
       transaction
@@ -621,7 +633,8 @@ test('M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criado
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(settled.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): PAYABLE, com ou sem conta, só liquida com aprovação + comprovante.
+    await settleFinancialEntryWithApproval(tenant, settled.id, tenant.userId, transaction);
 
     const afterReport = await financialHealthReportService.getWeeklyHealthReport(transaction, { now });
     const round2 = (v) => Math.round(v * 100) / 100;
@@ -768,7 +781,8 @@ test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', as
       transaction
     );
 
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    // Revisão 18/10/2026 (A1): PAYABLE só liquida com aprovação e comprovante.
+    const settled = await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
     assert.equal(settled.status, 'SETTLED');
     const settledAt = settled.settledAt;
 
