@@ -466,8 +466,23 @@ const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
   if (typeof externalSubmissionId !== 'string' || !externalSubmissionId || typeof status !== 'string' || !status) {
     return success(res, { statusCode: 400, data: { received: false, reason: 'invalid_payload' } });
   }
+  const { sequelize } = require('../../models');
+  const result = await sequelize.transaction((t) =>
+    processBankPaymentWebhook({ body: req.body, rawBody: req.rawBody, headers: req.headers }, t)
+  );
+  return success(res, { data: result });
+});
+
+/**
+ * processBankPaymentWebhook — corpo do webhook bancário público, recebendo a transação de fora
+ * (o controller abre a dele; o teste E2E do Financeiro usa a transação com rollback). Resolve o
+ * tenant pela tabela de roteamento, aplica SET LOCAL, confere a assinatura HMAC (sempre, também
+ * em sandbox) e só então confirma o pagamento.
+ */
+async function processBankPaymentWebhook({ body, rawBody, headers }, t) {
+  const { externalSubmissionId, status } = body || {};
   const { sequelize, BankPaymentProviderRouting } = require('../../models');
-  const result = await sequelize.transaction(async (t) => {
+  {
     // Resolve o tenant via routing table (sem RLS) ANTES de abrir qualquer SET LOCAL — mesma
     // ordem de operações do webhook de assinatura.
     const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId }, transaction: t });
@@ -487,7 +502,7 @@ const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
     // configurado, falha fechado. Confirmação via sandbox é gravada como SANDBOX_CONFIRMED.
     const providerName = await getSetting('finance.payment_provider', tenant, t, 'sandbox');
     const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
-    const isValid = verifyBankWebhookSignature(req.rawBody, req.headers, webhookSecret);
+    const isValid = verifyBankWebhookSignature(rawBody, headers, webhookSecret);
     if (!isValid) {
       throw AppError.unauthorized(
         'Assinatura HMAC do webhook bancário ausente ou inválida.',
@@ -497,9 +512,8 @@ const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
 
     await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t, { sandbox: providerName === 'sandbox' });
     return { received: true, processed: true };
-  });
-  return success(res, { data: result });
-});
+  }
+}
 
 // --- Intercompany transfers (M4-18) ---
 const createIntercompanyTransfer = catchAsync(async (req, res) => {
@@ -653,7 +667,7 @@ module.exports = {
   publishCommissionRule, getCommissionRule, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
-  submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, verifyBankWebhookSignature,
+  submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, processBankPaymentWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
   closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
