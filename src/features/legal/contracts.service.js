@@ -55,7 +55,10 @@ const CONTRACT_NUMBER_PREFIX = {
 
 /**
  * generateContractNumber — gera o próximo número no formato "{PREFIXO}-{ANO}-{SEQ:04d}"
- * (ex.: "LOC-2026-0001"), sequencial reiniciando por (companyId, contractType, ano corrente).
+ * (ex.: "LOC-2026-0001"), sequencial reiniciando por (companyId, PREFIXO, ano corrente).
+ * A chave é o PREFIXO (gravado na coluna contract_type da sequência), não o tipo: SALE_CASH e
+ * SALE_TRADE compartilham "VEN" e antes geravam ambos VEN-2026-0001 (BUG M45, migration 000530,
+ * que também criou o índice único (company_id, contract_number) em legal.contracts).
  *
  * CONCORRÊNCIA: usa um único `INSERT ... ON CONFLICT (company_id, contract_type, year)
  * DO UPDATE SET last_seq = contract_number_sequences.last_seq + 1 RETURNING last_seq` — é uma
@@ -79,7 +82,7 @@ async function generateContractNumber(companyId, contractType, transaction) {
      DO UPDATE SET last_seq = "legal"."contract_number_sequences".last_seq + 1, updated_at = now()
      RETURNING last_seq`,
     {
-      replacements: { companyId, contractType, year },
+      replacements: { companyId, contractType: prefix, year },
       transaction,
     }
   );
@@ -360,7 +363,12 @@ async function createContract(payload, actorUserId, transaction) {
       updatedBy: actorUserId || null,
     },
     { transaction }
-  );
+  ).catch((err) => {
+    if (err && err.name === 'SequelizeUniqueConstraintError') {
+      throw AppError.conflict(`Já existe um contrato com o número "${finalContractNumber}" nesta empresa.`, 'LEGAL_CONTRACT_NUMBER_DUPLICATE');
+    }
+    throw err;
+  });
 
   await registrarAuditoria(
     {
