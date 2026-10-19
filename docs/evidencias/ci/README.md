@@ -4,6 +4,34 @@ Resposta ao item **E01** da conferência da Nayara de 18/10/2026: "Enviar o test
 
 A API de download de artifacts do GitHub exige login mesmo em repositório público (por isso a IA da auditoria recebeu HTTP 403). Os logs abaixo são **cópias byte a byte do `test-results.log` de dentro do artifact original** de cada run, versionadas aqui para ficarem acessíveis sem login pelo link raw do GitHub.
 
+## Run final dos Marcos 4/5 — 39301913793 (commit `3f7e550`)
+
+- Run: https://github.com/gsPatrick/NayaraOne--API/actions/runs/39301913793 — evento `push` na branch `marco-6-e-7-homologado-nayara`, `conclusion=success`, criado em 2026-10-19T18:22:11Z.
+- Commit avaliado: `3f7e5500e00c609cf5c4da2f8a5b5573cfbf48d8`. Como o evento é `push`, não existe commit de merge temporário: o artifact se chama exatamente `test-results-3f7e5500e00c609cf5c4da2f8a5b5573cfbf48d8` (id 12210643253, digest do zip `sha256:2c376ef482f2a08e7cff0b9321c15aba043eeb42aaa91d4caf24ad3ccd8ff76a`, expira em 17/01/2027).
+- Resultado: `ℹ tests 1429 / pass 1429 / fail 0 / cancelled 0 / skipped 0 / todo 0`. Os sete testes R3 e os 12 testes de dois tenants (Compras, Financeiro e Jurídico) estão no log e verdes.
+- Front correspondente: run https://github.com/gsPatrick/NayaraOne--FRONT/actions/runs/39301378437 (commit `728e99fa80aa693762141335b00cf0b7651cbb6d`, `push`, `success`).
+- `39301913793-3f7e550-test-results.log` é cópia byte a byte do `test-results.log` de dentro do artifact (baixado com `gh run download 39301913793 -R gsPatrick/NayaraOne--API`); o `.sha256` ao lado confere.
+
+## Reprodução local — `scripts/reproduzir-conferencia.sh`
+
+Faz em qualquer máquina o mesmo que o job `test` do workflow, sem tocar em banco compartilhado:
+
+1. sobe um PostgreSQL 16 **descartável** — `docker run postgres:16` quando há Docker; sem Docker, um cluster local criado com `initdb` num diretório temporário (porta própria, padrão 55432);
+2. roda as migrations do zero e os seeds `seed-dev`, `seedBillingRules`, `seedRealEstateRules` e `seed-ci-two-tenants` (dois tenants fictícios, perfis maker/checker/leitura) como superusuário do cluster;
+3. cria a role `nayara_ci_app` NOSUPERUSER NOBYPASSRLS com GRANT por schema (schemas enumerados do catálogo, como no CI);
+4. roda a suíte inteira com `NODE_ENV=test`, reporter `spec`, gravando `test-results.log` com cabeçalho (commit avaliado, modo do Postgres, usuário do banco, versão do Node);
+5. remove o banco no final (container ou cluster e diretório).
+
+Neutraliza as chaves do `.env` local que o script não define (o `dotenv` não sobrescreve variável existente), então nada do ambiente de desenvolvimento vaza para a reprodução.
+
+```bash
+bash scripts/reproduzir-conferencia.sh                      # suíte inteira -> ./test-results.log
+bash scripts/reproduzir-conferencia.sh /tmp/r.log 'test/nayaraConferencia1810*.test.js'   # recorte
+REPRO_FORCE_LOCAL=1 REPRO_PG_PORT=55440 bash scripts/reproduzir-conferencia.sh           # sem docker, outra porta
+```
+
+Execução de 19/10/2026 nesta máquina (sem Docker instalado, portanto cluster local PostgreSQL 16.14), commit `3f7e550`, Node v24.18.0, arquivos em série (`--test-concurrency=1`): **1429 testes, 1429 aprovados, 0 falhas, 0 pulados**, 205,8 s. Log em [`local-reproducao-3f7e550-test-results.log`](./local-reproducao-3f7e550-test-results.log). O conjunto de nomes de testes aprovados é idêntico ao do run 39301913793 (`diff` das listas ordenadas vazio). O cabeçalho registra "arquivos rastreados modificados: 1" — era `docs/evidencias/MAPA_SEGURANCA.md` (documentação, sem efeito na suíte).
+
 ## Por que o nome do artifact não bate com o commit
 
 Os dois runs abaixo foram disparados pelo evento `pull_request` (PR #1, branch `marco-6-e-7-homologado-nayara` → `main`). Nesse evento, a variável `github.sha` do GitHub Actions não é o commit da branch: é o **commit de merge temporário** que o GitHub cria em `refs/pull/1/merge` para testar como a branch ficaria mesclada. O workflow nomeava o artifact com `github.sha`, daí a diferença:
@@ -23,6 +51,8 @@ Pode ser conferido com `gh run view <run> --json event,headSha` e `gh api repos/
 |---|---|---|---|---|---|---|---|
 | [`39127433976-8f7c97c-test-results.log`](./39127433976-8f7c97c-test-results.log) | `4959a27f9964b1986fc5c2cafb54dce12334eaebbcd70ddbe967a63ffb0c12a2` | 1137 | 1137 | 0 | 0 | 0 | 0 |
 | [`39137022521-0ab0e7b-test-results.log`](./39137022521-0ab0e7b-test-results.log) | `4a251a9edb6d482c1a15354d3077cb6e7016596bed1066bb0b814d91b2a39d57` | 1152 | 1152 | 0 | 0 | 0 | 0 |
+| [`39301913793-3f7e550-test-results.log`](./39301913793-3f7e550-test-results.log) — **run final dos Marcos 4/5** (evento `push`, sem commit de merge) | `46dd37c2e5b28156b15448c1b9bf272aeac9a9d3bebad5f9abdd073953d5638c` | 1429 | 1429 | 0 | 0 | 0 | 0 |
+| [`local-reproducao-3f7e550-test-results.log`](./local-reproducao-3f7e550-test-results.log) — reprodução local (`scripts/reproduzir-conferencia.sh`) | `31f5c74146dbd93646b5e05059a2a7924b91b84c3db41bf2c808407d1b18b410` | 1429 | 1429 | 0 | 0 | 0 | 0 |
 
 Digest oficial do GitHub para o **zip** de cada artifact (não do log): run 39127433976 → `sha256:5276f6b18e8ced915175c2625b9a2902709ca8fcda413217684a8d3de89976c4` (artifact id 12137255014); run 39137022521 → `sha256:2b7a6b312d78d87417dbd80f6b1b81dfdd257b9aad0c449ac69978ed52e79cb0` (artifact id 12140006965). Ambos expiram em 16/01/2027 no GitHub; as cópias aqui não expiram.
 
