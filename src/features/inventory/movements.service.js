@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User, Person } = require('../../models');
+const { sequelize, InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -23,10 +23,17 @@ async function applyBalanceDelta(inventoryItemId, locationId, delta, companyId, 
   });
 
   if (!balance) {
-    balance = await InventoryStockBalance.create(
-      { groupId, companyId, inventoryItemId, locationId, quantityOnHand: 0 },
-      { transaction }
+    // BUG REAL CORRIGIDO (teste de carga de Estoque/Compras, Marco 7, 19/10/2026): duas
+    // entradas simultâneas no PRIMEIRO saldo de um item/local liam "não existe" e a segunda
+    // estourava a UNIQUE (item, local) com erro 500. INSERT ... ON CONFLICT DO NOTHING e releitura
+    // com FOR UPDATE: quem chega depois espera o lock e soma sobre o saldo já criado.
+    await sequelize.query(
+      `INSERT INTO inventory.stock_balances (id, group_id, company_id, inventory_item_id, location_id, quantity_on_hand, lock_version, created_at, updated_at)
+       VALUES (gen_random_uuid(), :groupId, :companyId, :inventoryItemId, :locationId, 0, 0, NOW(), NOW())
+       ON CONFLICT (inventory_item_id, location_id) DO NOTHING`,
+      { replacements: { groupId, companyId, inventoryItemId, locationId }, transaction }
     );
+    balance = await InventoryStockBalance.findOne({ where: { inventoryItemId, locationId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   }
 
   const nextQuantity = Number(balance.quantityOnHand) + Number(delta);
@@ -337,6 +344,11 @@ async function recordMovement(payload, actor, transaction) {
 
   // EST-00x: idempotência — reenvio do mesmo payload (ex.: retry de rede) não duplica o movimento.
   if (idempotencyKey) {
+    // BUG REAL CORRIGIDO (teste de carga de Estoque/Compras, Marco 7, 19/10/2026): dois envios
+    // SIMULTÂNEOS da mesma chave liam "não existe" ao mesmo tempo e o segundo estourava a UNIQUE
+    // (company_id, idempotency_key) com erro 500 em vez de devolver o movimento. Trava consultiva
+    // da transação por (empresa, chave): o segundo espera o commit do primeiro e o encontra.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))', { replacements: { k: `inventory-movement:${companyId}:${idempotencyKey}` }, transaction });
     const existing = await InventoryMovement.findOne({ where: { companyId, idempotencyKey }, transaction });
     if (existing) return existing;
   }

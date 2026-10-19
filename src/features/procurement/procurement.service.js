@@ -591,22 +591,12 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
 
   const order = await PurchaseOrder.findOne({ where: { id: purchaseOrderId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!order) throw AppError.notFound('Pedido de compra não encontrado.', 'PURCHASE_ORDER_NOT_FOUND');
-  if (order.status !== 'OPEN') {
-    throw AppError.badRequest(`Só é possível registrar recebimento para um pedido de compra em aberto (status atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
-  }
-  order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
-
-  // BUG REAL CORRIGIDO (reauditoria "loop até secar", 2026-10-08): a checagem de NF duplicada
-  // rodava ANTES do lock FOR UPDATE do PO — duas requisições concorrentes (sem idempotencyKey)
-  // liam ambas "nenhum GoodsReceipt com este invoiceFingerprint" antes de qualquer commit (TOCTOU)
-  // e as duas seguiam criando recebimento + payable duplicados. Agora a checagem roda DEPOIS do
-  // lock do PO: a segunda chamada concorrente só lê este GoodsReceipt.findOne depois do commit da
-  // primeira (serializada pela trava pessimista na linha do PO), encontrando o registro já criado.
-  if (invoiceFingerprint) {
-    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint, groupId: order.groupId, companyId: order.companyId }, transaction });
-    if (existing) throw AppError.badRequest(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
-  }
-
+  // BUG REAL CORRIGIDO (failure drill de Estoque/Compras, Marco 7, 19/10/2026): a checagem de
+  // idempotência vinha DEPOIS da de NF duplicada — o retry de um recebimento que JÁ tinha dado
+  // certo (mesma idempotencyKey, mesma NF; ex.: a resposta se perdeu na rede) era recusado com
+  // GOODS_RECEIPT_DUPLICATE_INVOICE em vez de devolver o recebimento existente. Agora a chave de
+  // idempotência é conferida primeiro (antes até do status do pedido: o replay do recebimento que
+  // completou o pedido deve devolver o recebimento, não PURCHASE_ORDER_INVALID_TRANSITION); NF repetida com chave diferente continua bloqueada.
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 64, 2026-10-06): a única proteção
   // real contra duplo-processamento era o status do PO virar != OPEN, que só acontece no
   // recebimento TOTAL — em recebimento PARCIAL (PO continua OPEN), um retry de rede com o mesmo
@@ -623,6 +613,22 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
       });
       return { goodsReceipt: existingByKey, discrepancies: existingDiscrepancies };
     }
+  }
+
+  if (order.status !== 'OPEN') {
+    throw AppError.badRequest(`Só é possível registrar recebimento para um pedido de compra em aberto (status atual: ${order.status}).`, 'PURCHASE_ORDER_INVALID_TRANSITION');
+  }
+  order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
+
+  // BUG REAL CORRIGIDO (reauditoria "loop até secar", 2026-10-08): a checagem de NF duplicada
+  // rodava ANTES do lock FOR UPDATE do PO — duas requisições concorrentes (sem idempotencyKey)
+  // liam ambas "nenhum GoodsReceipt com este invoiceFingerprint" antes de qualquer commit (TOCTOU)
+  // e as duas seguiam criando recebimento + payable duplicados. Agora a checagem roda DEPOIS do
+  // lock do PO: a segunda chamada concorrente só lê este GoodsReceipt.findOne depois do commit da
+  // primeira (serializada pela trava pessimista na linha do PO), encontrando o registro já criado.
+  if (invoiceFingerprint) {
+    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint, groupId: order.groupId, companyId: order.companyId }, transaction });
+    if (existing) throw AppError.badRequest(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
   }
 
   const goodsReceipt = await GoodsReceipt.create(

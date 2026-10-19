@@ -17,6 +17,10 @@
     "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
     "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
     "restore-drill:legal-full": "node scripts/restoreDrill/legalFullDrill.js",
+    "verify-restore:inventory-procurement": "node scripts/verifyRestoreInventoryProcurementData.js",
+    "restore-drill:inventory-full": "node scripts/restoreDrill/inventoryFullDrill.js",
+    "load-test:inventory": "node scripts/withDisposableDb.js -- node scripts/loadTestInventoryProcurement.js",
+    "test:failure-drills:inventory": "node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/inventory.failureDrills.test.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
