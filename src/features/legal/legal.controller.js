@@ -726,7 +726,7 @@ module.exports = {
   createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
   createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
   attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
-  createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery,
+  createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery, previewKeyDeliveryTerm,
   createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, setLegalHold,
   createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
   createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
