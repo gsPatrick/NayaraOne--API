@@ -238,7 +238,8 @@ test('FIN-TS-015: repasse gera exatamente UM lançamento a pagar (na aprovação
     // recurso de terceiro, fora da despesa própria (filtro isThirdPartyFunds=false).
     assert.equal(financialEntry.isThirdPartyFunds, true, 'pagamento de repasse é dinheiro de terceiro');
     assert.equal(financialEntry.thirdPartyReleaseType, 'OWNER_REPASSE');
-    assert.ok(financialEntry.thirdPartyReference && financialEntry.thirdPartyReference.includes('2026-09'));
+    // A referência é texto para pessoas (bf653aa): período no formato MM/AAAA, sem ENUM nem ISO.
+    assert.ok(financialEntry.thirdPartyReference && financialEntry.thirdPartyReference.includes('09/2026'), financialEntry.thirdPartyReference);
     const proprios = await FinancialEntry.findAll({ where: { companyId: tenant.companyId, isThirdPartyFunds: false }, transaction });
     assert.ok(!proprios.some((e) => e.id === financialEntry.id), 'repasse não aparece como despesa própria');
     const countAposAprovar = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
