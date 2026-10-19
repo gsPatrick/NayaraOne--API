@@ -113,6 +113,7 @@ financeRouter.get('/finance/intercompany-transfers', requirePermission('finance:
 financeRouter.post('/finance/intercompany-transfers/:id/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approveIntercompanyTransfer);
 financeRouter.post('/finance/intercompany-transfers/:id/reject', requirePermission('finance:approve'), financeController.rejectIntercompanyTransfer);
 financeRouter.get('/finance/intercompany-transfers/destination-bank-accounts', requirePermission('finance:read'), financeController.listIntercompanyDestinationAccounts);
+financeRouter.get('/finance/intercompany-transfers/destination-companies', requirePermission('finance:read'), financeController.listIntercompanyDestinationCompanies);
 financeRouter.get('/finance/reports/group-consolidated', requirePermission('finance:read'), financeController.getGroupConsolidatedReport);
 financeRouter.post('/finance/intercompany-transfers/:id/reconcile', requirePermission('finance:reconcile'), financeController.reconcileIntercompanyTransfer);
 

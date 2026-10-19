@@ -600,6 +600,15 @@ const listIntercompanyDestinationAccounts = catchAsync(async (req, res) => {
   );
   return success(res, { data: items });
 });
+const listIntercompanyDestinationCompanies = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.listDestinationCompanies(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      t
+    )
+  );
+  return success(res, { data: items });
+});
 const publishCommissionRule = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) => commissionsService.publishCommissionRuleVersion(withTenant(req), req.auth.userId, t));
   return success(res, { data: result });
@@ -622,7 +631,7 @@ const listChartAccountVersions = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts,
+  approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts, listIntercompanyDestinationCompanies,
   publishCommissionRule, getCommissionRule, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,

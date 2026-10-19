@@ -519,7 +519,27 @@ async function listDestinationBankAccounts(actor, toCompanyId, transaction) {
   });
 }
 
+/**
+ * listDestinationCompanies — M45 F8: empresas do grupo (exceto a atual) com o indicador
+ * `canReadFinance`. A tela lista como destino só as que o usuário pode ler; as demais aparecem
+ * explicadas ("sem acesso ao Financeiro") em vez de devolver contas vazias.
+ */
+async function listDestinationCompanies(actor, transaction) {
+  const { groupId, companyId: currentCompanyId, userId } = actor;
+  const companies = await Company.findAll({ where: { groupId }, order: [['name', 'ASC']], transaction });
+  const out = [];
+  for (const company of companies) {
+    if (company.id === currentCompanyId) continue;
+    const canReadFinance = await withCompanyContext(company.id, currentCompanyId, transaction, () =>
+      actorCanReadFinanceIn(company.id, userId, transaction)
+    );
+    out.push({ id: company.id, name: company.name, canReadFinance });
+  }
+  return out;
+}
+
 module.exports = {
+  listDestinationCompanies,
   listDestinationBankAccounts,
   createIntercompanyTransfer,
   approveIntercompanyTransfer,
