@@ -1,7 +1,7 @@
 'use strict';
 
 const { Contract } = require('../../models');
-const { collectContractClosurePendencies } = require('../legal/contractClosureGate');
+const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../legal/contractClosureGate');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCloseoutBlocked, publishCloseoutCompleted } = require('./billingEvents.service');
@@ -45,13 +45,14 @@ async function closeoutContract(contractId, actorUserId, transaction) {
         action: 'billing.closeout.blocked',
         entityType: 'Contract',
         entityId: contract.id,
-        afterJson: { reasons },
-        reason: `Closeout do contrato ${contract.id} bloqueado por ${reasons.length} pendência(s) crítica(s).`,
+        beforeJson: { status: contract.status, encerramento: 'solicitado' },
+        afterJson: { status: contract.status, encerramento: 'bloqueado', reasons },
+        reason: `Encerramento do contrato ${contract.contractNumber || contract.id} bloqueado por ${reasons.length} pendência(s) crítica(s).`,
       },
       transaction
     );
     throw AppError.conflict(
-      `Não é possível encerrar a locação: há pendências críticas (${reasons.map((r) => r.type).join(', ')}).`,
+      `Não é possível encerrar a locação: ${reasons.length} pendência(s) — ${[...new Set(reasons.map((r) => PENDENCY_LABELS[r.type] || r.type))].join(', ')}.`,
       'CLOSEOUT_BLOCKED',
       { reasons }
     );
@@ -66,7 +67,9 @@ async function closeoutContract(contractId, actorUserId, transaction) {
       action: 'billing.closeout.completed',
       entityType: 'Contract',
       entityId: contract.id,
-      reason: `Closeout do contrato ${contract.id} concluído sem pendências críticas.`,
+      beforeJson: { status: contract.status, encerramento: 'solicitado' },
+      afterJson: { status: contract.status, encerramento: 'concluído sem pendências' },
+      reason: `Encerramento do contrato ${contract.contractNumber || contract.id} concluído sem pendências críticas.`,
     },
     transaction
   );

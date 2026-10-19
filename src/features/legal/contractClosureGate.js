@@ -77,7 +77,7 @@ async function collectContractClosurePendencies(contractId, transaction) {
   if (activeGuarantees.length > 0) {
     pendencies.push({
       type: 'ACTIVE_GUARANTEE',
-      detail: `${activeGuarantees.length} garantia(s) ainda ACTIVE (não devolvida(s)/liberada(s)).`,
+      detail: `${activeGuarantees.length} garantia(s) ainda ativa(s) (não devolvida(s)/liberada(s)).`,
       guaranteeIds: activeGuarantees.map((g) => g.id),
     });
   }
@@ -115,7 +115,7 @@ async function collectContractClosurePendencies(contractId, transaction) {
   if (openCases.length > 0) {
     pendencies.push({
       type: 'OPEN_LEGAL_CASE',
-      detail: `${openCases.length} processo(s) jurídico(s) vinculado(s) ainda não CLOSED.`,
+      detail: `${openCases.length} processo(s) jurídico(s) vinculado(s) ainda não encerrado(s).`,
       legalCaseIds: openCases.map((c) => c.id),
     });
   }
