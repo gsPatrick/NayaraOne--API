@@ -367,6 +367,7 @@ test('GAP fechado via HTTP: composição do repasse de proprietário é consult�
         ownerPersonId: owner.id,
         sourceEntryIds: [recebimento.id],
         deductionsAmount: 50,
+        deductionsReason: 'Taxa de administração contratual',
         referenceMonth: '2026-09',
         idempotencyKey: `repasse-http-${suffix}`,
       },

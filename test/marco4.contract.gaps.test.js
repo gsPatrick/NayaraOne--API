@@ -831,7 +831,7 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     );
     await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
     await ownerRepassesService.createOwnerRepasse(
-      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: ownerAccount.id, sourceEntryIds: [recebimento.id], grossAmount: 500, deductionsAmount: 50, referenceMonth: '2026-10' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: ownerAccount.id, sourceEntryIds: [recebimento.id], grossAmount: 500, deductionsAmount: 50, deductionsReason: 'Taxa de administração', referenceMonth: '2026-10' },
       tenant.userId, transaction
     );
 

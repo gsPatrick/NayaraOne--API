@@ -5,7 +5,7 @@ const { OwnerRepass, FinancialEntry, AuditLog, Contract, Person } = require('../
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
-const { publishOwnerRepasseCreated } = require('./financeEvents.service');
+const { publishOwnerRepasseCreated, publishOwnerRepassCompleted } = require('./financeEvents.service');
 
 // Carregado sob demanda: financialEntries.service importa módulos que importam este arquivo.
 function entriesService() {
@@ -234,6 +234,8 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
     sourceEntryIds,
     grossAmount,
     deductionsAmount,
+    deductionsReason,
+    deductionsDocumentFileId,
     referenceMonth,
     idempotencyKey,
     formalAdjustment,
@@ -303,6 +305,12 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
     }
   }
 
+  // Caderno M4 §12: "Desconto precisa de motivo/documento/regra." Dedução sem motivo é recusada.
+  const deductionsReasonText = typeof deductionsReason === 'string' ? deductionsReason.trim() : '';
+  if (deductionsNumeric > 0 && !deductionsReasonText) {
+    throw AppError.badRequest('Dedução no repasse exige "deductionsReason" (motivo do desconto).', 'FINANCE_OWNER_REPASSE_DEDUCTION_REASON_REQUIRED');
+  }
+
   await assertNoDuplicatePayment(OwnerRepass, idempotencyKey, transaction);
 
   const netAmount = round2(grossNumeric - deductionsNumeric);
@@ -317,6 +325,8 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
       bankAccountId: bankAccountId || null,
       grossAmount: grossNumeric,
       deductionsAmount: deductionsNumeric,
+      deductionsReason: deductionsReasonText || null,
+      deductionsDocumentFileId: deductionsDocumentFileId || null,
       netAmount,
       referenceMonth,
       status: 'PENDING',
@@ -540,6 +550,7 @@ async function payOwnerRepasse(id, actorUserId, transaction) {
     },
     transaction
   );
+  await publishOwnerRepassCompleted(repasse, transaction);
 
   return repasse;
 }

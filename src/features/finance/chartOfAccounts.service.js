@@ -115,6 +115,16 @@ async function resolveAccountVersionForEntry(chartOfAccountId, companyId, factDa
   if (!account || (companyId && account.companyId !== companyId)) {
     throw AppError.badRequest('A conta contábil informada não existe no plano de contas desta empresa.', 'FINANCE_CHART_ACCOUNT_NOT_FOUND');
   }
+  // Caderno M4 §4: "contas analíticas e sintéticas". Conta com filhas ativas é SINTÉTICA
+  // (agrupadora): só consolida nos relatórios e não recebe lançamento direto — o lançamento vai
+  // para a conta analítica (folha).
+  const activeChildren = await ChartOfAccount.count({ where: { parentAccountId: account.id, isActive: true }, transaction });
+  if (activeChildren > 0) {
+    throw AppError.badRequest(
+      `A conta "${account.code} — ${account.name}" é sintética (tem ${activeChildren} subconta(s)); lance na conta analítica.`,
+      'FINANCE_CHART_ACCOUNT_SYNTHETIC'
+    );
+  }
   const at = factDate ? new Date(factDate) : new Date();
   if (Number.isNaN(at.getTime())) {
     throw AppError.badRequest('Data do fato inválida.', 'FINANCE_ENTRY_VALIDATION');

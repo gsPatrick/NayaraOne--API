@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { PaymentIntent, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishPaymentPrepared, publishPaymentApproved } = require('./financeEvents.service');
 const { getFinancialEntry, settleFinancialEntry } = require('./financialEntries.service');
 const { isApprovalRequestApproved, getApprovalRequest } = require('./approvals.service');
 
@@ -183,6 +184,7 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
     },
     transaction
   );
+  await publishPaymentPrepared(intent, transaction);
 
   return intent;
 }
@@ -257,6 +259,7 @@ async function approvePaymentIntent(id, actorUserId, transaction) {
     },
     transaction
   );
+  await publishPaymentApproved(intent, transaction);
 
   return intent;
 }

@@ -79,7 +79,7 @@ test('M45-F4 caminho feliz: lista -> cria repasse válido -> aprovado por outra 
 
     const bank = await BankAccount.create({ groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `M45R-${uniqueSuffix()}`, status: 'ACTIVE' }, { transaction: t });
     const repasse = await ownerRepassesService.createOwnerRepasse(
-      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: propA.id, contractId: contractA.id, ownerPersonId: owner.id, bankAccountId: bank.id, referenceMonth: '2026-09', sourceEntryIds: eligible.map((e) => e.id), deductionsAmount: 200 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: propA.id, contractId: contractA.id, ownerPersonId: owner.id, bankAccountId: bank.id, referenceMonth: '2026-09', sourceEntryIds: eligible.map((e) => e.id), deductionsAmount: 200, deductionsReason: 'Taxa de administração' },
       tenant.userId, t
     );
     assert.equal(repasse.status, 'PENDING');

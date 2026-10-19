@@ -404,7 +404,7 @@ async function repasseSetup(t) {
   await financialEntriesService.settleFinancialEntry(received.id, tenant.userId, t);
   const bankAccount = await newBankAccount(t);
   const costCenter = await createTestCostCenter(tenant, t);
-  const base = { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: bankAccount.id, sourceEntryIds: [received.id], grossAmount: 1000, deductionsAmount: 100, referenceMonth: '2026-09' };
+  const base = { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: bankAccount.id, sourceEntryIds: [received.id], grossAmount: 1000, deductionsAmount: 100, deductionsReason: 'Taxa de administração', referenceMonth: '2026-09' };
   return { base, costCenter, received };
 }
 

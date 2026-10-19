@@ -114,6 +114,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
         sourceEntryIds: [recebimento.id],
         grossAmount: 1000,
         deductionsAmount: 80,
+        deductionsReason: 'Taxa de administração contratual',
         referenceMonth: '2026-09',
       },
       tenant.userId,

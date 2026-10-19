@@ -73,6 +73,8 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'paid_at',
       },
+      deductionsReason: { type: DataTypes.TEXT, allowNull: true, field: 'deductions_reason' },
+      deductionsDocumentFileId: { type: DataTypes.UUID, allowNull: true, field: 'deductions_document_file_id' },
       approvedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'approved_by_user_id' },
       approvedAt: { type: DataTypes.DATE, allowNull: true, field: 'approved_at' },
       confirmedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'confirmed_by_user_id' },

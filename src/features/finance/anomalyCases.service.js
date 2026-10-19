@@ -3,6 +3,7 @@
 const { AnomalyCase } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { publishAnomalyOpened } = require('./financeEvents.service');
 
 const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
@@ -55,6 +56,7 @@ async function createAnomalyCase(payload, actorUserId, transaction) {
     },
     transaction
   );
+  await publishAnomalyOpened(anomalyCase, transaction);
 
   return anomalyCase;
 }
