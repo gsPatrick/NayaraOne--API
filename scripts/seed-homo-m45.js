@@ -2,7 +2,7 @@
 
 require('dotenv').config();
 
-const { sequelize, Company, UserMembership, BankAccount, FinancialEntry, PaymentIntent, CostCenter } = require('../src/models');
+const { sequelize, Company, UserMembership, BankAccount, FinancialEntry, PaymentIntent, CostCenter, BankPaymentProviderRouting } = require('../src/models');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
@@ -72,9 +72,17 @@ async function main() {
     // ---------------- F9 ----------------
     const created = [];
     for (const target of ['SUBMITTED', 'SUBMITTING']) {
-      const description = `${SEED_TAG} — pagamento sandbox ${target === 'SUBMITTED' ? 'em trânsito' : 'envio incerto'}`;
-      const existing = await FinancialEntry.findOne({ where: { companyId: COMPANY_ID, description }, transaction: t });
-      if (existing) continue;
+      const baseDescription = `${SEED_TAG} — pagamento sandbox ${target === 'SUBMITTED' ? 'em trânsito' : 'envio incerto'}`;
+      // M45-RECONF: idempotente por "existe intenção ABERTA neste estado". Se a anterior já foi
+      // consultada/resolvida (Executada), cria uma nova rodada numerada para o próximo reteste.
+      const { Op } = require('sequelize');
+      const previous = await FinancialEntry.findAll({ where: { companyId: COMPANY_ID, description: { [Op.like]: `${baseDescription}%` } }, transaction: t });
+      const openIntent = previous.length
+        ? await PaymentIntent.findOne({ where: { financialEntryId: previous.map((e) => e.id), status: target }, transaction: t })
+        : null;
+      if (openIntent) continue;
+      const round = previous.length + 1;
+      const description = round === 1 ? baseDescription : `${baseDescription} (rodada ${round})`;
       let account = await BankAccount.findOne({ where: { companyId: COMPANY_ID, accountNumber: 'M45-SANDBOX' }, transaction: t });
       if (!account) {
         account = await bankAccountsService.createBankAccount(
@@ -90,7 +98,7 @@ async function main() {
         {
           groupId: GROUP_ID, companyId: COMPANY_ID, bankAccountId: account.id, entryType: 'DEBIT', nature: 'PAYABLE',
           amount: target === 'SUBMITTED' ? 123.45 : 67.89, description, dueAt: new Date(), competenceMonth: new Date().toISOString().slice(0, 7),
-          idempotencyKey: `homo-m45-${target}`, costCenterId: cc.id,
+          idempotencyKey: round === 1 ? `homo-m45-${target}` : `homo-m45-${target}-${round}`, costCenterId: cc.id,
         },
         ADMIN_USER_ID, t
       );
@@ -99,13 +107,21 @@ async function main() {
       const before = row.toJSON();
       row.status = target;
       row.paymentMethod = 'PIX';
-      row.idempotencyKey = `homo-m45-${target}`;
-      row.externalSubmissionId = target === 'SUBMITTED' ? `sandbox-homo-m45-${target}` : null;
+      row.idempotencyKey = round === 1 ? `homo-m45-${target}` : `homo-m45-${target}-${round}`;
+      row.externalSubmissionId = target === 'SUBMITTED' ? `sandbox-homo-m45-${target}${round === 1 ? '' : `-${round}`}` : null;
       row.externalStatus = target === 'SUBMITTED' ? 'PENDING_EXTERNAL' : null;
       row.submittedAt = new Date();
       row.uncertainSince = target === 'SUBMITTING' ? new Date() : null;
       row.updatedBy = ADMIN_USER_ID;
       await row.save({ transaction: t });
+      if (row.externalSubmissionId) {
+        // M45-RECONF F2: sem o roteamento, "Consultar banco" não achava a intenção pelo id externo.
+        await BankPaymentProviderRouting.findOrCreate({
+          where: { externalSubmissionId: row.externalSubmissionId },
+          defaults: { externalSubmissionId: row.externalSubmissionId, paymentIntentId: row.id, groupId: GROUP_ID, companyId: COMPANY_ID },
+          transaction: t,
+        });
+      }
       await registrarAuditoria(
         {
           groupId: GROUP_ID, companyId: COMPANY_ID, actorUserId: ADMIN_USER_ID, action: 'finance.payment_intent.homolog_seed',

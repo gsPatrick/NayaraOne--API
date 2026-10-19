@@ -292,6 +292,19 @@ async function reconcilePaymentIntent(id, actor, transaction) {
     if (updated.status !== 'SUBMITTED') return { intent: updated, outcome: 'STILL_UNCERTAIN' };
   }
   const current = await PaymentIntent.findByPk(id, { transaction });
+  if (!current.externalSubmissionId) return { intent: current, outcome: 'STILL_UNCERTAIN' };
+  // M45-RECONF F2: a intenção já sabe o próprio id externo — se o roteamento (usado pelo webhook)
+  // não existir (ex.: intenção gravada antes do roteamento, seed de homologação), recria-o aqui
+  // em vez de a consulta falhar com 404 e a tela não mostrar nada.
+  const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId: current.externalSubmissionId }, transaction });
+  if (!routing) {
+    await BankPaymentProviderRouting.create(
+      { externalSubmissionId: current.externalSubmissionId, paymentIntentId: current.id, groupId: current.groupId, companyId: current.companyId },
+      { transaction }
+    );
+  } else if (routing.paymentIntentId !== current.id) {
+    throw AppError.conflict('O id do banco desta intenção pertence a outra intenção — verifique antes de consultar.', 'FINANCE_BANK_PAYMENT_ROUTING_MISMATCH');
+  }
   let statusResult;
   try {
     statusResult = await adapter.getPaymentStatus(current.externalSubmissionId);
