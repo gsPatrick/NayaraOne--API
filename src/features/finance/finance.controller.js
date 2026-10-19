@@ -122,6 +122,13 @@ const updateFinancialEntry = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => financialEntriesService.updateFinancialEntry(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
 });
+// M45 — remove o vínculo do comprovante de um lançamento em aberto, com motivo.
+const detachSettlementEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.detachSettlementEvidence(req.params.id, { reason: req.body && req.body.reason }, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
 // A4 — comprovante da baixa manual é anexado ANTES da aprovação.
 const attachSettlementEvidence = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
@@ -642,7 +649,7 @@ module.exports = {
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
-  clearFinancialEntryManualReview, settleFinancialEntryPartial, attachSettlementEvidence,
+  clearFinancialEntryManualReview, settleFinancialEntryPartial, attachSettlementEvidence, detachSettlementEvidence,
   listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending,
   createBankTransaction, listBankTransactions, importBankStatement,
   matchReconciliation, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,

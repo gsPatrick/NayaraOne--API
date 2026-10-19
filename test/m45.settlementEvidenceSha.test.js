@@ -61,3 +61,48 @@ test('M45-F2 comprovante com mesmo SHA-256 (reenvio do arquivo) é recusado em o
     await financialEntriesService.attachSettlementEvidence(e1.id, { evidenceFileId: f2.id, reason }, tenant.userId, transaction);
   });
 });
+
+// M45 saneamento: remover o vínculo do comprovante de um lançamento em aberto (com motivo e
+// auditoria) libera o comprovante — e o vínculo de um lançamento liquidado não pode ser removido.
+test('M45 detachSettlementEvidence: exige motivo, só em lançamento em aberto, audita e libera o comprovante', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const suffix = uniqueSuffix();
+    const account = await bankAccountsService.createBankAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `m45d-${suffix}` },
+      tenant.userId, transaction
+    );
+    account.status = 'ACTIVE';
+    await account.save({ transaction });
+    const cc = await createTestCostCenter(tenant, transaction);
+    const e1 = await newPayable(transaction, suffix, 11, cc.id, account.id);
+    const e2 = await newPayable(transaction, suffix, 12, cc.id, account.id);
+    const f1 = await upload(transaction, `PNG-DETACH-${suffix}`, 'd.png');
+    const reason = 'Pagamento fora da integração';
+    await financialEntriesService.attachSettlementEvidence(e1.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
+    await assert.rejects(
+      financialEntriesService.detachSettlementEvidence(e1.id, { reason: '' }, tenant.userId, transaction),
+      (err) => err.code === 'FINANCE_SETTLEMENT_EVIDENCE_DETACH_REASON_REQUIRED'
+    );
+    await assert.rejects(
+      financialEntriesService.detachSettlementEvidence(e2.id, { reason: 'sem comprovante aqui' }, tenant.userId, transaction),
+      (err) => err.code === 'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED'
+    );
+    const after = await financialEntriesService.detachSettlementEvidence(e1.id, { reason: 'Comprovante duplicado (auditoria)' }, tenant.userId, transaction);
+    assert.equal(after.settlementEvidenceFileId, null);
+    assert.equal(after.status, 'PENDING');
+    const [rows] = await sequelize.query(
+      "SELECT reason FROM audit.audit_log WHERE entity_id = :id AND action = 'finance.entry.settlement_evidence.detach'",
+      { replacements: { id: e1.id }, transaction }
+    );
+    assert.equal(rows.length, 1);
+    assert.match(rows[0].reason, /Comprovante duplicado/);
+    // Comprovante liberado: agora pode ir para outro lançamento.
+    await financialEntriesService.attachSettlementEvidence(e2.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
+    // Lançamento não-PENDING recusa.
+    await sequelize.query("UPDATE finance.financial_entries SET status = 'CANCELLED' WHERE id = :id", { replacements: { id: e2.id }, transaction });
+    await assert.rejects(
+      financialEntriesService.detachSettlementEvidence(e2.id, { reason: 'tentativa indevida' }, tenant.userId, transaction),
+      (err) => err.code === 'FINANCE_ENTRY_INVALID_STATUS'
+    );
+  });
+});

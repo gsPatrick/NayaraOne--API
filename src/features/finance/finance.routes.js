@@ -43,6 +43,7 @@ financeRouter.patch('/finance/entries/:id', requirePermission('finance:update'),
 financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntry);
 // A4 (revisão 18/10/2026): comprovante da baixa manual é anexado ANTES da aprovação.
 financeRouter.post('/finance/entries/:id/settlement-evidence', requirePermission('finance:settle'), financeController.attachSettlementEvidence);
+financeRouter.post('/finance/entries/:id/settlement-evidence/detach', requirePermission('finance:settle'), financeController.detachSettlementEvidence);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);

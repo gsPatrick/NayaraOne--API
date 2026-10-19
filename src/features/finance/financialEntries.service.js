@@ -338,6 +338,61 @@ async function attachSettlementEvidence(id, payload, actorUserId, transaction) {
   return entry;
 }
 
+/**
+ * detachSettlementEvidence — M45: remove o vínculo do comprovante de baixa manual de um
+ * lançamento AINDA NÃO LIQUIDADO (PENDING). Usado para sanear vínculos que violam a regra de
+ * comprovante único (ex.: mesmo arquivo/SHA-256 anexado a dois lançamentos antes da regra F2).
+ * Não apaga nada do ledger: só limpa as colunas mutáveis do comprovante (o trigger de linha
+ * também registra), invalida aprovações e grava auditoria de negócio com o motivo.
+ */
+async function detachSettlementEvidence(id, payload, actorUserId, transaction) {
+  const reason = String((payload && payload.reason) || '').trim();
+  if (reason.length < 5) {
+    throw AppError.badRequest('Informe o motivo para remover o comprovante (mínimo de 5 caracteres).', 'FINANCE_SETTLEMENT_EVIDENCE_DETACH_REASON_REQUIRED');
+  }
+  const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
+  if (!entry.settlementEvidenceFileId) {
+    throw AppError.conflict('Este lançamento não tem comprovante de baixa anexado.', 'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED');
+  }
+  if (entry.status !== 'PENDING') {
+    throw AppError.conflict(
+      'Só é possível remover o comprovante de um lançamento ainda não liquidado (em aberto).',
+      'FINANCE_ENTRY_INVALID_STATUS'
+    );
+  }
+  const beforeJson = entry.toJSON();
+  const removedFileId = entry.settlementEvidenceFileId;
+  entry.settlementEvidenceFileId = null;
+  entry.settlementReason = null;
+  entry.settlementEvidenceAttachedBy = null;
+  entry.settlementEvidenceAttachedAt = null;
+  entry.updatedBy = actorUserId || null;
+  await entry.save({ transaction });
+  await markApprovalRequestsStale(
+    'FinancialEntry',
+    entry.id,
+    'Comprovante de baixa manual removido — a aprovação precisa ser refeita sobre um novo comprovante.',
+    actorUserId,
+    transaction
+  );
+  await registrarAuditoria(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      actorUserId,
+      action: 'finance.entry.settlement_evidence.detach',
+      entityType: 'FinancialEntry',
+      entityId: entry.id,
+      beforeJson,
+      afterJson: entry.toJSON(),
+      reason: `Comprovante de baixa manual removido (arquivo ${removedFileId}) — motivo: ${reason}.`,
+    },
+    transaction
+  );
+  return entry;
+}
+
 // D1/D3 (revisão independente): a liquidação de uma devolução/compensação de caução revalida o
 // saldo da origem com lock (a validação só na criação deixava liquidar depois que a origem foi
 // estornada, ou com saldo já consumido).
@@ -1571,4 +1626,5 @@ module.exports = {
   OPEN_PAYMENT_INTENT_STATUSES,
   computeThirdPartyOriginBalance,
   attachSettlementEvidence,
+  detachSettlementEvidence,
 };
