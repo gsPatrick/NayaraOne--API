@@ -1,5 +1,7 @@
 'use strict';
 
+const { formatCompetenceBR } = require('../../utils/formatBR');
+
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const {
@@ -123,14 +125,14 @@ async function assertCompetenceOpen(companyId, competenceMonths, transaction) {
     const closure = await getClosureByMonth(companyId, month, transaction);
     if (closure && closure.status === 'CLOSED') {
       throw AppError.conflict(
-        `A competência ${month} está fechada — nenhum lançamento pode entrar nela ou sair dela. Reabra o período (com justificativa) se a correção for mesmo necessária, ou lance o ajuste no período corrente com referência a ${month}.`,
+        `A competência ${formatCompetenceBR(month)} está fechada — nenhum lançamento pode entrar nela ou sair dela. Reabra o período (com justificativa) se a correção for mesmo necessária, ou lance o ajuste no período corrente com referência a ${formatCompetenceBR(month)}.`,
         'FINANCE_PERIOD_CLOSED',
         { referenceMonth: month }
       );
     }
     if (closure && closure.status === 'REVIEW') {
       throw AppError.conflict(
-        `A competência ${month} está em revisão de fechamento — nada pode entrar nela ou sair dela enquanto o retrato do mês é aprovado. Peça ao aprovador para devolver o período para aberto.`,
+        `A competência ${formatCompetenceBR(month)} está em revisão de fechamento — nada pode entrar nela ou sair dela enquanto o retrato do mês é aprovado. Peça ao aprovador para devolver o período para aberto.`,
         'FINANCE_PERIOD_IN_REVIEW',
         { referenceMonth: month }
       );

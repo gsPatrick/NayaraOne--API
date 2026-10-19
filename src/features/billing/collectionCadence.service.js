@@ -1,5 +1,7 @@
 'use strict';
 
+const { formatCompetenceBR } = require('../../utils/formatBR');
+
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const {
@@ -247,7 +249,7 @@ function planSteps(steps, daysFromDue, alreadyRecorded) {
 function describeStep(step, schedule, daysFromDue) {
   const amount = formatBRL(schedule.balance);
   const due = formatDateBR(String(schedule.dueDate));
-  const period = schedule.period;
+  const period = formatCompetenceBR(schedule.period);
   if (step.offsetDays < 0) {
     return {
       title: `Aluguel da competência ${period} vence em ${Math.abs(daysFromDue)} dia(s)`,
