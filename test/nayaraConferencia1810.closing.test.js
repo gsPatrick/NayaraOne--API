@@ -487,6 +487,15 @@ test('F02-C4b: baixa parcial de caução entra no caixa de terceiros e no saldo 
     const { preconditions } = await periodClosuresService.getPeriodPreconditions(withTenant({ referenceMonth }), transaction);
     assert.equal(preconditions.thirdParty.received, '400.00', 'a baixa parcial (filha) é dinheiro de terceiro, mesmo sem a marca na filha');
     assert.equal(preconditions.thirdParty.balanceAtMonthEnd, '400.00');
+    // M45 O1: o texto exibido na tela usa formato brasileiro; o dado cru continua '400.00'.
+    const detail = preconditions.items.find((i) => i.code === 'THIRD_PARTY_CASH_CHECKED').detail;
+    assert.match(detail, /R\$\s400,00/);
+    assert.doesNotMatch(detail, /400\.00/);
+    await periodClosuresService.confirmPeriodCheck(withTenant({ referenceMonth, checkType: 'THIRD_PARTY_CASH', note: 'ok' }), tenant.userId, transaction);
+    const after = await periodClosuresService.getPeriodPreconditions(withTenant({ referenceMonth }), transaction);
+    const checked = after.preconditions.items.find((i) => i.code === 'THIRD_PARTY_CASH_CHECKED').detail;
+    assert.match(checked, /^Conferido em \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}/);
+    assert.doesNotMatch(checked, /T\d{2}:\d{2}:\d{2}/);
   });
 });
 

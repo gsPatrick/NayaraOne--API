@@ -195,6 +195,16 @@ function moneyOf(cents) {
   return (cents / 100).toFixed(2);
 }
 
+// O1 (M45): textos de detalhe exibidos na tela vêm em formato brasileiro (R$ 12.250,00 e
+// dd/mm/aaaa hh:mm, horário de Brasília). Os campos numéricos/ISO crus continuam no payload.
+function brl(value) {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function brDateTime(date) {
+  return new Date(date).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -496,10 +506,10 @@ async function computePeriodPreconditions(companyId, referenceMonth, closure, tr
       ok: thirdPartyChecked && !thirdPartyStale,
       count: thirdPartyChecked && !thirdPartyStale ? 0 : 1,
       detail: !thirdPartyChecked
-        ? `Conferência ainda não registrada. Saldo de terceiros no fim do mês: ${thirdParty.balanceAtMonthEnd} (no mês: recebido ${thirdParty.received}, devolvido ${thirdParty.released}).`
+        ? `Conferência ainda não registrada. Saldo de terceiros no fim do mês: ${brl(thirdParty.balanceAtMonthEnd)} (no mês: recebido ${brl(thirdParty.received)}, devolvido ${brl(thirdParty.released)}).`
         : thirdPartyStale
-          ? `Lançamentos de terceiros mudaram depois da conferência (saldo conferido ${closure.thirdPartyBalanceAtCheck}, saldo atual ${thirdParty.balanceAtMonthEnd}). Confira de novo.`
-          : `Conferido em ${closure.thirdPartyCheckedAt.toISOString()} (saldo de terceiros no fim do mês ${thirdParty.balanceAtMonthEnd}).`,
+          ? `Lançamentos de terceiros mudaram depois da conferência (saldo conferido ${brl(closure.thirdPartyBalanceAtCheck)}, saldo atual ${brl(thirdParty.balanceAtMonthEnd)}). Confira de novo.`
+          : `Conferido em ${brDateTime(closure.thirdPartyCheckedAt)} (saldo de terceiros no fim do mês ${brl(thirdParty.balanceAtMonthEnd)}).`,
       thirdParty,
     },
     {
@@ -511,7 +521,7 @@ async function computePeriodPreconditions(companyId, referenceMonth, closure, tr
         ? `Revisão ainda não registrada. Mês com ${commissions.repassesCount} repasse(s) (${commissions.repassesPending} pendente(s)) e ${commissions.commissionInstallmentsCount} parcela(s) de comissão (${commissions.commissionInstallmentsPending} pendente(s)).`
         : commissionsStale
           ? 'Comissões ou repasses do mês mudaram depois da revisão. Revise de novo.'
-          : `Revisado em ${closure.commissionsReviewedAt.toISOString()}.`,
+          : `Revisado em ${brDateTime(closure.commissionsReviewedAt)}.`,
       commissions: {
         repassesCount: commissions.repassesCount,
         repassesPending: commissions.repassesPending,
