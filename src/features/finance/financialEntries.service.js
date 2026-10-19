@@ -536,7 +536,7 @@ function assertReasonableDueDate(dueAt) {
  * `idempotencyKey`, quando informada, impede duplicidade (ex.: reprocessar o mesmo import não
  * cria dois lançamentos — FIN-004).
  */
-async function createFinancialEntry(payload, actorUserId, transaction) {
+async function createFinancialEntry(payload, actorUserId, transaction, options = {}) {
   const {
     groupId,
     companyId,
@@ -630,7 +630,15 @@ async function createFinancialEntry(payload, actorUserId, transaction) {
       'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
     );
   }
-  if (normalizedThirdParty && normalizedNature === 'PAYABLE') {
+  if (normalizedThirdParty && normalizedNature === 'PAYABLE' && options.ownerRepasseId) {
+    // Repasse ao proprietário (19/10/2026): o dinheiro pago é do PROPRIETÁRIO (terceiro), não
+    // despesa da empresa. Só o service de repasses passa `options.ownerRepasseId` (nunca vem do
+    // body HTTP) — não há caução de origem: a origem é o próprio repasse aprovado.
+    if (thirdPartyOriginEntryId || thirdPartyReleaseType || thirdPartyCompensatedEntryId) {
+      throw AppError.badRequest('Pagamento de repasse não aceita vínculo de caução.', 'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE');
+    }
+    resolvedReleaseType = 'OWNER_REPASSE';
+  } else if (normalizedThirdParty && normalizedNature === 'PAYABLE') {
     resolvedReleaseType = thirdPartyReleaseType ? String(thirdPartyReleaseType).toUpperCase() : 'RETURN';
     if (!THIRD_PARTY_RELEASE_TYPES.includes(resolvedReleaseType)) {
       throw AppError.badRequest(

@@ -349,9 +349,13 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
       dueAt: (payload && payload.dueAt) || null,
       competenceMonth: (payload && payload.competenceMonth) || undefined,
       idempotencyKey: `owner-repasse:${repasse.id}`,
+      // Dinheiro do proprietário é de terceiro: não entra como despesa própria nos relatórios.
+      isThirdPartyFunds: true,
+      thirdPartyReference: `Repasse ao proprietário ${repasse.ownerPersonId} — período ${repasse.referenceMonth}`,
     },
     actorUserId,
-    transaction
+    transaction,
+    { ownerRepasseId: repasse.id }
   );
 
   const beforeJson = repasse.toJSON();
