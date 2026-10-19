@@ -74,13 +74,15 @@ test('Plano de contas (HTTP real): usuário SEM finance:create recebe 403 ao ten
   assert.equal(res.status, 403, 'usuário sem finance:create deveria receber 403, não conseguir criar conta contábil');
 });
 
-test('Plano de contas (HTTP real): usuário COM finance:create consegue criar conta contábil e ela aparece na listagem', async () => {
+test('Plano de contas (HTTP real): usuário COM finance:chartOfAccounts consegue criar conta contábil e ela aparece na listagem', async () => {
   const tokenWithPermission = signAccessToken({
     sub: tenant.userId,
     group_id: tenant.groupId,
     company_id: tenant.companyId,
     roles: ['admin'],
-    permissions: ['finance:create', 'finance:read'],
+    // Frente 3 (35aaf02): plano de contas versionado passou a exigir a permissão própria
+    // finance:chartOfAccounts (antes, finance:create genérico).
+    permissions: ['finance:chartOfAccounts', 'finance:read'],
   });
   const code = `PERMITIDO-${uniqueSuffix()}`;
 
