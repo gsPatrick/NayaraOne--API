@@ -1,6 +1,6 @@
 # Mapa de segurança — Nayara One (API)
 
-> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T11:49:16.518Z, commit `3781ecd`.
+> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T12:42:14.840Z, commit `ef90594`.
 > Banco consultado: o do `DATABASE_URL` do ambiente (PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2)), transação READ ONLY, só catálogos.
 > Nenhum segredo, host ou connection string é impresso. Nenhum endpoint (inclusive MFA) foi chamado.
 > Regenerar no estado final antes do fechamento dos Marcos 4/5.
@@ -240,8 +240,9 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 |---|---|---|
 | `audit:read` | 2 | audit |
 | `billing:approve` | 3 | billing |
+| `billing:cadence:manage` | 1 | billing |
 | `billing:create` | 7 | billing |
-| `billing:read` | 13 | billing |
+| `billing:read` | 15 | billing |
 | `billing:update` | 7 | billing |
 | `companies:create` | 1 | companies |
 | `companies:delete` | 1 | companies |
@@ -280,7 +281,7 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | `finance:bankAccounts` | 4 | finance |
 | `finance:chartOfAccounts` | 3 | finance |
 | `finance:create` | 10 | finance |
-| `finance:read` | 29 | finance |
+| `finance:read` | 30 | finance |
 | `finance:reconcile` | 2 | finance |
 | `finance:settle` | 12 | finance |
 | `finance:update` | 10 | finance |
