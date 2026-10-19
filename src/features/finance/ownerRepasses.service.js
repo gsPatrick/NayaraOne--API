@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { OwnerRepass, FinancialEntry, AuditLog, Contract } = require('../../models');
+const { OwnerRepass, FinancialEntry, AuditLog, Contract, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
@@ -430,6 +430,10 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
   }
   await assertBankAccountEligibleForPayment(bankAccountId, transaction);
 
+  // M45: texto do lançamento sem UUID e com período no formato brasileiro.
+  const owner = await Person.findByPk(repasse.ownerPersonId, { attributes: ['legalName'], transaction });
+  const [refYear, refMonth] = String(repasse.referenceMonth).split('-');
+  const periodBR = refMonth ? `${refMonth}/${refYear}` : repasse.referenceMonth;
   const entry = await entriesService().createFinancialEntry(
     {
       groupId: repasse.groupId,
@@ -440,13 +444,13 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
       entryType: 'DEBIT',
       nature: 'PAYABLE',
       amount: Number(repasse.netAmount),
-      description: `Repasse ao proprietário — período ${repasse.referenceMonth}`,
+      description: `Repasse ao proprietário${owner ? ` ${owner.legalName}` : ''} — período ${periodBR}`,
       dueAt: (payload && payload.dueAt) || null,
       competenceMonth: (payload && payload.competenceMonth) || undefined,
       idempotencyKey: `owner-repasse:${repasse.id}`,
       // Dinheiro do proprietário é de terceiro: não entra como despesa própria nos relatórios.
       isThirdPartyFunds: true,
-      thirdPartyReference: `Repasse ao proprietário ${repasse.ownerPersonId} — período ${repasse.referenceMonth}`,
+      thirdPartyReference: `Repasse ao proprietário${owner ? ` ${owner.legalName}` : ''} — período ${periodBR}`,
     },
     actorUserId,
     transaction,

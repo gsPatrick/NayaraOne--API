@@ -162,7 +162,17 @@ async function resolveCommissionRule(groupId, companyId, transaction) {
 
 async function getActiveCommissionRule(groupId, companyId, transaction) {
   const { ruleVersionId, action } = await resolveCommissionRule(groupId, companyId, transaction);
-  return { ruleVersionId, ruleCode: RULE_CODE, components: action.components || {}, base: action.base || BASE_TYPE };
+  // M45: número da versão e início de vigência para a tela mostrar "versão 3, desde dd/mm/aaaa"
+  // em vez do identificador interno.
+  const version = ruleVersionId ? await RuleVersion.findByPk(ruleVersionId, { attributes: ['versionNumber', 'effectiveFrom'], transaction }) : null;
+  return {
+    ruleVersionId,
+    versionNumber: version ? version.versionNumber : null,
+    effectiveFrom: version ? version.effectiveFrom : null,
+    ruleCode: RULE_CODE,
+    components: action.components || {},
+    base: action.base || BASE_TYPE,
+  };
 }
 
 /**

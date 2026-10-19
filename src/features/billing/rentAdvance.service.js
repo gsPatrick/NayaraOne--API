@@ -18,6 +18,12 @@ const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
 const { isLeaseLikeContractType } = require('../legal/contracts.service');
 
+// M45: descrição do lançamento mostra o NÚMERO do contrato (visível ao usuário), nunca o UUID.
+async function contractRef(contractId, transaction) {
+  const c = contractId ? await Contract.findByPk(contractId, { attributes: ['contractNumber'], transaction }) : null;
+  return c && c.contractNumber ? `contrato ${c.contractNumber}` : 'contrato sem número';
+}
+
 // PRODUTO SEPARADO de guaranteed_rent_contracts (ver guaranteedRent.service.js) — tabela e
 // fluxo próprios (eligibility -> proposal -> acceptance -> payment -> recovery), nunca
 // misturados com o modelo de aluguel garantido.
@@ -192,7 +198,7 @@ async function payRentAdvance(id, actorUserId, transaction) {
       entryType: 'DEBIT',
       nature: 'PAYABLE',
       amount: rentAdvance.principalAmount,
-      description: `Antecipação de aluguel — principal, contrato ${rentAdvance.contractId}.`,
+      description: `Antecipação de aluguel — principal, ${await contractRef(rentAdvance.contractId, transaction)}.`,
       dueAt: new Date(),
       idempotencyKey: `rent_advance.principal:${rentAdvance.id}`,
       costCenterId: principalCostCenter.id,
@@ -218,7 +224,7 @@ async function payRentAdvance(id, actorUserId, transaction) {
         entryType: 'CREDIT',
         nature: 'RECEIVABLE',
         amount: rentAdvance.costAmount,
-        description: `Antecipação de aluguel — custo/juros, contrato ${rentAdvance.contractId}.`,
+        description: `Antecipação de aluguel — custo/juros, ${await contractRef(rentAdvance.contractId, transaction)}.`,
         dueAt: new Date(),
         idempotencyKey: `rent_advance.cost:${rentAdvance.id}`,
         resultCenterId: costResultCenter.id,
@@ -361,7 +367,7 @@ async function recoverRentAdvance(id, amountRecovered, actorUserId, transaction)
         entryType: 'CREDIT',
         nature: 'RECEIVABLE',
         amount: fromCents(principalPortionCents),
-        description: `Antecipação de aluguel — recuperação do principal (${formatBRL(principalPortionCents)}), contrato ${rentAdvance.contractId}.`,
+        description: `Antecipação de aluguel — recuperação do principal (${formatBRL(principalPortionCents)}), ${await contractRef(rentAdvance.contractId, transaction)}.`,
         dueAt: new Date(),
         // Saldo recuperado antes desta recuperação é estritamente crescente: a chave é única
         // por recuperação e reenviar a MESMA recuperação (mesmo saldo anterior) não duplica.

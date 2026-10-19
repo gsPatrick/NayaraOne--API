@@ -23,6 +23,9 @@ const {
 
 const UTILITY_TYPES = ['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'];
 const RESPONSIBLE_PARTIES = ['LANDLORD', 'TENANT'];
+// M45: rótulos para o texto do lançamento (a descrição é vista pelo usuário — nunca o código).
+const UTILITY_TYPE_LABELS = { WATER: 'água', ELECTRICITY: 'energia elétrica', GAS: 'gás', CONDO: 'condomínio', IPTU: 'IPTU', SPU: 'SPU (laudêmio/foro)', OTHER: 'outra despesa' };
+const PARTY_LABELS = { LANDLORD: 'o locador', TENANT: 'o locatário' };
 
 async function createUtilityObligation(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, utilityType, responsibleParty, provider, accountNumber, transferRequired, evidenceFileId } = payload;
@@ -291,7 +294,7 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
       entryType: 'CREDIT',
       nature: 'RECEIVABLE',
       amount: numericAmount,
-      description: `Reembolso de utilidade "${obligation.utilityType}" pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
+      description: `Reembolso de ${UTILITY_TYPE_LABELS[obligation.utilityType] || 'despesa do imóvel'} pago por ${PARTY_LABELS[normalizedPaidBy] || 'uma das partes'}, a cobrar de ${PARTY_LABELS[owedByParty] || 'outra parte'}.`,
       dueAt: new Date(),
       idempotencyKey: `utility_reimbursement:${obligation.id}:${Date.now()}`,
       resultCenterId: resultCenter.id,
