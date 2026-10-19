@@ -186,10 +186,8 @@ test('T-invoice sem receipt (rota): POST goods-receipts só com a NF → 400 e n
 
   const invoiceOnly = { destinationLocationId: fx.warehouse.id, invoiceFingerprint: `NF-${uniqueSuffix()}`, invoiceTotalAmount: 400 };
   for (const body of [invoiceOnly, { ...invoiceOnly, items: [] }]) {
-    // eslint-disable-next-line no-await-in-loop
     const res = await call('POST', `/procurement/purchase-orders/${fx.order.id}/goods-receipts`, body);
     assert.equal(res.status, 400);
-    // eslint-disable-next-line no-await-in-loop
     assert.equal((await res.json()).error.code, 'GOODS_RECEIPT_VALIDATION');
   }
 
@@ -201,7 +199,6 @@ test('T-invoice sem receipt (rota): POST goods-receipts só com a NF → 400 e n
   assert.deepEqual(await withTenantTransaction(tenant, (t) => traces(fx.order.id, t)), { receipts: 0, payables: 0 });
 
   for (const path of ['/procurement/invoices', `/procurement/purchase-orders/${fx.order.id}/invoices`, `/procurement/purchase-orders/${fx.order.id}/payables`]) {
-    // eslint-disable-next-line no-await-in-loop
     const res = await call('POST', path, invoiceOnly);
     assert.equal(res.status, 404, `${path} não pode existir`);
   }

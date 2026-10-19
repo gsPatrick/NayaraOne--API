@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, InventoryMovement, File, FinancialEntry, Person, ApprovalThreshold } = require('../../models');
+const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, File, FinancialEntry, Person, ApprovalThreshold } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');

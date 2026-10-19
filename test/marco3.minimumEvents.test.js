@@ -15,7 +15,6 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const offersService = require('../src/features/properties/propertyOffers.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const messagesService = require('../src/features/crm/messages.service');
 const visitsService = require('../src/features/crm/visits.service');

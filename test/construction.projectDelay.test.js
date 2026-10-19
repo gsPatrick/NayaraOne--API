@@ -78,7 +78,7 @@ test('M6-74: projectDelayDetectionJob cria Notification real pro responsável, e
     const past = new Date();
     past.setDate(past.getDate() - 5);
 
-    const project = await projectsService.createProject(
+    await projectsService.createProject(
       withTenant({ name: 'Obra atrasada com responsável', responsibleUserId: tenant.userId, endsAtPlanned: past.toISOString() }),
       tenant.userId,
       transaction

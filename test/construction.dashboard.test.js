@@ -177,7 +177,6 @@ test('dashboard: projectedMarginTotal consegue ficar POSITIVA quando a obra agre
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const projectStagesService = require('../src/features/construction/projectStages.service');
     const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
-    const financialEntriesService = require('../src/features/finance/financialEntries.service');
     const { FinancialEntry } = require('../src/models');
 
     await marginRulesService.createMarginRule(withTenant({ minMarginPct: 0 }), tenant.userId, transaction);

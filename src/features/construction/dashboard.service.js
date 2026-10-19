@@ -107,7 +107,6 @@ async function getConstructionDashboard(filters, transaction) {
     return acc + sign * toNumber(m.quantity) * unitCost;
   }, 0);
 
-  const realizedCostTotal = actualFinancialCostTotal + consumedInventoryCostTotal;
   const marginBudgetBaseTotal = committedCostTotal + approvedChangesTotal;
 
   // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2, estendido ao

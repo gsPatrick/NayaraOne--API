@@ -9,7 +9,7 @@ const projectStagesService = require('../src/features/construction/projectStages
 const dailyReportsService = require('../src/features/construction/dailyReports.service');
 const peopleService = require('../src/features/people/people.service');
 const nayObrasService = require('../src/features/construction/nayObras.service');
-const { StageMeasurement, Nonconformity } = require('../src/models');
+const { StageMeasurement } = require('../src/models');
 
 // Auditoria externa (Nayara) — Marco 6, "NAY Obras" (`nayObras.service.js`). A arquitetura
 // "NAY sugere, nunca decide" é deliberada (`decisionsMade: []` hardcoded) — estes testes

@@ -27,7 +27,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.F06_HTTP_TEST_PORT || '21612';
 
-const app = require('../app');
+require('../app');
 const {
   sequelize,
   getSeedTenant,

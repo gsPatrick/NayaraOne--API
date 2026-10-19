@@ -13,7 +13,7 @@
 require('dotenv').config();
 const { execFile } = require('node:child_process');
 const { URL } = require('node:url');
-const { resolveConnection, resolveDumpConnection, resolveBinary } = require('./backupDatabase');
+const { resolveDumpConnection, resolveBinary } = require('./backupDatabase');
 
 function parseArgs(argv) {
   const out = {};

@@ -8,7 +8,7 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const materialRequestsService = require('../src/features/construction/materialRequests.service');
 const AppError = require('../src/utils/AppError');
-const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance, AuditLog } = require('../src/models');
+const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, AuditLog } = require('../src/models');
 const inventoryMovementsService = require('../src/features/inventory/movements.service');
 
 // M6-28 — requisição de material mínima do Marco 6 (integração completa com Estoque é do

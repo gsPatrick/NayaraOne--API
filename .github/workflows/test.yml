@@ -16,6 +16,8 @@ on:
     branches: [main, marco-6-e-7-homologado-nayara]
   pull_request:
     branches: [main, marco-6-e-7-homologado-nayara]
+  # Disparo manual: usado para promover a produção (job deploy-production, com aprovação).
+  workflow_dispatch:
 
 jobs:
   test:
@@ -99,6 +101,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Guia §13 (Marco 7): lint. ESLint com as regras recomendadas, nada desligado; falha com
+      # qualquer erro fora da linha de base dos arquivos dos Marcos 4/5 (scripts/lint-baseline.json,
+      # teto por arquivo que só pode descer).
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      # Guia §13: "typecheck". O projeto é JavaScript (sem TypeScript); a checagem possível é de
+      # sintaxe de todos os arquivos (node --check) — pega arquivo que nem carrega antes da suíte.
+      - name: Syntax check (node --check em app.js, src, scripts, migrations, test)
+        run: npm run syntax-check
 
       # M6-96: scanner de hard-code cobrindo o módulo de Obras — vigia contra regressão de
       # margem/comissão/valor monetário fixado em código em vez de vir do Motor de Regras.
@@ -243,10 +256,65 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Guia §1/§14 (Marco 7): etapa de carga leve + gates. Movimentações concorrentes,
+      # recebimentos com replays, requisições e leituras pela camada de serviço, com a role de
+      # privilégio mínimo. Falha se houver saldo negativo, duplicidade, saldo ≠ ledger, erro
+      # inesperado ou p95 acima de 300 ms. Os failure drills (test/inventory.failureDrills.test.js)
+      # já rodam dentro da suíte acima (CI=true).
+      - name: Carga leve Estoque/Compras (gates de p95, saldo e duplicidade)
+        env:
+          DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
+          NODE_ENV: test
+        run: |
+          node scripts/loadTestInventoryProcurement.js --light --concurrency 8 --json load-test-light.json | tee load-test-light.log
+          { echo "## Carga leve Estoque/Compras"; echo '```'; sed -n '/| Opera/,/GATES/p;/✅\|❌/p' load-test-light.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publicar artifact com resultado individual dos testes
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ env.EVIDENCE_SHA }}
-          path: test-results.log
+          path: |
+            test-results.log
+            load-test-light.json
+            load-test-light.log
           retention-days: 90
+
+  # Guia §13: deploy_LAB automático e production_approval. Ver docs/runbooks/CI_CD.md para criar
+  # os environments "lab" e "production" (este com required reviewers) e os secrets. Sem o secret
+  # o job termina verde com um aviso — nunca quebra o CI por falta de alvo.
+  deploy-lab:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
+    runs-on: ubuntu-latest
+    environment: lab
+    steps:
+      - name: Disparar deploy da API no LAB
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::LAB_API_DEPLOY_HOOK_URL não configurado no environment 'lab' — deploy pulado (docs/runbooks/CI_CD.md)."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"
+          echo "Deploy LAB disparado para ${GITHUB_SHA}"
+
+  deploy-production:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # O environment "production" com required reviewers pausa este job até a aprovação manual.
+    environment: production
+    steps:
+      - name: Disparar deploy de produção (após aprovação manual)
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.PRODUCTION_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::PRODUCTION_API_DEPLOY_HOOK_URL não configurado no environment 'production' — deploy pulado."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"

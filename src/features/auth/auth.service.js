@@ -8,7 +8,6 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../..
 const { getEffectiveAccess } = require('../memberships/effectivePermissions.service');
 const { getSetting } = require('../settings/settings.service');
 
-const BCRYPT_ROUNDS = 12;
 
 /**
  * hasSensitivePermission — critério de "permissão sensível" para o gate de

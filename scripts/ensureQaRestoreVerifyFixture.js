@@ -27,7 +27,7 @@ require('dotenv').config();
  * servir de evidência de restore.
  */
 
-const { sequelize, Group, Company, Project, Budget, BudgetLine, ProjectStage, StageMeasurement } = require('../src/models');
+const { sequelize, Group, Company, Project, Budget, ProjectStage, StageMeasurement } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');

@@ -19,7 +19,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
-const { PropertyPriceHistory, Property } = require('../src/models');
+const { PropertyPriceHistory } = require('../src/models');
 
 let tenant;
 

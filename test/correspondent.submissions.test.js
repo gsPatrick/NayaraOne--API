@@ -269,7 +269,6 @@ test('CORRESPONDENT-SUB-10: evento financing.submission_requested é emitido (ou
 // duas corridas vencem o findOne antes de qualquer create — a 2ª create batia no índice único e
 // estourava um erro cru (SequelizeUniqueConstraintError) em vez de devolver a submission existente.
 test('CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações commitadas em paralelo) nunca duplicam — perdedora recebe conflito tratado, nunca erro cru', async () => {
-  const suffix = uniqueSuffix();
   async function withCommitted(fn) {
     const t = await sequelize.transaction();
     try {

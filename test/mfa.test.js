@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const mfaService = require('../src/features/users/mfa.service');
 const approvalsService = require('../src/features/finance/approvals.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');

@@ -21,6 +21,9 @@
     "restore-drill:inventory-full": "node scripts/restoreDrill/inventoryFullDrill.js",
     "load-test:inventory": "node scripts/withDisposableDb.js -- node scripts/loadTestInventoryProcurement.js",
     "test:failure-drills:inventory": "node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/inventory.failureDrills.test.js",
+    "lint": "node scripts/lintRatchet.js",
+    "syntax-check": "find app.js src scripts migrations test -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 -P 4 node --check",
+    "backup:scheduled": "node scripts/scheduledBackup.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
@@ -40,6 +43,9 @@
     "sequelize-cli": "^6.6.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "globals": "^15.15.0",
     "nodemon": "^3.1.4"
   },
   "engines": {

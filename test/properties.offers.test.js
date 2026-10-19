@@ -213,7 +213,7 @@ test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo
     );
 
     const offer1 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 400000 }, tenant.userId, transaction);
-    const offer2 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
+    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
     // offer1 já virou SUPERSEDED automaticamente aqui (offer2 é a ACTIVE atual).
 
     await seedVideo(property, tenant, transaction);

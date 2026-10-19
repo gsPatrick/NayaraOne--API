@@ -3,8 +3,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
-const { FinancialEntry, InsuranceRenewalTask, Notification, File, FileLink } = require('../src/models');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter } = require('./testHelpers');
+const { FinancialEntry, InsuranceRenewalTask, Notification } = require('../src/models');
 const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const { alertDueRenewals } = require('../src/engines/jobs/insuranceRenewalAlertJob');
@@ -366,7 +366,6 @@ test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo fina
     //     banco (última linha de defesa, nem dado corrompido consegue);
     // (2) na API, dar baixa na segunda parcela com o lançamento da primeira cai em NOT_LINKED
     //     (a baixa só aceita o lançamento da própria parcela).
-    const { settleFinancialEntryWithApproval } = require('./testHelpers');
     const { InsuranceInstallment } = require('../src/models');
 
     await assert.rejects(

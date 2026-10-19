@@ -9,13 +9,13 @@
  * sem componente de hora (DATEONLY no Sequelize) — nunca sofre conversão de fuso.
  */
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  async up(queryInterface) {
     await queryInterface.sequelize.query(
       'ALTER TABLE "inventory"."tool_loans" ALTER COLUMN "due_at" TYPE date USING "due_at"::date;'
     );
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface) {
     await queryInterface.sequelize.query(
       'ALTER TABLE "inventory"."tool_loans" ALTER COLUMN "due_at" TYPE timestamptz USING "due_at"::timestamptz;'
     );

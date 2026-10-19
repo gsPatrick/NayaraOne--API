@@ -13,7 +13,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const { InventoryItem, InventoryLocation, File } = require('../src/models');

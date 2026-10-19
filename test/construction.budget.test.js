@@ -196,7 +196,7 @@ test('M6-33/M6-82: Change Order aprovado altera o baseline do orçamento já con
 // (podia mascarar um alerta de margem abaixo da regra configurada).
 test('M6-42: projectedMargin não conta o Change Order aprovado duas vezes (baseline já sincronizada)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { project, budget } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+    const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
     const changeOrder = await changeOrdersService.createChangeOrder(
       project.id,
       withTenant({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço estrutural não previsto', budgetImpact: 250, scheduleImpactDays: 0, evidenceFileIds: ['99999999-9999-9999-9999-999999999999'], idempotencyKey: `co-${uniqueSuffix()}` }),
@@ -331,7 +331,6 @@ test('M6-NOVO-14: projectedMargin consegue ficar POSITIVA, ZERO e NEGATIVA confo
     const projectStagesService = require('../src/features/construction/projectStages.service');
     const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
     const projectHealthService = require('../src/features/construction/projectHealth.service');
-    const financialEntriesService = require('../src/features/finance/financialEntries.service');
     const { FinancialEntry } = require('../src/models');
 
     async function measureAndSettle(stage, projectId, measuredPct, unitPrice, dateStr) {
@@ -400,7 +399,6 @@ test('M6-NOVO-15: economyAmount/commissionAmount são calculados a partir da mar
     const projectStagesService = require('../src/features/construction/projectStages.service');
     const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
     const projectHealthService = require('../src/features/construction/projectHealth.service');
-    const financialEntriesService = require('../src/features/finance/financialEntries.service');
     const { FinancialEntry } = require('../src/models');
 
     const project = await projectsService.createProject(withTenant({ name: `HOMO QA Obra economia/comissão ${uniqueSuffix()}` }), tenant.userId, transaction);

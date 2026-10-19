@@ -42,7 +42,7 @@ async function createItemAndWarehouse(transaction, extra = {}) {
   return { item, location };
 }
 
-async function fullProcurementCycle(transaction, { item, location, quantity = 10, unitPrice = 3 }) {
+async function fullProcurementCycle(transaction, { item, quantity = 10, unitPrice = 3 }) {
   const request = await procurementService.createPurchaseRequest(
     withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity }] }),
     tenant.userId,

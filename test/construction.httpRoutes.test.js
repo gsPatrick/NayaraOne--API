@@ -25,7 +25,7 @@ const assert = require('node:assert/strict');
 // `require('../app')` — o require então sobe sua própria instância real nessa porta.
 process.env.PORT = process.env.CONSTRUCTION_HTTP_TEST_PORT || '21591';
 
-const app = require('../app');
+require('../app');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const {

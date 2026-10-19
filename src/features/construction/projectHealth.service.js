@@ -2,7 +2,6 @@
 
 const { Op } = require('sequelize');
 const {
-  sequelize,
   Project,
   ProjectStage,
   StageMeasurement,

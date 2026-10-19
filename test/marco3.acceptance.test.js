@@ -17,7 +17,6 @@ const propertyOwnersService = require('../src/features/properties/propertyOwners
 const propertyOccurrencesService = require('../src/features/properties/propertyInternalOccurrences.service');
 const publishService = require('../src/features/properties/publish.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
-const AppError = require('../src/utils/AppError');
 
 let tenant;
 

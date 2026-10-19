@@ -5,7 +5,6 @@ const projectHealthService = require('./projectHealth.service');
 const postObraHealthService = require('./postObraHealth.service');
 const { lastBusinessDays } = require('../../engines/jobs/businessDays.helper');
 const {
-  Project,
   ProjectStage,
   DailyReport,
   DailyWorker,

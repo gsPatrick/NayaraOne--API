@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.APPROVER_SCREENS_HTTP_TEST_PORT || '21600';
 
-const app = require('../app');
+require('../app');
 const { sequelize, getSeedTenant } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { PERMISSION_CODES } = require('../scripts/seed-homo-aprovador-compras');

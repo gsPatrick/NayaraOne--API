@@ -12,7 +12,7 @@ const { httpRequestDuration } = require('../utils/metrics');
  */
 const requestLoggerMiddleware = pinoHttp({
   logger,
-  customProps: (req) => ({ correlationId: getCurrentCorrelationId() }),
+  customProps: () => ({ correlationId: getCurrentCorrelationId() }),
   autoLogging: {
     ignore: (req) => req.url === '/health' || req.url === '/api/health' || req.url === '/api/metrics',
   },

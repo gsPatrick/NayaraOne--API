@@ -152,7 +152,6 @@ test('FISCAL-DIMOB-03: RLS — batch de outra empresa não é encontrado', async
 
 test('FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEIVED, exclui EXPECTED e ADJUSTED', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const year = 2012 + Math.floor(Math.random() * 5); // ano exclusivo, evita colidir com dado real
     const principal = await Person.create(
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Proponente DIMOB ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }

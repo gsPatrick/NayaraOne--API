@@ -15,7 +15,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.MARCO3_HTTP_TEST_PORT || '21593';
 
-const app = require('../app');
+require('../app');
 const { getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Person, Property, PropertyOffer, Opportunity, Message, PropertyRadar } = require('../src/models');

@@ -156,7 +156,6 @@ async function tableFingerprints(c) {
      WHERE table_schema IN ('inventory', 'procurement') AND table_type = 'BASE TABLE' ORDER BY 1, 2`);
   const out = {};
   for (const { table_schema: s, table_name: t } of tables) {
-    // eslint-disable-next-line no-await-in-loop
     const { rows } = await c.query(`SELECT row_to_json(x)::text AS j FROM "${s}"."${t}" x ORDER BY x.id`);
     const h = crypto.createHash('sha256');
     for (const r of rows) h.update(`${r.j}\n`);

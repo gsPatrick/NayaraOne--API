@@ -1,6 +1,5 @@
 'use strict';
 
-const { Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { listOpportunities } = require('./opportunity.service');

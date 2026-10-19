@@ -16,7 +16,7 @@ const path = require('path');
 
 process.env.PORT = process.env.FILES_ACL_HTTP_TEST_PORT || '21620';
 
-const app = require('../app');
+require('../app');
 const {
   sequelize,
   getSeedTenant,

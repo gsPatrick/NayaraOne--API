@@ -24,7 +24,6 @@ const {
   getSeedTenant,
   withRollbackTenantTransaction,
   uniqueSuffix,
-  createTestCostCenter,
   createTestResultCenter,
 } = require('./testHelpers');
 const { User } = require('../src/models');

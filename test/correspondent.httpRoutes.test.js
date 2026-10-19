@@ -14,7 +14,7 @@ process.env.PORT = process.env.CORRESPONDENT_HTTP_TEST_PORT || '21592';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const app = require('../app');
+require('../app');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Person, FinancingCase, File, ExternalCaseRouting } = require('../src/models');

@@ -1,6 +1,6 @@
 'use strict';
 
-const { test, before, after } = require('node:test');
+const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');

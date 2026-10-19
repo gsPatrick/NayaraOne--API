@@ -620,6 +620,18 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   }
   order.items = await PurchaseOrderItem.findAll({ where: { purchaseOrderId: order.id }, transaction });
 
+  // BUG REAL CORRIGIDO (teste de carga de Estoque/Compras, Marco 7, 19/10/2026): dois
+  // recebimentos simultâneos (pedidos diferentes) do MESMO item de estoque davam deadlock
+  // (40P01). Cada um inseria os itens do recibo de estoque — o FK pega FOR KEY SHARE na linha do
+  // item — e depois pedia FOR UPDATE na mesma linha para recalcular o custo médio: os dois
+  // seguravam o KEY SHARE e esperavam um pelo outro. Agora as linhas dos itens de estoque do
+  // pedido são travadas FOR UPDATE ANTES de qualquer insert, em ordem de id (ordem global
+  // estável — sem ciclo entre pedidos com vários itens).
+  const inventoryItemIdsToLock = [...new Set(order.items.map((i) => i.inventoryItemId).filter(Boolean))].sort();
+  if (inventoryItemIdsToLock.length) {
+    await InventoryItem.findAll({ where: { id: inventoryItemIdsToLock, groupId: order.groupId, companyId: order.companyId }, order: [['id', 'ASC']], transaction, lock: transaction.LOCK.UPDATE });
+  }
+
   // BUG REAL CORRIGIDO (reauditoria "loop até secar", 2026-10-08): a checagem de NF duplicada
   // rodava ANTES do lock FOR UPDATE do PO — duas requisições concorrentes (sem idempotencyKey)
   // liam ambas "nenhum GoodsReceipt com este invoiceFingerprint" antes de qualquer commit (TOCTOU)
@@ -967,7 +979,7 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
       const invoiceText = goodsReceipt.invoiceFingerprint ? `NF nº ${goodsReceipt.invoiceFingerprint}` : 'recebimento sem NF';
       if (overAmount > 0) {
         const costCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
-        const overReceiptPayable = await createFinancialEntry(
+        await createFinancialEntry(
           {
             groupId: goodsReceipt.groupId,
             companyId: goodsReceipt.companyId,
@@ -1099,7 +1111,6 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
 
   const discrepancies = [];
   for (const item of underReceivedItems) {
-    const remaining = Number(item.quantity) - Number(item.receivedQuantity);
     const lastGrItem = await GoodsReceiptItem.findOne({
       where: { purchaseOrderItemId: item.id }, order: [['created_at', 'DESC']], transaction,
     });
@@ -1201,7 +1212,6 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
 
 // --- Due diligence / qualificação de fornecedor ---
 // Contrato (Anexo I): "Fornecedores: documentos/vigência; due diligence para alto risco".
-const DUE_DILIGENCE_STATUSES = ['NOT_REQUIRED', 'PENDING', 'APPROVED', 'REJECTED'];
 
 // BUG REAL CORRIGIDO (reauditoria contratual, 2026-10-08 — due diligence bypass): com
 // `highRisk:false`, o código recalculava `dueDiligenceStatus` pra 'NOT_REQUIRED'

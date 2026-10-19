@@ -44,7 +44,7 @@ const P95_GATE_MS = Number(argValue('--p95-ms')) || 300;
 const JSON_OUT = argValue('--json');
 
 const SIZE = LIGHT
-  ? { items: 6, hotItems: 2, movements: 300, orders: 6, receiptsPerOrder: 4, replays: 20, requisitions: 20, reads: 60 }
+  ? { items: 12, hotItems: 2, movements: 300, orders: 10, receiptsPerOrder: 5, replays: 20, requisitions: 50, reads: 60 }
   : { items: 30, hotItems: 4, movements: 2400, orders: 30, receiptsPerOrder: 5, replays: 120, requisitions: 150, reads: 400 };
 
 const EXPECTED_BUSINESS_CODES = new Set(['INVENTORY_INSUFFICIENT_BALANCE']);
@@ -85,7 +85,6 @@ async function runPool(tasks, concurrency) {
     while (i < tasks.length) {
       const task = tasks[i];
       i += 1;
-      // eslint-disable-next-line no-await-in-loop
       await task();
     }
   });
@@ -200,25 +199,28 @@ async function main() {
 
   // ------------------------------------------------------------------ invariantes (SQL direto, com RLS do tenant)
   const inv = await T(async (t) => {
-    const q = async (sql) => (await ctx.sequelize.query(sql, { type: ctx.sequelize.QueryTypes.SELECT, transaction: t }))[0];
+    // Escopo: só os itens e pedidos criados NESTA execução (no CI o banco já tem dados da suíte).
+    const replacements = { items: setup.items.map((i) => i.id), orders: setup.orders.map((o) => o.order.id) };
+    const q = async (sql) => (await ctx.sequelize.query(sql, { type: ctx.sequelize.QueryTypes.SELECT, transaction: t, replacements }))[0];
+    const GR = '(SELECT * FROM procurement.goods_receipts WHERE purchase_order_id IN (:orders))';
     return {
-      negativos: Number((await q('SELECT COUNT(*) AS n FROM inventory.stock_balances WHERE quantity_on_hand < 0')).n),
+      negativos: Number((await q('SELECT COUNT(*) AS n FROM inventory.stock_balances WHERE quantity_on_hand < 0 AND inventory_item_id IN (:items)')).n),
       ledgerDivergente: Number((await q(`
-        WITH f AS (SELECT inventory_item_id i, destination_location_id l, quantity q FROM inventory.inventory_movements WHERE destination_location_id IS NOT NULL
-                   UNION ALL SELECT inventory_item_id, source_location_id, -quantity FROM inventory.inventory_movements WHERE source_location_id IS NOT NULL),
+        WITH f AS (SELECT inventory_item_id i, destination_location_id l, quantity q FROM inventory.inventory_movements WHERE destination_location_id IS NOT NULL AND inventory_item_id IN (:items)
+                   UNION ALL SELECT inventory_item_id, source_location_id, -quantity FROM inventory.inventory_movements WHERE source_location_id IS NOT NULL AND inventory_item_id IN (:items)),
              g AS (SELECT i, l, SUM(q) s FROM f GROUP BY 1, 2)
         SELECT COUNT(*) AS n FROM g FULL JOIN inventory.stock_balances b ON b.inventory_item_id = g.i AND b.location_id = g.l
          WHERE COALESCE(b.quantity_on_hand, 0) <> COALESCE(g.s, 0)`)).n),
       movimentoDuplicado: Number((await q('SELECT COUNT(*) AS n FROM (SELECT idempotency_key FROM inventory.inventory_movements WHERE idempotency_key IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d')).n),
-      recebimentoDuplicado: Number((await q('SELECT COUNT(*) AS n FROM (SELECT idempotency_key FROM procurement.goods_receipts WHERE idempotency_key IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d')).n),
-      nfDuplicada: Number((await q('SELECT COUNT(*) AS n FROM (SELECT invoice_fingerprint FROM procurement.goods_receipts WHERE invoice_fingerprint IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d')).n),
-      payableDuplicado: Number((await q("SELECT COUNT(*) AS n FROM (SELECT idempotency_key FROM finance.financial_entries WHERE idempotency_key LIKE 'goods-receipt:%' GROUP BY 1 HAVING COUNT(*) > 1) d")).n),
-      recebimentoSemPayable: Number((await q("SELECT COUNT(*) AS n FROM procurement.goods_receipts WHERE status = 'CONFIRMED' AND financial_entry_id IS NULL")).n),
+      recebimentoDuplicado: Number((await q(`SELECT COUNT(*) AS n FROM (SELECT idempotency_key FROM ${GR} gr WHERE idempotency_key IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)).n),
+      nfDuplicada: Number((await q(`SELECT COUNT(*) AS n FROM (SELECT invoice_fingerprint FROM ${GR} gr WHERE invoice_fingerprint IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)).n),
+      payableDuplicado: Number((await q(`SELECT COUNT(*) AS n FROM (SELECT idempotency_key FROM finance.financial_entries WHERE idempotency_key IN (SELECT 'goods-receipt:' || id FROM ${GR} gr) GROUP BY 1 HAVING COUNT(*) > 1) d`)).n),
+      recebimentoSemPayable: Number((await q(`SELECT COUNT(*) AS n FROM ${GR} gr WHERE status = 'CONFIRMED' AND financial_entry_id IS NULL`)).n),
       pedidoDivergente: Number((await q(`SELECT COUNT(*) AS n FROM procurement.purchase_order_items poi
          LEFT JOIN (SELECT purchase_order_item_id, SUM(received_quantity) s FROM procurement.goods_receipt_items GROUP BY 1) g ON g.purchase_order_item_id = poi.id
-         WHERE poi.received_quantity <> COALESCE(g.s, 0)`)).n),
+         WHERE poi.purchase_order_id IN (:orders) AND poi.received_quantity <> COALESCE(g.s, 0)`)).n),
       recebimentos: Number((await q(`SELECT COUNT(*) AS n FROM procurement.goods_receipts WHERE idempotency_key LIKE 'carga-${run}-%'`)).n),
-      movimentos: Number((await q('SELECT COUNT(*) AS n FROM inventory.inventory_movements')).n),
+      movimentos: Number((await q('SELECT COUNT(*) AS n FROM inventory.inventory_movements WHERE inventory_item_id IN (:items)')).n),
     };
   });
   const expectedReceipts = SIZE.orders * SIZE.receiptsPerOrder;
@@ -231,7 +233,9 @@ async function main() {
     [`recebimentos gravados = ${expectedReceipts} (replays não somam)`, inv.recebimentos === expectedReceipts, `${inv.recebimentos}`],
     ['recebido por item de pedido = soma dos recebimentos', inv.pedidoDivergente === 0, `${inv.pedidoDivergente}`],
     ['zero erro inesperado', rows.every((r) => !Object.keys(r.inesperados).length), rows.filter((r) => Object.keys(r.inesperados).length).map((r) => `${r.op}: ${fmt(r.inesperados)}`).join('; ') || '0'],
-    [`p95 < ${P95_GATE_MS} ms em todas as operações`, rows.every((r) => r.p95 < P95_GATE_MS), `maior p95: ${Math.max(...rows.map((r) => r.p95)).toFixed(1)} ms`],
+    // p95 só é estatisticamente significativo com amostra razoável: o gate vale para operações
+    // com n >= 50 (no modo completo, todas); as demais aparecem na tabela, sem gate.
+    [`p95 < ${P95_GATE_MS} ms em todas as operações com n >= 50`, rows.filter((r) => r.n >= 50).every((r) => r.p95 < P95_GATE_MS), `maior p95 (n >= 50): ${Math.max(...rows.filter((r) => r.n >= 50).map((r) => r.p95)).toFixed(1)} ms`],
   ];
   console.log('\n--- GATES ---');
   for (const [name, ok, detail] of gates) console.log(`  ${ok ? '✅' : '❌'} ${name} — ${detail}`);
