@@ -34,6 +34,14 @@ const { verifyAccessToken } = require('../utils/jwt');
  * `SET LOCAL` antes de buscar a sessão — sem isso, precisaríamos remover o RLS da tabela
  * (pior) ou usar uma segunda conexão privilegiada (reintroduziria o mesmo risco do TEC-03/04).
  */
+// Cada router de feature faz `router.use(authMiddleware)` e todos são montados em '/v1', então
+// uma requisição para o router N passava pelo authMiddleware dos N-1 routers anteriores — no
+// financeiro eram 12 validações de sessão (5 round-trips cada, ~125 ms por ida ao Postgres
+// remoto) ≈ 7,5 s antes do handler. A validação passa a valer uma vez por requisição: se ESTE
+// middleware já validou ESTE mesmo token nesta requisição, segue direto (req.auth foi gravado por
+// ele). Nada vindo do cliente é confiado — a marca fica num WeakMap interno, não no req.
+const verifiedTokenByRequest = new WeakMap();
+
 async function authMiddleware(req, res, next) {
   const header = req.header('authorization') || req.header('Authorization');
   if (!header || !header.startsWith('Bearer ')) {
@@ -43,6 +51,10 @@ async function authMiddleware(req, res, next) {
   const token = header.slice('Bearer '.length).trim();
   if (!token) {
     return next(AppError.unauthorized('Token de acesso ausente.', 'MISSING_ACCESS_TOKEN'));
+  }
+
+  if (req.auth && verifiedTokenByRequest.get(req) === token) {
+    return next();
   }
 
   let payload;
@@ -63,8 +75,11 @@ async function authMiddleware(req, res, next) {
       // require tardio pra evitar dependência circular (models -> ... -> middlewares).
       const { Session, sequelize } = require('../models');
       const session = await sequelize.transaction(async (transaction) => {
-        await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: payload.group_id }, transaction });
-        await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: payload.company_id }, transaction });
+        // set_config(..., true) = SET LOCAL; os dois cabem numa única ida ao banco.
+        await sequelize.query(
+          "SELECT set_config('app.group_id', :groupId, true), set_config('app.company_id', :companyId, true)",
+          { replacements: { groupId: payload.group_id, companyId: payload.company_id }, transaction }
+        );
         return Session.findByPk(payload.session_id, { transaction });
       });
       if (!session || session.revokedAt || session.expiresAt < new Date()) {
@@ -88,6 +103,7 @@ async function authMiddleware(req, res, next) {
     roles: payload.roles || [],
     permissions: payload.permissions || [],
   };
+  verifiedTokenByRequest.set(req, token);
 
   return next();
 }
