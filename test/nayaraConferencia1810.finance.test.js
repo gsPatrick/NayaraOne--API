@@ -14,12 +14,11 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.CONFERENCIA_1810_HTTP_TEST_PORT || '21601';
 
-const app = require('../app');
+require('../app');
 const {
   sequelize,
   getSeedTenant,
   withRollbackTenantTransaction,
-  withTenantTransaction,
   uniqueSuffix,
   createTestCostCenter,
   createTestResultCenter,

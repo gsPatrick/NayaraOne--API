@@ -522,7 +522,7 @@ test('billing: duas recuperações CONCORRENTES da mesma antecipação de alugue
     }
   }
 
-  const { contractId, advanceId } = await withCommitted(async (t) => {
+  const { advanceId } = await withCommitted(async (t) => {
     const contract = await createLeaseContract(t, { contractNumber: `QA-ADVANCE-RACE-${suffix}` });
     await activateContract(contract, t);
     const advance = await rentAdvanceService.requestRentAdvance(
@@ -595,7 +595,7 @@ test('billing: dois pagamentos CONCORRENTES de aluguel garantido para a mesma co
     }
   }
 
-  const { contractId, guaranteedId } = await withCommitted(async (t) => {
+  const { guaranteedId } = await withCommitted(async (t) => {
     const contract = await createLeaseContract(t, { contractNumber: `QA-GUARANTEED-RACE-${suffix}` });
     await activateContract(contract, t);
     const guaranteed = await guaranteedRentService.enrollGuaranteedRent(

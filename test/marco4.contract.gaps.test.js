@@ -725,7 +725,6 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
   }
 
   let entryId;
-  let bankAccountId;
   let intentId;
   let manualSettlement;
   try {
@@ -741,7 +740,6 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
 
     await withCommitted(async (t) => {
       const account = await createActiveBankAccount(t, `fints002-${suffix}`);
-      bankAccountId = account.id;
       const entry = await createEntry(t, { amount: 500, bankAccountId: account.id, idempotencyKey: `fints002-entry-${suffix}` });
       entryId = entry.id;
       // F03/A4: execução manual exige comprovante anexado ANTES da aprovação da intenção.

@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.FINANCE_RECON_HTTP_TEST_PORT || '21594';
 
-const app = require('../app');
+require('../app');
 const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');

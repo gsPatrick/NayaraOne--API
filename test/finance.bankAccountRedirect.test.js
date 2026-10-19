@@ -9,7 +9,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval, createManualSettlementEvidence, prepareManualSettlement } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, prepareManualSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');

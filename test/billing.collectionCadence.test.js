@@ -10,7 +10,7 @@ const collectionCaseService = require('../src/features/billing/collectionCase.se
 const cadenceService = require('../src/features/billing/collectionCadence.service');
 const { seedBillingRules } = require('../scripts/seedBillingRules');
 const AppError = require('../src/utils/AppError');
-const { CollectionCadenceStep, Notification, Task, OutboxEvent, BillingSchedule } = require('../src/models');
+const {  Notification, Task, OutboxEvent, BillingSchedule } = require('../src/models');
 
 /**
  * Cadência de cobrança via Motor de Regras (REG-LOC-004) — conferência Nayara 18/10/2026,

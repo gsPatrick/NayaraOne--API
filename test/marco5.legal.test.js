@@ -585,7 +585,7 @@ test('AUD-016: createEvidencePackageFromContractAttachments inclui documento da 
     const versionFile = await createFakeDocumentFile(transaction);
     versionFile.checksumSha256 = 'hash-versao-contrato';
     await versionFile.save({ transaction });
-    const version = await contractVersionsService.createContractVersion(
+    await contractVersionsService.createContractVersion(
       contract.id,
       { content: `corpo do contrato ${uniqueSuffix()}`, documentFileId: versionFile.id },
       tenant.userId,
@@ -597,7 +597,7 @@ test('AUD-016: createEvidencePackageFromContractAttachments inclui documento da 
     requirementFile.checksumSha256 = 'hash-documento-checklist';
     await requirementFile.save({ transaction });
     const { ContractRequirement } = require('../src/models');
-    const requirement = await ContractRequirement.create(
+    await ContractRequirement.create(
       {
         groupId: tenant.groupId,
         companyId: tenant.companyId,

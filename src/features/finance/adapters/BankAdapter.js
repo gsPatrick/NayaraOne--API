@@ -59,7 +59,7 @@ class SandboxBankAdapter {
     return { externalId, status: 'CONFIRMED', raw: { sandbox: true } };
   }
 
-  async fetchTransactions(cursor) {
+  async fetchTransactions(_cursor) {
     return { transactions: [], nextCursor: null };
   }
 }

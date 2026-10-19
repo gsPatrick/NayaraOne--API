@@ -15,7 +15,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.MARCO5_HTTP_TEST_PORT || '21597';
 
-const app = require('../app');
+require('../app');
 const { getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Contract, ContractRequirement, ContractClause, Notice } = require('../src/models');

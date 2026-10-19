@@ -24,7 +24,6 @@ const {
   approveFinancialEntryForSettlement,
   uniqueClosingTestMonth,
   confirmPeriodChecksForTest,
-  createManualSettlementEvidence,
   prepareManualSettlement,
 } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');

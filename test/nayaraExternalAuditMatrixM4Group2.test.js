@@ -25,10 +25,9 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.MARCO4_GROUP2_HTTP_TEST_PORT || '21598';
 
-const app = require('../app');
+require('../app');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const { CostCenter } = require('../src/models');
 

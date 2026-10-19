@@ -19,7 +19,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
 const contractsService = require('../src/features/legal/contracts.service');

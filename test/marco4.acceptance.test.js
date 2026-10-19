@@ -12,7 +12,7 @@ const bankAccountsService = require('../src/features/finance/bankAccounts.servic
 const { assertBankAccountEligibleForPayment } = require('../src/features/finance/financeAntifraud.service');
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const { BankAccount, Person } = require('../src/models');
+const {  Person } = require('../src/models');
 
 let tenant;
 

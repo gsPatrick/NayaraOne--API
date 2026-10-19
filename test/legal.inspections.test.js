@@ -8,7 +8,6 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const propertiesService = require('../src/features/properties/properties.service');
 const inspectionsService = require('../src/features/legal/inspections.service');
 const contractsService = require('../src/features/legal/contracts.service');
-const AppError = require('../src/utils/AppError');
 const { File, OutboxEvent } = require('../src/models');
 
 let tenant;

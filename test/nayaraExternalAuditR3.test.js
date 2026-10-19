@@ -26,7 +26,6 @@ const {
   uniqueSuffix,
   createTestCostCenter,
   approveFinancialEntryForSettlement,
-  createManualSettlementEvidence,
   prepareManualSettlement,
 } = require('./testHelpers');
 const legalCasesService = require('../src/features/legal/legalCases.service');

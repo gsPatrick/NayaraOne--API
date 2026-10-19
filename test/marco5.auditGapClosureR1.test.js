@@ -375,7 +375,7 @@ test('G3: webhook de assinatura (externalSignatureId) duplicado Ã© idempotente â
     reloaded = await contractsService.transitionContractStatus(reloaded, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     reloaded = await contractsService.transitionContractStatus(reloaded, 'LEGAL_REVIEW', tenant.userId, transaction);
     reloaded = await contractsService.transitionContractStatus(reloaded, 'APPROVED', tenant.userId, transaction);
-    reloaded = await contractsService.transitionContractStatus(reloaded, 'SIGNING', tenant.userId, transaction);
+    await contractsService.transitionContractStatus(reloaded, 'SIGNING', tenant.userId, transaction);
 
     const signatures = await signaturesService.initiateSignature(version.id, [landlord.id, tenantPerson.id], tenant.userId, transaction);
     assert.equal(signatures.length, 2);

@@ -28,7 +28,7 @@ class SandboxSignatureAdapter {
    * Não persiste nada e não faz I/O — a persistência de Signature é responsabilidade do
    * chamador (signatures.service.js).
    */
-  async requestSignature(contractVersion, signerPersonIds, transaction) {
+  async requestSignature(contractVersion, signerPersonIds, _transaction) {
     const externalSignatureIdsByPerson = {};
     for (const personId of signerPersonIds) {
       externalSignatureIdsByPerson[personId] = `sandbox-sig-${crypto.randomUUID()}`;
@@ -53,7 +53,7 @@ class SandboxSignatureAdapter {
   // Sandbox nunca tem um documento assinado de verdade por trás (não existe provedor real) —
   // retorna null explicitamente em vez de inventar um PDF. handleEnvelopeClosedWebhook trata
   // `null` como "nada pra baixar" e não falha por isso.
-  async downloadSignedDocument(providerEnvelopeId) {
+  async downloadSignedDocument(_providerEnvelopeId) {
     return null;
   }
 }

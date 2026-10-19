@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval, approveFinancialEntryForSettlement, createManualSettlementEvidence, prepareManualSettlement } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval, prepareManualSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -621,7 +621,7 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     }
   }
 
-  const { entryId, accountId, manualSettlement } = await withCommitted(async (t) => {
+  const { entryId, manualSettlement } = await withCommitted(async (t) => {
     const account = await createActiveBankAccount(t, suffix);
     const entry = await createEntry(t, { amount: 100, bankAccountId: account.id, description: `QA ADV-F21 ${suffix}` });
         // F03 (conferência 18/10/2026): pagamento bancário sem confirmação do banco exige comprovante.

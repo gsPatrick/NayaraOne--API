@@ -15,7 +15,7 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.CONFERENCIA_1810_CLOSING_HTTP_TEST_PORT || '21631';
 
-const app = require('../app');
+require('../app');
 const {
   sequelize,
   getSeedTenant,
@@ -34,7 +34,6 @@ const {
   ContractParty,
   BankAccount,
   PeriodClosure,
-  PeriodClosureSnapshot,
   MfaCredential,
   MfaStepUp,
 } = require('../src/models');

@@ -163,7 +163,7 @@ async function assertManualSettlementApprovedAfterEvidence(entry, transaction) {
  * resolvePayableSettlement — decide COMO um PAYABLE pode ser liquidado (ver comentário acima).
  * Retorna null para lançamentos que não são PAYABLE (recebimentos seguem o fluxo direto, §10).
  */
-async function resolvePayableSettlement(entry, options, transaction) {
+async function resolvePayableSettlement(entry, options, _transaction) {
   if (entry.nature !== 'PAYABLE') return null;
   const opts = options || {};
   if (opts.viaBankConfirmation) {

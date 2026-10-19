@@ -2,7 +2,7 @@
 
 const { Op } = require('sequelize');
 
-const { FinancialEntry, BankTransaction, Reconciliation, Commission, OwnerRepass, sequelize } = require('../../models');
+const { FinancialEntry, Commission, OwnerRepass, sequelize } = require('../../models');
 const { countOpenHighRiskAnomalies } = require('./anomalyCases.service');
 const { startOfBusinessDay } = require('../../utils/businessDate');
 

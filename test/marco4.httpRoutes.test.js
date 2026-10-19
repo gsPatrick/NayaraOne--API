@@ -19,10 +19,10 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.MARCO4_HTTP_TEST_PORT || '21595';
 
-const app = require('../app');
+require('../app');
 const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter, createCommissionSource } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase, Person, Property } = require('../src/models');
+const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase, Person } = require('../src/models');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');

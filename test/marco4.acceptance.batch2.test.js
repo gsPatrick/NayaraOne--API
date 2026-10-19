@@ -10,7 +10,6 @@ const financialEntriesService = require('../src/features/finance/financialEntrie
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
 const approvalsService = require('../src/features/finance/approvals.service');
-const usersService = require('../src/features/users/users.service');
 const { User } = require('../src/models');
 
 let tenant;

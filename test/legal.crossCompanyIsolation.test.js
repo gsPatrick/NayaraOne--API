@@ -11,7 +11,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const guaranteesService = require('../src/features/legal/guarantees.service');
 
