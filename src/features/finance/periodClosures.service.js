@@ -66,6 +66,12 @@ function toReferenceMonth(value) {
   return businessDateKey(parsed).slice(0, 7);
 }
 
+/** monthBR — "2071-05" -> "05/2071" (formato que o usuário vê nas mensagens). */
+function monthBR(value) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
+  return m ? `${m[2]}/${m[1]}` : String(value || '');
+}
+
 async function getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate = false } = {}) {
   return PeriodClosure.findOne({
     where: { companyId, referenceMonth },
@@ -95,7 +101,7 @@ async function assertPeriodOpenForEntry(companyId, dates, transaction) {
   for (const month of months) {
     if (await isPeriodClosed(companyId, month, transaction)) {
       throw AppError.conflict(
-        `O período ${month} está fechado — nenhum lançamento pode ser criado ou editado nesse mês. Reabra o período (com justificativa) se a correção for mesmo necessária.`,
+        `O período ${monthBR(month)} está fechado — nenhum lançamento pode ser criado ou editado nesse mês. Reabra o período (com justificativa) se a correção for mesmo necessária.`,
         'FINANCE_PERIOD_CLOSED',
         { referenceMonth: month }
       );
@@ -546,7 +552,7 @@ function assertPreconditionsMet(preconditions, stageLabel) {
   if (preconditions.allOk) return;
   const missing = preconditions.items.filter((item) => !item.ok);
   throw AppError.conflict(
-    `O período ${preconditions.referenceMonth} não pode ${stageLabel}: ${missing.map((item) => `${item.label} — ${item.detail}`).join(' | ')}`,
+    `O período ${monthBR(preconditions.referenceMonth)} não pode ${stageLabel}: ${missing.map((item) => `${item.label} — ${item.detail}`).join(' | ')}`,
     'FINANCE_PERIOD_PRECONDITIONS_NOT_MET',
     { referenceMonth: preconditions.referenceMonth, missing: missing.map((item) => ({ code: item.code, label: item.label, count: item.count, detail: item.detail })) }
   );
@@ -592,7 +598,7 @@ async function confirmPeriodCheck(payload, actorUserId, transaction) {
   let closure = await getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
   if (closure && closure.status !== 'OPEN') {
     throw AppError.conflict(
-      `O período ${referenceMonth} está ${closure.status === 'CLOSED' ? 'fechado' : 'em revisão'} — conferências só podem ser registradas com o período aberto${closure.status === 'REVIEW' ? ' (o aprovador pode devolver o período para aberto)' : ''}.`,
+      `O período ${monthBR(referenceMonth)} está ${closure.status === 'CLOSED' ? 'fechado' : 'em revisão'} — conferências só podem ser registradas com o período aberto${closure.status === 'REVIEW' ? ' (o aprovador pode devolver o período para aberto)' : ''}.`,
       'FINANCE_PERIOD_CHECK_NOT_ALLOWED'
     );
   }
@@ -712,10 +718,10 @@ async function closePeriod(payload, actorUserId, transaction) {
 
   let closure = await getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
   if (closure && closure.status === 'CLOSED') {
-    throw AppError.conflict(`O período ${referenceMonth} já está fechado.`, 'FINANCE_PERIOD_ALREADY_CLOSED');
+    throw AppError.conflict(`O período ${monthBR(referenceMonth)} já está fechado.`, 'FINANCE_PERIOD_ALREADY_CLOSED');
   }
   if (closure && closure.status === 'REVIEW') {
-    throw AppError.conflict(`O período ${referenceMonth} já está em revisão, aguardando aprovação do fechamento.`, 'FINANCE_PERIOD_ALREADY_IN_REVIEW');
+    throw AppError.conflict(`O período ${monthBR(referenceMonth)} já está em revisão, aguardando aprovação do fechamento.`, 'FINANCE_PERIOD_ALREADY_IN_REVIEW');
   }
 
   // F02 — Caderno §16: nada vai para revisão de fechamento com pré-condição pendente.
@@ -760,7 +766,7 @@ async function closePeriod(payload, actorUserId, transaction) {
       entityId: closure.id,
       beforeJson,
       afterJson: closure.toJSON(),
-      reason: `Fechamento do período ${referenceMonth} solicitado — em revisão, ainda não bloqueado. Aguardando aprovação.`,
+      reason: `Fechamento do período ${monthBR(referenceMonth)} solicitado — em revisão, ainda não bloqueado. Aguardando aprovação.`,
     },
     transaction
   );
@@ -784,10 +790,10 @@ async function approvePeriodClosure(payload, actorUserId, transaction) {
   // primeira e reavalia o status (já CLOSED), em vez de gravar um segundo snapshot.
   const closure = await getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
   if (!closure) {
-    throw AppError.notFound(`Não há solicitação de fechamento para o período ${referenceMonth}.`, 'FINANCE_PERIOD_NOT_FOUND');
+    throw AppError.notFound(`Não há solicitação de fechamento para o período ${monthBR(referenceMonth)}.`, 'FINANCE_PERIOD_NOT_FOUND');
   }
   if (closure.status !== 'REVIEW') {
-    throw AppError.conflict(`O período ${referenceMonth} não está aguardando aprovação de fechamento.`, 'FINANCE_PERIOD_NOT_IN_REVIEW');
+    throw AppError.conflict(`O período ${monthBR(referenceMonth)} não está aguardando aprovação de fechamento.`, 'FINANCE_PERIOD_NOT_IN_REVIEW');
   }
   const requesterId = closure.reviewRequestedByUserId || closure.updatedBy;
   if (actorUserId && requesterId && String(actorUserId) === String(requesterId)) {
@@ -861,10 +867,10 @@ async function reopenPeriod(payload, actorUserId, transaction) {
 
   const closure = await getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
   if (!closure) {
-    throw AppError.notFound(`Não há fechamento registrado para o período ${referenceMonth}.`, 'FINANCE_PERIOD_NOT_FOUND');
+    throw AppError.notFound(`Não há fechamento registrado para o período ${monthBR(referenceMonth)}.`, 'FINANCE_PERIOD_NOT_FOUND');
   }
   if (closure.status !== 'CLOSED') {
-    throw AppError.conflict(`O período ${referenceMonth} não está fechado.`, 'FINANCE_PERIOD_NOT_CLOSED');
+    throw AppError.conflict(`O período ${monthBR(referenceMonth)} não está fechado.`, 'FINANCE_PERIOD_NOT_CLOSED');
   }
 
   const beforeJson = closure.toJSON();
@@ -930,11 +936,11 @@ async function returnPeriodToOpen(payload, actorUserId, transaction) {
   }
   const closure = await getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
   if (!closure) {
-    throw AppError.notFound(`Não há solicitação de fechamento para o período ${referenceMonth}.`, 'FINANCE_PERIOD_NOT_FOUND');
+    throw AppError.notFound(`Não há solicitação de fechamento para o período ${monthBR(referenceMonth)}.`, 'FINANCE_PERIOD_NOT_FOUND');
   }
   if (closure.status !== 'REVIEW') {
     throw AppError.conflict(
-      `O período ${referenceMonth} não está em revisão — só um pedido de fechamento em revisão pode voltar para aberto.`,
+      `O período ${monthBR(referenceMonth)} não está em revisão — só um pedido de fechamento em revisão pode voltar para aberto.`,
       'FINANCE_PERIOD_NOT_IN_REVIEW'
     );
   }
