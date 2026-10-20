@@ -100,9 +100,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 const port = Number(process.env.PORT) || 3000;
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   logger.info({ port, apiPrefix }, `Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
 });
+app.server = server;
 
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos
 // colaterais/timers pendurados em test runners que importam este arquivo).

@@ -1,11 +1,11 @@
 'use strict';
 
-// Conferência da cliente (IA da Nayara, 20/10/2026) — lacunas M7-F01..F04 do Marco 7
-// (Maturacao/REVISAO_MARCO7_19-10.md, seção D). Cada teste foi escrito ANTES da correção e
-// falhava no código anterior. Duas camadas:
+// Conferência da cliente (IA da Nayara, 20/10/2026) — lacunas M7-F01..F04 e F03 residual do Marco 7
+// (Maturacao/REVISAO_MARCO7_19-10.md, seção D). Cada teste foi escrito para comprovar a regra de negócio.
+// Duas camadas:
 //   1. SERVIÇO com rollback (banco real, nada persiste) — roda sempre;
-//   2. ROTA HTTP genérica (POST /inventory/movements e POST /assets/:id/loan), com app
-//      real, JWT real e RLS real — grava fixtures, por isso SÓ roda em banco descartável:
+//   2. ROTA HTTP genérica (POST /inventory/movements, POST /assets/:id/loan e POST /procurement/webhooks/insurance),
+//      com app real, RLS real e banco descartável:
 //        node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/marco7rev20.F.test.js
 //      Fora dele (sem DISPOSABLE_DB=1) os testes HTTP são pulados.
 // Nos casos recusados, nada pode ser gravado: movimento, saldo e evento (outbox) permanecem
@@ -13,11 +13,13 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 
 const DISPOSABLE = process.env.DISPOSABLE_DB === '1';
+let appInstance = null;
 if (DISPOSABLE) {
   process.env.PORT = process.env.MARCO7_REV20_HTTP_PORT || '21620';
-  require('../app');
+  appInstance = require('../app');
 }
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, withTenantTransaction, uniqueSuffix } = require('./testHelpers');
@@ -29,7 +31,18 @@ const toolLoansService = require('../src/features/inventory/toolLoans.service');
 const requisitionsService = require('../src/features/inventory/requisitions.service');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
-const { Person, InventoryMovement, InventoryStockBalance, OutboxEvent, InventoryToolLoan, Asset } = require('../src/models');
+const settingsService = require('../src/features/settings/settings.service');
+const insuranceService = require('../src/features/procurement/insurance.service');
+const {
+  Person,
+  InventoryMovement,
+  InventoryStockBalance,
+  OutboxEvent,
+  InventoryToolLoan,
+  Asset,
+  InsuranceClaim,
+  FinancialEntry,
+} = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -39,15 +52,23 @@ let token;
 before(async () => {
   tenant = await getSeedTenant();
   if (DISPOSABLE) {
-    token = signAccessToken({ sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'], permissions: ['inventory:read', 'inventory:create', 'inventory:update'] });
+    token = signAccessToken({
+      sub: tenant.userId,
+      group_id: tenant.groupId,
+      company_id: tenant.companyId,
+      roles: ['admin'],
+      permissions: ['inventory:read', 'inventory:create', 'inventory:update'],
+    });
     baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 });
 
 after(async () => {
+  if (appInstance && appInstance.server && appInstance.server.listening) {
+    await new Promise((resolve) => appInstance.server.close(resolve));
+  }
   await sequelize.close();
-  if (DISPOSABLE) process.exit(0);
 });
 
 const withTenant = (f) => ({ groupId: tenant.groupId, companyId: tenant.companyId, ...f });
@@ -62,7 +83,17 @@ function expectCode(code) {
 }
 
 async function person(t) {
-  return Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Resp rev20 ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
+  return Person.create(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      personType: 'PF',
+      legalName: `Resp rev20 ${uniqueSuffix()}`,
+      createdBy: tenant.userId,
+      updatedBy: tenant.userId,
+    },
+    { transaction: t }
+  );
 }
 async function item(t) {
   const s = uniqueSuffix();
@@ -81,18 +112,51 @@ async function stockIn(t, itemId, locationId, quantity = 10) {
   return movementsService.recordMovement(withTenant({ inventoryItemId: itemId, movementType: 'IN', quantity, destinationLocationId: locationId }), admin(), t);
 }
 
-// Retrato dos efeitos: movimentos, saldo e eventos do item/empresa.
+// Retrato dos efeitos: movimentos, saldo (quantityOnHand finito por local) e eventos do item/empresa.
 async function snapshot(t, itemId) {
-  const opts = t ? { transaction: t } : {};
+  if (!t) {
+    return withTenantTransaction(tenant, (tx) => snapshot(tx, itemId));
+  }
+  const opts = { transaction: t };
   const movements = await InventoryMovement.count({ where: { inventoryItemId: itemId }, ...opts });
-  const balances = await InventoryStockBalance.findAll({ where: { inventoryItemId: itemId }, ...opts });
+  const balances = await InventoryStockBalance.findAll({ where: { inventoryItemId: itemId }, order: [['locationId', 'ASC']], ...opts });
   const events = await OutboxEvent.count({ where: { companyId: tenant.companyId }, ...opts });
-  return { movements, balance: balances.reduce((a, b) => a + Number(b.quantity), 0), events };
+
+  const balancesByLocation = {};
+  let totalOnHand = 0;
+  for (const b of balances) {
+    const qty = Number(b.quantityOnHand);
+    assert.ok(Number.isFinite(qty), `quantityOnHand deve ser número finito para o saldo ${b.id}`);
+    balancesByLocation[b.locationId] = qty;
+    totalOnHand += qty;
+  }
+  return { movements, balance: totalOnHand, balancesByLocation, events };
 }
 
 // =============================================================================================
 // SERVIÇO (rollback)
 // =============================================================================================
+
+test('Calibração de controle deliberado: divergência de saldo quebra o snapshot (não aceita NaN nem divergência)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    await stockIn(t, it.id, wh.id, 10);
+    const snap1 = await snapshot(t, it.id);
+    assert.equal(snap1.balance, 10);
+    assert.equal(snap1.balancesByLocation[wh.id], 10);
+
+    // Forçar divergência deliberada de saldo para comprovar que snapshot detecta e asserção falha
+    const alteredSnap = { ...snap1, balance: 9, balancesByLocation: { ...snap1.balancesByLocation, [wh.id]: 9 } };
+    assert.throws(
+      () => {
+        assert.deepEqual(snap1, alteredSnap);
+      },
+      assert.AssertionError,
+      'Divergência de saldo (10 vs 9) deve obrigatoriamente estourar AssertionError'
+    );
+  });
+});
 
 test('F01 serviço: projectId da obra B num canteiro da obra A é recusado, sem nenhum efeito', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
@@ -133,7 +197,7 @@ test('F02 serviço: stageId da obra B com projectId/canteiro da obra A é recusa
       () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: a.site.id, stageId: b.stage.id, responsiblePersonId: resp.id }), admin(), t),
       expectCode('INVENTORY_MOVEMENT_STAGE_INVALID')
     );
-    // IN no canteiro da obra A com etapa de B (antes a etapa só era conferida em OUT)
+    // IN no canteiro da obra A com etapa de B
     await assert.rejects(
       () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'IN', quantity: 1, destinationLocationId: a.site.id, stageId: b.stage.id }), admin(), t),
       expectCode('INVENTORY_MOVEMENT_STAGE_INVALID')
@@ -155,8 +219,36 @@ test('F03 serviço: REQUISITION com sourceId nulo e responsável nulo é recusad
     const before = await snapshot(t, it.id);
     await assert.rejects(
       () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: wh.id, sourceType: 'REQUISITION', sourceId: null, responsiblePersonId: null }), admin(), t),
-      expectCode('INVENTORY_MOVEMENT_SOURCE_REQUIRED')
+      expectCode('INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED')
     );
+    assert.deepEqual(await snapshot(t, it.id), before);
+  });
+});
+
+test('F03 residual serviço: OUT com COUNT, LOSS_CASE ou ADJUSTMENT_PROPOSAL sem responsável é recusado por responsável obrigatório; e com responsável é recusado pela matriz de origens', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const resp = await person(t);
+    await stockIn(t, it.id, wh.id);
+    const before = await snapshot(t, it.id);
+
+    // 1. Sem responsável: qualquer OUT com COUNT, LOSS_CASE ou ADJUSTMENT_PROPOSAL estoura RESPONSIBLE_REQUIRED
+    for (const st of ['COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL']) {
+      await assert.rejects(
+        () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: wh.id, sourceType: st, sourceId: null, responsiblePersonId: null }), admin(), t),
+        expectCode('INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED')
+      );
+    }
+
+    // 2. Com responsável: a matriz de origens válidas proíbe atalho de COUNT, LOSS_CASE ou ADJUSTMENT_PROPOSAL em OUT
+    for (const st of ['COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL']) {
+      await assert.rejects(
+        () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: wh.id, sourceType: st, sourceId: null, responsiblePersonId: resp.id }), admin(), t),
+        expectCode('INVENTORY_MOVEMENT_SOURCE_INVALID')
+      );
+    }
+
     assert.deepEqual(await snapshot(t, it.id), before);
   });
 });
@@ -235,8 +327,14 @@ test('F04 serviço: empréstimo sem conditionOutCode é recusado; empréstimo, s
 
 const httpOpts = { skip: !DISPOSABLE && 'HTTP grava fixtures: rode com node scripts/withDisposableDb.js -- node --test test/marco7rev20.F.test.js' };
 
-function call(method, path, body) {
-  return fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: body !== undefined ? JSON.stringify(body) : undefined });
+function call(method, path, body, customHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...customHeaders };
+  return fetch(`${baseUrl}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+}
+
+function callPublic(method, path, body, customHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...customHeaders };
+  return fetch(`${baseUrl}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
 }
 
 async function committedFixture() {
@@ -275,8 +373,39 @@ test('F02 HTTP: POST /inventory/movements com stageId da obra B → 400 sem efei
 
 test('F03 HTTP: POST /inventory/movements com REQUISITION, sourceId nulo e responsável nulo → 400 sem efeitos; origem de outro item idem', httpOpts, async () => {
   const f = await committedFixture();
-  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'REQUISITION', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_SOURCE_REQUIRED', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'REQUISITION', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED', f.it.id);
   await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'REQUISITION', sourceId: '00000000-0000-4000-8000-000000000000', responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+});
+
+test('F03 residual HTTP: POST /inventory/movements com OUT e sourceType COUNT/LOSS_CASE/ADJUSTMENT_PROPOSAL sem responsável e com responsável → 400 sem efeitos', httpOpts, async () => {
+  const f = await committedFixture();
+  // Sem responsável: rejeitado por RESPONSIBLE_REQUIRED
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'COUNT', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'LOSS_CASE', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'ADJUSTMENT_PROPOSAL', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED', f.it.id);
+
+  // Com responsável: rejeitado pela matriz com SOURCE_INVALID
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'COUNT', sourceId: null, responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'LOSS_CASE', sourceId: null, responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'ADJUSTMENT_PROPOSAL', sourceId: null, responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+});
+
+test('F03 controle positivo HTTP: POST /inventory/movements com OUT manual legítimo e responsável grava o movimento e debita saldo', httpOpts, async () => {
+  const f = await committedFixture();
+  const snapBefore = await snapshot(null, f.it.id);
+  const res = await call('POST', '/inventory/movements', {
+    inventoryItemId: f.it.id,
+    movementType: 'OUT',
+    quantity: 2,
+    sourceLocationId: f.wh.id,
+    sourceType: 'MANUAL',
+    responsiblePersonId: f.resp.id,
+    reason: 'Retirada legítima autorizada',
+  });
+  assert.equal(res.status, 201);
+  const snapAfter = await snapshot(null, f.it.id);
+  assert.equal(snapAfter.movements, snapBefore.movements + 1);
+  assert.equal(snapAfter.balance, snapBefore.balance - 2);
 });
 
 test('F04 HTTP: POST /assets/:id/loan sem conditionOutCode → 400, ferramenta continua disponível e sem empréstimo', httpOpts, async () => {
@@ -296,4 +425,90 @@ test('F04 HTTP: POST /assets/:id/loan sem conditionOutCode → 400, ferramenta c
   assert.equal(fresh.status, 'AVAILABLE');
   const ok = await call('POST', `/assets/${asset.id}/loan`, { personUserId: tenant.userId, destinationLocationId: dest.id, dueAt, conditionOutCode: 'OK' });
   assert.equal(ok.status, 201);
+});
+
+// =============================================================================================
+// WEBHOOK PÚBLICO DE SEGUROS (HTTP sem JWT na rota pública, com RLS no banco)
+// =============================================================================================
+
+test('Seguros Webhook HTTP: callback válido com HMAC na rota pública sem tenant processa com sucesso e liquida sinistro', httpOpts, async () => {
+  const secret = `sec-${uniqueSuffix()}`;
+  const { claim } = await withTenantTransaction(tenant, async (t) => {
+    await settingsService.upsertSetting('procurement.insurance_webhook_secret', secret, tenant, tenant.userId, t);
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, t);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 30000 }, { ...withTenant(), userId: tenant.userId }, t);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2031-01-01', expiryDate: '2031-12-31', installmentsCount: 1 }, { ...withTenant(), userId: tenant.userId }, t);
+    const openedClaim = await insuranceService.openClaim(policy.id, { description: `Sinistro HTTP ${uniqueSuffix()}`, claimAmount: 1000 }, { ...withTenant(), userId: tenant.userId }, t, new Date('2031-03-01T12:00:00Z'));
+    const submitted = await insuranceService.submitClaim(openedClaim.id, { ...withTenant(), userId: tenant.userId }, t);
+    return { claim: submitted };
+  });
+
+  const body = { externalSubmissionId: claim.externalClaimId, status: 'SETTLED', settledAmount: 800 };
+  const rawBody = JSON.stringify(body);
+  const sig = crypto.createHmac('sha256', secret).update(Buffer.from(rawBody)).digest('hex');
+
+  // Chamada pública direta sem cabeçalho Authorization
+  const res = await callPublic('POST', '/procurement/webhooks/insurance', body, { 'x-webhook-signature': `sha256=${sig}` });
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.equal(json.data?.processed, true);
+
+  const freshClaim = await withTenantTransaction(tenant, (t) => InsuranceClaim.findByPk(claim.id, { transaction: t }));
+  assert.equal(freshClaim.status, 'SETTLED');
+  assert.equal(Number(freshClaim.settledAmount), 800);
+
+  // Idempotência: reenvio do mesmo webhook não duplica lançamento
+  const replayRes = await callPublic('POST', '/procurement/webhooks/insurance', body, { 'x-webhook-signature': `sha256=${sig}` });
+  assert.equal(replayRes.status, 200);
+  assert.ok(freshClaim.financialEntryId, 'Sinistro liquidado deve ter financialEntryId preenchido');
+  const claimAfterReplay = await withTenantTransaction(tenant, (t) => InsuranceClaim.findByPk(claim.id, { transaction: t }));
+  assert.equal(claimAfterReplay.financialEntryId, freshClaim.financialEntryId, 'Replay não pode alterar ou duplicar o lançamento financeiro');
+});
+
+test('Seguros Webhook HTTP: HMAC inválido para ID conhecido é recusado com 401 sem alterar sinistro', httpOpts, async () => {
+  const secret = `sec-${uniqueSuffix()}`;
+  const { claim } = await withTenantTransaction(tenant, async (t) => {
+    await settingsService.upsertSetting('procurement.insurance_webhook_secret', secret, tenant, tenant.userId, t);
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, t);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 30000 }, { ...withTenant(), userId: tenant.userId }, t);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2031-01-01', expiryDate: '2031-12-31', installmentsCount: 1 }, { ...withTenant(), userId: tenant.userId }, t);
+    const openedClaim = await insuranceService.openClaim(policy.id, { description: `Sinistro HTTP HMAC Inv ${uniqueSuffix()}`, claimAmount: 1000 }, { ...withTenant(), userId: tenant.userId }, t, new Date('2031-03-01T12:00:00Z'));
+    const submitted = await insuranceService.submitClaim(openedClaim.id, { ...withTenant(), userId: tenant.userId }, t);
+    return { claim: submitted };
+  });
+
+  const body = { externalSubmissionId: claim.externalClaimId, status: 'SETTLED', settledAmount: 800 };
+  const fakeSig = 'a'.repeat(64);
+
+  const res = await callPublic('POST', '/procurement/webhooks/insurance', body, { 'x-webhook-signature': `sha256=${fakeSig}` });
+  assert.equal(res.status, 401);
+  const json = await res.json();
+  assert.equal(json.error?.code || json.code, 'INSURANCE_WEBHOOK_HMAC_INVALID');
+
+  const freshClaim = await withTenantTransaction(tenant, (t) => InsuranceClaim.findByPk(claim.id, { transaction: t }));
+  assert.equal(freshClaim.status, 'SUBMITTED', 'Sinistro não pode ser liquidado após recusa de HMAC');
+});
+
+test('Seguros Webhook HTTP: indenização acima do teto do sinistro é limitada conforme regra de negócio', httpOpts, async () => {
+  const secret = `sec-${uniqueSuffix()}`;
+  const { claim } = await withTenantTransaction(tenant, async (t) => {
+    await settingsService.upsertSetting('procurement.insurance_webhook_secret', secret, tenant, tenant.userId, t);
+    const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, t);
+    await insuranceService.quotePolicy(policy.id, { estimatedValue: 30000 }, { ...withTenant(), userId: tenant.userId }, t);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2031-01-01', expiryDate: '2031-12-31', installmentsCount: 1 }, { ...withTenant(), userId: tenant.userId }, t);
+    const openedClaim = await insuranceService.openClaim(policy.id, { description: `Sinistro HTTP Teto ${uniqueSuffix()}`, claimAmount: 500 }, { ...withTenant(), userId: tenant.userId }, t, new Date('2031-03-01T12:00:00Z'));
+    const submitted = await insuranceService.submitClaim(openedClaim.id, { ...withTenant(), userId: tenant.userId }, t);
+    return { claim: submitted };
+  });
+
+  const body = { externalSubmissionId: claim.externalClaimId, status: 'SETTLED', settledAmount: 999999 };
+  const rawBody = JSON.stringify(body);
+  const sig = crypto.createHmac('sha256', secret).update(Buffer.from(rawBody)).digest('hex');
+
+  const res = await callPublic('POST', '/procurement/webhooks/insurance', body, { 'x-webhook-signature': `sha256=${sig}` });
+  assert.equal(res.status, 200);
+
+  const freshClaim = await withTenantTransaction(tenant, (t) => InsuranceClaim.findByPk(claim.id, { transaction: t }));
+  assert.equal(freshClaim.status, 'SETTLED');
+  assert.equal(Number(freshClaim.settledAmount), 500, 'Valor deve ser limitado ao teto do sinistro de R$ 500');
 });

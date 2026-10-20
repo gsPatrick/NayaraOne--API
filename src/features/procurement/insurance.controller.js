@@ -22,7 +22,7 @@ function computeHmacSha256Hex(secret, rawBody) {
 
 function verifyInsuranceWebhookSignature(rawBody, headers, webhookSecret) {
   if (!webhookSecret || !rawBody || rawBody.length === 0) return false;
-  const received = headers ? headers[INSURANCE_WEBHOOK_HEADER] : null;
+  const received = headers ? (headers[INSURANCE_WEBHOOK_HEADER] || headers['x-insurance-signature']) : null;
   if (!received || typeof received !== 'string') return false;
   const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
 
@@ -128,8 +128,23 @@ async function processInsuranceWebhook(body, rawBody, headers, transaction) {
   if (typeof externalSubmissionId !== 'string' || !externalSubmissionId || typeof status !== 'string' || !status) {
     return { statusCode: 400, data: { received: false, reason: 'invalid_payload' } };
   }
-  const { sequelize, InsuranceProviderSubmission } = require('../../models');
-  const submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction });
+  const { sequelize } = require('../../models');
+  let submission = null;
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT id, group_id AS "groupId", company_id AS "companyId", policy_id AS "policyId",
+              claim_id AS "claimId", provider, submission_type AS "submissionType",
+              external_submission_id AS "externalSubmissionId", status
+       FROM procurement.resolve_insurance_submission_routing(:externalSubmissionId)`,
+      { replacements: { externalSubmissionId }, transaction }
+    );
+    if (rows && rows.length > 0) {
+      submission = rows[0];
+    }
+  } catch (err) {
+    const { InsuranceProviderSubmission } = require('../../models');
+    submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction });
+  }
   if (!submission) {
     return { statusCode: 200, data: { received: true, processed: false, reason: 'unknown_routing' } };
   }

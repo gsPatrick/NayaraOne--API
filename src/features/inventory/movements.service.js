@@ -189,21 +189,56 @@ async function assertAdjustmentOrigin({ groupId, companyId, inventoryItemId, mov
 //     requisição (ou, se for requisição de obra, que a obra seja a mesma) e um responsável;
 //   - COUNT, LOSS_CASE e ADJUSTMENT_PROPOSAL continuam validados pelos blocos próprios abaixo.
 const KNOWN_SOURCE_TYPES = ['MANUAL', 'RECEIPT', 'REQUISITION', 'TOOL_LOAN', 'ADJUSTMENT', 'COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL', 'PURCHASE_ORDER_CANCEL'];
-const SOURCE_MODELS = { RECEIPT: InventoryReceipt, TOOL_LOAN: InventoryToolLoan, PURCHASE_ORDER_CANCEL: PurchaseOrder };
-async function assertMovementSource({ groupId, companyId, inventoryItemId, sourceType, sourceId, responsiblePersonId, projectId }, transaction) {
+const VALID_SOURCES_BY_MOVEMENT_TYPE = {
+  IN: ['RECEIPT', 'MANUAL', 'PURCHASE_ORDER_CANCEL'],
+  OUT: ['REQUISITION', 'MANUAL'],
+  RETURN: ['TOOL_LOAN', 'MANUAL'],
+  TRANSFER: ['MANUAL'],
+  ADJUSTMENT: ['COUNT', 'ADJUSTMENT_PROPOSAL', 'MANUAL'],
+  LOSS: ['LOSS_CASE'],
+  DISPOSAL: ['ADJUSTMENT_PROPOSAL', 'MANUAL'],
+};
+
+const SOURCE_MODELS = {
+  RECEIPT: InventoryReceipt,
+  TOOL_LOAN: InventoryToolLoan,
+  PURCHASE_ORDER_CANCEL: PurchaseOrder,
+  COUNT: InventoryCount,
+  LOSS_CASE: InventoryLossCase,
+  ADJUSTMENT_PROPOSAL: InventoryAdjustmentProposal,
+};
+
+async function assertMovementSource({ groupId, companyId, inventoryItemId, movementType, sourceType, sourceId, responsiblePersonId, projectId }, transaction) {
   const type = sourceType || 'MANUAL';
   if (!KNOWN_SOURCE_TYPES.includes(type)) {
     throw AppError.badRequest(`Origem do movimento desconhecida ("${sourceType}").`, 'INVENTORY_MOVEMENT_SOURCE_INVALID');
   }
+
+  // Validação da matriz de combinações válidas entre movementType e sourceType
+  if (movementType) {
+    const allowed = VALID_SOURCES_BY_MOVEMENT_TYPE[movementType] || ['MANUAL'];
+    if (!allowed.includes(type)) {
+      throw AppError.badRequest(
+        `A origem "${type}" não é permitida para movimentações do tipo "${movementType}".`,
+        'INVENTORY_MOVEMENT_SOURCE_INVALID'
+      );
+    }
+  }
+
   if (type === 'MANUAL') {
     if (sourceId) throw AppError.badRequest('Movimento manual não pode apontar uma origem ("sourceId").', 'INVENTORY_MOVEMENT_SOURCE_INVALID');
+    if (movementType === 'OUT' && !responsiblePersonId) {
+      throw AppError.badRequest('Saída manual de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+    }
     return;
   }
-  if (['COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL'].includes(type)) return; // validadas pelos blocos específicos
+
   if (!sourceId) {
     throw AppError.badRequest(`Origem "${type}" exige o identificador do registro de origem ("sourceId").`, 'INVENTORY_MOVEMENT_SOURCE_REQUIRED');
   }
+
   const notFound = () => AppError.badRequest('A origem informada não existe nesta empresa.', 'INVENTORY_MOVEMENT_SOURCE_INVALID');
+
   if (type === 'REQUISITION') {
     const req = await InventoryRequisition.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
     if (req) {
@@ -223,6 +258,25 @@ async function assertMovementSource({ groupId, companyId, inventoryItemId, sourc
     }
     return;
   }
+
+  if (type === 'LOSS_CASE') {
+    const lc = await InventoryLossCase.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!lc) throw notFound();
+    if (lc.inventoryItemId !== inventoryItemId) {
+      throw AppError.badRequest('O caso de perda não pertence ao item deste movimento.', 'INVENTORY_MOVEMENT_SOURCE_ITEM_MISMATCH');
+    }
+    return;
+  }
+
+  if (type === 'ADJUSTMENT_PROPOSAL') {
+    const prop = await InventoryAdjustmentProposal.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!prop) throw notFound();
+    if (prop.inventoryItemId !== inventoryItemId) {
+      throw AppError.badRequest('A proposta de ajuste não pertence ao item deste movimento.', 'INVENTORY_MOVEMENT_SOURCE_ITEM_MISMATCH');
+    }
+    return;
+  }
+
   const Model = SOURCE_MODELS[type];
   if (Model) {
     const found = await Model.findOne({ where: { id: sourceId, groupId, companyId }, attributes: ['id'], transaction });
@@ -400,11 +454,11 @@ async function recordMovement(payload, actor, transaction) {
   // (requisição, devolução de ferramenta etc.) já chegam aqui com `sourceType` preenchido e
   // controlado pelo próprio fluxo de origem — essa exigência vale só pra saída manual genuína
   // (sem sourceType, ou MANUAL), que é onde a baixa sem controle de fato acontecia.
-  if (movementType === 'OUT' && (!sourceType || sourceType === 'MANUAL') && !responsiblePersonId) {
-    throw AppError.badRequest('Saída manual de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+  if (movementType === 'OUT' && !responsiblePersonId) {
+    throw AppError.badRequest('Saída de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
   }
   // Revisão Marco 7 (20/10/2026), M7-F03 — origem e responsável validados no servidor.
-  await assertMovementSource({ groupId, companyId, inventoryItemId, sourceType, sourceId, responsiblePersonId, projectId }, transaction);
+  await assertMovementSource({ groupId, companyId, inventoryItemId, movementType, sourceType, sourceId, responsiblePersonId, projectId }, transaction);
   if (responsiblePersonId) {
     const person = await Person.findOne({ where: { id: responsiblePersonId, groupId, companyId }, attributes: ['id'], transaction });
     if (!person) throw AppError.badRequest('O responsável informado não existe nesta empresa.', 'INVENTORY_MOVEMENT_RESPONSIBLE_INVALID');
