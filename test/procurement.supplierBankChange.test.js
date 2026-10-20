@@ -27,7 +27,7 @@ const bankAccountsService = require('../src/features/finance/bankAccounts.servic
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const antifraudService = require('../src/features/finance/financeAntifraud.service');
 const approvalsService = require('../src/features/finance/approvals.service');
-const { Person, BankAccount, FinancialEntry, User } = require('../src/models');
+const { BankAccount, FinancialEntry, User } = require('../src/models');
 
 // FIX FIN-004 (ver financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE com
 // bankAccountId agora exige aprovação prévia. Estes testes são sobre COOLDOWN de conta
