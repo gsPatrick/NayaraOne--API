@@ -346,6 +346,28 @@ function verifyProviderWebhookSignature(provider, rawBody, headers, webhookSecre
   return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
+/**
+ * B1 (revisão 19/10/2026): o sandbox não tem provedor/HMAC por trás — antes qualquer usuário com
+ * legal:sign marcava SIGNED sem prova. Agora (1) sandbox é recusado com
+ * DEPLOY_ENVIRONMENT=production e (2) o payload precisa trazer o hash do documento
+ * (contentHash/documentHash), que o service confere contra a versão enviada para assinatura.
+ */
+function assertSandboxWebhookAllowed(body, env) {
+  if (env.DEPLOY_ENVIRONMENT === 'production') {
+    throw AppError.forbidden(
+      'Webhook de assinatura em modo sandbox não é aceito em produção — configure um provedor real.',
+      'LEGAL_SANDBOX_WEBHOOK_FORBIDDEN_IN_PRODUCTION'
+    );
+  }
+  const payload = body || {};
+  if (!payload.contentHash && !payload.documentHash) {
+    throw AppError.badRequest(
+      'Informe o hash do documento assinado (contentHash) no payload do webhook.',
+      'LEGAL_WEBHOOK_HASH_REQUIRED'
+    );
+  }
+}
+
 const signatureWebhook = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction(async (t) => {
     const tenant = { groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -365,6 +387,8 @@ const signatureWebhook = catchAsync(async (req, res) => {
           'LEGAL_WEBHOOK_HMAC_INVALID'
         );
       }
+    } else {
+      assertSandboxWebhookAllowed(req.body, process.env);
     }
 
     return signaturesService.handleSignatureWebhook(req.params.externalSignatureId, req.body, t);
@@ -770,7 +794,7 @@ module.exports = {
   upgradeContractTemplateClause, listClauseTemplateUsage,
   createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
   createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause, approveClauseCondition,
-  initiateSignature, listSignaturesByContractVersion, signatureWebhook, clicksignPublicWebhook, verifyProviderWebhookSignature,
+  initiateSignature, listSignaturesByContractVersion, signatureWebhook, assertSandboxWebhookAllowed, clicksignPublicWebhook, verifyProviderWebhookSignature,
   checkSignatureStatus, cancelSignature,
   createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
   createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
