@@ -54,7 +54,7 @@ test('inventory: abrir OS de manutenção direto trava o asset em MAINTENANCE (n
     assert.equal(asset.status, 'MAINTENANCE', 'abrir a OS precisa travar o asset — não pode ficar AVAILABLE com manutenção OPEN');
 
     await assert.rejects(
-      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      async () => toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_ASSET_UNAVAILABLE');
@@ -77,7 +77,7 @@ test('inventory: não é possível abrir OS de manutenção sobre um asset empre
       tenant.userId,
       transaction
     );
-    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     await assert.rejects(
       () => maintenanceService.openMaintenanceOrder(withTenant({ assetId: asset.id, description: 'x' }), tenant.userId, transaction),
@@ -98,7 +98,7 @@ test('inventory: returnTool com devolução danificada continua abrindo manuten�
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const { maintenanceOrder } = await toolLoansService.returnTool(loan.id, { conditionCode: 'DAMAGED' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.ok(maintenanceOrder);
@@ -120,7 +120,7 @@ test('inventory: devolver a ferramenta limpa o custodiante do asset (assignedToU
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await asset.reload({ transaction });
     assert.equal(asset.assignedToUserId, tenant.userId);
 
@@ -139,7 +139,7 @@ test('inventory: devolução danificada também limpa o custodiante (mesmo indo 
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     await toolLoansService.returnTool(loan.id, { conditionCode: 'DAMAGED' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await asset.reload({ transaction });
@@ -166,7 +166,7 @@ test('inventory: emprestar a ferramenta move currentLocationId pro destino, e de
     );
     assert.equal(asset.currentLocationId, origin.id);
 
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await asset.reload({ transaction });
     assert.equal(asset.currentLocationId, destination.id, 'empréstimo precisa mover o asset pro destino registrado (EST-006/EST-014)');
 

@@ -13,6 +13,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { recordApprovedAdjustment } = require('./testHelpers');
 const AppError = require('../src/utils/AppError');
 const itemsService = require('../src/features/inventory/items.service');
 const receiptsService = require('../src/features/inventory/receipts.service');
@@ -186,31 +187,23 @@ test('Gap 2 (EST-TS-12): reenviar a MESMA idempotencyKey duas vezes devolve o mo
     const item = await createItem(transaction);
     const key = `adj-test-${uniqueSuffix()}`;
 
-    const first = await movementsService.recordMovement(
-      withTenant({
+    const first = await recordApprovedAdjustment(tenant, withTenant({
         inventoryItemId: item.id,
         movementType: 'ADJUSTMENT',
         quantity: 2,
         destinationLocationId: location.id,
         reason: 'Ajuste manual de teste',
         idempotencyKey: key,
-      }),
-      approver,
-      transaction
-    );
+      }), transaction);
 
-    const second = await movementsService.recordMovement(
-      withTenant({
+    const second = await recordApprovedAdjustment(tenant, withTenant({
         inventoryItemId: item.id,
         movementType: 'ADJUSTMENT',
         quantity: 2,
         destinationLocationId: location.id,
         reason: 'Ajuste manual de teste',
         idempotencyKey: key,
-      }),
-      approver,
-      transaction
-    );
+      }), transaction);
 
     assert.equal(second.id, first.id, 'reenvio da mesma idempotencyKey deve devolver o movimento original, não criar outro');
 

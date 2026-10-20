@@ -28,6 +28,8 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const assetsService = require('../src/features/inventory/assets.service');
@@ -153,7 +155,7 @@ test('EST-TS-11 RLS Estoque/Patrimônio: leitura e escrita cross-company bloquea
 
     const asset = await assetsService.createAsset(withTenant({ name: `HOMO QA RLS M7 Asset ${suffix}`, assetTag: `RLSM7-${suffix}`, currentLocationId: warehouse.id }), tenant.userId, transaction);
     const assetMovement = await assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: otherLoc.id }, tenant.userId, transaction);
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: otherLoc.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: otherLoc.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia-rls.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA-RLS').toString('base64'), category: 'generic' }),
@@ -216,7 +218,7 @@ test('EST-TS-11 RLS Compras: leitura e escrita cross-company bloqueadas em todas
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);

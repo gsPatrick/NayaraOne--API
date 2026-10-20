@@ -58,7 +58,7 @@ async function createTestStockLink(transaction, qty = 200) {
 
 async function createTestProject(transaction) {
   const suffix = uniqueSuffix();
-  return projectsService.createProject(
+  const project = await projectsService.createProject(
     {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
@@ -67,6 +67,11 @@ async function createTestProject(transaction) {
     tenant.userId,
     transaction
   );
+  // Revisão Marco 7 (19/10/2026), A7: a baixa de estoque para a obra exige a etapa — cada obra de
+  // teste ganha uma etapa, informada no recebimento (testStageId).
+  const stage = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Etapa de teste' }, tenant.userId, transaction);
+  project.testStageId = stage.id;
+  return project;
 }
 
 test('material-request: criar requisição publica evento material.requested', async () => {
@@ -209,7 +214,7 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
     const { item, location } = await createTestStockLink(transaction, 5000);
     const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     assert.equal(received.status, 'RECEIVED');
     assert.ok(received.receivedAt);
@@ -223,7 +228,7 @@ test('material-request: receber marca RECEIVED e publica material.received (idem
     // Confirmar recebimento uma segunda vez tem que bloquear — não pode disparar o evento de
     // novo nem voltar silenciosamente sem erro (mesmo padrão de "não duplicar" do módulo).
     await assert.rejects(
-      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id }),
+      () => materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id, stageId: project.testStageId }),
       (err) => {
         assert.equal(err.code, 'MATERIAL_REQUEST_ALREADY_RECEIVED');
         return true;
@@ -267,7 +272,7 @@ test('material-request: devolução de material recebido credita o saldo de volt
     );
     await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReceive, 80);
@@ -387,7 +392,7 @@ test('material-request: receber com vínculo de estoque debita o saldo real (OUT
 
     const received = await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     assert.equal(received.status, 'RECEIVED');
 
@@ -420,7 +425,7 @@ test('material-request: listMaterialRequests filtra por status', async () => {
       transaction
     );
     const { item, location } = await createTestStockLink(transaction, 50);
-    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id });
+    await materialRequestsService.receiveMaterialRequest(requestA.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, { inventoryItemId: item.id, sourceLocationId: location.id, stageId: project.testStageId });
 
     const received = await materialRequestsService.listMaterialRequests(project.id, transaction, { status: 'RECEIVED' });
     assert.equal(received.length, 1);
@@ -447,7 +452,7 @@ test('material-request: devolução REUSABLE credita o saldo e persiste reusable
     );
     await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReceive, 80);
@@ -496,7 +501,7 @@ test('material-request: devolução DAMAGED credita o saldo e persiste returnCos
     );
     await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReceive, 80);
@@ -537,7 +542,7 @@ test('material-request: devolução DAMAGED credita o saldo e persiste returnCos
     );
     await materialRequestsService.receiveMaterialRequest(requestB.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     const { returnDetails: defaultDetails } = await materialRequestsService.returnMaterialRequest(
       requestB.id,
@@ -567,7 +572,7 @@ test('material-request: devolução LOST NÃO credita o saldo — material nunca
     );
     await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: item.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
     const balanceAfterReceive = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balanceAfterReceive, 8, 'saída real de 2 unidades deve reduzir o saldo de 10 para 8');
@@ -618,7 +623,7 @@ test('material-request: devolução recusa item diferente do que foi consumido n
     );
     await materialRequestsService.receiveMaterialRequest(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: itemA.id,
-      sourceLocationId: location.id,
+      sourceLocationId: location.id, stageId: project.testStageId,
     });
 
     await assert.rejects(

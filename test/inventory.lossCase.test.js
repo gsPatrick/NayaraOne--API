@@ -53,7 +53,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const file = await filesService.uploadFile(
       withTenant({ fileName: 'evidencia.jpg', mimeType: 'image/jpeg', contentBase64: Buffer.from('EVIDENCIA').toString('base64'), category: 'generic' }),
@@ -77,7 +77,7 @@ test('inventory: aprovar loss_case de um Asset marca o patrimônio como LOST e l
     assert.equal(asset.assignedToUserId, null, 'custodiante precisa ser limpo — a perda já foi formalizada');
 
     await assert.rejects(
-      async () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      async () => toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'TOOL_LOAN_ASSET_UNAVAILABLE');
@@ -129,7 +129,7 @@ test('inventory: aprovar a perda de um Asset ainda emprestado fecha o loan e blo
       tenant.userId,
       transaction
     );
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.equal(loan.status, 'OPEN');
 
     const file = await filesService.uploadFile(
@@ -231,9 +231,11 @@ test('inventory: loss_case de item ACIMA da alçada por valor nasce PENDING_APPR
   });
 });
 
-// Perda ABAIXO da alçada: autoaprova na abertura (mesmo caminho/efeitos de decideLossCase),
-// sem exigir nenhuma chamada separada com inventory:approve.
-test('inventory: loss_case de item ABAIXO da alçada por valor autoaprova na abertura (gera movimento LOSS imediatamente)', async () => {
+// Perda ABAIXO da alçada — REGRA ALTERADA na revisão Marco 7 (19/10/2026), item A2: a
+// autoaprovação foi removida (usava o valor informado pelo próprio solicitante e aprovava sem
+// segunda pessoa). Abaixo da alçada o caso nasce OPEN e continua esperando a decisão de outra
+// pessoa — nenhum movimento na abertura. Ver também test/marco7rev19.A.test.js.
+test('inventory: loss_case de item ABAIXO da alçada NÃO autoaprova — nasce OPEN e espera decisão de outra pessoa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     await upsertApprovalThreshold(
@@ -272,10 +274,10 @@ test('inventory: loss_case de item ABAIXO da alçada por valor autoaprova na abe
       tenant.userId,
       transaction
     );
-    assert.equal(lossCase.status, 'APPROVED', 'perda abaixo da alçada precisa autoaprovar na própria abertura');
-    assert.ok(lossCase.resultingMovementId, 'autoaprovação precisa gerar o movimento LOSS imediatamente');
+    assert.notEqual(lossCase.status, 'APPROVED', 'perda abaixo da alçada não se autoaprova');
+    assert.equal(lossCase.resultingMovementId, null, 'nenhum movimento LOSS na abertura');
 
     const balance = await inventoryMovementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction);
-    assert.equal(balance, 90, 'saldo já cai na abertura, sem esperar decisão separada');
+    assert.equal(balance, 100, 'saldo intacto até a decisão de outra pessoa');
   });
 });

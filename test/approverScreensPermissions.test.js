@@ -48,9 +48,9 @@ before(async () => {
 const SCREENS = {
   'Painel (abas que o aprovador vê: Visão geral e Contatos)': ['/people', '/people/duplicates'],
   'Estoque > Itens': ['/inventory/items', '/inventory/locations', '/construction/projects'],
-  'Estoque > Movimentos': ['/inventory/items', '/inventory/locations', '/inventory/movements', '/people'],
+  'Estoque > Movimentos': ['/inventory/items', '/inventory/locations', '/inventory/movements', '/inventory/adjustment-proposals?status=PENDING', '/people'],
   'Estoque > Recebimentos (NF)': ['/inventory/receipts', '/inventory/items', '/inventory/locations', '/people'],
-  'Estoque > Requisições': ['/inventory/requisitions', '/inventory/items', '/inventory/locations', '/construction/projects'],
+  'Estoque > Requisições': ['/inventory/requisitions', '/inventory/items', '/inventory/locations', '/construction/projects', '/people'],
   'Estoque > Patrimônio, Ferramentas & QR': ['/assets', '/inventory/locations', '/users', '/tool-loans?status=OPEN', '/tool-loans?status=OVERDUE'],
   'Estoque > Manutenção': ['/maintenance-orders', '/assets', '/users'],
   'Estoque > Perdas & Extravios': ['/inventory/loss-cases', '/inventory/items', '/inventory/locations', '/assets', '/inventory/nay/loss-case-anomalies', '/people'],

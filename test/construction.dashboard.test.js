@@ -139,8 +139,11 @@ test('dashboard: projectedMarginTotal/projectedTotalCostTotal consideram consume
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `QA Dashboard retirante ${Date.now()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
+    // Revisão Marco 7 (19/10/2026), A7: saída de material para a obra exige a etapa.
+    const projectStagesService = require('../src/features/construction/projectStages.service');
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Estrutura' }), tenant.userId, transaction);
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, stageId: stage.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );

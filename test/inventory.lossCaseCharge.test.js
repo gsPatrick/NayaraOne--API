@@ -56,9 +56,12 @@ async function employee(transaction) {
   );
 }
 
-async function openAssetLossCase(transaction, extra = {}) {
+async function openAssetLossCase(transaction, { estimatedCost, ...extra } = {}) {
   const suffix = uniqueSuffix();
-  const asset = await assetsService.createAsset(withTenant({ name: `Furadeira ${suffix}`, assetTag: `CHG-${suffix}` }), tenant.userId, transaction);
+  // Revisão Marco 7 (A2): o custo do caso é calculado no servidor — para patrimônio, é o valor
+  // contábil (aquisição, sem depreciação para item novo). O valor "estimativa" do teste vira o
+  // valor de aquisição do ativo.
+  const asset = await assetsService.createAsset(withTenant({ name: `Furadeira ${suffix}`, assetTag: `CHG-${suffix}`, acquisitionValue: estimatedCost }), tenant.userId, transaction);
   const file = await evidence(transaction);
   const lossCase = await lossCasesService.openLossCase(
     withTenant({ assetId: asset.id, context: 'Ferramenta quebrada por uso indevido.', evidenceFileIds: [file.id], ...extra }),

@@ -228,6 +228,9 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     const inventoryMovementsService = require('../src/features/inventory/movements.service');
 
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
+    // Revisão Marco 7 (19/10/2026), A7: saída de material para a obra exige a etapa.
+    const projectStagesService = require('../src/features/construction/projectStages.service');
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Estrutura' }), tenant.userId, transaction);
 
     const location = await InventoryLocation.create(
       withTenant({ name: `HOMO QA Deposito ${Date.now()}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }),
@@ -268,7 +271,7 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
       { transaction }
     );
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 20, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, stageId: stage.id, movementType: 'OUT', quantity: 20, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );
@@ -292,7 +295,7 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     // custo total projetado SUBIR acima do orçado — prova de que consumedInventoryCost está de
     // fato integrado, não só exposto no JSON sem efeito.
     await inventoryMovementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, projectId: project.id, movementType: 'OUT', quantity: 25, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
+      withTenant({ inventoryItemId: item.id, projectId: project.id, stageId: stage.id, movementType: 'OUT', quantity: 25, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
       transaction
     );

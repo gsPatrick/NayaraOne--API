@@ -112,7 +112,7 @@ test('EST-TS-05: ferramenta já emprestada não pode sair de novo sem devolver a
 
     await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: warehouse.id },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: warehouse.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
       tenant.userId,
       tenant.groupId,
       tenant.companyId,
@@ -122,7 +122,7 @@ test('EST-TS-05: ferramenta já emprestada não pode sair de novo sem devolver a
     await assert.rejects(
       () => toolLoansService.loanTool(
         asset.id,
-        { personUserId: tenant.userId, destinationLocationId: warehouse.id },
+        { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: warehouse.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
         tenant.userId,
         tenant.groupId,
         tenant.companyId,

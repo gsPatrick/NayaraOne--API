@@ -104,7 +104,7 @@ test('Gap 1 (EST-006): loanTool sem destinationLocationId é recusado', async ()
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      () => toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('TOOL_LOAN_VALIDATION')
     );
     await asset.reload({ transaction });
@@ -116,7 +116,7 @@ test('Gap 1 (EST-006): loanTool com destino inexistente é recusado com erro de 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const asset = await createAsset(transaction);
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: '00000000-0000-4000-8000-000000000000' }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      () => toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: '00000000-0000-4000-8000-000000000000', dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('INVENTORY_LOCATION_NOT_FOUND')
     );
   });
@@ -129,7 +129,7 @@ test('Gap 1 (EST-006): loanTool registra responsável, destino e data prevista, 
     const asset = await createAsset(transaction, { currentLocationId: origin.id });
     const dueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id, dueAt }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.equal(loan.personUserId, tenant.userId);
     assert.equal(loan.destinationLocationId, destination.id);
     assert.equal(loan.sourceLocationId, origin.id);
@@ -334,7 +334,7 @@ test('Gap 3 (§9): não baixa ferramenta emprestada — exige devolução antes'
     const asset = await createAsset(transaction);
     const destination = await createLocation(transaction);
     const evidence = await createEvidence(transaction);
-    await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await assert.rejects(
       () => assetsService.disposeAsset(asset.id, tenant.groupId, tenant.companyId, { disposalType: 'DISCARD', reason: 'x', evidenceFileIds: [evidence.id] }, approver, transaction),
       expectCode('ASSET_DISPOSAL_ASSET_LOANED')
@@ -381,7 +381,7 @@ test('Gap 3 (§9): patrimônio baixado é terminal — não pode ser baixado de 
       expectCode('ASSET_ALREADY_DISPOSED')
     );
     await assert.rejects(
-      () => toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: destination.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      () => toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       expectCode('TOOL_LOAN_ASSET_UNAVAILABLE')
     );
     await assert.rejects(
@@ -440,7 +440,7 @@ test('Gap 4 (§10): com contagem OPEN, qualquer movimento tocando o local é blo
       { movementType: 'OUT', quantity: 1, sourceLocationId: frozen.id, responsiblePersonId: retirante.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: frozen.id, destinationLocationId: other.id },
       { movementType: 'TRANSFER', quantity: 1, sourceLocationId: other.id, destinationLocationId: frozen.id },
-      { movementType: 'ADJUSTMENT', quantity: 1, destinationLocationId: frozen.id, reason: 'ajuste manual', idempotencyKey: `gap4-frozen-adj-${uniqueSuffix()}` },
+      { movementType: 'ADJUSTMENT', quantity: 1, destinationLocationId: frozen.id, reason: 'ajuste de contagem', sourceType: 'COUNT', sourceId: count.id, idempotencyKey: `gap4-frozen-adj-${uniqueSuffix()}` },
     ]) {
       await assert.rejects(
         () => movementsService.recordMovement(withTenant({ inventoryItemId: item.id, ...payload }), approver, transaction),
@@ -482,7 +482,9 @@ test('Gap 4 (§10): baixa de requisição a partir de almoxarifado em contagem �
     await requisitionsService.decideRequisition(requisition.id, 'APPROVED', reqDecider.userId, tenant.groupId, tenant.companyId, transaction);
     await countsService.openCount(withTenant({ locationId: warehouse.id }), tenant.userId, transaction);
 
-    await assert.rejects(() => requisitionsService.issueRequisition(requisition.id, approver, tenant.groupId, tenant.companyId, transaction), expectCode('INVENTORY_LOCATION_FROZEN_BY_COUNT'));
+    const { Person } = require('../src/models');
+    const retirante = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `HOMO QA Gap4 retirante ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
+    await assert.rejects(() => requisitionsService.issueRequisition(requisition.id, approver, tenant.groupId, tenant.companyId, transaction, { responsiblePersonId: retirante.id }), expectCode('INVENTORY_LOCATION_FROZEN_BY_COUNT'));
     assert.equal(await movementsService.getBalance(item.id, warehouse.id, tenant.groupId, tenant.companyId, transaction), 10);
   });
 });

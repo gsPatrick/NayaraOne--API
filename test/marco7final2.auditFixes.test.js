@@ -17,6 +17,8 @@ const {
   uniqueSuffix,
   createTestCostCenter,
 } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const { getWeeklyHealthReport, countOverdueEntries } = require('../src/features/finance/financialHealthReport.service');
 const { startOfBusinessDay, isDueDateOverdue } = require('../src/utils/businessDate');
@@ -128,7 +130,7 @@ async function overReceiptScenario(transaction, { invoice }) {
   const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   const offer = await procurementService.submitSupplierOffer(
     quotation.id, tenant.groupId, tenant.companyId,
-    { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 6 }] },
+    { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 6 }] },
     transaction
   );
   const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -173,7 +175,10 @@ test('F2-4: nota da divergência aceita é legível — sem UUID, sem "payable",
     assert.match(notes, new RegExp(`NF nº ${invoice}`), `cita a NF: ${notes}`);
 
     const payable = await FinancialEntry.findOne({
-      where: { idempotencyKey: { [require('sequelize').Op.like]: `%over-receipt-accepted:${overReceipt.id}` } },
+      // Revisão Marco 7 (19/10/2026), B1: o excedente aceito não gera mais um segundo lançamento —
+      // o payable ÚNICO do recebimento é reajustado (chave goods-receipt:<id>[:reconciled:<divergência>]).
+      where: { idempotencyKey: { [require('sequelize').Op.like]: 'goods-receipt:%' }, description: { [require('sequelize').Op.ne]: null } },
+      order: [['created_at', 'DESC']],
       transaction,
     });
     assert.ok(payable);

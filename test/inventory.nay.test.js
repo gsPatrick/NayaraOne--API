@@ -4,12 +4,15 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const requisitionsService = require('../src/features/inventory/requisitions.service');
 const lossCasesService = require('../src/features/inventory/lossCases.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const projectsService = require('../src/features/construction/projects.service');
+const projectStagesService = require('../src/features/construction/projectStages.service');
 const settingsService = require('../src/features/settings/settings.service');
 const filesService = require('../src/features/files/files.service');
 const nay = require('../src/features/inventory/inventoryNay.service');
@@ -70,7 +73,8 @@ async function createActiveProjectWithSite(transaction) {
     tenant.userId,
     transaction
   );
-  return { project, site };
+  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Etapa' }), tenant.userId, transaction);
+  return { project, site, stage };
 }
 async function suggestionsForItem(itemId, transaction) {
   return AiRecommendation.findAll({ where: { recommendationType: nay.RECOMMENDATION_TYPE_PURCHASE, relatedEntityId: itemId }, transaction });
@@ -124,23 +128,24 @@ test('EST-013/§12: NAY sugere compra a partir de consumo, obra ativa, lead time
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const item = await createItem(transaction, { minimumQuantity: 10 });
     const warehouse = await createWarehouse(transaction);
-    const { project, site } = await createActiveProjectWithSite(transaction);
+    const { project, site, stage } = await createActiveProjectWithSite(transaction);
     await settingsService.upsertSetting('inventory.nay_default_lead_time_days', 14, tenant, tenant.userId, transaction);
 
     await stockIn(item, warehouse, 100, transaction);
     // Consumo real: requisição da obra ativa entregue (OUT 75 do almoxarifado).
     const issued = await requisitionsService.createRequisition(
-      withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, projectId: project.id, items: [{ inventoryItemId: item.id, quantity: 75 }] }),
+      withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, projectId: project.id, stageId: stage.id, items: [{ inventoryItemId: item.id, quantity: 75 }] }),
       tenant.userId,
       transaction
     );
     // Segregação: quem criou a requisição (tenant.userId) não pode decidi-la.
     const decider = await secondDecider(transaction);
     await requisitionsService.decideRequisition(issued.id, 'APPROVED', decider.userId, tenant.groupId, tenant.companyId, transaction);
-    await requisitionsService.issueRequisition(issued.id, actor(), tenant.groupId, tenant.companyId, transaction);
+    const resp = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Resp NAY ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
+    await requisitionsService.issueRequisition(issued.id, actor(), tenant.groupId, tenant.companyId, transaction, { responsiblePersonId: resp.id });
     // Demanda comprometida da obra ativa ainda não baixada.
     await requisitionsService.createRequisition(
-      withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, projectId: project.id, items: [{ inventoryItemId: item.id, quantity: 20 }] }),
+      withTenant({ warehouseLocationId: warehouse.id, projectLocationId: site.id, projectId: project.id, stageId: stage.id, items: [{ inventoryItemId: item.id, quantity: 20 }] }),
       tenant.userId,
       transaction
     );
@@ -288,7 +293,7 @@ test('NAY Estoque: lead time OBSERVADO no histórico real de Compras (pedido -> 
     );
     await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
-    const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] }, transaction);
+    const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] }, transaction);
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     // Fixture: o pedido foi emitido 12 dias antes do recebimento.
     await sequelize.query("UPDATE procurement.purchase_orders SET created_at = NOW() - INTERVAL '12 days' WHERE id = :id", { replacements: { id: order.id }, transaction });
@@ -344,15 +349,18 @@ test('EST-TS-14: NAY sinaliza recorrência/valor anômalo em loss_cases SEM deci
     );
     const file = await evidence(transaction);
 
-    const open = (estimatedCost) =>
+    // A2: o custo estimado é calculado no servidor (quantidade × custo médio) — o cliente não o
+    // informa mais. Custo médio R$ 100 → quantidades 1, 1 e 10 dão R$ 100, 100 e 1000.
+    await item.update({ averageCost: 100 }, { transaction });
+    const open = (quantity) =>
       lossCasesService.openLossCase(
-        withTenant({ inventoryItemId: item.id, locationId: warehouse.id, quantity: 1, responsiblePersonId: responsible.id, context: 'Material sumiu do almoxarifado.', evidenceFileIds: [file.id], estimatedCost }),
+        withTenant({ inventoryItemId: item.id, locationId: warehouse.id, quantity, responsiblePersonId: responsible.id, context: 'Material sumiu do almoxarifado.', evidenceFileIds: [file.id] }),
         tenant.userId,
         transaction
       );
-    const a = await open(100);
-    const b = await open(100);
-    const c = await open(1000);
+    const a = await open(1);
+    const b = await open(1);
+    const c = await open(10);
 
     const analysis = await nay.analyzeLossCaseAnomalies(tenant, {}, transaction);
     assert.equal(analysis.financialEffect, 'NONE');

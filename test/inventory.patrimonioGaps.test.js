@@ -79,7 +79,7 @@ test('Item 7: transferAsset recusa transferir uma ferramenta emprestada (LOANED)
     const destination = await loanDestination(transaction);
     await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: destination.id },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
       tenant.userId,
       tenant.groupId,
       tenant.companyId,
@@ -164,7 +164,7 @@ test('Item 10: loanTool recusa emprestar asset com caso de perda OPEN', async ()
       () =>
         toolLoansService.loanTool(
           asset.id,
-          { personUserId: tenant.userId, destinationLocationId: destination.id },
+          { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
           tenant.userId,
           tenant.groupId,
           tenant.companyId,
@@ -230,7 +230,7 @@ test('Item 11 (achado "check" #3): getAssetByTag mostra empréstimo/devolução 
     const destination = await loanDestination(transaction);
     const loan = await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: destination.id },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
       tenant.userId,
       tenant.groupId,
       tenant.companyId,
@@ -265,7 +265,7 @@ test('Item 11: getAssetByTag mostra o empréstimo ativo (ferramenta emprestada)'
     const destination = await loanDestination(transaction);
     const loan = await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: destination.id },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
       tenant.userId,
       tenant.groupId,
       tenant.companyId,

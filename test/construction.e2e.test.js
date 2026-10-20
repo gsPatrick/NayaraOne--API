@@ -114,9 +114,18 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       { userId: tenant.userId, canApprove: true },
       transaction
     );
+    // Etapa (revisão Marco 7, A7: a baixa de estoque para a obra exige a etapa)
+    const stage = await projectStagesService.createProjectStage(
+      project.id,
+      withTenant({ name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000 }),
+      tenant.userId,
+      transaction
+    );
+    assert.equal(stage.stageCode, 'FUND-01');
     const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: stockItem.id,
       sourceLocationId: stockLocation.id,
+      stageId: stage.id,
     });
     assert.equal(receivedRequest.status, 'RECEIVED');
 
@@ -138,14 +147,8 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     );
     assert.ok(report.id);
 
-    // 6. Etapa
-    const stage = await projectStagesService.createProjectStage(
-      project.id,
-      withTenant({ name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000 }),
-      tenant.userId,
-      transaction
-    );
-    assert.equal(stage.stageCode, 'FUND-01');
+    // 6. Etapa — criada antes do recebimento do material (passo 3): revisão Marco 7 (19/10/2026),
+    // A7 — a baixa de estoque para a obra exige a etapa.
 
     // 7. Medição: criar (DRAFT) -> submeter -> revisar -> aprovar (dispara pagamento real)
     const measurement = await stageMeasurementsService.createStageMeasurement(

@@ -12,6 +12,17 @@ const { InventoryMaintenanceOrder } = require('../src/models');
 
 let tenant;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const { businessDateKey } = require('../src/utils/businessDate');
+
+// Revisão Marco 7 (19/10/2026), A3: o empréstimo não aceita mais dueAt no passado. Para testar o
+// escalonamento, cria com uma data válida e "faz o tempo passar" regravando due_at direto no
+// banco (dentro da transação de rollback do teste).
+async function backdateLoan(loan, pastDate, transaction) {
+  const dueKey = businessDateKey(pastDate);
+  await sequelize.query('UPDATE inventory.tool_loans SET due_at = :d WHERE id = :id', { replacements: { d: dueKey, id: loan.id }, transaction });
+  await loan.reload({ transaction });
+  return loan;
+}
 
 before(async () => {
   tenant = await getSeedTenant();
@@ -44,13 +55,13 @@ test('inventory: toolLoanOverdueJob cria Notification real pro responsável quan
       transaction
     );
 
-    const loan = await toolLoansService.loanTool(
+    const loan = await backdateLoan(await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * DAY_MS).toISOString() },
       tenant.userId,
       tenant.groupId, tenant.companyId,
       transaction
-    );
+    ), new Date(Date.now() - 24 * 60 * 60 * 1000), transaction);
     assert.equal(loan.status, 'OPEN');
 
     const result = await escalateOverdueToolLoans(transaction);
@@ -78,13 +89,13 @@ test('inventory: toolLoanOverdueJob é idempotente — rodar de novo não duplic
       tenant.userId,
       transaction
     );
-    await toolLoansService.loanTool(
+    await backdateLoan(await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * DAY_MS).toISOString() },
       tenant.userId,
       tenant.groupId, tenant.companyId,
       transaction
-    );
+    ), new Date(Date.now() - 24 * 60 * 60 * 1000), transaction);
 
     const first = await escalateOverdueToolLoans(transaction);
     assert.equal(first.escalated, 1);
@@ -113,13 +124,13 @@ test('inventory: o responsável notificado pela ferramenta atrasada realmente te
       transaction
     );
 
-    const loan = await toolLoansService.loanTool(
+    const loan = await backdateLoan(await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() - 4 * DAY_MS) },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * DAY_MS).toISOString() },
       tenant.userId,
       tenant.groupId, tenant.companyId,
       transaction
-    );
+    ), new Date(Date.now() - 4 * DAY_MS), transaction);
 
     const result = await escalateOverdueToolLoans(transaction);
     assert.ok(result.notified >= 1);
@@ -185,21 +196,22 @@ test('inventory: dueAt do empréstimo nunca perde um dia por conversão de fuso 
       transaction
     );
 
+    const futureDateKey = businessDateKey(new Date(Date.now() + 10 * DAY_MS));
     const loan = await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: '2026-10-01' },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: futureDateKey },
       tenant.userId,
       tenant.groupId, tenant.companyId,
       transaction
     );
-    assert.equal(loan.dueAt, '2026-10-01', 'a data prevista precisa ser EXATAMENTE a digitada, sem deslocar um dia');
+    assert.equal(loan.dueAt, futureDateKey, 'a data prevista precisa ser EXATAMENTE a digitada, sem deslocar um dia');
 
     await loan.reload({ transaction });
-    assert.equal(loan.dueAt, '2026-10-01', 'relendo do banco, continua exatamente a mesma data');
+    assert.equal(loan.dueAt, futureDateKey, 'relendo do banco, continua exatamente a mesma data');
 
     const movements = await assetsService.listAssetMovements(asset.id, tenant.groupId, tenant.companyId, transaction);
     const loanEntry = movements.find((m) => m.movementType === 'LOAN');
-    assert.equal(loanEntry.dueAt, '2026-10-01', 'a listagem de histórico também precisa manter a data exata');
+    assert.equal(loanEntry.dueAt, futureDateKey, 'a listagem de histórico também precisa manter a data exata');
   });
 });
 
@@ -219,7 +231,7 @@ test('inventory: data do empréstimo é persistida e aparece no histórico e na 
 
     const loan = await toolLoansService.loanTool(
       asset.id,
-      { personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id },
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: (await loanDestination(transaction)).id, dueAt: new Date(Date.now() + 7 * DAY_MS).toISOString() },
       tenant.userId,
       tenant.groupId, tenant.companyId,
       transaction

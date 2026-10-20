@@ -14,6 +14,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { recordApprovedAdjustment } = require('./testHelpers');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const receiptsService = require('../src/features/inventory/receipts.service');
@@ -103,11 +104,7 @@ test('M7CHECK-01b: Ajuste só com destino (aumentar) continua funcionando normal
     const suffix = uniqueSuffix();
     const { item, warehouseA } = await createItemAndTwoWarehouses(transaction, suffix);
 
-    await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 5, destinationLocationId: warehouseA.id, sourceType: 'MANUAL', reason: 'Ajuste de conferência (só destino).', idempotencyKey: `m7check-adj-dest-${suffix}` }),
-      actorOf({ canApprove: true }),
-      transaction
-    );
+    await recordApprovedAdjustment(tenant, withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 5, destinationLocationId: warehouseA.id, sourceType: 'MANUAL', reason: 'Ajuste de conferência (só destino).', idempotencyKey: `m7check-adj-dest-${suffix}` }), transaction);
 
     const balance = await movementsService.getBalance(item.id, warehouseA.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balance, 5);
@@ -124,11 +121,7 @@ test('M7CHECK-01c: Ajuste só com origem (diminuir) continua funcionando normalm
       actorOf({ canApprove: true }),
       transaction
     );
-    await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 3, sourceLocationId: warehouseA.id, sourceType: 'MANUAL', reason: 'Ajuste de conferência (só origem).', idempotencyKey: `m7check-adj-src-${suffix}` }),
-      actorOf({ canApprove: true }),
-      transaction
-    );
+    await recordApprovedAdjustment(tenant, withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 3, sourceLocationId: warehouseA.id, sourceType: 'MANUAL', reason: 'Ajuste de conferência (só origem).', idempotencyKey: `m7check-adj-src-${suffix}` }), transaction);
 
     const balance = await movementsService.getBalance(item.id, warehouseA.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(balance, 7);

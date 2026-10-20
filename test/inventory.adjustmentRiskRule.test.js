@@ -13,6 +13,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { recordApprovedAdjustment } = require('./testHelpers');
 const itemsService = require('../src/features/inventory/items.service');
 const receiptsService = require('../src/features/inventory/receipts.service');
 const movementsService = require('../src/features/inventory/movements.service');
@@ -90,18 +91,14 @@ test('REG-EST-002: ajuste de baixo valor não exige evidenceFileId', async () =>
     const { item, location } = await createItemAndWarehouse(transaction);
     await receive(transaction, item, location, 100, 1); // averageCost = 1 -> 5 un = R$5, bem abaixo do limiar padrão R$1000
 
-    const movement = await movementsService.recordMovement(
-      withTenant({
+    const movement = await recordApprovedAdjustment(tenant, withTenant({
         inventoryItemId: item.id,
         movementType: 'ADJUSTMENT',
         quantity: 5,
         sourceLocationId: location.id,
         reason: 'Ajuste de baixo valor de teste.',
         idempotencyKey: `adj-risk-low-${uniqueSuffix()}`,
-      }),
-      actor(),
-      transaction
-    );
+      }), transaction);
     assert.ok(movement.id);
   });
 });
@@ -135,8 +132,7 @@ test('REG-EST-002: ajuste de alto valor COM evidenceFileId passa normalmente', a
     await receive(transaction, item, location, 100, 50);
     const file = await createFile(transaction);
 
-    const movement = await movementsService.recordMovement(
-      withTenant({
+    const movement = await recordApprovedAdjustment(tenant, withTenant({
         inventoryItemId: item.id,
         movementType: 'ADJUSTMENT',
         quantity: 30,
@@ -144,10 +140,7 @@ test('REG-EST-002: ajuste de alto valor COM evidenceFileId passa normalmente', a
         reason: 'Ajuste de alto valor de teste, com evidência.',
         evidenceFileId: file.id,
         idempotencyKey: `adj-risk-high-with-evidence-${uniqueSuffix()}`,
-      }),
-      actor(),
-      transaction
-    );
+      }), transaction);
     assert.ok(movement.id);
     assert.equal(movement.evidenceFileId, file.id);
   });
@@ -159,11 +152,7 @@ test('REG-EST-002: limiar é configurável via Motor de Regras (nova versão fec
     await receive(transaction, item, location, 100, 50); // averageCost 50 -> 10 un = R$500
 
     // Limiar padrão R$1000: R$500 passa sem evidência.
-    const low = await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Abaixo do limiar padrão.', idempotencyKey: `adj-risk-threshold-low-${uniqueSuffix()}` }),
-      actor(),
-      transaction
-    );
+    const low = await recordApprovedAdjustment(tenant, withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 10, sourceLocationId: location.id, reason: 'Abaixo do limiar padrão.', idempotencyKey: `adj-risk-threshold-low-${uniqueSuffix()}` }), transaction);
     assert.ok(low.id);
 
     // Abaixa o limiar para R$100 — agora R$500 (ou qualquer ajuste >= R$100) passa a exigir evidência.

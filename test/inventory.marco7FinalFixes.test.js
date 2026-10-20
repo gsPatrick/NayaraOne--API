@@ -17,6 +17,7 @@ const requisitionsService = require('../src/features/inventory/requisitions.serv
 const movementsService = require('../src/features/inventory/movements.service');
 const lossCasesService = require('../src/features/inventory/lossCases.service');
 const projectsService = require('../src/features/construction/projects.service');
+const projectStagesService = require('../src/features/construction/projectStages.service');
 const { User, File } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -70,12 +71,14 @@ test('M7FINAL-01: requisição pra canteiro de obra X ignora obra Y divergente e
       transaction
     );
 
+    const realStage = await projectStagesService.createProjectStage(realProject.id, withTenant({ name: 'Etapa' }), tenant.userId, transaction);
     // Front/cliente malicioso ou desatualizado manda a obra ERRADA junto com o canteiro certo.
     const requisition = await requisitionsService.createRequisition(
       withTenant({
         warehouseLocationId: warehouse.id,
         projectLocationId: siteLocation.id,
         projectId: wrongProject.id,
+        stageId: realStage.id,
         items: [{ inventoryItemId: item.id, quantity: 5 }],
       }),
       tenant.userId,

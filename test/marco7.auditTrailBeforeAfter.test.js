@@ -10,6 +10,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const receiptsService = require('../src/features/inventory/receipts.service');
@@ -113,7 +115,8 @@ test('Marco 7 / estoque: recebimento, OCR, requisição, contagem e NAY gravam a
     const decided = await expectTransition('INVENTORY_REQUISITION_DECIDED', requisition.id, transaction);
     assert.equal(decided.beforeJson.status, 'REQUESTED');
     assert.equal(decided.afterJson.status, 'APPROVED');
-    await requisitionsService.issueRequisition(requisition.id, { userId: decider.id, canApprove: true }, tenant.groupId, tenant.companyId, transaction);
+    const retirante = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Retirante audit ${Date.now()}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction });
+    await requisitionsService.issueRequisition(requisition.id, { userId: decider.id, canApprove: true }, tenant.groupId, tenant.companyId, transaction, { responsiblePersonId: retirante.id });
     const issued = await expectTransition('INVENTORY_REQUISITION_ISSUED', requisition.id, transaction);
     assert.equal(issued.afterJson.status, 'ISSUED');
 
@@ -162,7 +165,7 @@ test('Marco 7 / patrimônio: transferência, empréstimo, devolução, manutenç
     assert.equal(transfer.beforeJson.currentLocationId, origin.id);
     assert.equal(transfer.afterJson.currentLocationId, dest.id);
 
-    const loan = await toolLoansService.loanTool(asset.id, { personUserId: tenant.userId, destinationLocationId: origin.id }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const loan = await toolLoansService.loanTool(asset.id, { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: origin.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     await expectCreation('TOOL_LOAN_CREATED', loan.id, transaction);
     const { maintenanceOrder } = await toolLoansService.returnTool(loan.id, { conditionCode: 'DAMAGED' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     const returned = await expectTransition('TOOL_LOAN_RETURNED', loan.id, transaction);
@@ -199,7 +202,7 @@ test('Marco 7 / compras: requisição, decisão, PO, recebimento, cancelamento e
     assert.equal(prDecided.afterJson.status, 'APPROVED');
 
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
-    const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] }, transaction);
+    const offer = await procurementService.submitSupplierOffer(quotation.id, tenant.groupId, tenant.companyId, { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] }, transaction);
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     await expectTransition('PURCHASE_ORDER_CREATED', order.id, transaction);
 

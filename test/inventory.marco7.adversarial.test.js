@@ -16,6 +16,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { recordApprovedAdjustment } = require('./testHelpers');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const countsService = require('../src/features/inventory/counts.service');
@@ -118,11 +119,7 @@ for (const movementType of ['ADJUSTMENT', 'LOSS', 'DISPOSAL']) {
 test('EST-TS-07 (controle positivo): ADJUSTMENT com motivo e inventory:approve é aceito e altera o saldo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item, location } = await createItemAndLocation(transaction, 10);
-    const movement = await movementsService.recordMovement(
-      withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 2, destinationLocationId: location.id, reason: 'Sobra encontrada na conferência', idempotencyKey: `adversarial-adj-positivo-${uniqueSuffix()}` }),
-      approver(),
-      transaction
-    );
+    const movement = await recordApprovedAdjustment(tenant, withTenant({ inventoryItemId: item.id, movementType: 'ADJUSTMENT', quantity: 2, destinationLocationId: location.id, reason: 'Sobra encontrada na conferência', idempotencyKey: `adversarial-adj-positivo-${uniqueSuffix()}` }), transaction);
     assert.equal(movement.reason, 'Sobra encontrada na conferência');
     assert.equal(await movementsService.getBalance(item.id, location.id, tenant.groupId, tenant.companyId, transaction), 12);
   });
