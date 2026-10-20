@@ -164,7 +164,7 @@ test('CAD-2: rodar o job de novo não repete etapa; job parado executa só a eta
     await run(contract.id, 16, transaction);
     rows = await steps(schedule.id, transaction);
     assert.equal(rows.filter((row) => row.stepCode === 'TASK_D15').length, 1);
-    const notifications = await Notification.count({ where: { userId: tenant.userId, title: { [require('sequelize').Op.like]: `%competência ${schedule.period}%` } }, transaction });
+    const notifications = await Notification.count({ where: { userId: tenant.userId, title: { [require('sequelize').Op.like]: `%competência ${require('../src/utils/formatBR').formatCompetenceBR(schedule.period)}%` } }, transaction });
     assert.ok(notifications >= 1);
     const d5Notifications = rows.filter((row) => row.stepCode === 'NOTICE_D5');
     assert.equal(d5Notifications.length, 1);

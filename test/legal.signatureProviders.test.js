@@ -225,15 +225,23 @@ function invokeController(controllerFn, req) {
   });
 }
 
-test('legal webhook: sandbox continua funcionando SEM exigir HMAC (nenhum provider real configurado)', async () => {
+test('legal webhook: sandbox funciona SEM HMAC, mas só com o hash do documento enviado para assinatura (B1)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     await clearSignatureSettings(transaction);
     const signature = await createLeaseWithSignedContract(transaction);
 
-    const req = buildFakeReq({ params: { externalSignatureId: signature.externalSignatureId }, body: {} });
-    req.withTenantTransaction = (fn) => fn(transaction);
+    // Sem o hash: recusado (400 LEGAL_WEBHOOK_HASH_REQUIRED).
+    const semHash = buildFakeReq({ params: { externalSignatureId: signature.externalSignatureId }, body: {} });
+    semHash.withTenantTransaction = (fn) => fn(transaction);
+    const recusado = await invokeController(legalController.signatureWebhook, semHash);
+    assert.ok(recusado.error, 'sandbox sem hash do documento deveria ser recusado');
+    assert.equal(recusado.error.code, 'LEGAL_WEBHOOK_HASH_REQUIRED');
+    assert.equal(recusado.error.statusCode, 400);
 
-    const { error } = await invokeController(legalController.signatureWebhook, req);
+    // Com o hash da versão enviada: aceito.
+    const comHash = buildFakeReq({ params: { externalSignatureId: signature.externalSignatureId }, body: { contentHash: signature.contentHash } });
+    comHash.withTenantTransaction = (fn) => fn(transaction);
+    const { error } = await invokeController(legalController.signatureWebhook, comHash);
     assert.equal(error, null);
   });
 });

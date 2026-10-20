@@ -32,18 +32,19 @@ test('D1: POST /files com groupId/companyId do tenant B no corpo grava no tenant
   if (skipReason) return t.skip(skipReason);
   const claimsA = JSON.parse(Buffer.from(tokens.A.split('.')[1], 'base64').toString());
   const claimsB = JSON.parse(Buffer.from(tokens.B.split('.')[1], 'base64').toString());
-  assert.notEqual(claimsA.companyId, claimsB.companyId);
+  assert.ok(claimsA.company_id && claimsB.company_id, 'o token precisa trazer company_id');
+  assert.notEqual(claimsA.company_id, claimsB.company_id);
   const res = await fetch(`${baseUrl}/files`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.A}` },
-    body: JSON.stringify({ groupId: claimsB.groupId, companyId: claimsB.companyId, fileName: 'd1.txt', mimeType: 'application/pdf', contentBase64: Buffer.from('%PDF-1.4 d1 fictício').toString('base64'), category: 'documents' }),
+    body: JSON.stringify({ groupId: claimsB.group_id, companyId: claimsB.company_id, fileName: 'd1.txt', mimeType: 'application/pdf', contentBase64: Buffer.from('%PDF-1.4 d1 fictício').toString('base64'), category: 'documents' }),
   });
   const body = await res.json();
   if (res.status === 403) return assert.equal(body.error.code, 'PERMISSION_DENIED'); // maker sem permissão de arquivo: já bloqueado
   assert.equal(res.status, 201, JSON.stringify(body));
-  assert.equal(body.data.companyId, claimsA.companyId);
-  assert.equal(body.data.groupId, claimsA.groupId);
-  assert.notEqual(body.data.companyId, claimsB.companyId);
+  assert.equal(body.data.companyId, claimsA.company_id);
+  assert.equal(body.data.groupId, claimsA.group_id);
+  assert.notEqual(body.data.companyId, claimsB.company_id);
 });
 
 test('B1: webhook sandbox sem hash do documento é recusado (400 LEGAL_WEBHOOK_HASH_REQUIRED)', () => {
