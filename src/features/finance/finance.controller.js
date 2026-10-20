@@ -205,6 +205,11 @@ const matchReconciliation = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => reconciliationService.matchReconciliation(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+// Conciliação em grupo (N lançamentos x M transações), tolerância zero — Caderno §11 / M4-13.
+const matchReconciliationGroup = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => reconciliationService.matchReconciliationGroup(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
 const listReconciliations = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
     reconciliationService.listReconciliations(t, { financialEntryId: req.query.financialEntryId, bankTransactionId: req.query.bankTransactionId })
@@ -690,7 +695,7 @@ module.exports = {
   clearFinancialEntryManualReview, settleFinancialEntryPartial, attachSettlementEvidence, detachSettlementEvidence,
   listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending,
   createBankTransaction, listBankTransactions, importBankStatement,
-  matchReconciliation, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
+  matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
   createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments,
   listAnomalyCases, resolveAnomalyCase,
