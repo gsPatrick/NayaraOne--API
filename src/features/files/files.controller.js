@@ -38,7 +38,8 @@ async function assertNotRestrictedFile(fileId, permissions, transaction) {
 const uploadFile = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     filesService.uploadFile(
-      { groupId: req.auth.groupId, companyId: req.auth.companyId, ...req.body },
+      // O tenant do token sempre vence: groupId/companyId do corpo são ignorados (D1).
+      { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId },
       req.auth.userId,
       t
     )
