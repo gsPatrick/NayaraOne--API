@@ -11,10 +11,22 @@
 #      cabeçalho (commit avaliado, modo do Postgres, usuário do banco);
 #   5. derruba o banco ao final (container removido / cluster parado e diretório apagado).
 #
+# COMANDO COMPLETO (do zero, em qualquer máquina com Node 20 e Docker OU PostgreSQL 16 com initdb):
+#   git clone https://github.com/gsPatrick/NayaraOne--API.git && cd NayaraOne--API
+#   git checkout <HASH-DO-COMMIT>            # o hash declarado na página/log de entrega
+#   npm ci
+#   bash scripts/reproduzir-conferencia.sh   # gera ./test-results.log
+# O script roda, NESTA ORDEM, o mesmo que o job "test" do workflow: lint, syntax-check, scanner de
+# hard-code, SAST, security scan (npm audit), migrations, seeds, role de menor privilégio e a
+# suíte com o MESMO comando do CI:  node --test --test-reporter=spec test/*.test.js
+# (sem --test-concurrency=1; para rodar em série use REPRO_SERIAL=1). Node: o CI usa 20; com outra
+# major o script avisa no cabeçalho do log (ou aborta com REPRO_REQUIRE_NODE20=1).
+# Logs do CI (artifact test-results-<commit>): gh run download <RUN_ID> -R gsPatrick/NayaraOne--API
+#
 # Uso:  bash scripts/reproduzir-conferencia.sh [arquivo-de-saida.log] [padrão-de-testes]
-#       ex.: bash scripts/reproduzir-conferencia.sh
-#            bash scripts/reproduzir-conferencia.sh /tmp/r.log 'test/nayaraConferencia1810*.test.js'
-# Variáveis: REPRO_PG_PORT (padrão 55432), REPRO_FORCE_LOCAL=1 (ignora docker).
+#       ex.: bash scripts/reproduzir-conferencia.sh /tmp/r.log 'test/nayaraConferencia1810*.test.js'
+# Variáveis: REPRO_PG_PORT (padrão 55432), REPRO_FORCE_LOCAL=1 (ignora docker), REPRO_SERIAL=1,
+#            REPRO_SKIP_CHECKS=1 (pula lint/syntax/scanners), REPRO_REQUIRE_NODE20=1.
 #
 # Todos os segredos abaixo são os mesmos "not-for-production" públicos do workflow do CI: só
 # existem dentro do banco descartável deste script.
@@ -23,6 +35,18 @@ set -euo pipefail
 API_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$API_ROOT"
 OUT="${1:-$API_ROOT/test-results.log}"
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$NODE_MAJOR" != "20" ]; then
+  echo "[reproduzir] AVISO: Node $(node -v) — o CI usa Node 20."
+  [ -z "${REPRO_REQUIRE_NODE20:-}" ] || exit 2
+fi
+if [ -z "${REPRO_SKIP_CHECKS:-}" ]; then
+  echo "[reproduzir] lint…";           npm run -s lint
+  echo "[reproduzir] syntax-check…";   npm run -s syntax-check
+  echo "[reproduzir] hard-code…";      node scripts/scanConstructionHardcode.js >/dev/null
+  echo "[reproduzir] SAST…";           node scripts/sastScan.js >/dev/null
+  echo "[reproduzir] security scan…";  node scripts/securityScan.js >/dev/null || echo "[reproduzir] security scan sem rede/falhou (no CI roda online)"
+fi
 PATTERN="${2:-test/*.test.js}"
 PGP="${REPRO_PG_PORT:-55432}"
 DB=nayara_one_ci
@@ -98,21 +122,23 @@ for schema in $("${PSQL[@]}" -t -A -c "SELECT nspname FROM pg_namespace WHERE ns
   "${PSQL[@]}" -q -c "GRANT USAGE ON SCHEMA \"$schema\" TO $APP; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO $APP; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO $APP;" >/dev/null
 done
 
-export DATABASE_URL="postgres://$APP:$APP_PW@127.0.0.1:$PGP/$DB" DB_USER=$APP DB_PASSWORD=$APP_PW NODE_ENV=test CI=true PORT=3011
+export DATABASE_URL="postgres://$APP:$APP_PW@127.0.0.1:$PGP/$DB" DB_USER=$APP DB_PASSWORD=$APP_PW NODE_ENV=test CI=true PORT=3011  # CI=true: o GitHub Actions sempre define
 COMMIT="$(git rev-parse HEAD 2>/dev/null || echo desconhecido)"
-DIRTY="$(git status --porcelain 2>/dev/null | grep -v '^??' | wc -l | tr -d ' ')"
+DIRTY="$({ git status --porcelain 2>/dev/null | grep -v "^??" || true; } | wc -l | tr -d " ")"
 {
-  echo "# Nayara One — resultado individual da suíte de testes (reprodução LOCAL)"
-  echo "# commit avaliado: $COMMIT (arquivos rastreados modificados: $DIRTY)"
+  echo "# Nayara One — resultado individual da suíte de testes (reprodução LOCAL, mesmo comando do CI)"
+  echo "# commit avaliado (branch): $COMMIT (arquivos rastreados modificados: $DIRTY)"
   echo "# postgres: $MODE"
   echo "# usuário do banco na suíte: $APP (NOSUPERUSER NOBYPASSRLS)"
   echo "# node: $(node -v)  data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# padrão: $PATTERN"
+  echo "# padrão: $PATTERN  concorrência: ${REPRO_SERIAL:+serial (--test-concurrency=1)}${REPRO_SERIAL:-padrão do node, igual ao CI}"
   echo "#"
 } > "$OUT"
+CONC=""
+[ -z "${REPRO_SERIAL:-}" ] || CONC="--test-concurrency=1"
 set +e
 # shellcheck disable=SC2086
-node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout $PATTERN 2>&1 | tee -a "$OUT"
+node --test $CONC --test-reporter=spec --test-reporter-destination=stdout $PATTERN 2>&1 | tee -a "$OUT"
 STATUS=${PIPESTATUS[0]}
 set -e
 echo "[reproduzir] saída em $OUT (status $STATUS)"
