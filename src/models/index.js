@@ -144,6 +144,7 @@ const modelDefiners = {
   InventoryToolLoan: require('./InventoryToolLoan'),
   InventoryMaintenanceOrder: require('./InventoryMaintenanceOrder'),
   InventoryLossCase: require('./InventoryLossCase'),
+  InventoryAdjustmentProposal: require('./InventoryAdjustmentProposal'),
   InventoryCount: require('./InventoryCount'),
   InventoryCountItem: require('./InventoryCountItem'),
   FinancingCase: require('./FinancingCase'),
@@ -514,6 +515,12 @@ for (const [name, definer] of Object.entries(modelDefiners)) {
   // retirada (responsiblePersonId) — o dado já era salvo certo, só nunca era resolvido/exibido.
   db.InventoryMovement.belongsTo(db.Person, { foreignKey: 'responsible_person_id', as: 'responsiblePerson', constraints: false });
   db.InventoryLocation.belongsTo(db.Project, { foreignKey: 'project_id', as: 'project', constraints: false });
+  db.InventoryMovement.belongsTo(db.ProjectStage, { foreignKey: 'stage_id', as: 'stage', constraints: false });
+  db.InventoryAdjustmentProposal.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
+  db.InventoryAdjustmentProposal.belongsTo(db.InventoryLocation, { foreignKey: 'source_location_id', as: 'sourceLocation', constraints: false });
+  db.InventoryAdjustmentProposal.belongsTo(db.InventoryLocation, { foreignKey: 'destination_location_id', as: 'destinationLocation', constraints: false });
+  db.InventoryAdjustmentProposal.belongsTo(db.User, { foreignKey: 'proposed_by_user_id', as: 'proposedByUser', constraints: false });
+  db.InventoryAdjustmentProposal.belongsTo(db.User, { foreignKey: 'decided_by_user_id', as: 'decidedByUser', constraints: false });
   db.InventoryStockBalance.belongsTo(db.InventoryItem, { foreignKey: 'inventory_item_id', as: 'inventoryItem', constraints: false });
   db.InventoryStockBalance.belongsTo(db.InventoryLocation, { foreignKey: 'location_id', as: 'location', constraints: false });
   db.InventoryItem.hasMany(db.InventoryStockBalance, { foreignKey: 'inventory_item_id', as: 'stockBalances', constraints: false });

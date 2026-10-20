@@ -82,7 +82,10 @@ async function createReceipt(payload, actorUserId, transaction) {
   if (invoiceNumber) {
     const normalizedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
     const existingByNumber = await InventoryReceipt.findOne({
-      where: { companyId, invoiceNumber: { [Op.iLike]: normalizedInvoiceNumber } },
+      // Revisão Marco 7 (19/10/2026, B11): numeração de NF é por emitente — a duplicidade é por
+      // (empresa, fornecedor, número). Sem fornecedor informado, compara com os recebimentos também
+      // sem fornecedor (nunca libera por omissão).
+      where: { companyId, supplierPersonId: supplierPersonId || null, invoiceNumber: { [Op.iLike]: normalizedInvoiceNumber } },
       transaction,
     });
     if (existingByNumber) {
@@ -203,7 +206,13 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
       const totalQtyBefore = balancesBefore.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
       const oldAverage = item.averageCost != null ? Number(item.averageCost) : Number(line.unitCost);
       const receivedQty = Number(line.quantity);
-      item.averageCost = (totalQtyBefore * oldAverage + receivedQty * Number(line.unitCost)) / (totalQtyBefore + receivedQty);
+      // Revisão Marco 7 (19/10/2026), A10: com saldo negativo (item que permite estoque
+      // negativo) o denominador ficava 0 (divisão por zero → erro no banco) ou a média saía
+      // distorcida (ex.: saldo −3 a 20 + 6 a 40 = 60, acima de qualquer custo real). Saldo ≤ 0
+      // não tem valor a ponderar: a quantidade anterior entra como 0 e o custo médio passa a ser
+      // o custo desta entrada — nunca uma média com denominador ≤ 0.
+      const weightedQtyBefore = Math.max(0, totalQtyBefore);
+      item.averageCost = (weightedQtyBefore * oldAverage + receivedQty * Number(line.unitCost)) / (weightedQtyBefore + receivedQty);
       item.updatedBy = actor.userId || null;
       await item.save({ transaction });
     }
@@ -219,6 +228,8 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
         sourceType: 'RECEIPT',
         sourceId: receipt.id,
         idempotencyKey: `receipt:${receipt.id}:item:${line.id}`,
+        // A1/EST-011: entrada guarda o custo da nota (custo histórico do movimento).
+        unitCost: line.unitCost != null ? line.unitCost : undefined,
         reason: options.movementReason
           || (receipt.invoiceNumber
             ? `Recebimento da nota fiscal nº ${receipt.invoiceNumber}.`

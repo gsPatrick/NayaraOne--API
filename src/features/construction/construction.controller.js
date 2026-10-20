@@ -393,9 +393,10 @@ const listMaterialRequests = catchAsync(async (req, res) => {
 const receiveMaterialRequest = catchAsync(async (req, res) => {
   // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07): item/local do Estoque agora são
   // obrigatórios pra confirmar o recebimento — ver materialRequests.service.js.
-  const { inventoryItemId, sourceLocationId } = req.body || {};
+  // Revisão Marco 7 (19/10/2026), A7: `stageId` informa a etapa quando a requisição não tem.
+  const { inventoryItemId, sourceLocationId, stageId } = req.body || {};
   const item = await req.withTenantTransaction((t) =>
-    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t, { inventoryItemId, sourceLocationId })
+    materialRequestsService.receiveMaterialRequest(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t, { inventoryItemId, sourceLocationId, stageId })
   );
   return success(res, { data: item });
 });

@@ -154,6 +154,23 @@ async function receiveMaterialRequest(id, groupId, companyId, actorUserId, trans
     );
   }
 
+  // Revisão Marco 7 (19/10/2026), A7 — EST-004 ("Material consumido precisa de
+  // project_id/stage_id") / Caderno M7 §5 ("OUT vincula project_id/stage_id"): a baixa de estoque
+  // desta confirmação é um OUT da obra e passou a exigir a etapa. Requisição criada sem etapa
+  // (legado/campo opcional na criação) informa a etapa aqui, no recebimento — validada contra a
+  // obra e gravada na própria requisição.
+  if (!materialRequest.stageId) {
+    const stageIdFromReceive = stockLink?.stageId || null;
+    if (!stageIdFromReceive) {
+      throw AppError.badRequest('Informe a etapa da obra em que o material será usado — a baixa de estoque para a obra exige a etapa.', 'MATERIAL_REQUEST_STAGE_REQUIRED');
+    }
+    const stage = await ProjectStage.findOne({ where: { id: stageIdFromReceive, projectId: materialRequest.projectId }, transaction });
+    if (!stage) {
+      throw AppError.badRequest('"stageId" não corresponde a uma etapa desta obra.', 'MATERIAL_REQUEST_STAGE_INVALID');
+    }
+    materialRequest.stageId = stage.id;
+  }
+
   materialRequest.status = 'RECEIVED';
   materialRequest.receivedAt = new Date();
   materialRequest.updatedBy = actorUserId || null;

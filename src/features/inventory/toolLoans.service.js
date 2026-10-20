@@ -5,8 +5,47 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { openMaintenanceOrder } = require('./maintenance.service');
 const { publishToolLoanCreated, publishToolReturned } = require('./inventoryEvents.service');
+const { businessDateKey, startOfBusinessDay } = require('../../utils/businessDate');
 
 const CONDITION_CODES = ['OK', 'DAMAGED'];
+
+// Revisão Marco 7 (19/10/2026), A3 — EST-006 ("Saída de ferramenta registra responsável, destino,
+// DATA PREVISTA DE RETORNO e condição") e §8 "Ferramenta atrasada gera tarefa/escalonamento":
+// dueAt era opcional — sem ele o empréstimo nunca fica atrasado e nunca escalona. Agora é
+// obrigatório, precisa ser uma data válida de hoje em diante e no máximo TOOL_LOAN_MAX_DAYS adiante. O
+// Caderno não fixa o limite; escolhemos 90 dias (o mais conservador que ainda cobre uma etapa
+// longa de obra) — empréstimo mais longo deve ser renovado (devolução + nova saída), o que
+// força a conferência física periódica da ferramenta.
+const TOOL_LOAN_MAX_DAYS = 90;
+
+// dueAt é DATA de calendário (coluna DATEONLY): validado no fuso de São Paulo — de hoje (devolução
+// no mesmo dia é permitida) até hoje + TOOL_LOAN_MAX_DAYS. Data pura "AAAA-MM-DD" é usada como
+// veio; instante ISO vira a data de calendário de São Paulo (o Front manda meio-dia de SP).
+function parseLoanDueAt(dueAt, now = new Date()) {
+  if (dueAt == null || dueAt === '') {
+    throw AppError.badRequest('Informe a data prevista de devolução da ferramenta.', 'TOOL_LOAN_DUE_AT_INVALID');
+  }
+  let dateKey = null;
+  if (typeof dueAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueAt)) {
+    const probe = new Date(`${dueAt}T12:00:00Z`);
+    if (!Number.isNaN(probe.getTime()) && probe.toISOString().slice(0, 10) === dueAt) dateKey = dueAt;
+  } else {
+    const parsed = new Date(dueAt);
+    if (!Number.isNaN(parsed.getTime())) dateKey = businessDateKey(parsed);
+  }
+  if (!dateKey) {
+    throw AppError.badRequest('A data prevista de devolução não é uma data válida.', 'TOOL_LOAN_DUE_AT_INVALID');
+  }
+  const today = businessDateKey(now);
+  const max = businessDateKey(startOfBusinessDay(now, TOOL_LOAN_MAX_DAYS));
+  if (dateKey < today) {
+    throw AppError.badRequest('A data prevista de devolução não pode estar no passado.', 'TOOL_LOAN_DUE_AT_INVALID');
+  }
+  if (dateKey > max) {
+    throw AppError.badRequest(`A data prevista de devolução pode ser no máximo ${TOOL_LOAN_MAX_DAYS} dias a partir de hoje.`, 'TOOL_LOAN_DUE_AT_INVALID');
+  }
+  return dateKey;
+}
 
 // Guia do Marcelo §6/§7: loanTool exige asset AVAILABLE (EST-TS-05: ferramenta já emprestada
 // não pode sair de novo); returnTool exige condition_code e abre manutenção se DAMAGED.
@@ -16,6 +55,7 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   // responsável, destino, data prevista de retorno E condição na saída — só os 3 primeiros eram
   // exigidos. Condição é opcional na API (nem toda ferramenta tem inspeção formal de saída), mas
   // quando informada precisa ser um dos códigos válidos — mesma validação do retorno.
+  // Revisão Marco 7 (20/10/2026), M7-F04 — EST-006 exige a condição na saída: obrigatória e válida.
   if (conditionOutCode && !CONDITION_CODES.includes(conditionOutCode)) {
     throw AppError.badRequest(`A condição informada não é válida — escolha uma de: ${CONDITION_CODES.join(', ')}.`, 'TOOL_LOAN_VALIDATION');
   }
@@ -28,6 +68,10 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   // registrado e asset.currentLocationId ficava apontando pro almoxarifado de origem (EST-014).
   if (!destinationLocationId) {
     throw AppError.badRequest('O local de destino da ferramenta é obrigatório.', 'TOOL_LOAN_VALIDATION');
+  }
+  const parsedDueAt = parseLoanDueAt(dueAt);
+  if (!conditionOutCode) {
+    throw AppError.badRequest('A condição da ferramenta na saída é obrigatória.', 'TOOL_LOAN_VALIDATION');
   }
   const destination = await InventoryLocation.findOne({ where: { id: destinationLocationId, groupId, companyId }, transaction });
   if (!destination) {
@@ -43,7 +87,9 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
   // já usa pra bloquear baixa com loss case aberto — um asset com InventoryLossCase OPEN está em
   // apuração de perda/extravio; emprestá-lo de novo antes da decisão humana contradiria o
   // próprio caso em andamento (o item "perdido" sairia de novo pra campo).
-  const openLossCase = await InventoryLossCase.findOne({ where: { assetId, status: 'OPEN' }, transaction });
+  // Revisão Marco 7 (19/10/2026), A5: PENDING_APPROVAL (caso acima da alçada) também é caso não
+  // decidido — antes só OPEN bloqueava.
+  const openLossCase = await InventoryLossCase.findOne({ where: { assetId, groupId, companyId, status: ['OPEN', 'PENDING_APPROVAL'] }, transaction });
   if (openLossCase) {
     await registrarTentativaBloqueada(
       {
@@ -75,7 +121,7 @@ async function loanTool(assetId, payload, actorUserId, groupId, companyId, trans
       personUserId,
       destinationLocationId,
       sourceLocationId: asset.currentLocationId || null,
-      dueAt: dueAt || null,
+      dueAt: parsedDueAt,
       conditionOutCode: conditionOutCode || null,
       status: 'OPEN',
       createdBy: actorUserId || null,
@@ -201,4 +247,4 @@ async function listToolLoans(groupId, companyId, transaction, { status, assetId 
   return InventoryToolLoan.findAll({ where, order: [['created_at', 'DESC']], limit: 1500, transaction });
 }
 
-module.exports = { CONDITION_CODES, loanTool, returnTool, listToolLoans };
+module.exports = { CONDITION_CODES, TOOL_LOAN_MAX_DAYS, loanTool, returnTool, listToolLoans };

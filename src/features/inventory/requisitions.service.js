@@ -1,6 +1,6 @@
 'use strict';
 
-const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage, Project, User } = require('../../models');
+const { InventoryRequisition, InventoryRequisitionItem, InventoryLocation, InventoryItem, ProjectStage, Project, User, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
@@ -56,11 +56,9 @@ async function createRequisition(payload, actorUserId, transaction) {
     if (projectLocation.locationType === 'PROJECT_SITE') {
       if (projectLocation.projectId) {
         // Canteiro já vinculado a uma obra no cadastro: essa é a única obra válida pra essa
-        // requisição, independente do que o formulário tiver enviado. Se a etapa enviada não
-        // pertencer a essa obra, descarta a etapa em vez de travar a requisição inteira.
-        if (String(projectId || '') !== String(projectLocation.projectId)) {
-          stageId = null;
-        }
+        // requisição, independente do que o formulário tiver enviado. Revisão Marco 7
+        // (19/10/2026), A7: a etapa deixou de ser descartada em silêncio quando não pertence a
+        // essa obra — com a etapa obrigatória, a validação abaixo recusa com erro claro.
         projectId = projectLocation.projectId;
       } else if (!projectId) {
         // Canteiro legado (criado antes da correção F2), ainda sem obra no próprio cadastro —
@@ -76,6 +74,12 @@ async function createRequisition(payload, actorUserId, transaction) {
   // GAP REAL CORRIGIDO (auditoria de conformidade contratual Marco 7, 2026-10-07): EST-004 exige
   // project_id/stage_id — stageId era gravado sem nenhuma validação (aceitava etapa de OUTRA obra
   // ou etapa sem obra nenhuma). Mesmo padrão de materialRequests.service.js#createMaterialRequest.
+  // Revisão Marco 7 (19/10/2026), A7 — EST-004 / Caderno §5 ("Obra/etapa solicita material";
+  // "OUT vincula project_id/stage_id"): requisição para obra sem etapa era aceita e virava OUT
+  // sem etapa. Agora a etapa é obrigatória sempre que houver obra.
+  if (projectId && !stageId) {
+    throw AppError.badRequest('Requisição para obra exige a etapa — escolha em qual etapa o material será usado.', 'INVENTORY_REQUISITION_STAGE_REQUIRED');
+  }
   if (stageId) {
     if (!projectId) {
       throw AppError.badRequest('Informe a obra antes de escolher a etapa (a etapa pertence a uma obra).', 'INVENTORY_REQUISITION_VALIDATION');
@@ -199,11 +203,24 @@ async function decideRequisition(requisitionId, decision, actorUserId, groupId, 
   return requisition;
 }
 
-async function issueRequisition(requisitionId, actor, groupId, companyId, transaction) {
+// Revisão Marco 7 (19/10/2026), A7 — Caderno §5 "OUT vincula project_id/stage_id e responsável":
+// a entrega para obra passa a exigir a pessoa que recebe o material (responsiblePersonId, do
+// cadastro de Pessoas desta empresa), gravada no OUT e na entrada no canteiro.
+async function issueRequisition(requisitionId, actor, groupId, companyId, transaction, payload = {}) {
   const requisition = await InventoryRequisition.findOne({ where: { id: requisitionId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!requisition) throw AppError.notFound('Requisição não encontrada.', 'INVENTORY_REQUISITION_NOT_FOUND');
   if (requisition.status !== 'APPROVED') {
     throw AppError.badRequest(`Só é possível entregar uma requisição em APPROVED (atual: ${requisition.status}).`, 'INVENTORY_REQUISITION_INVALID_TRANSITION');
+  }
+  const responsiblePersonId = payload?.responsiblePersonId || null;
+  if (requisition.projectId && !responsiblePersonId) {
+    throw AppError.badRequest('Entrega para obra exige o responsável que recebe o material.', 'INVENTORY_REQUISITION_RESPONSIBLE_REQUIRED');
+  }
+  if (responsiblePersonId) {
+    const responsible = await Person.findOne({ where: { id: responsiblePersonId, groupId, companyId }, transaction });
+    if (!responsible) {
+      throw AppError.badRequest('Responsável informado não encontrado no cadastro de pessoas desta empresa.', 'INVENTORY_REQUISITION_RESPONSIBLE_NOT_FOUND');
+    }
   }
   const items = await InventoryRequisitionItem.findAll({ where: { requisitionId: requisition.id, groupId, companyId }, transaction });
 
@@ -225,6 +242,7 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
         movementType: 'OUT',
         quantity: Number(line.quantity) - Number(line.issuedQuantity),
         sourceLocationId: requisition.warehouseLocationId,
+        responsiblePersonId: responsiblePersonId || undefined,
         sourceType: 'REQUISITION',
         sourceId: requisition.id,
         idempotencyKey: `req:${requisition.id}:item:${line.id}`,
@@ -262,6 +280,7 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
           destinationLocationId: requisition.projectLocationId,
           projectId: requisition.projectId,
           stageId: requisition.stageId,
+          responsiblePersonId: responsiblePersonId || undefined,
           sourceType: 'REQUISITION',
           sourceId: requisition.id,
           idempotencyKey: `req:${requisition.id}:item:${line.id}:site-in`,
@@ -280,6 +299,7 @@ async function issueRequisition(requisitionId, actor, groupId, companyId, transa
         status: requisition.status,
         warehouseLocationId: requisition.warehouseLocationId,
         projectLocationId: requisition.projectLocationId,
+        responsiblePersonId,
         lines: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, issuedQuantity: l.issuedQuantity })),
       },
       reason: 'Requisição entregue — baixa de estoque gerada.' },

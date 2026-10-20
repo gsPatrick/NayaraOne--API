@@ -12,10 +12,9 @@ const {
   LossRecord,
   MaintenanceCase,
   WarrantyAction,
-  InventoryMovement,
-  InventoryItem,
 } = require('../../models');
 const { getTeamAndMaterialByActionIds } = require('./warrantyActionTeamMaterialColumns');
+const { getConsumedInventoryCostByProject } = require('../inventory/inventoryCost.service');
 
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o contrato ("CONSTRUÇÃO + OBRAS + PÓS-OBRA —
 // BLINDADO v1", seção "Painéis principais" e "9. KPIs Obras" do caderno de BI) exige DOIS
@@ -93,19 +92,10 @@ async function getConstructionDashboard(filters, transaction) {
   // de estoque real, o painel agregado (Centro de Comando) subestimava o custo total e inflava
   // a margem projetada exibida, divergindo do drill-down por obra (getProjectHealth) — viés
   // sistemático de ocultar prejuízo por consumo de estoque no agregado.
-  const inventoryMovements = projectIds.length
-    ? await InventoryMovement.findAll({ where: { projectId: { [Op.in]: projectIds }, movementType: { [Op.in]: ['OUT', 'RETURN'] } }, transaction })
-    : [];
-  const inventoryItemIds = [...new Set(inventoryMovements.map((m) => m.inventoryItemId))];
-  const inventoryItems = inventoryItemIds.length
-    ? await InventoryItem.findAll({ where: { id: { [Op.in]: inventoryItemIds } }, transaction })
-    : [];
-  const inventoryCostById = new Map(inventoryItems.map((i) => [i.id, toNumber(i.averageCost)]));
-  const consumedInventoryCostTotal = inventoryMovements.reduce((acc, m) => {
-    const unitCost = inventoryCostById.get(m.inventoryItemId) || 0;
-    const sign = m.movementType === 'RETURN' ? -1 : 1;
-    return acc + sign * toNumber(m.quantity) * unitCost;
-  }, 0);
+  // Revisão Marco 7 (19/10/2026), A1/EST-011: mesma conta do drill-down por obra (custo histórico
+  // gravado no movimento, política de custódia — inventory/inventoryCost.service.js).
+  const consumedByProject = await getConsumedInventoryCostByProject(projectIds, transaction);
+  const consumedInventoryCostTotal = [...consumedByProject.values()].reduce((acc, v) => acc + v, 0);
 
   const marginBudgetBaseTotal = committedCostTotal + approvedChangesTotal;
 
@@ -127,12 +117,7 @@ async function getConstructionDashboard(filters, transaction) {
   for (const c of changeOrders) changeOrdersByProject.set(c.projectId, (changeOrdersByProject.get(c.projectId) || 0) + toNumber(c.budgetImpact));
   const actualCostByProject = new Map();
   for (const e of settledEntries) actualCostByProject.set(e.constructionProjectId, (actualCostByProject.get(e.constructionProjectId) || 0) + toNumber(e.amount));
-  const inventoryCostByProject = new Map();
-  for (const m of inventoryMovements) {
-    const unitCost = inventoryCostById.get(m.inventoryItemId) || 0;
-    const sign = m.movementType === 'RETURN' ? -1 : 1;
-    inventoryCostByProject.set(m.projectId, (inventoryCostByProject.get(m.projectId) || 0) + sign * toNumber(m.quantity) * unitCost);
-  }
+  const inventoryCostByProject = consumedByProject;
   const stagesByProject = new Map();
   for (const s of stages) {
     if (!stagesByProject.has(s.projectId)) stagesByProject.set(s.projectId, []);

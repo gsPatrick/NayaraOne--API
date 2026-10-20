@@ -1,11 +1,12 @@
 'use strict';
 
-const { sequelize, InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, User, Person } = require('../../models');
+const { sequelize, InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, InventoryAdjustmentProposal, ProjectStage, Project, User, Person, InventoryRequisition, InventoryRequisitionItem, MaterialRequest, InventoryReceipt, InventoryToolLoan, PurchaseOrder } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
 const { getMinStockPolicy, resolveMinimumForLocation } = require('./minStockRules.service');
 const { getActiveHighValueThreshold } = require('./adjustmentRiskRules.service');
+const { getProjectChargedUnitCost } = require('./inventoryCost.service');
 
 // EST-00x (Caderno Marco 7): 7 tipos de movimento. ADJUSTMENT/LOSS/DISPOSAL exigem
 // inventory:approve (mesmo padrão de alçada já usado em construction:approve/finance:approve)
@@ -91,6 +92,144 @@ async function assertLocationsNotFrozenByCount(locationIds, groupId, companyId, 
   }
 }
 
+function finiteOrNull(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Revisão Marco 7 (19/10/2026), A1 — EST-011: custo HISTÓRICO do movimento, gravado no fato.
+// Regra (ver inventoryCost.service.js para a política de custódia da obra):
+//   - entrada por recebimento (IN/RECEIPT): custo da nota (`unitCost` informado pelo recebimento);
+//   - material saindo da custódia da obra (RETURN da obra, TRANSFER canteiro → fora): custo pelo
+//     qual a obra foi cobrada, limitado ao custo informado (devolução avariada vale menos) —
+//     devolver nunca credita mais do que foi cobrado;
+//   - demais: custo médio do item NESTE momento.
+// Item sem custo conhecido grava null (a obra trata como 0, como antes).
+async function resolveMovementCost({ item, movementType, qty, resolvedProjectId, sourceLocationId, destinationLocationId, sourceType, unitCostOverride, groupId, companyId }, transaction) {
+  const currentAverage = finiteOrNull(item.averageCost);
+  const override = finiteOrNull(unitCostOverride);
+  if (override != null && override < 0) {
+    throw AppError.badRequest('"unitCost" do movimento não pode ser negativo.', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  let unitCost = currentAverage;
+
+  if (movementType === 'IN' && sourceType === 'RECEIPT' && override != null) {
+    unitCost = override;
+  } else if (resolvedProjectId && (movementType === 'RETURN' || movementType === 'TRANSFER')) {
+    let leavesProject = movementType === 'RETURN';
+    if (movementType === 'TRANSFER') {
+      const sites = await InventoryLocation.findAll({
+        where: { id: [sourceLocationId, destinationLocationId].filter(Boolean), groupId, companyId, locationType: 'PROJECT_SITE', projectId: resolvedProjectId },
+        attributes: ['id'],
+        transaction,
+      });
+      const siteIds = new Set(sites.map((l) => l.id));
+      leavesProject = siteIds.has(sourceLocationId) && !siteIds.has(destinationLocationId);
+    }
+    if (leavesProject) {
+      const charged = await getProjectChargedUnitCost(resolvedProjectId, item.id, transaction);
+      unitCost = charged != null ? charged : currentAverage;
+      if (override != null) unitCost = unitCost != null ? Math.min(unitCost, override) : override;
+    }
+  }
+
+  if (unitCost == null) return { unitCost: null, totalCost: null };
+  const roundedUnit = Math.round(unitCost * 1e6) / 1e6;
+  return { unitCost: roundedUnit, totalCost: Math.round(qty * unitCost * 100) / 100 };
+}
+
+// Revisão Marco 7 (19/10/2026), A6 — origem obrigatória de ADJUSTMENT/DISPOSAL (ver recordMovement).
+async function assertAdjustmentOrigin({ groupId, companyId, inventoryItemId, movementType, quantity, sourceType, sourceId, sourceLocationId, destinationLocationId }, actor, transaction) {
+  if (movementType === 'ADJUSTMENT' && sourceType === 'COUNT' && sourceId) {
+    const count = await InventoryCount.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (count) return;
+  }
+  if (sourceType === 'ADJUSTMENT_PROPOSAL' && sourceId) {
+    const proposal = await InventoryAdjustmentProposal.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    const matches = proposal
+      && proposal.status === 'APPROVED'
+      && proposal.movementType === movementType
+      && proposal.inventoryItemId === inventoryItemId
+      && Number(proposal.quantity) === Number(quantity)
+      && (proposal.sourceLocationId || null) === (sourceLocationId || null)
+      && (proposal.destinationLocationId || null) === (destinationLocationId || null)
+      && proposal.decidedByUserId
+      && String(proposal.decidedByUserId) !== String(proposal.proposedByUserId);
+    if (matches) return;
+  }
+  await registrarTentativaBloqueada(
+    {
+      groupId,
+      companyId,
+      actorUserId: actor.userId || null,
+      action: 'inventory.movement.record',
+      entityType: 'InventoryItem',
+      entityId: inventoryItemId,
+      beforeJson: { movementType, quantity, sourceType: sourceType || null, sourceId: sourceId || null },
+      reason: `Tentativa de registrar ${movementType} sem proposta aprovada por outra pessoa (EST-008).`,
+    },
+    transaction
+  );
+  throw AppError.badRequest(
+    'Ajuste e descarte de estoque não são lançados direto: registre uma proposta de ajuste e peça a aprovação de outra pessoa com permissão.',
+    'INVENTORY_ADJUSTMENT_REQUIRES_PROPOSAL'
+  );
+}
+
+
+// Revisão Marco 7 (20/10/2026), M7-F03 — a origem do movimento é validada NO SERVIDOR, nunca
+// confiada ao cliente. A rota genérica POST /inventory/movements repassa o corpo; sem isto,
+// "sourceType=REQUISITION" com sourceId nulo (ou de outra empresa/item) e sem responsável
+// virava uma baixa "oficial" sem rastro. Regras:
+//   - sem sourceType (ou MANUAL): não pode vir sourceId (não existe origem a apontar);
+//   - sourceType desconhecido: recusado;
+//   - origem interna (REQUISITION, RECEIPT, TOOL_LOAN, PURCHASE_ORDER_CANCEL): exige sourceId de
+//     registro EXISTENTE da MESMA empresa; REQUISITION também exige que o item faça parte da
+//     requisição (ou, se for requisição de obra, que a obra seja a mesma) e um responsável;
+//   - COUNT, LOSS_CASE e ADJUSTMENT_PROPOSAL continuam validados pelos blocos próprios abaixo.
+const KNOWN_SOURCE_TYPES = ['MANUAL', 'RECEIPT', 'REQUISITION', 'TOOL_LOAN', 'ADJUSTMENT', 'COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL', 'PURCHASE_ORDER_CANCEL'];
+const SOURCE_MODELS = { RECEIPT: InventoryReceipt, TOOL_LOAN: InventoryToolLoan, PURCHASE_ORDER_CANCEL: PurchaseOrder };
+async function assertMovementSource({ groupId, companyId, inventoryItemId, sourceType, sourceId, responsiblePersonId, projectId }, transaction) {
+  const type = sourceType || 'MANUAL';
+  if (!KNOWN_SOURCE_TYPES.includes(type)) {
+    throw AppError.badRequest(`Origem do movimento desconhecida ("${sourceType}").`, 'INVENTORY_MOVEMENT_SOURCE_INVALID');
+  }
+  if (type === 'MANUAL') {
+    if (sourceId) throw AppError.badRequest('Movimento manual não pode apontar uma origem ("sourceId").', 'INVENTORY_MOVEMENT_SOURCE_INVALID');
+    return;
+  }
+  if (['COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL'].includes(type)) return; // validadas pelos blocos específicos
+  if (!sourceId) {
+    throw AppError.badRequest(`Origem "${type}" exige o identificador do registro de origem ("sourceId").`, 'INVENTORY_MOVEMENT_SOURCE_REQUIRED');
+  }
+  const notFound = () => AppError.badRequest('A origem informada não existe nesta empresa.', 'INVENTORY_MOVEMENT_SOURCE_INVALID');
+  if (type === 'REQUISITION') {
+    const req = await InventoryRequisition.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (req) {
+      const line = await InventoryRequisitionItem.findOne({ where: { requisitionId: req.id, inventoryItemId, groupId, companyId }, transaction });
+      if (!line) throw AppError.badRequest('O item deste movimento não faz parte da requisição de origem.', 'INVENTORY_MOVEMENT_SOURCE_ITEM_MISMATCH');
+      if (!responsiblePersonId) throw AppError.badRequest('Movimento de requisição exige o responsável pela retirada ("responsiblePersonId").', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+      return;
+    }
+    const mr = await MaterialRequest.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!mr) throw notFound();
+    // Requisição de obra (Construção): o responsável rastreável é quem a solicitou (requestedByUserId).
+    if (!responsiblePersonId && !mr.requestedByUserId) {
+      throw AppError.badRequest('Movimento de requisição exige o responsável pela retirada ("responsiblePersonId").', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+    }
+    if (projectId && mr.projectId && mr.projectId !== projectId) {
+      throw AppError.badRequest('A obra do movimento não é a da requisição de origem.', 'INVENTORY_MOVEMENT_SOURCE_PROJECT_MISMATCH');
+    }
+    return;
+  }
+  const Model = SOURCE_MODELS[type];
+  if (Model) {
+    const found = await Model.findOne({ where: { id: sourceId, groupId, companyId }, attributes: ['id'], transaction });
+    if (!found) throw notFound();
+  }
+}
+
 async function recordMovement(payload, actor, transaction) {
   const {
     groupId,
@@ -109,6 +248,7 @@ async function recordMovement(payload, actor, transaction) {
     responsiblePersonId,
     evidenceFileId,
     reason,
+    unitCost: unitCostOverride,
   } = payload;
 
   if (!groupId || !companyId || !inventoryItemId || !movementType || quantity == null) {
@@ -263,6 +403,23 @@ async function recordMovement(payload, actor, transaction) {
   if (movementType === 'OUT' && (!sourceType || sourceType === 'MANUAL') && !responsiblePersonId) {
     throw AppError.badRequest('Saída manual de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
   }
+  // Revisão Marco 7 (20/10/2026), M7-F03 — origem e responsável validados no servidor.
+  await assertMovementSource({ groupId, companyId, inventoryItemId, sourceType, sourceId, responsiblePersonId, projectId }, transaction);
+  if (responsiblePersonId) {
+    const person = await Person.findOne({ where: { id: responsiblePersonId, groupId, companyId }, attributes: ['id'], transaction });
+    if (!person) throw AppError.badRequest('O responsável informado não existe nesta empresa.', 'INVENTORY_MOVEMENT_RESPONSIBLE_INVALID');
+  }
+  // Revisão Marco 7 (19/10/2026), A6 — EST-008 (checado depois de motivo/chave/evidência, para
+  // que esses erros de preenchimento continuem aparecendo primeiro): quem tinha inventory:approve registrava e
+  // "aprovava" o próprio ADJUSTMENT/DISPOSAL manual (a permissão era a única barreira). Agora o
+  // ledger só aceita esses dois tipos vindos de um fluxo com segregação já verificada:
+  //   - COUNT: ajuste de inventário físico (counts.service.js#applyAdjustment já impede quem abriu
+  //     a contagem de aprovar o próprio ajuste);
+  //   - ADJUSTMENT_PROPOSAL: proposta aprovada por OUTRA pessoa (proposeAdjustment/
+  //     decideAdjustmentProposal abaixo), conferida aqui de novo contra o banco.
+  if (['ADJUSTMENT', 'DISPOSAL'].includes(movementType)) {
+    await assertAdjustmentOrigin({ groupId, companyId, inventoryItemId, movementType, quantity, sourceType, sourceId, sourceLocationId, destinationLocationId }, actor, transaction);
+  }
   // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): o endpoint genérico de movimentos
   // aceitava "movementType: LOSS" direto (com motivo/aprovação/evidência por valor já exigidos
   // acima), mas sem NENHUM vínculo obrigatório com um InventoryLossCase — permitindo registrar
@@ -326,6 +483,11 @@ async function recordMovement(payload, actor, transaction) {
     });
     if (siteLocations.length > 0) {
       const projectIdsFromSites = [...new Set(siteLocations.map((l) => l.projectId).filter(Boolean))];
+      // Revisão Marco 7 (20/10/2026), M7-F01 — um projectId explícito só vale se for a obra de
+      // TODOS os canteiros tocados (fail-closed: o cliente não escolhe a obra do custo).
+      if (resolvedProjectId && projectIdsFromSites.some((pid) => pid !== resolvedProjectId)) {
+        throw AppError.badRequest('A obra informada não é a obra do canteiro deste movimento.', 'INVENTORY_MOVEMENT_PROJECT_MISMATCH');
+      }
       if (!resolvedProjectId) {
         if (projectIdsFromSites.length === 1) {
           resolvedProjectId = projectIdsFromSites[0];
@@ -339,6 +501,33 @@ async function recordMovement(payload, actor, transaction) {
           throw AppError.badRequest('Este local é um canteiro de obra, mas não tem nenhuma obra vinculada no cadastro — edite o local e vincule a obra antes de movimentar.', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
         }
       }
+    }
+  }
+
+  // Revisão Marco 7 (19/10/2026), A7 — EST-004 ("Material consumido precisa de
+  // project_id/stage_id quando atribuído à obra") e Caderno §5 ("OUT vincula project_id/stage_id
+  // e responsável"): a etapa era opcional. Toda SAÍDA (OUT) atribuída a uma obra — seja a
+  // entrega da requisição saindo do almoxarifado, seja o consumo saindo do canteiro — exige a
+  // etapa, e a etapa precisa ser desta obra.
+  if (resolvedProjectId) {
+    const project = await Project.findOne({ where: { id: resolvedProjectId, groupId, companyId }, attributes: ['id'], transaction });
+    if (!project) throw AppError.badRequest('A obra informada não existe nesta empresa.', 'INVENTORY_MOVEMENT_PROJECT_INVALID');
+  }
+  // M7-F02 — etapa informada (em QUALQUER tipo de movimento) precisa ser da obra do movimento.
+  if (stageId && !resolvedProjectId) {
+    throw AppError.badRequest('Etapa informada sem obra: informe a obra ou um canteiro vinculado a ela.', 'INVENTORY_MOVEMENT_STAGE_INVALID');
+  }
+  if (stageId && movementType !== 'OUT') {
+    const stg = await ProjectStage.findOne({ where: { id: stageId, projectId: resolvedProjectId }, transaction });
+    if (!stg) throw AppError.badRequest('A etapa informada não pertence à obra deste movimento.', 'INVENTORY_MOVEMENT_STAGE_INVALID');
+  }
+  if (movementType === 'OUT' && resolvedProjectId) {
+    if (!stageId) {
+      throw AppError.badRequest('Saída de material para a obra exige a etapa ("stageId") — informe em qual etapa o material foi usado.', 'INVENTORY_MOVEMENT_STAGE_REQUIRED');
+    }
+    const stage = await ProjectStage.findOne({ where: { id: stageId, projectId: resolvedProjectId }, transaction });
+    if (!stage) {
+      throw AppError.badRequest('A etapa informada não pertence à obra deste movimento.', 'INVENTORY_MOVEMENT_STAGE_INVALID');
     }
   }
 
@@ -357,6 +546,11 @@ async function recordMovement(payload, actor, transaction) {
   // Depois do retorno idempotente acima: reenvio de um movimento JÁ gravado antes da contagem
   // abrir não é um movimento novo, então devolve o original em vez de falhar.
   await assertLocationsNotFrozenByCount(touchedLocationIds, groupId, companyId, transaction);
+
+  const { unitCost, totalCost } = await resolveMovementCost(
+    { item, movementType, qty, resolvedProjectId, sourceLocationId, destinationLocationId, sourceType, unitCostOverride, groupId, companyId },
+    transaction
+  );
 
   const movement = await InventoryMovement.create(
     {
@@ -377,6 +571,9 @@ async function recordMovement(payload, actor, transaction) {
       responsiblePersonId: responsiblePersonId || null,
       evidenceFileId: evidenceFile ? evidenceFile.id : null,
       reason: reason || null,
+      unitCost,
+      totalCost,
+      costSource: 'RECORDED',
       createdBy: actor.userId || null,
       updatedBy: actor.userId || null,
     },
@@ -413,7 +610,7 @@ async function recordMovement(payload, actor, transaction) {
       action: 'INVENTORY_MOVEMENT_RECORDED',
       entityType: 'InventoryMovement',
       entityId: movement.id,
-      afterJson: { movementType, quantity: qty, inventoryItemId, sourceLocationId, destinationLocationId },
+      afterJson: { movementType, quantity: qty, inventoryItemId, sourceLocationId, destinationLocationId, projectId: resolvedProjectId, stageId: stageId || null, unitCost, totalCost },
       reason: `Movimento de estoque "${movementType}" de ${qty} unidade(s) registrado.`,
     },
     transaction
@@ -469,6 +666,7 @@ async function listMovements(filters, groupId, companyId, transaction) {
       { model: InventoryLocation, as: 'destinationLocation', attributes: ['id', 'name'] },
       { model: User, as: 'movedByUser', attributes: ['id', 'name'] },
       { model: Person, as: 'responsiblePerson', attributes: ['id', 'legalName'] },
+      { model: ProjectStage, as: 'stage', attributes: ['id', 'name'] },
     ],
     order: [['moved_at', 'DESC']],
     limit: Math.min(Number(limit) || 100, 500),
@@ -486,4 +684,196 @@ async function listBalancesByItem(inventoryItemId, groupId, companyId, transacti
   });
 }
 
-module.exports = { MOVEMENT_TYPES, APPROVAL_REQUIRED_TYPES, recordMovement, getBalance, listBalancesByItem, listMovements, assertLocationsNotFrozenByCount };
+// =============================================================================================
+// Revisão Marco 7 (19/10/2026), A6 — EST-008: proposta de ajuste/descarte manual.
+// Quem propõe (inventory:create) não mexe no saldo; outra pessoa com inventory:approve decide.
+// A aprovação grava o movimento pelo mesmo recordMovement (motivo, evidência por valor, freeze
+// de contagem, saldo negativo e custo histórico continuam valendo), com sourceType
+// ADJUSTMENT_PROPOSAL — e recordMovement confere de novo, no banco, que a proposta foi aprovada
+// por alguém diferente de quem a propôs (CHECK de segregação também na tabela).
+// =============================================================================================
+const PROPOSAL_TYPES = ['ADJUSTMENT', 'DISPOSAL'];
+
+async function proposeAdjustment(payload, actor, transaction) {
+  const { groupId, companyId, inventoryItemId, movementType, quantity, sourceLocationId, destinationLocationId, reason, evidenceFileId, idempotencyKey } = payload || {};
+  if (!actor?.userId) {
+    throw AppError.badRequest('Proposta de ajuste exige um usuário autenticado.', 'INVENTORY_MOVEMENT_ACTOR_REQUIRED');
+  }
+  if (!groupId || !companyId || !inventoryItemId) {
+    throw AppError.badRequest('Informe o item do ajuste.', 'INVENTORY_ADJUSTMENT_VALIDATION');
+  }
+  if (!PROPOSAL_TYPES.includes(movementType)) {
+    throw AppError.badRequest('A proposta precisa ser de "ADJUSTMENT" (ajuste) ou "DISPOSAL" (descarte).', 'INVENTORY_ADJUSTMENT_VALIDATION');
+  }
+  const qty = Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw AppError.badRequest('"quantity" precisa ser um número maior que zero.', 'INVENTORY_ADJUSTMENT_VALIDATION');
+  }
+  if (!reason || !String(reason).trim()) {
+    throw AppError.badRequest(`Movimento "${movementType}" exige "reason" (motivo).`, 'INVENTORY_MOVEMENT_REASON_REQUIRED');
+  }
+  if (!idempotencyKey) {
+    throw AppError.badRequest('Não foi possível registrar a proposta — tente novamente em alguns instantes.', 'INVENTORY_MOVEMENT_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  if (movementType === 'ADJUSTMENT' && Boolean(sourceLocationId) === Boolean(destinationLocationId)) {
+    throw AppError.badRequest('Um ajuste corrige o saldo de um único local: informe a origem (para diminuir) OU o destino (para aumentar).', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+  if (movementType === 'DISPOSAL' && (!sourceLocationId || destinationLocationId)) {
+    throw AppError.badRequest('Descarte exige apenas o local de origem.', 'INVENTORY_MOVEMENT_VALIDATION');
+  }
+
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))', { replacements: { k: `inventory-adjustment-proposal:${companyId}:${idempotencyKey}` }, transaction });
+  const existing = await InventoryAdjustmentProposal.findOne({ where: { groupId, companyId, idempotencyKey }, transaction });
+  if (existing) return existing;
+
+  const item = await InventoryItem.findOne({ where: { id: inventoryItemId, groupId, companyId }, transaction });
+  if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
+  if (item.itemType === 'SERVICE_ITEM') {
+    throw AppError.badRequest('Item do tipo "SERVICE_ITEM" não movimenta estoque (não possui saldo físico).', 'INVENTORY_MOVEMENT_SERVICE_ITEM_FORBIDDEN');
+  }
+  const locationId = sourceLocationId || destinationLocationId;
+  const location = await InventoryLocation.findOne({ where: { id: locationId, groupId, companyId }, transaction });
+  if (!location) throw AppError.notFound('Local de estoque não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
+  if (location.locationType === 'PROJECT_SITE' && !location.projectId) {
+    throw AppError.badRequest('Este local é um canteiro de obra, mas não tem nenhuma obra vinculada no cadastro — edite o local e vincule a obra antes de movimentar.', 'INVENTORY_MOVEMENT_PROJECT_REQUIRED');
+  }
+
+  let evidenceFile = null;
+  if (evidenceFileId) evidenceFile = await File.findOne({ where: { id: evidenceFileId, groupId, companyId }, transaction });
+  const hasKnownCost = item.averageCost != null && Number(item.averageCost) > 0;
+  const estimatedValue = hasKnownCost ? Math.round(qty * Number(item.averageCost) * 100) / 100 : null;
+  if (!evidenceFile) {
+    const { highValueThreshold } = await getActiveHighValueThreshold(groupId, companyId, transaction, actor.userId);
+    if ((hasKnownCost && estimatedValue >= highValueThreshold) || (!hasKnownCost && qty >= highValueThreshold)) {
+      throw AppError.badRequest(
+        hasKnownCost
+          ? `Ajuste de valor estimado R$ ${estimatedValue.toFixed(2)} está acima do limite de R$ ${Number(highValueThreshold).toFixed(2)} (REG-EST-002) — anexe uma evidência.`
+          : `Ajuste de quantidade ${qty} (custo do item desconhecido) está acima do limite de ${highValueThreshold} (REG-EST-002) — anexe uma evidência.`,
+        'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      );
+    }
+  }
+
+  const proposal = await InventoryAdjustmentProposal.create(
+    {
+      groupId,
+      companyId,
+      inventoryItemId,
+      movementType,
+      quantity: qty,
+      sourceLocationId: sourceLocationId || null,
+      destinationLocationId: destinationLocationId || null,
+      projectId: location.locationType === 'PROJECT_SITE' ? location.projectId : null,
+      reason: String(reason).trim(),
+      evidenceFileId: evidenceFile ? evidenceFile.id : null,
+      estimatedValue,
+      idempotencyKey,
+      status: 'PENDING',
+      proposedByUserId: actor.userId,
+    },
+    { transaction }
+  );
+  await registrarAuditoria(
+    { groupId, companyId, actorUserId: actor.userId, action: 'INVENTORY_ADJUSTMENT_PROPOSED', entityType: 'InventoryAdjustmentProposal', entityId: proposal.id, afterJson: proposal.toJSON(), reason: `Proposta de ${movementType === 'DISPOSAL' ? 'descarte' : 'ajuste'} de estoque registrada — aguarda aprovação de outra pessoa.` },
+    transaction
+  );
+  return proposal;
+}
+
+async function decideAdjustmentProposal(proposalId, groupId, companyId, decision, actor, transaction, { decisionNote } = {}) {
+  if (!['APPROVED', 'REJECTED'].includes(decision)) {
+    throw AppError.badRequest('"decision" precisa ser "APPROVED" ou "REJECTED".', 'INVENTORY_ADJUSTMENT_VALIDATION');
+  }
+  if (!actor?.canApprove) {
+    throw AppError.forbidden('Decidir um ajuste de estoque exige a permissão inventory:approve.', 'INVENTORY_MOVEMENT_APPROVAL_REQUIRED');
+  }
+  const proposal = await InventoryAdjustmentProposal.findOne({ where: { id: proposalId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  if (!proposal) throw AppError.notFound('Proposta de ajuste não encontrada.', 'INVENTORY_ADJUSTMENT_NOT_FOUND');
+  if (proposal.status !== 'PENDING') {
+    throw AppError.conflict(`Esta proposta já foi decidida (${proposal.status === 'APPROVED' ? 'aprovada' : 'rejeitada'}).`, 'INVENTORY_ADJUSTMENT_INVALID_TRANSITION');
+  }
+  if (String(proposal.proposedByUserId) === String(actor.userId)) {
+    await registrarTentativaBloqueada(
+      { groupId, companyId, actorUserId: actor.userId, action: 'inventory.adjustment_proposal.decide', entityType: 'InventoryAdjustmentProposal', entityId: proposal.id, beforeJson: proposal.toJSON(), reason: 'Quem propôs o ajuste tentou aprová-lo/rejeitá-lo (EST-008).' },
+      transaction
+    );
+    throw AppError.forbidden('Quem propôs este ajuste não pode aprová-lo/rejeitá-lo — peça a decisão de outra pessoa com permissão.', 'INVENTORY_ADJUSTMENT_SELF_APPROVAL_BLOCKED');
+  }
+  const note = decisionNote != null && String(decisionNote).trim() ? String(decisionNote).trim().slice(0, 500) : null;
+  const before = { status: proposal.status, decidedByUserId: null };
+  proposal.status = decision;
+  proposal.decidedByUserId = actor.userId;
+  proposal.decidedAt = new Date();
+  proposal.decisionNote = note;
+  await proposal.save({ transaction });
+
+  if (decision === 'APPROVED') {
+    const movement = await recordMovement(
+      {
+        groupId,
+        companyId,
+        inventoryItemId: proposal.inventoryItemId,
+        movementType: proposal.movementType,
+        quantity: proposal.quantity,
+        sourceLocationId: proposal.sourceLocationId || undefined,
+        destinationLocationId: proposal.destinationLocationId || undefined,
+        sourceType: 'ADJUSTMENT_PROPOSAL',
+        sourceId: proposal.id,
+        idempotencyKey: `adjustment-proposal:${proposal.id}`,
+        evidenceFileId: proposal.evidenceFileId || undefined,
+        reason: proposal.reason,
+      },
+      actor,
+      transaction
+    );
+    proposal.resultingMovementId = movement.id;
+    await proposal.save({ transaction });
+  }
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId: actor.userId,
+      action: 'INVENTORY_ADJUSTMENT_DECIDED',
+      entityType: 'InventoryAdjustmentProposal',
+      entityId: proposal.id,
+      beforeJson: before,
+      afterJson: { status: proposal.status, decidedByUserId: proposal.decidedByUserId, proposedByUserId: proposal.proposedByUserId, resultingMovementId: proposal.resultingMovementId, decisionNote: note },
+      reason: decision === 'APPROVED' ? 'Proposta de ajuste aprovada por outra pessoa — movimento gravado.' : 'Proposta de ajuste rejeitada — saldo não alterado.',
+    },
+    transaction
+  );
+  return proposal;
+}
+
+async function listAdjustmentProposals(groupId, companyId, transaction, { status } = {}) {
+  const where = { groupId, companyId };
+  if (status) where.status = status;
+  return InventoryAdjustmentProposal.findAll({
+    where,
+    include: [
+      { model: InventoryItem, as: 'inventoryItem', attributes: ['id', 'name', 'sku', 'unitOfMeasure'] },
+      { model: InventoryLocation, as: 'sourceLocation', attributes: ['id', 'name'] },
+      { model: InventoryLocation, as: 'destinationLocation', attributes: ['id', 'name'] },
+      { model: User, as: 'proposedByUser', attributes: ['id', 'name'] },
+      { model: User, as: 'decidedByUser', attributes: ['id', 'name'] },
+    ],
+    order: [['created_at', 'DESC']],
+    limit: 500,
+    transaction,
+  });
+}
+
+module.exports = {
+  MOVEMENT_TYPES,
+  APPROVAL_REQUIRED_TYPES,
+  recordMovement,
+  getBalance,
+  listBalancesByItem,
+  listMovements,
+  assertLocationsNotFrozenByCount,
+  proposeAdjustment,
+  decideAdjustmentProposal,
+  listAdjustmentProposals,
+};

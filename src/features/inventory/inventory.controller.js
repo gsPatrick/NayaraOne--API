@@ -86,6 +86,22 @@ const recordMovement = catchAsync(async (req, res) => {
   const movement = await req.withTenantTransaction((t) => movementsService.recordMovement(withTenant(req), actor, t));
   return success(res, { statusCode: 201, data: movement });
 });
+const proposeAdjustment = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const proposal = await req.withTenantTransaction((t) => movementsService.proposeAdjustment(withTenant(req), actor, t));
+  return success(res, { statusCode: 201, data: proposal });
+});
+const listAdjustmentProposals = catchAsync(async (req, res) => {
+  const proposals = await req.withTenantTransaction((t) => movementsService.listAdjustmentProposals(req.auth.groupId, req.auth.companyId, t, { status: req.query.status }));
+  return success(res, { data: proposals });
+});
+const decideAdjustmentProposal = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
+  const proposal = await req.withTenantTransaction((t) =>
+    movementsService.decideAdjustmentProposal(req.params.id, req.auth.groupId, req.auth.companyId, req.body?.decision, actor, t, { decisionNote: req.body?.decisionNote })
+  );
+  return success(res, { data: proposal });
+});
 const listBalancesByItem = catchAsync(async (req, res) => {
   const balances = await req.withTenantTransaction((t) => movementsService.listBalancesByItem(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: balances });
@@ -138,7 +154,7 @@ const decideRequisition = catchAsync(async (req, res) => {
 });
 const issueRequisition = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
-  const requisition = await req.withTenantTransaction((t) => requisitionsService.issueRequisition(req.params.id, actor, req.auth.groupId, req.auth.companyId, t));
+  const requisition = await req.withTenantTransaction((t) => requisitionsService.issueRequisition(req.params.id, actor, req.auth.groupId, req.auth.companyId, t, req.body || {}));
   return success(res, { data: requisition });
 });
 
@@ -259,6 +275,9 @@ module.exports = {
   listLocations,
   updateLocation,
   recordMovement,
+  proposeAdjustment,
+  listAdjustmentProposals,
+  decideAdjustmentProposal,
   listBalancesByItem,
   listMovements,
   createReceipt,

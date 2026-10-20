@@ -28,8 +28,14 @@ inventoryRouter.patch('/inventory/locations/:id', requirePermission('inventory:u
 
 // Movimento de estoque — único ponto de escrita de "inventory"."stock_balances" (EST-002).
 // ADJUSTMENT/LOSS/DISPOSAL exigem inventory:approve, validado dentro do service (movements.service.js).
+// ADJUSTMENT/DISPOSAL manuais aqui são recusados (INVENTORY_ADJUSTMENT_REQUIRES_PROPOSAL) — ver abaixo.
 inventoryRouter.post('/inventory/movements', requirePermission('inventory:create'), inventoryController.recordMovement);
 inventoryRouter.get('/inventory/movements', requirePermission('inventory:read'), inventoryController.listMovements);
+// Revisão Marco 7 (19/10/2026), A6/EST-008: ajuste/descarte manual é proposta (inventory:create)
+// decidida por OUTRA pessoa (inventory:approve; segregação conferida no service e no banco).
+inventoryRouter.post('/inventory/adjustment-proposals', requirePermission('inventory:create'), inventoryController.proposeAdjustment);
+inventoryRouter.get('/inventory/adjustment-proposals', requirePermission('inventory:read'), inventoryController.listAdjustmentProposals);
+inventoryRouter.post('/inventory/adjustment-proposals/:id/decide', requirePermission('inventory:approve'), inventoryController.decideAdjustmentProposal);
 
 // Receipts/NF (Guia do Marcelo §4) — DRAFT -> REVIEWED -> COMPLETED.
 inventoryRouter.post('/inventory/receipts', requirePermission('inventory:create'), inventoryController.createReceipt);

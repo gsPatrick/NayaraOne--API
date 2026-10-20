@@ -10,8 +10,6 @@ const {
   ChangeOrder,
   LossRecord,
   Nonconformity,
-  InventoryMovement,
-  InventoryItem,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
@@ -35,32 +33,12 @@ function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * getConsumedInventoryCost — GAP CORRIGIDO (auditoria pós-Marco 6, item 3): o custo de estoque
- * consumido pela obra ficava hard-coded em 0 porque não havia vínculo projectId nos movimentos
- * de estoque. Agora `inventory.inventory_movements.project_id` existe (EST-004) e
- * `inventory.inventory_items.average_cost` já é mantido pelo módulo de Estoque — soma-se o
- * custo real: saídas (OUT) debitam ao custo médio do item no momento da consulta, devoluções
- * (RETURN) e perdas revertidas abatem. Não inventa custo unitário por movimento (o schema não
- * guarda isso): usa o custo médio ATUAL do item, mesma fonte usada no restante do sistema.
- */
-async function getConsumedInventoryCost(projectId, transaction) {
-  const movements = await InventoryMovement.findAll({
-    where: { projectId, movementType: { [Op.in]: ['OUT', 'RETURN'] } },
-    transaction,
-  });
-  if (movements.length === 0) return 0;
-
-  const itemIds = [...new Set(movements.map((m) => m.inventoryItemId))];
-  const items = await InventoryItem.findAll({ where: { id: { [Op.in]: itemIds } }, transaction });
-  const costById = new Map(items.map((i) => [i.id, toNumber(i.averageCost)]));
-
-  return movements.reduce((acc, m) => {
-    const unitCost = costById.get(m.inventoryItemId) || 0;
-    const sign = m.movementType === 'RETURN' ? -1 : 1;
-    return acc + sign * toNumber(m.quantity) * unitCost;
-  }, 0);
-}
+// getConsumedInventoryCost — revisão Marco 7 (19/10/2026), A1/EST-011: soma o custo HISTÓRICO
+// gravado em cada movimento (unit_cost/total_cost), com a política de custódia da obra
+// documentada em inventory/inventoryCost.service.js (inclui TRANSFER canteiro → almoxarifado,
+// ajuste no canteiro e perda atribuída à obra). Antes usava o custo médio ATUAL do item, e o
+// histórico da obra mudava a cada nova compra.
+const { getConsumedInventoryCost } = require('../inventory/inventoryCost.service');
 
 /**
  * getApprovedChangeOrdersTotal — M6-97/M6-42: soma de change orders aprovados da obra.
@@ -243,10 +221,9 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
  *                               comprometido/orçado por linha de custo).
  *  4. actualFinancialCost    — soma de finance.financial_entries SETTLED (nature=PAYABLE,
  *                               construction_project_id = obra) — dinheiro que JÁ SAIU de fato.
- *  5. consumedInventoryCost  — TODO: inventory.inventory_movements não tem custo unitário no
- *                               schema atual (InventoryItem/InventoryMovement não carregam
- *                               unit_cost) — sem uma fatia de custeio de estoque, este valor
- *                               fica 0 (documentado, não inventado).
+ *  5. consumedInventoryCost  — custo HISTÓRICO do estoque levado à obra (unit_cost/total_cost
+ *                               gravados em cada movimento; política de custódia em
+ *                               inventory/inventoryCost.service.js — revisão Marco 7, A1).
  *  6. forecastToComplete     — max(committedCost + approvedChanges - (actualFinancialCost +
  *                               consumedInventoryCost), 0). GAP CORRIGIDO (item 1, auditoria
  *                               pós-Marco 6): custo realizado = Financeiro + Estoque já consumido

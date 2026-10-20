@@ -100,6 +100,24 @@ module.exports = (sequelize) => {
         field: 'reason',
         comment: 'EST-008: motivo obrigatório para ADJUSTMENT/LOSS/DISPOSAL.',
       },
+      // Revisão Marco 7 (19/10/2026), A1/EST-011: custo HISTÓRICO gravado no fato (migration
+      // 20260101000580). A obra soma estes valores — nunca o custo médio de hoje.
+      unitCost: {
+        type: DataTypes.DECIMAL(18, 6),
+        allowNull: true,
+        field: 'unit_cost',
+      },
+      totalCost: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+        field: 'total_cost',
+      },
+      costSource: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'cost_source',
+        comment: 'RECORDED|BACKFILL_RECEIPT|BACKFILL_CURRENT_AVERAGE|UNKNOWN',
+      },
       movedAt: {
         type: DataTypes.DATE,
         allowNull: false,

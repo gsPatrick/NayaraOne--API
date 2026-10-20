@@ -24,7 +24,9 @@ async function openCount(payload, actorUserId, transaction) {
   // FOR UPDATE no local serializa a abertura com qualquer movimento em voo no mesmo local
   // (recordMovement trava o local com FOR SHARE). Também impede duas contagens OPEN no mesmo
   // local (duas aberturas concorrentes esperam uma pela outra aqui).
-  const location = await InventoryLocation.findByPk(locationId, { transaction, lock: transaction.LOCK.UPDATE });
+  // Revisão Marco 7 (19/10/2026), A8: toda busca filtra por groupId+companyId — defesa em
+  // profundidade além da RLS (a política tenant_isolation já isola por app.company_id).
+  const location = await InventoryLocation.findOne({ where: { id: locationId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!location) throw AppError.notFound('Local de estoque não encontrado.', 'INVENTORY_LOCATION_NOT_FOUND');
   // ACHADO REAL (auditoria Marco 7, rodada final): a obra era pedida de novo no formulário de
   // abertura, podendo divergir da obra REAL já vinculada ao canteiro desde o cadastro (mesma
@@ -34,7 +36,7 @@ async function openCount(payload, actorUserId, transaction) {
   if (location.locationType === 'PROJECT_SITE' && !projectId) {
     throw AppError.badRequest('Este canteiro ainda não está vinculado a uma obra no cadastro — vincule a obra no cadastro do local antes de abrir o inventário.', 'INVENTORY_COUNT_PROJECT_REQUIRED');
   }
-  const alreadyOpen = await InventoryCount.findOne({ where: { locationId, status: 'OPEN' }, transaction });
+  const alreadyOpen = await InventoryCount.findOne({ where: { locationId, groupId, companyId, status: 'OPEN' }, transaction });
   if (alreadyOpen) {
     throw AppError.conflict(`Já existe um inventário OPEN para este local (${alreadyOpen.id}) — conclua-o antes de abrir outro.`, 'INVENTORY_COUNT_ALREADY_OPEN');
   }
@@ -58,6 +60,9 @@ async function openCount(payload, actorUserId, transaction) {
 // tenant ler ou agir sobre o inventário de OUTRA empresa só adivinhando o UUID. Projeto não usa
 // RLS real do Postgres — isolamento é 100% a cargo do filtro manual no where, que faltava aqui
 // (mesmo padrão já corrigido em materialRequests.service.js/adjustmentRiskRules.service.js).
+// ATUALIZAÇÃO (revisão Marco 7, 19/10/2026, A8): a frase acima ficou desatualizada — hoje as
+// tabelas de inventory TÊM RLS forçada (política tenant_isolation por app.company_id). O filtro
+// manual por groupId/companyId continua em toda busca como defesa em profundidade.
 async function addCountItem(countId, groupId, companyId, payload, transaction) {
   const { inventoryItemId, countedQuantity } = payload;
   if (!inventoryItemId || countedQuantity == null || !Number.isFinite(Number(countedQuantity)) || Number(countedQuantity) < 0) {
@@ -93,10 +98,10 @@ async function completeCount(countId, groupId, companyId, actorUserId, transacti
   // Com o freeze lógico (Caderno §10), nenhum movimento tocou este local desde openCount — o
   // saldo lido aqui é exatamente o saldo do momento da abertura, então `divergence` é só
   // divergência real de contagem, nunca efeito de movimento posterior.
-  const items = await InventoryCountItem.findAll({ where: { countId }, transaction });
+  const items = await InventoryCountItem.findAll({ where: { countId, groupId: count.groupId, companyId: count.companyId }, transaction });
   for (const line of items) {
     const balance = await InventoryStockBalance.findOne({
-      where: { inventoryItemId: line.inventoryItemId, locationId: count.locationId },
+      where: { inventoryItemId: line.inventoryItemId, locationId: count.locationId, groupId: count.groupId, companyId: count.companyId },
       transaction,
     });
     const expected = balance ? Number(balance.quantityOnHand) : 0;

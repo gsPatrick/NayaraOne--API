@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
+const { computeEstimatedCurrentValue } = require('./assets.service');
 const financialEntriesService = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
 // GAP 3 (fechamento de auditoria externa Nayara, Marco 6): alçada por VALOR, mesmo padrão já
@@ -79,11 +80,34 @@ function parseChargeFlag(raw) {
   throw AppError.badRequest('"chargeResponsible" precisa ser booleano (true/false).', 'LOSS_CASE_VALIDATION');
 }
 
+const UNDECIDED_STATUSES = ['OPEN', 'PENDING_APPROVAL'];
+
+// Revisão Marco 7 (19/10/2026), A2: custo do caso calculado no servidor —
+//   - item de estoque: quantidade × custo médio do item no momento da abertura;
+//   - patrimônio: valor contábil (valor de aquisição com a depreciação informativa de
+//     assets.service#computeEstimatedCurrentValue); sem data de aquisição, o valor de aquisição.
+// null quando não há base (custo desconhecido) — nunca um número vindo do cliente.
+async function computeLossEstimatedCost({ groupId, companyId, inventoryItemId, assetId, quantity }, transaction) {
+  if (inventoryItemId) {
+    const item = await InventoryItem.findOne({ where: { id: inventoryItemId, groupId, companyId }, transaction });
+    if (!item) throw AppError.notFound('Item de estoque não encontrado.', 'INVENTORY_ITEM_NOT_FOUND');
+    if (item.averageCost == null) return null;
+    return Math.round(Number(quantity) * Number(item.averageCost) * 100) / 100;
+  }
+  const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction });
+  if (!asset || asset.acquisitionValue == null) return null;
+  const bookValue = computeEstimatedCurrentValue(asset);
+  return bookValue != null ? bookValue : Math.round(Number(asset.acquisitionValue) * 100) / 100;
+}
+
 // Guia do Marcelo §11/EST-010: perda/quebra/extravio não é baixa comum — abre loss_case com
 // contexto+evidência; decisão humana (approve/reject) é quem efetivamente gera o movimento
 // LOSS/DISPOSAL, nunca a criação do caso em si (EST-TS-10: loss sem evidência é bloqueado).
 async function openLossCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, inventoryItemId, assetId, locationId, projectId, quantity, responsiblePersonId, context, evidenceFileIds, estimatedCost } = payload;
+  // Revisão Marco 7 (19/10/2026), A2 — EST-010: `estimatedCost` enviado pelo cliente NÃO é lido.
+  // Era ele que ativava a autoaprovação por alçada, sem validação nenhuma (negativo ou
+  // subavaliado passava). O custo é calculado aqui no servidor (computeLossEstimatedCost).
+  const { groupId, companyId, inventoryItemId, assetId, locationId, projectId, quantity, responsiblePersonId, context, evidenceFileIds } = payload;
 
   if (!groupId || !companyId || !context) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "context" são obrigatórios.', 'LOSS_CASE_VALIDATION');
@@ -150,6 +174,18 @@ async function openLossCase(payload, actorUserId, transaction) {
     }
   }
 
+  // Revisão Marco 7 (19/10/2026), A4: o mesmo patrimônio podia ter vários casos abertos (cobrança
+  // em dobro). O lock FOR UPDATE no asset (acima) serializa aberturas concorrentes; o índice
+  // único parcial loss_cases_one_open_per_asset (migration 20260101000581) fecha no banco.
+  if (assetId) {
+    const alreadyOpen = await InventoryLossCase.findOne({ where: { assetId, groupId, companyId, status: { [Op.in]: UNDECIDED_STATUSES } }, transaction });
+    if (alreadyOpen) {
+      throw AppError.conflict('Já existe um caso de perda em aberto para este patrimônio — decida-o antes de abrir outro.', 'LOSS_CASE_ALREADY_OPEN');
+    }
+  }
+
+  const estimatedCost = await computeLossEstimatedCost({ groupId, companyId, inventoryItemId, assetId, quantity }, transaction);
+
   const lossCase = await InventoryLossCase.create(
     {
       groupId,
@@ -162,7 +198,7 @@ async function openLossCase(payload, actorUserId, transaction) {
       responsiblePersonId: responsiblePersonId || null,
       context,
       evidenceFileIds,
-      estimatedCost: estimatedCost != null ? estimatedCost : null,
+      estimatedCost,
       status: 'OPEN',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -177,34 +213,15 @@ async function openLossCase(payload, actorUserId, transaction) {
     transaction
   );
 
-  // GAP 3 (fechamento de auditoria externa Nayara, Marco 6) — alçada por VALOR, mesmo padrão de
-  // construction/lossRecords.service.js#createLossRecord. BACKWARD-COMPAT DELIBERADA: a alçada
-  // só é avaliada quando a EMPRESA já configurou explicitamente uma linha em
-  // "construction"."approval_thresholds" para o contexto INVENTORY_LOSS (via
-  // upsertApprovalThreshold) — nunca pelo valor-padrão de fallback (DEFAULT_MAX_AUTO_APPROVE_AMOUNT,
-  // pensado para MATERIAL_LOSS). Sem essa configuração explícita, todo caso continua nascendo
-  // OPEN e exigindo decisão humana explícita via inventory:approve, EXATAMENTE como antes deste
-  // gap (toda a suíte existente — inventory.lossCaseCharge.test.js, cenários de Asset/Ferramenta
-  // — abre casos com `estimatedCost` e sempre decide explicitamente depois; nenhuma empresa de
-  // teste tinha configurado alçada de INVENTORY_LOSS antes deste gap, então autoaprovar por um
-  // fallback numérico quebraria esse fluxo já aprovado). Só avalia, além disso, quando
-  // `estimatedCost` foi informado (sem estimativa, não há valor pra comparar).
-  const thresholdRow = estimatedCost != null
-    ? await ApprovalThreshold.findOne({ where: { companyId, context: INVENTORY_LOSS_APPROVAL_CONTEXT }, transaction })
-    : null;
-  if (thresholdRow) {
-    const threshold = Number(thresholdRow.maxAutoApproveAmount);
-    const withinThreshold = Number(estimatedCost) <= threshold;
-    if (withinThreshold) {
-      // Autoaprovação: reaproveita o MESMO caminho de decisão (decideLossCase) que já gera o
-      // movimento LOSS/atualiza o Asset — actor sintético com canApprove:true representa a
-      // regra de negócio decidindo (valor dentro da alçada), não um bypass de permissão de um
-      // usuário real (o ator que ABRIU o caso nunca precisou de inventory:approve pra isso).
-      const approved = await decideLossCase(lossCase.id, groupId, companyId, 'APPROVED', { userId: actorUserId, canApprove: true }, transaction, { systemAutoApprove: true });
-      return approved;
-    }
-    // Acima da alçada: nasce PENDING_APPROVAL (em vez de OPEN) — deixa explícito que falta uma
-    // decisão humana via inventory:approve antes de qualquer movimento ser gerado.
+  // Alçada por valor (GAP 3, Marco 6) — revisão Marco 7 (19/10/2026), A2: a autoaprovação foi
+  // REMOVIDA. Ela usava o valor informado pelo próprio solicitante e aprovava a perda em nome de
+  // um "ator sintético", sem segunda pessoa. EST-010 ("decisão humana determina
+  // responsabilidade"): toda perda espera decisão de OUTRA pessoa com inventory:approve
+  // (decideLossCase bloqueia quem abriu). A alçada configurada (approval_thresholds,
+  // INVENTORY_LOSS) continua servindo para sinalizar o caso grande: acima dela — ou quando o
+  // custo não pode ser calculado — o caso nasce PENDING_APPROVAL em vez de OPEN.
+  const thresholdRow = await ApprovalThreshold.findOne({ where: { companyId, context: INVENTORY_LOSS_APPROVAL_CONTEXT }, transaction });
+  if (thresholdRow && (estimatedCost == null || Number(estimatedCost) > Number(thresholdRow.maxAutoApproveAmount))) {
     lossCase.status = 'PENDING_APPROVAL';
     await lossCase.save({ transaction });
   }
@@ -309,10 +326,9 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
   // ACHADO REAL (apontado em 3 rodadas independentes de auditoria, Marco 7): quem registrou a
   // perda podia aprovar/rejeitar o próprio caso, inconsistente com o mesmo bloqueio já aplicado
   // em Compras, Ajuste de inventário e Requisição de material. Mesmo padrão: fail closed.
-  // `options.systemAutoApprove` é o único bypass legítimo — representa a REGRA DE NEGÓCIO de
-  // alçada por valor decidindo automaticamente (ver openLossCase), nunca uma pessoa aprovando a
-  // própria perda; sem esse flag, o bloqueio vale sempre, mesmo pra quem tem inventory:approve.
-  if (!options.systemAutoApprove && lossCase.createdBy && actor?.userId && String(lossCase.createdBy) === String(actor.userId)) {
+  // Revisão Marco 7 (19/10/2026), A2: o antigo bypass `systemAutoApprove` (autoaprovação por
+  // alçada) foi removido — o bloqueio vale sempre, mesmo pra quem tem inventory:approve.
+  if (lossCase.createdBy && actor?.userId && String(lossCase.createdBy) === String(actor.userId)) {
     throw AppError.forbidden(
       'Quem registrou esta perda não pode aprová-la/rejeitá-la — peça a decisão de outra pessoa com permissão.',
       'LOSS_CASE_SELF_APPROVAL_BLOCKED'

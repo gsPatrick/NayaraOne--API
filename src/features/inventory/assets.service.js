@@ -2,6 +2,7 @@
 
 const { Op } = require('sequelize');
 const {
+  sequelize,
   Asset,
   AssetMovement,
   AuditLog,
@@ -195,12 +196,19 @@ async function transferAsset(assetId, groupId, companyId, payload, actorUserId, 
   }
 
   if (idempotencyKey) {
+    // Revisão Marco 7 (19/10/2026), A9: duas chamadas simultâneas com a mesma chave liam "não
+    // existe" e a segunda estourava a UNIQUE (company_id, idempotency_key) com erro 500. Trava
+    // consultiva da transação por (empresa, chave), mesmo padrão de recordMovement: a segunda
+    // espera o commit da primeira e devolve o movimento já gravado.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))', { replacements: { k: `asset-movement:${companyId}:${idempotencyKey}` }, transaction });
     const existing = await AssetMovement.findOne({ where: { idempotencyKey, groupId, companyId }, transaction });
     if (existing) return existing;
   }
 
-  // EST-TS-15: transferência concorrente usa lock otimista (lockVersion do Asset) — o save()
-  // abaixo falha com erro de versão se outra transação já alterou o asset no meio do caminho.
+  // EST-TS-15: transferência concorrente é serializada pelo lock PESSIMISTA abaixo (SELECT ...
+  // FOR UPDATE na linha do Asset): a segunda transação espera o commit da primeira e relê o
+  // estado já atualizado. O lockVersion do model continua incrementando a cada gravação, mas não
+  // é ele que resolve a corrida (com FOR UPDATE a versão lida já é a nova).
   const asset = await Asset.findOne({ where: { id: assetId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
   if (TERMINAL_ASSET_STATUSES.includes(asset.status)) {
@@ -276,6 +284,11 @@ async function updateAsset(id, groupId, companyId, payload, actorUserId, transac
   const { name, acquisitionValue, acquiredAt, warrantyUntil } = payload;
   const asset = await Asset.findOne({ where: { id, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!asset) throw AppError.notFound('Patrimônio não encontrado.', 'ASSET_NOT_FOUND');
+  // Revisão Marco 7 (19/10/2026), A11: patrimônio baixado (DISPOSED) ou perdido (LOST) saiu de
+  // circulação — editar valor/datas depois reescreveria a base da baixa/cobrança já decidida.
+  if (TERMINAL_ASSET_STATUSES.includes(asset.status)) {
+    throw AppError.conflict(`Patrimônio com status ${asset.status} não pode ser editado (já saiu de circulação).`, 'ASSET_NOT_IN_CIRCULATION');
+  }
 
   if (acquisitionValue !== undefined) assertNonNegativeAcquisitionValue(acquisitionValue);
   assertWarrantyNotBeforeAcquisition(
@@ -465,7 +478,8 @@ async function disposeAsset(assetId, groupId, companyId, payload, actor, transac
     );
     throw AppError.conflict('Patrimônio com ordem de manutenção aberta não pode ser baixado — feche a OS primeiro.', 'ASSET_DISPOSAL_MAINTENANCE_OPEN');
   }
-  const openLossCase = await InventoryLossCase.findOne({ where: { assetId, status: 'OPEN' }, transaction });
+  // Revisão Marco 7 (19/10/2026), A5: PENDING_APPROVAL também é caso não decidido.
+  const openLossCase = await InventoryLossCase.findOne({ where: { assetId, groupId, companyId, status: { [Op.in]: ['OPEN', 'PENDING_APPROVAL'] } }, transaction });
   if (openLossCase) {
     await registrarTentativaBloqueada(
       {
