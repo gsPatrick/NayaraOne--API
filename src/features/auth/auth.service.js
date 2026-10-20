@@ -292,4 +292,100 @@ async function logout({ refreshToken: rawToken }) {
   return { revoked: true };
 }
 
-module.exports = { login, refresh, logout };
+async function setTenantContext(transaction, { userId, groupId, companyId }) {
+  await sequelize.query(
+    "SELECT set_config('app.user_id', :userId, true), set_config('app.group_id', :groupId, true), set_config('app.company_id', :companyId, true)",
+    { replacements: { userId, groupId, companyId }, transaction }
+  );
+}
+
+/**
+ * GET /v1/auth/companies — empresas em que o usuário autenticado tem vínculo ATIVO (R9).
+ * Lê somente os vínculos do próprio usuário (policy self_membership_lookup) e, para cada
+ * um, abre o contexto daquele tenant para ler o nome da empresa e os papéis.
+ */
+async function listMyCompanies({ userId, currentCompanyId }) {
+  const { Company } = require('../../models');
+  return sequelize.transaction(async (transaction) => {
+    await sequelize.query("SELECT set_config('app.user_id', :userId, true)", { replacements: { userId }, transaction });
+    const memberships = await UserMembership.findAll({
+      where: { userId, status: 'ACTIVE' },
+      order: [['created_at', 'ASC']],
+      transaction,
+    });
+    const seen = new Set();
+    const items = [];
+    for (const m of memberships) {
+      if (seen.has(m.companyId)) continue;
+      seen.add(m.companyId);
+      await setTenantContext(transaction, { userId, groupId: m.groupId, companyId: m.companyId });
+      const company = await Company.findOne({ where: { id: m.companyId }, transaction });
+      if (!company) continue;
+      const access = await getEffectiveAccess(userId, m.companyId, transaction);
+      items.push({
+        id: company.id,
+        name: company.name,
+        groupId: m.groupId,
+        roles: access.roles.map((r) => r.name),
+        current: m.companyId === currentCompanyId,
+      });
+    }
+    return { companies: items };
+  });
+}
+
+/**
+ * POST /v1/auth/switch-company — troca a empresa ativa (R9). Só aceita empresa em que o
+ * usuário tem vínculo ACTIVE (senão 403 NO_ACTIVE_MEMBERSHIP, sem revelar se a empresa
+ * existe). Emite NOVA sessão/tokens com as permissões daquela empresa e revoga a sessão
+ * atual, de modo que o token antigo deixa de valer. Não enfraquece MFA: o step-up segue
+ * por usuário e as ações sensíveis continuam exigindo MFA recente.
+ */
+async function switchCompany({ auth, companyId }, meta = {}) {
+  if (!companyId || typeof companyId !== 'string') {
+    throw AppError.badRequest('companyId é obrigatório.', 'AUTH_VALIDATION');
+  }
+  if (companyId === auth.companyId) {
+    throw AppError.badRequest('A empresa informada já é a empresa ativa.', 'ALREADY_ACTIVE_COMPANY');
+  }
+  return sequelize.transaction(async (transaction) => {
+    await sequelize.query("SELECT set_config('app.user_id', :userId, true)", {
+      replacements: { userId: auth.userId },
+      transaction,
+    });
+    const user = await User.findByPk(auth.userId, { transaction });
+    if (!user || user.status !== 'ACTIVE') {
+      throw AppError.unauthorized('Usuário inválido ou inativo.', 'SESSION_USER_INVALID');
+    }
+    const membership = await resolveActiveTenant(user.id, companyId, transaction);
+    await setTenantContext(transaction, { userId: user.id, groupId: membership.groupId, companyId: membership.companyId });
+
+    const { accessToken, refreshToken, session, claims } = await issueTokensForSession({
+      user,
+      groupId: membership.groupId,
+      companyId: membership.companyId,
+      transaction,
+      userAgent: meta.userAgent,
+      ipAddress: meta.ipAddress,
+    });
+
+    // Revoga a sessão da empresa anterior (contexto do tenant antigo).
+    if (auth.sessionId) {
+      await setTenantContext(transaction, { userId: user.id, groupId: auth.groupId, companyId: auth.companyId });
+      await Session.update({ revokedAt: new Date(), updatedBy: user.id }, { where: { id: auth.sessionId }, transaction });
+    }
+
+    return {
+      accessToken,
+      refreshToken,
+      sessionId: session.id,
+      user: { id: user.id, name: user.name, email: user.email, mfaEnabled: Boolean(user.mfaEnabled) },
+      groupId: claims.group_id,
+      companyId: claims.company_id,
+      roles: claims.roles,
+      permissions: claims.permissions,
+    };
+  });
+}
+
+module.exports = { login, refresh, logout, listMyCompanies, switchCompany };

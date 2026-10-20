@@ -27,6 +27,40 @@ async function assertNotAlreadyReconciled(financialEntryId, bankTransactionId, t
   }
 }
 
+// Sentido do extrato (R6 / M4-D019 A7): valor negativo = saída (só concilia com DEBIT/PAYABLE),
+// positivo = entrada (só com CREDIT/RECEIVABLE). Conta bancária diferente também nunca concilia
+// (quando os dois lados têm conta informada).
+function entryDirection(entry) {
+  if (entry.entryType === 'DEBIT' || entry.entryType === 'CREDIT') return entry.entryType;
+  if (entry.nature === 'PAYABLE') return 'DEBIT';
+  if (entry.nature === 'RECEIVABLE') return 'CREDIT';
+  return null;
+}
+
+function bankDirection(bankTransaction) {
+  const value = Number(bankTransaction.amount);
+  if (value < 0) return 'DEBIT';
+  if (value > 0) return 'CREDIT';
+  return null;
+}
+
+function assertDirectionAndAccountCompatible(entry, bankTransaction) {
+  const entrySide = entryDirection(entry);
+  const bankSide = bankDirection(bankTransaction);
+  if (entrySide && bankSide && entrySide !== bankSide) {
+    throw AppError.conflict(
+      'Entrada do extrato não pode conciliar com pagamento (ou vice-versa).',
+      'FINANCE_RECONCILIATION_DIRECTION_MISMATCH'
+    );
+  }
+  if (entry.bankAccountId && bankTransaction.bankAccountId && entry.bankAccountId !== bankTransaction.bankAccountId) {
+    throw AppError.conflict(
+      'A linha do extrato e o lançamento são de contas bancárias diferentes.',
+      'FINANCE_RECONCILIATION_ACCOUNT_MISMATCH'
+    );
+  }
+}
+
 async function matchReconciliation(payload, actorUserId, transaction) {
   const { groupId, companyId, financialEntryId, bankTransactionId } = payload;
   if (!groupId || !companyId || !financialEntryId || !bankTransactionId) {
@@ -57,6 +91,8 @@ async function matchReconciliation(payload, actorUserId, transaction) {
       'FINANCE_RECONCILIATION_AMOUNT_MISMATCH'
     );
   }
+
+  assertDirectionAndAccountCompatible(entry, bankTransaction);
 
   await assertNotAlreadyReconciled(financialEntryId, bankTransactionId, transaction);
 
@@ -156,6 +192,10 @@ async function matchReconciliationGroup(payload, actorUserId, transaction) {
         `${(txCents / 100).toFixed(2)}. Conciliação em grupo bloqueada (tolerância zero).`,
       'FINANCE_RECONCILIATION_AMOUNT_MISMATCH'
     );
+  }
+
+  for (const entry of entries) {
+    for (const bankTransaction of bankTransactions) assertDirectionAndAccountCompatible(entry, bankTransaction);
   }
 
   // Cada entry/transaction do grupo precisa estar livre — mesma regra do 1:1, aplicada item a item.
@@ -284,7 +324,9 @@ async function listReconciliations(transaction, filters = {}) {
 // score máximo possível é FORTE (0.90 — reference textual + counterparty + dateWindow), nunca
 // EXATO — fail-closed em relação à classe mais permissiva de auto-conciliação.
 const MATCH_CLASSES = { EXACT: 'EXACT', STRONG: 'STRONG', PROBABLE: 'PROBABLE', AMBIGUOUS: 'AMBIGUOUS', NO_MATCH: 'NO_MATCH' };
-const STRONG_THRESHOLD = 0.75;
+// Livro / M4-D019: FORTE a partir de 0,90 (valor+ref+contraparte, ou valor+ref+contraparte+janela);
+// 0,85 (valor+ref+janela) ainda é PROVÁVEL.
+const STRONG_THRESHOLD = 0.9;
 const PROBABLE_THRESHOLD = 0.45;
 const DATE_WINDOW_DAYS = 5;
 const AMBIGUITY_SCORE_GAP = 0.05;
@@ -355,7 +397,9 @@ function scoreMatch(bankTx, candidate) {
  * batendo, não só o score numérico) — as demais usam só o limiar de score.
  */
 function classifyMatch({ score, criteria }) {
-  if (score >= 1 && criteria.amountMatch && criteria.byExternalId && criteria.counterpartyMatch && criteria.dateMatch) {
+  // EXATO (livro §11): ID externo/fingerprint + valor + data. A conta bancária já é checada na
+  // elegibilidade (candidato de outra conta nunca chega aqui), então não é exigida de novo.
+  if (criteria.amountMatch && criteria.byExternalId && criteria.dateMatch) {
     return MATCH_CLASSES.EXACT;
   }
   if (score >= STRONG_THRESHOLD) return MATCH_CLASSES.STRONG;
@@ -393,11 +437,29 @@ async function suggestReconciliationMatches(bankTransactionId, transaction) {
     (await Reconciliation.findAll({ where: { companyId: bankTx.companyId }, transaction })).map((r) => r.financialEntryId)
   );
 
-  const scored = candidates
-    .filter((c) => !reconciledEntryIds.has(c.id))
+  // Elegibilidade (M4-D019 A7): valor igual (tolerância zero), mesmo sentido e mesma conta.
+  // Candidato incompatível NUNCA aparece como sugestão, qualquer que seja o score.
+  const eligible = candidates.filter((c) => {
+    if (reconciledEntryIds.has(c.id)) return false;
+    if (!sameAmount(bankTx, c)) return false;
+    try {
+      assertDirectionAndAccountCompatible(c, bankTx);
+    } catch {
+      return false;
+    }
+    return true;
+  });
+
+  const scored = eligible
     .map((candidate) => {
       const { score, criteria } = scoreMatch(bankTx, candidate);
-      return { financialEntryId: candidate.id, score, criteria, class: classifyMatch({ score, criteria }) };
+      return {
+        financialEntryId: candidate.id,
+        score,
+        criteria,
+        class: classifyMatch({ score, criteria }),
+        reasons: describeReasons(criteria),
+      };
     })
     .filter((c) => c.score >= PROBABLE_THRESHOLD)
     .sort((a, b) => b.score - a.score);
@@ -406,17 +468,26 @@ async function suggestReconciliationMatches(bankTransactionId, transaction) {
     return { bankTransactionId, finalClass: MATCH_CLASSES.NO_MATCH, candidates: [] };
   }
 
+  // AMBÍGUO (livro §11 e Guia §9): mais de um candidato elegível com score parecido -> nunca
+  // auto. Só o EXATO por ID externo desempata sozinho (o ID externo identifica um lançamento).
   const top = scored[0];
-  const strongOrBetter = scored.filter((c) => c.class === MATCH_CLASSES.EXACT || c.class === MATCH_CLASSES.STRONG);
-  const tiedAtTop = strongOrBetter.filter((c) => top.score - c.score < AMBIGUITY_SCORE_GAP);
+  const tiedAtTop = scored.filter((c) => top.score - c.score < AMBIGUITY_SCORE_GAP);
 
   let finalClass = top.class;
-  if ((top.class === MATCH_CLASSES.EXACT || top.class === MATCH_CLASSES.STRONG) && tiedAtTop.length > 1) {
-    // "múltiplos candidatos fortes: AMBIGUOUS, nunca auto" (contrato, literal).
+  if (top.class !== MATCH_CLASSES.EXACT && tiedAtTop.length > 1) {
     finalClass = MATCH_CLASSES.AMBIGUOUS;
   }
 
   return { bankTransactionId, finalClass, candidates: scored };
+}
+
+function describeReasons(criteria) {
+  const reasons = [];
+  if (criteria.amountMatch) reasons.push('Valor igual');
+  if (criteria.referenceMatch) reasons.push(criteria.byExternalId ? 'ID externo do extrato igual ao do lançamento' : 'Referência do lançamento citada no extrato');
+  if (criteria.counterpartyMatch) reasons.push('Mesma conta bancária');
+  if (criteria.dateMatch) reasons.push('Data dentro da janela de tolerância');
+  return reasons;
 }
 
 /**
@@ -433,6 +504,15 @@ async function autoReconcileSuggestion(payload, actorUserId, transaction) {
     return { ...suggestion, autoReconciled: false };
   }
 
+  // Livro §11: EXATO é auto-confirmado; FORTE é "auto ou revisão conforme regra" — por padrão
+  // fica para revisão humana, e só confirma sozinho se a política estiver ligada na empresa
+  // (setting finance.reconciliation.auto_strong). Ambíguo nunca chega aqui.
+  if (suggestion.finalClass === MATCH_CLASSES.STRONG) {
+    const { getSetting } = require('../settings/settings.service');
+    const autoStrong = await getSetting('finance.reconciliation.auto_strong', { groupId, companyId }, transaction, false);
+    if (!autoStrong) return { ...suggestion, autoReconciled: false };
+  }
+
   const top = suggestion.candidates[0];
   const reconciliation = await matchReconciliation(
     { groupId, companyId, financialEntryId: top.financialEntryId, bankTransactionId },
@@ -440,7 +520,12 @@ async function autoReconcileSuggestion(payload, actorUserId, transaction) {
     transaction
   );
 
-  return { ...suggestion, autoReconciled: true, reconciliation };
+  return {
+    ...suggestion,
+    autoReconciled: true,
+    method: suggestion.finalClass === MATCH_CLASSES.EXACT ? 'AUTO_EXACT' : 'AUTO_STRONG',
+    reconciliation,
+  };
 }
 
 module.exports = {

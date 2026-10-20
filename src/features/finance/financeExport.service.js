@@ -18,10 +18,22 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const EXPORT_MAX_ROWS = 5000;
 const COLUMNS = ['id', 'competenceMonth', 'nature', 'entryType', 'status', 'amount', 'dueAt', 'settledAt', 'description', 'isThirdPartyFunds'];
 
-function csvCell(value) {
+// Colunas numéricas legítimas: números negativos (ex.: -10.00) continuam números, sem apóstrofo.
+const NUMERIC_COLUMNS = new Set(['amount']);
+const NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
+
+/**
+ * csvCell — escapa separador/aspas/quebras e NEUTRALIZA injeção de fórmula (CSV injection,
+ * OWASP): texto livre que começa com = + - @ TAB ou CR é prefixado com apóstrofo, para que o
+ * Excel/Sheets o trate como texto. Colunas numéricas com número válido não são alteradas.
+ */
+function csvCell(value, { numeric = false } = {}) {
   if (value === null || value === undefined) return '';
-  const text = value instanceof Date ? value.toISOString() : String(value);
-  return /[",;\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  if (!(numeric && NUMBER_PATTERN.test(text)) && /^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
+  return /[",;\n\r\t]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
@@ -47,7 +59,7 @@ async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
 
   const rows = await FinancialEntry.findAll({ where, order: [['due_at', 'ASC'], ['id', 'ASC']], transaction });
   const lines = [COLUMNS.join(';')];
-  for (const row of rows) lines.push(COLUMNS.map((c) => csvCell(row.get(c))).join(';'));
+  for (const row of rows) lines.push(COLUMNS.map((c) => csvCell(row.get(c), { numeric: NUMERIC_COLUMNS.has(c) })).join(';'));
   const csv = `${lines.join('\n')}\n`;
   const sha256 = require('crypto').createHash('sha256').update(csv).digest('hex'); // eslint-disable-line global-require
 
@@ -69,4 +81,4 @@ async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
   return { csv, rows: rows.length, sha256, limit: maxRows };
 }
 
-module.exports = { exportFinancialEntries, EXPORT_MAX_ROWS };
+module.exports = { exportFinancialEntries, csvCell, EXPORT_MAX_ROWS };

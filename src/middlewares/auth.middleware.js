@@ -98,6 +98,7 @@ async function authMiddleware(req, res, next) {
 
   req.auth = {
     userId: payload.sub,
+    sessionId: payload.session_id || null,
     groupId: payload.group_id,
     companyId: payload.company_id,
     roles: payload.roles || [],

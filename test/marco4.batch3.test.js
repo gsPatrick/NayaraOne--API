@@ -251,7 +251,7 @@ test('M4-13 N:1 — dois lançamentos de R$50 conciliam contra uma transação b
     const e1 = await createEntry(transaction, { amount: 50, bankAccountId: account.id });
     const e2 = await createEntry(transaction, { amount: 50, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -275,7 +275,7 @@ test('M4-13 N:1 — dois lançamentos de R$50 conciliam contra uma transação b
 
     // Depois de conciliado em grupo, nenhum dos itens pode ser reconciliado de novo.
     const outraTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 50, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -50, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -300,12 +300,12 @@ test('M4-13 N:M — soma que não bate (nem por um centavo) é rejeitada e nada 
     const e1 = await createEntry(transaction, { amount: 33.33, bankAccountId: account.id });
     const e2 = await createEntry(transaction, { amount: 66.68, bankAccountId: account.id }); // total 100.01
     const t1 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 60, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -60, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
     const t2 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 40, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -40, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -328,12 +328,12 @@ test('M4-13 N:M — soma que não bate (nem por um centavo) é rejeitada e nada 
     // Com transações que somam EXATAMENTE os mesmos 100.01, o grupo 2x2 passa
     // (N + M - 1 = 3 linhas, todas no mesmo match_group_id).
     const t3 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 60.01, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -60.01, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
     const t4 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 40, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -40, transactionDate: new Date() },
       tenant.userId,
       transaction
     );

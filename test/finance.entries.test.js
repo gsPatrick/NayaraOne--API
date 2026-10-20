@@ -186,7 +186,7 @@ test('conciliação: valores divergentes entre lançamento e extrato são bloque
     );
     const entry = await createEntry(transaction, tenant.userId, { amount: 150.5, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 99.9, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -99.9, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -214,12 +214,12 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
     );
     const entry = await createEntry(transaction, tenant.userId, { amount: 150.5, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 150.5, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
     const bankTx2 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 150.5, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date() },
       tenant.userId,
       transaction
     );

@@ -83,7 +83,7 @@ test('suggestReconciliationMatches: EXATO quando id externo (idempotencyKey) + c
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         bankAccountId: account.id,
-        amount: 321.0,
+        amount: -321.0,
         transactionDate: new Date(),
         externalTransactionId: idemKey,
       },
@@ -114,7 +114,7 @@ test('suggestReconciliationMatches: AMBÍGUO quando 2 candidatos empatados na fa
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         bankAccountId: account.id,
-        amount: 777.0,
+        amount: -777.0,
         transactionDate: new Date(),
         description: `Lote ref ${entryA.id} ${entryB.id}`,
       },
@@ -169,7 +169,7 @@ test('GET /finance/bank-transactions/:id/reconciliation-suggestions responde com
   assert.equal(entryRes.status, 201, JSON.stringify(entryRes.body));
 
   const txRes = await http('POST', '/finance/bank-transactions', {
-    bankAccountId: accountId, amount: 456.78, transactionDate: new Date().toISOString(),
+    bankAccountId: accountId, amount: -456.78, transactionDate: new Date().toISOString(),
   });
   assert.equal(txRes.status, 201, JSON.stringify(txRes.body));
 
@@ -177,4 +177,117 @@ test('GET /finance/bank-transactions/:id/reconciliation-suggestions responde com
   assert.equal(suggestRes.status, 200, JSON.stringify(suggestRes.body));
   assert.ok(suggestRes.body.data.finalClass);
   assert.ok(Array.isArray(suggestRes.body.data.candidates));
+});
+
+// --- R6 (reconferência ao vivo 20/10/2026): as 5 classes aparecem de fato -----------------------
+
+async function newAccount(transaction) {
+  return bankAccountsService.createBankAccount(
+    { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `${uniqueSuffix()}` },
+    tenant.userId,
+    transaction
+  );
+}
+
+function newBankTx(transaction, account, overrides) {
+  return bankTransactionsService.createBankTransaction(
+    { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, transactionDate: new Date(), ...overrides },
+    tenant.userId,
+    transaction
+  );
+}
+
+test('R6 FORTE: valor + referência (texto) + mesma conta + data = 1 candidato só; não vira EXATO sem ID externo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await newAccount(transaction);
+    const entry = await createEntry(transaction, { amount: 410.0, bankAccountId: account.id });
+    const tx = await newBankTx(transaction, account, { amount: -410.0, description: `PIX ref ${entry.id}` });
+    const s = await reconciliationService.suggestReconciliationMatches(tx.id, transaction);
+    assert.equal(s.finalClass, 'STRONG');
+    assert.equal(s.candidates.length, 1);
+    assert.ok(s.candidates[0].score >= 0.9);
+    assert.ok(s.candidates[0].reasons.includes('Valor igual'));
+  });
+});
+
+test('R6 PROVÁVEL: 0,85 (valor + referência + janela, sem conta) continua sugestão; 1 candidato', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await newAccount(transaction);
+    const entry = await createEntry(transaction, { amount: 411.0 });
+    const tx = await newBankTx(transaction, account, { amount: -411.0, description: `PIX ref ${entry.id}` });
+    const s = await reconciliationService.suggestReconciliationMatches(tx.id, transaction);
+    assert.equal(s.finalClass, 'PROBABLE');
+    assert.equal(s.candidates[0].score, 0.85);
+  });
+});
+
+test('R6 AMBÍGUO: 2 lançamentos de mesmo valor (só valor+data) NÃO são "Provável" — são ambíguos e nunca auto', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await newAccount(transaction);
+    await createEntry(transaction, { amount: 412.0 });
+    await createEntry(transaction, { amount: 412.0 });
+    const tx = await newBankTx(transaction, account, { amount: -412.0 });
+    const s = await reconciliationService.suggestReconciliationMatches(tx.id, transaction);
+    assert.equal(s.finalClass, 'AMBIGUOUS');
+    assert.equal(s.candidates.length, 2);
+    const auto = await reconciliationService.autoReconcileSuggestion(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankTransactionId: tx.id }, tenant.userId, transaction
+    );
+    assert.equal(auto.autoReconciled, false);
+  });
+});
+
+test('R6: FORTE não confirma sozinho por padrão; EXATO confirma e informa método AUTO_EXACT', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await newAccount(transaction);
+    const strongEntry = await createEntry(transaction, { amount: 413.0, bankAccountId: account.id });
+    const strongTx = await newBankTx(transaction, account, { amount: -413.0, description: `ref ${strongEntry.id}` });
+    const a = await reconciliationService.autoReconcileSuggestion(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankTransactionId: strongTx.id }, tenant.userId, transaction
+    );
+    assert.equal(a.finalClass, 'STRONG');
+    assert.equal(a.autoReconciled, false, 'FORTE só confirma sozinho com a política ligada');
+
+    const key = `r6-${uniqueSuffix()}`;
+    const exactEntry = await createEntry(transaction, { amount: 414.0, bankAccountId: account.id, idempotencyKey: key });
+    const exactTx = await newBankTx(transaction, account, { amount: -414.0, externalTransactionId: key });
+    const b = await reconciliationService.autoReconcileSuggestion(
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankTransactionId: exactTx.id }, tenant.userId, transaction
+    );
+    assert.equal(b.finalClass, 'EXACT');
+    assert.equal(b.autoReconciled, true);
+    assert.equal(b.method, 'AUTO_EXACT');
+    assert.equal(b.reconciliation.financialEntryId, exactEntry.id);
+  });
+});
+
+test('R6: valor divergente, sinal oposto e outra conta nunca conciliam (nem aparecem como sugestão)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const account = await newAccount(transaction);
+    const other = await newAccount(transaction);
+    const wrongAmount = await createEntry(transaction, { amount: 415.0, bankAccountId: account.id });
+    const payable = await createEntry(transaction, { amount: 416.0, bankAccountId: account.id });
+    const otherAccountEntry = await createEntry(transaction, { amount: 417.0, bankAccountId: other.id });
+
+    const txAmount = await newBankTx(transaction, account, { amount: -415.5, description: `ref ${wrongAmount.id}` });
+    assert.equal((await reconciliationService.suggestReconciliationMatches(txAmount.id, transaction)).finalClass, 'NO_MATCH');
+    await assert.rejects(
+      () => reconciliationService.matchReconciliation({ groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: wrongAmount.id, bankTransactionId: txAmount.id }, tenant.userId, transaction),
+      (e) => e.code === 'FINANCE_RECONCILIATION_AMOUNT_MISMATCH'
+    );
+
+    const txCredit = await newBankTx(transaction, account, { amount: 416.0 });
+    assert.equal((await reconciliationService.suggestReconciliationMatches(txCredit.id, transaction)).finalClass, 'NO_MATCH');
+    await assert.rejects(
+      () => reconciliationService.matchReconciliation({ groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: payable.id, bankTransactionId: txCredit.id }, tenant.userId, transaction),
+      (e) => e.code === 'FINANCE_RECONCILIATION_DIRECTION_MISMATCH'
+    );
+
+    const txOther = await newBankTx(transaction, account, { amount: -417.0 });
+    assert.equal((await reconciliationService.suggestReconciliationMatches(txOther.id, transaction)).finalClass, 'NO_MATCH');
+    await assert.rejects(
+      () => reconciliationService.matchReconciliation({ groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: otherAccountEntry.id, bankTransactionId: txOther.id }, tenant.userId, transaction),
+      (e) => e.code === 'FINANCE_RECONCILIATION_ACCOUNT_MISMATCH'
+    );
+  });
 });

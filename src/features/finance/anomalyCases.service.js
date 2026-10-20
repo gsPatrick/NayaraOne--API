@@ -1,6 +1,6 @@
 'use strict';
 
-const { AnomalyCase } = require('../../models');
+const { AnomalyCase, User, FinancialEntry, PaymentIntent } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishAnomalyOpened } = require('./financeEvents.service');
@@ -61,11 +61,80 @@ async function createAnomalyCase(payload, actorUserId, transaction) {
   return anomalyCase;
 }
 
+// Título em português por tipo de caso (R7). Tipo desconhecido nunca vira texto técnico: cai
+// num rótulo neutro mas honesto.
+const CASE_TYPE_TITLES = {
+  AMOUNT_OUTLIER: 'Valor fora do padrão',
+  FREQUENT_REVERSAL: 'Estornos frequentes',
+  DUPLICATE_SETTLEMENT: 'Possível pagamento em dobro',
+  BENEFICIARY_CHANGED: 'Conta bancária do favorecido trocada',
+  LATE_BANK_CONFIRMATION: 'Confirmação do banco após falha',
+  BANK_PAYMENT_RETURNED: 'Pagamento devolvido pelo banco',
+  BANK_CONFIRMATION_UNDER_REVIEW: 'Confirmação do banco em revisão manual',
+  POST_CLOSING_BANK_CONFIRMATION: 'Confirmação do banco após o fechamento',
+  BANK_UNREACHABLE: 'Banco indisponível no envio',
+};
+
+function caseTypeTitle(caseType) {
+  return CASE_TYPE_TITLES[caseType] || 'Alerta financeiro (tipo não catalogado)';
+}
+
+function toIso(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Serializa o caso para a tela: data de abertura (created_at underscored — o model expõe o
+ * atributo como `created_at`, não `createdAt`), quem resolveu, o lançamento relacionado e o
+ * título em português.
+ */
+async function serializeAnomalyCases(cases, transaction) {
+  const rows = Array.isArray(cases) ? cases : [cases];
+  const userIds = [...new Set(rows.flatMap((c) => [c.resolvedBy, c.createdBy]).filter(Boolean))];
+  const users = userIds.length ? await User.findAll({ where: { id: userIds }, attributes: ['id', 'name'], transaction }) : [];
+  const userName = new Map(users.map((u) => [u.id, u.name]));
+
+  const entryIds = new Set();
+  const intentIds = [];
+  for (const c of rows) {
+    if (c.relatedEntityType === 'FinancialEntry' && c.relatedEntityId) entryIds.add(c.relatedEntityId);
+    if (c.relatedEntityType === 'PaymentIntent' && c.relatedEntityId) intentIds.push(c.relatedEntityId);
+  }
+  const intents = intentIds.length ? await PaymentIntent.findAll({ where: { id: intentIds }, transaction }) : [];
+  const intentToEntry = new Map(intents.map((i) => [i.id, i.financialEntryId]));
+  for (const entryId of intentToEntry.values()) if (entryId) entryIds.add(entryId);
+  const entries = entryIds.size ? await FinancialEntry.findAll({ where: { id: [...entryIds] }, transaction }) : [];
+  const entryById = new Map(entries.map((e) => [e.id, e]));
+
+  const out = rows.map((c) => {
+    const json = c.toJSON();
+    const createdAt = toIso(c.get('created_at') || c.get('createdAt') || json.created_at || json.createdAt);
+    const updatedAt = toIso(c.get('updated_at') || c.get('updatedAt') || json.updated_at || json.updatedAt);
+    const entryId = c.relatedEntityType === 'PaymentIntent' ? intentToEntry.get(c.relatedEntityId) : c.relatedEntityId;
+    const entry = entryId ? entryById.get(entryId) : null;
+    return {
+      ...json,
+      createdAt,
+      updatedAt,
+      caseTypeLabel: caseTypeTitle(c.caseType),
+      resolvedAt: toIso(c.resolvedAt),
+      resolvedByName: c.resolvedBy ? userName.get(c.resolvedBy) || null : null,
+      relatedEntry: entry
+        ? { id: entry.id, description: entry.description, amount: entry.amount, status: entry.status }
+        : null,
+    };
+  });
+  return Array.isArray(cases) ? out : out[0];
+}
+
 async function listAnomalyCases(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.riskLevel) where.riskLevel = String(filters.riskLevel).toUpperCase();
-  return AnomalyCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const cases = await AnomalyCase.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return serializeAnomalyCases(cases, transaction);
 }
 
 async function countOpenHighRiskAnomalies(companyId, transaction) {
@@ -105,7 +174,7 @@ async function resolveAnomalyCase(id, actorUserId, transaction, resolutionNote) 
     transaction
   );
 
-  return anomalyCase;
+  return serializeAnomalyCases(anomalyCase, transaction);
 }
 
 module.exports = {
@@ -113,5 +182,8 @@ module.exports = {
   listAnomalyCases,
   countOpenHighRiskAnomalies,
   resolveAnomalyCase,
+  serializeAnomalyCases,
+  caseTypeTitle,
+  CASE_TYPE_TITLES,
   RISK_LEVELS,
 };

@@ -128,7 +128,7 @@ test('ADV-F03 conciliar lançamento da empresa A dizendo que pertence à empresa
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -346,7 +346,7 @@ test('ADV-F13 repetir o mesmo lançamento na lista do grupo pra "dobrar" a soma 
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 50, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -403,7 +403,7 @@ test('ADV-F15 reusar uma transação bancária já conciliada em um novo grupo (
     const e1 = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const e2 = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
