@@ -19,6 +19,16 @@ const pino = require('pino');
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   base: { service: 'nayaraone-api' },
+  // Nunca registrar credenciais (o log de requisição do pino-http imprimia o JWT completo do
+  // header Authorization em cada linha). Vale para qualquer log que carregue req/res/headers.
+  redact: {
+    paths: [
+      'req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]',
+      'req.headers["x-auth-token"]', 'req.headers["x-refresh-token"]',
+      'res.headers["set-cookie"]', 'headers.authorization', 'headers.cookie',
+    ],
+    censor: '[REDACTED]',
+  },
   timestamp: pino.stdTimeFunctions.isoTime,
 });
 
