@@ -236,7 +236,7 @@ async function createCommission(payload, actorUserId, transaction) {
   }
   if (!idempotencyKey) {
     throw AppError.badRequest(
-      'O campo "idempotencyKey" é obrigatório — evita duplicar a obrigação de comissão em caso de retry/duplo-clique.',
+      'Falta a chave de segurança contra duplicidade da comissão. Tente de novo; se persistir, avise o administrador.',
       'FINANCE_COMMISSION_IDEMPOTENCY_KEY_REQUIRED'
     );
   }
@@ -474,7 +474,7 @@ async function markInstallmentPaid(installmentId, financialEntryId, actorUserId,
   // nenhum). Agora a validação é real e fail-closed.
   if (!financialEntryId) {
     throw AppError.badRequest(
-      'O campo "financialEntryId" é obrigatório para dar baixa na parcela — precisa apontar para um lançamento financeiro já liquidado.',
+      'Para dar baixa na parcela, informe o lançamento financeiro já liquidado que a pagou.',
       'FINANCE_COMMISSION_INSTALLMENT_ENTRY_REQUIRED'
     );
   }

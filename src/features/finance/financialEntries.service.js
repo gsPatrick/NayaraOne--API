@@ -65,7 +65,7 @@ function resolveCompetenceMonth(competenceMonth, dueAt) {
     const normalized = String(competenceMonth).trim();
     if (!COMPETENCE_MONTH_REGEX.test(normalized)) {
       throw AppError.badRequest(
-        'O campo "competenceMonth" deve estar no formato "YYYY-MM" (ex.: "2026-09").',
+        'A competência precisa estar no formato mês/ano (ex.: 09/2026).',
         'FINANCE_ENTRY_VALIDATION'
       );
     }
@@ -492,7 +492,7 @@ const THIRD_PARTY_RELEASE_TYPES = ['RETURN', 'COMPENSATION'];
 async function resolveCompensatedDebt({ companyId, compensatedEntryId, contractId, holderPersonId, amount }, transaction) {
   if (!compensatedEntryId) {
     throw AppError.badRequest(
-      'Compensação de caução precisa indicar a dívida compensada ("thirdPartyCompensatedEntryId").',
+      'Informe a dívida do titular que está sendo compensada com a caução.',
       'FINANCE_THIRD_PARTY_COMPENSATED_DEBT_REQUIRED'
     );
   }
@@ -530,7 +530,7 @@ async function resolveCompensatedDebt({ companyId, compensatedEntryId, contractI
 async function resolveThirdPartyRelease({ companyId, contractId, holderPersonId, originEntryId, amount }, transaction) {
   if (!originEntryId) {
     throw AppError.badRequest(
-      'Devolução ou compensação de dinheiro de terceiro precisa indicar o recebimento de origem ("thirdPartyOriginEntryId") — é o que liga a saída ao contrato e ao titular corretos.',
+      'Informe de qual recebimento de caução esta devolução ou compensação sai — é isso que liga a saída ao contrato e ao titular corretos.',
       'FINANCE_THIRD_PARTY_ORIGIN_REQUIRED'
     );
   }
@@ -592,7 +592,7 @@ function assertReasonableDueDate(dueAt) {
   if (dueAt === undefined || dueAt === null || dueAt === '') return;
   const parsed = new Date(dueAt);
   if (Number.isNaN(parsed.getTime())) {
-    throw AppError.badRequest('O campo "dueAt" não é uma data válida.', 'FINANCE_ENTRY_VALIDATION');
+    throw AppError.badRequest('O vencimento informado não é uma data válida.', 'FINANCE_ENTRY_VALIDATION');
   }
   const year = parsed.getUTCFullYear();
   if (year < DUE_DATE_MIN_YEAR || year > DUE_DATE_MAX_YEAR) {
@@ -659,13 +659,13 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   // PENDING_CLASSIFICATION), por isso ficam de fora desta exigência.
   if (normalizedNature === 'PAYABLE' && !costCenterId) {
     throw AppError.badRequest(
-      'Lançamento de despesa (nature "PAYABLE") exige "costCenterId".',
+      'Lançamento de despesa exige o centro de custo.',
       'FINANCE_ENTRY_COST_CENTER_REQUIRED'
     );
   }
   if (normalizedNature === 'RECEIVABLE' && !resultCenterId) {
     throw AppError.badRequest(
-      'Lançamento de receita (nature "RECEIVABLE") exige "resultCenterId".',
+      'Lançamento de receita exige o centro de resultado.',
       'FINANCE_ENTRY_RESULT_CENTER_REQUIRED'
     );
   }
@@ -679,7 +679,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
     thirdPartyReference === undefined || thirdPartyReference === null ? null : String(thirdPartyReference).trim();
   if (normalizedThirdParty && !normalizedThirdPartyReference) {
     throw AppError.badRequest(
-      'Lançamento marcado como dinheiro de terceiro exige "thirdPartyReference" não vazio (ex.: "Caução contrato X") — é o que identifica de quem é o dinheiro.',
+      'Lançamento de dinheiro de terceiro exige uma referência preenchida (ex.: "Caução contrato X") — é o que identifica de quem é o dinheiro.',
       'FINANCE_THIRD_PARTY_REFERENCE_REQUIRED'
     );
   }
@@ -687,7 +687,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   // F04 — vínculo de origem, contrato e titular do dinheiro de terceiro.
   if (thirdPartyOriginEntryId && !(normalizedThirdParty && normalizedNature === 'PAYABLE')) {
     throw AppError.badRequest(
-      '"thirdPartyOriginEntryId" só se aplica a devolução/compensação de dinheiro de terceiro (nature "PAYABLE" com isThirdPartyFunds).',
+      'O recebimento de origem só se aplica a devolução ou compensação de dinheiro de terceiro (despesa marcada como dinheiro de terceiro).',
       'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
     );
   }
@@ -698,7 +698,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   let compensatedDebt = null;
   if ((thirdPartyReleaseType || thirdPartyCompensatedEntryId) && !(normalizedThirdParty && normalizedNature === 'PAYABLE')) {
     throw AppError.badRequest(
-      '"thirdPartyReleaseType"/"thirdPartyCompensatedEntryId" só se aplicam a devolução/compensação de dinheiro de terceiro.',
+      'O tipo de saída e a dívida compensada só se aplicam a devolução ou compensação de dinheiro de terceiro.',
       'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
     );
   }
@@ -737,7 +737,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
       );
     } else if (thirdPartyCompensatedEntryId) {
       throw AppError.badRequest(
-        '"thirdPartyCompensatedEntryId" só se aplica a compensação (thirdPartyReleaseType "COMPENSATION").',
+        'A dívida compensada só se aplica quando o tipo de saída é compensação.',
         'FINANCE_ENTRY_VALIDATION'
       );
     }
@@ -746,7 +746,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
     // era aceito e só travava na devolução. §13: toda movimentação exige vínculo.
     if (!resolvedContractId || !resolvedHolderPersonId) {
       throw AppError.badRequest(
-        'Recebimento de dinheiro de terceiro (caução) exige o contrato ("contractId") e o titular ("thirdPartyHolderPersonId").',
+        'Recebimento de caução exige o contrato e o titular. Informe os dois.',
         'FINANCE_THIRD_PARTY_LINK_REQUIRED'
       );
     }
@@ -755,7 +755,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
     await assertThirdPartyHolderIsContractParty(resolvedHolderPersonId, resolvedContractId, transaction);
   } else if (!normalizedThirdParty && resolvedHolderPersonId) {
     throw AppError.badRequest(
-      '"thirdPartyHolderPersonId" só se aplica a dinheiro de terceiro (isThirdPartyFunds).',
+      'O titular só se aplica a lançamento de dinheiro de terceiro.',
       'FINANCE_THIRD_PARTY_HOLDER_NOT_APPLICABLE'
     );
   }
@@ -881,6 +881,50 @@ async function getFinancialEntry(id, transaction) {
 }
 
 /**
+ * invalidateStaleOpenPaymentIntents — F-05. Depois de uma edição, toda intenção de pagamento ainda
+ * não enviada ao banco (PENDING ou APPROVED) cujo retrato (snapshot) não bate mais com o
+ * lançamento é cancelada, com motivo em português e auditoria antes/depois. Fica livre para uma
+ * nova intenção sobre a versão atual. Intenção já enviada ao banco (SUBMITTING/SUBMITTED) não é
+ * tocada aqui: a mudança de destino nesse estágio é barrada em updateFinancialEntry.
+ */
+async function invalidateStaleOpenPaymentIntents(entry, actorUserId, transaction) {
+  const { buildEntrySnapshot, computeSnapshotHash } = require('./paymentIntents.service');
+  const intents = await PaymentIntent.findAll({
+    where: { financialEntryId: entry.id, status: ['PENDING', 'APPROVED'] },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+  if (intents.length === 0) return 0;
+  const currentHash = computeSnapshotHash(buildEntrySnapshot(entry));
+  let invalidated = 0;
+  for (const intent of intents) {
+    if (intent.snapshotHash === currentHash) continue;
+    const beforeJson = intent.toJSON();
+    intent.status = 'CANCELLED';
+    intent.cancelledAt = new Date();
+    intent.cancelReason = 'Lançamento alterado após a aprovação: a intenção de pagamento foi invalidada. Crie uma nova intenção sobre a versão atual.';
+    intent.updatedBy = actorUserId || null;
+    await intent.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId: intent.groupId,
+        companyId: intent.companyId,
+        actorUserId,
+        action: 'finance.payment_intent.stale',
+        entityType: 'PaymentIntent',
+        entityId: intent.id,
+        beforeJson,
+        afterJson: intent.toJSON(),
+        reason: intent.cancelReason,
+      },
+      transaction
+    );
+    invalidated += 1;
+  }
+  return invalidated;
+}
+
+/**
  * updateFinancialEntry — só permite editar campos "de agenda" (vencimento, centro de custo/
  * resultado, conta bancária) enquanto o lançamento estiver PENDING. Uma vez SETTLED/REVERSED,
  * o registro é histórico — qualquer correção de valor precisa passar por `reverseEntry`.
@@ -956,6 +1000,16 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     }
   }
 
+  if (bankAccountId !== undefined && bankAccountId !== entry.bankAccountId) {
+    const inFlight = await PaymentIntent.count({ where: { financialEntryId: entry.id, status: ['SUBMITTING', 'SUBMITTED'] }, transaction });
+    if (inFlight > 0) {
+      throw AppError.conflict(
+        'Há um pagamento em andamento no banco para este lançamento — não é possível trocar a conta do favorecido até o banco responder.',
+        'FINANCE_ENTRY_HAS_OPEN_PAYMENT_INTENT'
+      );
+    }
+  }
+
   const isBankAccountRedirect = bankAccountId !== undefined && entry.bankAccountId && bankAccountId && bankAccountId !== entry.bankAccountId;
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
@@ -970,6 +1024,27 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     entry.manualReviewClearedBy = null;
   }
   await entry.save({ transaction });
+
+  // F-05 (conferência ao vivo 20/10/2026, Caderno §9 e §17): trocar o favorecido ou qualquer
+  // dado que entra no retrato (snapshot) da intenção de pagamento invalida a intenção que ainda
+  // não foi ao banco — ela deixa de ficar "Aprovada" sobre um dado que mudou — e a troca de
+  // conta abre um caso de revisão (alerta) além da marca de revisão manual.
+  await invalidateStaleOpenPaymentIntents(entry, actorUserId, transaction);
+  if (isBankAccountRedirect) {
+    await createAnomalyCase(
+      {
+        groupId: entry.groupId,
+        companyId: entry.companyId,
+        caseType: 'BENEFICIARY_CHANGED',
+        riskLevel: 'HIGH',
+        relatedEntityType: 'FinancialEntry',
+        relatedEntityId: entry.id,
+        reason: 'A conta bancária do favorecido foi trocada depois da criação do lançamento. As aprovações anteriores foram invalidadas e o pagamento exige revisão manual antes de ser liquidado.',
+      },
+      actorUserId,
+      transaction
+    );
+  }
 
   // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A10): qualquer
   // edição do lançamento depois de uma aprovação invalida a aprovação (FIN-005 — a decisão foi
@@ -1447,7 +1522,7 @@ async function resolveClassificationPending(id, finalNature, actorUserId, transa
   const normalizedNature = String(finalNature || '').toUpperCase();
   if (!['RECEIVABLE', 'PAYABLE', 'ADJUSTMENT'].includes(normalizedNature)) {
     throw AppError.badRequest(
-      'O campo "finalNature" deve ser um de: RECEIVABLE, PAYABLE, ADJUSTMENT.',
+      'Escolha como classificar o valor excedente: receita, despesa ou ajuste.',
       'FINANCE_CLASSIFICATION_PENDING_VALIDATION'
     );
   }
@@ -1464,7 +1539,7 @@ async function resolveClassificationPending(id, finalNature, actorUserId, transa
   await assertCompetenceOpen(pending.companyId, pending.competenceMonth, transaction);
   const costCenterId = options && options.costCenterId ? options.costCenterId : null;
   if (normalizedNature === 'PAYABLE' && !costCenterId) {
-    throw AppError.badRequest('Classificar como despesa (PAYABLE) exige "costCenterId".', 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
+    throw AppError.badRequest('Classificar como despesa exige o centro de custo.', 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
   }
   const beforeJson = pending.toJSON();
   pending.nature = normalizedNature;

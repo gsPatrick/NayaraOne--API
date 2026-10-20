@@ -2,6 +2,7 @@
 
 const { Op } = require('sequelize');
 const { OwnerRepass, FinancialEntry, AuditLog, Contract, Person } = require('../../models');
+const { formatCompetenceBR, formatMoneyBR } = require('../../utils/formatBR');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
@@ -100,6 +101,8 @@ function sourceIneligibility(entry) {
 // repasse tem contrato) ou de contrato do MESMO imóvel (se o repasse é só do imóvel). Recebimento
 // sem contrato (lançamento avulso) não tem como ser ligado a um imóvel: continua aceito pela API
 // (compatibilidade), mas não é sugerido na lista de elegíveis.
+const REPASSE_STATUS_PT = { PENDING: 'aguardando aprovação', APPROVED: 'aprovado', PAID: 'pago', CANCELLED: 'cancelado' };
+
 async function assertSourcesInScope(entries, { propertyId, contractId }, transaction) {
   const contractIds = [...new Set(entries.map((e) => e.contractId).filter(Boolean))];
   if (contractIds.length === 0) return;
@@ -144,7 +147,7 @@ async function allocatedAmountsByEntry(transaction) {
 async function listEligibleRepasseSources(transaction, filters = {}) {
   const { propertyId, contractId, referenceMonth } = filters;
   if (!propertyId) {
-    throw AppError.badRequest('Informe o imóvel ("propertyId") para listar os recebimentos elegíveis.', 'FINANCE_OWNER_REPASSE_VALIDATION');
+    throw AppError.badRequest('Escolha o imóvel para listar os recebimentos elegíveis ao repasse.', 'FINANCE_OWNER_REPASSE_VALIDATION');
   }
   if (referenceMonth && !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(referenceMonth))) {
     throw AppError.badRequest('O período deve estar no formato AAAA-MM.', 'FINANCE_OWNER_REPASSE_VALIDATION');
@@ -183,7 +186,7 @@ async function listEligibleRepasseSources(transaction, filters = {}) {
 async function assertEligibleSources(companyId, sourceEntryIds, transaction) {
   if (!Array.isArray(sourceEntryIds) || sourceEntryIds.length === 0) {
     throw AppError.badRequest(
-      'O campo "sourceEntryIds" é obrigatório — o repasse precisa ser vinculado a lançamento(s) de recebimento real(is).',
+      'Escolha ao menos um recebimento: o repasse precisa estar ligado a recebimento(s) reais.',
       'FINANCE_OWNER_REPASSE_VALIDATION'
     );
   }
@@ -198,7 +201,7 @@ async function assertEligibleSources(companyId, sourceEntryIds, transaction) {
   });
   if (entries.length !== uniqueIds.length) {
     throw AppError.notFound(
-      'Um ou mais lançamentos informados em "sourceEntryIds" não foram encontrados nesta empresa.',
+      'Um ou mais recebimentos escolhidos não foram encontrados nesta empresa.',
       'FINANCE_OWNER_REPASSE_SOURCE_NOT_FOUND'
     );
   }
@@ -251,7 +254,7 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   // Período definido (§12, Frente 3): todo repasse é de uma competência — sem isso não há como
   // impedir dois repasses do mesmo período (ver índice owner_repasses_one_per_period_uq).
   if (!referenceMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(referenceMonth))) {
-    throw AppError.badRequest('O período do repasse ("referenceMonth", formato YYYY-MM) é obrigatório.', 'FINANCE_OWNER_REPASSE_PERIOD_REQUIRED');
+    throw AppError.badRequest('Informe o período do repasse (mês/ano).', 'FINANCE_OWNER_REPASSE_PERIOD_REQUIRED');
   }
   const samePeriod = await OwnerRepass.findOne({
     where: { companyId, ownerPersonId, propertyId, contractId: contractId || null, referenceMonth, status: ['PENDING', 'APPROVED', 'PAID'] },
@@ -259,7 +262,7 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   });
   if (samePeriod) {
     throw AppError.conflict(
-      `Já existe repasse para este proprietário/imóvel/contrato no período ${referenceMonth} (status ${samePeriod.status}).`,
+      `Já existe um repasse para este proprietário e imóvel no período ${formatCompetenceBR(referenceMonth)} (situação: ${REPASSE_STATUS_PT[samePeriod.status] || samePeriod.status}). Cancele o anterior antes de criar outro.`,
       'FINANCE_OWNER_REPASSE_PERIOD_DUPLICATE',
       { existingId: samePeriod.id }
     );
@@ -282,13 +285,13 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   const grossNumeric = grossAmount === undefined || grossAmount === null ? eligibleAmount : Number(grossAmount);
   const deductionsNumeric = Number(deductionsAmount) || 0;
   if (!Number.isFinite(grossNumeric) || grossNumeric <= 0) {
-    throw AppError.badRequest('O campo "grossAmount" deve ser um número positivo.', 'FINANCE_OWNER_REPASSE_VALIDATION');
+    throw AppError.badRequest('O valor bruto do repasse precisa ser um número positivo.', 'FINANCE_OWNER_REPASSE_VALIDATION');
   }
   if (deductionsNumeric < 0 || deductionsNumeric > grossNumeric) {
-    throw AppError.badRequest('O campo "deductionsAmount" não pode ser negativo nem maior que "grossAmount".', 'FINANCE_OWNER_REPASSE_VALIDATION');
+    throw AppError.badRequest('A dedução não pode ser negativa nem maior que o valor bruto do repasse.', 'FINANCE_OWNER_REPASSE_VALIDATION');
   }
   if (referenceMonth && !/^\d{4}-\d{2}$/.test(referenceMonth)) {
-    throw AppError.badRequest('O campo "referenceMonth" deve estar no formato "YYYY-MM".', 'FINANCE_OWNER_REPASSE_VALIDATION');
+    throw AppError.badRequest('O período do repasse precisa estar no formato mês/ano (ex.: 10/2026).', 'FINANCE_OWNER_REPASSE_VALIDATION');
   }
 
   // "Repasse não pode ser maior que valor elegível recebido, salvo ajuste formal." Sem
@@ -298,8 +301,8 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
       formalAdjustment && typeof formalAdjustment.reason === 'string' && formalAdjustment.reason.trim() && formalAdjustment.approvedByUserId;
     if (!hasFormalAdjustment) {
       throw AppError.conflict(
-        `Valor do repasse (${round2(grossNumeric)}) excede o valor elegível recebido dos lançamentos informados ` +
-          `(${round2(eligibleAmount)}) — bloqueado. Para exceder, informe "formalAdjustment" com motivo e aprovador.`,
+        `O valor do repasse (${formatMoneyBR(round2(grossNumeric))}) é maior que o valor elegível recebido dos lançamentos escolhidos ` +
+          `(${formatMoneyBR(round2(eligibleAmount))}) — bloqueado. Para exceder, é preciso um ajuste formal com motivo e aprovador.`,
         'FINANCE_OWNER_REPASSE_EXCEEDS_ELIGIBLE_CAP'
       );
     }
@@ -308,7 +311,7 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   // Caderno M4 §12: "Desconto precisa de motivo/documento/regra." Dedução sem motivo é recusada.
   const deductionsReasonText = typeof deductionsReason === 'string' ? deductionsReason.trim() : '';
   if (deductionsNumeric > 0 && !deductionsReasonText) {
-    throw AppError.badRequest('Dedução no repasse exige "deductionsReason" (motivo do desconto).', 'FINANCE_OWNER_REPASSE_DEDUCTION_REASON_REQUIRED');
+    throw AppError.badRequest('Dedução no repasse exige o motivo do desconto.', 'FINANCE_OWNER_REPASSE_DEDUCTION_REASON_REQUIRED');
   }
 
   await assertNoDuplicatePayment(OwnerRepass, idempotencyKey, transaction);
@@ -432,11 +435,11 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
   }
   const bankAccountId = repasse.bankAccountId || (payload && payload.bankAccountId);
   if (!bankAccountId) {
-    throw AppError.badRequest('Informe a conta bancária de saída do repasse ("bankAccountId").', 'FINANCE_OWNER_REPASSE_BANK_ACCOUNT_REQUIRED');
+    throw AppError.badRequest('Informe a conta bancária de saída do repasse.', 'FINANCE_OWNER_REPASSE_BANK_ACCOUNT_REQUIRED');
   }
   const costCenterId = payload && payload.costCenterId;
   if (!costCenterId) {
-    throw AppError.badRequest('Informe o centro de custo do pagamento do repasse ("costCenterId").', 'FINANCE_OWNER_REPASSE_VALIDATION');
+    throw AppError.badRequest('Informe o centro de custo do pagamento do repasse.', 'FINANCE_OWNER_REPASSE_VALIDATION');
   }
   await assertBankAccountEligibleForPayment(bankAccountId, transaction);
 

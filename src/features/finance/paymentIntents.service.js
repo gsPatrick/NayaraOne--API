@@ -105,7 +105,7 @@ async function getPaymentIntentForUpdate(id, transaction) {
 async function createPaymentIntent(payload, actorUserId, transaction) {
   const { financialEntryId, approvalRequestId } = payload;
   if (!financialEntryId) {
-    throw AppError.badRequest('O campo "financialEntryId" é obrigatório.', 'FINANCE_PAYMENT_INTENT_VALIDATION');
+    throw AppError.badRequest('Escolha o lançamento para criar a intenção de pagamento.', 'FINANCE_PAYMENT_INTENT_VALIDATION');
   }
 
   // Relê o lançamento do banco (em vez de confiar num objeto passado pelo chamador) para que o

@@ -32,7 +32,7 @@ async function createBudgetForecast(payload, actorUserId, transaction) {
     );
   }
   if (!COMPETENCE_MONTH_REGEX.test(competenceMonth)) {
-    throw AppError.badRequest('O campo "competenceMonth" deve estar no formato "YYYY-MM".', 'FINANCE_BUDGET_FORECAST_VALIDATION');
+    throw AppError.badRequest('A competência precisa estar no formato mês/ano (ex.: 09/2026).', 'FINANCE_BUDGET_FORECAST_VALIDATION');
   }
   const normalizedNature = String(nature).toUpperCase();
   if (!NATURES.includes(normalizedNature)) {
@@ -40,13 +40,13 @@ async function createBudgetForecast(payload, actorUserId, transaction) {
   }
   const amountNumeric = Number(forecastedAmount);
   if (!Number.isFinite(amountNumeric) || amountNumeric <= 0) {
-    throw AppError.badRequest('O campo "forecastedAmount" deve ser um número positivo.', 'FINANCE_BUDGET_FORECAST_VALIDATION');
+    throw AppError.badRequest('O valor projetado precisa ser um número positivo.', 'FINANCE_BUDGET_FORECAST_VALIDATION');
   }
   if (normalizedNature === 'PAYABLE' && !costCenterId) {
-    throw AppError.badRequest('Projeção de despesa (nature "PAYABLE") exige "costCenterId".', 'FINANCE_BUDGET_FORECAST_COST_CENTER_REQUIRED');
+    throw AppError.badRequest('Projeção de despesa exige o centro de custo.', 'FINANCE_BUDGET_FORECAST_COST_CENTER_REQUIRED');
   }
   if (normalizedNature === 'RECEIVABLE' && !resultCenterId) {
-    throw AppError.badRequest('Projeção de receita (nature "RECEIVABLE") exige "resultCenterId".', 'FINANCE_BUDGET_FORECAST_RESULT_CENTER_REQUIRED');
+    throw AppError.badRequest('Projeção de receita exige o centro de resultado.', 'FINANCE_BUDGET_FORECAST_RESULT_CENTER_REQUIRED');
   }
 
   const forecast = await BudgetForecast.create(
@@ -97,7 +97,7 @@ async function listBudgetForecasts(transaction, filters = {}) {
  */
 async function compareForecastToRealized(competenceMonth, transaction) {
   if (!COMPETENCE_MONTH_REGEX.test(competenceMonth)) {
-    throw AppError.badRequest('O campo "competenceMonth" deve estar no formato "YYYY-MM".', 'FINANCE_BUDGET_FORECAST_VALIDATION');
+    throw AppError.badRequest('A competência precisa estar no formato mês/ano (ex.: 09/2026).', 'FINANCE_BUDGET_FORECAST_VALIDATION');
   }
 
   const forecasts = await BudgetForecast.findAll({ where: { competenceMonth }, transaction });

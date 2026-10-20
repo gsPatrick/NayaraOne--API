@@ -30,6 +30,14 @@ async function createBankTransaction(payload, actorUserId, transaction) {
     );
   }
 
+  const amountNumber = Number(amount);
+  if (!Number.isFinite(amountNumber) || Math.abs(amountNumber) >= 1e16) {
+    throw AppError.badRequest('O valor da transação do extrato precisa ser um número válido.', 'FINANCE_BANK_TRANSACTION_VALIDATION');
+  }
+  // F-09: data de dia (AAAA-MM-DD) é gravada ao meio-dia de São Paulo — à meia-noite UTC o
+  // dia aparecia como o anterior (20/10 virava 19/10) para quem lê no fuso de São Paulo.
+  const storedDate = DATE_ONLY_REGEX.test(String(transactionDate).trim()) ? `${String(transactionDate).trim()}${NOON_SAO_PAULO_SUFFIX}` : transactionDate;
+
   if (externalTransactionId) {
     const existing = await BankTransaction.findOne({ where: { externalTransactionId }, transaction });
     if (existing) {
@@ -47,8 +55,8 @@ async function createBankTransaction(payload, actorUserId, transaction) {
       companyId,
       bankAccountId,
       externalTransactionId: externalTransactionId || null,
-      amount,
-      transactionDate,
+      amount: amountNumber,
+      transactionDate: storedDate,
       description: description || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -81,35 +89,123 @@ async function createBankTransaction(payload, actorUserId, transaction) {
 // (cabeçalho obrigatório, nessa ordem — escopo desta rodada: CSV, não OFX binário/SGML, que
 // exigiria um parser bem maior; a REGRA DE NEGÓCIO — idempotência por linha, reimportar o
 // MESMO arquivo não duplica nada — é a mesma independente do formato de origem).
+const CSV_EXPECTED_HEADER = ['externaltransactionid', 'transactiondate', 'description', 'amount'];
+const NOON_SAO_PAULO_SUFFIX = 'T12:00:00-03:00';
+
+/**
+ * splitCsv — leitor de CSV com aspas ("" dentro de um campo vira "), delimitador vírgula ou ponto
+ * e vírgula (decidido pela primeira linha) e quebra de linha dentro de campo entre aspas.
+ * Devolve as linhas já separadas em campos; linhas totalmente vazias são ignoradas.
+ */
+function splitCsv(text) {
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  const firstLine = src.split(/\r?\n/)[0] || '';
+  const delimiter = firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',';
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+  let fieldWasQuoted = false;
+  const pushField = () => { row.push(fieldWasQuoted ? field : field.trim()); field = ''; fieldWasQuoted = false; };
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { field += '"'; i += 1; } else { quoted = false; }
+      } else { field += ch; }
+    } else if (ch === '"' && field.trim() === '') { quoted = true; fieldWasQuoted = true; field = ''; }
+    else if (ch === delimiter) { pushField(); }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i += 1;
+      pushField();
+      if (row.some((c) => String(c).trim() !== '')) rows.push(row);
+      row = [];
+    } else { field += ch; }
+  }
+  if (quoted) {
+    throw AppError.badRequest('O arquivo tem um campo entre aspas que nunca foi fechado. Corrija o arquivo e importe de novo.', 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_ROW');
+  }
+  pushField();
+  if (row.some((c) => String(c).trim() !== '')) rows.push(row);
+  return { rows, delimiter };
+}
+
+/**
+ * parseStatementAmount — valor do extrato em formato EXPLÍCITO, sem adivinhar:
+ *   - ponto decimal:  1234.56 · -1234.5 · 1234                (sem separador de milhar)
+ *   - formato BR:     1.234,56 · -1.234,56 · 1234,56 · R$ 1.234,56
+ * Aceita até 2 casas decimais. "1.234" (ponto com 3 dígitos) é ambíguo e é recusado: nunca vira
+ * 1,23 nem 1234 por palpite. Texto, NaN, Infinity e valores acima de 16 dígitos são recusados.
+ */
+function parseStatementAmount(raw) {
+  let text = String(raw === undefined || raw === null ? '' : raw).trim().replace(/^R\$\s*/i, '').replace(/\s+/g, '');
+  if (!text) return { error: 'o valor está vazio' };
+  let negative = false;
+  if (/^\(.*\)$/.test(text)) { negative = true; text = text.slice(1, -1); }
+  if (text.startsWith('-')) { negative = !negative; text = text.slice(1); } else if (text.startsWith('+')) text = text.slice(1);
+  let normalized;
+  if (/^\d+(\.\d{1,2})?$/.test(text)) normalized = text;
+  else if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(text) || /^\d+,\d{1,2}$/.test(text)) normalized = text.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(text)) return { error: `o valor "${raw}" é ambíguo (ponto com 3 dígitos): escreva 1234.56 ou 1.234,56` };
+  else return { error: `o valor "${raw}" não é um número válido (use 1234.56 ou 1.234,56)` };
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || Math.abs(value) >= 1e16) return { error: `o valor "${raw}" está fora do limite permitido` };
+  return { value: negative ? -value : value };
+}
+
+function normalizeStatementDate(raw) {
+  const text = String(raw === undefined || raw === null ? '' : raw).trim();
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  const candidate = br ? `${br[3]}-${br[2]}-${br[1]}` : text;
+  if (DATE_ONLY_REGEX.test(candidate)) {
+    const [y, m, d] = candidate.split('-').map(Number);
+    const check = new Date(Date.UTC(y, m - 1, d));
+    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+    return candidate;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(candidate) && !Number.isNaN(new Date(candidate).getTime())) return candidate;
+  return null;
+}
+
 function parseStatementCsv(csvText) {
-  const lines = String(csvText || '')
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lines.length === 0) {
+  const { rows: table, delimiter } = splitCsv(csvText);
+  if (table.length === 0) {
     throw AppError.badRequest('Arquivo de extrato vazio.', 'FINANCE_BANK_STATEMENT_IMPORT_EMPTY');
   }
-  const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const expected = ['externaltransactionid', 'transactiondate', 'description', 'amount'];
-  if (header.join(',') !== expected.join(',')) {
+  const header = table[0].map((h) => String(h).trim().toLowerCase());
+  if (header.join(',') !== CSV_EXPECTED_HEADER.join(',')) {
     throw AppError.badRequest(
-      `Cabeçalho do CSV inválido — esperado exatamente: ${expected.join(',')}.`,
+      'Cabeçalho do CSV inválido — esperado exatamente: externalTransactionId,transactionDate,description,amount.',
       'FINANCE_BANK_STATEMENT_IMPORT_INVALID_HEADER'
     );
   }
-  return lines.slice(1).map((line, idx) => {
-    const cols = line.split(',');
-    if (cols.length < 4) {
-      throw AppError.badRequest(`Linha ${idx + 2} do CSV com número de colunas inválido.`, 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_ROW');
+  const errors = [];
+  const parsed = [];
+  table.slice(1).forEach((cols, idx) => {
+    const line = idx + 2;
+    if (cols.length !== 4) {
+      errors.push({ linha: line, erro: cols.length > 4
+        ? `a linha tem ${cols.length} colunas em vez de 4; se o valor usa vírgula decimal (1.234,56), coloque-o entre aspas ou use ponto e vírgula como separador`
+        : `a linha tem ${cols.length} colunas em vez de 4` });
+      return;
     }
-    const [externalTransactionId, transactionDate, description, amount] = cols;
-    return {
-      externalTransactionId: externalTransactionId.trim(),
-      transactionDate: transactionDate.trim(),
-      description: description.trim(),
-      amount: Number(amount.trim()),
-    };
+    const [externalTransactionId, transactionDate, description, amountRaw] = cols;
+    const date = normalizeStatementDate(transactionDate);
+    const amount = parseStatementAmount(amountRaw);
+    if (!String(externalTransactionId).trim()) errors.push({ linha: line, code: 'FINANCE_BANK_STATEMENT_IMPORT_MISSING_EXTERNAL_ID', erro: 'falta o identificador externo da transação (é ele que impede duplicar linhas ao reimportar)' });
+    else if (!date) errors.push({ linha: line, code: 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_DATE', erro: `a data "${transactionDate}" é inválida (use AAAA-MM-DD ou DD/MM/AAAA)` });
+    else if (amount.error) errors.push({ linha: line, erro: amount.error });
+    else parsed.push({ externalTransactionId: String(externalTransactionId).trim(), transactionDate: date, description: String(description).trim(), amount: amount.value });
   });
+  if (errors.length > 0) {
+    // O lote inteiro é recusado: nenhuma linha boa entra enquanto houver linha inválida.
+    throw AppError.badRequest(
+      `O extrato não foi importado: linha ${errors[0].linha} — ${errors[0].erro}${errors.length > 1 ? ` (e mais ${errors.length - 1} linha(s) com problema)` : ''}. Nenhuma linha foi gravada.`,
+      errors[0].code || 'FINANCE_BANK_STATEMENT_IMPORT_INVALID_ROW',
+      { linhasComProblema: errors.slice(0, 20), delimitador: delimiter }
+    );
+  }
+  return parsed;
 }
 
 /**

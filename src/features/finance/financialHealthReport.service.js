@@ -76,7 +76,16 @@ async function getWeeklyHealthReport(transaction, options = {}) {
     // entre 30 e 60) — é a leitura usual de "contas a pagar nos próximos N dias".
     dueNext30Days: emptyWindow(),
     dueNext60Days: emptyWindow(),
-    thirdPartyFunds: { count: 0, total: 0 },
+    // F-11 (conferência ao vivo 20/10/2026): duas medidas de terceiros com nomes parecidos pareciam a mesma
+    // coisa. Esta é a PREVISTA (lançamentos de terceiro ainda em aberto); a REALIZADA (já recebida e
+    // retida em caixa) está em freeCash.thirdPartyHeld. Cada uma diz o que mede.
+    thirdPartyFunds: {
+      count: 0,
+      total: 0,
+      basis: 'PENDING',
+      label: 'Dinheiro de terceiros em aberto (previsto)',
+      description: 'Soma dos lançamentos de dinheiro de terceiro (cauções etc.) ainda pendentes. Não é o que já está retido em caixa.',
+    },
   };
 
   for (const entry of pendingEntries) {
@@ -213,6 +222,9 @@ async function getWeeklyHealthReport(transaction, options = {}) {
   report.freeCash = {
     grossBankBalance,
     thirdPartyHeld,
+    thirdPartyHeldBasis: 'SETTLED',
+    thirdPartyHeldLabel: 'Dinheiro de terceiros retido em caixa (realizado)',
+    thirdPartyHeldDescription: 'Dinheiro de terceiro já recebido e ainda não devolvido; é o que sai do saldo bancário para chegar ao caixa livre. Difere do total em aberto, que é previsto.',
     value: round2(grossBankBalance - thirdPartyHeld),
   };
 

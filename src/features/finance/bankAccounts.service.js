@@ -33,7 +33,7 @@ async function createBankAccount(payload, actorUserId, transaction) {
   }
   if (!bankCode && !pixKey) {
     throw AppError.badRequest(
-      'Informe ao menos "bankCode"+"accountNumber" ou uma "pixKey" para identificar a conta.',
+      'Informe o banco e o número da conta, ou uma chave PIX, para identificar a conta.',
       'FINANCE_BANK_ACCOUNT_VALIDATION'
     );
   }

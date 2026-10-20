@@ -117,13 +117,13 @@ async function createIntercompanyTransfer(payload, actorUserId, transaction) {
   }
   if (!evidenceFileId) {
     throw AppError.badRequest(
-      'O documento comprobatório da transferência ("evidenceFileId") é obrigatório (Caderno §15).',
+      'Anexe o documento comprobatório da transferência: ele é obrigatório.',
       'FINANCE_INTERCOMPANY_EVIDENCE_REQUIRED'
     );
   }
   if (!fromBankAccountId || !toBankAccountId) {
     throw AppError.badRequest(
-      'Informe a conta bancária de cada lado ("fromBankAccountId" na origem e "toBankAccountId" no destino) — contas correspondentes (Caderno §15).',
+      'Informe a conta bancária de cada lado da transferência: a da empresa de origem e a da empresa de destino.',
       'FINANCE_INTERCOMPANY_BANK_ACCOUNTS_REQUIRED'
     );
   }
@@ -397,7 +397,7 @@ async function getGroupConsolidatedReport(actor, filters, transaction) {
   const { groupId, companyId: currentCompanyId, userId } = actor;
   const referenceMonth = filters && filters.referenceMonth ? String(filters.referenceMonth) : null;
   if (referenceMonth && !/^\d{4}-\d{2}$/.test(referenceMonth)) {
-    throw AppError.badRequest('"referenceMonth" deve estar no formato YYYY-MM.', 'FINANCE_CONSOLIDATED_VALIDATION');
+    throw AppError.badRequest('O mês de referência precisa estar no formato mês/ano (ex.: 10/2026).', 'FINANCE_CONSOLIDATED_VALIDATION');
   }
 
   const companies = await Company.findAll({ where: { groupId }, order: [['name', 'ASC']], transaction });

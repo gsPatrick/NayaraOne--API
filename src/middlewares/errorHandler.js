@@ -13,9 +13,24 @@ const logger = require('../utils/logger');
  * erro (esperado ou não) vira um log estruturado com correlationId + rota, sempre — em
  * produção também, porque é exatamente lá que se precisa investigar um incidente depois.
  */
+const MISSING_CONFIG_RESPONSES = {
+  FILES_CRYPTO_CONFIG_MISSING: { code: 'FILES_STORAGE_NOT_CONFIGURED', message: 'O armazenamento de arquivos não está configurado neste ambiente. Avise o administrador.' },
+  MFA_CRYPTO_CONFIG_MISSING: { code: 'MFA_NOT_CONFIGURED', message: 'A verificação em duas etapas não está configurada neste ambiente. Avise o administrador.' },
+  JWT_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
+  PII_HASH_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
+};
+
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
+
+  // F-01 (conferência ao vivo 20/10/2026): variável de ambiente ausente é problema do servidor, não
+  // do usuário. A tela não pode mostrar o nome da variável: o detalhe vai só para o log.
+  if (err instanceof AppError && MISSING_CONFIG_RESPONSES[err.code]) {
+    const mapped = MISSING_CONFIG_RESPONSES[err.code];
+    logger.error({ ...context, code: err.code, statusCode: 503 }, `[AppError] ${err.code}: ${err.message}`);
+    return failure(res, { statusCode: 503, code: mapped.code, message: mapped.message });
+  }
 
   if (err instanceof AppError) {
     logger.warn({ ...context, code: err.code, statusCode: err.statusCode }, `[AppError] ${err.code}: ${err.message}`);

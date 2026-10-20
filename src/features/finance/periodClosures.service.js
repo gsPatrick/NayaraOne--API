@@ -39,7 +39,7 @@ const REFERENCE_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 function assertValidReferenceMonth(referenceMonth) {
   if (!referenceMonth || !REFERENCE_MONTH_REGEX.test(String(referenceMonth))) {
     throw AppError.badRequest(
-      'O campo "referenceMonth" deve estar no formato "YYYY-MM" (ex.: "2026-09").',
+      'O mês de referência precisa estar no formato mês/ano (ex.: 09/2026).',
       'FINANCE_PERIOD_VALIDATION'
     );
   }

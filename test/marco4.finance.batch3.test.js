@@ -191,12 +191,10 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
     );
 
     // O lançamento muda DEPOIS do snapshot: o que seria aprovado já não é o que foi proposto.
-    await financialEntriesService.updateFinancialEntry(
-      entry.id,
-      { description: `M4-07 ALTERADO ${suffix}` },
-      tenant.userId,
-      transaction
-    );
+    // Mudança direta no banco (fora do serviço): é a defesa em profundidade do approve, que
+    // recalcula o hash. Pelo serviço de edição a intenção já é invalidada na hora (F-05, ver
+    // m4.reconfBrowser.finance.test.js).
+    await FinancialEntry.update({ description: `M4-07 ALTERADO ${suffix}` }, { where: { id: entry.id }, transaction });
 
     await assert.rejects(
       () => paymentIntentsService.approvePaymentIntent(intent.id, approver.id, transaction),
