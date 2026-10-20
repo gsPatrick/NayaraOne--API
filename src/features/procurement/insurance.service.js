@@ -20,9 +20,8 @@ const {
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
-const { getSetting } = require('../settings/settings.service');
 const filesService = require('../files/files.service');
 
 // Insurance Hub (Marco 7, contrato 00000009 Anexo I — "COMPRAS/PROCUREMENT + SEGUROS"):
@@ -384,7 +383,16 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   // possivelmente consumir idempotencyKey do provider real) com uma vigência já sabida inválida.
   const nextEffectiveDate = issueRequest?.effectiveDate || policy.effectiveDate;
   const nextExpiryDate = issueRequest?.expiryDate || policy.expiryDate;
-  if (nextEffectiveDate && nextExpiryDate) {
+  // REVISÃO MARCO 7 (19/10/2026, B8): a vigência era opcional — a apólice emitida sem data de fim
+  // nunca gerava tarefa de renovação (o caderno exige "vigência" e "renovação alerta"). Início e fim
+  // passam a ser obrigatórios na emissão.
+  if (!nextEffectiveDate || !nextExpiryDate) {
+    throw AppError.badRequest(
+      'Informe a vigência da apólice (data de início e data de fim) para emitir — sem ela não há alerta de renovação.',
+      'INSURANCE_POLICY_VALIDATION'
+    );
+  }
+  {
     const effectiveTime = Date.parse(String(nextEffectiveDate).slice(0, 10));
     const expiryTime = Date.parse(String(nextExpiryDate).slice(0, 10));
     if (!Number.isFinite(effectiveTime) || !Number.isFinite(expiryTime)) {
@@ -435,9 +443,11 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   }
 
   const tenant = { groupId: policy.groupId, companyId: policy.companyId };
-  const providerName = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
   const idempotencyKey = `insurance-policy:${policy.id}`;
   const adapter = await resolveInsuranceAdapter(tenant, transaction);
+  // REVISÃO MARCO 7 (19/10/2026, B7): gravava o provedor SELECIONADO nas configurações, mesmo
+  // quando a emissão tinha caído no sandbox. Agora grava quem emitiu de fato (o adapter usado).
+  const providerName = adapter.providerName;
   const issued = await adapter.issuePolicy({ ...issueRequest, idempotencyKey });
 
   const beforeJson = policy.toJSON();
@@ -532,7 +542,7 @@ async function generateInstallments(policy, count, firstDueAt, actor, transactio
 
     const dueDate = addMonthsDateOnly(startDateOnly, i - 1);
 
-    // eslint-disable-next-line no-await-in-loop
+     
     const installment = await InsuranceInstallment.create(
       {
         groupId: policy.groupId,
@@ -545,7 +555,7 @@ async function generateInstallments(policy, count, firstDueAt, actor, transactio
       { transaction }
     );
 
-    // eslint-disable-next-line no-await-in-loop
+     
     const premiumEntry = await createFinancialEntry(
       {
         groupId: policy.groupId,
@@ -563,7 +573,7 @@ async function generateInstallments(policy, count, firstDueAt, actor, transactio
       transaction
     );
     installment.financialEntryId = premiumEntry.id;
-    // eslint-disable-next-line no-await-in-loop
+     
     await installment.save({ transaction });
 
     installments.push(installment);
@@ -572,13 +582,15 @@ async function generateInstallments(policy, count, firstDueAt, actor, transactio
   return installments;
 }
 
-async function listPolicyInstallments(policyId, transaction) {
-  const installments = await InsuranceInstallment.findAll({ where: { policyId }, order: [['due_date', 'ASC']], transaction });
+// REVISÃO MARCO 7 (19/10/2026, B13): o where não tinha empresa — só o RLS protegia.
+async function listPolicyInstallments(policyId, groupId, companyId, transaction) {
+  if (!groupId || !companyId) throw AppError.badRequest('"groupId" e "companyId" são obrigatórios.', 'INSURANCE_POLICY_VALIDATION');
+  const installments = await InsuranceInstallment.findAll({ where: { policyId, groupId, companyId }, order: [['due_date', 'ASC']], transaction });
   // Anexa o lançamento de prêmio vinculado (descrição/status) pra tela de baixa mostrar
   // exatamente o payable da parcela, em vez de uma busca genérica por valor.
   const entryIds = installments.map((i) => i.financialEntryId).filter(Boolean);
   if (entryIds.length > 0) {
-    const entries = await FinancialEntry.findAll({ where: { id: entryIds }, attributes: ['id', 'description', 'status', 'amount'], transaction });
+    const entries = await FinancialEntry.findAll({ where: { id: entryIds, groupId, companyId }, attributes: ['id', 'description', 'status', 'amount'], transaction });
     const byId = new Map(entries.map((e) => [e.id, e]));
     return installments.map((i) => {
       const json = i.toJSON();
@@ -609,6 +621,9 @@ async function payInsurancePolicyInstallment(installmentId, financialEntryId, ac
     lock: transaction.LOCK.UPDATE,
   });
   if (!installment) throw AppError.notFound('Parcela de seguro não encontrada.', 'INSURANCE_INSTALLMENT_NOT_FOUND');
+  if (installment.status === 'CANCELED') {
+    throw AppError.conflict('Esta parcela foi cancelada junto com a apólice.', 'INSURANCE_INSTALLMENT_CANCELED');
+  }
   if (installment.status === 'PAID') {
     await registrarTentativaBloqueada(
       {
@@ -882,7 +897,7 @@ async function submitClaim(claimId, actor, transaction) {
   await InsuranceProviderSubmission.create(
     {
       groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id,
-      provider: policy?.provider || 'sandbox',
+      provider: adapter.providerName,
       submissionType: 'CLAIM',
       externalSubmissionId: submitted.externalId,
       status: submitted.status,
@@ -945,7 +960,28 @@ async function confirmClaimSettlement(externalSubmissionId, externalStatus, sett
   // payableAmount em procurement (sempre round2). `Number(resolvedAmount) > 0` já é falso pra
   // NaN, mas não pra Infinity — some Number.isFinite explicitamente e arredonda em seguida.
   const rawResolvedAmount = settledAmount || claim.claimAmount;
-  const resolvedAmount = Number.isFinite(Number(rawResolvedAmount)) ? round2(rawResolvedAmount) : rawResolvedAmount;
+  let resolvedAmount = Number.isFinite(Number(rawResolvedAmount)) ? round2(rawResolvedAmount) : rawResolvedAmount;
+  // REVISÃO MARCO 7 (19/10/2026, B6 — decisão conservadora): o valor vindo da seguradora não tinha
+  // teto — qualquer settledAmount virava receita a receber. Limite: o valor do sinistro aberto
+  // (claimAmount); sem ele, o maior limite de cobertura da apólice; sem nenhum dos dois, não há
+  // como conferir e o sinistro vai para revisão manual (caminho "sem valor utilizável" abaixo).
+  // O excedente informado pela seguradora fica registrado na timeline, nunca vira lançamento.
+  let settlementCapNote = null;
+  if (Number.isFinite(Number(resolvedAmount)) && Number(resolvedAmount) > 0) {
+    let cap = Number(claim.claimAmount) > 0 ? round2(claim.claimAmount) : null;
+    let capLabel = 'valor do sinistro';
+    if (cap == null) {
+      const coverages = await InsuranceCoverage.findAll({ where: { policyId: claim.policyId, groupId: claim.groupId, companyId: claim.companyId }, transaction });
+      const limits = coverages.map((c) => Number(c.limitAmount)).filter((v) => Number.isFinite(v) && v > 0);
+      if (limits.length) { cap = round2(Math.max(...limits)); capLabel = 'limite de cobertura da apólice'; }
+    }
+    if (cap == null) {
+      resolvedAmount = null;
+    } else if (Number(resolvedAmount) > cap) {
+      settlementCapNote = `Seguradora informou ${resolvedAmount}; lançado ${cap} (limitado ao ${capLabel}). A diferença exige conferência manual.`;
+      resolvedAmount = cap;
+    }
+  }
   if ((externalStatus === 'SETTLED' || externalStatus === 'APPROVED') && !(Number.isFinite(Number(resolvedAmount)) && Number(resolvedAmount) > 0)) {
     claim.status = 'REJECTED';
     await claim.save({ transaction });
@@ -1002,7 +1038,7 @@ async function confirmClaimSettlement(externalSubmissionId, externalStatus, sett
     await claim.save({ transaction });
 
     await InsuranceClaimEvent.create(
-      { groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'SETTLED', notes: `Lançamento ${entry.id} criado.`, occurredAt: new Date() },
+      { groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id, eventType: 'SETTLED', notes: `Lançamento ${entry.id} criado.${settlementCapNote ? ` ${settlementCapNote}` : ''}`, occurredAt: new Date() },
       { transaction }
     );
 
@@ -1063,21 +1099,67 @@ async function cancelPolicy(policyId, payload, actor, transaction) {
   }
 
   const beforeJson = policy.toJSON();
+
+  // REVISÃO MARCO 7 (19/10/2026, B5): cancelar só mudava o status — as parcelas seguiam vencendo,
+  // os payables do prêmio continuavam no contas a pagar e a tarefa de renovação continuava ativa.
+  // Compensação financeira (decisão conservadora; o caderno só diz "cancel/return = compensação"):
+  //   - parcela em aberto (PENDING/OVERDUE) → CANCELED e o payable dela é ESTORNADO (nunca editado,
+  //     FIN-010). Se o payable já foi pago (SETTLED) ou tem pagamento em andamento, a parcela é
+  //     tratada como paga e NÃO é estornada aqui (estornar daria baixa num dinheiro que já saiu);
+  //   - parcelas pagas ficam como estão; a restituição de prêmio depende do cálculo da seguradora e
+  //     não é presumida — o total pago fica registrado na auditoria (paidPremiumAmount);
+  //   - tarefa de renovação PENDING → DISMISSED.
+  const installments = await InsuranceInstallment.findAll({ where: { policyId: policy.id, groupId: policy.groupId, companyId: policy.companyId }, order: [['due_date', 'ASC']], transaction, lock: transaction.LOCK.UPDATE });
+  const canceledInstallmentIds = [];
+  const reversedFinancialEntryIds = [];
+  let paidPremiumAmount = 0;
+  for (const installment of installments) {
+    if (installment.status === 'PAID' || installment.status === 'CANCELED') {
+      if (installment.status === 'PAID') paidPremiumAmount = round2(paidPremiumAmount + Number(installment.amount));
+      continue;
+    }
+     
+    const entry = installment.financialEntryId
+      ? await FinancialEntry.findOne({ where: { id: installment.financialEntryId, groupId: policy.groupId, companyId: policy.companyId }, transaction, lock: transaction.LOCK.UPDATE })
+      : null;
+    if (entry && entry.status === 'SETTLED') {
+      paidPremiumAmount = round2(paidPremiumAmount + Number(installment.amount));
+      continue;
+    }
+    if (entry && !['REVERSED', 'CANCELLED'].includes(entry.status)) {
+       
+      await reverseFinancialEntry(entry.id, `Apólice ${policy.externalPolicyNumber || policy.id} cancelada — parcela de prêmio em aberto estornada.`, actor.userId, transaction);
+      reversedFinancialEntryIds.push(entry.id);
+    }
+    installment.status = 'CANCELED';
+     
+    await installment.save({ transaction });
+    canceledInstallmentIds.push(installment.id);
+  }
+  const [dismissedRenewalTasks] = await InsuranceRenewalTask.update(
+    { status: 'DISMISSED' },
+    { where: { policyId: policy.id, groupId: policy.groupId, companyId: policy.companyId, status: 'PENDING' }, transaction }
+  );
+
   policy.status = 'CANCELED';
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
 
+  const compensation = { canceledInstallmentIds, reversedFinancialEntryIds, paidPremiumAmount, dismissedRenewalTasks };
   await registrarAuditoria(
     {
       groupId: policy.groupId, companyId: policy.companyId, actorUserId: actor.userId,
       action: 'procurement.insurance_policy.cancel',
       entityType: 'InsurancePolicy', entityId: policy.id,
-      beforeJson, afterJson: policy.toJSON(),
+      beforeJson, afterJson: { ...policy.toJSON(), compensation },
+      // O motivo fica no formato de sempre (cancelInfo da tela lê "Apólice cancelada — <motivo>.");
+      // a compensação financeira vai no afterJson (compensation).
       reason: `Apólice cancelada — ${String(reason).trim()}.`,
     },
     transaction
   );
 
+  policy.setDataValue('compensation', compensation);
   return policy;
 }
 

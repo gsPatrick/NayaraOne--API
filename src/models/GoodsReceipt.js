@@ -10,6 +10,8 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       purchaseOrderId: { type: DataTypes.UUID, allowNull: false, field: 'purchase_order_id' },
+      // Revisão Marco 7 (19/10/2026, B11): NF duplicada é por (empresa, fornecedor, número).
+      supplierPersonId: { type: DataTypes.UUID, allowNull: true, field: 'supplier_person_id' },
       destinationLocationId: { type: DataTypes.UUID, allowNull: false, field: 'destination_location_id' },
       inventoryReceiptId: { type: DataTypes.UUID, allowNull: true, field: 'inventory_receipt_id' },
       invoiceFingerprint: { type: DataTypes.STRING(128), allowNull: true, field: 'invoice_fingerprint' },

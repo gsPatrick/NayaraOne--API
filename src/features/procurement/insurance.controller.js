@@ -6,6 +6,7 @@ const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const service = require('./insurance.service');
+const { assertSandboxAllowed } = require('./adapters/resolveInsuranceAdapter');
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 37, 2026-10-05): insurancePublicWebhook
 // nunca validava assinatura nenhuma — qualquer requisição que conhecesse (ou adivinhasse) o
@@ -102,7 +103,7 @@ const listPolicyDocuments = catchAsync(async (req, res) => {
 });
 
 const listPolicyInstallments = catchAsync(async (req, res) => {
-  const installments = await req.withTenantTransaction((t) => service.listPolicyInstallments(req.params.id, t));
+  const installments = await req.withTenantTransaction((t) => service.listPolicyInstallments(req.params.id, req.auth.groupId, req.auth.companyId, t));
   return success(res, { data: installments });
 });
 
@@ -116,41 +117,48 @@ const payPolicyInstallment = catchAsync(async (req, res) => {
 // Webhook público da seguradora — SEM authMiddleware/tenantMiddleware (ver routes/index.js),
 // resolve tenant via InsuranceProviderSubmission (sem RLS), mesmo padrão do webhook bancário e
 // do webhook da Clicksign.
-const insurancePublicWebhook = catchAsync(async (req, res) => {
-  const { externalSubmissionId, status, settledAmount } = req.body || {};
+// REVISÃO MARCO 7 (19/10/2026, B6): o sandbox aceitava a chamada SEM HMAC — qualquer pessoa que
+// soubesse o id externo forjava uma indenização com valor arbitrário. Agora:
+//   - HMAC é exigido SEMPRE, inclusive no sandbox (sem segredo configurado → recusa, fail-closed);
+//   - com DEPLOY_ENVIRONMENT=production o sandbox é recusado;
+//   - o valor é limitado ao sinistro/cobertura (insurance.service#confirmClaimSettlement).
+// processInsuranceWebhook recebe a transação de fora para ser testável em banco real com rollback.
+async function processInsuranceWebhook(body, rawBody, headers, transaction) {
+  const { externalSubmissionId, status, settledAmount } = body || {};
   if (typeof externalSubmissionId !== 'string' || !externalSubmissionId || typeof status !== 'string' || !status) {
-    return success(res, { statusCode: 400, data: { received: false, reason: 'invalid_payload' } });
+    return { statusCode: 400, data: { received: false, reason: 'invalid_payload' } };
   }
   const { sequelize, InsuranceProviderSubmission } = require('../../models');
-  const result = await sequelize.transaction(async (t) => {
-    const submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction: t });
-    if (!submission) {
-      return { received: true, processed: false, reason: 'unknown_routing' };
-    }
-    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: submission.groupId }, transaction: t });
-    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: submission.companyId }, transaction: t });
+  const submission = await InsuranceProviderSubmission.findOne({ where: { externalSubmissionId }, transaction });
+  if (!submission) {
+    return { statusCode: 200, data: { received: true, processed: false, reason: 'unknown_routing' } };
+  }
+  await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: submission.groupId }, transaction });
+  await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: submission.companyId }, transaction });
 
-    // Regra crítica (mesmo padrão do webhook do Clicksign, legal.controller.js): se um
-    // provedor real estiver configurado pro tenant, a rota DEVE rejeitar qualquer payload sem
-    // HMAC válido — nunca aplica "por confiança". O sandbox (sem provedor real por trás, usado
-    // nos próprios testes automatizados) segue sem exigir HMAC.
-    const tenant = { groupId: submission.groupId, companyId: submission.companyId };
-    const providerName = await getSetting('procurement.insurance_provider', tenant, t, 'sandbox');
-    if (providerName !== 'sandbox') {
-      const webhookSecret = await getDecryptedSetting('procurement.insurance_webhook_secret', tenant, t, null);
-      const isValid = verifyInsuranceWebhookSignature(req.rawBody, req.headers, webhookSecret);
-      if (!isValid) {
-        throw AppError.unauthorized(
-          'Assinatura HMAC do webhook de seguro ausente ou inválida para o provedor configurado.',
-          'INSURANCE_WEBHOOK_HMAC_INVALID'
-        );
-      }
-    }
+  const tenant = { groupId: submission.groupId, companyId: submission.companyId };
+  const webhookSecret = await getDecryptedSetting('procurement.insurance_webhook_secret', tenant, transaction, null);
+  const isValid = verifyInsuranceWebhookSignature(rawBody, headers, webhookSecret);
+  if (!isValid) {
+    throw AppError.unauthorized(
+      'Assinatura HMAC do webhook de seguro ausente ou inválida.',
+      'INSURANCE_WEBHOOK_HMAC_INVALID'
+    );
+  }
+  const providerName = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
+  if (providerName === 'sandbox' || submission.provider === 'sandbox') assertSandboxAllowed();
 
-    await service.confirmClaimSettlement(externalSubmissionId, status, settledAmount, t);
-    return { received: true, processed: true };
-  });
-  return success(res, { data: result });
+  await service.confirmClaimSettlement(externalSubmissionId, status, settledAmount, transaction);
+  return { statusCode: 200, data: { received: true, processed: true } };
+}
+
+// Webhook público da seguradora — SEM authMiddleware/tenantMiddleware (ver routes/index.js),
+// resolve tenant via InsuranceProviderSubmission (sem RLS), mesmo padrão do webhook bancário e
+// do webhook da Clicksign.
+const insurancePublicWebhook = catchAsync(async (req, res) => {
+  const { sequelize } = require('../../models');
+  const result = await sequelize.transaction((t) => processInsuranceWebhook(req.body, req.rawBody, req.headers, t));
+  return success(res, { statusCode: result.statusCode, data: result.data });
 });
 
 module.exports = {
@@ -159,4 +167,5 @@ module.exports = {
   attachPolicyDocument, listPolicyDocuments,
   listPolicyInstallments, payPolicyInstallment,
   verifyInsuranceWebhookSignature,
+  processInsuranceWebhook,
 };

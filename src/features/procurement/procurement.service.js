@@ -17,7 +17,7 @@ const {
   SupplierQualification,
   FinancialEntry,
 } = require('../../models');
-const { InventoryStockBalance, Person, User, InventoryItem } = require('../../models');
+const { InventoryStockBalance, Person, User, InventoryItem, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
@@ -448,7 +448,18 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
     where: { companyId: offer.companyId, supplierPersonId: offer.supplierPersonId },
     transaction,
   });
-  if (qualification?.highRisk) {
+  // REVISÃO MARCO 7 (19/10/2026, B10): documentos e vigência só eram checados no alto risco — um
+  // fornecedor SEM qualificação nenhuma era adjudicado (o "fail-closed" acima não valia para ele).
+  // Agora vale para todo fornecedor: precisa de qualificação com pelo menos um documento anexado
+  // (arquivo existente da empresa) e vigência informada e não vencida. A due diligence continua
+  // exigida só para alto risco (checada primeiro, mantendo o código de erro já conhecido).
+  if (!qualification) {
+    throw AppError.badRequest(
+      'Fornecedor sem qualificação cadastrada (documentos e vigência) — cadastre a qualificação antes de gerar o pedido.',
+      'SUPPLIER_QUALIFICATION_REQUIRED'
+    );
+  }
+  if (qualification.highRisk) {
     // validUntil é DATEONLY e a vigência INCLUI o último dia. `new Date('YYYY-MM-DD') < new Date()`
     // ancorava em meia-noite UTC — "válido até 31/12" já contava como vencido no próprio dia 31
     // (desde 21h do dia 30 em São Paulo). Compara por data de calendário de São Paulo.
@@ -457,6 +468,21 @@ async function awardSupplierOffer(offerId, groupId, companyId, actorUserId, tran
       throw AppError.badRequest(
         'Fornecedor de alto risco precisa de due diligence aprovada e dentro da vigência antes de receber uma PO.',
         'SUPPLIER_DUE_DILIGENCE_REQUIRED'
+      );
+    }
+  }
+  {
+    const documentIds = Array.isArray(qualification.documentFileIds) ? qualification.documentFileIds.filter(Boolean) : [];
+    const existingDocuments = documentIds.length
+      ? await File.count({ where: { id: documentIds, companyId: offer.companyId }, transaction })
+      : 0;
+    const validityMissingOrExpired = !qualification.validUntil || String(qualification.validUntil) < todayInSaoPaulo();
+    if (existingDocuments === 0 || validityMissingOrExpired) {
+      throw AppError.badRequest(
+        validityMissingOrExpired
+          ? 'A qualificação do fornecedor está sem vigência ou vencida — atualize documentos e vigência antes de gerar o pedido.'
+          : 'A qualificação do fornecedor não tem nenhum documento anexado — anexe os documentos antes de gerar o pedido.',
+        'SUPPLIER_QUALIFICATION_REQUIRED'
       );
     }
   }
@@ -670,13 +696,17 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   // e as duas seguiam criando recebimento + payable duplicados. Agora a checagem roda DEPOIS do
   // lock do PO: a segunda chamada concorrente só lê este GoodsReceipt.findOne depois do commit da
   // primeira (serializada pela trava pessimista na linha do PO), encontrando o registro já criado.
+  // REVISÃO MARCO 7 (19/10/2026, B11): a NF duplicada era procurada na EMPRESA inteira — a NF nº
+  // 123 de um fornecedor bloqueava a NF nº 123 de outro fornecedor (numeração de NF é por
+  // emitente). A chave agora é (empresa, fornecedor, número da NF), no serviço e no índice único
+  // do banco (migration 20260101000590). Duplicidade é conflito (409), não erro de formato.
   if (invoiceFingerprint) {
-    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint, groupId: order.groupId, companyId: order.companyId }, transaction });
-    if (existing) throw AppError.badRequest(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
+    const existing = await GoodsReceipt.findOne({ where: { invoiceFingerprint, groupId: order.groupId, companyId: order.companyId, supplierPersonId: order.supplierPersonId }, transaction });
+    if (existing) throw AppError.conflict(`Já existe um recebimento (${existing.id}) com esta mesma nota fiscal deste fornecedor.`, 'GOODS_RECEIPT_DUPLICATE_INVOICE');
   }
 
   const goodsReceipt = await GoodsReceipt.create(
-    { groupId: order.groupId, companyId: order.companyId, purchaseOrderId: order.id, destinationLocationId, invoiceFingerprint: invoiceFingerprint || null, invoiceTotalAmount: invoiceTotalAmount != null ? invoiceTotalAmount : null, idempotencyKey: idempotencyKey || null, status: 'DRAFT', createdBy: actor.userId || null, updatedBy: actor.userId || null },
+    { groupId: order.groupId, companyId: order.companyId, purchaseOrderId: order.id, supplierPersonId: order.supplierPersonId, destinationLocationId, invoiceFingerprint: invoiceFingerprint || null, invoiceTotalAmount: invoiceTotalAmount != null ? invoiceTotalAmount : null, idempotencyKey: idempotencyKey || null, status: 'DRAFT', createdBy: actor.userId || null, updatedBy: actor.userId || null },
     { transaction }
   );
 
@@ -684,6 +714,10 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   const discrepancies = [];
   let firstGrItem = null;
   let expectedAmount = 0;
+  // Valor de TUDO o que chegou fisicamente, a preço do pedido (inclui o excedente). É a base do
+  // three-way match de preço: a NF que cobra o excedente a preço de pedido não é "divergência
+  // de preço" — o excedente já é decidido pela própria divergência OVER_RECEIPT (B1).
+  let fullReceivedAmount = 0;
 
   for (const line of items) {
     const poItem = order.items.find((i) => i.id === line.purchaseOrderItemId);
@@ -714,6 +748,7 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     // nunca entra (devolução ao fornecedor fica na trilha da resolução).
     const cappedQtyForAmount = Math.min(receivedQty, Math.max(remaining, 0));
     expectedAmount += cappedQtyForAmount * Number(poItem.unitPrice);
+    fullReceivedAmount += receivedQty * Number(poItem.unitPrice);
 
     const grItem = await GoodsReceiptItem.create(
       { groupId: order.groupId, companyId: order.companyId, goodsReceiptId: goodsReceipt.id, purchaseOrderItemId: poItem.id, receivedQuantity: receivedQty },
@@ -731,7 +766,11 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
       );
     }
 
-    poItem.receivedQuantity = Number(poItem.receivedQuantity) + receivedQty;
+    // REVISÃO MARCO 7 (19/10/2026, B3): somava a quantidade física cheia, inclusive o excedente
+    // ainda não decidido — rejeitado o excedente, o pedido continuava "recebido a mais". Agora só
+    // o que coube no pedido conta como recebido; o excedente só soma se a divergência for ACEITA
+    // (resolveDiscrepancy).
+    poItem.receivedQuantity = Number(poItem.receivedQuantity) + cappedQtyForAmount;
     await poItem.save({ transaction });
 
     if (poItem.inventoryItemId && cappedQtyForAmount > 0) {
@@ -739,16 +778,17 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     }
   }
   expectedAmount = round2(expectedAmount);
+  fullReceivedAmount = round2(fullReceivedAmount);
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 25, 2026-10-05): o contrato exige
   // three-way match "PO x receipt x invoice" — mas só existia PO x receipt (quantidade). Quando
   // o valor da nota fiscal é informado e diverge do valor esperado (soma unitPrice x
   // receivedQty de todas as linhas), abre uma divergência de PREÇO de verdade, no mesmo padrão
   // fail-closed de OVER_RECEIPT, em vez de aceitar silenciosamente qualquer valor de nota.
-  if (invoiceTotalAmount != null && Math.abs(round2(invoiceTotalAmount) - expectedAmount) > INVOICE_AMOUNT_TOLERANCE) {
+  if (invoiceTotalAmount != null && Math.abs(round2(invoiceTotalAmount) - fullReceivedAmount) > INVOICE_AMOUNT_TOLERANCE) {
     discrepancies.push(
       await ReceiptDiscrepancy.create(
-        { groupId: order.groupId, companyId: order.companyId, goodsReceiptItemId: firstGrItem.id, discrepancyType: 'PRICE_MISMATCH', expectedValue: expectedAmount, receivedValue: round2(invoiceTotalAmount), status: 'OPEN' },
+        { groupId: order.groupId, companyId: order.companyId, goodsReceiptItemId: firstGrItem.id, discrepancyType: 'PRICE_MISMATCH', expectedValue: fullReceivedAmount, receivedValue: round2(invoiceTotalAmount), status: 'OPEN' },
         { transaction }
       )
     );
@@ -762,7 +802,7 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
     // mostra "Recebimento da nota fiscal nº ...". Propaga o número pra rastreabilidade
     // NF → movimento ficar idêntica nos dois fluxos.
     const inventoryReceipt = await createInventoryReceipt(
-      { groupId: order.groupId, companyId: order.companyId, destinationLocationId, invoiceNumber: invoiceFingerprint || null, invoiceFingerprint: invoiceFingerprint ? `${invoiceFingerprint}:po:${order.id}` : null, items: inventoryReceiptItems },
+      { groupId: order.groupId, companyId: order.companyId, destinationLocationId, supplierPersonId: invoiceFingerprint ? order.supplierPersonId : null, invoiceNumber: invoiceFingerprint || null, invoiceFingerprint: invoiceFingerprint ? `${invoiceFingerprint}:po:${order.id}` : null, items: inventoryReceiptItems },
       actor.userId,
       transaction
     );
@@ -799,7 +839,17 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
   // Usa o valor da nota fiscal quando informado (mais preciso — é o que a fornecedora cobra de
   // fato), senão o valor esperado calculado (PO x quantidade recebida). idempotencyKey por
   // goodsReceipt garante que reprocessar nunca duplica o payable.
-  const payableAmount = invoiceTotalAmount != null ? round2(invoiceTotalAmount) : expectedAmount;
+  //
+  // REVISÃO MARCO 7 (19/10/2026, B1/B2 — decisão conservadora, o caderno só diz "divergência abre
+  // case" e "invoice match = payable idempotente"): o payable nascia com o valor CHEIO da NF. Isso
+  // (B1) pagava o excedente duas vezes — a NF já o cobrava e o aceite do OVER_RECEIPT lançava outro
+  // payable — e (B2) deixava o valor contestado pagável enquanto a divergência estava aberta.
+  // Agora o payable nasce SEMPRE no valor do pedido para o que coube nele (expectedAmount) e,
+  // havendo qualquer divergência aberta, nasce RETIDO (requiresManualReview — o Financeiro não
+  // liquida nem libera por fora, ver financeAntifraud.clearManualReview). Cada decisão de
+  // divergência recalcula o valor devido do recebimento inteiro (reconcileGoodsReceiptPayable) —
+  // excedente aceito e diferença de preço aceita entram ali, uma única vez.
+  const payableAmount = expectedAmount;
   if (payableAmount > 0) {
     const costCenter = await getOrCreateDefaultCostCenter(order.groupId, order.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
     const payable = await createFinancialEntry(
@@ -816,6 +866,7 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
       actor.userId,
       transaction
     );
+    if (discrepancies.length > 0) await holdPayableForDiscrepancy(payable, transaction);
     goodsReceipt.financialEntryId = payable.id;
   }
   await goodsReceipt.save({ transaction });
@@ -903,6 +954,106 @@ async function listDiscrepancies(groupId, companyId, transaction, { status } = {
   });
 }
 
+// REVISÃO MARCO 7 (19/10/2026, B1/B2) — retenção do pagamento e valor devido do recebimento.
+const PAYABLE_HOLD_REASON = 'Retido por Compras: divergência de recebimento em aberto — o pagamento só é liberado depois da decisão da divergência.';
+const FINANCIAL_DISCREPANCY_TYPES = ['OVER_RECEIPT', 'PRICE_MISMATCH'];
+
+async function holdPayableForDiscrepancy(entry, transaction) {
+  if (entry.requiresManualReview) return;
+  entry.requiresManualReview = true;
+  entry.manualReviewReason = PAYABLE_HOLD_REASON;
+  entry.manualReviewClearedAt = null;
+  entry.manualReviewClearedBy = null;
+  await entry.save({ transaction });
+}
+
+/**
+ * Recalcula o valor devido de UM recebimento a partir das decisões das divergências e deixa um
+ * único payable ativo com esse valor:
+ *   devido = (o que coube no pedido × preço do pedido)
+ *          + (excedentes ACEITOS × preço do pedido)
+ *          + (NF − valor físico a preço de pedido, só se a divergência de PREÇO foi ACEITA)
+ * Enquanto houver divergência OPEN, o payable atual fica retido e nada é recalculado. O valor de
+ * um FinancialEntry nunca é editado (FIN-010): se mudar, estorna e cria outro.
+ */
+async function reconcileGoodsReceiptPayable(goodsReceipt, actor, transaction, triggerDiscrepancyId) {
+  const grItems = await GoodsReceiptItem.findAll({ where: { goodsReceiptId: goodsReceipt.id }, transaction });
+  const discrepancies = grItems.length
+    ? await ReceiptDiscrepancy.findAll({ where: { goodsReceiptItemId: grItems.map((i) => i.id), discrepancyType: FINANCIAL_DISCREPANCY_TYPES, status: { [Op.ne]: 'CANCELED' } }, transaction })
+    : [];
+  const current = goodsReceipt.financialEntryId
+    ? await FinancialEntry.findByPk(goodsReceipt.financialEntryId, { transaction, lock: transaction.LOCK.UPDATE })
+    : null;
+  const currentActive = current && !['REVERSED', 'CANCELLED'].includes(current.status) ? current : null;
+
+  if (discrepancies.some((d) => d.status === 'OPEN')) {
+    if (currentActive) await holdPayableForDiscrepancy(currentActive, transaction);
+    return { held: true, financialEntryId: currentActive ? currentActive.id : null };
+  }
+
+  const poItems = await PurchaseOrderItem.findAll({ where: { id: [...new Set(grItems.map((i) => i.purchaseOrderItemId))] }, transaction });
+  const poItemById = new Map(poItems.map((i) => [i.id, i]));
+  let base = 0;
+  let full = 0;
+  let acceptedOver = 0;
+  for (const grItem of grItems) {
+    const unitPrice = Number(poItemById.get(grItem.purchaseOrderItemId)?.unitPrice || 0);
+    const received = Number(grItem.receivedQuantity);
+    const over = discrepancies.find((d) => d.discrepancyType === 'OVER_RECEIPT' && d.goodsReceiptItemId === grItem.id);
+    const inOrder = over ? Number(over.expectedValue) : received;
+    base += Math.max(inOrder, 0) * unitPrice;
+    full += received * unitPrice;
+    if (over && over.status === 'ACCEPTED') acceptedOver += (received - Math.max(inOrder, 0)) * unitPrice;
+  }
+  const price = discrepancies.find((d) => d.discrepancyType === 'PRICE_MISMATCH');
+  const priceDelta = price && price.status === 'ACCEPTED' && goodsReceipt.invoiceTotalAmount != null
+    ? Number(goodsReceipt.invoiceTotalAmount) - full
+    : 0;
+  const due = Math.max(round2(base + acceptedOver + priceDelta), 0);
+
+  if (currentActive && Math.abs(round2(currentActive.amount) - due) < 0.005) {
+    if (currentActive.requiresManualReview && currentActive.manualReviewReason === PAYABLE_HOLD_REASON) {
+      currentActive.requiresManualReview = false;
+      currentActive.manualReviewClearedAt = new Date();
+      currentActive.manualReviewClearedBy = actor.userId || null;
+      await currentActive.save({ transaction });
+    }
+    return { held: false, financialEntryId: currentActive.id, amount: due };
+  }
+
+  if (currentActive) {
+    await reverseFinancialEntry(
+      currentActive.id,
+      `Valor a pagar do recebimento recalculado após decisão de divergência (de ${formatBRLText(Number(currentActive.amount))} para ${formatBRLText(due)}).`,
+      actor.userId,
+      transaction
+    );
+  }
+  let newEntryId = null;
+  if (due > 0) {
+    const costCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
+    const corrected = await createFinancialEntry(
+      {
+        groupId: goodsReceipt.groupId,
+        companyId: goodsReceipt.companyId,
+        entryType: 'DEBIT',
+        nature: 'PAYABLE',
+        amount: due,
+        description: `Recebimento de materiais (valor após decisão das divergências)${goodsReceipt.invoiceFingerprint ? ` — NF ${goodsReceipt.invoiceFingerprint}` : ''}.`,
+        idempotencyKey: `goods-receipt:${goodsReceipt.id}:reconciled:${triggerDiscrepancyId}`,
+        costCenterId: costCenter.id,
+      },
+      actor.userId,
+      transaction
+    );
+    newEntryId = corrected.id;
+  }
+  goodsReceipt.financialEntryId = newEntryId;
+  goodsReceipt.updatedBy = actor.userId || null;
+  await goodsReceipt.save({ transaction });
+  return { held: false, financialEntryId: newEntryId, amount: due, previousEntryId: currentActive ? currentActive.id : null };
+}
+
 const DISCREPANCY_RESOLUTIONS = ['ACCEPTED', 'REJECTED'];
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 12, 2026-10-05): o contrato diz que
@@ -923,6 +1074,21 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
   // decisões concorrentes (ex.: ACCEPTED e REJECTED quase simultâneas) podiam ambas ler
   // status OPEN antes de qualquer commit e gravar decisões conflitantes (lost update), sem
   // nenhuma delas ser bloqueada com RECEIPT_DISCREPANCY_INVALID_STATUS como deveria.
+  //
+  // REVISÃO MARCO 7 (19/10/2026): ordem de lock RECEBIMENTO → DIVERGÊNCIA, a mesma de
+  // cancelPurchaseOrder (pedido → recebimentos → divergências). Antes a divergência era travada
+  // primeiro e o recebimento depois, ordem inversa à do cancelamento (risco de deadlock), e duas
+  // decisões simultâneas de divergências do MESMO recebimento recalculavam o payable cada uma sem
+  // enxergar a outra. Com o recebimento travado primeiro, a segunda decisão espera a primeira e
+  // relê o estado já confirmado.
+  const discrepancyProbe = await ReceiptDiscrepancy.findOne({ where: { id: discrepancyId, groupId, companyId }, attributes: ['id', 'goodsReceiptItemId'], transaction });
+  if (!discrepancyProbe) throw AppError.notFound('Divergência não encontrada.', 'RECEIPT_DISCREPANCY_NOT_FOUND');
+  const probeGrItem = discrepancyProbe.goodsReceiptItemId
+    ? await GoodsReceiptItem.findByPk(discrepancyProbe.goodsReceiptItemId, { attributes: ['id', 'goodsReceiptId'], transaction })
+    : null;
+  if (probeGrItem) {
+    await GoodsReceipt.findOne({ where: { id: probeGrItem.goodsReceiptId, groupId, companyId }, attributes: ['id'], transaction, lock: transaction.LOCK.UPDATE });
+  }
   const discrepancy = await ReceiptDiscrepancy.findOne({ where: { id: discrepancyId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!discrepancy) throw AppError.notFound('Divergência não encontrada.', 'RECEIPT_DISCREPANCY_NOT_FOUND');
   if (discrepancy.status !== 'OPEN') {
@@ -963,44 +1129,10 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
   discrepancy.resolvedAt = new Date();
   await discrepancy.save({ transaction });
 
-  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 26, 2026-10-05): rejeitar uma
-  // divergência de PREÇO (PRICE_MISMATCH, R25) só mudava o status da divergência — o payable
-  // criado em confirmGoodsReceipt continuava com o valor contestado da nota fiscal. Rejeitar a
-  // divergência precisa corrigir o contas a pagar pro valor esperado (PO x quantidade), nunca
-  // deixar a empresa pagando o valor que o próprio sistema já identificou como errado.
-  // `amount` nunca é editável num FinancialEntry existente (FIN-010, "nunca edita o valor") —
-  // por isso estorna o payable antigo e cria um novo, correto, no lugar.
-  if (discrepancy.discrepancyType === 'PRICE_MISMATCH' && normalized === 'REJECTED') {
-    const grItem = await GoodsReceiptItem.findByPk(discrepancy.goodsReceiptItemId, { transaction });
-    const goodsReceipt = grItem ? await GoodsReceipt.findByPk(grItem.goodsReceiptId, { transaction, lock: transaction.LOCK.UPDATE }) : null;
-    if (goodsReceipt && goodsReceipt.financialEntryId) {
-      await reverseFinancialEntry(
-        goodsReceipt.financialEntryId,
-        `Divergência de preço rejeitada — valor da NF (${discrepancy.receivedValue}) não confere com o esperado (${discrepancy.expectedValue}).`,
-        actor.userId,
-        transaction
-      );
-      const correctionCostCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
-      const correctedPayable = await createFinancialEntry(
-        {
-          groupId: goodsReceipt.groupId,
-          companyId: goodsReceipt.companyId,
-          entryType: 'DEBIT',
-          nature: 'PAYABLE',
-          amount: Number(discrepancy.expectedValue),
-          description: `Recebimento de materiais (corrigido após rejeição de divergência de preço) — recebimento ${goodsReceipt.id}.`,
-          idempotencyKey: `goods-receipt:${goodsReceipt.id}:price-corrected:${discrepancy.id}`,
-          costCenterId: correctionCostCenter.id,
-        },
-        actor.userId,
-        transaction
-      );
-      goodsReceipt.financialEntryId = correctedPayable.id;
-      goodsReceipt.updatedBy = actor.userId || null;
-      await goodsReceipt.save({ transaction });
-    }
-  }
-
+  // Efeito financeiro de PRICE_MISMATCH/OVER_RECEIPT: ver reconcileGoodsReceiptPayable (chamado
+  // abaixo). Antes (rodada 26) a rejeição de preço estornava e recriava o payable aqui, e o aceite
+  // do excedente lançava um payable SEPARADO — o que pagava o excedente duas vezes quando a NF já o
+  // cobrava (revisão 19/10/2026, B1).
   // BUG REAL CORRIGIDO (over-receipt sem cap, 2026-10-08): `confirmGoodsReceipt` agora capa o
   // payable no saldo do PO (`expectedValue` aqui) quando `receivedQty > remaining` — o excedente
   // (`receivedValue - expectedValue`) nunca entra automaticamente no contas a pagar. Só quando o
@@ -1021,23 +1153,12 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
         : null;
       const overQtyText = formatQtyText(overQuantity, overItem?.unitOfMeasure);
       const invoiceText = goodsReceipt.invoiceFingerprint ? `NF nº ${goodsReceipt.invoiceFingerprint}` : 'recebimento sem NF';
+      // O valor do excedente aceito entra no payable ÚNICO do recebimento (reconcileGoodsReceiptPayable
+      // abaixo), nunca num segundo lançamento (B1). B3: o excedente aceito passa a contar como recebido.
+      poItem.receivedQuantity = Number(poItem.receivedQuantity) + overQuantity;
+      await poItem.save({ transaction });
       if (overAmount > 0) {
-        const costCenter = await getOrCreateDefaultCostCenter(goodsReceipt.groupId, goodsReceipt.companyId, PROCUREMENT_COST_CENTER_CODE, 'Recebimentos de compras', transaction);
-        await createFinancialEntry(
-          {
-            groupId: goodsReceipt.groupId,
-            companyId: goodsReceipt.companyId,
-            entryType: 'DEBIT',
-            nature: 'PAYABLE',
-            amount: overAmount,
-            description: `Excedente aceito no recebimento — ${overQtyText} de ${overItem?.name || 'item do pedido'} (${invoiceText}).`,
-            idempotencyKey: `goods-receipt:${goodsReceipt.id}:over-receipt-accepted:${discrepancy.id}`,
-            costCenterId: costCenter.id,
-          },
-          actor.userId,
-          transaction
-        );
-        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[lançamento a pagar de ${formatBRLText(overAmount)} gerado no Financeiro para o excedente]`;
+        discrepancy.resolutionNotes = `${discrepancy.resolutionNotes ? `${discrepancy.resolutionNotes} ` : ''}[excedente de ${formatBRLText(overAmount)} incluído no valor a pagar do recebimento]`;
         await discrepancy.save({ transaction });
       }
       // BUG REAL CORRIGIDO (auditoria Marco 7 Compras E2E, 2026-10-18): o excedente físico
@@ -1088,12 +1209,18 @@ async function resolveDiscrepancy(discrepancyId, groupId, companyId, payload, ac
     }
   }
 
+  let payableReconciliation = null;
+  if (['OVER_RECEIPT', 'PRICE_MISMATCH'].includes(discrepancy.discrepancyType) && discrepancyGoodsReceipt) {
+    const lockedReceipt = await GoodsReceipt.findByPk(discrepancyGoodsReceipt.id, { transaction, lock: transaction.LOCK.UPDATE });
+    payableReconciliation = await reconcileGoodsReceiptPayable(lockedReceipt, actor, transaction, discrepancy.id);
+  }
+
   await registrarAuditoria(
     {
       groupId: discrepancy.groupId, companyId: discrepancy.companyId, actorUserId: actor.userId,
       action: 'procurement.receipt_discrepancy.resolve',
       entityType: 'ReceiptDiscrepancy', entityId: discrepancy.id,
-      beforeJson, afterJson: discrepancy.toJSON(),
+      beforeJson, afterJson: { ...discrepancy.toJSON(), payableReconciliation },
       reason: `Divergência de recebimento resolvida como ${normalized}.`,
     },
     transaction
@@ -1122,8 +1249,11 @@ async function evaluateSupplier(payload, actorUserId, transaction) {
 // do contrato listar `supplier_evaluations` como parte do fluxo de Procurement. Mesma família
 // de bug "dado gravado e nunca lido" das rodadas 7/8/9/10. `averageScore` é a agregação mais
 // útil pra decidir um próximo AWARD — nota histórica do fornecedor, não só a lista crua.
-async function listSupplierEvaluations(transaction, { supplierPersonId } = {}) {
-  const where = {};
+// REVISÃO MARCO 7 (19/10/2026, B13): o where não tinha empresa — só o RLS protegia. Defesa em
+// profundidade: grupo e empresa explícitos no filtro.
+async function listSupplierEvaluations(groupId, companyId, transaction, { supplierPersonId } = {}) {
+  if (!groupId || !companyId) throw AppError.badRequest('"groupId" e "companyId" são obrigatórios.', 'SUPPLIER_EVALUATION_VALIDATION');
+  const where = { groupId, companyId };
   if (supplierPersonId) where.supplierPersonId = supplierPersonId;
   const evaluations = await SupplierEvaluation.findAll({ where, order: [['created_at', 'DESC']], transaction });
   const averageScore = evaluations.length > 0
@@ -1158,6 +1288,30 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   };
   const underReceivedItems = items.filter((i) => Number(i.receivedQuantity) < Number(i.quantity));
 
+  // REVISÃO MARCO 7 (19/10/2026, B12/B3): divergências OVER_RECEIPT/PRICE_MISMATCH ainda abertas
+  // de um pedido cancelado ficavam abertas para sempre (decisão sobre algo que não existe mais).
+  // São encerradas como CANCELED. O status de cada excedente é lido ANTES (overStatusByGrItem) para
+  // o estorno de estoque abaixo saber o que de fato entrou no saldo.
+  const orderReceipts = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id }, transaction, lock: transaction.LOCK.UPDATE });
+  const orderGrItems = orderReceipts.length
+    ? await GoodsReceiptItem.findAll({ where: { goodsReceiptId: orderReceipts.map((g) => g.id) }, transaction })
+    : [];
+  const orderDiscrepancies = orderGrItems.length
+    ? await ReceiptDiscrepancy.findAll({ where: { goodsReceiptItemId: orderGrItems.map((i) => i.id) }, transaction, lock: transaction.LOCK.UPDATE })
+    : [];
+  const overByGrItem = new Map(orderDiscrepancies.filter((d) => d.discrepancyType === 'OVER_RECEIPT').map((d) => [d.goodsReceiptItemId, { status: d.status, expectedValue: Number(d.expectedValue), receivedValue: Number(d.receivedValue) }]));
+  const canceledDiscrepancyIds = [];
+  for (const d of orderDiscrepancies) {
+    if (d.status !== 'OPEN') continue;
+    d.status = 'CANCELED';
+    d.resolutionNotes = `${d.resolutionNotes ? `${d.resolutionNotes} ` : ''}[encerrada: pedido de compra cancelado]`;
+    d.resolvedByUserId = actor.userId || null;
+    d.resolvedAt = new Date();
+     
+    await d.save({ transaction });
+    canceledDiscrepancyIds.push(d.id);
+  }
+
   const discrepancies = [];
   for (const item of underReceivedItems) {
     const lastGrItem = await GoodsReceiptItem.findOne({
@@ -1187,11 +1341,28 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   // com um contas a pagar de uma compra que o próprio sistema está marcando como cancelada.
   // Mesmo padrão de estorno já usado em resolveDiscrepancy (PRICE_MISMATCH rejeitado): nunca edita
   // o valor de um FinancialEntry existente (FIN-010) — estorna via reverseFinancialEntry.
+  // REVISÃO MARCO 7 (19/10/2026, B4): só o financialEntryId do recebimento era estornado — o
+  // payable SEPARADO do excedente aceito (modelo antigo, idempotencyKey
+  // goods-receipt:<id>:over-receipt-accepted:<divergência>) ficava a pagar de um pedido cancelado.
+  // Agora estorna todo payable ativo nascido do recebimento (chave goods-receipt:<id>...), o que
+  // cobre o payable único atual e qualquer lançamento legado.
   const reversedFinancialEntryIds = [];
-  const goodsReceipts = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, financialEntryId: { [Op.ne]: null } }, transaction });
-  for (const goodsReceipt of goodsReceipts) {
-    const entry = await FinancialEntry.findByPk(goodsReceipt.financialEntryId, { transaction, lock: transaction.LOCK.UPDATE });
-    if (entry && entry.status !== 'REVERSED' && entry.status !== 'CANCELLED') {
+  for (const goodsReceipt of orderReceipts) {
+    const entries = await FinancialEntry.findAll({
+      where: {
+        nature: 'PAYABLE',
+        status: { [Op.notIn]: ['REVERSED', 'CANCELLED'] },
+        [Op.or]: [
+          { idempotencyKey: { [Op.like]: `goods-receipt:${goodsReceipt.id}%` } },
+          ...(goodsReceipt.financialEntryId ? [{ id: goodsReceipt.financialEntryId }] : []),
+        ],
+      },
+      order: [['id', 'ASC']],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    for (const entry of entries) {
+       
       await reverseFinancialEntry(
         entry.id,
         `Pedido de compra ${order.id} cancelado — estorno do payable gerado no recebimento ${goodsReceipt.id}.`,
@@ -1223,13 +1394,22 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
     for (const grItem of grItems) {
       const poItem = items.find((i) => i.id === grItem.purchaseOrderItemId);
       if (!poItem || !poItem.inventoryItemId) continue;
+      // REVISÃO MARCO 7 (19/10/2026, B3): estornava grItem.receivedQuantity (físico cheio) — com o
+      // excedente rejeitado (ou ainda aberto) ele nunca entrou no saldo, e o estorno tirava do
+      // estoque o que não era deste pedido. Estorna só o que entrou: o que coube no pedido, mais o
+      // excedente se (e somente se) foi ACEITO.
+      const over = overByGrItem.get(grItem.id);
+      const enteredQuantity = over && over.status !== 'ACCEPTED'
+        ? Math.max(over.expectedValue, 0)
+        : Number(grItem.receivedQuantity);
+      if (!(enteredQuantity > 0)) continue;
       const reversalMovement = await recordMovement(
         {
           groupId: order.groupId,
           companyId: order.companyId,
           inventoryItemId: poItem.inventoryItemId,
           movementType: 'OUT',
-          quantity: Number(grItem.receivedQuantity),
+          quantity: enteredQuantity,
           sourceLocationId: goodsReceipt.destinationLocationId,
           sourceType: 'PURCHASE_ORDER_CANCEL',
           sourceId: order.id,
@@ -1247,6 +1427,21 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   order.updatedBy = actor.userId || null;
   await order.save({ transaction });
 
+  // REVISÃO MARCO 7 (19/10/2026, B12): a requisição que originou o pedido ficava "Entregue"
+  // (DELIVERED) ou "Adjudicada" (AWARDED) apontando para um pedido cancelado. Decisão conservadora
+  // (o caderno não define): ela é ENCERRADA (CLOSED) — nunca volta sozinha a um estado que permita
+  // nova compra; se o material ainda for necessário, abre-se uma requisição nova, com nova aprovação.
+  let requestStatusChange = null;
+  if (order.purchaseRequestId) {
+    const originRequest = await PurchaseRequest.findOne({ where: { id: order.purchaseRequestId, groupId: order.groupId, companyId: order.companyId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (originRequest && ['DELIVERED', 'AWARDED'].includes(originRequest.status)) {
+      requestStatusChange = { purchaseRequestId: originRequest.id, from: originRequest.status, to: 'CLOSED' };
+      originRequest.status = 'CLOSED';
+      originRequest.updatedBy = actor.userId || null;
+      await originRequest.save({ transaction });
+    }
+  }
+
   await registrarAuditoria(
     {
       groupId: order.groupId, companyId: order.companyId, actorUserId: actor.userId,
@@ -1259,13 +1454,15 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
         discrepancyIds: discrepancies.map((d) => d.id),
         reversedFinancialEntryIds,
         reversedStockMovementIds,
+        canceledDiscrepancyIds,
+        requestStatusChange: requestStatusChange || 'Sem mudança na requisição',
       },
       reason: payload?.reason || `PO cancelada — ${underReceivedItems.length} item(ns) com saldo não recebido (compensação registrada)${reversedFinancialEntryIds.length > 0 ? `; payable(s) estornado(s): ${reversedFinancialEntryIds.join(', ')}` : ''}${reversedStockMovementIds.length > 0 ? `; estoque estornado via movimento(s): ${reversedStockMovementIds.join(', ')}` : ''}.`,
     },
     transaction
   );
 
-  return { order, discrepancies, reversedStockMovementIds, reversedFinancialEntryIds };
+  return { order, discrepancies, reversedStockMovementIds, reversedFinancialEntryIds, canceledDiscrepancyIds };
 }
 
 // --- Due diligence / qualificação de fornecedor ---
@@ -1290,6 +1487,13 @@ async function upsertSupplierQualification(payload, actorUserId, actor, transact
   // (comparação de string "válida" contra lixo nunca dá o resultado fail-closed esperado).
   if (validUntil != null && validUntil !== '' && !isValidDateOnly(validUntil)) {
     throw AppError.badRequest('"validUntil" precisa ser uma data válida no formato "YYYY-MM-DD".', 'SUPPLIER_QUALIFICATION_VALIDATION');
+  }
+
+  if (Array.isArray(documentFileIds) && documentFileIds.length > 0) {
+    const found = await File.count({ where: { id: documentFileIds, companyId }, transaction });
+    if (found !== new Set(documentFileIds).size) {
+      throw AppError.badRequest('Algum documento informado não existe nesta empresa.', 'SUPPLIER_QUALIFICATION_VALIDATION');
+    }
   }
 
   let qualification = await SupplierQualification.findOne({ where: { companyId, supplierPersonId }, transaction, lock: transaction.LOCK.UPDATE });
@@ -1318,6 +1522,18 @@ async function upsertSupplierQualification(payload, actorUserId, actor, transact
     if (isHighRisk && qualification.dueDiligenceStatus !== 'APPROVED') fields.dueDiligenceStatus = 'PENDING';
     if (isHighRisk && !qualification.highRisk) fields.dueDiligenceStatus = 'PENDING';
     if (!isHighRisk) fields.dueDiligenceStatus = 'NOT_REQUIRED';
+
+    // REVISÃO MARCO 7 (19/10/2026, B9): quem só cadastra (procurement:create) estendia a vigência
+    // ou trocava os documentos de uma due diligence JÁ APROVADA, e a aprovação antiga continuava
+    // valendo para o material novo. Segregação: mudança de vigência/documentos feita por quem não
+    // aprova devolve a due diligence para PENDING — outra pessoa, com procurement:approve, decide.
+    const sameDocuments = JSON.stringify([...(qualification.documentFileIds || [])].sort()) === JSON.stringify([...(fields.documentFileIds || [])].sort());
+    const sameValidity = String(qualification.validUntil || '') === String(fields.validUntil || '');
+    if (isHighRisk && qualification.dueDiligenceStatus === 'APPROVED' && !actor?.canApprove && (!sameDocuments || !sameValidity)) {
+      fields.dueDiligenceStatus = 'PENDING';
+      fields.approvedByUserId = null;
+      fields.approvedAt = null;
+    }
 
     // BUG REAL CORRIGIDO (due diligence bypass, 2026-10-08): se a qualification já estava
     // REJECTED (decisão só tomada por quem tem `procurement:approve`, via
@@ -1381,6 +1597,16 @@ async function decideSupplierDueDiligence(id, groupId, companyId, payload, actor
     throw AppError.conflict(
       `Due diligence já foi decidida (status atual: ${qualification.dueDiligenceStatus}) — não pode ser decidida novamente.`,
       'SUPPLIER_DUE_DILIGENCE_ALREADY_DECIDED'
+    );
+  }
+
+  // REVISÃO MARCO 7 (19/10/2026, B9): quem cadastrou/alterou por último os documentos e a vigência
+  // não decide a própria due diligence (maker-checker, mesmo padrão do resto de Compras).
+  const registeredBy = qualification.updatedBy || qualification.createdBy;
+  if (registeredBy && actor.userId && registeredBy === actor.userId) {
+    throw AppError.forbidden(
+      'Quem cadastrou os documentos e a vigência do fornecedor não pode decidir a própria due diligence — peça a decisão a outra pessoa com permissão.',
+      'SUPPLIER_DUE_DILIGENCE_SELF_DECISION_BLOCKED'
     );
   }
 

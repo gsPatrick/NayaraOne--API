@@ -81,7 +81,7 @@ const evaluateSupplier = catchAsync(async (req, res) => {
 });
 
 const listSupplierEvaluations = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => service.listSupplierEvaluations(t, { supplierPersonId: req.query.supplierPersonId }));
+  const result = await req.withTenantTransaction((t) => service.listSupplierEvaluations(req.auth.groupId, req.auth.companyId, t, { supplierPersonId: req.query.supplierPersonId }));
   return success(res, { data: result });
 });
 

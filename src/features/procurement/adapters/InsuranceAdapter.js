@@ -13,6 +13,8 @@ const { resilientFetch } = require('../../../utils/resilientFetch');
 // "GUIA DO MARCELO — INTEGRAÇÕES, APIs E WEBHOOKS", seção 14 "Seguradoras/garantias")
 
 class SandboxInsuranceAdapter {
+  get providerName() { return 'sandbox'; }
+
   async quote(req) {
     return {
       externalId: `sandbox-quote-${Date.now()}`,
@@ -76,6 +78,8 @@ async function httpRequestJson({ circuitKey, method, url, headers, body }) {
 // uma confirmação — precisam ser corrigidos no primeiro teste real contra sandbox.
 // ---------------------------------------------------------------------------------------------
 class PortoSeguroInsuranceAdapter {
+  get providerName() { return 'porto_seguro'; }
+
   constructor({ clientId, clientSecret, baseUrl, authBaseUrl }) {
     if (!clientId || !clientSecret) {
       throw AppError.internal('Configuração do provider Porto Seguro incompleta.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
@@ -181,6 +185,8 @@ class JuntoSegurosInsuranceAdapter {
 // HDI Seguros. Endpoints, payload e resposta abaixo batem com o PDF, campo a campo.
 // ---------------------------------------------------------------------------------------------
 class YelumInsuranceAdapter {
+  get providerName() { return 'yelum'; }
+
   constructor({ apiKey, baseUrl }) {
     if (!apiKey) {
       throw AppError.internal('Configuração do provider Yelum incompleta.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
