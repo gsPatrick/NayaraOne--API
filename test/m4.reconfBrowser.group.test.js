@@ -10,10 +10,10 @@ process.env.PORT = process.env.M4_GROUP_HTTP_TEST_PORT || '21633';
 require('../app');
 const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seq } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { BankAccount, BankTransaction, FinancialEntry, Reconciliation, ResultCenter, CostCenter } = require('../src/models');
+const { BankAccount, BankTransaction, FinancialEntry, Reconciliation, ResultCenter } = require('../src/models');
 
 let tenant; let baseUrl; let tokenOk; let tokenSemPermissao;
-const created = { accounts: [], txs: [], entries: [], centers: [], costCenters: [] };
+const created = { accounts: [], txs: [], entries: [], centers: [] };
 
 before(async () => {
   tenant = await getSeedTenant();
