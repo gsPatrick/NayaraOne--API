@@ -60,10 +60,35 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     );
   }
 
-  const existingPending = await ApprovalRequest.findOne({
+  let existingPending = await ApprovalRequest.findOne({
     where: { relatedEntityType, relatedEntityId, status: 'PENDING' },
     transaction,
   });
+  // R2 (reconferência 20/10/2026): um pedido pendente cujo lançamento mudou depois dele (versão
+  // diferente do retrato) não pode travar um novo pedido — vira STALE e libera o novo.
+  if (existingPending && existingPending.lockVersionAtRequest !== null && existingPending.lockVersionAtRequest !== undefined
+      && 'lockVersion' in relatedEntityForCheck.dataValues
+      && Number(existingPending.lockVersionAtRequest) !== Number(relatedEntityForCheck.lockVersion)) {
+    const before = existingPending.toJSON();
+    existingPending.status = 'STALE';
+    existingPending.updatedBy = actorUserId || null;
+    await existingPending.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'finance.approval_request.stale',
+        entityType: 'ApprovalRequest',
+        entityId: existingPending.id,
+        beforeJson: before,
+        afterJson: existingPending.toJSON(),
+        reason: 'Invalidada: o lançamento foi alterado depois do pedido.',
+      },
+      transaction
+    );
+    existingPending = null;
+  }
   if (existingPending) {
     throw AppError.conflict('Já existe uma solicitação de aprovação pendente para esta entidade.', 'FINANCE_APPROVAL_ALREADY_PENDING', {
       existingId: existingPending.id,
@@ -230,6 +255,12 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
   }
 
   const approvalRequest = await getApprovalRequest(approvalRequestId, transaction);
+  if (approvalRequest.status === 'STALE') {
+    throw AppError.conflict(
+      'Invalidada: o lançamento foi alterado depois do pedido; peça a aprovação de novo.',
+      'FINANCE_APPROVAL_STALE'
+    );
+  }
   if (approvalRequest.status !== 'PENDING') {
     throw AppError.conflict(`Esta solicitação já foi decidida (status "${approvalRequest.status}").`, 'FINANCE_APPROVAL_ALREADY_DECIDED');
   }
@@ -272,10 +303,13 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
         Number(approvalRequest.lockVersionAtRequest) !== currentLockVersion;
       const staleAgainstClientValue = expectedLockVersion !== undefined && Number(expectedLockVersion) !== currentLockVersion;
       if (staleAgainstSnapshot || staleAgainstClientValue) {
-        throw AppError.conflict(
-          'A entidade relacionada foi alterada desde que esta solicitação foi revisada — aprovação recusada por segurança (dado desatualizado).',
-          'FINANCE_APPROVAL_STALE'
-        );
+        // R2: rejeitar um pedido desatualizado é sempre permitido (nunca fica sem saída).
+        if (normalizedDecision !== 'REJECTED') {
+          throw AppError.conflict(
+            'O lançamento foi alterado depois do pedido de aprovação; peça a aprovação de novo.',
+            'FINANCE_APPROVAL_STALE'
+          );
+        }
       }
     }
   }
@@ -389,7 +423,7 @@ async function listApprovedDeciders(relatedEntityType, relatedEntityId, transact
  */
 async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, reason, actorUserId, transaction) {
   const approvedRequests = await ApprovalRequest.findAll({
-    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
+    where: { relatedEntityType, relatedEntityId, status: ['APPROVED', 'PENDING'] },
     transaction,
   });
   for (const request of approvedRequests) {

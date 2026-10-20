@@ -78,7 +78,7 @@ function resolveCompetenceMonth(competenceMonth, dueAt) {
 function assertPositiveAmount(amount) {
   const numeric = Number(amount);
   if (!Number.isFinite(numeric) || numeric <= 0) {
-    throw AppError.badRequest('O campo "amount" deve ser um número positivo (moeda em numeric/decimal — FIN-008).', 'FINANCE_ENTRY_VALIDATION');
+    throw AppError.badRequest('Informe um valor maior que zero.', 'FINANCE_ENTRY_VALIDATION');
   }
 }
 

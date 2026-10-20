@@ -243,7 +243,7 @@ async function createCommission(payload, actorUserId, transaction) {
   const existingByKey = await Commission.findOne({ where: { companyId, idempotencyKey }, transaction });
   if (existingByKey) {
     throw AppError.conflict(
-      'Já existe uma comissão criada com esta mesma chave de idempotência — envio duplicado bloqueado.',
+      'Esta comissão já foi registrada para este recebimento.',
       'FINANCE_COMMISSION_DUPLICATE',
       { existingId: existingByKey.id }
     );

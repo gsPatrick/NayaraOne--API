@@ -1,10 +1,10 @@
 'use strict';
 
-const { PaymentIntent, BankAccount, BankPaymentProviderRouting, FinancialEntry } = require('../../models');
+const { PaymentIntent, BankAccount, BankPaymentProviderRouting, FinancialEntry, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { resolveBankAdapter } = require('./adapters/resolveBankAdapter');
-const { getPaymentIntentForUpdate } = require('./paymentIntents.service');
+const { getPaymentIntentForUpdate, buildEntrySnapshot, computeSnapshotHash } = require('./paymentIntents.service');
 const { settleFinancialEntry } = require('./financialEntries.service');
 const { assertBankAccountEligibleForPayment } = require('./financeAntifraud.service');
 const { createAnomalyCase } = require('./anomalyCases.service');
@@ -61,6 +61,14 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
       'FINANCE_PAYMENT_INTENT_NOT_APPROVED'
     );
   }
+  // R5: o envio ao banco só vale se o lançamento continua igual ao retrato aprovado.
+  const currentEntry = await FinancialEntry.findByPk(intent.financialEntryId, { transaction });
+  if (!currentEntry || computeSnapshotHash(buildEntrySnapshot(currentEntry)) !== intent.snapshotHash) {
+    throw AppError.conflict(
+      'O lançamento foi alterado depois da aprovação desta intenção: o envio ao banco foi recusado. Crie uma nova intenção sobre a versão atual.',
+      'FINANCE_PAYMENT_INTENT_STALE'
+    );
+  }
   const bankAccountId = intent.snapshotJson?.bankAccountId;
   if (!bankAccountId) {
     throw AppError.badRequest('O lançamento desta intenção não tem conta bancária de destino definida.', 'FINANCE_BANK_PAYMENT_NO_BANK_ACCOUNT');
@@ -74,9 +82,10 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
   // Resolve o adapter já aqui: configuração incompleta falha ANTES de qualquer estado mudar.
   const adapter = await resolveBankAdapter({ groupId: intent.groupId, companyId: intent.companyId }, transaction);
 
+  const ownerPerson = bankAccount.ownerPersonId ? await Person.findByPk(bankAccount.ownerPersonId, { transaction }) : null;
   const beneficiarySnapshot = {
     personId: bankAccount.ownerPersonId || null,
-    name: intent.snapshotJson?.description || null,
+    name: ownerPerson?.legalName || intent.snapshotJson?.description || null,
     bankCode: bankAccount.bankCode || null,
     branch: bankAccount.agency || null,
     account: bankAccount.accountNumber || null,
