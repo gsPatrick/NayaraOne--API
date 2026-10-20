@@ -47,7 +47,7 @@ before(async () => {
   await new Promise((resolve) => setTimeout(resolve, 300));
 
   for (const tenantKey of ['A', 'B']) {
-    for (const profile of ['maker', 'checker', 'leitura']) {
+    for (const profile of PROFILES.map((p) => p.key)) {
       const res = await fetch(`${baseUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
