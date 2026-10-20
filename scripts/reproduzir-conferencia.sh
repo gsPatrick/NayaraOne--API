@@ -22,9 +22,16 @@
 # (sem --test-concurrency=1; para rodar em série use REPRO_SERIAL=1). Node: o CI usa 20; com outra
 # major o script avisa no cabeçalho do log (ou aborta com REPRO_REQUIRE_NODE20=1).
 # Logs do CI (artifact test-results-<commit>): gh run download <RUN_ID> -R gsPatrick/NayaraOne--API
+# Reexecução no próprio GitHub (sem deploy): Actions > CI > Run workflow (workflow_dispatch),
+# escolhendo a branch/commit; o job "test" é o mesmo que este script reproduz.
+# Este script e o workflow COINCIDEM: o script é que foi ajustado ao workflow (nada foi mudado no
+# comando de teste do CI). Diferença única: o CI define CI=true automaticamente (o script também).
+# Ao final grava também <saida>.saneado.log (scripts/sanear-log-teste.js): sem log JSON de
+# requisição e sem padrões de segredo, com o sha256 do original no cabeçalho.
 #
 # Uso:  bash scripts/reproduzir-conferencia.sh [arquivo-de-saida.log] [padrão-de-testes]
 #       ex.: bash scripts/reproduzir-conferencia.sh /tmp/r.log 'test/nayaraConferencia1810*.test.js'
+# REPRO_CAPTURA=1 roda, depois da suíte, scripts/capturar-evidencias-marco45.js (JSON com HTTP real, passos de serviço e consultas SQL).
 # Variáveis: REPRO_PG_PORT (padrão 55432), REPRO_FORCE_LOCAL=1 (ignora docker), REPRO_SERIAL=1,
 #            REPRO_SKIP_CHECKS=1 (pula lint/syntax/scanners), REPRO_REQUIRE_NODE20=1.
 #
@@ -143,4 +150,9 @@ STATUS=${PIPESTATUS[0]}
 set -e
 echo "[reproduzir] saída em $OUT (status $STATUS)"
 grep -E '^ℹ (tests|pass|fail|cancelled|skipped|todo)' "$OUT" || true
+if [ -n "${REPRO_CAPTURA:-}" ]; then
+  echo "[reproduzir] captura HTTP/serviço/SQL dos Marcos 4/5 no mesmo banco descartável…"
+  node scripts/capturar-evidencias-marco45.js --out "${OUT%.log}.captura.json" 2>&1 | grep -v '^{"level"' || true
+fi
+node scripts/sanear-log-teste.js "$OUT" "${OUT%.log}.saneado.log" >/dev/null && echo "[reproduzir] versão saneada em ${OUT%.log}.saneado.log (sha256 do original no cabeçalho)"
 exit "$STATUS"
