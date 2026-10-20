@@ -95,7 +95,7 @@ test('R2-2: baixa de parcela de prêmio rejeita RECEBIMENTO (RECEIVABLE) de valo
       withTenant({ userId: tenant.userId }),
       transaction
     );
-    const [firstInstallment] = await insuranceService.listPolicyInstallments(issued.id, transaction);
+    const [firstInstallment] = await insuranceService.listPolicyInstallments(issued.id, tenant.groupId, tenant.companyId, transaction);
     assert.ok(firstInstallment, 'emissão precisa ter gerado parcelas');
 
     // "Recebimento de aluguel" simulado: CREDIT/RECEIVABLE liquidado com o MESMO valor da

@@ -4,10 +4,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const itemsService = require('../src/features/inventory/items.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
-const { Person, FinancialEntry, User } = require('../src/models');
+const { Person, FinancialEntry, GoodsReceipt, User } = require('../src/models');
 
 let tenant;
 
@@ -66,7 +68,7 @@ async function fullProcurementCycle(transaction, { item, quantity = 10, unitPric
     quotation.id,
     tenant.groupId,
     tenant.companyId,
-    { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
+    { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
     transaction
   );
   const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -82,6 +84,8 @@ test('upsertSupplierQualification: rebaixar highRisk de uma qualification REJECT
       { transaction }
     );
 
+    // B9 (revisão 19/10): quem cadastrou a qualificação não decide a própria due diligence.
+    const decider = await User.create({ name: `QA Gap2 decisor ${uniqueSuffix()}`, email: `qa-gap2-decider-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction });
     const qualification = await procurementService.upsertSupplierQualification(
       withTenant({ supplierPersonId: supplier.id, highRisk: true }),
       tenant.userId,
@@ -89,7 +93,7 @@ test('upsertSupplierQualification: rebaixar highRisk de uma qualification REJECT
       transaction
     );
     await procurementService.decideSupplierDueDiligence(
-      qualification.id, tenant.groupId, tenant.companyId, { decision: 'REJECTED' }, actorOf(), transaction
+      qualification.id, tenant.groupId, tenant.companyId, { decision: 'REJECTED' }, { userId: decider.id }, transaction
     );
 
     // Sem procurement:approve, não pode rebaixar highRisk e cair em NOT_REQUIRED.
@@ -181,14 +185,17 @@ test('resolveDiscrepancy: aceitar um OVER_RECEIPT cria um FinancialEntry adicion
     );
     assert.equal(resolved.status, 'ACCEPTED');
 
-    // Excedente = 2 unidades x 4 = 8, lançado como payable adicional (DEBIT/PAYABLE).
+    // B1/B4 (revisão 19/10): o excedente aceito NÃO gera mais um payable separado (pagaria duas
+    // vezes). O payable do recebimento é recalculado em UM só lançamento: 12 x 4 = 48.
     const extraEntry = await FinancialEntry.findOne({
       where: { groupId: tenant.groupId, companyId: tenant.companyId, idempotencyKey: `goods-receipt:${goodsReceipt.id}:over-receipt-accepted:${overReceipt.id}` },
       transaction,
     });
-    assert.ok(extraEntry, 'precisa existir um FinancialEntry adicional para o excedente aceito');
-    assert.equal(Number(extraEntry.amount), 8);
-    assert.equal(extraEntry.nature, 'PAYABLE');
+    assert.equal(extraEntry, null, 'não existe mais lançamento separado do excedente');
+    const receiptAfter = await GoodsReceipt.findByPk(goodsReceipt.id, { transaction });
+    const payable = await FinancialEntry.findByPk(receiptAfter.financialEntryId, { transaction });
+    assert.equal(Number(payable.amount), 48);
+    assert.equal(payable.nature, 'PAYABLE');
   });
 });
 

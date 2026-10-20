@@ -14,6 +14,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { recordApprovedAdjustment } = require('./testHelpers');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const { InventoryItem, InventoryLocation, File } = require('../src/models');
@@ -316,8 +317,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
       },
       { transaction }
     );
-    const movement = await movementsService.recordMovement(
-      withTenant({
+    const movement = await recordApprovedAdjustment(tenant, withTenant({
         inventoryItemId: item.id,
         movementType: 'ADJUSTMENT',
         quantity: 10,
@@ -325,10 +325,7 @@ test('Item 8: recordMovement de alto valor exige evidenceFileId válido — UUID
         reason: 'Ajuste de alto valor com evidência válida.',
         evidenceFileId: ownFile.id,
         idempotencyKey: `test-item8-valid-${ownFile.id}`,
-      }),
-      actor({ canApprove: true }),
-      transaction
-    );
+      }), transaction);
     assert.equal(movement.evidenceFileId, ownFile.id);
   });
 });

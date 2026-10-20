@@ -12,6 +12,7 @@ const procurementService = require('../src/features/procurement/procurement.serv
 const countsService = require('../src/features/inventory/counts.service');
 const projectsService = require('../src/features/construction/projects.service');
 const { Person, User } = require('../src/models');
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const AppError = require('../src/utils/AppError');
 
 let tenant;
@@ -237,7 +238,7 @@ test('Three-way match: over-receipt no recebimento de um PO abre ReceiptDiscrepa
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -277,10 +278,11 @@ test('Procurement: submitSupplierOffer recusa unitPrice "NaN" (literal numérico
     const secondApprover = await createSecondApprover(transaction);
     await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    const nanSupplier = await createQualifiedSupplier(tenant, transaction);
     await assert.rejects(
       () => procurementService.submitSupplierOffer(
         quotation.id, tenant.groupId, tenant.companyId,
-        { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 'NaN' }] },
+        { supplierPersonId: nanSupplier.supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 'NaN' }] },
         transaction
       ),
       (err) => { assert.equal(err.code, 'SUPPLIER_OFFER_VALIDATION'); return true; }
@@ -308,10 +310,8 @@ test('Inventory counts: addCountItem recusa countedQuantity "NaN"', async () => 
 test('Procurement: compareOffers inclui o nome do fornecedor (supplierPersonName)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item } = await createItemAndWarehouse(transaction);
-    const supplier = await Person.create(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `Fornecedor Teste ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-      { transaction }
-    );
+    // B10 (revisão 19/10): fornecedor qualificado (documento + vigência) é pré-condição do pedido.
+    const { supplier } = await createQualifiedSupplier(tenant, transaction, { legalName: `Fornecedor Teste ${uniqueSuffix()}` });
     const request = await procurementService.createPurchaseRequest(
       withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity: 10 }] }),
       tenant.userId,
@@ -338,10 +338,8 @@ test('Procurement: compareOffers inclui o nome do fornecedor (supplierPersonName
 test('Procurement: listPurchaseOrders/getPurchaseOrder incluem supplierPersonName', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item } = await createItemAndWarehouse(transaction);
-    const supplier = await Person.create(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `Fornecedor PO Teste ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-      { transaction }
-    );
+    // B10 (revisão 19/10): fornecedor qualificado (documento + vigência) é pré-condição do pedido.
+    const { supplier } = await createQualifiedSupplier(tenant, transaction, { legalName: `Fornecedor PO Teste ${uniqueSuffix()}` });
     const request = await procurementService.createPurchaseRequest(
       withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity: 10 }] }),
       tenant.userId,
@@ -383,12 +381,12 @@ test('Procurement: awardSupplierOffer recusa adjudicar uma segunda oferta da mes
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offerA = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const offerB = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] },
       transaction
     );
 
@@ -416,7 +414,7 @@ test('Three-way match: confirmGoodsReceipt recusa receivedQuantity <= 0', async 
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -450,7 +448,7 @@ test('Three-way match: confirmGoodsReceipt com idempotencyKey repetida em recebi
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -495,7 +493,7 @@ test('Three-way match: resolveDiscrepancy fecha o case (ACCEPTED/REJECTED) e rej
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -556,7 +554,7 @@ test('Recebimento contra PO que não está OPEN é bloqueado', async () => {
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -601,7 +599,7 @@ test('Avaliação de fornecedor: listSupplierEvaluations lê as avaliações e c
       transaction
     );
 
-    const result = await procurementService.listSupplierEvaluations(transaction, { supplierPersonId });
+    const result = await procurementService.listSupplierEvaluations(tenant.groupId, tenant.companyId, transaction, { supplierPersonId });
     assert.equal(result.count, 2);
     assert.equal(result.averageScore, 3);
     assert.equal(result.evaluations.length, 2);
@@ -641,7 +639,7 @@ test('Invoice match: valor da NF igual ao esperado confirma o recebimento e cria
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -676,7 +674,7 @@ test('Invoice match: valor da NF diferente do esperado abre ReceiptDiscrepancy P
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -698,7 +696,7 @@ test('Invoice match: valor da NF diferente do esperado abre ReceiptDiscrepancy P
 // Bug real corrigido nesta auditoria (rodada 26, 2026-10-05): rejeitar uma PRICE_MISMATCH só
 // mudava o status da divergência — o payable continuava com o valor contestado da nota fiscal.
 // Agora a rejeição estorna o payable errado e cria um corrigido com o valor esperado.
-test('Invoice match: rejeitar PRICE_MISMATCH estorna o payable errado e cria um corrigido com o valor esperado', async () => {
+test('Invoice match: rejeitar PRICE_MISMATCH libera o payable retido no valor esperado do pedido', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item, location } = await createItemAndWarehouse(transaction);
     const request = await procurementService.createPurchaseRequest(
@@ -711,7 +709,7 @@ test('Invoice match: rejeitar PRICE_MISMATCH estorna o payable errado e cria um 
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -722,22 +720,27 @@ test('Invoice match: rejeitar PRICE_MISMATCH estorna o payable errado e cria um 
       actorOf(),
       transaction
     );
-    const wrongPayableId = goodsReceipt.financialEntryId;
-    assert.ok(wrongPayableId);
+    const heldPayableId = goodsReceipt.financialEntryId;
+    assert.ok(heldPayableId);
+    const { FinancialEntry } = require('../src/models');
+    // B2 (revisão 19/10): enquanto a divergência está aberta o payable nasce no valor do PEDIDO
+    // (10 x 3 = 30, nunca os 45 da NF contestada) e RETIDO — o pagamento só é liberado na decisão.
+    const held = await FinancialEntry.findByPk(heldPayableId, { transaction });
+    assert.equal(Number(held.amount), 30, 'o valor contestado da NF não entra no payable');
+    assert.equal(held.requiresManualReview, true, 'payable retido até a decisão da divergência');
 
     // FIX (auditoria "reconf" 18/10): resolvedor distinto + justificativa obrigatória na rejeição.
     const priceResolver = await createSecondApprover(transaction);
     await procurementService.resolveDiscrepancy(discrepancies[0].id, tenant.groupId, tenant.companyId, { resolution: 'REJECTED', notes: 'Valor da NF não confere com o pedido (teste).' }, { userId: priceResolver.id }, transaction);
 
-    const { FinancialEntry } = require('../src/models');
-    const wrongPayable = await FinancialEntry.findByPk(wrongPayableId, { transaction });
-    assert.equal(wrongPayable.status, 'REVERSED', 'payable com valor contestado precisa ser estornado');
-
+    // Rejeitada: o valor devido continua o do pedido (30), então o MESMO lançamento é liberado
+    // (sem estorno e sem lançamento novo).
     await goodsReceipt.reload({ transaction });
-    assert.notEqual(goodsReceipt.financialEntryId, wrongPayableId, 'recebimento precisa apontar pro novo payable corrigido');
-    const correctedPayable = await FinancialEntry.findByPk(goodsReceipt.financialEntryId, { transaction });
-    assert.equal(Number(correctedPayable.amount), 30, 'payable corrigido precisa usar o valor esperado (PO x quantidade), não o da nota contestada');
-    assert.equal(correctedPayable.status, 'PENDING');
+    assert.equal(goodsReceipt.financialEntryId, heldPayableId);
+    const released = await FinancialEntry.findByPk(heldPayableId, { transaction });
+    assert.equal(Number(released.amount), 30, 'payable usa o valor esperado (PO x quantidade), não o da nota contestada');
+    assert.equal(released.requiresManualReview, false, 'decisão tomada: pagamento liberado');
+    assert.equal(released.status, 'PENDING');
   });
 });
 
@@ -757,7 +760,7 @@ test('listGoodsReceipts lê os recebimentos de um PO, incluindo o payable vincul
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -909,7 +912,7 @@ test('Procurement: cancelPurchaseOrder com recebimento parcial abre UNDER_RECEIP
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -945,7 +948,7 @@ test('Procurement: cancelPurchaseOrder recusa cancelar PO já CANCELED', async (
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 3 }] },
       transaction
     );
     const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -1003,14 +1006,10 @@ test('Procurement: awardSupplierOffer bloqueia fornecedor de alto risco sem due 
 test('Procurement: awardSupplierOffer libera fornecedor de alto risco com due diligence APPROVED', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item } = await createItemAndWarehouse(transaction);
-    const supplier = await createSupplierPerson(transaction);
-    const qualification = await procurementService.upsertSupplierQualification(
-      withTenant({ supplierPersonId: supplier.id, highRisk: true, validUntil: '2099-12-31' }),
-      tenant.userId,
-      { canApprove: true },
-      transaction
-    );
-    await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, actorOf(), transaction);
+    // B9/B10 (revisão 19/10): documento + vigência obrigatórios e a due diligence é decidida por OUTRA pessoa.
+    const { supplier, qualification } = await createQualifiedSupplier(tenant, transaction, { highRisk: true });
+    const dueDiligenceDecider = await createSecondApprover(transaction);
+    await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: dueDiligenceDecider.id }, transaction);
 
     const request = await procurementService.createPurchaseRequest(
       withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity: 10 }] }),

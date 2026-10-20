@@ -74,6 +74,7 @@ after(async () => {
     }
     if (created.itemIds.length) await InventoryItem.destroy({ where: { id: created.itemIds }, force: true, transaction });
     if (created.locationIds.length) await InventoryLocation.destroy({ where: { id: created.locationIds }, force: true, transaction });
+    if (created.personIds.length) await require('../src/models').SupplierQualification.destroy({ where: { supplierPersonId: created.personIds }, force: true, transaction });
     if (created.personIds.length) await Person.destroy({ where: { id: created.personIds }, force: true, transaction });
   }).catch((err) => console.error('[procurement.invoiceWithoutReceipt] limpeza falhou:', err.message));
   if (secondApprover) await User.destroy({ where: { id: secondApprover.id }, force: true }).catch(() => {});
@@ -85,7 +86,8 @@ const withTenant = (fields) => ({ groupId: tenant.groupId, companyId: tenant.com
 const actor = () => ({ userId: tenant.userId, canApprove: false });
 
 async function buildOpenOrder(transaction) {
-  const supplier = await Person.create(withTenant({ personType: 'PJ', legalName: `QA NF Fornecedor ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId }), { transaction });
+  // B10 (revisão 19/10): fornecedor qualificado (documento + vigência) é pré-condição do pedido.
+  const { supplier } = await require('./procurementTestSupplier').createQualifiedSupplier(tenant, transaction, { legalName: `QA NF Fornecedor ${uniqueSuffix()}` });
   const item = await itemsService.createItem(withTenant({ name: `QA NF Item ${uniqueSuffix()}`, sku: `QANF-${uniqueSuffix()}`, unitOfMeasure: 'UN' }), tenant.userId, transaction);
   const warehouse = await itemsService.createLocation(withTenant({ name: `QA NF Depósito ${uniqueSuffix()}`, locationType: 'WAREHOUSE' }), tenant.userId, transaction);
   const request = await procurementService.createPurchaseRequest(withTenant({ items: [{ inventoryItemId: item.id, description: 'Cimento', quantity: 10 }] }), tenant.userId, transaction);

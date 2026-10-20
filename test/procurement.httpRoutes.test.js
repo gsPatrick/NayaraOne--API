@@ -39,13 +39,14 @@ let tenant;
 let baseUrl;
 let approverToken;
 let buyerToken;
+let deciderToken; // B9: quem decide a due diligence não é quem cadastrou a qualificação
 // GAP REAL CORRIGIDO (segregação "quem cria não aprova", 2026-10-08): decidePurchaseRequest
 // agora rejeita quando o ator é o mesmo que criou a requisição — createOpenOrder usava
 // tenant.userId para criar E decidir. Segundo usuário, persistido de verdade (requisição HTTP
 // comita a própria transação) e limpo no after(), mesmo padrão de personIds/requestIds abaixo.
 let secondApprover;
 
-const created = { personIds: [], requestIds: [], orderIds: [], qualificationIds: [], userIds: [] };
+const created = { personIds: [], requestIds: [], orderIds: [], qualificationIds: [], userIds: [], fileIds: [] };
 
 before(async () => {
   tenant = await getSeedTenant();
@@ -61,6 +62,7 @@ before(async () => {
     status: 'ACTIVE',
   });
   created.userIds.push(secondApprover.id);
+  deciderToken = signAccessToken({ ...base, sub: secondApprover.id, permissions: ['procurement:read', 'procurement:create', 'procurement:approve'] });
   await new Promise((resolve) => setTimeout(resolve, 300));
 });
 
@@ -87,6 +89,7 @@ after(async () => {
       await PurchaseRequest.destroy({ where: { id: created.requestIds }, force: true, transaction });
     }
     if (created.personIds.length) await Person.destroy({ where: { id: created.personIds }, force: true, transaction });
+    if (created.fileIds.length) await require('../src/models').File.destroy({ where: { id: created.fileIds }, force: true, transaction });
   }).catch((err) => {
     // Limpeza best-effort: não mascarar o resultado dos testes por causa dela.
     console.error('[procurement.httpRoutes] limpeza falhou:', err.message);
@@ -125,6 +128,19 @@ async function createOpenOrder(supplierPersonId) {
     created.requestIds.push(request.id);
     await procurementService.decidePurchaseRequest(request.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover.id, transaction);
     const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
+    // Revisão Marco 7 (19/10/2026, B10): adjudicar exige qualificação com documento e vigência.
+    const filesService = require('../src/features/files/files.service');
+    const doc = await filesService.uploadFile(
+      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'qa-http-docs-fornecedor.pdf', mimeType: 'application/pdf', contentBase64: Buffer.from(`QA HTTP ${uniqueSuffix()}`).toString('base64'), category: 'generic' },
+      tenant.userId,
+      transaction
+    );
+    created.fileIds.push(doc.id);
+    const qualification = await SupplierQualification.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, supplierPersonId, documentFileIds: [doc.id], validUntil: '2099-12-31', highRisk: false, dueDiligenceStatus: 'NOT_REQUIRED', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    created.qualificationIds.push(qualification.id);
     const offer = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
       { supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 12 }] },
@@ -188,11 +204,11 @@ test('HTTP supplier-qualifications — registrar risco/documentos, listar por fo
   assert.equal(buyerDecides.status, 403);
   assert.equal((await buyerDecides.json()).error.code, 'PERMISSION_DENIED');
 
-  const invalid = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, approverToken, { decision: 'MAYBE' });
+  const invalid = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, deciderToken, { decision: 'MAYBE' });
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).error.code, 'SUPPLIER_QUALIFICATION_VALIDATION');
 
-  const rejected = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, approverToken, { decision: 'REJECTED', notes: 'CND vencida' });
+  const rejected = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, deciderToken, { decision: 'REJECTED', notes: 'CND vencida' });
   assert.equal(rejected.status, 200);
   const rejectedBody = (await rejected.json()).data;
   assert.equal(rejectedBody.dueDiligenceStatus, 'REJECTED');
@@ -203,11 +219,11 @@ test('HTTP supplier-qualifications — registrar risco/documentos, listar por fo
   assert.equal(resubmitted.status, 201);
   assert.equal((await resubmitted.json()).data.dueDiligenceStatus, 'PENDING');
 
-  const approved = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, approverToken, { decision: 'APPROVED', notes: 'Documentação conferida' });
+  const approved = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, deciderToken, { decision: 'APPROVED', notes: 'Documentação conferida' });
   assert.equal(approved.status, 200);
   const approvedBody = (await approved.json()).data;
   assert.equal(approvedBody.dueDiligenceStatus, 'APPROVED');
-  assert.equal(approvedBody.approvedByUserId, tenant.userId);
+  assert.equal(approvedBody.approvedByUserId, secondApprover.id);
   assert.ok(approvedBody.approvedAt);
 
   // Deixar de ser alto risco zera a exigência — e decidir due diligence passa a ser recusado.
@@ -222,7 +238,7 @@ test('HTTP supplier-qualifications — registrar risco/documentos, listar por fo
   const cleared = await call('POST', '/procurement/supplier-qualifications', buyerToken, { supplierPersonId: supplier.id, highRisk: false, validUntil: null });
   assert.equal((await cleared.json()).data.validUntil, null);
 
-  const notRequired = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, approverToken, { decision: 'APPROVED' });
+  const notRequired = await call('POST', `/procurement/supplier-qualifications/${qualification.id}/decide`, deciderToken, { decision: 'APPROVED' });
   assert.equal(notRequired.status, 400);
   assert.equal((await notRequired.json()).error.code, 'SUPPLIER_QUALIFICATION_NOT_HIGH_RISK');
 });

@@ -19,6 +19,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const procurementService = require('../src/features/procurement/procurement.service');
 const approvalThresholdRulesService = require('../src/features/procurement/approvalThresholdRules.service');
 const { User, PurchaseRequest } = require('../src/models');
@@ -57,7 +59,7 @@ async function openRequestWithQuotationAndOffer(transaction, { quantity = 10, un
   const quotation = await procurementService.createQuotation(request.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
   const offer = await procurementService.submitSupplierOffer(
     quotation.id, tenant.groupId, tenant.companyId,
-    { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
+    { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
     transaction
   );
   return { request, quotation, offer, approver };

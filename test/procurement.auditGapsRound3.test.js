@@ -8,6 +8,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const procurementService = require('../src/features/procurement/procurement.service');
 const { User } = require('../src/models');
 
@@ -50,12 +52,12 @@ test('procurement: awardSupplierOffer bloqueia adjudicar uma SEGUNDA oferta da M
     // segunda aprovação (REG-COM-001), pra não precisar de um segundo aprovador aqui.
     const offerA = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 5 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 5 }] },
       transaction
     );
     const offerB = await procurementService.submitSupplierOffer(
       quotation.id, tenant.groupId, tenant.companyId,
-      { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] },
+      { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice: 4 }] },
       transaction
     );
 

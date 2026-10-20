@@ -17,6 +17,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const procurementService = require('../src/features/procurement/procurement.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const itemsService = require('../src/features/inventory/items.service');
@@ -77,7 +79,7 @@ async function fullProcurementCycle(transaction, { item, quantity = 25, unitPric
     quotation.id,
     tenant.groupId,
     tenant.companyId,
-    { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
+    { supplierPersonId: (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
     transaction
   );
   const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -237,7 +239,7 @@ async function issuePolicyWithInstallments(transaction, installmentsCount = 2) {
     actorWithTenant(),
     transaction
   );
-  const installments = await insuranceService.listPolicyInstallments(policy.id, transaction);
+  const installments = await insuranceService.listPolicyInstallments(policy.id, tenant.groupId, tenant.companyId, transaction);
   return { policy: issued, installments };
 }
 
@@ -341,7 +343,7 @@ test('RECONF-1: parcela com vencimento HOJE não nasce "Vencida" no momento da e
       actorWithTenant(),
       transaction
     );
-    const [inst] = await insuranceService.listPolicyInstallments(policy.id, transaction);
+    const [inst] = await insuranceService.listPolicyInstallments(policy.id, tenant.groupId, tenant.companyId, transaction);
     const entry = await FinancialEntry.findByPk(inst.financialEntryId, { transaction });
     assert.equal(saoPauloDateOf(entry.dueAt), todaySaoPaulo);
     // Mesma regra de "Vencida" do Front (lib/mock/finance.js#isEntryOverdue): PENDING e dueAt < agora.

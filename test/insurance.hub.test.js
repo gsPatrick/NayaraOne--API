@@ -114,7 +114,7 @@ test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments
       transaction
     );
 
-    const installments = await insuranceService.listPolicyInstallments(issued.id, transaction);
+    const installments = await insuranceService.listPolicyInstallments(issued.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(installments.length, 3, 'issuePolicy precisa gerar as 3 parcelas pedidas');
     const sum = installments.reduce((acc, i) => acc + Number(i.amount), 0);
     assert.ok(Math.abs(sum - Number(issued.premiumAmount)) < 0.01, 'soma das parcelas precisa bater com o prêmio (sem perder centavos no arredondamento)');
@@ -355,7 +355,7 @@ test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo fina
       withTenant({ userId: tenant.userId }),
       transaction
     );
-    const installments = await insuranceService.listPolicyInstallments(issued.id, transaction);
+    const installments = await insuranceService.listPolicyInstallments(issued.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(installments.length, 2);
     const [first, second] = installments;
 
@@ -392,7 +392,7 @@ test('Insurance Hub: baixa da 2ª parcela com o lançamento da 1ª é rejeitada 
       withTenant({ userId: tenant.userId }),
       transaction
     );
-    const [first, second] = await insuranceService.listPolicyInstallments(issued.id, transaction);
+    const [first, second] = await insuranceService.listPolicyInstallments(issued.id, tenant.groupId, tenant.companyId, transaction);
 
     const { settleFinancialEntryWithApproval } = require('./testHelpers');
     await settleFinancialEntryWithApproval(tenant, first.financialEntryId, tenant.userId, transaction);
@@ -623,7 +623,7 @@ test('Insurance Hub: issuePolicy funciona normalmente depois de cotar (fluxo cor
       transaction
     );
     assert.equal(issued.status, 'ACTIVE');
-    const installments = await insuranceService.listPolicyInstallments(issued.id, transaction);
+    const installments = await insuranceService.listPolicyInstallments(issued.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(installments.length, 2, 'apólice cotada e emitida precisa gerar as parcelas pedidas');
   });
 });

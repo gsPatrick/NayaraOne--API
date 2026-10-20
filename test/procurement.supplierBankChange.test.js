@@ -65,10 +65,9 @@ function actorOf() {
 }
 
 async function createPerson(transaction, label) {
-  return Person.create(
-    { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `${label} ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-    { transaction }
-  );
+  // B10 (revisão 19/10): pedido só sai para fornecedor com qualificação, documento e vigência.
+  const { supplier } = await require('./procurementTestSupplier').createQualifiedSupplier(tenant, transaction, { legalName: `${label} ${uniqueSuffix()}` });
+  return supplier;
 }
 
 /**

@@ -36,13 +36,23 @@ async function offerFromApprovedHighRiskSupplier(transaction, validUntil) {
     { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `QA Vigência ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
     { transaction }
   );
+  // B9/B10 (revisão 19/10): documento anexado é obrigatório e quem cadastra não decide a due diligence.
+  const file = await require('../src/features/files/files.service').uploadFile(
+    withTenant({ fileName: `doc-${uniqueSuffix()}.pdf`, mimeType: 'application/pdf', contentBase64: Buffer.from(`DOC ${uniqueSuffix()}`).toString('base64'), category: 'generic' }),
+    tenant.userId,
+    transaction
+  );
+  const decider = await User.create(
+    { name: `QA Vigência decisor ${uniqueSuffix()}`, email: `qa-vigencia-decider-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+    { transaction }
+  );
   const qualification = await procurementService.upsertSupplierQualification(
-    withTenant({ supplierPersonId: supplier.id, highRisk: true, validUntil }),
+    withTenant({ supplierPersonId: supplier.id, highRisk: true, validUntil, documentFileIds: [file.id] }),
     tenant.userId,
     { canApprove: true },
     transaction
   );
-  await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: tenant.userId }, transaction);
+  await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: decider.id }, transaction);
 
   const request = await procurementService.createPurchaseRequest(
     withTenant({ items: [{ description: `QA vigência item ${uniqueSuffix()}`, quantity: 2 }] }),

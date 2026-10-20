@@ -4,6 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+// Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
+const { createQualifiedSupplier } = require('./procurementTestSupplier');
 const itemsService = require('../src/features/inventory/items.service');
 const procurementService = require('../src/features/procurement/procurement.service');
 const { Person, FinancialEntry, User } = require('../src/models');
@@ -42,7 +44,7 @@ async function createItemAndWarehouse(transaction, extra = {}) {
   return { item, location };
 }
 
-async function fullProcurementCycle(transaction, { item, quantity = 10, unitPrice = 3 }) {
+async function fullProcurementCycle(transaction, { item, quantity = 10, unitPrice = 3, supplierPersonId = null }) {
   const request = await procurementService.createPurchaseRequest(
     withTenant({ items: [{ inventoryItemId: item.id, description: item.name, quantity }] }),
     tenant.userId,
@@ -62,7 +64,7 @@ async function fullProcurementCycle(transaction, { item, quantity = 10, unitPric
     quotation.id,
     tenant.groupId,
     tenant.companyId,
-    { supplierPersonId: tenant.userId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
+    { supplierPersonId: supplierPersonId || (await createQualifiedSupplier(tenant, transaction)).supplierPersonId, items: [{ purchaseRequestItemId: request.items[0].id, unitPrice }] },
     transaction
   );
   const order = await procurementService.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, transaction);
@@ -108,9 +110,11 @@ test('cancelPurchaseOrder: cancelar PO RECEIVED com payable já criado estorna o
 test('confirmGoodsReceipt: checagem de invoiceFingerprint duplicado roda mesmo após o lock do PO (ordem não quebra o bloqueio)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { item, location } = await createItemAndWarehouse(transaction);
-    const { order: orderA } = await fullProcurementCycle(transaction, { item, location });
+    // B11 (revisão 19/10): NF duplicada é por FORNECEDOR — os dois pedidos precisam ser do mesmo.
+    const { supplierPersonId } = await createQualifiedSupplier(tenant, transaction);
+    const { order: orderA } = await fullProcurementCycle(transaction, { item, location, supplierPersonId });
     const { item: item2, location: location2 } = await createItemAndWarehouse(transaction);
-    const { order: orderB } = await fullProcurementCycle(transaction, { item: item2, location: location2 });
+    const { order: orderB } = await fullProcurementCycle(transaction, { item: item2, location: location2, supplierPersonId });
 
     const fingerprint = `NF-AUDIT-GAP-${uniqueSuffix()}`;
 
@@ -142,16 +146,18 @@ test('decideSupplierDueDiligence: recusa decidir uma due diligence que já foi d
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PJ', legalName: `Fornecedor Audit Gap ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
+    // B9 (revisão 19/10): quem cadastrou a qualificação não decide a própria due diligence.
+    const decider = await User.create({ name: `QA AuditGap decisor ${uniqueSuffix()}`, email: `qa-auditgap-decider-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction });
     const qualification = await procurementService.upsertSupplierQualification(
       withTenant({ supplierPersonId: supplier.id, highRisk: true }),
       tenant.userId,
       { canApprove: true },
       transaction
     );
-    await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, actorOf(), transaction);
+    await procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'APPROVED' }, { userId: decider.id }, transaction);
 
     await assert.rejects(
-      () => procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'REJECTED' }, actorOf(), transaction),
+      () => procurementService.decideSupplierDueDiligence(qualification.id, tenant.groupId, tenant.companyId, { decision: 'REJECTED' }, { userId: decider.id }, transaction),
       (err) => { assert.equal(err.code, 'SUPPLIER_DUE_DILIGENCE_ALREADY_DECIDED'); return true; }
     );
   });
