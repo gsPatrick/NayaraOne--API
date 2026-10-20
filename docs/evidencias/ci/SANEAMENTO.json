@@ -1,0 +1,62 @@
+{
+  "gerador": "scripts/sanear-log-teste.js",
+  "regra": "remove linhas que começam com {\"level\": (log JSON de requisição do pino) e qualquer outra linha com padrão de segredo; nenhuma linha de resultado de teste é alterada",
+  "originais": "guardados fora do repositório; o sha256 do original está aqui e no cabeçalho de cada log saneado",
+  "arquivos": [
+    {
+      "arquivo": "39127433976-8f7c97c-test-results.log",
+      "shaOriginal": "4959a27f9964b1986fc5c2cafb54dce12334eaebbcd70ddbe967a63ffb0c12a2",
+      "shaSaneado": "d71431bcd8011cce71930286977abe520889c2e75d785226f99ea32ed67dcd07",
+      "bytesOriginal": 320920,
+      "bytesSaneado": 162174,
+      "linhasOriginal": 1445,
+      "linhasSaneado": 1313,
+      "jsonRemovidas": 137,
+      "segredoRemovidas": 0
+    },
+    {
+      "arquivo": "39137022521-0ab0e7b-test-results.log",
+      "shaOriginal": "4a251a9edb6d482c1a15354d3077cb6e7016596bed1066bb0b814d91b2a39d57",
+      "shaSaneado": "27a544605de424e8268ff814fe43bd8175c0fe142b6e970b663cf9cab47d829a",
+      "bytesOriginal": 336298,
+      "bytesSaneado": 163996,
+      "linhasOriginal": 1470,
+      "linhasSaneado": 1328,
+      "jsonRemovidas": 147,
+      "segredoRemovidas": 0
+    },
+    {
+      "arquivo": "39301913793-3f7e550-test-results.log",
+      "shaOriginal": "46dd37c2e5b28156b15448c1b9bf272aeac9a9d3bebad5f9abdd073953d5638c",
+      "shaSaneado": "8512dd7e4db586d51fba0a159c57bdf7e6239681fda42063d37a946225f6bdf2",
+      "bytesOriginal": 753187,
+      "bytesSaneado": 197936,
+      "linhasOriginal": 2139,
+      "linhasSaneado": 1634,
+      "jsonRemovidas": 510,
+      "segredoRemovidas": 0
+    },
+    {
+      "arquivo": "local-reproducao-3f7e550-test-results.log",
+      "shaOriginal": "31f5c74146dbd93646b5e05059a2a7924b91b84c3db41bf2c808407d1b18b410",
+      "shaSaneado": "a7ce2f21400cbcc16eaf4984427fc6ec1b142d6f864616ecaf16293dd1551828",
+      "bytesOriginal": 752197,
+      "bytesSaneado": 197112,
+      "linhasOriginal": 2139,
+      "linhasSaneado": 1634,
+      "jsonRemovidas": 510,
+      "segredoRemovidas": 0
+    },
+    {
+      "arquivo": "local-reproducao-badc180-test-results.log",
+      "shaOriginal": "0a2a184ea135583a98d46f2528385aed5c644221f570b4f49253b25a8cd135f2",
+      "shaSaneado": "dbe0dc0014a831d5f2c6b863a0cd09d1cd6a521e171066f70728450d007d45c2",
+      "bytesOriginal": 782558,
+      "bytesSaneado": 206374,
+      "linhasOriginal": 2219,
+      "linhasSaneado": 1690,
+      "jsonRemovidas": 534,
+      "segredoRemovidas": 0
+    }
+  ]
+}
