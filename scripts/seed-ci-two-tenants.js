@@ -46,6 +46,20 @@ const PROFILES = [
     ],
   },
   { key: 'leitura', roleName: 'CI LEITURA', permissions: ['procurement:read', 'finance:read', 'legal:read'] },
+  // Perfil operacional completo (Financeiro, Jurídico e Cobrança), usado pela captura HTTP da
+  // entrega dos Marcos 4/5 (scripts/capturar-evidencias-marco45.js). Não aprova Compras e NÃO
+  // contorna MFA: as rotas de ação crítica continuam recusando sem step-up.
+  {
+    key: 'gestor',
+    roleName: 'CI GESTOR',
+    permissions: [
+      'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
+      'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts',
+      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
+      'billing:read', 'billing:create', 'billing:update', 'billing:approve', 'billing:cadence:manage',
+      'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',
+    ],
+  },
 ];
 
 function emailFor(tenantKey, profileKey) {
