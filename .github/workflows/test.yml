@@ -16,8 +16,15 @@ on:
     branches: [main, marco-6-e-7-homologado-nayara]
   pull_request:
     branches: [main, marco-6-e-7-homologado-nayara]
-  # Disparo manual: usado para promover a produção (job deploy-production, com aprovação).
+  # Disparo manual (Actions > CI > Run workflow): reexecuta lint, migrations, seeds e a suíte
+  # inteira no commit/branch escolhido, sem deploy. O deploy de produção só roda no disparo
+  # manual se `deploy_production` for marcado (e ainda passa pela aprovação do environment).
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: 'Também disparar o deploy de produção (exige aprovação do environment production)'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -223,6 +230,17 @@ jobs:
           } > test-results.log
           node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee -a test-results.log
 
+      # Conferência Nayara 19/10/2026: o log de teste não pode carregar segredo. A API agora
+      # redige Authorization/Cookie/tokens nos logs de requisição; este passo FALHA o build se
+      # algum JWT ou string de conexão reaparecer no log versionável.
+      - name: Verificar que o log de testes não contém segredos
+        if: always()
+        run: |
+          if grep -nE 'Bearer ey|eyJ|postgres://[^ ]*:[^ ]*@' test-results.log | grep -v 'nayara_ci_app_password' | head -5 | grep -q .; then
+            echo "::error::test-results.log contém padrão de segredo (JWT ou string de conexão)"; exit 1
+          fi
+          echo "test-results.log sem padrões de segredo (Bearer ey, eyJ, string de conexão)."
+
       # E01 (Nayara, 18/10/2026): a API de download de artifacts do GitHub exige login mesmo em
       # repositório público (a auditora recebeu HTTP 403). O resumo do job, ao contrário, é
       # visível na página pública do run — então a contagem e a lista de falhas ficam ali também.
@@ -303,7 +321,7 @@ jobs:
 
   deploy-production:
     needs: test
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: (github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     # O environment "production" com required reviewers pausa este job até a aprovação manual.
     environment: production
