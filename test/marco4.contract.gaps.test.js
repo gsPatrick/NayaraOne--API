@@ -495,9 +495,9 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
 
     let lastReversal;
     for (let i = 0; i < 3; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
+       
       const entry = await createEntry(transaction, { bankAccountId: account.id, description: `estorno frequente ${i}` });
-      // eslint-disable-next-line no-await-in-loop
+       
       lastReversal = await financialEntriesService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
     }
 
@@ -786,6 +786,10 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
 // não ser afetado por dado pré-existente no banco de homologação compartilhado.
 test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dias, conciliação pendente, comissão provisionada, repasse pendente, anomalia aberta)', async () => {
   const { Person } = require('../src/models');
+  // Os deltas são globais por empresa e outros arquivos de teste rodam em paralelo na mesma
+  // empresa: se um deles abrir/fechar conciliação ou anomalia no intervalo, repete a medição.
+  for (let tentativa = 1; ; tentativa += 1) {
+    try {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const beforeReport = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
@@ -865,6 +869,11 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     assert.ok(Array.isArray(afterReport.marginBySector));
     assert.equal(typeof afterReport.delinquencyRatio, 'number');
   });
+      return;
+    } catch (err) {
+      if (tentativa >= 3 || !(err instanceof assert.AssertionError)) throw err;
+    }
+  }
 });
 
 // GAP REAL CORRIGIDO (Caderno §19, "Caixa disponível" e "Margem por setor"): caixa disponível
