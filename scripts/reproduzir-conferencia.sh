@@ -138,7 +138,7 @@ DIRTY="$({ git status --porcelain 2>/dev/null | grep -v "^??" || true; } | wc -l
   echo "# postgres: $MODE"
   echo "# usuário do banco na suíte: $APP (NOSUPERUSER NOBYPASSRLS)"
   echo "# node: $(node -v)  data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# padrão: $PATTERN  concorrência: ${REPRO_SERIAL:+serial (--test-concurrency=1)}${REPRO_SERIAL:-padrão do node, igual ao CI}"
+  echo "# padrão: $PATTERN  concorrência: $([ -n "${REPRO_SERIAL:-}" ] && echo 'serial (--test-concurrency=1)' || echo 'padrão do node, igual ao CI')"
   echo "#"
 } > "$OUT"
 CONC=""

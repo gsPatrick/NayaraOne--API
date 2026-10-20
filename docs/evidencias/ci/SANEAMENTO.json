@@ -57,6 +57,17 @@
       "linhasSaneado": 1690,
       "jsonRemovidas": 534,
       "segredoRemovidas": 0
+    },
+    {
+      "arquivo": "local-reproducao-470ecc1-test-results.log",
+      "shaOriginal": "9815615c59f0e1a97703b8f58a2b424dbb1f0852bd4bf09cfdd160e457e6864c",
+      "shaSaneado": "cc257e9873c1f7754178fc290ab351e5b035719a8a6257b882399001cd2e8b1c",
+      "bytesOriginal": 622689,
+      "bytesSaneado": 210326,
+      "linhasOriginal": 2272,
+      "linhasSaneado": 1725,
+      "jsonRemovidas": 552,
+      "segredoRemovidas": 0
     }
   ]
 }
