@@ -23,13 +23,46 @@ const logger = pino({
   // header Authorization em cada linha). Vale para qualquer log que carregue req/res/headers.
   redact: {
     paths: [
-      'req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]',
-      'req.headers["x-auth-token"]', 'req.headers["x-refresh-token"]',
-      'res.headers["set-cookie"]', 'headers.authorization', 'headers.cookie',
+      // cabeçalhos de requisição e resposta (pino-http registra req.headers e res.headers)
+      'req.headers.authorization', 'req.headers.cookie', 'req.headers["proxy-authorization"]',
+      'req.headers["x-api-key"]', 'req.headers["x-auth-token"]', 'req.headers["x-refresh-token"]',
+      'req.headers["x-csrf-token"]', 'req.headers["x-mfa-code"]', 'req.headers["x-signature"]',
+      'res.headers["set-cookie"]', 'res.headers.authorization',
+      'headers.authorization', 'headers.cookie', 'headers["set-cookie"]',
+      // corpo e query, caso algum log os carregue (nunca devem sair em claro)
+      'req.body.password', 'req.body.senha', 'req.body.token', 'req.body.refreshToken',
+      'req.body.accessToken', 'req.body.mfaCode', 'req.body.code', 'req.body.secret',
+      'req.query.token', 'req.query.access_token', 'req.query.refresh_token',
+      'req.query.password', 'req.query.secret', 'req.query.api_key', 'req.query.key',
+      // campos sensíveis em qualquer objeto de primeiro nível dos logs de erro
+      '*.password', '*.passwordHash', '*.senha', '*.token', '*.accessToken', '*.refreshToken',
+      '*.secret', '*.apiKey', '*.mfaCode', '*.authorization', '*.cookie',
     ],
     censor: '[REDACTED]',
   },
   timestamp: pino.stdTimeFunctions.isoTime,
 });
 
+/**
+ * redactUrl — mascara o valor de parâmetros sensíveis na query string de uma URL
+ * (?token=…, ?access_token=…, ?password=…), usada nas mensagens e no campo `url` dos logs.
+ */
+const SENSITIVE_QUERY_KEYS = /^(token|access_token|refresh_token|id_token|password|senha|secret|api_key|apikey|key|code|signature|sig)$/i;
+function safeDecode(v) {
+  try { return decodeURIComponent(v); } catch (_) { return v; }
+}
+function redactUrl(url) {
+  if (typeof url !== 'string') return url;
+  const i = url.indexOf('?');
+  if (i < 0) return url;
+  const base = url.slice(0, i);
+  const query = url.slice(i + 1).split('&').map((pair) => {
+    const eq = pair.indexOf('=');
+    if (eq < 0) return pair;
+    return SENSITIVE_QUERY_KEYS.test(safeDecode(pair.slice(0, eq)).trim()) ? `${pair.slice(0, eq)}=[REDACTED]` : pair;
+  }).join('&');
+  return `${base}?${query}`;
+}
+
 module.exports = logger;
+module.exports.redactUrl = redactUrl;

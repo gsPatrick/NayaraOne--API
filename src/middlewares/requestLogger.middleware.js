@@ -2,6 +2,7 @@
 
 const pinoHttp = require('pino-http');
 const logger = require('../utils/logger');
+const { redactUrl } = logger;
 const { getCurrentCorrelationId } = require('./correlationId.middleware');
 const { httpRequestDuration } = require('../utils/metrics');
 
@@ -12,12 +13,19 @@ const { httpRequestDuration } = require('../utils/metrics');
  */
 const requestLoggerMiddleware = pinoHttp({
   logger,
+  serializers: {
+    // o campo url também sai com a query sensível mascarada (?token=…)
+    req: (req) => {
+      if (req && req.url) req.url = redactUrl(req.url);
+      return req;
+    },
+  },
   customProps: () => ({ correlationId: getCurrentCorrelationId() }),
   autoLogging: {
     ignore: (req) => req.url === '/health' || req.url === '/api/health' || req.url === '/api/metrics',
   },
-  customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
-  customErrorMessage: (req, res, err) => `${req.method} ${req.url} ${res.statusCode} — ${err.message}`,
+  customSuccessMessage: (req, res) => `${req.method} ${redactUrl(req.url)} ${res.statusCode}`,
+  customErrorMessage: (req, res, err) => `${req.method} ${redactUrl(req.url)} ${res.statusCode} — ${err.message}`,
 });
 
 function metricsRecorderMiddleware(req, res, next) {
