@@ -852,7 +852,9 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     assert.equal(delta((r) => r.provisionedCommissions.total), 100, 'comissão = 1000 * 10%');
     assert.equal(delta((r) => r.pendingOwnerRepasses.count), 1);
     assert.equal(delta((r) => r.pendingOwnerRepasses.total), 450, 'repasse líquido = 500 - 50');
-    assert.equal(delta((r) => r.openHighRiskAnomalies), 1);
+    // >= 1: outros arquivos de teste rodam em paralelo na mesma empresa e podem abrir casos HIGH
+    // no intervalo; o caso criado aqui é o mínimo que precisa aparecer.
+    assert.ok(delta((r) => r.openHighRiskAnomalies) >= 1, 'a anomalia criada aqui entra em openHighRiskAnomalies');
     assert.equal(typeof afterReport.breathingNeed.value, 'number');
     // GAP REAL CORRIGIDO (Caderno §19, "Caixa disponível"/"Margem por setor"): freeCash agora é
     // calculado de verdade (saldo assinado de finance.bank_transactions menos dinheiro de

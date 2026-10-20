@@ -54,12 +54,19 @@ before(async () => {
 
   for (const tenantKey of ['A', 'B']) {
     for (const profile of ['maker', 'checker', 'leitura']) {
-      const res = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailFor(tenantKey, profile), password }),
-      });
-      const body = await res.json();
+      // Vários arquivos de teste entram com os MESMOS usuários do seed ao mesmo tempo; o login
+      // atualiza a linha do usuário e pode perder a corrida (409 OPTIMISTIC_LOCK_CONFLICT). Repete.
+      let res; let body;
+      for (let tentativa = 0; tentativa < 5; tentativa += 1) {
+        res = await fetch(`${baseUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailFor(tenantKey, profile), password }),
+        });
+        body = await res.json();
+        if (res.status !== 409) break;
+        await new Promise((resolve) => setTimeout(resolve, 200 * (tentativa + 1)));
+      }
       assert.equal(res.status, 200, `login de ${tenantKey}/${profile} deveria funcionar: ${JSON.stringify(body)}`);
       tokens[`${tenantKey}:${profile}`] = body.data.accessToken;
     }
