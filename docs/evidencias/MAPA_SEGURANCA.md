@@ -1,6 +1,6 @@
 # Mapa de segurança — Nayara One (API)
 
-> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T12:42:14.840Z, commit `ef90594`.
+> Gerado por `node scripts/generateSecurityMap.js` em 2026-10-19T18:17:36.527Z, commit `dda254a`.
 > Banco consultado: o do `DATABASE_URL` do ambiente (PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2)), transação READ ONLY, só catálogos.
 > Nenhum segredo, host ou connection string é impresso. Nenhum endpoint (inclusive MFA) foi chamado.
 > Regenerar no estado final antes do fechamento dos Marcos 4/5.
@@ -281,9 +281,9 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | `finance:bankAccounts` | 4 | finance |
 | `finance:chartOfAccounts` | 3 | finance |
 | `finance:create` | 10 | finance |
-| `finance:read` | 30 | finance |
+| `finance:read` | 32 | finance |
 | `finance:reconcile` | 2 | finance |
-| `finance:settle` | 12 | finance |
+| `finance:settle` | 13 | finance |
 | `finance:update` | 10 | finance |
 | `groups:create` | 1 | groups |
 | `groups:delete` | 1 | groups |
@@ -295,8 +295,8 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | `inventory:update` | 9 | inventory |
 | `legal:approve` | 8 | legal |
 | `legal:create` | 21 | legal |
-| `legal:deliverKeys` | 1 | legal |
-| `legal:read` | 36 | legal |
+| `legal:deliverKeys` | 2 | legal |
+| `legal:read` | 37 | legal |
 | `legal:sign` | 4 | legal |
 | `legal:update` | 16 | legal |
 | `legal:waive` | 1 | legal |

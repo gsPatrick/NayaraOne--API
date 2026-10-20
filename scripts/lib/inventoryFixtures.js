@@ -25,6 +25,7 @@ function load() {
     assetsService: req('features/inventory/assets.service'),
     procurementService: req('features/procurement/procurement.service'),
     insuranceService: req('features/procurement/insurance.service'),
+    filesService: req('features/files/files.service'),
   };
 }
 
@@ -105,6 +106,31 @@ async function createOpenPurchaseOrder(ctx, tenant, t, { supplierPersonId, appro
   const offer = await ps.submitSupplierOffer(
     quotation.id, tenant.groupId, tenant.companyId,
     { supplierPersonId, items: request.items.map((it, i) => ({ purchaseRequestItemId: it.id, unitPrice: lines[i].unitPrice })) },
+    t
+  );
+  const file = await ctx.filesService.uploadFile(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      fileName: `doc-fornecedor-${Date.now()}.pdf`,
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from('DOCUMENTOS FORNECEDOR').toString('base64'),
+      category: 'generic',
+    },
+    tenant.userId,
+    t
+  );
+  await ps.upsertSupplierQualification(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      supplierPersonId,
+      documentFileIds: [file.id],
+      validUntil: '2099-12-31',
+      highRisk: false,
+    },
+    tenant.userId,
+    { canApprove: true },
     t
   );
   const order = await ps.awardSupplierOffer(offer.id, tenant.groupId, tenant.companyId, tenant.userId, t);

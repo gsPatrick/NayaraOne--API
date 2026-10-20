@@ -77,12 +77,14 @@ function mustRun(title, command, args, env) {
 }
 
 function startCluster(dataDir, port, workDir) {
-  execFileSync(bin('initdb'), ['-D', dataDir, '-U', SUPER, '--auth=trust', '--encoding=UTF8', '--locale=C'], { stdio: 'ignore' });
-  execFileSync(bin('pg_ctl'), ['-D', dataDir, '-o', `-p ${port} -k ${workDir} -c listen_addresses=127.0.0.1 -c max_connections=200`, '-l', path.join(workDir, `pg-${port}.log`), '-w', 'start'], { stdio: 'ignore' });
+  const env = { ...process.env, LC_ALL: 'C' };
+  execFileSync(bin('initdb'), ['-D', dataDir, '-U', SUPER, '--auth=trust', '--encoding=UTF8', '--locale=C'], { stdio: 'ignore', env });
+  execFileSync(bin('pg_ctl'), ['-D', dataDir, '-o', `-p ${port} -k ${workDir} -c listen_addresses=127.0.0.1 -c max_connections=200`, '-l', path.join(workDir, `pg-${port}.log`), '-w', 'start'], { stdio: 'ignore', env });
 }
 
 function stopCluster(dataDir) {
-  try { execFileSync(bin('pg_ctl'), ['-D', dataDir, '-m', 'fast', 'stop'], { stdio: 'ignore' }); } catch (e) { /* já parado */ }
+  const env = { ...process.env, LC_ALL: 'C' };
+  try { execFileSync(bin('pg_ctl'), ['-D', dataDir, '-m', 'fast', 'stop'], { stdio: 'ignore', env }); } catch (e) { /* já parado */ }
 }
 
 function createRuntimeRole(port) {

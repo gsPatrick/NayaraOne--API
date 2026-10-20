@@ -142,11 +142,12 @@ test('Drill 3: falha na 2ª linha da entrega de requisição não entrega nada; 
     const wh = await fx.createWarehouse(ctx, tenant, t, `Drill req dep ${uniqueSuffix()}`);
     await fx.move(ctx, tenant, t, { inventoryItemId: a.id, movementType: 'IN', quantity: 10, destinationLocationId: wh.id, reason: 'saldo inicial' });
     await fx.move(ctx, tenant, t, { inventoryItemId: b.id, movementType: 'IN', quantity: 10, destinationLocationId: wh.id, reason: 'saldo inicial' });
+    const responsible = await fx.createPerson(ctx, tenant, t, `Drill req resp ${uniqueSuffix()}`);
     const req = await ctx.requisitionsService.createRequisition({ groupId: tenant.groupId, companyId: tenant.companyId, warehouseLocationId: wh.id, items: [{ inventoryItemId: a.id, quantity: 4 }, { inventoryItemId: b.id, quantity: 6 }] }, tenant.userId, t);
-    return { a, b, wh, req };
+    return { a, b, wh, req, responsible };
   });
   await T((t) => ctx.requisitionsService.decideRequisition(base.req.id, 'APPROVED', approver.id, tenant.groupId, tenant.companyId, t), approver.id);
-  const issue = () => T((t) => ctx.requisitionsService.issueRequisition(base.req.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, t));
+  const issue = () => T((t) => ctx.requisitionsService.issueRequisition(base.req.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, t, { responsiblePersonId: base.responsible.id }));
   const outs = () => T((t) => InventoryMovement.count({ where: { sourceId: base.req.id, movementType: 'OUT' }, transaction: t }));
 
   const restore = injectFailure(InventoryMovement, 'create', (n) => n === 2, 'falha ao gravar a 2ª saída (drill)');

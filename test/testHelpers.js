@@ -260,7 +260,41 @@ async function createCommissionSource(tenant, transaction, { baseAmount, percent
   return { sourceEntryId: source.id, component };
 }
 
+/**
+ * recordApprovedAdjustment — revisão Marco 7 (19/10/2026), A6/EST-008: ADJUSTMENT/DISPOSAL manual
+ * não entra mais direto no ledger; vira proposta (quem propõe = tenant.userId) aprovada por OUTRA
+ * pessoa com inventory:approve. Testes que precisam de um ajuste efetivado (preparar saldo,
+ * provar evidência por valor etc.) passam por aqui — mesmo caminho da tela. Devolve o movimento.
+ */
+async function recordApprovedAdjustment(tenant, payload, transaction) {
+  const movementsService = require('../src/features/inventory/movements.service');
+  const { InventoryMovement } = require('../src/models');
+  const proposal = await movementsService.proposeAdjustment(
+    { idempotencyKey: `test-adj-${uniqueSuffix()}`, ...payload },
+    { userId: tenant.userId, canApprove: true },
+    transaction
+  );
+  if (proposal.status === 'APPROVED' && proposal.resultingMovementId) {
+    return InventoryMovement.findByPk(proposal.resultingMovementId, { transaction });
+  }
+  const [approver] = await User.findOrCreate({
+    where: { email: 'homo-qa-adjustment-approver@nayaraone.dev' },
+    defaults: { name: 'HOMO QA — Aprovador de ajuste de estoque', passwordHash: 'x', status: 'ACTIVE' },
+    transaction,
+  });
+  const decided = await movementsService.decideAdjustmentProposal(
+    proposal.id,
+    payload.groupId,
+    payload.companyId,
+    'APPROVED',
+    { userId: approver.id, canApprove: true },
+    transaction
+  );
+  return InventoryMovement.findByPk(decided.resultingMovementId, { transaction });
+}
+
 module.exports = {
+  recordApprovedAdjustment,
   createCommissionSource,
   createThirdPartyLink,
   prepareManualSettlement,
