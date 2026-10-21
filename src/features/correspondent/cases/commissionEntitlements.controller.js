@@ -39,6 +39,13 @@ const chargebackCommissionEntitlement = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+const receiveCommissionEntitlement = catchAsync(async (req, res) => {
+  const entitlement = await req.withTenantTransaction((t) =>
+    service.receiveCommissionEntitlement(req.params.entitlementId, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data: entitlement });
+});
+
 const listCommissionEntitlements = catchAsync(async (req, res) => {
   const entitlements = await req.withTenantTransaction((t) =>
     service.listCommissionEntitlements(req.params.id, req.auth.groupId, req.auth.companyId, t)
@@ -49,6 +56,7 @@ const listCommissionEntitlements = catchAsync(async (req, res) => {
 module.exports = {
   createCommissionEntitlement,
   confirmCommissionEntitlement,
+  receiveCommissionEntitlement,
   chargebackCommissionEntitlement,
   listCommissionEntitlements,
 };

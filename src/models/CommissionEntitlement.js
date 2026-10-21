@@ -4,10 +4,8 @@ const { DataTypes } = require('sequelize');
 
 /**
  * CommissionEntitlement — tabela "correspondent"."commission_entitlements" (Marco 8 Fase 8).
- * Ciclo EXPECTED → CONFIRMED (colapsado com RECEIVABLE no mesmo passo, ver
- * commissionEntitlements.service.js) → RECEIVABLE → RECEIVED → ADJUSTED. "RECEIVED" é observado
- * via o status do `financialEntryId` vinculado; "ADJUSTED" é um ajuste append-only (AuditLog),
- * nunca sobrescreve o registro original — mesmo padrão de Commission.cancelCommission
+ * Ciclo EXPECTED → CONFIRMED → RECEIVABLE → RECEIVED → ADJUSTED.
+ * O estorno não apaga o fato original — mesmo padrão de Commission.cancelCommission
  * (src/features/finance/commissions.service.js).
  */
 module.exports = (sequelize) => {

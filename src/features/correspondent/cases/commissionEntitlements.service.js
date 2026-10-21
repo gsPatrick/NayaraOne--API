@@ -79,13 +79,11 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
 }
 
 /**
- * confirmCommissionEntitlement — Marco 8 Fase 8. Transição EXPECTED → CONFIRMED → RECEIVABLE,
- * colapsada num único passo atômico (mesma simplificação documentada na Fase 5 pra submissão: o
- * Caderno fala em "worker" assíncrono que este projeto ainda não tem infraestrutura pra reusar —
- * ver nota no checklist). "commission.confirmed cria RECEIVABLE no Financeiro com sourceEventId
- * UNIQUE" (citação literal do Caderno) é satisfeito aqui via `FinancialEntry.idempotencyKey`
- * (MESMO mecanismo de idempotência já usado em todo o Financeiro — não existe uma coluna
- * "sourceEventId" separada no projeto, o padrão estabelecido é idempotencyKey).
+ * confirmCommissionEntitlement — Marco 8 Fase 8. Transição EXPECTED → CONFIRMED → RECEIVABLE
+ * no mesmo passo: o status CONFIRMED é gravado antes do recebível. "commission.confirmed cria
+ * RECEIVABLE no Financeiro com sourceEventId UNIQUE" (citação literal do Caderno) é satisfeito
+ * via `FinancialEntry.idempotencyKey` (o mesmo mecanismo de idempotência já usado em todo o
+ * Financeiro — não existe uma coluna "sourceEventId" separada no projeto).
  *
  * Idempotente por `externalConfirmationId`: se a MESMA confirmação já foi aplicada a este
  * entitlement, retorna o resultado existente sem criar um segundo RECEIVABLE (nunca duplica —
@@ -143,10 +141,13 @@ async function confirmCommissionEntitlement(entitlementId, payload, actorUserId,
     transaction
   );
 
-  entitlement.status = 'RECEIVABLE';
+  entitlement.status = 'CONFIRMED';
   entitlement.externalConfirmationId = externalConfirmationId;
   entitlement.financialEntryId = entry.id;
   entitlement.updatedBy = actorUserId || null;
+  await entitlement.save({ transaction });
+
+  entitlement.status = 'RECEIVABLE';
   await entitlement.save({ transaction });
 
   await publishCommissionConfirmed(entitlement, transaction);
@@ -159,7 +160,46 @@ async function confirmCommissionEntitlement(entitlementId, payload, actorUserId,
       action: 'correspondent.commission_entitlement.confirm',
       entityType: 'FinancingCase',
       entityId: entitlement.financingCaseId,
+      beforeJson: { status: 'EXPECTED' },
+      afterJson: { status: 'RECEIVABLE', passedThrough: 'CONFIRMED', financialEntryId: entry.id },
       reason: `Comissão de correspondente confirmada (confirmação externa "${externalConfirmationId}") — recebível R$ ${Number(entitlement.amount).toFixed(2)} criado no Financeiro (lançamento ${entry.id}).`,
+    },
+    transaction
+  );
+
+  return entitlement;
+}
+
+async function receiveCommissionEntitlement(entitlementId, actorUserId, groupId, companyId, transaction) {
+  const entitlement = await CommissionEntitlement.findOne({ where: { id: entitlementId, groupId, companyId }, transaction });
+  if (!entitlement) {
+    throw AppError.notFound('Direito a comissão não encontrado.', 'COMMISSION_ENTITLEMENT_NOT_FOUND');
+  }
+  if (entitlement.status === 'RECEIVED') return entitlement;
+  if (entitlement.status !== 'RECEIVABLE') {
+    throw AppError.unprocessable(
+      'Só uma comissão já lançada como recebível pode ser marcada como recebida.',
+      'COMMISSION_ENTITLEMENT_NOT_RECEIVABLE'
+    );
+  }
+
+  const beforeStatus = entitlement.status;
+  const financialEntryId = entitlement.financialEntryId;
+  entitlement.status = 'RECEIVED';
+  entitlement.updatedBy = actorUserId || null;
+  await entitlement.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'correspondent.commission_entitlement.received',
+      entityType: 'FinancingCase',
+      entityId: entitlement.financingCaseId,
+      beforeJson: { status: beforeStatus, financialEntryId },
+      afterJson: { status: 'RECEIVED', financialEntryId },
+      reason: 'Comissão de correspondente recebida. O lançamento do Financeiro permanece o mesmo.',
     },
     transaction
   );
@@ -290,6 +330,7 @@ async function listCommissionEntitlements(financingCaseId, groupId, companyId, t
 module.exports = {
   createCommissionEntitlement,
   confirmCommissionEntitlement,
+  receiveCommissionEntitlement,
   chargebackCommissionEntitlement,
   getCommissionEntitlementAdjustments,
   listCommissionEntitlements,

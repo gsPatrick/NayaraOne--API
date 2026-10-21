@@ -120,6 +120,11 @@ correspondentRouter.post(
   commissionEntitlementsController.confirmCommissionEntitlement
 );
 correspondentRouter.post(
+  '/financing-cases/:id/commissions/:entitlementId/receive',
+  requirePermission('correspondent:create'),
+  commissionEntitlementsController.receiveCommissionEntitlement
+);
+correspondentRouter.post(
   '/financing-cases/:id/commissions/:entitlementId/chargeback',
   requirePermission('correspondent:create'),
   commissionEntitlementsController.chargebackCommissionEntitlement
