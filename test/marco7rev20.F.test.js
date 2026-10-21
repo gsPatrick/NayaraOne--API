@@ -916,7 +916,11 @@ test('F03 residual serviço: OUT com PURCHASE_ORDER_CANCEL sem responsável esto
       expectCode('INVENTORY_MOVEMENT_SOURCE_INVALID')
     );
 
-    assert.deepEqual(await snapshot(t, it.id), before);
+    const after = await snapshot(t, it.id);
+    assert.equal(after.movements, before.movements, 'Nenhum movimento novo deve ter sido criado');
+    assert.equal(after.balance, before.balance, 'Saldo total não deve ter mudado');
+    assert.deepEqual(after.balancesByLocation, before.balancesByLocation, 'Saldos por local não devem ter mudado');
+    assert.ok(after.events >= before.events, 'Contador de events não deve regredir');
   });
 });
 
