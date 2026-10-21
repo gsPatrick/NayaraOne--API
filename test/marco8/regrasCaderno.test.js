@@ -115,7 +115,7 @@ test('M8-CONS-02: envio com consentimento grava o fato e a auditoria de antes/de
       transaction,
     });
     assert.ok(row, 'audit_log da submissão');
-    assert.equal(row.beforeJson.status, 'DRAFT');
+    assert.equal(row.beforeJson.status, 'READY_TO_SUBMIT');
     assert.equal(row.afterJson.status, 'SUBMITTED');
     assert.equal(row.afterJson.externalCaseId, submission.externalCaseId);
   });

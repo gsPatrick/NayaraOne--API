@@ -9,9 +9,7 @@ const { registrarAuditoria } = require('../audit/auditLog.service');
  * preserva versão anterior; expiração gera requirement.").
  *
  * Varre `correspondent.case_documents` com `expires_at` no passado, cuja versão é a VIGENTE
- * (`superseded_at IS NULL`) e cujo requirement está `SUBMITTED` (único estado "aceito" que a
- * service de upload de fato produz hoje — não existe fluxo de validação humana que leve a
- * VALIDATED ainda, então usar esse status inexistente como gatilho nunca dispararia nada). Marca
+ * (`superseded_at IS NULL`) e cujo requirement está `SUBMITTED` ou `VALIDATED`. Marca
  * o requirement como `EXPIRED` e cria um NOVO `CaseRequirement` do MESMO `documentType`,
  * `PENDING`, pra reabrir o checklist — sem apagar nada, sem UPDATE em `CaseDocument` (a versão
  * expirada continua intacta no histórico).
@@ -27,7 +25,7 @@ const { registrarAuditoria } = require('../audit/auditLog.service');
 async function expireDueDocuments(transaction, now = new Date()) {
   const candidates = await CaseDocument.findAll({
     where: { supersededAt: null, expiresAt: { [Op.lt]: now } },
-    include: [{ model: CaseRequirement, as: 'requirement', where: { status: 'SUBMITTED' }, required: true }],
+    include: [{ model: CaseRequirement, as: 'requirement', where: { status: { [Op.in]: ['SUBMITTED', 'VALIDATED'] } }, required: true }],
     transaction,
   });
 
@@ -36,7 +34,7 @@ async function expireDueDocuments(transaction, now = new Date()) {
     try {
       const didExpire = await sequelize.transaction({ transaction }, async (nested) => {
         const requirement = await CaseRequirement.findByPk(candidate.requirementId, { transaction: nested, lock: nested.LOCK.UPDATE });
-        if (!requirement || requirement.status !== 'SUBMITTED') return false;
+        if (!requirement || !['SUBMITTED', 'VALIDATED'].includes(requirement.status)) return false;
         const document = await CaseDocument.findByPk(candidate.id, { transaction: nested });
         if (!document || document.supersededAt || !document.expiresAt || document.expiresAt >= now) return false;
 

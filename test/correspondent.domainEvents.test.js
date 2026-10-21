@@ -81,9 +81,12 @@ test('CORRESPONDENT-EVT-02: completar o checklist de documentos emite financing.
 
     const file = await makeFile(transaction, 'rg.pdf');
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, actorContext, transaction);
-
     event = await findEvent('financing.documents.completed', financingCase.id, transaction);
-    assert.ok(event, 'evento financing.documents.completed não foi emitido após o único requirement ser enviado');
+    assert.equal(event, null, 'envio sem validação humana ainda não completa o checklist');
+
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
+    event = await findEvent('financing.documents.completed', financingCase.id, transaction);
+    assert.ok(event, 'evento financing.documents.completed não foi emitido após a validação humana');
 
     // Documento substituído (nova versão) não deve tentar duplicar o evento (idempotencyKey fixa
     // por case faria o 2º INSERT colidir se não houvesse o check-before-insert).
@@ -103,6 +106,7 @@ test('CORRESPONDENT-EVT-03: payload de financing.documents.completed nunca inclu
     const requirement = await caseDocumentsService.createRequirement(financingCase.id, { documentType: 'RG_CPF' }, tenant.userId, actorContext, transaction);
     const file = await makeFile(transaction, 'rg.pdf');
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, actorContext, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
 
     const event = await findEvent('financing.documents.completed', financingCase.id, transaction);
     const payloadStr = JSON.stringify(event.payloadJson);
@@ -118,6 +122,7 @@ test('CORRESPONDENT-EVT-04: submissão com sucesso emite financing.submitted', a
     const requirement = await caseDocumentsService.createRequirement(financingCase.id, { documentType: 'RG_CPF' }, tenant.userId, actorContext, transaction);
     const file = await makeFile(transaction, 'rg.pdf');
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, actorContext, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
 
     const submission = await submissionsService.submitFinancingCase(
       financingCase.id,
@@ -176,6 +181,7 @@ async function createSubmittedCase(extra = {}) {
       { transaction }
     );
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, { groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, { groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>
@@ -197,8 +203,9 @@ test('CORRESPONDENT-EVT-05: webhook aplicando APPROVED emite financing.status.ch
   const result = await webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body);
   assert.equal(result.applied, true, 'pré-condição do teste: a transição precisa ter sido aplicada');
 
-  const statusChanged = await withTenantTransaction(tenant, (t) => OutboxEvent.findOne({ where: { eventType: 'financing.status.changed', aggregateId: financingCaseId }, transaction: t }));
-  assert.ok(statusChanged, 'evento financing.status.changed não foi emitido');
+  const statusEvents = await withTenantTransaction(tenant, (t) => OutboxEvent.findAll({ where: { eventType: 'financing.status.changed', aggregateId: financingCaseId }, transaction: t }));
+  const statusChanged = statusEvents.find((event) => event.payloadJson.status === 'APPROVED');
+  assert.ok(statusChanged, 'evento financing.status.changed da aprovação não foi emitido');
   assert.equal(statusChanged.payloadJson.status, 'APPROVED');
 
   const approved = await withTenantTransaction(tenant, (t) => OutboxEvent.findOne({ where: { eventType: 'financing.approved', aggregateId: financingCaseId }, transaction: t }));

@@ -35,6 +35,11 @@ correspondentRouter.get(
   requirePermission('correspondent:read'),
   documentsController.listRequirements
 );
+correspondentRouter.post(
+  '/financing-cases/:id/requirements/:requirementId/validate',
+  requirePermission('correspondent:create'),
+  documentsController.validateRequirement
+);
 // Path "/financing-cases/:id/documents" segue literalmente a lista de "APIs mínimas" do Guia do
 // Marcelo (Marco 8) — requirementId vai no corpo, não na URL.
 correspondentRouter.post(

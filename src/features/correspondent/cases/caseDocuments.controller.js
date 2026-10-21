@@ -31,4 +31,11 @@ const uploadDocument = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: document });
 });
 
-module.exports = { createRequirement, listRequirements, uploadDocument };
+const validateRequirement = catchAsync(async (req, res) => {
+  const requirement = await req.withTenantTransaction((t) =>
+    service.validateRequirement(req.params.id, req.params.requirementId, req.auth.userId, tenant(req), t)
+  );
+  return success(res, { data: requirement });
+});
+
+module.exports = { createRequirement, listRequirements, uploadDocument, validateRequirement };

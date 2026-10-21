@@ -98,6 +98,13 @@ async function completeChecklist(financingCaseId, transaction) {
     { groupId: tenant.groupId, companyId: tenant.companyId },
     transaction
   );
+  await documentsService.validateRequirement(
+    financingCaseId,
+    requirement.id,
+    tenant.userId,
+    { groupId: tenant.groupId, companyId: tenant.companyId },
+    transaction
+  );
 }
 
 test('CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o adapter; o job processa e vira SUBMITTED', async () => {

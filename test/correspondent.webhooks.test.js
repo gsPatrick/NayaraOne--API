@@ -92,6 +92,13 @@ async function createSubmittedCase() {
       { groupId: tenant.groupId, companyId: tenant.companyId },
       transaction
     );
+    await documentsService.validateRequirement(
+      financingCase.id,
+      requirement.id,
+      tenant.userId,
+      { groupId: tenant.groupId, companyId: tenant.companyId },
+      transaction
+    );
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>

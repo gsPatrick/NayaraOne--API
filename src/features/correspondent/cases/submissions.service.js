@@ -5,8 +5,14 @@ const { FinancingCase, CaseRequirement, Simulation, ProviderSubmission, External
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
+const { shouldApplyTransition } = require('../statusMachine');
 const { assertEligible } = require('../eligibility.service');
-const { publishSubmissionRequested, publishFinancingSubmitted, publishIntegrationCorrespondentFailed } = require('../correspondentEvents.service');
+const {
+  publishSubmissionRequested,
+  publishFinancingSubmitted,
+  publishIntegrationCorrespondentFailed,
+  publishFinancingStatusChanged,
+} = require('../correspondentEvents.service');
 const { recordIntegrationError } = require('../integrationErrors.service');
 
 // DECISÃO DE ENGENHARIA — não especificado no Caderno com um número exato: tempo máximo que
@@ -48,25 +54,19 @@ async function getCaseOrThrow(financingCaseId, groupId, companyId, transaction) 
 }
 
 /**
- * assertChecklistComplete — "READY_TO_SUBMIT exige checklist completo" (Caderno). Critério
- * adotado (mais conservador possível dado o que já existe no sistema): todo CaseRequirement
- * obrigatório (`required: true`) precisa estar com `status: 'SUBMITTED'`. O Caderno também cita
- * um status `VALIDATED` (validação humana do documento) — essa etapa de validação ainda não tem
- * NENHUM fluxo implementado no sistema (nenhum lugar seta esse status), então exigi-la aqui
- * tornaria IMPOSSÍVEL qualquer submissão para sempre; documentado para a Fase 2/futura revisão
- * adicionar validação humana. Um case sem nenhum requirement obrigatório cadastrado passa
- * trivialmente (checklist vazio = nada pendente) — a decisão de EXIGIR requirements cadastrados
- * antes de poder submeter fica para quem configura o caso, não é regra de negócio desta fase.
+ * assertChecklistComplete — "READY_TO_SUBMIT exige checklist completo" e o pipeline termina
+ * em validação humana. Todo requirement obrigatório precisa estar VALIDATED. Checklist vazio
+ * não tem pendência.
  */
 async function assertChecklistComplete(financingCaseId, groupId, companyId, transaction) {
   const requirements = await CaseRequirement.findAll({
     where: { financingCaseId, groupId, companyId, required: true },
     transaction,
   });
-  const pending = requirements.filter((r) => r.status !== 'SUBMITTED');
+  const pending = requirements.filter((r) => r.status !== 'VALIDATED');
   if (pending.length > 0) {
     throw AppError.unprocessable(
-      `Checklist de documentos incompleto — ${pending.length} item(ns) obrigatório(s) ainda não enviado(s) (${pending.map((p) => p.documentType).join(', ')}).`,
+      `Checklist de documentos incompleto — ${pending.length} item(ns) obrigatório(s) ainda sem validação humana (${pending.map((p) => p.documentType).join(', ')}).`,
       'SUBMISSION_CHECKLIST_INCOMPLETE'
     );
   }
@@ -130,6 +130,32 @@ async function requestSubmission(financingCaseId, payload, actorUserId, groupId,
     throw AppError.unprocessable(
       'Envio exige autorização/consentimento do cliente.',
       'SUBMISSION_CONSENT_REQUIRED'
+    );
+  }
+
+  if (financingCase.status !== 'READY_TO_SUBMIT' && shouldApplyTransition(financingCase.status, 'READY_TO_SUBMIT')) {
+    const beforeStatus = financingCase.status;
+    financingCase.status = 'READY_TO_SUBMIT';
+    financingCase.updatedBy = actorUserId || null;
+    await financingCase.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'correspondent.financing_case.status_changed',
+        entityType: 'FinancingCase',
+        entityId: financingCase.id,
+        beforeJson: { status: beforeStatus },
+        afterJson: { status: 'READY_TO_SUBMIT' },
+        reason: 'Checklist completo. Caso pronto para envio.',
+      },
+      transaction
+    );
+    await publishFinancingStatusChanged(
+      financingCase,
+      { previousStatus: beforeStatus, normalizedStatus: 'READY_TO_SUBMIT', historyId: `checklist:${financingCase.id}:READY_TO_SUBMIT` },
+      transaction
     );
   }
 

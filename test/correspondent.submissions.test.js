@@ -77,6 +77,13 @@ async function completeChecklist(financingCaseId, transaction) {
     { groupId: tenant.groupId, companyId: tenant.companyId },
     transaction
   );
+  await documentsService.validateRequirement(
+    financingCaseId,
+    requirement.id,
+    tenant.userId,
+    { groupId: tenant.groupId, companyId: tenant.companyId },
+    transaction
+  );
 }
 
 test('CORRESPONDENT-SUB-01: submete com sucesso (sandbox) quando checklist completo e elegível', async () => {

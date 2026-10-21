@@ -1,11 +1,14 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { FinancingCase, CaseRequirement, CaseDocument, File } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const { publishFinancingDocumentsCompleted } = require('../correspondentEvents.service');
+const { publishFinancingDocumentsCompleted, publishFinancingStatusChanged } = require('../correspondentEvents.service');
+const { shouldApplyTransition } = require('../statusMachine');
 
 const INCOMPLETE_REQUIREMENT_STATUSES = ['PENDING', 'REJECTED', 'EXPIRED'];
+const CHECKLIST_COMPLETO = 'VALIDATED';
 
 const DOCUMENT_TYPES = ['RG_CPF', 'COMPROVANTE_RENDA', 'COMPROVANTE_RESIDENCIA', 'MATRICULA_IMOVEL', 'CERTIDAO_ESTADO_CIVIL', 'IPTU', 'OUTRO'];
 
@@ -74,11 +77,14 @@ async function createRequirement(financingCaseId, payload, actorUserId, actorCon
       action: 'correspondent.case_requirement.created',
       entityType: 'CaseRequirement',
       entityId: requirement.id,
+      beforeJson: { registro: 'Não existia (registro criado nesta ação)' },
+      afterJson: { id: requirement.id, documentType: requirement.documentType, status: requirement.status },
       reason: `Requirement "${documentType}" adicionado ao caso de financiamento.`,
     },
     transaction
   );
 
+  await syncCaseChecklistStatus(financingCaseId, groupId, companyId, actorUserId, transaction);
   return requirement;
 }
 
@@ -188,26 +194,126 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
       action: 'correspondent.case_document.uploaded',
       entityType: 'CaseDocument',
       entityId: document.id,
+      beforeJson: current
+        ? { documentId: current.id, version: current.version, superseded: true }
+        : { registro: 'Não existia (registro criado nesta ação)' },
+      afterJson: { id: document.id, version: document.version, classification: document.classification, requirementStatus: requirement.status },
       reason: `Documento RESTRICTED enviado (versão ${nextVersion}) para o requirement "${requirement.documentType}".` +
         (current ? ' Versão anterior preservada como superada.' : ''),
     },
     transaction
   );
 
-  // Caderno, Fase 9: "financing.documents.completed" — emitido quando TODOS os requirements
-  // OBRIGATÓRIOS do case saem do estado incompleto (pelo menos SUBMITTED). Itens opcionais
-  // (required: false) nunca bloqueiam esse checklist.
+  await syncCaseChecklistStatus(financingCaseId, groupId, companyId, actorUserId, transaction);
+  return document;
+}
+
+/**
+ * validateRequirement — a validação humana do pipeline
+ * "Upload → malware scan → hash → OCR/IA → sugestão → validação".
+ * Só um ator humano valida um documento já enviado. A NAY não chama esta função.
+ */
+async function validateRequirement(financingCaseId, requirementId, actorUserId, actorContext, transaction) {
+  const { groupId, companyId } = actorContext;
+  await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  if (!actorUserId) {
+    throw AppError.unprocessable('A validação do documento exige uma pessoa.', 'CASE_REQUIREMENT_VALIDATION_ACTOR_REQUIRED');
+  }
+  const requirement = await CaseRequirement.findOne({ where: { id: requirementId, financingCaseId, groupId, companyId }, transaction });
+  if (!requirement) {
+    throw AppError.notFound('Item de checklist (requirement) não encontrado para este caso.', 'CASE_REQUIREMENT_NOT_FOUND');
+  }
+  if (requirement.status !== 'SUBMITTED') {
+    throw AppError.unprocessable(
+      'Só um documento já enviado pode ser validado.',
+      'CASE_REQUIREMENT_NOT_READY_TO_VALIDATE'
+    );
+  }
+
+  const beforeStatus = requirement.status;
+  requirement.status = CHECKLIST_COMPLETO;
+  requirement.updatedBy = actorUserId;
+  await requirement.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'correspondent.case_requirement.validated',
+      entityType: 'CaseRequirement',
+      entityId: requirement.id,
+      beforeJson: { status: beforeStatus },
+      afterJson: { status: requirement.status, documentType: requirement.documentType },
+      reason: `Requirement "${requirement.documentType}" validado por pessoa.`,
+    },
+    transaction
+  );
+
+  await syncCaseChecklistStatus(financingCaseId, groupId, companyId, actorUserId, transaction);
+  await publishDocumentsCompletedIfReady(financingCaseId, groupId, companyId, transaction);
+  return requirement;
+}
+
+async function publishDocumentsCompletedIfReady(financingCaseId, groupId, companyId, transaction) {
   const totalRequired = await CaseRequirement.count({ where: { financingCaseId, groupId, companyId, required: true }, transaction });
   const pendingRequired = await CaseRequirement.count({
-    where: { financingCaseId, groupId, companyId, required: true, status: INCOMPLETE_REQUIREMENT_STATUSES },
+    where: { financingCaseId, groupId, companyId, required: true, status: { [Op.ne]: CHECKLIST_COMPLETO } },
     transaction,
   });
   if (totalRequired > 0 && pendingRequired === 0) {
     const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
     await publishFinancingDocumentsCompleted(financingCase, transaction);
   }
-
-  return document;
 }
 
-module.exports = { DOCUMENT_TYPES, createRequirement, listRequirements, uploadDocument };
+async function syncCaseChecklistStatus(financingCaseId, groupId, companyId, actorUserId, transaction) {
+  const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  const required = await CaseRequirement.findAll({
+    where: { financingCaseId, groupId, companyId, required: true },
+    transaction,
+  });
+  if (required.length === 0) return financingCase;
+
+  const allValidated = required.every((item) => item.status === CHECKLIST_COMPLETO);
+  const target = allValidated ? 'READY_TO_SUBMIT' : 'DOCUMENTS_PENDING';
+  if (financingCase.status === target || !shouldApplyTransition(financingCase.status, target)) return financingCase;
+
+  const beforeStatus = financingCase.status;
+  financingCase.status = target;
+  financingCase.updatedBy = actorUserId || null;
+  await financingCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'correspondent.financing_case.status_changed',
+      entityType: 'FinancingCase',
+      entityId: financingCase.id,
+      beforeJson: { status: beforeStatus },
+      afterJson: { status: target },
+      reason: allValidated
+        ? 'Checklist validado. Caso pronto para envio.'
+        : 'Checklist de documentos aberto.',
+    },
+    transaction
+  );
+  await publishFinancingStatusChanged(
+    financingCase,
+    { previousStatus: beforeStatus, normalizedStatus: target, historyId: `checklist:${financingCase.id}:${target}` },
+    transaction
+  );
+  return financingCase;
+}
+
+module.exports = {
+  DOCUMENT_TYPES,
+  INCOMPLETE_REQUIREMENT_STATUSES,
+  createRequirement,
+  listRequirements,
+  uploadDocument,
+  validateRequirement,
+  syncCaseChecklistStatus,
+};
