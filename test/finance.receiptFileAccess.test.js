@@ -5,13 +5,13 @@
 // ao Financeiro, 200 para quem tem finance:read, e 404 em outra empresa.
 // Fixtures COMMITADAS: rode com
 //   node scripts/withDisposableDb.js -- node --test test/finance.receiptFileAccess.test.js
-// Fora do banco descartável o teste é pulado.
+// Fora de banco descartável (DISPOSABLE_DB=1 ou CI, cujo Postgres é efêmero) o teste é pulado.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.FINANCE_RECEIPT_HTTP_TEST_PORT || '21652';
-const skip = process.env.DISPOSABLE_DB === '1' ? false : 'requer banco descartável (scripts/withDisposableDb.js)';
+const skip = Boolean(process.env.DISPOSABLE_DB || process.env.CI) ? false : 'requer banco descartável (scripts/withDisposableDb.js ou o CI)';
 
 let ctx = {};
 

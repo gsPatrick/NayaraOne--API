@@ -4,7 +4,7 @@
 // conexões). Os dados precisam estar commitados para uma transação enxergar a outra, por isso
 // este arquivo SÓ roda em banco descartável:
 //   node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/marco7rev19.B.concurrency.test.js
-// Fora dele (sem DISPOSABLE_DB=1) os testes são pulados — nada é gravado no banco compartilhado.
+// Fora de banco descartável (DISPOSABLE_DB=1 ou CI, cujo Postgres é efêmero) os testes são pulados.
 //
 // Sincronização sem sorte de timing: a transação A faz a operação e NÃO commita; a B é disparada
 // e fica parada no lock; só então A commita. Assim a B obrigatoriamente roda "depois" e precisa
@@ -20,7 +20,7 @@ const procurementService = require('../src/features/procurement/procurement.serv
 const itemsService = require('../src/features/inventory/items.service');
 const { User, FinancialEntry, ReceiptDiscrepancy } = require('../src/models');
 
-const DISPOSABLE = process.env.DISPOSABLE_DB === '1';
+const DISPOSABLE = Boolean(process.env.DISPOSABLE_DB || process.env.CI);
 let tenant;
 
 before(async () => {

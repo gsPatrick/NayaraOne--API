@@ -7,7 +7,7 @@
 //   2. ROTA HTTP genérica (POST /inventory/movements, POST /assets/:id/loan e POST /procurement/webhooks/insurance),
 //      com app real, RLS real e banco descartável:
 //        node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/marco7rev20.F.test.js
-//      Fora dele (sem DISPOSABLE_DB=1) os testes HTTP são pulados.
+//      Fora de banco descartável (DISPOSABLE_DB=1 ou CI, cujo Postgres é efêmero) os testes HTTP são pulados.
 // Nos casos recusados, nada pode ser gravado: movimento, saldo e evento (outbox) permanecem
 // exatamente como antes.
 
@@ -15,7 +15,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
-const DISPOSABLE = process.env.DISPOSABLE_DB === '1';
+// O job de CI sobe um Postgres efêmero e define CI=true. Commitar lá não toca homologação.
+const DISPOSABLE = Boolean(process.env.DISPOSABLE_DB || process.env.CI);
 let appInstance = null;
 if (DISPOSABLE) {
   process.env.PORT = process.env.MARCO7_REV20_HTTP_PORT || '21620';

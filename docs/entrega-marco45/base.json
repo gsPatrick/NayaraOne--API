@@ -11540,7 +11540,7 @@
    "testes": [
     {
      "arquivo": "test/legal.signatureProviders.test.js",
-     "nome": "legal webhook: sandbox continua funcionando SEM exigir HMAC (nenhum provider real configurado)"
+     "nome": "legal webhook: sandbox funciona SEM HMAC, mas só com o hash do documento enviado para assinatura (B1)"
     }
    ],
    "evidenciaHomologacao": [
@@ -32555,6 +32555,15 @@
    "causa": "Formato novo do gate de encerramento não acompanhado pela tela; intenção de homologação sem roteamento do id do banco; telas lendo campo errado ou mostrando o código interno; textos gerados com a competência crua.",
    "correcao": "API c9f09b5, cf9fa43, 6fe909c, 17bb6d2, be4e8cf, 0aac23e, 3576127; Front 48cfaef, a59df1c, 7df01a4, bf1e056, d8ef450, 203ea54, d374c10, 8bac006. Detalhe de cada falha na seção 13.",
    "reconfirmacao": "Playwright clicando nas telas (prints RC1 a RC7), varredura de 40 telas dos Marcos 4/5 com 0 achados, 321/321 testes dos arquivos tocados e vizinhos, lint dos dois repositórios com saída 0. O repasse pelo navegador não foi executado nesta conferência; a regra é provada por testes e por capturas HTTP no banco descartável."
+  },
+  {
+   "data": "20/10/2026",
+   "titulo": "Reconferência ao vivo do Marco 4 (11:06–12:36)",
+   "classe": "bad",
+   "achado": "Repasse não concluía depois do MFA; lançamento preso quando a aprovação era pedida antes do comprovante; valor negativo era salvo como positivo; fechamento e reabertura sem prova de MFA recente; conciliação sem as cinco classes; antifraude sem data, responsável e lançamento; perfil só leitura inexistente; troca de empresa desativada; CSV sem prova de neutralização de fórmula.",
+   "causa": "A tela e algumas regras não acompanhavam o que o teste de serviço já cobria, ou o teste não exercitava o caminho da tela.",
+   "correcao": "d1f56db (repasse e MFA recente do fechamento), 2e4fa1e (pedido preso, valor menor ou igual a zero, envio ao banco), f656f46 (troca de empresa, cinco classes de conciliação, antifraude, papel só leitura, CSV).",
+   "reconfirmacao": "Esses commits estão no commit do CI desta página. A prova é o teste nomeado no log do CI. Os prints dessa rodada não estão nesta página."
   }
  ],
  "reproducao": {

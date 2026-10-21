@@ -138,11 +138,23 @@ function authFetchAs(bearerToken, method, path, body) {
   });
 }
 
+// A suíte paralela commita obras na mesma empresa. O Postgres pode abortar com deadlock
+// (40P01) na numeração da obra; a transação inteira é descartada e esta repetição começa outra.
+async function transacao(fn, attempt = 1) {
+  try {
+    return await sequelize.transaction(fn);
+  } catch (err) {
+    const pgCode = err?.original?.code || err?.parent?.code;
+    if (pgCode === '40P01' && attempt < 5) return transacao(fn, attempt + 1);
+    throw err;
+  }
+}
+
 async function createTestProjectAndStage() {
   // Criados direto via service (commitado de verdade, sem rollback) — mesma fábrica de dados
   // de negócio usada pelo endpoint HTTP real, só sem passar pela camada HTTP (o que este
   // arquivo já testa à parte nos próprios casos de teste).
-  const project = await sequelize.transaction(async (transaction) => {
+  const project = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -154,7 +166,7 @@ async function createTestProjectAndStage() {
   });
   createdProjectIds.push(project.id);
 
-  const stage = await sequelize.transaction(async (transaction) => {
+  const stage = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -200,7 +212,7 @@ test('HTTP real: POST /construction/measurements/:id/approve aprova a medição 
   // Chega a medição até REVIEWED via service direto (comitado), simulando o fluxo real até o
   // ponto que só falta a aprovação final — é exatamente esse último passo que este teste
   // precisa exercitar via HTTP real no path /measurements/:id/approve.
-  const measurement = await sequelize.transaction(async (transaction) => {
+  const measurement = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -234,7 +246,7 @@ test('HTTP real: POST /construction/measurements/:id/approve aprova a medição 
 test('HTTP real: POST /construction/measurements/:id/approve SEM permissão construction:approve é bloqueado (403)', async () => {
   const { stage } = await createTestProjectAndStage();
 
-  const measurement = await sequelize.transaction(async (transaction) => {
+  const measurement = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -257,7 +269,7 @@ test('HTTP real: POST /construction/measurements/:id/approve SEM permissão cons
   assert.equal(body.success, false);
 
   // Confirma que o bloqueio é real — a medição continua REVIEWED, nunca avançou pra PAYABLE.
-  const stillReviewed = await sequelize.transaction(async (transaction) => {
+  const stillReviewed = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -269,7 +281,7 @@ test('HTTP real: POST /construction/measurements/:id/approve SEM permissão cons
 // --- POST /construction/warranty-cases (path canônico exigido pela fonte) ---
 
 test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-obra (201)', async () => {
-  const property = await sequelize.transaction(async (transaction) => {
+  const property = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -309,7 +321,7 @@ test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-
 // sem paginação — inconsistente com GET /construction/projects, que já pagina. Confirma, via
 // HTTP real, que o endpoint agora devolve o formato paginado padrão {data, pagination}.
 test('HTTP real: GET /construction/maintenance-cases devolve formato paginado {data, pagination} (mesmo padrão de GET /construction/projects)', async () => {
-  const property = await sequelize.transaction(async (transaction) => {
+  const property = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -359,7 +371,7 @@ test('HTTP real: GET /construction/maintenance-cases devolve formato paginado {d
 test('HTTP real: PATCH /construction/budget-lines/:id com baseline APPROVED é bloqueado (400/422 BUDGET_LINE_BASELINE_LOCKED)', async () => {
   const { project } = await createTestProjectAndStage();
 
-  const { budget, line } = await sequelize.transaction(async (transaction) => {
+  const { budget, line } = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
@@ -397,7 +409,7 @@ test('HTTP real: PATCH /construction/budget-lines/:id com baseline APPROVED é b
   assert.equal(body.success, false);
   assert.equal(body.error?.code || body.code, 'BUDGET_LINE_BASELINE_LOCKED');
 
-  const persisted = await sequelize.transaction(async (transaction) => {
+  const persisted = await transacao(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction });
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });

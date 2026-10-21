@@ -66,13 +66,15 @@ function dataUri(texto, mime) {
 }
 const dl = (texto, nome, rotulo, mime = 'text/plain') => `<a class="dl" download="${esc(nome)}" href="${dataUri(texto, mime)}">${esc(rotulo || `Baixar ${nome}`)}</a>`;
 
-function tabelaTestes(testes, ci, local, antes) {
+function tabelaTestes(testes, ci, local, antes, rotulos = {}) {
+  const h1 = rotulos.principal || 'Resultado no log do CI';
+  const h2 = rotulos.local || 'Reprodução local';
   const linhas = testes.map((t) => {
     const c = classificarTeste(ci, t.nome);
     const a = antes ? antes.get(t.nome) : null;
     return `<tr><td><code>${esc(t.arquivo)}</code></td><td>${esc(t.nome)}</td><td>${celulaCI(c)}</td><td class="small">${esc(localTxt(local, t.nome))}</td>${antes ? `<td class="small">${a ? `${a.status === 'pass' ? 'passou' : 'falhou'}, ${ms(a.duracaoMs)}` : 'não executado'}</td>` : ''}</tr>`;
   }).join('');
-  return `<div class="tw"><table class="tt"><thead><tr><th>Arquivo</th><th>Teste (nome exato)</th><th>Resultado no log do CI</th><th>Reprodução local</th>${antes ? '<th>Antes (commit 46b0ecb)</th>' : ''}</tr></thead><tbody>${linhas}</tbody></table></div>`;
+  return `<div class="tw"><table class="tt"><thead><tr><th>Arquivo</th><th>Teste (nome exato)</th><th>${esc(h1)}</th><th>${esc(h2)}</th>${antes ? '<th>Antes (commit 46b0ecb)</th>' : ''}</tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
 function passoResumo(p) {

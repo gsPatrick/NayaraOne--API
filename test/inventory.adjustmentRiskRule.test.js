@@ -38,6 +38,16 @@ function withTenant(fields) {
 
 const actor = () => ({ userId: tenant.userId, canApprove: true });
 
+// A suíte inteira disputa a mesma empresa em paralelo. Um deadlock (40P01) aborta a transação;
+// devolver false aqui viraria falha do teste e esconderia o erro do retry de
+// withRollbackTenantTransaction. Relançar deixa o helper abrir outra transação e repetir.
+function erroDeNegocio(code) {
+  return (err) => {
+    if (err?.parent?.code === '40P01' || err?.original?.code === '40P01') throw err;
+    return err instanceof AppError && err.code === code;
+  };
+}
+
 // EST-008 (auditoria Nayara, Marco 7, 14/10/2026): quem abre o inventário não pode aprovar o
 // próprio ajuste — testes de applyAdjustment via counts.service precisam de um segundo usuário.
 async function secondApprover(suffix) {
@@ -121,7 +131,7 @@ test('REG-EST-002: ajuste de alto valor sem evidenceFileId é bloqueado com INVE
         actor(),
         transaction
       ),
-      (err) => err instanceof AppError && err.code === 'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      erroDeNegocio('INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE')
     );
   });
 });
@@ -164,7 +174,7 @@ test('REG-EST-002: limiar é configurável via Motor de Regras (nova versão fec
         actor(),
         transaction
       ),
-      (err) => err instanceof AppError && err.code === 'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      erroDeNegocio('INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE')
     );
   });
 });
@@ -184,7 +194,7 @@ test('REG-EST-002: ajuste de contagem (counts.service.js#applyAdjustment) de alt
 
     await assert.rejects(
       () => countsService.applyAdjustment(line.id, tenant.groupId, tenant.companyId, approver, transaction),
-      (err) => err instanceof AppError && err.code === 'INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE'
+      erroDeNegocio('INVENTORY_MOVEMENT_EVIDENCE_REQUIRED_HIGH_VALUE')
     );
 
     const file = await createFile(transaction);

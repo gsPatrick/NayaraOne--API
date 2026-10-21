@@ -138,9 +138,14 @@ function montar() {
   }
   const ci = ciLog ? parseLog(ciLog.texto) : null;
   if (ciInfo && ci && ci.commit && !ci.commit.startsWith(ciInfo.sha.slice(0, 7))) throw new Error(`cabeçalho do log (${ci.commit}) não bate com o commit do run (${ciInfo.sha})`);
+  const execucaoLocal = Boolean(ci && ci.cabecalho.some((h) => h.includes('reprodução LOCAL')));
+  const doCabecalho = (re) => (ci ? (ci.cabecalho.map((h) => re.exec(h)).find(Boolean) || [])[1] : null) || null;
+  const arquivosModificados = doCabecalho(/arquivos rastreados modificados: (\d+)/);
+  const nodeDoLog = doCabecalho(/# node: (v[\d.]+)/);
+  const concorrenciaDoLog = doCabecalho(/concorrência: (.+)$/);
 
   // ---- reprodução local
-  const localFile = opt['log-local'] || maisRecente(/^local-reproducao-.*-test-results\.log$/);
+  const localFile = execucaoLocal ? null : (opt['log-local'] || maisRecente(/^local-reproducao-.*-test-results\.log$/));
   const localLog = localFile ? lerLogSaneado(localFile) : null;
   const local = localLog ? parseLog(localLog.texto) : null;
 
@@ -150,6 +155,7 @@ function montar() {
 
   const apiCommit = (ciInfo && ciInfo.sha) || opt['api-commit'] || (ci && ci.commit) || (local && local.commit) || 'não informado';
   const frontCommit = (frontInfo && frontInfo.sha) || opt['front-commit'] || 'não informado';
+  const curto = (sha) => (/^[0-9a-f]{7,40}$/i.test(String(sha)) ? String(sha).slice(0, 7) : String(sha));
   const agora = new Date();
 
   // ---- classificação dos grupos
@@ -174,20 +180,36 @@ function montar() {
   const homologDe = (ids) => (ids || []).filter((id) => idsHom.has(id)).map((id) => `<a href="#hom-${R.esc(id)}">${R.esc(id)}</a>`).join(', ') || 'nenhuma';
 
   const stat = (n, l, warn) => `<div class="stat"><div class="n${warn ? ' warn' : ''}">${n}</div><div class="l">${R.esc(l)}</div></div>`;
-  const resumoCI = ci ? `${ci.resumo.pass}/${ci.resumo.tests}` : 'CI pendente';
+  const suiteLimpa = Boolean(ci && ci.resumo.fail === 0 && ci.resumo.skipped === 0 && (ci.resumo.cancelled || 0) === 0 && (ci.resumo.todo || 0) === 0 && ci.resumo.pass === ci.resumo.tests);
+  const gruposLimpos = porCat.aprovado === 39 && porCat.falhou === 0 && porCat.ausente === 0 && porCat.bloqueado === 0 && porCat.naoimpl === 0 && porCat.aguardando === 0;
+  const resumoCI = ci
+    ? `${ci.resumo.pass} passaram, ${ci.resumo.fail || 0} falharam, ${ci.resumo.skipped || 0} pulados, de ${ci.resumo.tests}`
+    : 'execução pendente';
   const resumoLocal = local ? `${local.resumo.pass}/${local.resumo.tests}` : 'sem reprodução local';
 
   // ---- hashes
   const hashLinhas = [];
-  if (ciLog) hashLinhas.push(['Log do CI do commit final (saneado)', ciLog.nome, ciLog.shaSaneado, ciLog.shaOriginal]);
+  if (ciLog) hashLinhas.push([execucaoLocal ? 'Reprodução local do comando do CI (saneado)' : 'Log do CI do commit final (saneado)', ciLog.nome, ciLog.shaSaneado, ciLog.shaOriginal]);
   if (localLog) hashLinhas.push(['Reprodução local (saneado)', localLog.nome, localLog.shaSaneado, localLog.shaOriginal]);
   if (antesJson) hashLinhas.push(['F01–F06 antes (commit 46b0ecb, saneado)', 'antes-46b0ecb-test-results.log', antesJson.shaLogSaneado, antesJson.shaLogOriginal]);
   if (drill) hashLinhas.push(['Drill de restore jurídico', path.basename(drillFile), sha256(Buffer.from(drill, 'utf8')), 'log sem token; sem saneamento']);
 
   const ph = '<span class="ph">CI_FINAL</span>';
+  const origemLog = execucaoLocal ? 'Reprodução local do mesmo comando do CI' : 'Log do CI';
+  const detalheLocal = execucaoLocal
+    ? ` Node ${R.esc(nodeDoLog || 'não informado')}. Concorrência: ${R.esc(concorrenciaDoLog || 'não informada')}. Arquivos rastreados modificados e ainda não commitados: ${R.esc(arquivosModificados || '0')}.`
+    : '';
   const bannerCI = ci
-    ? `Log do CI do commit <code>${R.esc(String(apiCommit).slice(0, 7))}</code>: ${porCat.aprovado} de 39 grupos aprovados, ${porCat.falhou} com falha, ${porCat.ausente} com teste ausente do log, ${porCat.bloqueado} bloqueados por ambiente, ${porCat.naoimpl} não implementados, ${porCat.aguardando} aguardando.`
-    : `Ainda não há log de CI do commit final: nenhum grupo é marcado como aprovado. Cada teste fica como "aguardando CI do commit final" até o gerador ser executado com os RUN_IDs reais.`;
+    ? `${origemLog} do commit <code>${R.esc(curto(apiCommit))}</code>: ${ci.resumo.pass} passaram, ${ci.resumo.fail || 0} falharam, ${ci.resumo.skipped || 0} pulados, de ${ci.resumo.tests}. ${porCat.aprovado} de 39 grupos aprovados, ${porCat.falhou} com falha, ${porCat.ausente} com teste ausente do log, ${porCat.bloqueado} bloqueados por ambiente, ${porCat.naoimpl} não implementados, ${porCat.aguardando} aguardando. Na matriz do caderno: ${matrizPorCat.aprovado} aprovadas, ${matrizPorCat.falhou} falharam, ${matrizPorCat.ausente} ausentes do log, ${matrizPorCat.bloqueado} bloqueadas por ambiente, ${matrizPorCat.naoimpl} não implementadas.${detalheLocal}`
+    : `Ainda não há log do commit final: nenhum grupo é marcado como aprovado. Cada teste fica como "aguardando CI do commit final" até o gerador ser executado com o log real.`;
+  const badgeOk = Boolean(ci && suiteLimpa && gruposLimpos && matrizPorCat.aprovado === matriz.length && !execucaoLocal);
+  const badgeTexto = !ci
+    ? 'Execução reproduzível, não declaração de aceite'
+    : badgeOk
+      ? '39 grupos classificados pelo CI'
+      : (suiteLimpa && gruposLimpos
+        ? 'Execução completa: 0 falhas e 0 pulados'
+        : 'Execução reproduzível, não declaração de aceite');
 
   const sanitizacao = [
     'Logs de teste: removidas as linhas de log JSON de requisição da API (começam com {"level":) e qualquer linha com padrão de segredo (cabeçalhos de autorização, tokens e strings de conexão). Nenhuma linha de resultado de teste foi alterada; o SHA-256 do original e do saneado está na tabela de hashes e no cabeçalho de cada log. Os originais ficam fora do repositório.',
@@ -200,18 +222,18 @@ function montar() {
   ];
 
   // ===================================================== HTML
-  const navBase = [['estado', '1. Estado'], ['reproducao', '2. Reprodução'], ['grupos', '3. 39 grupos'], ['respostas', '4. F01–F06'], ['matriz', '5. Matriz do caderno'], ['logs', '6. Logs'], ['http', '7. HTTP no banco descartável'], ['sql', '8. Consultas SQL'], ['homologacao', '9. Homologação'], ['reconf', '11. Reconferência de 19/10'], ['anexo-json', '12. Anexo JSON'], ['conferir', '13. Como conferir'], ['fora', '14. Limites']];
-
-  const nav = prints ? navBase.slice(0, 9).concat([['prints', '10. Prints ao vivo']], navBase.slice(9)) : navBase;
+  const navBase = [['estado', '1. Estado'], ['reproducao', '2. Reprodução'], ['grupos', '3. 39 grupos'], ['respostas', '4. F01–F06'], ['matriz', '5. Matriz do caderno'], ['logs', '6. Logs'], ['http', '7. HTTP no banco descartável'], ['sql', '8. Consultas SQL'], ['homologacao', '9. Homologação'], ['auditoria', '10. Auditoria'], ['seguranca', '11. Segurança'], ['reconf', '12. Reconferência ao vivo'], ['anexo-json', '13. Anexo JSON'], ['conferir', '14. Como conferir'], ['fora', '15. Limites']];
+  const nav = prints ? navBase.slice(0, 11).concat([['prints', '12. Prints ao vivo']], navBase.slice(11).map(([id, t], i) => [id, `${13 + i}. ${t.replace(/^\d+\. /, '')}`])) : navBase;
+  const rotulo = (id) => nav.find((x) => x[0] === id)[1];
   const parts = [];
   parts.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Marcos 4 e 5 — Entrega</title><style>${R.estilo()}</style></head><body><div class="wrap">`);
   parts.push(`<header class="top"><div class="tag">Nayara One · Execução reproduzível dos Marcos 4 e 5</div><h1>Centro Financeiro Inteligente · Contratos, Locação, Vistorias e Jurídico</h1>
-<div class="meta"><span><b>Gerada em:</b> ${R.dataBR(agora)}</span><span><b>Autor:</b> Patrick Siqueira (desenvolvedor)</span><span><b>Base:</b> ${R.esc(base.meta.base)}</span><span><b>Versão:</b> API <code>${R.esc(String(apiCommit).slice(0, 7))}</code> · Front <code>${R.esc(String(frontCommit).slice(0, 7))}</code></span>
-<span><b>CI do commit final:</b> ${ciInfo ? `API <a href="${R.esc(ciInfo.url)}">run ${R.esc(ciInfo.id)}</a> (${R.esc(ciInfo.evento)}, ${R.esc(ciInfo.conclusao || ciInfo.status)}, ${R.dataBR(ciInfo.criadoEm)})` : ph}${frontInfo ? ` · Front <a href="${R.esc(frontInfo.url)}">run ${R.esc(frontInfo.id)}</a> (${R.esc(frontInfo.evento)}, ${R.esc(frontInfo.conclusao || frontInfo.status)})` : ''}</span></div>
-<div class="status"><span class="b ${ci && porCat.aprovado === 39 ? 'ok' : 'warn'} big">Execução reproduzível, não declaração de aceite</span><span>${bannerCI}</span></div>
-<div class="summary"><p>1. Esta página é gerada por <code>scripts/gerar-entrega-marco45.js</code> a partir do log do CI do commit indicado. Cada teste mostra o resultado individual lido do log; o que o log não mostra não é marcado como aprovado.</p><p>2. Categorias: aprovado, falhou, bloqueado por ambiente (teste pulado), não implementado (teste marcado como pendente de implementação) e aguardando CI do commit final.</p><p>3. As provas por HTTP e por consulta SQL foram colhidas num PostgreSQL 16 descartável, com migrations do zero e o seed de dois tenants fictícios (perfis maker, checker, leitura, gestor e o tenant B).</p><p>4. F01 a F06 têm seção própria, com cada teste ligado ao seu resultado no log e ao seu estado antes das correções.</p><p>5. Os logs, os JSON e os hashes estão embutidos na própria página, legíveis sem JavaScript, com botão de download.</p></div></header>`);
+<div class="meta"><span><b>Gerada em:</b> ${R.dataBR(agora)}</span><span><b>Autor:</b> Patrick Siqueira (desenvolvedor)</span><span><b>Base:</b> ${R.esc(base.meta.base)}</span><span><b>Versão:</b> API <code>${R.esc(curto(apiCommit))}</code> · Front <code>${R.esc(curto(frontCommit))}</code></span>
+<span><b>${execucaoLocal ? 'Execução' : 'CI do commit final'}:</b> ${ciInfo ? `API <a href="${R.esc(ciInfo.url)}">run ${R.esc(ciInfo.id)}</a> (${R.esc(ciInfo.evento)}, ${R.esc(ciInfo.conclusao || ciInfo.status)}, ${R.dataBR(ciInfo.criadoEm)})` : (execucaoLocal ? 'reprodução local do comando do CI, neste working tree. Não é um artifact do GitHub Actions.' : ph)}${frontInfo ? ` · Front <a href="${R.esc(frontInfo.url)}">run ${R.esc(frontInfo.id)}</a> (${R.esc(frontInfo.evento)}, ${R.esc(frontInfo.conclusao || frontInfo.status)})` : ''}</span></div>
+<div class="status"><span class="b ${suiteLimpa && gruposLimpos ? 'ok' : 'warn'} big">${badgeTexto}</span><span>${bannerCI}</span></div>
+<div class="summary"><p>1. Esta página é gerada por <code>scripts/gerar-entrega-marco45.js</code> a partir ${execucaoLocal ? 'da reprodução local do mesmo comando do CI' : 'do log do CI do commit indicado'}. Cada teste mostra o resultado individual lido do log; o que o log não mostra não é marcado como aprovado.</p><p>2. Categorias: aprovado, falhou, bloqueado por ambiente (teste pulado), não implementado (teste marcado como pendente de implementação) e aguardando CI do commit final.</p><p>3. As provas por HTTP e por consulta SQL foram colhidas num PostgreSQL 16 descartável, com migrations do zero e o seed de dois tenants fictícios (perfis maker, checker, leitura, gestor e o tenant B).</p><p>4. F01 a F06 têm seção própria, com cada teste ligado ao seu resultado no log e ao seu estado antes das correções.</p><p>5. Os logs, os JSON e os hashes estão embutidos na própria página, legíveis sem JavaScript, com botão de download.</p></div></header>`);
   parts.push(`<nav class="toc" aria-label="Índice">${nav.map(([id, t]) => `<a href="#${id}">${R.esc(t)}</a>`).join('')}</nav>`);
-  parts.push(`<div class="stats">${stat(`${porCat.aprovado}/39`, 'Grupos aprovados pelo log do CI', porCat.aprovado !== 39)}${stat(porCat.falhou + porCat.ausente, 'Grupos com falha ou teste ausente', porCat.falhou + porCat.ausente > 0)}${stat(porCat.aguardando, 'Grupos aguardando o CI do commit final', porCat.aguardando > 0)}${stat(resumoCI, 'Testes no CI do commit final', !ci)}${stat(resumoLocal, 'Reprodução local (informativa)', false)}${stat(cap.passos.length, 'Passos HTTP/serviço no banco descartável', false)}${stat(cap.consultas.length, 'Consultas SQL no banco descartável', false)}${stat(matriz.length, 'Linhas do caderno na matriz', false)}</div>`);
+  parts.push(`<div class="stats">${stat(`${porCat.aprovado}/39`, execucaoLocal ? 'Grupos aprovados por esta execução' : 'Grupos aprovados pelo log do CI', porCat.aprovado !== 39)}${stat(porCat.falhou + porCat.ausente, 'Grupos com falha ou teste ausente', porCat.falhou + porCat.ausente > 0)}${stat(porCat.bloqueado + porCat.naoimpl, 'Grupos bloqueados ou não implementados', porCat.bloqueado + porCat.naoimpl > 0)}${stat(resumoCI, execucaoLocal ? 'Testes nesta execução' : 'Testes no CI do commit final', !suiteLimpa)}${stat(execucaoLocal ? 'o mesmo log' : resumoLocal, execucaoLocal ? 'Reprodução e classificação' : 'Reprodução local (informativa)', false)}${stat(cap.passos.length, 'Passos HTTP/serviço no banco descartável', false)}${stat(cap.consultas.length, 'Consultas SQL no banco descartável', false)}${stat(matriz.length, 'Linhas do caderno na matriz', matrizPorCat.aprovado !== matriz.length)}</div>`);
 
   // ---- 1 estado
   parts.push(`<section id="estado"><h2>1. Estado desta execução</h2><p class="lead">${bannerCI}</p><div class="tw"><table><thead><tr><th>Categoria</th><th>Grupos</th><th>Linhas da matriz do caderno</th></tr></thead><tbody>${PRIOR_KEYS.map((k) => `<tr><td>${R.badge(k)}</td><td class="r">${porCat[k]}</td><td class="r">${matrizPorCat[k]}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td class="r">39</td><td class="r">${matriz.length}</td></tr></tbody></table></div>
@@ -230,17 +252,18 @@ git checkout ${shaCommit}
 node -v          # v20.x
 npm ci
 
-# 3. executar (lint, syntax-check, scanners, migrations do zero, seeds, role sem bypass de RLS, suíte inteira)
-REPRO_CAPTURA=1 bash scripts/reproduzir-conferencia.sh ./test-results.log
-#   gera ./test-results.log (original), ./test-results.saneado.log e ./test-results.captura.json
+# 3. executar (migrations do zero, seeds, role sem bypass de RLS, suíte inteira)
+${execucaoLocal && concorrenciaDoLog && concorrenciaDoLog.includes('serial') ? 'REPRO_SERIAL=1 ' : ''}bash scripts/reproduzir-conferencia.sh ./test-results.log
+#   gera ./test-results.log (original) e ./test-results.saneado.log
 
-# comando de teste idêntico ao do CI (dentro do script):
-node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js
+# comando de teste dentro do script:
+node --test --test-reporter=spec --test-reporter-destination=stdout ${execucaoLocal && concorrenciaDoLog && concorrenciaDoLog.includes('serial') ? '--test-concurrency=1 ' : ''}test/*.test.js
 
 # 4. logs e artifacts do CI (precisa de login no GitHub)
 gh run download <RUN_ID> -R ${REPO_API}      # artifact test-results-<commit>
 
 # 5. reexecutar no próprio GitHub, sem deploy: Actions > CI > Run workflow (workflow_dispatch)`, 'cmd-reproducao')}
+${execucaoLocal && arquivosModificados && arquivosModificados !== '0' ? `<p class="lead">O log embutido nesta página saiu deste working tree, com ${R.esc(arquivosModificados)} arquivos rastreados modificados em cima do commit <code>${R.esc(curto(apiCommit))}</code>. O <code>git checkout</code> desse commit, sozinho, não contém essas alterações. Enquanto elas não estiverem no commit publicado, o artifact do GitHub desse commit continua sendo a execução anterior.</p>` : ''}
 <h3 class="msec">Ambiente do CI e do script (idênticos)</h3>
 <ul class="sec">${base.reproducao.workflow.map((w) => `<li>${R.esc(w)}</li>`).join('')}</ul>
 <h3 class="msec">Usuários fictícios do seed de dois tenants</h3>
@@ -251,7 +274,7 @@ gh run download <RUN_ID> -R ${REPO_API}      # artifact test-results-<commit>
 <h3 class="msec">Sanitização (tudo o que é truncado, traduzido ou removido)</h3><ul class="sec">${sanitizacao.map((s) => `<li>${R.esc(s)}</li>`).join('')}</ul></section>`);
 
   // ---- 3 grupos
-  parts.push(`<section id="grupos"><h2>3. Os 39 grupos da conferência → testes → resultado individual</h2><p class="lead">Categoria do grupo = a pior categoria entre seus testes. ${R.esc(ci ? 'Resultado lido do log do CI.' : 'Sem log de CI do commit final: todos aguardam.')} A coluna de reprodução local é informativa e não aprova nada.</p>`);
+  parts.push(`<section id="grupos"><h2>3. Os 39 grupos da conferência → testes → resultado individual</h2><p class="lead">Categoria do grupo = a pior categoria entre seus testes. ${R.esc(ci ? (execucaoLocal ? 'Resultado lido da reprodução local do comando do CI.' : 'Resultado lido do log do CI.') : 'Sem log do commit final: todos aguardam.')} ${execucaoLocal ? 'Não há um segundo log: a coluna de reprodução repete esta execução.' : 'A coluna de reprodução local é informativa e não aprova nada.'}</p>`);
   for (const marco of ['Marco 4', 'Marco 5']) {
     const gs = grupos.filter((g) => g.marco === marco);
     parts.push(`<h3 class="msec">${marco} <span class="count">${gs.length} grupos</span></h3>`);
@@ -261,7 +284,7 @@ gh run download <RUN_ID> -R ${REPO_API}      # artifact test-results-<commit>
     const ps = passosDe(g.n); const cs = consultasDe(g.n);
     const prs = prints ? prints.itens.filter((p) => p.chave === String(g.n) && !p.duplicadoDe) : [];
     parts.push(`<div class="fbox" id="g${g.n}"><h3>${g.n}. ${R.esc(g.grupo)} · ${R.esc(g.marco)} ${R.badge(g.cat)}</h3><p class="small"><b>Cenário:</b> ${R.txt(g.cenario)}</p>
-<h4>Testes e resultado individual</h4>${R.tabelaTestes(g.testes, ci, local)}
+<h4>Testes e resultado individual</h4>${R.tabelaTestes(g.testes, ci, execucaoLocal ? ci : local, null, execucaoLocal ? { principal: 'Resultado nesta execução', local: 'A mesma execução' } : {})}
 <h4>Evidência específica: HTTP real no banco descartável</h4>${R.tabelaPassos(ps)}
 ${cs.length ? `<h4>Consultas somente leitura no banco descartável</h4>${R.tabelaConsultas(cs)}` : ''}
 <p class="small"><b>Capturas de homologação de 19/10 ligadas a este grupo:</b> ${homologDe(g.evidenciaHomologacao)}. <b>Linhas da matriz do caderno:</b> ${g.linhasMatriz}.</p>
@@ -281,7 +304,7 @@ ${prs.length ? `<h4>Prints ao vivo (Claude Browser)</h4><p class="small">${prs.m
     parts.push(`<div class="fbox" id="${R.esc(f.id)}"><h3>${R.esc(f.id)} — ${R.esc(f.titulo)} ${R.badge(cat)}</h3>
 <dl class="kv"><dt>Achado</dt><dd>${R.txt(f.achado)}</dd><dt>Causa</dt><dd>${R.txt(f.causa)}</dd><dt>Correção</dt><dd>${f.correcao.map((c) => `<code>${R.esc(c.commit)}</code> ${R.esc(c.descricao)}`).join('<br>')}</dd>
 <dt>Antes das correções</dt><dd>${antes ? `Dos ${f.testes.length} testes desta pendência, ${antesFail} falharam e ${antesPass} passaram contra o código do commit 46b0ecb${antesNao ? `; ${antesNao} não existiam ou não foram executados` : ''}.` : 'Execução do estado anterior indisponível nesta geração.'}</dd></dl>
-<h4>Testes: resultado no CI do commit final, na reprodução local e antes</h4>${R.tabelaTestes(f.testes, ci, local, antes)}
+<h4>${execucaoLocal ? 'Testes: resultado nesta execução e antes das correções' : 'Testes: resultado no CI do commit final, na reprodução local e antes'}</h4>${R.tabelaTestes(f.testes, ci, execucaoLocal ? ci : local, antes, execucaoLocal ? { principal: 'Resultado nesta execução', local: 'A mesma execução' } : {})}
 <h4>Prova da regra no PostgreSQL descartável</h4>${ps.length ? R.tabelaPassos(ps) : '<p class="small">Esta pendência é provada pelos testes acima e pelo drill (seção 6); as chamadas HTTP que exigem MFA humano são recusadas sem MFA habilitado e a regra é provada por teste de serviço, sem chamar endpoint de MFA.</p>'}
 <p class="small"><b>Capturas de homologação de 19/10:</b> ${homologDe(f.evidenciaHomologacao)}. ${f.aoVivoTexto ? R.esc(f.aoVivoTexto) : ''}</p></div>`);
   }
@@ -291,14 +314,14 @@ ${prs.length ? `<h4>Prints ao vivo (Claude Browser)</h4><p class="small">${prs.m
   parts.push(`<section id="matriz"><h2>5. Matriz do caderno: ${matriz.length} linhas → implementação → testes → resultado</h2><p class="lead">Estado da linha = pior resultado entre seus testes. Cada linha tem o JSON próprio na seção 12 (âncora <code>#json-matriz-ID</code>).</p>`);
   for (const marco of ['Marco 4', 'Marco 5']) {
     const rs = matriz.filter((r) => r.marco === marco);
-    parts.push(`<h3 class="msec">${marco} <span class="count">${rs.length} linhas</span></h3><div class="tw"><table class="mx"><thead><tr><th>ID</th><th>Requisito</th><th>Implementação</th><th>Testes e resultado</th><th>Estado</th></tr></thead><tbody>${rs.map((r) => `<tr><td class="n"><a href="#json-matriz-${R.esc(r.id)}">${R.esc(r.id)}</a><br><span class="small">${R.txt(r.secao)}</span></td><td>${R.txt(r.requisito)}</td><td><code>${R.txt(r.implementacao)}</code></td><td>${r.cls.map((x) => `<div class="small">${R.esc(x.t.nome)}<br>${R.celulaCI(x.c)}</div>`).join('') || 'sem teste ligado'}</td><td>${R.badge(r.cat)}</td></tr>`).join('')}</tbody></table></div>`);
+    parts.push(`<h3 class="msec">${marco} <span class="count">${rs.length} linhas</span></h3><div class="tw"><table class="mx"><thead><tr><th>ID</th><th>Requisito</th><th>Implementação</th><th>Testes e resultado</th><th>Evidência</th><th>Estado</th></tr></thead><tbody>${rs.map((r) => `<tr><td class="n"><a href="#json-matriz-${R.esc(r.id)}">${R.esc(r.id)}</a><br><span class="small">${R.txt(r.secao)}</span></td><td>${R.txt(r.requisito)}</td><td><code>${R.txt(r.implementacao)}</code></td><td>${r.cls.map((x) => `<div class="small">${R.esc(x.t.nome)}<br>${R.celulaCI(x.c)}</div>`).join('') || 'sem teste ligado'}</td><td>${homologDe(r.evidenciaHomologacao)}</td><td>${R.badge(r.cat)}</td></tr>`).join('')}</tbody></table></div>`);
   }
   parts.push('</section>');
 
   // ---- 6 logs
   const bloco = (titulo, nome, texto, id) => `<details id="${id}"><summary><b>${R.esc(titulo)}</b> <span class="small">(${texto.split('\n').length} linhas)</span></summary>${R.dl(texto, nome)}${R.pre(texto)}</details>`;
   parts.push(`<section id="logs"><h2>6. Logs completos (saneados)</h2><p class="lead">Texto integral, legível sem JavaScript. O SHA-256 do original e do saneado está na seção 2.</p>
-${ciLog ? bloco(`CI do commit final — ${ciLog.nome}`, ciLog.nome, ciLog.texto, 'log-ci') : '<p>O log do CI do commit final entra aqui quando o gerador é executado com o RUN_ID da API.</p>'}
+${ciLog ? bloco(`${execucaoLocal ? 'Reprodução local do comando do CI' : 'CI do commit final'} — ${ciLog.nome}`, ciLog.nome, ciLog.texto, 'log-ci') : '<p>O log do commit final entra aqui quando o gerador é executado com o RUN_ID da API ou com o arquivo da reprodução.</p>'}
 ${localLog ? bloco(`Reprodução local — ${localLog.nome}`, localLog.nome, localLog.texto, 'log-local') : ''}
 ${antesJson ? bloco('F01–F06 antes: testes do commit final contra o código do commit 46b0ecb', 'antes-46b0ecb-test-results.log', fs.readFileSync(path.join(ENT, 'antes-46b0ecb-test-results.log'), 'utf8'), 'log-antes') : ''}
 ${drill ? bloco('Drill de restore jurídico (133 checagens)', path.basename(drillFile), drill, 'log-drill') : ''}</section>`);
@@ -312,23 +335,25 @@ ${drill ? bloco('Drill de restore jurídico (133 checagens)', path.basename(dril
   // ---- 9 homologação
   parts.push(`<section id="homologacao"><h2>9. Capturas de homologação de 19/10 (banco compartilhado de homologação, dados fictícios)</h2><p class="lead">Respostas HTTP (${base.httpHomologacao.length}) e consultas (${base.consultasBancoHomologacao.length}) colhidas na conferência de 19/10 contra o ambiente de homologação, com o usuário administrador. Nelas as ações que exigem MFA mostram a recusa; o caminho feliz com MFA foi feito por operador humano.</p>
 <h3 class="msec">Respostas HTTP</h3>${base.httpHomologacao.map((h) => `<details id="hom-${R.esc(h.id)}"><summary><b>${R.esc(h.id)}</b> · ${R.esc(h.perfil)} · <code>${R.esc(h.metodo)} ${R.esc(h.rota)}</code> · ${R.esc(h.status)}${h.codigo ? ` ${R.esc(h.codigo)}` : ''}<br><span class="small">${R.txt(h.descricao)} — ${R.dataBR(h.dataHora)}</span></summary>${R.pre(h)}</details>`).join('')}
-<h3 class="msec">Consultas ao banco de homologação</h3>${base.consultasBancoHomologacao.map((c) => `<details id="hom-${R.esc(c.id)}"><summary><b>${R.esc(c.id)}</b> · ${R.txt(c.descricao)} <span class="b ${c.invarianteOk ? 'ok' : 'bad'}">${c.invarianteOk ? 'invariante confirmada' : 'invariante violada'}</span></summary>${R.pre({ sql: c.sql, resultado: c.resultado })}</details>`).join('')}
-<h3 class="msec">Trilha de auditoria com antes e depois (${base.auditoria.length} registros)</h3><div class="tw"><table class="tt"><thead><tr><th>Quando</th><th>Ação</th><th>Entidade</th><th>Antes</th><th>Depois</th><th>Motivo</th></tr></thead><tbody>${base.auditoria.map((a) => `<tr><td>${R.esc(a.dataHoraBR)}</td><td>${R.txt(a.rotulo)}</td><td>${R.txt(a.entidade)}</td><td>${R.pre(a.antes)}</td><td>${R.pre(a.depois)}</td><td>${R.txt(a.motivo)}</td></tr>`).join('')}</tbody></table></div>
-<h3 class="msec">Segurança</h3><ul class="sec">${base.seguranca.itens.map((i) => `<li>${i}</li>`).join('')}</ul></section>`);
+<h3 class="msec">Consultas ao banco de homologação</h3>${base.consultasBancoHomologacao.map((c) => `<details id="hom-${R.esc(c.id)}"><summary><b>${R.esc(c.id)}</b> · ${R.txt(c.descricao)} <span class="b ${c.invarianteOk ? 'ok' : 'bad'}">${c.invarianteOk ? 'invariante confirmada' : 'invariante violada'}</span></summary>${R.pre({ sql: c.sql, resultado: c.resultado })}</details>`).join('')}</section>`);
+
+  parts.push(`<section id="auditoria"><h2>${rotulo('auditoria')}</h2><p class="lead">Cada linha mostra o estado antes e o estado depois. Em criação, o antes diz que o registro não existia.</p><div class="tw"><table class="tt"><thead><tr><th>Quando</th><th>Ação</th><th>Entidade</th><th>Antes</th><th>Depois</th><th>Motivo</th></tr></thead><tbody>${base.auditoria.map((a) => `<tr><td>${R.esc(a.dataHoraBR)}</td><td>${R.txt(a.rotulo)}</td><td>${R.txt(a.entidade)}</td><td>${R.pre(a.antes)}</td><td>${R.pre(a.depois)}</td><td>${R.txt(a.motivo)}</td></tr>`).join('')}</tbody></table></div></section>`);
+
+  parts.push(`<section id="seguranca"><h2>${rotulo('seguranca')}</h2><ul class="sec">${base.seguranca.itens.map((i) => `<li>${i}</li>`).join('')}</ul></section>`);
 
   // ---- 10 prints
   if (prints) {
     const unicos = prints.itens.filter((p) => !p.duplicadoDe);
     const dups = prints.itens.filter((p) => p.duplicadoDe);
     const falhas = prints.relatorio ? (prints.relatorio.match(/FALHA/g) || []).length : 0;
-    parts.push(`<section id="prints"><h2>10. Prints ao vivo (Claude Browser)</h2><p class="lead">${prints.itens.length} arquivos na pasta, ${unicos.length} únicos${dups.length ? `; repetidos (mesmo conteúdo, SHA-256 igual): ${dups.map((d) => `${R.esc(d.arquivo)} = ${R.esc(d.duplicadoDe)}`).join('; ')}` : ''}. ${prints.relatorio ? `O relatório do operador tem ${falhas} ocorrência(s) da palavra FALHA.` : 'A pasta não tem relatorio.md.'}</p>
+    parts.push(`<section id="prints"><h2>${rotulo('prints')}</h2><p class="lead">${prints.itens.length} arquivos na pasta, ${unicos.length} únicos${dups.length ? `; repetidos (mesmo conteúdo, SHA-256 igual): ${dups.map((d) => `${R.esc(d.arquivo)} = ${R.esc(d.duplicadoDe)}`).join('; ')}` : ''}. ${prints.relatorio ? `O relatório do operador tem ${falhas} ocorrência(s) da palavra FALHA.` : 'A pasta não tem relatorio.md.'}</p>
 ${prints.relatorio ? `<details id="relatorio-prints"><summary><b>Relatório do Claude Browser</b></summary>${R.dl(prints.relatorio, 'relatorio.md')}${R.pre(prints.relatorio)}</details>` : ''}
 <div class="figs">${unicos.map((p) => `<figure id="print-${R.esc(p.arquivo)}"><img alt="${R.esc(p.arquivo)}" src="data:image/jpeg;base64,${p.b64}"><figcaption><b>${R.esc(p.arquivo)}</b><br>${p.chave ? `Grupo/pendência ${R.esc(p.chave)}` : 'sem número no nome do arquivo'} · ${p.bytes.toLocaleString('pt-BR')} bytes<br><span class="small">SHA-256 <code>${R.esc(p.sha)}</code></span></figcaption></figure>`).join('')}</div></section>`);
   }
 
   // ---- 11 reconf
   const rec = base.reconferenciaAoVivo;
-  parts.push(`<section id="reconf"><h2>11. Reconferência ao vivo de 19/10 pelo navegador (texto)</h2><p class="lead">Janela: ${R.txt(rec.janela.data)} em ${R.txt(rec.janela.ambiente)}. ${R.txt(rec.janela.mfa)} Os prints dessa reconferência não estão nesta página.</p>
+  parts.push(`<section id="reconf"><h2>${rotulo('reconf')}</h2><p class="lead">Janela: ${R.txt(rec.janela.data)} em ${R.txt(rec.janela.ambiente)}. ${R.txt(rec.janela.mfa)} Os prints dessa reconferência não estão nesta página.</p>
 <h3 class="msec">Falhas encontradas e corrigidas</h3><div class="tw"><table class="tt"><thead><tr><th>Id</th><th>Passo</th><th>Falha</th><th>Causa</th><th>Correção</th><th>Commits</th><th>Reconfirmação</th></tr></thead><tbody>${rec.falhas.map((f) => `<tr><td>${R.txt(f.id)}</td><td>${R.txt(f.passo)}</td><td>${R.txt(f.falha)}</td><td>${R.txt(f.causa)}</td><td>${R.txt(f.correcao)}</td><td>${R.txt((f.commits || []).join(', '))}</td><td>${R.txt(f.reconfirmacao)}</td></tr>`).join('')}</tbody></table></div>
 <h3 class="msec">Bloqueio e como foi tratado</h3><p>${R.txt(rec.bloqueio.passo)}: ${R.txt(rec.bloqueio.motivo)} ${R.txt(rec.bloqueio.correcao)} ${R.txt(rec.bloqueio.reconfirmacao)}</p>
 <h3 class="msec">Passos</h3><div class="tw"><table class="tt"><thead><tr><th>Passo</th><th>Hora</th><th>Usuário</th><th>Ação</th><th>Esperado</th><th>Obtido</th><th>Situação</th></tr></thead><tbody>${rec.passos.map((p) => `<tr><td>${R.txt(p.passo)}</td><td>${R.txt(p.hora)}</td><td>${R.txt(p.usuario)}</td><td>${R.txt(p.acao)}</td><td>${R.txt(p.esperado)}</td><td>${R.txt(p.obtido)}</td><td>${R.txt(p.status)}</td></tr>`).join('')}</tbody></table></div>
@@ -337,14 +362,18 @@ ${prints.relatorio ? `<details id="relatorio-prints"><summary><b>Relatório do C
   // ---- 12 anexo json
   const anexo = { meta: { gerador: 'scripts/gerar-entrega-marco45.js', geradoEm: agora.toISOString(), apiCommit, frontCommit, ci: ciInfo, front: frontInfo, hashes: hashLinhas.map((h) => ({ nome: h[1], shaPublicado: h[2], shaOriginal: h[3] })), sanitizacao }, grupos: grupos.map((g) => ({ n: g.n, marco: g.marco, grupo: g.grupo, categoria: CATNOME(g.cat), testes: g.cls.map((x) => ({ arquivo: x.t.arquivo, nome: x.t.nome, categoria: CATNOME(x.c.cat), resultadoCi: x.c.r })) })) };
   function CATNOME(c) { return R.CAT[c][0]; }
-  parts.push(`<section id="anexo-json"><h2>12. Anexo JSON</h2><p class="lead">Texto legível, sem JavaScript. O botão baixa o arquivo.</p>
+  const anexoJson = JSON.stringify(anexo);
+  const anexoSha = sha256(Buffer.from(anexoJson, 'utf8'));
+  parts.push(`<section id="anexo-json"><h2>${rotulo('anexo-json')}</h2><p class="lead">O mesmo dossiê está no elemento <code>&lt;script type="application/json" id="evidencias-marco45"&gt;</code> e no bloco abaixo. SHA-256 desse JSON: <code>${anexoSha}</code>. O botão baixa o arquivo.</p>
 <details open><summary><b>Resultado por grupo e metas</b></summary>${R.dl(JSON.stringify(anexo, null, 2), 'evidencias-marco4-5.json', 'Baixar evidencias-marco4-5.json', 'application/json')}${R.pre(anexo, 'json-pre')}</details>
 <h3 class="msec">Uma linha da matriz por bloco</h3>${matriz.map((r) => `<details><summary>${R.esc(r.id)} · ${R.esc(r.secao)} · ${R.esc(R.CAT[r.cat][0])}</summary>${R.pre({ ...r, cls: undefined, cat: undefined, categoria: R.CAT[r.cat][0], testes: r.cls.map((x) => ({ arquivo: x.t.arquivo, nome: x.t.nome, categoria: R.CAT[x.c.cat][0], resultadoCi: x.c.r })) }, `json-matriz-${r.id}`)}</details>`).join('')}</section>`);
 
   // ---- 13/14
-  parts.push(`<section id="conferir"><h2>13. Como conferir</h2><ol class="steps"><li>Confira o commit e o run no cabeçalho; baixe o artifact do run (<code>gh run download</code>) e compare o SHA-256 do original com a seção 2.</li><li>Rode <code>scripts/reproduzir-conferencia.sh</code> (seção 2) e compare a lista de testes aprovados com a do CI.</li><li>Procure um teste pelo nome exato nas tabelas dos grupos e no log (seção 6).</li><li>Para qualquer chamada HTTP, abra o bloco da seção 7 e leia o corpo bruto da resposta.</li><li>Para as regras sem rota sem MFA, leia o passo de serviço e o teste citado.</li></ol></section>
-<section id="fora"><h2>14. Limites desta execução</h2><ul class="sec"><li>Banco, assinatura eletrônica e provedores externos rodam em modo simulado (sandbox): nenhum dinheiro real e nenhum envio jurídico real.</li><li>Ações com MFA humano não são exercitadas por HTTP nesta execução; aparecem como recusa (MFA não habilitado nos usuários fictícios) e a regra é provada por teste de serviço.</li><li>As conferências visuais de tela são feitas pelo Claude Browser com operador humano (pasta de prints); sem a pasta de prints, a página mostra a evidência HTTP e SQL e não tem a seção de prints.</li><li>Esta página não declara aceite: ela mostra o que o log do commit indicado prova.</li></ul></section>
-<footer class="sign">Gerada por scripts/gerar-entrega-marco45.js em ${R.dataBR(agora)}.</footer></div></body></html>`);
+  parts.push(`<section id="conferir"><h2>${rotulo('conferir')}</h2><ol class="steps"><li>Confira o commit e o run no cabeçalho; baixe o artifact do run (<code>gh run download</code>) e compare o SHA-256 do original com a seção 2.</li><li>Rode <code>scripts/reproduzir-conferencia.sh</code> (seção 2) e compare a lista de testes aprovados com a do CI.</li><li>Procure um teste pelo nome exato nas tabelas dos grupos e no log (seção 6).</li><li>Para qualquer chamada HTTP, abra o bloco da seção 7 e leia o corpo bruto da resposta.</li><li>Para as regras sem rota sem MFA, leia o passo de serviço e o teste citado.</li><li>O JSON de máquina está em <code>evidencias-marco45</code>. O SHA-256 está no texto da seção do anexo.</li></ol></section>
+<section id="fora"><h2>${rotulo('fora')}</h2><ul class="sec"><li>Banco, assinatura eletrônica e provedores externos rodam em modo simulado (sandbox): nenhum dinheiro real e nenhum envio jurídico real.</li><li>Ações com MFA humano não são exercitadas por HTTP nesta execução; aparecem como recusa (MFA não habilitado nos usuários fictícios) e a regra é provada por teste de serviço.</li><li>As conferências visuais de tela são feitas pelo Claude Browser com operador humano (pasta de prints); sem a pasta de prints, a página mostra a evidência HTTP e SQL e não tem a seção de prints.</li><li>A captura HTTP e SQL do banco descartável pode ser de um commit anterior ao do CI. A data e o commit estão no lead da seção 7. A classificação aprovado/falhou/bloqueado/não implementado vem só do log do CI.</li><li>Esta página mostra o que o log do commit indicado prova. O aceite do marco continua dependendo da reconferência ao vivo com os prints desta versão.</li></ul></section>
+<footer class="sign">Gerada por scripts/gerar-entrega-marco45.js em ${R.dataBR(agora)}.</footer></div>
+<script type="application/json" id="evidencias-marco45">${anexoJson}</script>
+</body></html>`);
   return { html: parts.join('\n'), porCat, apiCommit, ciInfo };
 }
 
