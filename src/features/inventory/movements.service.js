@@ -213,6 +213,13 @@ async function assertMovementSource({ groupId, companyId, inventoryItemId, movem
     throw AppError.badRequest(`Origem do movimento desconhecida ("${sourceType}").`, 'INVENTORY_MOVEMENT_SOURCE_INVALID');
   }
 
+  if (movementType === 'LOSS' && (type !== 'LOSS_CASE' || !sourceId)) {
+    throw AppError.badRequest(
+      'Um movimento de perda só pode ser registrado a partir de um caso de perda já aprovado — abra o caso em "Perdas & Extravios" primeiro.',
+      'INVENTORY_MOVEMENT_LOSS_REQUIRES_LOSS_CASE'
+    );
+  }
+
   // Validação da matriz de combinações válidas entre movementType e sourceType
   if (movementType) {
     const allowed = VALID_SOURCES_BY_MOVEMENT_TYPE[movementType] || ['MANUAL'];
