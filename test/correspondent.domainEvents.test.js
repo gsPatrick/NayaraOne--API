@@ -121,7 +121,7 @@ test('CORRESPONDENT-EVT-04: submissão com sucesso emite financing.submitted', a
 
     const submission = await submissionsService.submitFinancingCase(
       financingCase.id,
-      { amount: 200000 },
+      { consent: true, amount: 200000 },
       tenant.userId,
       tenant.groupId,
       tenant.companyId,
@@ -179,7 +179,7 @@ async function createSubmittedCase(extra = {}) {
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>
-    submissionsService.submitFinancingCase(financingCaseId, { amount: 200000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction)
+    submissionsService.submitFinancingCase(financingCaseId, { consent: true, amount: 200000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction)
   );
   assert.equal(submission.status, 'SUBMITTED', 'pré-condição do teste: submissão precisa ter sucedido');
 

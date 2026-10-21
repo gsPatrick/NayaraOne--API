@@ -228,7 +228,7 @@ jobs:
             echo "# usuário do banco na suíte: nayara_ci_app (NOSUPERUSER NOBYPASSRLS)"
             echo "#"
           } > test-results.log
-          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js 2>&1 | tee -a test-results.log
+          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js test/marco8/*.test.js 2>&1 | tee -a test-results.log
 
       # Conferência Nayara 19/10/2026: o log de teste não pode carregar segredo. A API agora
       # redige Authorization/Cookie/tokens nos logs de requisição; este passo FALHA o build se

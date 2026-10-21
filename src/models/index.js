@@ -158,6 +158,8 @@ const modelDefiners = {
   ExternalCaseRouting: require('./ExternalCaseRouting'),
   Appraisal: require('./Appraisal'),
   CommissionEntitlement: require('./CommissionEntitlement'),
+  ProviderAccount: require('./ProviderAccount'),
+  IntegrationError: require('./IntegrationError'),
   InvoiceRequest: require('./InvoiceRequest'),
   InvoiceEvent: require('./InvoiceEvent'),
   FiscalObligation: require('./FiscalObligation'),

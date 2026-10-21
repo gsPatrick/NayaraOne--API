@@ -125,6 +125,13 @@ async function requestSubmission(financingCaseId, payload, actorUserId, groupId,
 
   await assertChecklistComplete(financingCaseId, groupId, companyId, transaction);
 
+  if (payload?.consent !== true) {
+    throw AppError.unprocessable(
+      'Envio exige autorização/consentimento do cliente.',
+      'SUBMISSION_CONSENT_REQUIRED'
+    );
+  }
+
   const amount = await resolveSubmissionAmount(financingCaseId, payload, groupId, companyId, transaction);
   await assertEligible(financingCase, { amount }, groupId, companyId, actorUserId, transaction);
 
@@ -143,7 +150,7 @@ async function requestSubmission(financingCaseId, payload, actorUserId, groupId,
     throw AppError.badRequest('O provider configurado para este caso não aceita submissão automática.', 'SUBMISSION_NOT_SUPPORTED');
   }
 
-  const requestSnapshot = { financingCaseId, amount, idempotencyKey };
+  const requestSnapshot = { financingCaseId, amount, idempotencyKey, consent: true };
   const snapshotHash = hashSnapshot(requestSnapshot);
 
   // ACHADO REAL (auditoria pós-DoD, Frente Idempotência/Concorrência, teste
@@ -204,6 +211,7 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
   }
 
   try {
+    const beforeStatus = financingCase.status;
     const result = await withTimeout(adapter.submitCase(submission.requestSnapshot), SUBMIT_TIMEOUT_MS);
     submission.status = 'SUBMITTED';
     submission.externalCaseId = result.externalId;
@@ -238,6 +246,8 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
         action: 'correspondent.submission.submitted',
         entityType: 'FinancingCase',
         entityId: financingCaseId,
+        beforeJson: { status: beforeStatus },
+        afterJson: { status: financingCase.status, externalCaseId: result.externalId },
         reason: `Caso submetido ao provider "${financingCase.providerCode}" (externalCaseId "${result.externalId}") pelo worker assíncrono.`,
       },
       transaction

@@ -105,7 +105,7 @@ test('CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o ad
   await withCommitted((t) => completeChecklist(financingCase.id, t));
 
   const submission = await withCommitted((t) =>
-    submissionsService.requestSubmission(financingCase.id, { amount: 150000 }, tenant.userId, tenant.groupId, tenant.companyId, t)
+    submissionsService.requestSubmission(financingCase.id, { consent: true, amount: 150000 }, tenant.userId, tenant.groupId, tenant.companyId, t)
   );
   assert.equal(submission.status, 'PENDING');
   assert.equal(submission.externalCaseId, null);
@@ -125,7 +125,7 @@ test('CORRESPONDENT-WORKER-02: rodar o job 2x não processa a mesma submissão P
   const financingCase = await withCommitted((t) => createReadyCase(t));
   await withCommitted((t) => completeChecklist(financingCase.id, t));
   const submission = await withCommitted((t) =>
-    submissionsService.requestSubmission(financingCase.id, { amount: 150000 }, tenant.userId, tenant.groupId, tenant.companyId, t)
+    submissionsService.requestSubmission(financingCase.id, { consent: true, amount: 150000 }, tenant.userId, tenant.groupId, tenant.companyId, t)
   );
 
   const group = { id: tenant.groupId };

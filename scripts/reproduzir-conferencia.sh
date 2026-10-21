@@ -18,7 +18,7 @@
 #   bash scripts/reproduzir-conferencia.sh   # gera ./test-results.log
 # O script roda, NESTA ORDEM, o mesmo que o job "test" do workflow: lint, syntax-check, scanner de
 # hard-code, SAST, security scan (npm audit), migrations, seeds, role de menor privilégio e a
-# suíte com o MESMO comando do CI:  node --test --test-reporter=spec test/*.test.js
+# suíte com o MESMO comando do CI:  node --test --test-reporter=spec test/*.test.js test/marco8/*.test.js
 # (sem --test-concurrency=1; para rodar em série use REPRO_SERIAL=1). Node: o CI usa 20; com outra
 # major o script avisa no cabeçalho do log (ou aborta com REPRO_REQUIRE_NODE20=1).
 # Logs do CI (artifact test-results-<commit>): gh run download <RUN_ID> -R gsPatrick/NayaraOne--API
@@ -54,7 +54,7 @@ if [ -z "${REPRO_SKIP_CHECKS:-}" ]; then
   echo "[reproduzir] SAST…";           node scripts/sastScan.js >/dev/null
   echo "[reproduzir] security scan…";  node scripts/securityScan.js >/dev/null || echo "[reproduzir] security scan sem rede/falhou (no CI roda online)"
 fi
-PATTERN="${2:-test/*.test.js}"
+PATTERN="${2:-test/*.test.js test/marco8/*.test.js}"
 PGP="${REPRO_PG_PORT:-55432}"
 DB=nayara_one_ci
 SUPER=nayara_ci

@@ -95,7 +95,7 @@ async function createSubmittedCase() {
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>
-    submissionsService.submitFinancingCase(financingCaseId, { amount: 200000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction)
+    submissionsService.submitFinancingCase(financingCaseId, { consent: true, amount: 200000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction)
   );
   assert.equal(submission.status, 'SUBMITTED', 'pré-condição do teste: submissão precisa ter sucedido');
 

@@ -107,6 +107,13 @@ async function createFinancingCase(payload, actorUserId, transaction) {
       action: 'correspondent.financing_case.created',
       entityType: 'FinancingCase',
       entityId: financingCase.id,
+      beforeJson: { registro: 'Não existia (registro criado nesta ação)' },
+      afterJson: {
+        id: financingCase.id,
+        status: financingCase.status,
+        providerCode: financingCase.providerCode,
+        purpose: financingCase.purpose,
+      },
       reason: `Caso de financiamento criado com ${applicants.length} proponente(s), provider "${resolvedProviderCode}".`,
     },
     transaction

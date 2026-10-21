@@ -85,7 +85,7 @@ test('CORRESPONDENT-SUB-01: submete com sucesso (sandbox) quando checklist compl
     await completeChecklist(financingCase.id, transaction);
     await simulationsService.createSimulation(financingCase.id, { amount: 200000, termMonths: 360 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
-    const submission = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const submission = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     assert.equal(submission.status, 'SUBMITTED');
     assert.ok(submission.externalCaseId);
@@ -121,7 +121,7 @@ test('CORRESPONDENT-SUB-03: bloqueia submissão de case inelegível (valor acima
     await completeChecklist(financingCase.id, transaction);
 
     await assert.rejects(
-      () => submissionsService.submitFinancingCase(financingCase.id, { amount: 99999999 }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      () => submissionsService.submitFinancingCase(financingCase.id, { consent: true, amount: 99999999 }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => err.code === 'COR_ELIGIBILITY_AMOUNT_EXCEEDS_LIMIT'
     );
   });
@@ -140,8 +140,8 @@ test('CORRESPONDENT-SUB-04: idempotência — 2 submissões com a mesma key reto
       return original.call(this, req);
     };
     try {
-      const first = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-      const second = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+      const first = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+      const second = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
       assert.equal(first.id, second.id, 'segunda chamada com a mesma key deve devolver a submission já existente, nunca criar outra');
       assert.equal(callCount, 1, 'o adapter nunca pode ser chamado de novo pra uma key já existente');
     } finally {
@@ -161,7 +161,7 @@ test('CORRESPONDENT-SUB-05: adapter que lança erro (não-timeout) vira status U
       throw new Error('Falha simulada de rede do provider.');
     };
     try {
-      const submission = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+      const submission = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
       assert.equal(submission.status, 'UNKNOWN');
       assert.ok(submission.failureReason.includes('Falha simulada'));
 
@@ -206,7 +206,7 @@ test('CORRESPONDENT-SUB-07: acknowledgeUnknownSubmission exige status UNKNOWN', 
     const financingCase = await createCase(transaction);
     await completeChecklist(financingCase.id, transaction);
     await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 120 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-    const submission = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const submission = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.equal(submission.status, 'SUBMITTED');
 
     await assert.rejects(
@@ -221,7 +221,7 @@ test('CORRESPONDENT-SUB-08: listSubmissions retorna mais recente primeiro', asyn
     const financingCase = await createCase(transaction);
     await completeChecklist(financingCase.id, transaction);
     await simulationsService.createSimulation(financingCase.id, { amount: 50000, termMonths: 60 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-    const first = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const first = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const list = await submissionsService.listSubmissions(financingCase.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(list.length, 1);
@@ -235,7 +235,7 @@ test('CORRESPONDENT-SUB-09: outra empresa não enxerga submission via SELECT dir
     const financingCase = await createCase(transaction);
     await completeChecklist(financingCase.id, transaction);
     await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 120 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-    const submission = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const submission = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     await sequelize.query('SET LOCAL app.company_id = :otherCompanyId', { replacements: { otherCompanyId }, transaction });
 
@@ -252,7 +252,7 @@ test('CORRESPONDENT-SUB-10: evento financing.submission_requested é emitido (ou
     const financingCase = await createCase(transaction);
     await completeChecklist(financingCase.id, transaction);
     await simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 120 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-    const submission = await submissionsService.submitFinancingCase(financingCase.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const submission = await submissionsService.submitFinancingCase(financingCase.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
     const [rows] = await sequelize.query(
       `SELECT event_type FROM integration.outbox_events WHERE event_type = 'financing.submission_requested' AND idempotency_key = :key`,
@@ -294,8 +294,8 @@ test('CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações 
     });
 
     const resultados = await Promise.allSettled([
-      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t)),
-      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t)),
+      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, t)),
+      withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, t)),
     ]);
 
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');
@@ -318,7 +318,7 @@ test('CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações 
 
     // Simula o retry do cliente (relevante só se houve rejeição): numa transação NOVA, o findOne
     // de idempotência no topo da função já encontra a submission vencedora e devolve ela.
-    const retry = await withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, {}, tenant.userId, tenant.groupId, tenant.companyId, t));
+    const retry = await withCommitted((t) => submissionsService.submitFinancingCase(financingCaseId, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, t));
     assert.equal(retry.id, submissionId, 'um retry posterior deve encontrar e devolver a MESMA submission já criada, nunca duplicar');
 
     await withCommitted(async (t) => {
