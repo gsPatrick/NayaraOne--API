@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.FINANCE_RECEIPT_HTTP_TEST_PORT || '21652';
-const skip = Boolean(process.env.DISPOSABLE_DB || process.env.CI) ? false : 'requer banco descartável (scripts/withDisposableDb.js ou o CI)';
+const skip = (process.env.DISPOSABLE_DB || process.env.CI) ? false : 'requer banco descartável (scripts/withDisposableDb.js ou o CI)';
 
 let ctx = {};
 

@@ -17,7 +17,7 @@ const bcrypt = require('bcryptjs');
 
 process.env.PORT = process.env.AUTH_SWITCH_HTTP_TEST_PORT || '21640';
 
-const skip = Boolean(process.env.DISPOSABLE_DB || process.env.CI) ? false : 'requer banco descartável (scripts/withDisposableDb.js ou o CI)';
+const skip = (process.env.DISPOSABLE_DB || process.env.CI) ? false : 'requer banco descartável (scripts/withDisposableDb.js ou o CI)';
 
 let ctx = {};
 
