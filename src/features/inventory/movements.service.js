@@ -190,9 +190,9 @@ async function assertAdjustmentOrigin({ groupId, companyId, inventoryItemId, mov
 //   - COUNT, LOSS_CASE e ADJUSTMENT_PROPOSAL continuam validados pelos blocos próprios abaixo.
 const KNOWN_SOURCE_TYPES = ['MANUAL', 'RECEIPT', 'REQUISITION', 'TOOL_LOAN', 'ADJUSTMENT', 'COUNT', 'LOSS_CASE', 'ADJUSTMENT_PROPOSAL', 'PURCHASE_ORDER_CANCEL'];
 const VALID_SOURCES_BY_MOVEMENT_TYPE = {
-  IN: ['RECEIPT', 'MANUAL', 'PURCHASE_ORDER_CANCEL'],
-  OUT: ['REQUISITION', 'MANUAL'],
-  RETURN: ['TOOL_LOAN', 'MANUAL'],
+  IN: ['RECEIPT', 'REQUISITION', 'MANUAL', 'PURCHASE_ORDER_CANCEL'],
+  OUT: ['REQUISITION', 'PURCHASE_ORDER_CANCEL', 'MANUAL'],
+  RETURN: ['TOOL_LOAN', 'REQUISITION', 'MANUAL'],
   TRANSFER: ['MANUAL'],
   ADJUSTMENT: ['COUNT', 'ADJUSTMENT_PROPOSAL', 'MANUAL'],
   LOSS: ['LOSS_CASE'],
@@ -454,7 +454,7 @@ async function recordMovement(payload, actor, transaction) {
   // (requisição, devolução de ferramenta etc.) já chegam aqui com `sourceType` preenchido e
   // controlado pelo próprio fluxo de origem — essa exigência vale só pra saída manual genuína
   // (sem sourceType, ou MANUAL), que é onde a baixa sem controle de fato acontecia.
-  if (movementType === 'OUT' && !responsiblePersonId) {
+  if (movementType === 'OUT' && !responsiblePersonId && sourceType !== 'PURCHASE_ORDER_CANCEL') {
     throw AppError.badRequest('Saída de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
   }
   // Revisão Marco 7 (20/10/2026), M7-F03 — origem e responsável validados no servidor.
@@ -575,10 +575,15 @@ async function recordMovement(payload, actor, transaction) {
     const stg = await ProjectStage.findOne({ where: { id: stageId, projectId: resolvedProjectId }, transaction });
     if (!stg) throw AppError.badRequest('A etapa informada não pertence à obra deste movimento.', 'INVENTORY_MOVEMENT_STAGE_INVALID');
   }
-  if (movementType === 'OUT' && resolvedProjectId) {
+  if (movementType === 'OUT' && resolvedProjectId && sourceType !== 'PURCHASE_ORDER_CANCEL') {
     if (!stageId) {
       throw AppError.badRequest('Saída de material para a obra exige a etapa ("stageId") — informe em qual etapa o material foi usado.', 'INVENTORY_MOVEMENT_STAGE_REQUIRED');
     }
+    const stage = await ProjectStage.findOne({ where: { id: stageId, projectId: resolvedProjectId }, transaction });
+    if (!stage) {
+      throw AppError.badRequest('A etapa informada não pertence à obra deste movimento.', 'INVENTORY_MOVEMENT_STAGE_INVALID');
+    }
+  } else if (movementType === 'OUT' && resolvedProjectId && stageId) {
     const stage = await ProjectStage.findOne({ where: { id: stageId, projectId: resolvedProjectId }, transaction });
     if (!stage) {
       throw AppError.badRequest('A etapa informada não pertence à obra deste movimento.', 'INVENTORY_MOVEMENT_STAGE_INVALID');

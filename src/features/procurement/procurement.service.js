@@ -17,7 +17,7 @@ const {
   SupplierQualification,
   FinancialEntry,
 } = require('../../models');
-const { InventoryStockBalance, Person, User, InventoryItem, File } = require('../../models');
+const { InventoryStockBalance, Person, User, InventoryItem, File, InventoryLocation, ProjectStage } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
@@ -1389,7 +1389,28 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   // livre, sem controle físico), nada é estornado no estoque, como já era o comportamento.
   const reversedStockMovementIds = [];
   const confirmedReceiptsForStock = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, status: 'CONFIRMED' }, transaction });
+
+  // Resolução do responsável pelo cancelamento para rastreabilidade
+  let cancelResponsiblePersonId = payload?.responsiblePersonId || null;
+  if (!cancelResponsiblePersonId && actor?.userId) {
+    const p = (await Person.findOne({ where: { id: actor.userId, groupId: order.groupId, companyId: order.companyId }, attributes: ['id'], transaction }))
+      || (await Person.findOne({ where: { groupId: order.groupId, companyId: order.companyId }, attributes: ['id'], transaction }));
+    if (p) cancelResponsiblePersonId = p.id;
+  }
+  if (!cancelResponsiblePersonId) cancelResponsiblePersonId = order.supplierPersonId || null;
+
   for (const goodsReceipt of confirmedReceiptsForStock) {
+    let cancelStageId = payload?.stageId || null;
+    let cancelProjectId = null;
+    const destLoc = await InventoryLocation.findOne({ where: { id: goodsReceipt.destinationLocationId, groupId: order.groupId, companyId: order.companyId }, transaction });
+    if (destLoc && destLoc.locationType === 'PROJECT_SITE' && destLoc.projectId) {
+      cancelProjectId = destLoc.projectId;
+      if (!cancelStageId) {
+        const stg = await ProjectStage.findOne({ where: { projectId: destLoc.projectId }, order: [['orderIndex', 'ASC'], ['created_at', 'ASC']], transaction });
+        if (stg) cancelStageId = stg.id;
+      }
+    }
+
     const grItems = await GoodsReceiptItem.findAll({ where: { goodsReceiptId: goodsReceipt.id }, transaction });
     for (const grItem of grItems) {
       const poItem = items.find((i) => i.id === grItem.purchaseOrderItemId);
@@ -1411,6 +1432,9 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
           movementType: 'OUT',
           quantity: enteredQuantity,
           sourceLocationId: goodsReceipt.destinationLocationId,
+          projectId: cancelProjectId || undefined,
+          stageId: cancelStageId || undefined,
+          responsiblePersonId: cancelResponsiblePersonId || undefined,
           sourceType: 'PURCHASE_ORDER_CANCEL',
           sourceId: order.id,
           reason: `Estorno de estoque — pedido de compra ${order.id} cancelado após recebimento confirmado (${goodsReceipt.id}).`,

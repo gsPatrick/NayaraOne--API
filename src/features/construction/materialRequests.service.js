@@ -307,6 +307,7 @@ async function returnMaterialRequest(id, groupId, companyId, payload, actorUserI
           destinationLocationId,
           sourceType: 'REQUISITION',
           sourceId: materialRequest.id,
+          unitCost: returnCost != null ? returnCost : undefined,
           idempotencyKey: `material_request.return:${materialRequest.id}`,
           reason: reason || `Devolução de material da requisição "${materialRequest.description}" (obra ${materialRequest.projectId}) — condição: ${conditionCode}.`,
         },

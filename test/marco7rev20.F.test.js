@@ -33,6 +33,8 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const settingsService = require('../src/features/settings/settings.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
+const materialRequestsService = require('../src/features/construction/materialRequests.service');
+const procurementService = require('../src/features/procurement/procurement.service');
 const {
   Person,
   InventoryMovement,
@@ -41,7 +43,13 @@ const {
   InventoryToolLoan,
   Asset,
   InsuranceClaim,
+  MaterialRequest,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  GoodsReceipt,
+  GoodsReceiptItem,
   FinancialEntry,
+  User,
 } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -512,3 +520,365 @@ test('Seguros Webhook HTTP: indenização acima do teto do sinistro é limitada 
   assert.equal(freshClaim.status, 'SETTLED');
   assert.equal(Number(freshClaim.settledAmount), 500, 'Valor deve ser limitado ao teto do sinistro de R$ 500');
 });
+
+// =============================================================================================
+// REGRESSÕES CORRIGIDAS (R1, R2, R3) — FLUXOS LEGÍTIMOS DE ESTOQUE, OBRAS E COMPRAS
+// =============================================================================================
+
+test('R1 serviço: entrega de requisição gera par OUT/REQUISITION no almoxarifado e IN/REQUISITION no canteiro', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const ob = await obra(t);
+    const resp = await person(t);
+    // Cria um segundo USUÁRIO real para aprovar (segregação: quem cria não pode aprovar)
+    // audit_log.user_id tem FK para a tabela users — precisa ser User, não Person
+    const approverUser = await User.create(
+      { name: `Aprovador R1 ${uniqueSuffix()}`, email: `r1-approver-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' },
+      { transaction: t }
+    );
+    await stockIn(t, it.id, wh.id, 20);
+
+    const req = await requisitionsService.createRequisition(
+      withTenant({
+        warehouseLocationId: wh.id,
+        projectLocationId: ob.site.id,
+        projectId: ob.project.id,
+        stageId: ob.stage.id,
+        items: [{ inventoryItemId: it.id, quantity: 5 }],
+      }),
+      tenant.userId,
+      t
+    );
+    // decideRequisition(id, decision, actorUserId, groupId, companyId, transaction)
+    // Usa um User real diferente de tenant.userId para segregação (quem criou não pode aprovar)
+    await requisitionsService.decideRequisition(req.id, 'APPROVED', approverUser.id, tenant.groupId, tenant.companyId, t);
+    // issueRequisition(id, actor, groupId, companyId, transaction, payload)
+    await requisitionsService.issueRequisition(req.id, admin(), tenant.groupId, tenant.companyId, t, { responsiblePersonId: resp.id });
+
+    // Valida os dois movimentos gravados com sourceType REQUISITION
+    const mvs = await InventoryMovement.findAll({
+      where: { sourceId: req.id, sourceType: 'REQUISITION' },
+      order: [['movementType', 'DESC']],
+      transaction: t,
+    });
+    assert.equal(mvs.length, 2);
+    const outMv = mvs.find((m) => m.movementType === 'OUT');
+    const inMv = mvs.find((m) => m.movementType === 'IN');
+    assert.ok(outMv, 'Deve existir movimento OUT de requisição');
+    assert.ok(inMv, 'Deve existir movimento IN de requisição');
+    assert.equal(outMv.sourceLocationId, wh.id);
+    assert.equal(inMv.destinationLocationId, ob.site.id);
+    assert.equal(Number(outMv.quantity), 5);
+    assert.equal(Number(inMv.quantity), 5);
+
+    // Valida saldos
+    const balWh = await InventoryStockBalance.findOne({ where: { inventoryItemId: it.id, locationId: wh.id }, transaction: t });
+    const balSite = await InventoryStockBalance.findOne({ where: { inventoryItemId: it.id, locationId: ob.site.id }, transaction: t });
+    assert.equal(Number(balWh.quantityOnHand), 15);
+    assert.equal(Number(balSite.quantityOnHand), 5);
+  });
+});
+
+test('R2 serviço: devolução de material da obra via RETURN/REQUISITION (REUSABLE e DAMAGED com custo reduzido)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const ob = await obra(t);
+    const resp = await person(t);
+    await stockIn(t, it.id, wh.id, 20);
+
+    // Simula saída para obra com custo unitário R$ 10
+    it.averageCost = 10;
+    await it.save({ transaction: t });
+
+    // Criar DUAS requisições de material distintas para evitar colisão de idempotencyKey
+    // (returnMaterialRequest gera idempotencyKey: `material_request.return:${id}`)
+    const mrReusable = await MaterialRequest.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        projectId: ob.project.id,
+        stageId: ob.stage.id,
+        description: 'Material de teste R2 REUSABLE',
+        quantity: 6,
+        unit: 'UN',
+        status: 'RECEIVED',
+        requestedByUserId: tenant.userId,
+      },
+      { transaction: t }
+    );
+    const mrDamaged = await MaterialRequest.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        projectId: ob.project.id,
+        stageId: ob.stage.id,
+        description: 'Material de teste R2 DAMAGED',
+        quantity: 6,
+        unit: 'UN',
+        status: 'RECEIVED',
+        requestedByUserId: tenant.userId,
+      },
+      { transaction: t }
+    );
+
+    // Registra OUT original para cada requisição
+    await movementsService.recordMovement(
+      withTenant({
+        inventoryItemId: it.id,
+        movementType: 'OUT',
+        quantity: 6,
+        sourceLocationId: wh.id,
+        projectId: ob.project.id,
+        stageId: ob.stage.id,
+        sourceType: 'REQUISITION',
+        sourceId: mrReusable.id,
+        responsiblePersonId: resp.id,
+        unitCost: 10,
+      }),
+      admin(),
+      t
+    );
+    await movementsService.recordMovement(
+      withTenant({
+        inventoryItemId: it.id,
+        movementType: 'OUT',
+        quantity: 6,
+        sourceLocationId: wh.id,
+        projectId: ob.project.id,
+        stageId: ob.stage.id,
+        sourceType: 'REQUISITION',
+        sourceId: mrDamaged.id,
+        responsiblePersonId: resp.id,
+        unitCost: 10,
+      }),
+      admin(),
+      t
+    );
+
+    // 1. Devolução REUSABLE (1 unidade) -> retorna pelo custo histórico total (R$ 10)
+    await materialRequestsService.returnMaterialRequest(
+      mrReusable.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: it.id, destinationLocationId: wh.id, quantity: 1, conditionCode: 'REUSABLE' },
+      tenant.userId,
+      t
+    );
+    const mvReusable = await InventoryMovement.findOne({
+      where: { sourceType: 'REQUISITION', sourceId: mrReusable.id, movementType: 'RETURN' },
+      order: [['created_at', 'DESC']],
+      transaction: t,
+    });
+    assert.ok(mvReusable);
+    assert.equal(Number(mvReusable.quantity), 1);
+    assert.equal(Number(mvReusable.unitCost), 10);
+
+    // 2. Devolução DAMAGED (2 unidades a custo histórico R$ 10 com retorno reduzido R$ 4)
+    await materialRequestsService.returnMaterialRequest(
+      mrDamaged.id,
+      tenant.groupId,
+      tenant.companyId,
+      { inventoryItemId: it.id, destinationLocationId: wh.id, quantity: 2, conditionCode: 'DAMAGED', returnCost: 4 },
+      tenant.userId,
+      t
+    );
+    const mvDamaged = await InventoryMovement.findOne({
+      where: { sourceType: 'REQUISITION', sourceId: mrDamaged.id, movementType: 'RETURN' },
+      order: [['created_at', 'DESC']],
+      transaction: t,
+    });
+    assert.ok(mvDamaged);
+    assert.equal(Number(mvDamaged.quantity), 2);
+    assert.equal(Number(mvDamaged.unitCost), 4);
+    assert.equal(Number(mvDamaged.totalCost), 8);
+  });
+});
+
+test('R3 serviço: cancelamento de pedido de compra recebido gera estorno OUT/PURCHASE_ORDER_CANCEL e estorna payable', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const ob = await obra(t);
+    const supplier = await person(t);
+    const resp = await person(t);
+
+    // Cria a cadeia real de FK: PurchaseRequest → Quotation → SupplierOffer → PurchaseOrder
+    const { PurchaseRequest: PurchaseRequestModel, Quotation, SupplierOffer } = require('../src/models');
+    const purchaseRequest1 = await PurchaseRequestModel.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, status: 'REQUESTED', requestedByUserId: tenant.userId },
+      { transaction: t }
+    );
+    const quotation1 = await Quotation.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: purchaseRequest1.id, status: 'OPEN' },
+      { transaction: t }
+    );
+    const supplierOffer1 = await SupplierOffer.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, quotationId: quotation1.id, supplierPersonId: supplier.id, status: 'RECEIVED' },
+      { transaction: t }
+    );
+
+    // 1. Cancelamento com recebimento em almoxarifado
+    const poWh = await PurchaseOrder.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseRequestId: purchaseRequest1.id,
+        supplierOfferId: supplierOffer1.id,
+        supplierPersonId: supplier.id,
+        status: 'RECEIVED',
+        committedAmount: 500,
+      },
+      { transaction: t }
+    );
+    const poItemWh = await PurchaseOrderItem.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseOrderId: poWh.id,
+        inventoryItemId: it.id,
+        description: 'Item PO WH',
+        quantity: 10,
+        unitPrice: 50,
+        receivedQuantity: 10,
+      },
+      { transaction: t }
+    );
+    const payableWh = await FinancialEntry.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        entryType: 'DEBIT',
+        nature: 'PAYABLE',
+        amount: 500,
+        description: `Payable PO WH ${poWh.id}`,
+        status: 'OPEN',
+      },
+      { transaction: t }
+    );
+    const grWh = await GoodsReceipt.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseOrderId: poWh.id,
+        supplierPersonId: supplier.id,
+        destinationLocationId: wh.id,
+        financialEntryId: payableWh.id,
+        status: 'CONFIRMED',
+      },
+      { transaction: t }
+    );
+    await GoodsReceiptItem.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        goodsReceiptId: grWh.id,
+        purchaseOrderItemId: poItemWh.id,
+        receivedQuantity: 10,
+        acceptedQuantity: 10,
+      },
+      { transaction: t }
+    );
+
+    // Entra 10 unidades no saldo
+    await stockIn(t, it.id, wh.id, 10);
+    const balBeforeCancel = await InventoryStockBalance.findOne({ where: { inventoryItemId: it.id, locationId: wh.id }, transaction: t });
+    assert.equal(Number(balBeforeCancel.quantityOnHand), 10);
+
+    // Cancelar o pedido de compra
+    await procurementService.cancelPurchaseOrder(poWh.id, tenant.groupId, tenant.companyId, { responsiblePersonId: resp.id }, admin(), t);
+
+    // Verifica que o movimento OUT de cancelamento foi registrado
+    const cancelMvWh = await InventoryMovement.findOne({
+      where: { sourceId: poWh.id, sourceType: 'PURCHASE_ORDER_CANCEL', movementType: 'OUT' },
+      transaction: t,
+    });
+    assert.ok(cancelMvWh, 'Deve registrar OUT com PURCHASE_ORDER_CANCEL');
+    assert.equal(Number(cancelMvWh.quantity), 10);
+    assert.equal(cancelMvWh.responsiblePersonId, resp.id);
+
+    // Saldo físico revertido
+    const balAfterCancel = await InventoryStockBalance.findOne({ where: { inventoryItemId: it.id, locationId: wh.id }, transaction: t });
+    assert.equal(Number(balAfterCancel.quantityOnHand), 0);
+
+    // Payable estornado
+    await payableWh.reload({ transaction: t });
+    assert.equal(payableWh.status, 'REVERSED');
+
+    // 2. Cancelamento com recebimento em canteiro de obra (com etapa)
+    const purchaseRequest2 = await PurchaseRequestModel.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, status: 'REQUESTED', requestedByUserId: tenant.userId },
+      { transaction: t }
+    );
+    const quotation2 = await Quotation.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: purchaseRequest2.id, status: 'OPEN' },
+      { transaction: t }
+    );
+    const supplierOffer2 = await SupplierOffer.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, quotationId: quotation2.id, supplierPersonId: supplier.id, status: 'RECEIVED' },
+      { transaction: t }
+    );
+
+    const poSite = await PurchaseOrder.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseRequestId: purchaseRequest2.id,
+        supplierOfferId: supplierOffer2.id,
+        supplierPersonId: supplier.id,
+        status: 'RECEIVED',
+        committedAmount: 200,
+      },
+      { transaction: t }
+    );
+    const poItemSite = await PurchaseOrderItem.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseOrderId: poSite.id,
+        inventoryItemId: it.id,
+        description: 'Item PO Site',
+        quantity: 4,
+        unitPrice: 50,
+        receivedQuantity: 4,
+      },
+      { transaction: t }
+    );
+    const grSite = await GoodsReceipt.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        purchaseOrderId: poSite.id,
+        supplierPersonId: supplier.id,
+        destinationLocationId: ob.site.id,
+        status: 'CONFIRMED',
+      },
+      { transaction: t }
+    );
+    await GoodsReceiptItem.create(
+      {
+        groupId: tenant.groupId,
+        companyId: tenant.companyId,
+        goodsReceiptId: grSite.id,
+        purchaseOrderItemId: poItemSite.id,
+        receivedQuantity: 4,
+        acceptedQuantity: 4,
+      },
+      { transaction: t }
+    );
+    await stockIn(t, it.id, ob.site.id, 4);
+
+    // Cancela o PO recebido no canteiro
+    await procurementService.cancelPurchaseOrder(poSite.id, tenant.groupId, tenant.companyId, { responsiblePersonId: resp.id, stageId: ob.stage.id }, admin(), t);
+    const cancelMvSite = await InventoryMovement.findOne({
+      where: { sourceId: poSite.id, sourceType: 'PURCHASE_ORDER_CANCEL', movementType: 'OUT' },
+      transaction: t,
+    });
+    assert.ok(cancelMvSite);
+    assert.equal(Number(cancelMvSite.quantity), 4);
+    assert.equal(cancelMvSite.projectId, ob.project.id);
+    assert.equal(cancelMvSite.stageId, ob.stage.id);
+  });
+});
+
