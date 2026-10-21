@@ -12,6 +12,7 @@ const commissionEntitlementsController = require('./cases/commissionEntitlements
 const webhooksController = require('./webhooks.controller');
 const nayController = require('./correspondentNay.controller');
 const fiscalController = require('./fiscal/fiscal.controller');
+const providerAccountsController = require('./providerAccounts.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -187,6 +188,17 @@ correspondentRouter.post(
   '/fiscal/reconciliations/:id/resolve',
   requirePermission('correspondent:fiscal'),
   fiscalController.resolveReconciliation
+);
+
+correspondentRouter.post(
+  '/provider-accounts',
+  requirePermission('correspondent:create'),
+  providerAccountsController.registerProviderAccount
+);
+correspondentRouter.get(
+  '/provider-accounts',
+  requirePermission('correspondent:read'),
+  providerAccountsController.listProviderAccounts
 );
 
 correspondentRouter.post(

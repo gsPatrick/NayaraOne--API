@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { assertEligible } = require('../eligibility.service');
 const { publishSubmissionRequested, publishFinancingSubmitted, publishIntegrationCorrespondentFailed } = require('../correspondentEvents.service');
+const { recordIntegrationError } = require('../integrationErrors.service');
 
 // DECISÃO DE ENGENHARIA — não especificado no Caderno com um número exato: tempo máximo que
 // esperamos o adapter responder antes de considerar a submissão "ambígua" (status UNKNOWN em vez
@@ -278,6 +279,20 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
     await publishIntegrationCorrespondentFailed(
       financingCase,
       { providerCode: financingCase.providerCode, reason: submission.failureReason, submissionId: submission.id },
+      transaction
+    );
+    await recordIntegrationError(
+      {
+        groupId,
+        companyId,
+        financingCaseId,
+        providerCode: financingCase.providerCode,
+        operation: 'submit',
+        errorCode: isTimeout ? 'SUBMIT_TIMEOUT' : 'SUBMIT_FAILED',
+        message: isTimeout
+          ? 'Tempo esgotado aguardando resposta do provider. Consulte o status antes de reenviar.'
+          : 'Falha ao submeter o caso ao provider. Consulte o status antes de reenviar.',
+      },
       transaction
     );
     // Nunca relança — UNKNOWN é um estado de negócio válido; o job segue pra próxima pendência.
