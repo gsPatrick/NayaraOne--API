@@ -1390,18 +1390,36 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   const reversedStockMovementIds = [];
   const confirmedReceiptsForStock = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, status: 'CONFIRMED' }, transaction });
 
-  // Resolução do responsável pelo cancelamento para rastreabilidade estrita (sem fallback arbitrário)
+  // Resolução do responsável pelo cancelamento para rastreabilidade estrita do ator real (sem fallback arbitrário de terceiros)
   let cancelResponsiblePersonId = payload?.responsiblePersonId || null;
   if (!cancelResponsiblePersonId && actor?.userId) {
-    const userPerson = await Person.findOne({
-      where: {
-        id: actor.userId,
-        groupId: order.groupId,
-        companyId: order.companyId,
-      },
+    let userPerson = await Person.findOne({
+      where: { id: actor.userId, groupId: order.groupId, companyId: order.companyId },
       attributes: ['id'],
       transaction,
     });
+    if (!userPerson) {
+      const user = await User.findByPk(actor.userId, { transaction });
+      if (user) {
+        userPerson = await Person.findOne({
+          where: { legalName: user.name, groupId: order.groupId, companyId: order.companyId },
+          attributes: ['id'],
+          transaction,
+        });
+        if (!userPerson) {
+          userPerson = await Person.create(
+            {
+              id: user.id,
+              groupId: order.groupId,
+              companyId: order.companyId,
+              personType: 'PF',
+              legalName: user.name || 'Operador Responsável',
+            },
+            { transaction }
+          );
+        }
+      }
+    }
     if (userPerson) cancelResponsiblePersonId = userPerson.id;
   }
   if (confirmedReceiptsForStock.length > 0 && !cancelResponsiblePersonId) {
