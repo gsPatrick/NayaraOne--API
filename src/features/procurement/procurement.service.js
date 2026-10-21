@@ -1390,14 +1390,26 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
   const reversedStockMovementIds = [];
   const confirmedReceiptsForStock = await GoodsReceipt.findAll({ where: { purchaseOrderId: order.id, status: 'CONFIRMED' }, transaction });
 
-  // Resolução do responsável pelo cancelamento para rastreabilidade
+  // Resolução do responsável pelo cancelamento para rastreabilidade estrita (sem fallback arbitrário)
   let cancelResponsiblePersonId = payload?.responsiblePersonId || null;
   if (!cancelResponsiblePersonId && actor?.userId) {
-    const p = (await Person.findOne({ where: { id: actor.userId, groupId: order.groupId, companyId: order.companyId }, attributes: ['id'], transaction }))
-      || (await Person.findOne({ where: { groupId: order.groupId, companyId: order.companyId }, attributes: ['id'], transaction }));
-    if (p) cancelResponsiblePersonId = p.id;
+    const userPerson = await Person.findOne({
+      where: {
+        id: actor.userId,
+        groupId: order.groupId,
+        companyId: order.companyId,
+      },
+      attributes: ['id'],
+      transaction,
+    });
+    if (userPerson) cancelResponsiblePersonId = userPerson.id;
   }
-  if (!cancelResponsiblePersonId) cancelResponsiblePersonId = order.supplierPersonId || null;
+  if (confirmedReceiptsForStock.length > 0 && !cancelResponsiblePersonId) {
+    throw AppError.badRequest(
+      'Cancelamento de pedido de compra com estorno de estoque exige responsável identificado.',
+      'PURCHASE_ORDER_CANCEL_RESPONSIBLE_REQUIRED'
+    );
+  }
 
   for (const goodsReceipt of confirmedReceiptsForStock) {
     let cancelStageId = payload?.stageId || null;

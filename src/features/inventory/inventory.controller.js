@@ -1,6 +1,7 @@
 'use strict';
 
 const catchAsync = require('../../utils/catchAsync');
+const AppError = require('../../utils/AppError');
 const { success } = require('../../utils/httpResponse');
 const itemsService = require('./items.service');
 const movementsService = require('./movements.service');
@@ -82,6 +83,12 @@ const updateLocation = catchAsync(async (req, res) => {
 });
 
 const recordMovement = catchAsync(async (req, res) => {
+  if (req.body?.sourceType === 'PURCHASE_ORDER_CANCEL') {
+    throw AppError.badRequest(
+      'Compensação de cancelamento de compra é operação interna exclusiva do fluxo de compras.',
+      'INVENTORY_MOVEMENT_SOURCE_INVALID'
+    );
+  }
   const actor = { userId: req.auth.userId, canApprove: req.auth.permissions?.includes('inventory:approve') };
   const movement = await req.withTenantTransaction((t) => movementsService.recordMovement(withTenant(req), actor, t));
   return success(res, { statusCode: 201, data: movement });

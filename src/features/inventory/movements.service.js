@@ -1,6 +1,6 @@
 'use strict';
 
-const { sequelize, InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, InventoryAdjustmentProposal, ProjectStage, Project, User, Person, InventoryRequisition, InventoryRequisitionItem, MaterialRequest, InventoryReceipt, InventoryToolLoan, PurchaseOrder } = require('../../models');
+const { sequelize, InventoryCount, InventoryMovement, InventoryItem, InventoryLocation, InventoryStockBalance, File, InventoryLossCase, InventoryAdjustmentProposal, ProjectStage, Project, User, Person, InventoryRequisition, InventoryRequisitionItem, MaterialRequest, InventoryReceipt, InventoryToolLoan, PurchaseOrder, PurchaseOrderItem, GoodsReceipt, GoodsReceiptItem } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMovementRecorded, publishStockLow } = require('./inventoryEvents.service');
@@ -202,7 +202,6 @@ const VALID_SOURCES_BY_MOVEMENT_TYPE = {
 const SOURCE_MODELS = {
   RECEIPT: InventoryReceipt,
   TOOL_LOAN: InventoryToolLoan,
-  PURCHASE_ORDER_CANCEL: PurchaseOrder,
   COUNT: InventoryCount,
   LOSS_CASE: InventoryLossCase,
   ADJUSTMENT_PROPOSAL: InventoryAdjustmentProposal,
@@ -273,6 +272,58 @@ async function assertMovementSource({ groupId, companyId, inventoryItemId, movem
     if (!prop) throw notFound();
     if (prop.inventoryItemId !== inventoryItemId) {
       throw AppError.badRequest('A proposta de ajuste não pertence ao item deste movimento.', 'INVENTORY_MOVEMENT_SOURCE_ITEM_MISMATCH');
+    }
+    return;
+  }
+
+  if (type === 'PURCHASE_ORDER_CANCEL') {
+    if (!responsiblePersonId) {
+      throw AppError.badRequest('Cancelamento de compra com estorno de estoque exige responsável identificado.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+    }
+    const po = await PurchaseOrder.findOne({ where: { id: sourceId, groupId, companyId }, transaction });
+    if (!po) throw notFound();
+
+    // Validar lastro real da compensação:
+    // O pedido precisa ter recebimento confirmado contendo o item informado.
+    const receipts = await GoodsReceipt.findAll({
+      where: { purchaseOrderId: po.id, groupId, companyId, status: 'CONFIRMED' },
+      attributes: ['id'],
+      transaction,
+    });
+    if (!receipts.length) {
+      throw AppError.badRequest(
+        'Pedido de compra não possui recebimento confirmado deste item para compensação de cancelamento.',
+        'INVENTORY_MOVEMENT_SOURCE_INVALID'
+      );
+    }
+    const poItems = await PurchaseOrderItem.findAll({
+      where: { purchaseOrderId: po.id, inventoryItemId, groupId, companyId },
+      attributes: ['id'],
+      transaction,
+    });
+    if (!poItems.length) {
+      throw AppError.badRequest(
+        'O item informado não faz parte do pedido de compra de origem.',
+        'INVENTORY_MOVEMENT_SOURCE_ITEM_MISMATCH'
+      );
+    }
+    const receiptIds = receipts.map((r) => r.id);
+    const poItemIds = poItems.map((p) => p.id);
+    const grItems = await GoodsReceiptItem.findAll({
+      where: {
+        goodsReceiptId: receiptIds,
+        purchaseOrderItemId: poItemIds,
+        groupId,
+        companyId,
+      },
+      attributes: ['id'],
+      transaction,
+    });
+    if (!grItems.length) {
+      throw AppError.badRequest(
+        'O item informado não possui recebimento confirmado neste pedido de compra.',
+        'INVENTORY_MOVEMENT_SOURCE_INVALID'
+      );
     }
     return;
   }
@@ -454,8 +505,10 @@ async function recordMovement(payload, actor, transaction) {
   // (requisição, devolução de ferramenta etc.) já chegam aqui com `sourceType` preenchido e
   // controlado pelo próprio fluxo de origem — essa exigência vale só pra saída manual genuína
   // (sem sourceType, ou MANUAL), que é onde a baixa sem controle de fato acontecia.
-  if (movementType === 'OUT' && !responsiblePersonId && sourceType !== 'PURCHASE_ORDER_CANCEL') {
-    throw AppError.badRequest('Saída de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+  if (movementType === 'OUT' && !responsiblePersonId) {
+    if (sourceType !== 'REQUISITION' || !sourceId) {
+      throw AppError.badRequest('Saída de estoque exige informar o responsável pela retirada.', 'INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED');
+    }
   }
   // Revisão Marco 7 (20/10/2026), M7-F03 — origem e responsável validados no servidor.
   await assertMovementSource({ groupId, companyId, inventoryItemId, movementType, sourceType, sourceId, responsiblePersonId, projectId }, transaction);

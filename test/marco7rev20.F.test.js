@@ -398,6 +398,12 @@ test('F03 residual HTTP: POST /inventory/movements com OUT e sourceType COUNT/LO
   await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'ADJUSTMENT_PROPOSAL', sourceId: null, responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
 });
 
+test('F03 residual HTTP: POST /inventory/movements com OUT e sourceType PURCHASE_ORDER_CANCEL é recusado na rota genérica com 400', httpOpts, async () => {
+  const f = await committedFixture();
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'PURCHASE_ORDER_CANCEL', sourceId: '00000000-0000-4000-8000-000000000000', responsiblePersonId: f.resp.id }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+  await expectRefused('/inventory/movements', { inventoryItemId: f.it.id, movementType: 'OUT', quantity: 1, sourceLocationId: f.wh.id, sourceType: 'PURCHASE_ORDER_CANCEL', sourceId: null, responsiblePersonId: null }, 'INVENTORY_MOVEMENT_SOURCE_INVALID', f.it.id);
+});
+
 test('F03 controle positivo HTTP: POST /inventory/movements com OUT manual legítimo e responsável grava o movimento e debita saldo', httpOpts, async () => {
   const f = await committedFixture();
   const snapBefore = await snapshot(null, f.it.id);
@@ -879,6 +885,63 @@ test('R3 serviço: cancelamento de pedido de compra recebido gera estorno OUT/PU
     assert.equal(Number(cancelMvSite.quantity), 4);
     assert.equal(cancelMvSite.projectId, ob.project.id);
     assert.equal(cancelMvSite.stageId, ob.stage.id);
+  });
+});
+
+test('F03 residual serviço: OUT com PURCHASE_ORDER_CANCEL sem responsável estoura RESPONSIBLE_REQUIRED e em pedido OPEN sem recebimento estoura SOURCE_INVALID', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const resp = await person(t);
+    const supplier = await person(t);
+    await stockIn(t, it.id, wh.id);
+    const before = await snapshot(t, it.id);
+
+    // Cria um PurchaseOrder OPEN simples (sem recebimento)
+    const { PurchaseRequest: PurchaseRequestModel, Quotation, SupplierOffer } = require('../src/models');
+    const pr = await PurchaseRequestModel.create({ groupId: tenant.groupId, companyId: tenant.companyId, status: 'REQUESTED', requestedByUserId: tenant.userId }, { transaction: t });
+    const qt = await Quotation.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: pr.id, status: 'OPEN' }, { transaction: t });
+    const so = await SupplierOffer.create({ groupId: tenant.groupId, companyId: tenant.companyId, quotationId: qt.id, supplierPersonId: supplier.id, status: 'RECEIVED' }, { transaction: t });
+    const po = await PurchaseOrder.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: pr.id, supplierOfferId: so.id, supplierPersonId: supplier.id, status: 'OPEN', committedAmount: 100 }, { transaction: t });
+
+    // 1. Sem responsável: estoura RESPONSIBLE_REQUIRED
+    await assert.rejects(
+      () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: wh.id, sourceType: 'PURCHASE_ORDER_CANCEL', sourceId: po.id, responsiblePersonId: null }), admin(), t),
+      expectCode('INVENTORY_MOVEMENT_RESPONSIBLE_REQUIRED')
+    );
+
+    // 2. Com responsável mas sem recebimento confirmado do item (pedido OPEN sem lastro): estoura SOURCE_INVALID
+    await assert.rejects(
+      () => movementsService.recordMovement(withTenant({ inventoryItemId: it.id, movementType: 'OUT', quantity: 1, sourceLocationId: wh.id, sourceType: 'PURCHASE_ORDER_CANCEL', sourceId: po.id, responsiblePersonId: resp.id }), admin(), t),
+      expectCode('INVENTORY_MOVEMENT_SOURCE_INVALID')
+    );
+
+    assert.deepEqual(await snapshot(t, it.id), before);
+  });
+});
+
+test('R3 serviço negativo: cancelPurchaseOrder de pedido recebido sem responsável identificado falha com PURCHASE_ORDER_CANCEL_RESPONSIBLE_REQUIRED', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const it = await item(t);
+    const wh = await warehouse(t);
+    const supplier = await person(t);
+
+    const { PurchaseRequest: PurchaseRequestModel, Quotation, SupplierOffer } = require('../src/models');
+    const pr = await PurchaseRequestModel.create({ groupId: tenant.groupId, companyId: tenant.companyId, status: 'REQUESTED', requestedByUserId: tenant.userId }, { transaction: t });
+    const qt = await Quotation.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: pr.id, status: 'OPEN' }, { transaction: t });
+    const so = await SupplierOffer.create({ groupId: tenant.groupId, companyId: tenant.companyId, quotationId: qt.id, supplierPersonId: supplier.id, status: 'RECEIVED' }, { transaction: t });
+    const po = await PurchaseOrder.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseRequestId: pr.id, supplierOfferId: so.id, supplierPersonId: supplier.id, status: 'RECEIVED', committedAmount: 100 }, { transaction: t });
+    const poItem = await PurchaseOrderItem.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseOrderId: po.id, inventoryItemId: it.id, description: 'Item Teste', quantity: 2, unitPrice: 50, receivedQuantity: 2 }, { transaction: t });
+    const gr = await GoodsReceipt.create({ groupId: tenant.groupId, companyId: tenant.companyId, purchaseOrderId: po.id, supplierPersonId: supplier.id, destinationLocationId: wh.id, status: 'CONFIRMED' }, { transaction: t });
+    await GoodsReceiptItem.create({ groupId: tenant.groupId, companyId: tenant.companyId, goodsReceiptId: gr.id, purchaseOrderItemId: poItem.id, receivedQuantity: 2, acceptedQuantity: 2 }, { transaction: t });
+    await stockIn(t, it.id, wh.id, 2);
+
+    // Ator fictício sem Person vinculada e payload sem responsiblePersonId
+    const fakeActor = { userId: '00000000-0000-4000-8000-000000000099', canApprove: true };
+    await assert.rejects(
+      () => procurementService.cancelPurchaseOrder(po.id, tenant.groupId, tenant.companyId, {}, fakeActor, t),
+      expectCode('PURCHASE_ORDER_CANCEL_RESPONSIBLE_REQUIRED')
+    );
   });
 });
 
