@@ -10,6 +10,7 @@ const addressesService = require('./personAddresses.service');
 const consentsService = require('./personConsents.service');
 const mergeService = require('./personMerge.service');
 const dedupService = require('./personDedup.service');
+const documentIngestionService = require('./documentIngestion.service');
 
 // --- Persons ---
 
@@ -102,6 +103,20 @@ const createDocument = catchAsync(async (req, res) => {
     documentsService.createDocument(req.params.id, req.body, req.auth.userId, transaction)
   );
   return success(res, { statusCode: 201, data: document });
+});
+
+const ingestDocument = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((transaction) =>
+    documentIngestionService.ingestPersonDocument(
+      { ...req.body, personId: req.params.id, groupId: req.auth.groupId, companyId: req.auth.companyId },
+      req.auth.userId,
+      transaction
+    )
+  );
+  return success(res, {
+    statusCode: 201,
+    data: { document: result.personDocument, fileId: result.file.id, pendingTask: result.pendingTask },
+  });
 });
 
 const listDocuments = catchAsync(async (req, res) => {
@@ -200,6 +215,7 @@ module.exports = {
   updateContact,
   removeContact,
   createDocument,
+  ingestDocument,
   listDocuments,
   updateDocument,
   removeDocument,

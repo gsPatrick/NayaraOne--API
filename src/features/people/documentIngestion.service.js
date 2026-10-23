@@ -2,6 +2,7 @@
 
 const { Person, PersonDocument, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { uploadFile } = require('../files/files.service');
 const { resolveAntivirusAdapter, resolveOcrAdapter } = require('./adapters/resolveDocumentAdapters');
 const { validateDocumentFormat, onlyDigits } = require('./personDocumentFormat.service');
@@ -167,6 +168,7 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
         sourceFileId: file.id,
         confidence: extraction.confidence,
         illegible: !!extraction.illegible,
+        extractionMeta: extraction.raw || null,
       },
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -193,6 +195,22 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
       { transaction }
     );
   }
+
+  await registrarAuditoria(
+    {
+      groupId: tenant.groupId,
+      companyId: tenant.companyId,
+      actorUserId,
+      action: 'people.document.ingest',
+      entityType: 'PersonDocument',
+      entityId: personDocument.id,
+      afterJson: personDocument.toJSON(),
+      reason: pendingReason
+        ? `Documento ${classifiedType} lido automaticamente; revisão humana pendente: ${pendingReason}`
+        : `Documento ${classifiedType} lido automaticamente; aguardando validação humana.`,
+    },
+    transaction
+  );
 
   return { file, personDocument, extraction, pendingTask };
 }

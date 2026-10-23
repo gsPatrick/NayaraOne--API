@@ -2,6 +2,7 @@
 
 const { PersonDocument, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 // Enum FECHADO confirmado pelo Caderno para person_documents.verification_status.
 const VALID_VERIFICATION_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'];
@@ -56,6 +57,7 @@ async function getDocument(personId, documentId, transaction) {
 
 async function updateDocument(personId, documentId, payload, actorUserId, transaction) {
   const document = await getDocument(personId, documentId, transaction);
+  const beforeJson = document.toJSON();
   const { documentType, fileId, issuedAt, expiresAt, verificationStatus, verifiedBy, extractedDataJson } = payload;
   if (documentType !== undefined) document.documentType = String(documentType).toUpperCase();
   if (fileId !== undefined) document.fileId = fileId;
@@ -75,6 +77,20 @@ async function updateDocument(personId, documentId, payload, actorUserId, transa
   if (extractedDataJson !== undefined) document.extractedDataJson = extractedDataJson;
   document.updatedBy = actorUserId || null;
   await document.save({ transaction });
+  await registrarAuditoria(
+    {
+      groupId: document.groupId,
+      companyId: document.companyId,
+      actorUserId,
+      action: 'people.document.update',
+      entityType: 'PersonDocument',
+      entityId: document.id,
+      beforeJson,
+      afterJson: document.toJSON(),
+      reason: 'Documento da pessoa atualizado (inclui a validação humana dos dados extraídos).',
+    },
+    transaction
+  );
   return document;
 }
 
