@@ -319,6 +319,58 @@ test('billing: completeOwnershipTransfer exige comprovante (evidenceFileId) e de
   });
 });
 
+test('billing: requestOwnershipTransfer abre tarefa numa obrigação existente, recusa duplicada e a conclusão grava o comprovante na obrigação', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const contract = await createLeaseContract(transaction);
+    const { obligation } = await utilitiesService.createUtilityObligation(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, utilityType: 'WATER', responsibleParty: 'TENANT' },
+      tenant.userId,
+      transaction
+    );
+    assert.equal(obligation.status, 'ACTIVE');
+
+    const toPerson = await Person.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `AUDIT Novo titular ${uniqueSuffix()}` },
+      { transaction }
+    );
+    const requested = await utilitiesService.requestOwnershipTransfer(obligation.id, { toPersonId: toPerson.id }, tenant.userId, transaction);
+    assert.equal(requested.obligation.status, 'TRANSFER_PENDING');
+    assert.equal(requested.obligation.transferRequired, true);
+    assert.equal(requested.transferTask.status, 'PENDING');
+    assert.equal(requested.transferTask.toPersonId, toPerson.id);
+
+    await assert.rejects(
+      () => utilitiesService.requestOwnershipTransfer(obligation.id, {}, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'OWNERSHIP_TRANSFER_ALREADY_PENDING');
+        return true;
+      }
+    );
+
+    const listed = await utilitiesService.listUtilityObligations(transaction, { contractId: contract.id });
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].transferTasks.length, 1);
+    assert.equal(listed[0].transferTasks[0].status, 'PENDING');
+
+    const evidenceFile = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `qa/${uniqueSuffix()}.pdf`, fileName: 'comprovante.pdf', mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
+    await utilitiesService.completeOwnershipTransfer(requested.transferTask.id, { evidenceFileId: evidenceFile.id }, tenant.userId, transaction);
+    const after = await utilitiesService.getUtilityObligation(obligation.id, transaction);
+    assert.equal(after.status, 'TRANSFERRED');
+    assert.equal(after.evidenceFileId, evidenceFile.id);
+
+    await assert.rejects(
+      () => utilitiesService.requestOwnershipTransfer('00000000-0000-4000-8000-000000000000', {}, tenant.userId, transaction),
+      (err) => {
+        assert.equal(err.code, 'UTILITY_OBLIGATION_NOT_FOUND');
+        return true;
+      }
+    );
+  });
+});
+
 test('billing: closeout bloqueia com transferência de utilidade pendente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseContract(transaction);

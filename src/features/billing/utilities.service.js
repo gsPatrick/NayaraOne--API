@@ -111,7 +111,72 @@ async function listUtilityObligations(transaction, filters = {}) {
   const where = {};
   if (filters.contractId) where.contractId = filters.contractId;
   if (filters.status) where.status = String(filters.status).toUpperCase();
-  return UtilityObligation.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const obligations = await UtilityObligation.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  if (obligations.length === 0) return [];
+  const tasks = await OwnershipTransferTask.findAll({
+    where: { utilityObligationId: obligations.map((o) => o.id) },
+    order: [['created_at', 'DESC']],
+    transaction,
+  });
+  return obligations.map((obligation) => ({
+    ...obligation.toJSON(),
+    transferTasks: tasks.filter((t) => t.utilityObligationId === obligation.id).map((t) => t.toJSON()),
+  }));
+}
+
+/**
+ * requestOwnershipTransfer — abre a tarefa de transferência de titularidade numa obrigação que
+ * já existe (o caderno trata a troca de titularidade como tarefa com evidência). A obrigação
+ * passa a TRANSFER_PENDING e o encerramento do contrato fica bloqueado até a conclusão.
+ */
+async function requestOwnershipTransfer(utilityObligationId, payload, actorUserId, transaction) {
+  const obligation = await UtilityObligation.findByPk(utilityObligationId, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!obligation) throw AppError.notFound('Obrigação de utilidade não encontrada.', 'UTILITY_OBLIGATION_NOT_FOUND');
+
+  const pending = await OwnershipTransferTask.count({
+    where: { utilityObligationId: obligation.id, status: 'PENDING' },
+    transaction,
+  });
+  if (pending > 0) {
+    throw AppError.conflict('Já existe uma transferência de titularidade pendente para esta obrigação.', 'OWNERSHIP_TRANSFER_ALREADY_PENDING');
+  }
+
+  const beforeJson = obligation.toJSON();
+  const task = await OwnershipTransferTask.create(
+    {
+      groupId: obligation.groupId,
+      companyId: obligation.companyId,
+      utilityObligationId: obligation.id,
+      fromPersonId: payload?.fromPersonId || null,
+      toPersonId: payload?.toPersonId || null,
+      status: 'PENDING',
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+  obligation.transferRequired = true;
+  obligation.status = 'TRANSFER_PENDING';
+  obligation.updatedBy = actorUserId || null;
+  await obligation.save({ transaction });
+
+  await publishUtilityTransferRequired(task, transaction);
+  await registrarAuditoria(
+    {
+      groupId: obligation.groupId,
+      companyId: obligation.companyId,
+      actorUserId,
+      action: 'billing.ownership_transfer.request',
+      entityType: 'UtilityObligation',
+      entityId: obligation.id,
+      beforeJson,
+      afterJson: obligation.toJSON(),
+      reason: 'Transferência de titularidade de utilidade solicitada.',
+    },
+    transaction
+  );
+
+  return { obligation, transferTask: task };
 }
 
 async function createUtilityAccount(payload, actorUserId, transaction) {
@@ -220,6 +285,7 @@ async function completeOwnershipTransfer(taskId, payload, actorUserId, transacti
   });
   if (pendingCount === 0) {
     obligation.status = 'TRANSFERRED';
+    obligation.evidenceFileId = evidenceFileId;
     obligation.updatedBy = actorUserId || null;
     await obligation.save({ transaction });
   }
@@ -401,6 +467,7 @@ module.exports = {
   listUtilityObligations,
   createUtilityAccount,
   completeOwnershipTransfer,
+  requestOwnershipTransfer,
   recordUtilityPayment,
   UTILITY_TYPES,
   RESPONSIBLE_PARTIES,

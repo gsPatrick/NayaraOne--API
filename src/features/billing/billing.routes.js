@@ -52,6 +52,7 @@ billingRouter.get('/billing/utility-obligations', requirePermission('billing:rea
 billingRouter.get('/billing/utility-obligations/:id', requirePermission('billing:read'), billingController.getUtilityObligation);
 billingRouter.post('/billing/utility-accounts', requirePermission('billing:create'), billingController.createUtilityAccount);
 billingRouter.post('/billing/utility-obligations/:id/payments', requirePermission('billing:update'), billingController.recordUtilityPayment);
+billingRouter.post('/billing/utility-obligations/:id/ownership-transfer', requirePermission('billing:update'), billingController.requestOwnershipTransfer);
 billingRouter.post('/billing/ownership-transfer-tasks/:id/complete', requirePermission('billing:update'), billingController.completeOwnershipTransfer);
 
 // Closeout

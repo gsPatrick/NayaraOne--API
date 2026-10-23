@@ -176,6 +176,10 @@ const completeOwnershipTransfer = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => utilitiesService.completeOwnershipTransfer(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
 });
+const requestOwnershipTransfer = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => utilitiesService.requestOwnershipTransfer(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
 const recordUtilityPayment = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => utilitiesService.recordUtilityPayment(req.params.id, req.body, req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
@@ -222,6 +226,7 @@ module.exports = {
   getUtilityObligation,
   createUtilityAccount,
   completeOwnershipTransfer,
+  requestOwnershipTransfer,
   recordUtilityPayment,
   checkCloseoutEligibility,
   closeoutContract,

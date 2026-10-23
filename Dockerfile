@@ -24,6 +24,10 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Pasta de arquivos enviados: precisa pertencer ao usuário sem privilégio que roda a API; num
+# volume novo montado em /app/uploads, o Docker herda este dono.
+RUN mkdir -p /app/uploads && chown -R nodeapi:nodejs /app/uploads
+
 USER nodeapi
 EXPOSE 3000
 
