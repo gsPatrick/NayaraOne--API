@@ -291,3 +291,26 @@ test('Marco 8: documento do caso passa pela leitura real; ilegível abre pendên
     if (saved.o === undefined) delete process.env.OCR_PROVIDER; else process.env.OCR_PROVIDER = saved.o;
   }
 });
+
+test('enviar de novo um documento do mesmo tipo cria a versão seguinte e preserva a anterior (sem erro de unicidade)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const person = await personService.createPerson(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Versões doc ${uniqueSuffix()}` },
+      tenant.userId,
+      transaction
+    );
+    const payload = { __mockOcr: { fields: { name: person.legalName }, confidence: 0.9 } };
+    const send = () => ingestPersonDocument(
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, fileName: 'rg.pdf', mimeType: 'application/pdf', documentType: 'RG', contentBase64: Buffer.from(JSON.stringify(payload)).toString('base64') },
+      tenant.userId,
+      transaction
+    );
+    const first = await send();
+    const second = await send();
+    assert.equal(first.personDocument.versionNo, 1);
+    assert.equal(second.personDocument.versionNo, 2);
+    const { listDocuments } = require('../src/features/people/personDocuments.service');
+    const all = await listDocuments(person.id, transaction);
+    assert.equal(all.length, 2);
+  });
+});

@@ -13,6 +13,17 @@ async function assertPersonExists(personId, transaction) {
   return person;
 }
 
+// A unicidade é (pessoa, tipo, versão), inclusive nas linhas apagadas: enviar de novo um documento do
+// mesmo tipo cria a versão seguinte e a anterior continua no histórico.
+async function nextVersionNo(personId, documentType, transaction) {
+  const latest = await PersonDocument.max('versionNo', {
+    where: { personId, documentType: String(documentType).toUpperCase() },
+    paranoid: false,
+    transaction,
+  });
+  return (Number(latest) || 0) + 1;
+}
+
 async function createDocument(personId, payload, actorUserId, transaction) {
   const person = await assertPersonExists(personId, transaction);
   const { documentType, fileId, versionNo, issuedAt, expiresAt, verificationStatus, extractedDataJson } = payload;
@@ -32,7 +43,7 @@ async function createDocument(personId, payload, actorUserId, transaction) {
       personId,
       documentType: String(documentType).toUpperCase(),
       fileId,
-      versionNo: versionNo || 1,
+      versionNo: versionNo || (await nextVersionNo(personId, documentType, transaction)),
       issuedAt: issuedAt || null,
       expiresAt: expiresAt || null,
       verificationStatus: verificationStatus ? String(verificationStatus).toUpperCase() : 'PENDING',
@@ -102,4 +113,4 @@ async function deleteDocument(personId, documentId, actorUserId, transaction) {
   return { id: documentId };
 }
 
-module.exports = { createDocument, listDocuments, getDocument, updateDocument, deleteDocument, VALID_VERIFICATION_STATUSES };
+module.exports = { nextVersionNo, createDocument, listDocuments, getDocument, updateDocument, deleteDocument, VALID_VERIFICATION_STATUSES };

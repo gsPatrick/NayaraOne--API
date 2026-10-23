@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { uploadFile } = require('../files/files.service');
 const { resolveAntivirusAdapter, resolveOcrAdapter } = require('./adapters/resolveDocumentAdapters');
 const { validateDocumentFormat, onlyDigits } = require('./personDocumentFormat.service');
+const { nextVersionNo } = require('./personDocuments.service');
 
 /**
  * documentIngestion.service.js — item 2 do ciclo de auditoria externa (Marco 3).
@@ -162,6 +163,7 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
       personId,
       documentType: classifiedType,
       fileId: file.id,
+      versionNo: await nextVersionNo(personId, classifiedType, transaction),
       verificationStatus,
       extractedDataJson: {
         fields: extraction.fields || {},
