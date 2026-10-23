@@ -1,11 +1,14 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { FinancingCase, CaseRequirement, CaseDocument, File } = require('../../../models');
+const { FinancingCase, CaseRequirement, CaseDocument, File, Task } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishFinancingDocumentsCompleted, publishFinancingStatusChanged } = require('../correspondentEvents.service');
 const { shouldApplyTransition } = require('../statusMachine');
+const { getFileContent } = require('../../files/files.service');
+const { resolveOcrAdapter } = require('../../people/adapters/resolveDocumentAdapters');
+const { LocalOcrAdapter } = require('../../people/adapters/LocalOcrAdapter');
 
 const INCOMPLETE_REQUIREMENT_STATUSES = ['PENDING', 'REJECTED', 'EXPIRED'];
 const CHECKLIST_COMPLETO = 'VALIDATED';
@@ -32,6 +35,51 @@ function buildSuggestedNote(documentType, file) {
     notes.push('Arquivo muito pequeno (menos de 10KB) — pode estar incompleto ou ilegível.');
   }
   return notes.length ? notes.join(' ') : null;
+}
+
+const READING_FIELD_LABELS = { name: 'Nome', taxId: 'CPF/CNPJ', income: 'Renda', accountNumber: 'Conta', issuedAt: 'Emissão', expiresAt: 'Validade' };
+const READING_ENGINE_LABELS = { pdftotext: 'texto do PDF', tesseract: 'reconhecimento de imagem (OCR)' };
+
+function formatReadingValue(key, value) {
+  if (key === 'taxId') {
+    const d = String(value).replace(/\D/g, '');
+    if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+  if (key === 'income') return `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (key === 'issuedAt' || key === 'expiresAt') return String(value).replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1');
+  return String(value);
+}
+
+/**
+ * readDocumentAutomatically — passo "OCR/IA → sugestão" do pipeline. Só roda quando o leitor real
+ * está ativado (OCR_PROVIDER=local); com o adaptador de laboratório devolve null e o fluxo segue
+ * como antes. Nunca valida nada: o resultado é só texto de apoio para quem valida.
+ */
+async function readDocumentAutomatically(documentType, file, actorUserId, transaction) {
+  const adapter = await resolveOcrAdapter({ groupId: file.groupId, companyId: file.companyId }, transaction);
+  if (!(adapter instanceof LocalOcrAdapter)) return null;
+  try {
+    const withContent = await getFileContent(file.id, transaction, actorUserId, file);
+    const extraction = await adapter.extract(withContent.getDataValue('content'), documentType);
+    if (extraction.illegible) {
+      return {
+        illegible: true,
+        note: 'Leitura automática: o documento está ilegível ou sem texto reconhecível, e nenhum dado foi extraído. Peça um novo arquivo antes de validar.',
+      };
+    }
+    const percent = Math.round((extraction.confidence || 0) * 100);
+    const origin = READING_ENGINE_LABELS[extraction.raw?.engine] || 'leitura automática';
+    const found = Object.entries(extraction.fields || {}).map(([key, value]) => `${READING_FIELD_LABELS[key] || key}: ${formatReadingValue(key, value)}`);
+    return {
+      illegible: false,
+      note: found.length
+        ? `Leitura automática (${origin}, confiança de ${percent}%): ${found.join('; ')}. Confira com o arquivo original antes de validar.`
+        : `Leitura automática (${origin}, confiança de ${percent}%): nenhum campo conhecido foi encontrado no texto. Confira o arquivo original antes de validar.`,
+    };
+  } catch (err) {
+    return { illegible: false, note: 'Leitura automática indisponível neste momento. Confira o documento manualmente antes de validar.' };
+  }
 }
 
 async function getCaseOrThrow(financingCaseId, groupId, companyId, transaction) {
@@ -165,6 +213,9 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
     }
   }
 
+  const reading = await readDocumentAutomatically(requirement.documentType, file, actorUserId, transaction);
+  const suggestedNote = [buildSuggestedNote(requirement.documentType, file), reading?.note].filter(Boolean).join(' ') || null;
+
   const document = await CaseDocument.create(
     {
       groupId,
@@ -177,10 +228,29 @@ async function uploadDocument(financingCaseId, requirementId, payload, actorUser
       expiresAt: expiresAt || null,
       uploadedBy: actorUserId || null,
       duplicateOfDocumentId,
-      suggestedNote: buildSuggestedNote(requirement.documentType, file),
+      suggestedNote,
     },
     { transaction }
   );
+
+  if (reading?.illegible) {
+    await Task.create(
+      {
+        groupId,
+        companyId,
+        assignedToUserId: actorUserId || null,
+        title: `Revisar documento ilegível — ${requirement.documentType}`,
+        description: 'A leitura automática não conseguiu extrair dados do documento enviado. Peça um novo arquivo.',
+        relatedEntityType: 'correspondent.financing_cases',
+        relatedEntityId: financingCaseId,
+        status: 'OPEN',
+        priority: 'NORMAL',
+        createdBy: actorUserId || null,
+        updatedBy: actorUserId || null,
+      },
+      { transaction }
+    );
+  }
 
   requirement.status = 'SUBMITTED';
   requirement.updatedBy = actorUserId || null;

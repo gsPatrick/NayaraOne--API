@@ -248,3 +248,46 @@ test('auditoria: a leitura do documento e a validação humana gravam antes/depo
     assert.equal(update.after_json.verificationStatus, 'VERIFIED');
   });
 });
+
+test('Marco 8: documento do caso passa pela leitura real; ilegível abre pendência e a sugestão traz origem e confiança', async (t) => {
+  if (!ocrTools || !clamdUp) return t.skip('clamd e/ou OCR não disponíveis neste ambiente');
+  const financingCases = require('../src/features/correspondent/cases/financingCases.service');
+  const caseDocuments = require('../src/features/correspondent/cases/caseDocuments.service');
+  const { uploadFile } = require('../src/features/files/files.service');
+  const { Person, Task } = require('../src/models');
+  const saved = { a: process.env.ANTIVIRUS_PROVIDER, o: process.env.OCR_PROVIDER };
+  process.env.ANTIVIRUS_PROVIDER = 'clamav';
+  process.env.OCR_PROVIDER = 'local';
+  try {
+    await withRollbackTenantTransaction(tenant, async (transaction) => {
+      const ctx = { groupId: tenant.groupId, companyId: tenant.companyId };
+      const principal = await Person.create(
+        { ...ctx, personType: 'PF', legalName: `Proponente M8 ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+        { transaction }
+      );
+      const financingCase = await financingCases.createFinancingCase({ ...ctx, applicants: [{ personId: principal.id, role: 'PRINCIPAL' }] }, tenant.userId, transaction);
+      const send = async (docType, fileName, mimeType, buffer) => {
+        const requirement = await caseDocuments.createRequirement(financingCase.id, { documentType: docType }, tenant.userId, ctx, transaction);
+        const file = await uploadFile({ ...ctx, fileName, mimeType, contentBase64: buffer.toString('base64'), category: 'correspondent' }, tenant.userId, transaction);
+        return caseDocuments.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, ctx, transaction);
+      };
+
+      await assert.rejects(
+        () => send('RG_CPF', 'eicar.pdf', 'application/pdf', Buffer.from(EICAR_SIGNATURE)),
+        (err) => err.code === 'FILE_UPLOAD_MALWARE_DETECTED'
+      );
+
+      const legivel = await send('COMPROVANTE_RENDA', 'renda.pdf', 'application/pdf', textPdf);
+      assert.match(legivel.suggestedNote, /Leitura automática \(texto do PDF, confiança de 95%\)/);
+      assert.match(legivel.suggestedNote, /CPF\/CNPJ: 529\.982\.247-25/);
+
+      const ilegivel = await send('IPTU', 'iptu.png', 'image/png', blankPng);
+      assert.match(ilegivel.suggestedNote, /ilegível/i);
+      const tasks = await Task.findAll({ where: { relatedEntityId: financingCase.id }, transaction });
+      assert.equal(tasks.length, 1);
+    });
+  } finally {
+    if (saved.a === undefined) delete process.env.ANTIVIRUS_PROVIDER; else process.env.ANTIVIRUS_PROVIDER = saved.a;
+    if (saved.o === undefined) delete process.env.OCR_PROVIDER; else process.env.OCR_PROVIDER = saved.o;
+  }
+});
