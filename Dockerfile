@@ -28,9 +28,9 @@ COPY . .
 # volume novo montado em /app/uploads, o Docker herda este dono.
 RUN mkdir -p /app/uploads && chown -R nodeapi:nodejs /app/uploads
 
-# Leitor de documentos (Tesseract + poppler). Só entra na imagem quando a Contratante aprova o recurso
-# de servidor: docker build --build-arg INSTALL_DOCUMENT_ENGINES=true. Depois, OCR_PROVIDER=local.
-ARG INSTALL_DOCUMENT_ENGINES=false
+# Leitor de documentos (Tesseract + poppler), instalado na imagem. Só é usado quando OCR_PROVIDER=local;
+# sem essa variável nada muda. Para uma imagem sem eles: docker build --build-arg INSTALL_DOCUMENT_ENGINES=false.
+ARG INSTALL_DOCUMENT_ENGINES=true
 RUN if [ "$INSTALL_DOCUMENT_ENGINES" = "true" ]; then apk add --no-cache tesseract-ocr tesseract-ocr-data-por poppler-utils; fi
 
 USER nodeapi

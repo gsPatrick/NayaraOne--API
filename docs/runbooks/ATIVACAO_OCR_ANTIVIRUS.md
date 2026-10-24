@@ -24,12 +24,12 @@ Regra de decisão:
 2. Origem: imagem Docker `clamav/clamav:stable`.
 3. **Mounts → Volume** `clamav-assinaturas` em `/var/lib/clamav` (evita baixar as assinaturas a cada reinício).
 4. Sem domínio público. A porta `3310` só é acessível pela rede interna do projeto.
-5. Limite de memória do serviço: 2 GB. Aguardar o primeiro download das assinaturas (alguns minutos) até o serviço ficar saudável.
+5. Limite de memória do serviço: 4 GB (o ClamAV usa cerca de 1 GB em regime e mais durante a recarga das assinaturas). Aguardar o primeiro download das assinaturas (alguns minutos) até o serviço ficar saudável.
 
 ## 3. Ligar na API
 
 No serviço da API:
-1. **Build args:** `INSTALL_DOCUMENT_ENGINES=true` (instala Tesseract em português e poppler na imagem).
+1. **Imagem:** o Tesseract em português e o poppler já vêm na imagem por padrão (`INSTALL_DOCUMENT_ENGINES=true` no Dockerfile); nada a configurar no build.
 2. **Environment:**
    - `ANTIVIRUS_PROVIDER=clamav`
    - `CLAMAV_HOST=<nome interno do serviço clamav no Easypanel>`
