@@ -271,7 +271,7 @@ async function adjustExportLine(originalLineId, deltaAmount, reasonText, actorUs
       sourceType: original.sourceType,
       sourceId: original.sourceId,
       amount: delta,
-      description: `Ajuste (${reasonText}) referente à linha ${original.id}.`,
+      description: `Ajuste: ${String(reasonText).trim()}`,
       adjustmentOfLineId: original.id,
     },
     { transaction }
