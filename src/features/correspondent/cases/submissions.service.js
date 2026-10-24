@@ -21,6 +21,16 @@ const { recordIntegrationError } = require('../integrationErrors.service');
 // real futuro; ajustável depois se o cliente pedir outro valor.
 const SUBMIT_TIMEOUT_MS = Number(process.env.CORRESPONDENT_SUBMIT_TIMEOUT_MS || 8000);
 
+const DOCUMENT_TYPE_LABELS = {
+  RG_CPF: 'RG/CPF',
+  COMPROVANTE_RENDA: 'Comprovante de renda',
+  COMPROVANTE_RESIDENCIA: 'Comprovante de residência',
+  MATRICULA_IMOVEL: 'Matrícula do imóvel',
+  CERTIDAO_ESTADO_CIVIL: 'Certidão de estado civil',
+  IPTU: 'IPTU',
+  OUTRO: 'Outro',
+};
+
 class SubmitTimeoutError extends Error {
   constructor() {
     super('Tempo esgotado aguardando resposta do provider.');
@@ -65,10 +75,11 @@ async function assertChecklistComplete(financingCaseId, groupId, companyId, tran
   });
   const pending = requirements.filter((r) => r.status !== 'VALIDATED');
   if (pending.length > 0) {
-    throw AppError.unprocessable(
-      `Checklist de documentos incompleto — ${pending.length} item(ns) obrigatório(s) ainda sem validação humana (${pending.map((p) => p.documentType).join(', ')}).`,
-      'SUBMISSION_CHECKLIST_INCOMPLETE'
-    );
+    const nomes = pending.map((p) => DOCUMENT_TYPE_LABELS[p.documentType] || p.documentType).join(', ');
+    const frase = pending.length === 1
+      ? `Checklist incompleto — falta a validação humana de 1 documento obrigatório (${nomes}).`
+      : `Checklist incompleto — falta a validação humana de ${pending.length} documentos obrigatórios (${nomes}).`;
+    throw AppError.unprocessable(frase, 'SUBMISSION_CHECKLIST_INCOMPLETE');
   }
 }
 
@@ -93,10 +104,9 @@ async function resolveSubmissionAmount(financingCaseId, payload, groupId, compan
     transaction,
   });
   if (latestSimulation) return Number(latestSimulation.amount);
-  throw AppError.badRequest(
-    'Nenhum valor disponível para checar elegibilidade — informe "amount" ou rode uma simulação antes de submeter.',
-    'SUBMISSION_VALIDATION'
-  );
+  // Provider manual não simula e pode não ter teto. O valor só é obrigatório quando a regra
+  // de elegibilidade exige teto — essa checagem fica em assertEligible.
+  return null;
 }
 
 /**
@@ -275,7 +285,9 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
         entityId: financingCaseId,
         beforeJson: { status: beforeStatus },
         afterJson: { status: financingCase.status, externalCaseId: result.externalId },
-        reason: `Caso submetido ao provider "${financingCase.providerCode}" (externalCaseId "${result.externalId}") pelo worker assíncrono.`,
+        reason: result?.status === 'PENDING_MANUAL_ACTION'
+          ? `Caso registrado para ação manual no banco (referência "${result.externalId}"). Nenhum envio automático foi feito.`
+          : `Caso submetido ao provider "${financingCase.providerCode}" (externalCaseId "${result.externalId}") pelo worker assíncrono.`,
       },
       transaction
     );

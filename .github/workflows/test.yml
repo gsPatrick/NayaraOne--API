@@ -117,7 +117,7 @@ jobs:
 
       # Guia §13: "typecheck". O projeto é JavaScript (sem TypeScript); a checagem possível é de
       # sintaxe de todos os arquivos (node --check) — pega arquivo que nem carrega antes da suíte.
-      - name: Syntax check (node --check em app.js, src, scripts, migrations, test)
+      - name: Typecheck (node --check; o projeto é JavaScript, sem TypeScript)
         run: npm run syntax-check
 
       # M6-96: scanner de hard-code cobrindo o módulo de Obras — vigia contra regressão de
@@ -228,7 +228,7 @@ jobs:
             echo "# usuário do banco na suíte: nayara_ci_app (NOSUPERUSER NOBYPASSRLS)"
             echo "#"
           } > test-results.log
-          node --test --test-reporter=spec --test-reporter-destination=stdout test/*.test.js test/marco8/*.test.js 2>&1 | tee -a test-results.log
+          bash scripts/ci-estagios-marco8.sh test-results.log
 
       # Conferência Nayara 19/10/2026: o log de teste não pode carregar segredo. A API agora
       # redige Authorization/Cookie/tokens nos logs de requisição; este passo FALHA o build se
@@ -298,11 +298,30 @@ jobs:
             load-test-light.log
           retention-days: 90
 
+  # Caderno do Marco 8: depois da suíte e da varredura de segredo vêm DEV e LAB.
+  # O endereço é secret do repositório. Sem ele o job registra o aviso e não inventa host.
+  deploy-dev:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar deploy da API no DEV
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEV_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::DEV_API_DEPLOY_HOOK_URL não configurado — etapa DEV do caderno registrada, sem host inventado."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"
+          echo "Deploy DEV disparado para ${GITHUB_SHA}"
+
   # Guia §13: deploy_LAB automático e production_approval. Ver docs/runbooks/CI_CD.md para criar
   # os environments "lab" e "production" (este com required reviewers) e os secrets. Sem o secret
   # o job termina verde com um aviso — nunca quebra o CI por falta de alvo.
   deploy-lab:
-    needs: test
+    needs: [test, deploy-dev]
     if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
     runs-on: ubuntu-latest
     environment: lab

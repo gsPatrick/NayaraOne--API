@@ -20,6 +20,13 @@ const RULE_CODE = 'COR_PROVIDER_ELIGIBILITY';
 const RULE_NAME = 'Elegibilidade de provider de financiamento (produto, finalidade, valor)';
 const RULE_DOMAIN = 'correspondent';
 const CONDITION_AST = { fact: 'eligibilityCheckActive', op: '==', value: true };
+const PROVIDER_LABEL = { sandbox: 'Sandbox', manual: 'Manual' };
+const PURPOSE_LABEL = { RESIDENCIAL: 'Residencial', COMERCIAL: 'Comercial' };
+
+function reais(value) {
+  const [inteiro, centavos] = Number(value).toFixed(2).split('.');
+  return `${inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${centavos}`;
+}
 
 // Semente inicial — nenhum documento fonte define os números exatos ("elegibilidade conforme
 // produto/finalidade/valor/provider" não traz limiares); usado só como valor padrão no primeiro
@@ -170,7 +177,7 @@ async function assertEligible(financingCase, { amount } = {}, groupId, companyId
   if (!allowedPurposes.includes(purpose)) {
     await logIneligible(groupId, companyId, actorUserId, financingCase.id, ruleVersionId, `Finalidade "${purpose}" não está elegível para financiamento.`, transaction);
     throw AppError.unprocessable(
-      `A finalidade "${purpose}" deste caso não está elegível para financiamento no momento.`,
+      `A finalidade "${PURPOSE_LABEL[purpose] || purpose}" deste caso não está elegível para financiamento no momento.`,
       'COR_ELIGIBILITY_PURPOSE_NOT_ALLOWED'
     );
   }
@@ -205,6 +212,15 @@ async function assertEligible(financingCase, { amount } = {}, groupId, companyId
 
   const maxAmountByProvider = action.maxAmountByProvider || {};
   const maxAmount = maxAmountByProvider[providerCode];
+  if (maxAmount !== null && maxAmount !== undefined) {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      throw AppError.badRequest(
+        'Nenhum valor disponível para checar elegibilidade — informe o valor ou rode uma simulação antes de submeter.',
+        'SUBMISSION_VALIDATION'
+      );
+    }
+  }
   if (maxAmount !== null && maxAmount !== undefined && Number(amount) > Number(maxAmount)) {
     await logIneligible(
       groupId,
@@ -212,11 +228,11 @@ async function assertEligible(financingCase, { amount } = {}, groupId, companyId
       actorUserId,
       financingCase.id,
       ruleVersionId,
-      `Valor R$ ${Number(amount).toFixed(2)} acima do teto de R$ ${Number(maxAmount).toFixed(2)} para o provider "${providerCode}".`,
+      `Valor R$ ${reais(amount)} acima do teto de R$ ${reais(maxAmount)} para o provider "${providerCode}".`,
       transaction
     );
     throw AppError.unprocessable(
-      `O valor solicitado (R$ ${Number(amount).toFixed(2)}) está acima do limite aceito pelo provider "${providerCode}" (até R$ ${Number(maxAmount).toFixed(2)}). Tente um provider diferente ou ajuste o valor.`,
+      `O valor solicitado (R$ ${reais(amount)}) está acima do limite aceito pelo provider "${PROVIDER_LABEL[providerCode] || providerCode}" (até R$ ${reais(maxAmount)}). Tente um provider diferente ou ajuste o valor.`,
       'COR_ELIGIBILITY_AMOUNT_EXCEEDS_LIMIT'
     );
   }
