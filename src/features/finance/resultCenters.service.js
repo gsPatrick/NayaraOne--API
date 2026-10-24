@@ -84,6 +84,7 @@ async function deleteResultCenter(id, actorUserId, transaction) {
       entityType: 'ResultCenter',
       entityId: resultCenter.id,
       beforeJson,
+      afterJson: { ...beforeJson, deletedAt: new Date(), deletedBy: actorUserId || null, situacao: 'excluído (exclusão lógica — o registro continua no banco)' },
       reason: `Centro de resultado "${resultCenter.code}" excluído.`,
     },
     transaction
@@ -92,4 +93,19 @@ async function deleteResultCenter(id, actorUserId, transaction) {
   return { id };
 }
 
-module.exports = { createResultCenter, listResultCenters, getResultCenter, updateResultCenter, deleteResultCenter };
+// Mesmo raciocínio/comentário de getOrCreateDefaultCostCenter (costCenters.service.js) — ver
+// lá para o contexto completo do porquê este helper existe.
+async function getOrCreateDefaultResultCenter(groupId, companyId, code, name, transaction) {
+  const existing = await ResultCenter.findOne({ where: { groupId, companyId, code }, transaction });
+  if (existing) return existing;
+  return ResultCenter.create({ groupId, companyId, code, name }, { transaction });
+}
+
+module.exports = {
+  createResultCenter,
+  listResultCenters,
+  getResultCenter,
+  updateResultCenter,
+  deleteResultCenter,
+  getOrCreateDefaultResultCenter,
+};

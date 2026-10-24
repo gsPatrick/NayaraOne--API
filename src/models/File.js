@@ -52,6 +52,16 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'checksum_sha256',
       },
+      // true = o binário em disco foi gravado cifrado (marcador NAYENC1). Arquivos anteriores à
+      // migration 20260101000395 ficam false (legado, podem estar em texto puro). Com true, a
+      // leitura recusa conteúdo sem o marcador — sem isso, remover o marcador fazia a API servir
+      // bytes adulterados como se fossem "legado" (I4, revisão de 18/10/2026).
+      encryptedAtRest: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'encrypted_at_rest',
+      },
       // STOPGAP (ver migration 20260101000173) — binário guardado direto no Postgres enquanto
       // não existe storage de objetos real. Nunca incluído em queries por padrão
       // (excludeContentByDefault em files.service.js) para não pesar toda leitura de File.

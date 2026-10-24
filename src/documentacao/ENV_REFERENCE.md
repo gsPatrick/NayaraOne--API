@@ -83,3 +83,20 @@ usa em runtime. Os roles adicionais mencionados em `02_BANCO_DE_DADOS_E_RLS.md` 
 (`nayara_worker`, `nayara_readonly`, `nayara_breakglass`) ainda não foram criados — ficam para um
 próximo incremento quando os respectivos consumidores (jobs assíncronos, BI, acesso emergencial)
 existirem.
+
+## Motores reais de antivírus e leitura de documentos (opcionais)
+
+Sem as variáveis abaixo, o sistema usa os adaptadores de laboratório. A ativação em servidor
+depende de aprovação da Contratante (custo de infraestrutura, cláusula 14.2).
+
+| Variável | Valor | Efeito |
+|---|---|---|
+| `ANTIVIRUS_PROVIDER` | `clamav` | Todo upload passa pelo ClamAV (daemon `clamd`). Se o daemon não responde, o arquivo é recusado (falha fechada). |
+| `CLAMAV_HOST` / `CLAMAV_PORT` | `127.0.0.1` / `3310` | Endereço do `clamd`. |
+| `CLAMAV_TIMEOUT_MS` | `30000` | Tempo máximo da varredura. |
+| `OCR_PROVIDER` | `local` | Leitura de PDF com texto (`pdftotext`) e de imagem/PDF escaneado (Tesseract). |
+| `OCR_LANG` | `por` | Idioma do Tesseract. |
+| `PDFTOTEXT_BIN`, `PDFTOPPM_BIN`, `TESSERACT_BIN` | caminho do binário | Só se não estiverem no `PATH`. |
+
+Referência local (macOS): `brew install clamav tesseract tesseract-lang poppler`, `freshclam` para baixar as
+assinaturas e `clamd` com `TCPSocket 3310`. O `clamd` ocupa cerca de 1 GB de memória.

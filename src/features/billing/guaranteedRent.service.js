@@ -1,9 +1,17 @@
 'use strict';
 
+const { formatCompetenceBR, formatMoneyBR } = require('../../utils/formatBR');
+
 const { GuaranteedRentContract, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
+const GUARANTEED_RENT_COST_CENTER_CODE = 'LOCACAO-ALUGUEL-GARANTIDO';
+const GUARANTEED_RENT_RESULT_CENTER_CODE = 'LOCACAO-ALUGUEL-GARANTIDO';
 const { publishGuaranteedRentPaid } = require('./billingEvents.service');
 
 /**
@@ -104,11 +112,18 @@ async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId,
 
   const previousPayments = Array.isArray(guaranteedRentContract.paymentsJson) ? guaranteedRentContract.paymentsJson : [];
   if (previousPayments.some((p) => p.period === period)) {
-    throw AppError.conflict(`Já existe pagamento de aluguel garantido registrado para a competência "${period}".`, 'GUARANTEED_RENT_PAYMENT_DUPLICATE');
+    throw AppError.conflict(`Já existe pagamento de aluguel garantido registrado para a competência "${formatCompetenceBR(period)}".`, 'GUARANTEED_RENT_PAYMENT_DUPLICATE');
   }
 
   const beforeJson = guaranteedRentContract.toJSON();
 
+  const costCenter = await getOrCreateDefaultCostCenter(
+    guaranteedRentContract.groupId,
+    guaranteedRentContract.companyId,
+    GUARANTEED_RENT_COST_CENTER_CODE,
+    'Locação — aluguel garantido',
+    transaction
+  );
   const payableEntry = await createFinancialEntry(
     {
       groupId: guaranteedRentContract.groupId,
@@ -117,14 +132,22 @@ async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId,
       entryType: 'DEBIT',
       nature: 'PAYABLE',
       amount: numericAmount,
-      description: `Aluguel garantido — pagamento ao proprietário, competência ${period}.`,
+      description: `Aluguel garantido — pagamento ao proprietário, competência ${formatCompetenceBR(period)}.`,
       dueAt: new Date(),
       idempotencyKey: `guaranteed_rent.payable:${guaranteedRentContract.id}:${period}`,
+      costCenterId: costCenter.id,
     },
     actorUserId,
     transaction
   );
 
+  const resultCenter = await getOrCreateDefaultResultCenter(
+    guaranteedRentContract.groupId,
+    guaranteedRentContract.companyId,
+    GUARANTEED_RENT_RESULT_CENTER_CODE,
+    'Locação — aluguel garantido',
+    transaction
+  );
   const receivableEntry = await createFinancialEntry(
     {
       groupId: guaranteedRentContract.groupId,
@@ -133,9 +156,10 @@ async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId,
       entryType: 'CREDIT',
       nature: 'RECEIVABLE',
       amount: numericAmount,
-      description: `Aluguel garantido — crédito a recuperar do locatário, competência ${period}.`,
+      description: `Aluguel garantido — crédito a recuperar do locatário, competência ${formatCompetenceBR(period)}.`,
       dueAt: new Date(),
       idempotencyKey: `guaranteed_rent.receivable:${guaranteedRentContract.id}:${period}`,
+      resultCenterId: resultCenter.id,
     },
     actorUserId,
     transaction
@@ -166,7 +190,7 @@ async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId,
       entityId: guaranteedRentContract.id,
       beforeJson,
       afterJson: guaranteedRentContract.toJSON(),
-      reason: `Aluguel garantido pago ao proprietário (${numericAmount}) e crédito a recuperar do locatário criado, competência ${period}.`,
+      reason: `Aluguel garantido pago ao proprietário (${formatMoneyBR(numericAmount)}) e crédito a recuperar do locatário criado, competência ${formatCompetenceBR(period)}.`,
     },
     transaction
   );

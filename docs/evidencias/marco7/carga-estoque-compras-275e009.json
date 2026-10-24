@@ -1,0 +1,196 @@
+{
+  "date": "2026-10-19T17:52:55.862Z",
+  "mode": "full",
+  "concurrency": 16,
+  "pool": 24,
+  "totalOps": 3950,
+  "loadSeconds": 8.794,
+  "ops": [
+    {
+      "op": "leitura: histórico de movimentos",
+      "n": 400,
+      "ok": 400,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 14.98775,
+      "p95": 21.436875,
+      "p99": 26.910792,
+      "max": 28.127584
+    },
+    {
+      "op": "leitura: saldos do item",
+      "n": 400,
+      "ok": 400,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 11.382333,
+      "p95": 17.599917,
+      "p99": 22.124334,
+      "max": 24.977916
+    },
+    {
+      "op": "movimento IN",
+      "n": 385,
+      "ok": 385,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 39.01775,
+      "p95": 67.303125,
+      "p99": 91.958334,
+      "max": 125.668458
+    },
+    {
+      "op": "movimento OUT",
+      "n": 1208,
+      "ok": 434,
+      "recusasNegocio": {
+        "INVENTORY_INSUFFICIENT_BALANCE": 774
+      },
+      "inesperados": {},
+      "p50": 29.687,
+      "p95": 77.340333,
+      "p99": 140.485333,
+      "max": 196.442125
+    },
+    {
+      "op": "movimento TRANSFER",
+      "n": 807,
+      "ok": 421,
+      "recusasNegocio": {
+        "INVENTORY_INSUFFICIENT_BALANCE": 386
+      },
+      "inesperados": {},
+      "p50": 36.016208,
+      "p95": 82.168958,
+      "p99": 152.208791,
+      "max": 173.569958
+    },
+    {
+      "op": "recebimento de compra",
+      "n": 150,
+      "ok": 150,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 111.424167,
+      "p95": 185.434125,
+      "p99": 229.159375,
+      "max": 244.733375
+    },
+    {
+      "op": "replay de movimento",
+      "n": 120,
+      "ok": 7,
+      "recusasNegocio": {
+        "INVENTORY_INSUFFICIENT_BALANCE": 113
+      },
+      "inesperados": {},
+      "p50": 25.36975,
+      "p95": 41.770166,
+      "p99": 79.556875,
+      "max": 102.540291
+    },
+    {
+      "op": "replay de recebimento",
+      "n": 30,
+      "ok": 30,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 23.681125,
+      "p95": 143.862541,
+      "p99": 149.787583,
+      "max": 149.787583
+    },
+    {
+      "op": "requisição: aprovar",
+      "n": 150,
+      "ok": 150,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 13.028959,
+      "p95": 20.785417,
+      "p99": 24.790958,
+      "max": 26.411208
+    },
+    {
+      "op": "requisição: criar",
+      "n": 150,
+      "ok": 150,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 24.154292,
+      "p95": 67.416667,
+      "p99": 129.934625,
+      "max": 150.158416
+    },
+    {
+      "op": "requisição: entregar",
+      "n": 150,
+      "ok": 150,
+      "recusasNegocio": {},
+      "inesperados": {},
+      "p50": 49.44125,
+      "p95": 88.378167,
+      "p99": 150.859209,
+      "max": 192.955875
+    }
+  ],
+  "invariants": {
+    "negativos": 0,
+    "ledgerDivergente": 0,
+    "movimentoDuplicado": 0,
+    "recebimentoDuplicado": 0,
+    "nfDuplicada": 0,
+    "payableDuplicado": 0,
+    "recebimentoSemPayable": 0,
+    "pedidoDivergente": 0,
+    "recebimentos": 150,
+    "movimentos": 1571
+  },
+  "gates": [
+    {
+      "name": "zero saldo negativo",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "saldo = soma do ledger em todo item/local",
+      "ok": true,
+      "detail": "0 divergente(s)"
+    },
+    {
+      "name": "zero movimento duplicado (idempotencyKey)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "zero recebimento duplicado (chave e NF)",
+      "ok": true,
+      "detail": "chave 0, NF 0"
+    },
+    {
+      "name": "zero payable duplicado / recebimento sem payable",
+      "ok": true,
+      "detail": "duplicado 0, sem payable 0"
+    },
+    {
+      "name": "recebimentos gravados = 150 (replays não somam)",
+      "ok": true,
+      "detail": "150"
+    },
+    {
+      "name": "recebido por item de pedido = soma dos recebimentos",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "zero erro inesperado",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "p95 < 300 ms em todas as operações com n >= 50",
+      "ok": true,
+      "detail": "maior p95 (n >= 50): 185.4 ms"
+    }
+  ]
+}

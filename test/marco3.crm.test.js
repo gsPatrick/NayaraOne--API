@@ -26,6 +26,8 @@ const proposalsService = require('../src/features/crm/proposals.service');
 const dashboardService = require('../src/features/crm/dashboard.service');
 const feedbackCasesService = require('../src/features/crm/feedbackCases.service');
 const exportService = require('../src/features/crm/opportunitiesExport.service');
+const mfaService = require('../src/features/users/mfa.service');
+const { authenticator } = require('otplib');
 const radarService = require('../src/features/radar/radar.service');
 const { explainMatch } = require('../src/features/radar/radarMatching.service');
 const { escalateOverdueFeedbackCases } = require('../src/engines/jobs/feedbackCaseAlertJob');
@@ -651,6 +653,7 @@ test('M3-20: resolver um caso marca RESOLVED e audita', async () => {
         type: 'COMPLIMENT',
         description: `Elogio ao atendimento ${suffix}`,
         severity: 'LOW',
+        assignedToUserId: tenant.userId,
       },
       tenant.userId,
       transaction
@@ -772,12 +775,54 @@ test('M3-21: exportação SEM a permissão dedicada é bloqueada (403)', async (
   });
 });
 
-test('M3-21: exportação COM a permissão funciona, limita os campos e audita a contagem certa', async () => {
+async function disableExistingMfa(transaction) {
+  const { sequelize: db } = require('./testHelpers');
+  await db.query('DELETE FROM core.mfa_step_ups WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+  await db.query('DELETE FROM core.mfa_credentials WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
+}
+
+test('M3-21/CRM-TS-013: exportação SEM MFA recente é bloqueada mesmo com a permissão certa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await disableExistingMfa(transaction); // ver nota de determinismo no teste seguinte
+    await assert.rejects(
+      () =>
+        exportService.exportOpportunities(
+          {
+            groupId: tenant.groupId,
+            companyId: tenant.companyId,
+            actorUserId: tenant.userId,
+            actorPermissions: ['crm:opportunities:read', 'crm:opportunities:export'],
+            format: 'csv',
+            filters: {},
+          },
+          transaction
+        ),
+      (err) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.statusCode, 403);
+        assert.equal(err.code, 'MFA_REQUIRED_NOT_ENABLED');
+        return true;
+      }
+    );
+  });
+});
+
+test('M3-21: exportação COM a permissão e MFA recente funciona, limita os campos e audita a contagem certa', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `Lead Export ${suffix}`);
     await createActiveOpportunity(transaction, person.id);
     await createActiveOpportunity(transaction, person.id);
+
+    // CRM-TS-013: exportação exige MFA recente, mesmo mecanismo do step-up financeiro.
+    // Determinismo (19/10/2026): o usuário semente do banco compartilhado já tem MFA configurado
+    // (commitado em 14/10). Dentro da transação de rollback a credencial existente é desativada e
+    // o teste configura a sua pelo fluxo real (setup -> confirm -> verify).
+    await disableExistingMfa(transaction);
+    const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
+    const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
+    await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
+    await mfaService.verifyMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
 
     const result = await exportService.exportOpportunities(
       {

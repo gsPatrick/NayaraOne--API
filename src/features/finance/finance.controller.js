@@ -1,7 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
+const AppError = require('../../utils/AppError');
+const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const costCentersService = require('./costCenters.service');
 const resultCentersService = require('./resultCenters.service');
 const bankAccountsService = require('./bankAccounts.service');
@@ -9,16 +12,27 @@ const financialEntriesService = require('./financialEntries.service');
 const bankTransactionsService = require('./bankTransactions.service');
 const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
+const budgetsForecastsService = require('./budgetsForecasts.service');
+const { clearManualReview } = require('./financeAntifraud.service');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
 const chartOfAccountsService = require('./chartOfAccounts.service');
 const paymentIntentsService = require('./paymentIntents.service');
+const anomalyCasesService = require('./anomalyCases.service');
+const bankPaymentsService = require('./bankPayments.service');
 const intercompanyTransfersService = require('./intercompanyTransfers.service');
 const periodClosuresService = require('./periodClosures.service');
 const financialHealthReportService = require('./financialHealthReport.service');
+const financeInsightsService = require('./financeNay.service');
 
 function withTenant(req) {
   return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
+}
+
+// F03 — baixa manual de pagamento bancário (exceção formal): comprovante + motivo vêm do corpo.
+function manualSettlementFromBody(body) {
+  if (!body || (!body.settlementEvidenceFileId && !body.settlementReason)) return null;
+  return { evidenceFileId: body.settlementEvidenceFileId, reason: body.settlementReason };
 }
 
 // --- Cost centers ---
@@ -109,8 +123,28 @@ const updateFinancialEntry = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => financialEntriesService.updateFinancialEntry(req.params.id, req.body, req.auth.userId, t));
   return success(res, { data: item });
 });
+// M45 — remove o vínculo do comprovante de um lançamento em aberto, com motivo.
+const detachSettlementEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.detachSettlementEvidence(req.params.id, { reason: req.body && req.body.reason }, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+// A4 — comprovante da baixa manual é anexado ANTES da aprovação.
+const attachSettlementEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.attachSettlementEvidence(
+      req.params.id,
+      { evidenceFileId: req.body.settlementEvidenceFileId || req.body.evidenceFileId, reason: req.body.settlementReason || req.body.reason },
+      req.auth.userId,
+      t
+    )
+  );
+  return success(res, { data: item });
+});
+
 const settleFinancialEntry = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
   return success(res, { data: item });
 });
 const reverseFinancialEntry = catchAsync(async (req, res) => {
@@ -118,6 +152,38 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
     financialEntriesService.reverseFinancialEntry(req.params.id, req.body.reason, req.auth.userId, t)
   );
   return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO (ciclo de verificação Marco 4, 12/10/2026): settleFinancialEntryPartial
+// (recebimento parcial, FIN-TS-006) existia no service e era testada diretamente, mas nunca
+// tinha rota/controller — nenhum humano conseguia dar baixa parcial pela API/tela, só a baixa
+// total via settleFinancialEntry.
+const settleFinancialEntryPartial = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) })
+  );
+  return success(res, { data: item });
+});
+// GAP REAL CORRIGIDO: fila de pendências de classificação (M4-contrato §10) existia no service,
+// sem rota — ninguém via nem resolvia essas pendências.
+const listFinancialEntryClassificationPendings = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => financialEntriesService.listClassificationPendings(t, req.query));
+  return success(res, { data: items });
+});
+const resolveFinancialEntryClassificationPending = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    financialEntriesService.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t, { costCenterId: req.body.costCenterId })
+  );
+  return success(res, { data: item });
+});
+// GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7): clearManualReview
+// (financeAntifraud.service.js) já existia e era usada internamente, mas nunca foi exposta por
+// rota nenhuma — um lançamento retido por antifraude não tinha como ser liberado pela API/tela,
+// só direto no banco.
+const clearFinancialEntryManualReview = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    clearManualReview(req.params.id, req.auth.userId, t, req.body?.reviewNote)
+  );
+  return success(res, { data: item });
 });
 
 // --- Bank transactions (extrato) ---
@@ -129,10 +195,19 @@ const listBankTransactions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) => bankTransactionsService.listBankTransactions(t, { bankAccountId: req.query.bankAccountId }));
   return success(res, { data: items });
 });
+const importBankStatement = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => bankTransactionsService.importBankStatement(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: result });
+});
 
 // --- Reconciliation ---
 const matchReconciliation = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => reconciliationService.matchReconciliation(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+// Conciliação em grupo (N lançamentos x M transações), tolerância zero — Caderno §11 / M4-13.
+const matchReconciliationGroup = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => reconciliationService.matchReconciliationGroup(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
 const listReconciliations = catchAsync(async (req, res) => {
@@ -140,6 +215,31 @@ const listReconciliations = catchAsync(async (req, res) => {
     reconciliationService.listReconciliations(t, { financialEntryId: req.query.financialEntryId, bankTransactionId: req.query.bankTransactionId })
   );
   return success(res, { data: items });
+});
+// GAP REAL (verificação cética adicional, Marco 4, 12/10/2026): suggestReconciliationMatches —
+// o motor de classificação EXATO/FORTE/PROVÁVEL/AMBÍGUO/SEM CORRESPONDÊNCIA exigido pelo
+// Caderno (§11) já existia inteiro no service, mas nunca tinha rota — a tela de conciliação
+// bypassava a engine inteira e fazia match ingênuo só por valor exato no front. Só sugere,
+// nunca executa (ver reconciliation.service.js#suggestReconciliationMatches).
+const suggestReconciliationMatches = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    reconciliationService.suggestReconciliationMatches(req.params.id, t)
+  );
+  return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO: autoReconcileSuggestion existia no service (confirma EXATO/FORTE e já
+// concilia sozinho, igual o Caderno §11 pede — "Exato: auto confirmado"), mas nunca era chamada
+// de lugar nenhum, nem pela rota de sugestão nem internamente — morta. Classe AMBÍGUO/PROVÁVEL
+// nunca é auto-conciliada por esta rota (ela mesma recusa, ver reconciliation.service.js).
+const autoReconcileSuggestion = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    reconciliationService.autoReconcileSuggestion(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, bankTransactionId: req.params.id },
+      req.auth.userId,
+      t
+    )
+  );
+  return success(res, { data: result });
 });
 
 // --- Approvals (maker-checker) ---
@@ -169,7 +269,11 @@ const createCommission = catchAsync(async (req, res) => {
 });
 const listCommissions = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
-    commissionsService.listCommissions(t, { status: req.query.status, beneficiaryUserId: req.query.beneficiaryUserId })
+    commissionsService.listCommissions(t, {
+      status: req.query.status,
+      beneficiaryUserId: req.query.beneficiaryUserId,
+      includeInstallments: req.query.include === 'installments',
+    })
   );
   return success(res, { data: items });
 });
@@ -183,11 +287,51 @@ const payCommissionInstallment = catchAsync(async (req, res) => {
   );
   return success(res, { data: item });
 });
+const cancelCommission = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    commissionsService.cancelCommission(req.params.id, req.body.reason, req.auth.userId, t)
+  );
+  return success(res, { data: result });
+});
+// GAP REAL CORRIGIDO: getCommissionAdjustments (histórico de ajustes/cancelamentos de uma
+// comissão) existia no service, sem rota — a tela de cancelar comissão não tinha como mostrar
+// o histórico de ajustes já feitos.
+const getCommissionAdjustments = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => commissionsService.getCommissionAdjustments(req.params.id, t));
+  return success(res, { data: items });
+});
+
+// --- Anomaly cases (GAP REAL CORRIGIDO: service completo existia, sem nenhuma rota HTTP —
+// toda anomalia detectada ficava invisível pra qualquer humano, só contada no relatório
+// semanal como um número solto, sem forma de abrir e ver qual caso é qual) ---
+const listAnomalyCases = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    anomalyCasesService.listAnomalyCases(t, { status: req.query.status, riskLevel: req.query.riskLevel })
+  );
+  return success(res, { data: items });
+});
+const resolveAnomalyCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    anomalyCasesService.resolveAnomalyCase(req.params.id, req.auth.userId, t, req.body.resolutionNote)
+  );
+  return success(res, { data: item });
+});
 
 // --- Owner repasses ---
 const createOwnerRepasse = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => ownerRepassesService.createOwnerRepasse(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
+});
+// M45 F4: recebimentos elegíveis para o Novo repasse (imóvel/contrato/período).
+const listEligibleRepasseSources = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    ownerRepassesService.listEligibleRepasseSources(t, {
+      propertyId: req.query.propertyId,
+      contractId: req.query.contractId || null,
+      referenceMonth: req.query.referenceMonth || null,
+    })
+  );
+  return success(res, { data: items });
 });
 const listOwnerRepasses = catchAsync(async (req, res) => {
   const items = await req.withTenantTransaction((t) =>
@@ -198,6 +342,14 @@ const listOwnerRepasses = catchAsync(async (req, res) => {
 const payOwnerRepasse = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => ownerRepassesService.payOwnerRepasse(req.params.id, req.auth.userId, t));
   return success(res, { data: item });
+});
+// GAP REAL CORRIGIDO: getOwnerRepasseComposition (decomposição do valor em aluguel, taxa,
+// multa, consumo, manutenção, comissão/administração — Caderno §12 "extrato do proprietário
+// mostra composição, não apenas valor líquido") existia no service, sem rota — a tela de
+// repasses só mostrava o valor líquido final, violando essa regra explícita.
+const getOwnerRepasseComposition = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => ownerRepassesService.getOwnerRepasseComposition(req.params.id, t));
+  return success(res, { data: result });
 });
 
 // --- Chart of accounts (plano de contas — M4-01) ---
@@ -241,7 +393,7 @@ const approvePaymentIntent = catchAsync(async (req, res) => {
   return success(res, { data: item });
 });
 const executePaymentIntent = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => paymentIntentsService.executePaymentIntent(req.params.id, req.auth.userId, t));
+  const result = await req.withTenantTransaction((t) => paymentIntentsService.executePaymentIntent(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
   return success(res, { data: result });
 });
 const cancelPaymentIntent = catchAsync(async (req, res) => {
@@ -250,6 +402,124 @@ const cancelPaymentIntent = catchAsync(async (req, res) => {
   );
   return success(res, { data: item });
 });
+
+// --- Submissão bancária real (BankAdapter — ver PROVIDER_BANCARIO.md) ---
+// B1 (revisão independente): 3 fases em transações separadas — SUBMITTING é gravado e
+// COMMITADO antes da chamada ao banco; a chamada roda fora de transação; o resultado é gravado
+// depois. Uma queda entre o banco e o commit deixa a intenção incerta (SUBMITTING), nunca um
+// pagamento no banco sem registro local.
+const submitPaymentIntentToBank = catchAsync(async (req, res) => {
+  const actor = { userId: req.auth.userId };
+  const { adapter, request } = await req.withTenantTransaction((t) =>
+    bankPaymentsService.prepareBankSubmission(req.params.id, req.body.paymentMethod, actor, t)
+  );
+  const result = await bankPaymentsService.callBankSubmit(adapter, request);
+  const intent = await req.withTenantTransaction((t) => bankPaymentsService.finalizeBankSubmission(req.params.id, result, actor, t));
+  return success(res, { data: intent });
+});
+
+// B2 — consulta o banco para uma intenção incerta (o job faz o mesmo periodicamente).
+const reconcilePaymentIntent = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => bankPaymentsService.reconcilePaymentIntent(req.params.id, { userId: req.auth.userId }, t));
+  return success(res, { data: result });
+});
+
+// B2 — saída controlada (motivo + auditoria); só dá como falha com resposta do banco.
+const resolveUncertainPaymentIntent = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    bankPaymentsService.resolveUncertainPaymentIntent(req.params.id, { reason: req.body.reason }, { userId: req.auth.userId }, t)
+  );
+  return success(res, { data: result });
+});
+
+// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 38, 2026-10-05): mesma falha de
+// segurança já corrigida no webhook de seguro (R37, insurance.controller.js) — HMAC-SHA256 por
+// tenant, timing-safe, fail-closed quando há provider real configurado.
+const BANK_WEBHOOK_HEADER = 'x-webhook-signature';
+
+function computeHmacSha256Hex(secret, rawBody) {
+  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+}
+
+function verifyBankWebhookSignature(rawBody, headers, webhookSecret) {
+  if (!webhookSecret || !rawBody || rawBody.length === 0) return false;
+  const received = headers ? headers[BANK_WEBHOOK_HEADER] : null;
+  if (!received || typeof received !== 'string') return false;
+  const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
+
+  const expectedHex = computeHmacSha256Hex(webhookSecret, rawBody);
+
+  let expectedBuffer;
+  let receivedBuffer;
+  try {
+    expectedBuffer = Buffer.from(expectedHex, 'hex');
+    receivedBuffer = Buffer.from(receivedHex, 'hex');
+  } catch (err) {
+    return false;
+  }
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+// Webhook PÚBLICO (fora do authMiddleware/tenantMiddleware — ver finance.routes.js/routes/index.js,
+// mesmo padrão de clicksignPublicWebhook em legal.controller.js). O provedor bancário não tem
+// (e nunca terá) um JWT de usuário deste sistema.
+const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
+  const { externalSubmissionId, status } = req.body || {};
+  // Valida TIPO, não só presença — um payload malformado (ex.: status como objeto/array) não
+  // pode chegar a uma query Sequelize sem passar por aqui primeiro; isso derrubaria o webhook
+  // público com um 500 cru, sem nenhum código de erro específico.
+  if (typeof externalSubmissionId !== 'string' || !externalSubmissionId || typeof status !== 'string' || !status) {
+    return success(res, { statusCode: 400, data: { received: false, reason: 'invalid_payload' } });
+  }
+  const { sequelize } = require('../../models');
+  const result = await sequelize.transaction((t) =>
+    processBankPaymentWebhook({ body: req.body, rawBody: req.rawBody, headers: req.headers }, t)
+  );
+  return success(res, { data: result });
+});
+
+/**
+ * processBankPaymentWebhook — corpo do webhook bancário público, recebendo a transação de fora
+ * (o controller abre a dele; o teste E2E do Financeiro usa a transação com rollback). Resolve o
+ * tenant pela tabela de roteamento, aplica SET LOCAL, confere a assinatura HMAC (sempre, também
+ * em sandbox) e só então confirma o pagamento.
+ */
+async function processBankPaymentWebhook({ body, rawBody, headers }, t) {
+  const { externalSubmissionId, status } = body || {};
+  const { sequelize, BankPaymentProviderRouting } = require('../../models');
+  {
+    // Resolve o tenant via routing table (sem RLS) ANTES de abrir qualquer SET LOCAL — mesma
+    // ordem de operações do webhook de assinatura.
+    const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId }, transaction: t });
+    if (!routing) {
+      // Mesmo padrão do webhook da Clicksign (legal.controller.js): 200 pra o provedor não
+      // ficar reenviando infinitamente, mas o motivo de não ter processado fica EXPLÍCITO no
+      // campo `reason` da resposta — nunca um "received: true" indistinguível de sucesso real.
+      return { received: true, processed: false, reason: 'unknown_routing' };
+    }
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: routing.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: routing.companyId }, transaction: t });
+
+    const tenant = { groupId: routing.groupId, companyId: routing.companyId };
+    // B5 (revisão independente): antes, em sandbox (o padrão) o webhook NÃO conferia assinatura —
+    // com o id externo previsível, qualquer pessoa marcava um pagamento como confirmado. Agora a
+    // assinatura HMAC é exigida SEMPRE (o sandbox usa o próprio segredo configurado); sem segredo
+    // configurado, falha fechado. Confirmação via sandbox é gravada como SANDBOX_CONFIRMED.
+    const providerName = await getSetting('finance.payment_provider', tenant, t, 'sandbox');
+    const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
+    const isValid = verifyBankWebhookSignature(rawBody, headers, webhookSecret);
+    if (!isValid) {
+      throw AppError.unauthorized(
+        'Assinatura HMAC do webhook bancário ausente ou inválida.',
+        'BANK_PAYMENT_WEBHOOK_HMAC_INVALID'
+      );
+    }
+
+    await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t, { sandbox: providerName === 'sandbox' });
+    return { received: true, processed: true };
+  }
+}
 
 // --- Intercompany transfers (M4-18) ---
 const createIntercompanyTransfer = catchAsync(async (req, res) => {
@@ -276,8 +546,28 @@ const closePeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.closePeriod(withTenant(req), req.auth.userId, t));
   return success(res, { statusCode: 201, data: item });
 });
+const approvePeriodClosure = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.approvePeriodClosure(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
 const reopenPeriod = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
+// F02 (2ª rodada) — devolve um pedido de fechamento em REVIEW para OPEN, com motivo.
+const returnPeriodToOpen = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.returnPeriodToOpen(withTenant(req), req.auth.userId, t));
+  return success(res, { data: item });
+});
+// F02 — pré-condições do fechamento (Caderno §16) e conferências humanas.
+const getPeriodPreconditions = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    periodClosuresService.getPeriodPreconditions({ companyId: req.auth.companyId, referenceMonth: req.params.referenceMonth }, t)
+  );
+  return success(res, { data: result });
+});
+const confirmPeriodCheck = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => periodClosuresService.confirmPeriodCheck(withTenant(req), req.auth.userId, t));
   return success(res, { data: item });
 });
 const listPeriodClosures = catchAsync(async (req, res) => {
@@ -287,22 +577,128 @@ const listPeriodClosures = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const getWeeklyHealthReport = catchAsync(async (req, res) => {
-  const report = await req.withTenantTransaction((t) => financialHealthReportService.getWeeklyHealthReport(t));
+  const report = await req.withTenantTransaction((t) =>
+    financialHealthReportService.getWeeklyHealthReport(t, { companyId: req.auth.companyId })
+  );
   return success(res, { data: report });
 });
 
+// Caderno M4 §18 — explicações e sugestões somente leitura (financeNay.service.js).
+const getFinanceInsights = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    financeInsightsService.getFinanceInsights({ groupId: req.auth.groupId, companyId: req.auth.companyId }, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+
+// GAP REAL CORRIGIDO (varredura completa Marco 4, 11/10/2026): finance.budgets_forecasts
+// (Caderno §5) tinha service mas nenhuma rota HTTP.
+const createBudgetForecast = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => budgetsForecastsService.createBudgetForecast(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listBudgetForecasts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    budgetsForecastsService.listBudgetForecasts(t, {
+      competenceMonth: req.query.competenceMonth,
+      nature: req.query.nature,
+      costCenterId: req.query.costCenterId,
+      resultCenterId: req.query.resultCenterId,
+    })
+  );
+  return success(res, { data: items });
+});
+const compareBudgetForecastToRealized = catchAsync(async (req, res) => {
+  const comparison = await req.withTenantTransaction((t) => budgetsForecastsService.compareForecastToRealized(req.query.competenceMonth, t));
+  return success(res, { data: comparison });
+});
+
+// --- Frente 3 (Regras do Financeiro, Marco 4) ---
+const approveIntercompanyTransfer = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.approveIntercompanyTransfer(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: result });
+});
+const rejectIntercompanyTransfer = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.rejectIntercompanyTransfer(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+const getGroupConsolidatedReport = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.getGroupConsolidatedReport(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      { referenceMonth: req.query.referenceMonth },
+      t
+    )
+  );
+  return success(res, { data: result });
+});
+const listIntercompanyDestinationAccounts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.listDestinationBankAccounts(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      req.query.toCompanyId,
+      t
+    )
+  );
+  return success(res, { data: items });
+});
+const listIntercompanyDestinationCompanies = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    intercompanyTransfersService.listDestinationCompanies(
+      { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
+      t
+    )
+  );
+  return success(res, { data: items });
+});
+const publishCommissionRule = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.publishCommissionRuleVersion(withTenant(req), req.auth.userId, t));
+  return success(res, { data: result });
+});
+const getCommissionRule = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.getActiveCommissionRule(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: result });
+});
+const listCommissionRuleVersions = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.listCommissionRuleVersions(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: result });
+});
+const getCommissionRelease = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => commissionsService.getCommissionRelease(req.params.id, t));
+  return success(res, { data: result });
+});
+const approveOwnerRepasse = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => ownerRepassesService.approveOwnerRepasse(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: result });
+});
+const listChartAccountVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => chartOfAccountsService.listAccountVersions(req.params.id, t));
+  return success(res, { data: items });
+});
+
 module.exports = {
+  approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts, listIntercompanyDestinationCompanies,
+  publishCommissionRule, getCommissionRule, listCommissionRuleVersions, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
   createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount,
   createPaymentIntent, listPaymentIntents, approvePaymentIntent, executePaymentIntent, cancelPaymentIntent,
+  submitPaymentIntentToBank, reconcilePaymentIntent, resolveUncertainPaymentIntent, bankPaymentPublicWebhook, processBankPaymentWebhook, verifyBankWebhookSignature,
   createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer,
-  closePeriod, reopenPeriod, listPeriodClosures, getWeeklyHealthReport,
+  closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, listPeriodClosures, getPeriodPreconditions, confirmPeriodCheck, getWeeklyHealthReport, getFinanceInsights,
   createCostCenter, listCostCenters, updateCostCenter, removeCostCenter,
   createResultCenter, listResultCenters, updateResultCenter, removeResultCenter,
   createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount,
   createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, settleFinancialEntry, reverseFinancialEntry,
-  createBankTransaction, listBankTransactions,
-  matchReconciliation, listReconciliations,
+  clearFinancialEntryManualReview, settleFinancialEntryPartial, attachSettlementEvidence, detachSettlementEvidence,
+  listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending,
+  createBankTransaction, listBankTransactions, importBankStatement,
+  matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
   createApprovalRequest, listApprovalRequests, decideApprovalStep,
-  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment,
-  createOwnerRepasse, listOwnerRepasses, payOwnerRepasse,
+  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments,
+  listAnomalyCases, resolveAnomalyCase,
+  createOwnerRepasse, listOwnerRepasses, listEligibleRepasseSources, payOwnerRepasse, getOwnerRepasseComposition,
+  createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized,
 };

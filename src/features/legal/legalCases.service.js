@@ -32,6 +32,31 @@ function assertValidPhase(phase, allowUnknownPhase) {
   }
 }
 
+// M45 (Caderno M5 §14): órgão, classe, valor e risco do processo. O valor é sempre ESTIMADO
+// (estimated_amount) e nunca vira recebível sozinho: nenhum lançamento financeiro é criado a
+// partir do processo — "Não confundir estimativa processual com recebível confirmado".
+const CASE_RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+function readCaseDetails(payload) {
+  const out = {};
+  if (payload.court !== undefined) out.court = payload.court ? String(payload.court).trim().slice(0, 160) : null;
+  if (payload.caseClass !== undefined) out.caseClass = payload.caseClass ? String(payload.caseClass).trim().slice(0, 120) : null;
+  if (payload.riskLevel !== undefined && payload.riskLevel !== null) {
+    const risk = String(payload.riskLevel).toUpperCase();
+    if (!CASE_RISK_LEVELS.includes(risk)) {
+      throw AppError.badRequest(`"riskLevel" deve ser um de: ${CASE_RISK_LEVELS.join(', ')}.`, 'LEGAL_CASE_VALIDATION');
+    }
+    out.riskLevel = risk;
+  } else if (payload.riskLevel === null) out.riskLevel = null;
+  if (payload.estimatedAmount !== undefined && payload.estimatedAmount !== null && payload.estimatedAmount !== '') {
+    const amount = Number(payload.estimatedAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw AppError.badRequest('"estimatedAmount" deve ser um número maior ou igual a zero (valor estimado do processo).', 'LEGAL_CASE_VALIDATION');
+    }
+    out.estimatedAmount = amount.toFixed(2);
+  } else if (payload.estimatedAmount === null) out.estimatedAmount = null;
+  return out;
+}
+
 async function createLegalCase(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, propertyId, responsibleUserId, escalationUserId, caseNumber, caseType, summary, phase } = payload;
   if (!groupId || !companyId || !caseType) {
@@ -55,6 +80,7 @@ async function createLegalCase(payload, actorUserId, transaction) {
       status: 'OPEN',
       phase: phase || null,
       summary: summary || null,
+      ...readCaseDetails(payload),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -94,6 +120,68 @@ async function getLegalCase(id, transaction) {
   return legalCase;
 }
 
+/**
+ * assertNotOnLegalHold — gap real (auditoria Nayara, §16/JUR-010/011): um processo em legal
+ * hold não pode ter status/fase alterados (é exatamente o que a retenção legal existe para
+ * impedir — mudar o estado do processo durante uma disputa/investigação, mesmo sem apagar
+ * nada). Campos puramente informativos (summary, responsável, escalonamento) continuam
+ * editáveis: a retenção trava o ESTADO processual, não a operação do caso no dia a dia.
+ */
+function assertNotOnLegalHold(legalCase, { statusChanging, phaseChanging }) {
+  if (legalCase.legalHold && (statusChanging || phaseChanging)) {
+    throw AppError.conflict(
+      `Este processo está em legal hold (retenção legal) desde ${legalCase.legalHoldSetAt ? new Date(legalCase.legalHoldSetAt).toISOString() : 'data desconhecida'}` +
+        `${legalCase.legalHoldReason ? ` — motivo: "${legalCase.legalHoldReason}"` : ''}. Remova o hold antes de alterar status/fase.`,
+      'LEGAL_CASE_ON_LEGAL_HOLD'
+    );
+  }
+}
+
+/**
+ * setLegalHold — ativa/desativa a retenção legal do processo. Motivo é obrigatório ao ATIVAR
+ * (nunca ao desativar — remover o hold não precisa justificar o estado anterior, só o próprio
+ * ato já fica na trilha de auditoria com antes/depois). Auditado separadamente de
+ * `legal.case.update` para ficar fácil de filtrar/relatar quantos processos entraram/saíram de
+ * hold, sem misturar com qualquer outra edição de campo.
+ */
+async function setLegalHold(id, payload, actorUserId, transaction) {
+  const legalCase = await getLegalCase(id, transaction);
+  const { legalHold, reason } = payload;
+  if (typeof legalHold !== 'boolean') {
+    throw AppError.badRequest('O campo "legalHold" (boolean) é obrigatório.', 'LEGAL_CASE_LEGAL_HOLD_VALIDATION');
+  }
+  if (legalHold && (!reason || !String(reason).trim())) {
+    throw AppError.badRequest('Um motivo é obrigatório para ativar a retenção legal (legal hold).', 'LEGAL_CASE_LEGAL_HOLD_REASON_REQUIRED');
+  }
+
+  const beforeJson = legalCase.toJSON();
+  legalCase.legalHold = legalHold;
+  legalCase.legalHoldReason = legalHold ? reason : null;
+  legalCase.legalHoldSetBy = actorUserId || null;
+  legalCase.legalHoldSetAt = new Date();
+  legalCase.updatedBy = actorUserId || null;
+  await legalCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId: legalCase.groupId,
+      companyId: legalCase.companyId,
+      actorUserId,
+      action: legalHold ? 'legal.case.legal_hold_set' : 'legal.case.legal_hold_cleared',
+      entityType: 'LegalCase',
+      entityId: legalCase.id,
+      beforeJson,
+      afterJson: legalCase.toJSON(),
+      reason: legalHold
+        ? `Processo jurídico ${legalCase.id} colocado em legal hold: "${reason}".`
+        : `Legal hold removido do processo jurídico ${legalCase.id}.`,
+    },
+    transaction
+  );
+
+  return legalCase;
+}
+
 async function updateLegalCase(id, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(id, transaction);
   const beforeJson = legalCase.toJSON();
@@ -101,12 +189,17 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
   // com antes/depois explícitos no `reason`, não só no diff genérico.
   assertValidPhase(phase, payload.allowUnknownPhase);
+  assertNotOnLegalHold(legalCase, {
+    statusChanging: status !== undefined && status !== legalCase.status,
+    phaseChanging: phase !== undefined && phase !== legalCase.phase,
+  });
   const previousPhase = legalCase.phase;
   if (status !== undefined) legalCase.status = status;
   if (summary !== undefined) legalCase.summary = summary;
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
   if (escalationUserId !== undefined) legalCase.escalationUserId = escalationUserId;
   if (phase !== undefined) legalCase.phase = phase;
+  Object.assign(legalCase, readCaseDetails(payload));
   legalCase.updatedBy = actorUserId || null;
   await legalCase.save({ transaction });
 
@@ -237,10 +330,12 @@ async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
 }
 
 module.exports = {
+  CASE_RISK_LEVELS,
   createLegalCase,
   listLegalCases,
   getLegalCase,
   updateLegalCase,
+  setLegalHold,
   linkCaseToTask,
   addLegalCaseParty,
   listLegalCaseParties,

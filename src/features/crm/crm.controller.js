@@ -11,6 +11,8 @@ const feedbackCasesService = require('./feedbackCases.service');
 const opportunitiesExportService = require('./opportunitiesExport.service');
 const opportunityTasksService = require('./opportunityTasks.service');
 const opportunityTimelineService = require('./opportunityTimeline.service');
+const cartsService = require('./carts.service');
+const { sequelize } = require('../../models');
 
 // --- Opportunities ---
 
@@ -22,12 +24,25 @@ const createOpportunity = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: opportunity });
 });
 
+// CRM-TS-012: resolve o escopo ANTES do service — se o usuário tem a permissão de gestor
+// (`crm:opportunities:read:all`), vê tudo; se só tem a de corretor (`:read:own`), vê só a
+// própria carteira; se não tem NENHUMA das duas (papel ainda não migrado para o RBAC
+// granular), cai no fallback 'ALL' — sem regressão de acesso para quem já usava o sistema
+// antes desta permissão existir.
+function resolveOpportunityOwnerScope(auth) {
+  const permissions = auth.permissions || [];
+  if (permissions.includes('crm:opportunities:read:all')) return { mode: 'ALL' };
+  if (permissions.includes('crm:opportunities:read:own')) return { mode: 'OWN', userId: auth.userId };
+  return { mode: 'ALL' };
+}
+
 const listOpportunities = catchAsync(async (req, res) => {
   const opportunities = await req.withTenantTransaction((transaction) =>
     opportunitiesService.listOpportunities(transaction, {
       stage: req.query.stage,
       personId: req.query.personId,
       propertyId: req.query.propertyId,
+      ownerScope: resolveOpportunityOwnerScope(req.auth),
     })
   );
   return success(res, { data: opportunities });
@@ -273,6 +288,39 @@ const exportOpportunities = catchAsync(async (req, res) => {
   return res.status(200).send(result.content);
 });
 
+// --- Carrinho de imóveis compartilhável (crm.carts, item 3) ---
+
+const createCart = catchAsync(async (req, res) => {
+  const cart = await req.withTenantTransaction((transaction) =>
+    cartsService.createCart(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { statusCode: 201, data: cart });
+});
+
+const updateCartItems = catchAsync(async (req, res) => {
+  const cart = await req.withTenantTransaction((transaction) =>
+    cartsService.updateCartItems(req.params.cartId, req.body.propertyIds, req.auth.userId, transaction)
+  );
+  return success(res, { data: cart });
+});
+
+const generateCartShareLink = catchAsync(async (req, res) => {
+  const routing = await req.withTenantTransaction((transaction) => cartsService.generateShareLink(req.params.cartId, transaction));
+  return success(res, { data: { token: routing.token } });
+});
+
+// Endpoints PÚBLICOS (sem authMiddleware/tenantMiddleware — ver src/routes/index.js, mesmo
+// padrão de clicksignPublicWebhook): resolvem o tenant via CartShareRouting (sem RLS).
+const getPublicCart = catchAsync(async (req, res) => {
+  const data = await cartsService.getPublicCartByToken(req.params.token, sequelize);
+  return success(res, { data });
+});
+
+const clickPublicCartProperty = catchAsync(async (req, res) => {
+  const data = await cartsService.recordPublicCartClick(req.params.token, req.params.propertyId, sequelize);
+  return success(res, { data });
+});
+
 module.exports = {
   createOpportunity,
   listOpportunities,
@@ -302,4 +350,9 @@ module.exports = {
   resolveFeedbackCase,
   escalateFeedbackCase,
   exportOpportunities,
+  createCart,
+  updateCartItems,
+  generateCartShareLink,
+  getPublicCart,
+  clickPublicCartProperty,
 };

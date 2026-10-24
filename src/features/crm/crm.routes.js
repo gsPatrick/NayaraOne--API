@@ -61,4 +61,11 @@ crmRouter.get('/messages', requirePermission('crm:messages:read'), crmController
 crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), crmController.getMessage);
 crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), crmController.updateMessageStatus);
 
+// --- Carrinho de imóveis compartilhável (item 3) --- reaproveita permissões já seeded de
+// opportunities (sem permissão nova 'crm:carts:*' — migrations de DDL/seed bloqueadas nesta
+// sessão, ver nota em carts.service.js/propertyMerge.service.js).
+crmRouter.post('/opportunities/:id/carts', requirePermission('crm:opportunities:update'), crmController.createCart);
+crmRouter.patch('/carts/:cartId/items', requirePermission('crm:opportunities:update'), crmController.updateCartItems);
+crmRouter.post('/carts/:cartId/share-link', requirePermission('crm:opportunities:update'), crmController.generateCartShareLink);
+
 module.exports = crmRouter;

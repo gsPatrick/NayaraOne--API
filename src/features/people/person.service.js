@@ -4,8 +4,9 @@ const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = req
 const AppError = require('../../utils/AppError');
 const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
 const { findPotentialDuplicate } = require('./personDedup.service');
-const { publishPersonCreated } = require('./personEvents.service');
+const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
 const { VALID_ROLES } = require('./personRoles.service');
+const { scorePersonDataQuality } = require('./personDataQuality.service');
 
 // Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
 // payload de criação da pessoa (fonte única da lista: VALID_ROLES).
@@ -52,7 +53,7 @@ async function createPerson(payload, actorUserId, transaction) {
     const duplicate = await findPotentialDuplicate({ taxIdNormalized: taxIdDigits, contacts }, transaction);
     if (duplicate) {
       throw AppError.conflict(
-        'Já existe uma pessoa cadastrada com o mesmo documento ou contato principal. Envie "allowDuplicate": true para criar mesmo assim.',
+        'Já existe uma pessoa cadastrada com o mesmo documento ou contato principal.',
         'PERSON_DUPLICATE',
         { existingPersonId: duplicate.id }
       );
@@ -223,7 +224,13 @@ async function getPerson(id, transaction) {
     transaction,
   });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
-  return person;
+  // Caderno (seção 16, "NAY Comercial" — "classifica qualidade do cadastro e documentos
+  // faltantes"): derivado na leitura, não persistido. IMPORTANTE: `Model#toJSON()` do Sequelize
+  // só serializa atributos reais — uma propriedade solta atribuída à instância (`person.x = y`)
+  // é silenciosamente descartada por `res.json`/`JSON.stringify`. Por isso devolvemos um objeto
+  // plano (`{ ...person.toJSON(), dataQuality }`), mesmo padrão já usado em `afterJson` em todo
+  // o projeto (ex: opportunity.service.js), em vez de anexar a propriedade na instância.
+  return { ...person.toJSON(), dataQuality: scorePersonDataQuality(person) };
 }
 
 async function updatePerson(id, payload, actorUserId, transaction) {
@@ -251,6 +258,7 @@ async function updatePerson(id, payload, actorUserId, transaction) {
   if (riskFlagsJson !== undefined) person.riskFlagsJson = riskFlagsJson;
   person.updatedBy = actorUserId || null;
   await person.save({ transaction });
+  await publishPersonUpdated(person, transaction);
   return getPerson(id, transaction);
 }
 

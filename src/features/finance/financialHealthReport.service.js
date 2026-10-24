@@ -2,7 +2,9 @@
 
 const { Op } = require('sequelize');
 
-const { FinancialEntry } = require('../../models');
+const { FinancialEntry, Commission, OwnerRepass, sequelize } = require('../../models');
+const { countOpenHighRiskAnomalies } = require('./anomalyCases.service');
+const { startOfBusinessDay } = require('../../utils/businessDate');
 
 // M4-20 — Relatório semanal de saúde financeira.
 //
@@ -38,16 +40,25 @@ function round2(value) {
  */
 async function getWeeklyHealthReport(transaction, options = {}) {
   const now = options.now ? new Date(options.now) : new Date();
-  const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Vencimento é data de calendário em São Paulo (auditoria Marco 7 "final2", 18/10/2026: a
+  // parcela que vencia HOJE já aparecia como vencida à tarde, porque dueAt é gravado ao meio-dia
+  // e a comparação era com o instante atual). Vencido = vence antes de hoje; as janelas de N dias
+  // incluem hoje e vão até o fim do N-ésimo dia (limite superior exclusivo à meia-noite seguinte).
+  const startToday = startOfBusinessDay(now);
+  const horizon7 = startOfBusinessDay(now, 8);
+  const horizon30 = startOfBusinessDay(now, 31);
+  const horizon60 = startOfBusinessDay(now, 61);
 
   const pendingEntries = await FinancialEntry.findAll({
     where: { status: 'PENDING' },
     transaction,
   });
 
+  const emptyWindow = () => ({ payable: { count: 0, total: 0 }, receivable: { count: 0, total: 0 } });
+
   const report = {
     generatedAt: now.toISOString(),
-    windowEndsAt: horizon.toISOString(),
+    windowEndsAt: horizon7.toISOString(),
     payablePending: { count: 0, total: 0 },
     receivablePending: { count: 0, total: 0 },
     projectedNetBalance: 0,
@@ -60,7 +71,21 @@ async function getWeeklyHealthReport(transaction, options = {}) {
       payable: { count: 0, total: 0 },
       receivable: { count: 0, total: 0 },
     },
-    thirdPartyFunds: { count: 0, total: 0 },
+    // GAP REAL CORRIGIDO (Caderno §19, indicador "Contas/Recebíveis 7/30/60 dias"): só a janela
+    // de 7 dias existia. 30/60 dias são CUMULATIVOS (tudo que vence até ali, não só a "fatia"
+    // entre 30 e 60) — é a leitura usual de "contas a pagar nos próximos N dias".
+    dueNext30Days: emptyWindow(),
+    dueNext60Days: emptyWindow(),
+    // F-11 (conferência ao vivo 20/10/2026): duas medidas de terceiros com nomes parecidos pareciam a mesma
+    // coisa. Esta é a PREVISTA (lançamentos de terceiro ainda em aberto); a REALIZADA (já recebida e
+    // retida em caixa) está em freeCash.thirdPartyHeld. Cada uma diz o que mede.
+    thirdPartyFunds: {
+      count: 0,
+      total: 0,
+      basis: 'PENDING',
+      label: 'Dinheiro de terceiros em aberto (previsto)',
+      description: 'Soma dos lançamentos de dinheiro de terceiro (cauções etc.) ainda pendentes. Não é o que já está retido em caixa.',
+    },
   };
 
   for (const entry of pendingEntries) {
@@ -84,12 +109,20 @@ async function getWeeklyHealthReport(transaction, options = {}) {
 
     if (entry.dueAt) {
       const dueAt = new Date(entry.dueAt);
-      if (dueAt < now) {
+      if (dueAt < startToday) {
         report.overdue[bucket].count += 1;
         report.overdue[bucket].total += amount;
-      } else if (dueAt <= horizon) {
+      } else if (dueAt < horizon7) {
         report.dueNextSevenDays[bucket].count += 1;
         report.dueNextSevenDays[bucket].total += amount;
+      }
+      if (dueAt >= startToday && dueAt < horizon30) {
+        report.dueNext30Days[bucket].count += 1;
+        report.dueNext30Days[bucket].total += amount;
+      }
+      if (dueAt >= startToday && dueAt < horizon60) {
+        report.dueNext60Days[bucket].count += 1;
+        report.dueNext60Days[bucket].total += amount;
       }
     }
   }
@@ -100,9 +133,137 @@ async function getWeeklyHealthReport(transaction, options = {}) {
   for (const bucket of ['payable', 'receivable']) {
     report.overdue[bucket].total = round2(report.overdue[bucket].total);
     report.dueNextSevenDays[bucket].total = round2(report.dueNextSevenDays[bucket].total);
+    report.dueNext30Days[bucket].total = round2(report.dueNext30Days[bucket].total);
+    report.dueNext60Days[bucket].total = round2(report.dueNext60Days[bucket].total);
   }
   report.overdue.total = round2(report.overdue.payable.total + report.overdue.receivable.total);
   report.projectedNetBalance = round2(report.receivablePending.total - report.payablePending.total);
+
+  // GAP REAL CORRIGIDO (Caderno §19): os indicadores abaixo nunca tinham sido implementados —
+  // o relatório só cobria "contas 7 dias" e "dinheiro de terceiros" de todo o conjunto de 10
+  // indicadores exigidos. Cada um é calculado sobre dado que já existe (nenhum número novo
+  // inventado), na mesma transação/RLS desta chamada.
+
+  // "Inadimplência — Vencidos/total elegível": total elegível é tudo que já venceu + o que
+  // ainda vai vencer (overdue + pending futuro), próprio (sem terceiros).
+  const totalElegivel = report.payablePending.total + report.receivablePending.total;
+  report.delinquencyRatio = totalElegivel > 0 ? round2(report.overdue.total / totalElegivel) : 0;
+
+  // "Pendências de conciliação": extrato bancário importado sem nenhum vínculo em
+  // finance.reconciliations ainda — fila real de trabalho manual.
+  const [pendingReconciliationRow] = await sequelize.query(
+    `SELECT COUNT(*)::int AS count, COALESCE(SUM(bt.amount), 0)::numeric AS total
+     FROM finance.bank_transactions bt
+     LEFT JOIN finance.reconciliations r ON r.bank_transaction_id = bt.id
+     WHERE r.id IS NULL`,
+    { transaction, type: sequelize.QueryTypes.SELECT }
+  );
+  report.pendingReconciliations = {
+    count: Number(pendingReconciliationRow?.count || 0),
+    total: round2(toNumber(pendingReconciliationRow?.total)),
+  };
+
+  // "Comissões provisionadas": direito já calculado (PENDING/APPROVED), ainda não pago.
+  const provisionedCommissions = await Commission.findAll({
+    where: { status: { [Op.in]: ['PENDING', 'APPROVED'] } },
+    attributes: ['totalAmount'],
+    transaction,
+  });
+  report.provisionedCommissions = {
+    count: provisionedCommissions.length,
+    total: round2(provisionedCommissions.reduce((acc, c) => acc + toNumber(c.totalAmount), 0)),
+  };
+
+  // "Repasses pendentes": valores de proprietários ainda não pagos.
+  const pendingRepasses = await OwnerRepass.findAll({
+    where: { status: 'PENDING' },
+    attributes: ['netAmount'],
+    transaction,
+  });
+  report.pendingOwnerRepasses = {
+    count: pendingRepasses.length,
+    total: round2(pendingRepasses.reduce((acc, r) => acc + toNumber(r.netAmount), 0)),
+  };
+
+  // "Anomalias — Casos HIGH/CRITICAL abertos": companyId vem de options porque esta função
+  // roda sob RLS (não filtra company_id explicitamente em nenhuma outra query acima), mas
+  // AnomalyCase.count exige o valor porque não tem uma "sessão implícita" nesse service.
+  report.openHighRiskAnomalies = options.companyId
+    ? await countOpenHighRiskAnomalies(options.companyId, transaction)
+    : null;
+
+  // GAP REAL CORRIGIDO (Caderno §19, indicador "Caixa disponível"): não existe uma tabela
+  // finance.ledger nem um campo de saldo materializado em BankAccount — o saldo bancário real é
+  // a soma assinada (entrada positiva, saída negativa, já é a convenção usada por
+  // importBankStatement) de todo o extrato já importado (finance.bank_transactions), que É o
+  // fato bancário realizado. "Excluindo dinheiro de terceiros" (§19): subtrai o que está
+  // efetivamente retido hoje — recebido e ainda não devolvido — calculado sobre os lançamentos
+  // de terceiro já SETTLED (RECEIVABLE de terceiro menos PAYABLE de devolução de terceiro).
+  const [bankBalanceRow] = await sequelize.query(
+    `SELECT COALESCE(SUM(amount), 0)::numeric AS total FROM finance.bank_transactions`,
+    { transaction, type: sequelize.QueryTypes.SELECT }
+  );
+  const grossBankBalance = round2(toNumber(bankBalanceRow?.total));
+
+  const settledThirdParty = await FinancialEntry.findAll({
+    where: { status: 'SETTLED', isThirdPartyFunds: true },
+    attributes: ['amount', 'nature'],
+    transaction,
+  });
+  const thirdPartyHeld = round2(
+    settledThirdParty.reduce((acc, e) => {
+      const amt = toNumber(e.amount);
+      if (e.nature === 'RECEIVABLE') return acc + amt;
+      if (e.nature === 'PAYABLE') return acc - amt;
+      return acc;
+    }, 0)
+  );
+
+  report.freeCash = {
+    grossBankBalance,
+    thirdPartyHeld,
+    thirdPartyHeldBasis: 'SETTLED',
+    thirdPartyHeldLabel: 'Dinheiro de terceiros retido em caixa (realizado)',
+    thirdPartyHeldDescription: 'Dinheiro de terceiro já recebido e ainda não devolvido; é o que sai do saldo bancário para chegar ao caixa livre. Difere do total em aberto, que é previsto.',
+    value: round2(grossBankBalance - thirdPartyHeld),
+  };
+
+  // GAP REAL CORRIGIDO (Caderno §19, indicador "Margem por setor" — "Receita realizada − custos
+  // atribuídos"): "setor" não é um conceito solto — o próprio Caderno (§4) define
+  // result_center_id como a dimensão obrigatória "para receita e análise de margem". Agrupa
+  // todo lançamento SETTLED próprio (exclui terceiro) por centro de resultado.
+  const settledForMargin = await FinancialEntry.findAll({
+    where: { status: 'SETTLED', isThirdPartyFunds: false, nature: { [Op.in]: ['PAYABLE', 'RECEIVABLE'] } },
+    attributes: ['amount', 'nature', 'resultCenterId'],
+    transaction,
+  });
+  const bySector = new Map();
+  for (const entry of settledForMargin) {
+    const key = entry.resultCenterId || '__SEM_CENTRO_RESULTADO__';
+    if (!bySector.has(key)) bySector.set(key, { revenueRealized: 0, costsAttributed: 0 });
+    const bucket = bySector.get(key);
+    const amt = toNumber(entry.amount);
+    if (entry.nature === 'RECEIVABLE') bucket.revenueRealized += amt;
+    else bucket.costsAttributed += amt;
+  }
+  report.marginBySector = Array.from(bySector.entries()).map(([resultCenterId, v]) => ({
+    resultCenterId: resultCenterId === '__SEM_CENTRO_RESULTADO__' ? null : resultCenterId,
+    revenueRealized: round2(v.revenueRealized),
+    costsAttributed: round2(v.costsAttributed),
+    margin: round2(v.revenueRealized - v.costsAttributed),
+  }));
+
+  // "Necessidade para respirar": saídas obrigatórias já vencidas ou vencendo em 7 dias, menos o
+  // caixa livre, menos o que deve entrar com alta probabilidade na mesma janela (recebíveis que
+  // ainda não venceram e vencem em até 7 dias — overdue de recebível NÃO conta como "altamente
+  // provável", é inadimplência, não entrada certa). Agora usa o caixa livre real (freeCash.value
+  // acima) — a limitação documentada anteriormente (sem saldo bancário rastreado) foi fechada.
+  const saidasObrigatorias = report.overdue.payable.total + report.dueNextSevenDays.payable.total;
+  const entradasProvaveis = report.dueNextSevenDays.receivable.total;
+  report.breathingNeed = {
+    value: round2(saidasObrigatorias - report.freeCash.value - entradasProvaveis),
+    excludesFreeCashBalance: false,
+  };
 
   return report;
 }
@@ -117,7 +278,7 @@ async function countOverdueEntries(transaction, now = new Date()) {
       status: 'PENDING',
       isThirdPartyFunds: false,
       nature: { [Op.in]: ['PAYABLE', 'RECEIVABLE'] },
-      dueAt: { [Op.lt]: now },
+      dueAt: { [Op.lt]: startOfBusinessDay(now) },
     },
     transaction,
   });
