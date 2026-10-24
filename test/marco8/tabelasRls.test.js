@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 8 — tabelas do caderno existem com RLS forçado.
-// tax_documents fica em finance (já existia). proposals fica em crm.
+// tax_documents fica em finance (já existia). proposals (propostas do banco) fica em correspondent.
 // fiscal_calendar é a agenda em fiscal_obligations.due_at (o caderno escreve os dois no mesmo item).
 
 const { test, before, after } = require('node:test');
@@ -17,7 +17,7 @@ const TABELAS = [
   ['correspondent', 'simulations'],
   ['correspondent', 'provider_submissions'],
   ['correspondent', 'provider_status_history'],
-  ['crm', 'proposals'],
+  ['correspondent', 'proposals'],
   ['correspondent', 'appraisals'],
   ['correspondent', 'commission_entitlements'],
   ['correspondent', 'provider_accounts'],

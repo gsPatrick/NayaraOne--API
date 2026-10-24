@@ -1,5 +1,7 @@
 'use strict';
 
+const AppError = require('../../utils/AppError');
+
 // Marco 8, máquina de estados completa — citação literal do Caderno (Guia do Marcelo):
 // "DRAFT → DOCUMENTS_PENDING → READY_TO_SUBMIT → SUBMITTED → UNDER_ANALYSIS →
 // PENDING_CUSTOMER/PENDING_PROPERTY → APPROVED/REJECTED → CONTRACTING → COMPLETED ou CANCELED."
@@ -65,4 +67,13 @@ function shouldApplyTransition(currentStatus, candidateStatus) {
   return candidateRank >= currentRank;
 }
 
-module.exports = { RANK, shouldApplyTransition };
+/**
+ * assertCaseNotCanceled — um caso cancelado não recebe documento, simulação, avaliação nem envio.
+ */
+function assertCaseNotCanceled(financingCase) {
+  if (financingCase.status === 'CANCELED') {
+    throw AppError.unprocessable('Este caso foi cancelado e não aceita novas ações.', 'FINANCING_CASE_CANCELED');
+  }
+}
+
+module.exports = { assertCaseNotCanceled, RANK, shouldApplyTransition };

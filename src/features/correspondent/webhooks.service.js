@@ -14,6 +14,8 @@ const { resolveFinancingProviderAdapterByCode } = require('./adapters/resolveFin
 const { shouldApplyTransition } = require('./statusMachine');
 const { publishFinancingStatusChanged } = require('./correspondentEvents.service');
 const { syncOpportunityFromFinancingCase } = require('./correspondentCrmSync.service');
+const { recordProposal, PROPOSAL_STATUSES } = require('./cases/caseWorkflow.service');
+const { recordIntegrationError } = require('./integrationErrors.service');
 
 /**
  * resolveTenantByExternalId — o webhook só traz `externalCaseId` (do provider), nunca o
@@ -153,6 +155,18 @@ async function processFinancingWebhook(providerCode, rawBody, headers, body) {
         transaction
       );
       await syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction);
+      if (body.proposal && PROPOSAL_STATUSES.includes(normalizedStatus)) {
+        try {
+          await recordProposal(financingCase, body.proposal, 'PROVIDER', null, transaction);
+        } catch (err) {
+          // Proposta malformada não derruba o webhook (o status já foi aplicado): fica registrada como erro
+          // de integração, com mensagem de negócio, sem o corpo do provider.
+          await recordIntegrationError(
+            { groupId, companyId, financingCaseId: financingCase.id, providerCode, operation: 'webhook.proposal', errorCode: err?.code || 'PROPOSAL_INVALID', message: String(err?.message || 'Proposta inválida').slice(0, 480) },
+            transaction
+          );
+        }
+      }
     }
 
     await registrarAuditoria(

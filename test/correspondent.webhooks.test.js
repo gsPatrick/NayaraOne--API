@@ -320,3 +320,46 @@ test('CORRESPONDENT-WEBHOOK-10: status terminal não flipa pro irmão oposto (RE
   assert.equal(shouldApplyTransition('SUBMITTED', 'UNDER_ANALYSIS'), true);
   assert.equal(shouldApplyTransition('UNDER_ANALYSIS', 'APPROVED'), true);
 });
+
+test('CORRESPONDENT-WEBHOOK-PROPOSTA-01: aprovação do provider com proposta grava a proposta vigente; proposta inválida vira erro de integração sem derrubar o status', async () => {
+  const { FinancingProposal, IntegrationError } = require('../src/models');
+  const secret = `wh-secret-${uniqueSuffix()}`;
+  await setWebhookSecret(secret);
+  const { financingCaseId, externalCaseId } = await createSubmittedCase();
+
+  const valido = { externalCaseId, externalEventId: `evt-${uniqueSuffix()}`, status: 'APPROVED', proposal: { approvedAmount: 180000, annualRatePct: 9.9, termMonths: 240, monthlyPayment: 1850.4 } };
+  const r1 = signedWebhookRequest(secret, valido);
+  const res1 = await webhooksService.processFinancingWebhook('sandbox', r1.rawBody, r1.headers, valido);
+  assert.equal(res1.applied, true);
+
+  const invalido = { externalCaseId, externalEventId: `evt-${uniqueSuffix()}`, status: 'CONTRACTING', proposal: { approvedAmount: -1, termMonths: 240 } };
+  const r2 = signedWebhookRequest(secret, invalido);
+  const res2 = await webhooksService.processFinancingWebhook('sandbox', r2.rawBody, r2.headers, invalido);
+  assert.equal(res2.applied, true, 'o status é aplicado mesmo com a proposta malformada');
+
+  await withTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
+    assert.equal(financingCase.status, 'CONTRACTING');
+    const propostas = await FinancingProposal.findAll({ where: { financingCaseId }, transaction });
+    assert.equal(propostas.length, 1);
+    assert.equal(propostas[0].source, 'PROVIDER');
+    assert.equal(propostas[0].status, 'ACTIVE');
+    assert.equal(Number(propostas[0].approvedAmount), 180000);
+    const erros = await IntegrationError.findAll({ where: { financingCaseId, operation: 'webhook.proposal' }, transaction });
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0].errorCode, 'PROPOSAL_VALIDATION');
+  });
+});
+
+test('CORRESPONDENT-WEBHOOK-CANCELADO-01: cancelamento enviado pelo provider leva o caso a Cancelado', async () => {
+  const secret = `wh-secret-${uniqueSuffix()}`;
+  await setWebhookSecret(secret);
+  const { financingCaseId, externalCaseId } = await createSubmittedCase();
+  const body = { externalCaseId, externalEventId: `evt-${uniqueSuffix()}`, status: 'CANCELLED' };
+  const { rawBody, headers } = signedWebhookRequest(secret, body);
+  const res = await webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body);
+  assert.equal(res.normalizedStatus, 'CANCELED');
+  await withTenantTransaction(tenant, async (transaction) => {
+    assert.equal((await FinancingCase.findByPk(financingCaseId, { transaction })).status, 'CANCELED');
+  });
+});

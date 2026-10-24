@@ -166,6 +166,7 @@ const modelDefiners = {
   AccountingExportBatch: require('./AccountingExportBatch'),
   AccountingExportLine: require('./AccountingExportLine'),
   AccountingReturnImport: require('./AccountingReturnImport'),
+  FinancingProposal: require('./FinancingProposal'),
   DimobBatch: require('./DimobBatch'),
   DimobRecord: require('./DimobRecord'),
   FiscalReconciliation: require('./FiscalReconciliation'),

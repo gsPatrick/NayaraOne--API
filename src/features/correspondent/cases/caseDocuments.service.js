@@ -5,7 +5,7 @@ const { FinancingCase, CaseRequirement, CaseDocument, File, Task } = require('..
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishFinancingDocumentsCompleted, publishFinancingStatusChanged } = require('../correspondentEvents.service');
-const { shouldApplyTransition } = require('../statusMachine');
+const { shouldApplyTransition, assertCaseNotCanceled } = require('../statusMachine');
 const { getFileContent } = require('../../files/files.service');
 const { resolveOcrAdapter } = require('../../people/adapters/resolveDocumentAdapters');
 const { LocalOcrAdapter } = require('../../people/adapters/LocalOcrAdapter');
@@ -95,7 +95,7 @@ async function getCaseOrThrow(financingCaseId, groupId, companyId, transaction) 
  */
 async function createRequirement(financingCaseId, payload, actorUserId, actorContext, transaction) {
   const { groupId, companyId } = actorContext;
-  await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  assertCaseNotCanceled(await getCaseOrThrow(financingCaseId, groupId, companyId, transaction));
 
   const { documentType, required, notes } = payload || {};
   if (!documentType || !DOCUMENT_TYPES.includes(documentType)) {
@@ -172,7 +172,7 @@ async function listRequirements(financingCaseId, actorContext, transaction, { ca
  */
 async function uploadDocument(financingCaseId, requirementId, payload, actorUserId, actorContext, transaction) {
   const { groupId, companyId } = actorContext;
-  await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  assertCaseNotCanceled(await getCaseOrThrow(financingCaseId, groupId, companyId, transaction));
 
   if (!requirementId) {
     throw AppError.badRequest('"requirementId" é obrigatório — informe a qual item do checklist este documento pertence.', 'CASE_DOCUMENT_VALIDATION');

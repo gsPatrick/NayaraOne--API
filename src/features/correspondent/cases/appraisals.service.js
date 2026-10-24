@@ -5,6 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { publishAppraisalRequested, publishAppraisalCompleted } = require('../correspondentEvents.service');
+const { assertCaseNotCanceled } = require('../statusMachine');
 
 /**
  * requestAppraisalRecord — Marco 8 Fase 7 (worker assíncrono, pedido explícito do usuário após o
@@ -21,6 +22,7 @@ async function requestAppraisalRecord(financingCaseId, payload, actorUserId, gro
   if (!financingCase) {
     throw AppError.notFound('Caso de financiamento não encontrado.', 'FINANCING_CASE_NOT_FOUND');
   }
+  assertCaseNotCanceled(financingCase);
 
   const referenceValue = payload?.referenceValue !== undefined ? Number(payload.referenceValue) : undefined;
   if (referenceValue !== undefined && (!Number.isFinite(referenceValue) || referenceValue < 0)) {

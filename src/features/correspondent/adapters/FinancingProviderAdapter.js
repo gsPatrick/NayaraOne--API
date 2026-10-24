@@ -154,7 +154,8 @@ class SandboxFinancingProviderAdapter {
 
   // Mapa de status por provider — citação literal do Caderno (Marco 8, Guia do Marcelo,
   // "Status mapping"): "RECEIVED→SUBMITTED, ANALYSIS→UNDER_ANALYSIS, DOC_PENDING→PENDING_CUSTOMER,
-  // APPROVED→APPROVED, DENIED→REJECTED, CONTRACTED→COMPLETED." Retorna null (nunca lança) quando o
+  // APPROVED→APPROVED, DENIED→REJECTED, CONTRACTED→COMPLETED." Além desses, PROPERTY_PENDING→PENDING_PROPERTY,
+  // CONTRACTING→CONTRACTING e CANCELED/CANCELLED→CANCELED, para todos os estados internos serem alcançáveis. Retorna null (nunca lança) quando o
   // status bruto não é reconhecido — o chamador decide o que fazer (nunca perder o evento bruto).
   normalizeProviderStatus(rawStatus) {
     const MAP = {
@@ -164,6 +165,10 @@ class SandboxFinancingProviderAdapter {
       APPROVED: 'APPROVED',
       DENIED: 'REJECTED',
       CONTRACTED: 'COMPLETED',
+      PROPERTY_PENDING: 'PENDING_PROPERTY',
+      CONTRACTING: 'CONTRACTING',
+      CANCELED: 'CANCELED',
+      CANCELLED: 'CANCELED',
     };
     return MAP[String(rawStatus || '').toUpperCase()] || null;
   }

@@ -23,6 +23,7 @@ module.exports = (sequelize) => {
       duplicateFingerprint: { type: DataTypes.STRING(64), allowNull: true, field: 'duplicate_fingerprint' },
       possibleDuplicateOfCaseId: { type: DataTypes.UUID, allowNull: true, field: 'possible_duplicate_of_case_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
+      product: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'FINANCIAMENTO_IMOBILIARIO', field: 'product' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
       // Contador dedicado de idempotência de submissão (Marco 8 Fase 5) — DELIBERADAMENTE

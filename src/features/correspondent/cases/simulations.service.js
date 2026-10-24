@@ -5,6 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { assertEligible } = require('../eligibility.service');
+const { assertCaseNotCanceled } = require('../statusMachine');
 
 /**
  * createSimulation — Marco 8 Fase 3. Chama `adapter.simulate()` do provider configurado no
@@ -18,6 +19,7 @@ async function createSimulation(financingCaseId, payload, actorUserId, groupId, 
   if (!financingCase) {
     throw AppError.notFound('Caso de financiamento não encontrado.', 'FINANCING_CASE_NOT_FOUND');
   }
+  assertCaseNotCanceled(financingCase);
 
   const amount = Number(payload?.amount);
   const termMonths = Number(payload?.termMonths);

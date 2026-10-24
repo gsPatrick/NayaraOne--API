@@ -7,6 +7,7 @@ const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
 const simulationsController = require('./cases/simulations.controller');
 const submissionsController = require('./cases/submissions.controller');
+const workflowController = require('./cases/caseWorkflow.controller');
 const appraisalsController = require('./cases/appraisals.controller');
 const commissionEntitlementsController = require('./cases/commissionEntitlements.controller');
 const webhooksController = require('./webhooks.controller');
@@ -86,6 +87,24 @@ correspondentRouter.get(
   '/financing-cases/:id/status',
   requirePermission('correspondent:read'),
   webhooksController.getFinancingCaseStatus
+);
+
+// Workflow manual assistido (provider sem API), cancelamento e proposta do banco. Quem registra o
+// resultado ou cancela tem o mesmo nível de quem cria o caso; consultar a proposta é correspondent:read.
+correspondentRouter.post(
+  '/financing-cases/:id/manual-status',
+  requirePermission('correspondent:create'),
+  workflowController.registerManualStatus
+);
+correspondentRouter.post(
+  '/financing-cases/:id/cancel',
+  requirePermission('correspondent:create'),
+  workflowController.cancelCase
+);
+correspondentRouter.get(
+  '/financing-cases/:id/proposals',
+  requirePermission('correspondent:read'),
+  workflowController.listProposals
 );
 
 // Fase 7 — appraisals (avaliação do imóvel). Mesmo nível de permissão de criar/ler o caso —

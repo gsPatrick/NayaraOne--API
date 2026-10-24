@@ -5,7 +5,7 @@ const { FinancingCase, CaseRequirement, Simulation, ProviderSubmission, External
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
-const { shouldApplyTransition } = require('../statusMachine');
+const { shouldApplyTransition, assertCaseNotCanceled } = require('../statusMachine');
 const { assertEligible } = require('../eligibility.service');
 const {
   publishSubmissionRequested,
@@ -133,6 +133,7 @@ async function resolveSubmissionAmount(financingCaseId, payload, groupId, compan
  */
 async function requestSubmission(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
   const financingCase = await getCaseOrThrow(financingCaseId, groupId, companyId, transaction);
+  assertCaseNotCanceled(financingCase);
 
   await assertChecklistComplete(financingCaseId, groupId, companyId, transaction);
 
@@ -242,6 +243,13 @@ async function requestSubmission(financingCaseId, payload, actorUserId, groupId,
  */
 async function processPendingSubmission(submission, financingCase, actorUserId, transaction) {
   const { groupId, companyId, financingCaseId } = submission;
+  if (financingCase.status === 'CANCELED') {
+    // Caso cancelado depois do pedido de envio: nada vai ao provider.
+    submission.status = 'CANCELED';
+    submission.failureReason = 'CASO_CANCELADO';
+    await submission.save({ transaction });
+    return submission;
+  }
   const adapter = resolveFinancingProviderAdapterByCode(financingCase.providerCode);
   if (!adapter) {
     throw AppError.internal(`Provider "${financingCase.providerCode}" configurado no caso não é suportado.`, 'SUBMISSION_PROVIDER_UNKNOWN');
