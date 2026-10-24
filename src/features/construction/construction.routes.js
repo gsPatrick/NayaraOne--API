@@ -122,6 +122,8 @@ constructionRouter.post('/construction/approval-thresholds', requirePermission('
 // Margem mínima de obra (MarginRule) — pré-requisito pra approveBudget conseguir aprovar
 // QUALQUER orçamento (bug crítico achado numa auditoria do Front: nunca teve endpoint).
 constructionRouter.post('/construction/margin-rules', requirePermission('construction:update'), constructionController.createMarginRule);
+constructionRouter.post('/construction/margin-rules/deactivate', requirePermission('construction:update'), constructionController.deactivateMarginRule);
+constructionRouter.get('/construction/margin-rules/versions', requirePermission('construction:read'), constructionController.listMarginRuleVersions);
 constructionRouter.get('/construction/margin-rules/active', requirePermission('construction:read'), constructionController.getActiveMarginRule);
 
 // Maintenance cases (pós-obra/garantia)

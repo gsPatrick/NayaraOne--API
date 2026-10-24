@@ -116,7 +116,7 @@ async function authMiddleware(req, res, next) {
  * na lista resolvida no login, a requisição é bloqueada com 403 — nunca com bypass silencioso.
  */
 function requirePermission(permissionCode) {
-  return function requirePermissionMiddleware(req, res, next) {
+  const middleware = function requirePermissionMiddleware(req, res, next) {
     if (!req.auth) {
       return next(AppError.unauthorized('Contexto de autenticação ausente.', 'AUTH_CONTEXT_MISSING'));
     }
@@ -131,6 +131,10 @@ function requirePermission(permissionCode) {
     }
     return next();
   };
+  // Marca a permissão exigida para que a matriz de permissões da API (scripts/gerarMatrizPermissoes.js)
+  // seja gerada do código real, nunca digitada à mão.
+  middleware.requiredPermission = permissionCode;
+  return middleware;
 }
 
 /**

@@ -457,6 +457,17 @@ const getActiveMarginRule = catchAsync(async (req, res) => {
   return success(res, { data: rule });
 });
 
+const deactivateMarginRule = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    marginRulesService.deactivateMarginRule(req.auth.groupId, req.auth.companyId, req.body?.reason, req.auth.userId, t)
+  );
+  return success(res, { data: result });
+});
+const listMarginRuleVersions = catchAsync(async (req, res) => {
+  const versions = await req.withTenantTransaction((t) => marginRulesService.listMarginRuleVersions(req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: versions });
+});
+
 const upsertApprovalThreshold = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     lossRecordsService.upsertApprovalThreshold(withTenant(req), req.auth.userId, t)
@@ -568,6 +579,8 @@ module.exports = {
   returnLossRecord,
   createMarginRule,
   getActiveMarginRule,
+  deactivateMarginRule,
+  listMarginRuleVersions,
   upsertApprovalThreshold,
   createWarrantyAction,
   listWarrantyActions,

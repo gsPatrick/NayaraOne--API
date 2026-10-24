@@ -321,7 +321,68 @@ async function getMarginRule(id, transaction) {
   };
 }
 
+/**
+ * deactivateMarginRule — desativa a regra vigente SEM apagar nada: fecha a janela de vigência da
+ * versão aberta (mesmo mecanismo usado ao publicar uma versão nova). A versão fica no histórico;
+ * a empresa volta ao estado "sem margem mínima configurada" (aprovação de orçamento recusada até
+ * publicar de novo). Orçamentos já aprovados continuam apontando para a versão com que foram
+ * aprovados.
+ */
+async function deactivateMarginRule(groupId, companyId, reason, actorUserId, transaction) {
+  const lockKey = `margin_rule:${groupId}:${companyId}:${RULE_CODE}`;
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:lockKey, 0))', { replacements: { lockKey }, transaction });
+  const rule = await Rule.findOne({ where: { code: RULE_CODE, groupId, companyId }, transaction });
+  const open = rule
+    ? await RuleVersion.findOne({ where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction })
+    : null;
+  if (!open) {
+    throw AppError.unprocessable('Não há margem mínima ativa para desativar nesta empresa.', 'MARGIN_RULE_NOT_CONFIGURED');
+  }
+  const before = { versionNumber: open.versionNumber, minMarginPct: Number(open.actionJson?.minMarginPct), enforcementMode: open.actionJson?.enforcementMode || DEFAULT_ENFORCEMENT_MODE, ativa: true };
+  open.effectiveUntil = new Date();
+  open.updatedBy = actorUserId || null;
+  await open.save({ transaction });
+  await MarginRule.update({ isActive: false, updatedBy: actorUserId || null }, { where: { groupId, companyId, isActive: true }, transaction });
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'construction.margin_rule.deactivate',
+      entityType: 'RuleVersion',
+      entityId: open.id,
+      beforeJson: before,
+      afterJson: { ...before, ativa: false },
+      reason: reason ? `Margem mínima desativada: ${String(reason).slice(0, 200)}` : 'Margem mínima desativada. A versão continua no histórico.',
+    },
+    transaction
+  );
+  return { id: open.id, versionNumber: open.versionNumber, isActive: false };
+}
+
+/** listMarginRuleVersions — histórico completo, da mais nova para a mais antiga. */
+async function listMarginRuleVersions(groupId, companyId, transaction) {
+  const rule = await Rule.findOne({ where: { code: RULE_CODE, groupId, companyId }, transaction });
+  if (!rule) return [];
+  const versions = await RuleVersion.findAll({ where: { ruleId: rule.id }, order: [['versionNumber', 'DESC']], transaction });
+  return versions.map((v) => ({
+    id: v.id,
+    versionNumber: v.versionNumber,
+    minMarginPct: Number(v.actionJson?.minMarginPct),
+    economyPct: v.actionJson?.economyPct ?? null,
+    commissionPct: v.actionJson?.commissionPct ?? null,
+    enforcementMode: v.actionJson?.enforcementMode || DEFAULT_ENFORCEMENT_MODE,
+    description: v.actionJson?.description || null,
+    effectiveFrom: v.effectiveFrom,
+    effectiveUntil: v.effectiveUntil,
+    isActive: v.status === 'PUBLISHED' && !v.effectiveUntil,
+    publishedByUserId: v.publishedByUserId || null,
+  }));
+}
+
 module.exports = {
+  deactivateMarginRule,
+  listMarginRuleVersions,
   createMarginRule,
   getActiveMarginRule,
   getMarginRule,
