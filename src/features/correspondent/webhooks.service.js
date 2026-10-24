@@ -143,6 +143,10 @@ async function processFinancingWebhook(providerCode, rawBody, headers, body) {
 
     if (applied) {
       financingCase.status = normalizedStatus;
+      if (normalizedStatus === 'CANCELED') {
+        financingCase.canceledReason = `Cancelado pelo provider "${providerCode}" (status original "${rawProviderStatus}")`;
+        financingCase.canceledAt = new Date();
+      }
       await financingCase.save({ transaction });
 
       // Caderno, Fase 9: "financing.status.changed" (+ approved/rejected/completed quando

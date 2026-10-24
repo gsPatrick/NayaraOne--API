@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const { DimobBatch, DimobRecord, CommissionEntitlement } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
+const { ensureObligation, completeByDimobBatch } = require('./obligations.service');
+const { reconcileDimobBatch } = require('./reconciliation.service');
 
 /**
  * buildDimobDataset — fonte real dos registros DIMOB: comissões de correspondente já RECEBÍVEIS
@@ -60,6 +62,9 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
   if (!Number.isInteger(referenceYear) || referenceYear < 2000) {
     throw AppError.badRequest('O campo "referenceYear" deve ser um ano válido.', 'DIMOB_VALIDATION');
   }
+
+  // Todo ano com batch gerado passa a constar no calendário fiscal.
+  await ensureObligation({ obligationType: 'DIMOB_ANNUAL', referenceYear }, actorUserId, groupId, companyId, transaction);
 
   const dataset = await buildDimobDataset(referenceYear, groupId, companyId, transaction);
   const snapshotHash = hashDataset(dataset);
@@ -132,7 +137,20 @@ async function closeDimobBatch(dimobBatchId, actorUserId, groupId, companyId, tr
     transaction
   );
 
+  // Fechar o batch conclui a obrigação do ano e confere o total contra as comissões do Financeiro.
+  await completeByDimobBatch(batch, actorUserId, groupId, companyId, transaction);
+  await reconcileDimobBatch(batch, actorUserId, groupId, companyId, transaction);
+
   return batch;
+}
+
+async function listDimobRecords(dimobBatchId, groupId, companyId, transaction) {
+  const batch = await DimobBatch.findOne({ where: { id: dimobBatchId, groupId, companyId }, transaction });
+  if (!batch) {
+    throw AppError.notFound('Batch DIMOB não encontrado.', 'DIMOB_BATCH_NOT_FOUND');
+  }
+  const records = await DimobRecord.findAll({ where: { dimobBatchId, groupId, companyId }, order: [['id', 'ASC']], transaction });
+  return { batch, records };
 }
 
 async function listDimobBatches(referenceYear, groupId, companyId, transaction) {
@@ -141,4 +159,4 @@ async function listDimobBatches(referenceYear, groupId, companyId, transaction) 
   return DimobBatch.findAll({ where, order: [['reference_year', 'DESC'], ['version', 'DESC']], transaction });
 }
 
-module.exports = { generateDimobBatch, closeDimobBatch, listDimobBatches, buildDimobDataset, hashDataset };
+module.exports = { generateDimobBatch, closeDimobBatch, listDimobBatches, listDimobRecords, buildDimobDataset, hashDataset };

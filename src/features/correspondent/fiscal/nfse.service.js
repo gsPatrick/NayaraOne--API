@@ -1,9 +1,11 @@
 'use strict';
 
-const { InvoiceRequest, InvoiceEvent, TaxDocument } = require('../../../models');
+const crypto = require('crypto');
+const { InvoiceRequest, InvoiceEvent, TaxDocument, CommissionEntitlement } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { SandboxNfseAdapter } = require('../adapters/NfseAdapter');
+const { reconcile } = require('./reconciliation.service');
 
 const adapter = new SandboxNfseAdapter();
 
@@ -144,7 +146,10 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
     throw AppError.badRequest('Pedido de NFS-e ainda não foi submetido ao emissor (sem id externo).', 'NFSE_NOT_SUBMITTED');
   }
 
-  const result = await adapter.getInvoiceStatus(invoiceRequest.externalId);
+  const result = await adapter.getInvoiceStatus(invoiceRequest.externalId, {
+    amount: invoiceRequest.amount,
+    description: invoiceRequest.description,
+  });
   invoiceRequest.status = result.status;
   invoiceRequest.updatedBy = actorUserId || null;
   await invoiceRequest.save({ transaction });
@@ -156,17 +161,35 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
     // que este fluxo emite; DIMOB usa suas próprias tabelas (dimob_batches/records).
     const existing = await TaxDocument.findOne({ where: { invoiceRequestId: invoiceRequest.id }, transaction });
     if (!existing) {
-      await TaxDocument.create(
+      const docs = result.documents || {};
+      const taxDocument = await TaxDocument.create(
         {
           groupId, companyId,
           invoiceRequestId: invoiceRequest.id,
           documentType: 'NFSE',
           documentNumber: result.officialNumber,
           amount: invoiceRequest.amount,
-          issuedAt: new Date(),
+          issuedAt: docs.issuedAt || new Date(),
+          // XML, PDF e ID oficial preservados com hash (Caderno: "XML/PDF/ID oficial preservados").
+          xmlContent: docs.xml || null,
+          xmlSha256: docs.xml ? crypto.createHash('sha256').update(docs.xml).digest('hex') : null,
+          pdfContent: docs.pdf || null,
+          pdfSha256: docs.pdf ? crypto.createHash('sha256').update(docs.pdf).digest('hex') : null,
+          verificationCode: docs.verificationCode || null,
         },
         { transaction }
       );
+      await registrarAuditoria(
+        {
+          groupId, companyId, actorUserId,
+          action: 'correspondent.nfse.authorized',
+          entityType: 'InvoiceRequest',
+          entityId: invoiceRequest.id,
+          reason: `NFS-e ${result.officialNumber} autorizada; XML (${taxDocument.xmlSha256 || 'sem xml'}) e PDF (${taxDocument.pdfSha256 || 'sem pdf'}) preservados.`,
+        },
+        transaction
+      );
+      await reconcileInvoiceWithSource(invoiceRequest, actorUserId, groupId, companyId, transaction);
     }
   }
 
@@ -211,12 +234,77 @@ async function cancelInvoice(invoiceRequestId, reasonText, actorUserId, groupId,
   return invoiceRequest;
 }
 
+/**
+ * reconcileInvoiceWithSource — Financeiro × NFS-e: compara o valor da nota com o valor que o
+ * Financeiro reconhece para a origem. Diferença abre issue (reconciliação), nunca é silenciosa.
+ * Origem COMMISSION_ENTITLEMENT: esperado = valor da comissão (zero se estornada).
+ */
+async function reconcileInvoiceWithSource(invoiceRequest, actorUserId, groupId, companyId, transaction) {
+  if (invoiceRequest.sourceType !== 'COMMISSION_ENTITLEMENT') return null;
+  const entitlement = await CommissionEntitlement.findOne({ where: { id: invoiceRequest.sourceId, groupId, companyId }, transaction });
+  if (!entitlement) return null;
+  const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
+  return reconcile('FINANCE_X_NFSE', invoiceRequest.id, expected, Number(invoiceRequest.amount), actorUserId, groupId, companyId, transaction);
+}
+
 async function listInvoiceRequests(groupId, companyId, transaction) {
-  return InvoiceRequest.findAll({
+  const invoices = await InvoiceRequest.findAll({
     where: { groupId, companyId },
     order: [['created_at', 'DESC']],
     transaction,
   });
+  const docs = await TaxDocument.findAll({
+    where: { groupId, companyId, invoiceRequestId: invoices.map((i) => i.id) },
+    attributes: ['id', 'invoiceRequestId', 'documentNumber', 'verificationCode', 'xmlSha256', 'pdfSha256', 'issuedAt'],
+    transaction,
+  });
+  const byInvoice = new Map(docs.map((d) => [d.invoiceRequestId, d]));
+  return invoices.map((invoice) => {
+    const json = invoice.toJSON();
+    const doc = byInvoice.get(invoice.id);
+    json.document = doc
+      ? {
+          documentNumber: doc.documentNumber,
+          verificationCode: doc.verificationCode,
+          issuedAt: doc.issuedAt,
+          hasXml: Boolean(doc.xmlSha256),
+          hasPdf: Boolean(doc.pdfSha256),
+          xmlSha256: doc.xmlSha256,
+          pdfSha256: doc.pdfSha256,
+        }
+      : null;
+    return json;
+  });
+}
+
+/**
+ * getInvoiceFile — devolve o XML ou PDF oficial preservado, conferindo o hash gravado na emissão.
+ */
+async function getInvoiceFile(invoiceRequestId, kind, groupId, companyId, transaction) {
+  const invoiceRequest = await InvoiceRequest.findOne({ where: { id: invoiceRequestId, groupId, companyId }, transaction });
+  if (!invoiceRequest) {
+    throw AppError.notFound('Pedido de NFS-e não encontrado.', 'NFSE_NOT_FOUND');
+  }
+  const doc = await TaxDocument.findOne({ where: { invoiceRequestId, groupId, companyId }, transaction });
+  if (!doc) {
+    throw AppError.notFound('Esta NFS-e ainda não foi autorizada — não há XML/PDF para baixar.', 'NFSE_DOCUMENT_NOT_AVAILABLE');
+  }
+  const content = kind === 'xml' ? doc.xmlContent : doc.pdfContent;
+  const expectedHash = kind === 'xml' ? doc.xmlSha256 : doc.pdfSha256;
+  if (!content) {
+    throw AppError.notFound(`O arquivo ${kind.toUpperCase()} desta NFS-e não foi preservado.`, 'NFSE_DOCUMENT_NOT_AVAILABLE');
+  }
+  const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  const actualHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  if (expectedHash && actualHash !== expectedHash) {
+    throw AppError.unprocessable('O arquivo preservado não confere com o hash gravado na emissão.', 'NFSE_DOCUMENT_HASH_MISMATCH');
+  }
+  return {
+    buffer,
+    sha256: actualHash,
+    contentType: kind === 'xml' ? 'application/xml; charset=utf-8' : 'application/pdf',
+    fileName: `${doc.documentNumber || 'nfse'}.${kind}`,
+  };
 }
 
 async function getInvoiceEvents(invoiceRequestId, groupId, companyId, transaction) {
@@ -237,6 +325,8 @@ module.exports = {
   cancelInvoice,
   listInvoiceRequests,
   getInvoiceEvents,
+  getInvoiceFile,
+  reconcileInvoiceWithSource,
   withTimeout,
   NfseTimeoutError,
 };

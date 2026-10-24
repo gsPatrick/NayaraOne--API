@@ -41,8 +41,19 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
     throw AppError.badRequest('O campo "baseAmount" deve ser um número positivo.', 'COMMISSION_ENTITLEMENT_VALIDATION');
   }
 
-  const { percentage, ruleVersionId } = await resolveCommissionSplit(financingCase.providerCode, groupId, companyId, actorUserId, transaction);
+  const split = await resolveCommissionSplit(financingCase.providerCode, groupId, companyId, actorUserId, transaction);
+  const { percentage, ruleVersionId } = split;
   const amount = round2(baseAmount * (percentage / 100));
+  const brokerAmount = round2(amount * (split.brokerSharePct / 100));
+  const managerAmount = round2(amount - brokerAmount);
+
+  const triggerEvent = payload?.triggerEvent ? String(payload.triggerEvent).trim() : split.defaultTriggerEvent;
+  if (!split.allowedTriggerEvents.includes(triggerEvent)) {
+    throw AppError.badRequest(
+      `O fato gerador "${triggerEvent}" não é aceito. Use um destes: ${split.allowedTriggerEvents.join(', ')}.`,
+      'COMMISSION_ENTITLEMENT_VALIDATION'
+    );
+  }
 
   const entitlement = await CommissionEntitlement.create(
     {
@@ -53,6 +64,12 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
       baseAmount,
       percentage,
       amount,
+      providerCode: financingCase.providerCode,
+      triggerEvent,
+      brokerSharePct: split.brokerSharePct,
+      managerSharePct: split.managerSharePct,
+      brokerAmount,
+      managerAmount,
       ruleVersionId,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -70,7 +87,7 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
       action: 'correspondent.commission_entitlement.create',
       entityType: 'FinancingCase',
       entityId: financingCaseId,
-      reason: `Direito à comissão de correspondente registrado: R$ ${amount.toFixed(2)} (${percentage}% sobre R$ ${baseAmount.toFixed(2)}, regra versão ${ruleVersionId}).`,
+      reason: `Direito à comissão de correspondente registrado: R$ ${amount.toFixed(2)} (${percentage}% sobre R$ ${baseAmount.toFixed(2)}; corretor R$ ${brokerAmount.toFixed(2)} e gerente R$ ${managerAmount.toFixed(2)}; fato gerador ${triggerEvent}; regra versão ${ruleVersionId}).`,
     },
     transaction
   );

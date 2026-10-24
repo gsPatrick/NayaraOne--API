@@ -360,6 +360,9 @@ test('CORRESPONDENT-WEBHOOK-CANCELADO-01: cancelamento enviado pelo provider lev
   const res = await webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body);
   assert.equal(res.normalizedStatus, 'CANCELED');
   await withTenantTransaction(tenant, async (transaction) => {
-    assert.equal((await FinancingCase.findByPk(financingCaseId, { transaction })).status, 'CANCELED');
+    const caso = await FinancingCase.findByPk(financingCaseId, { transaction });
+    assert.equal(caso.status, 'CANCELED');
+    assert.match(caso.canceledReason, /Cancelado pelo provider "sandbox" \(status original "CANCELLED"\)/);
+    assert.ok(caso.canceledAt);
   });
 });

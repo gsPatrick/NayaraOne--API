@@ -18,6 +18,8 @@ module.exports = (sequelize) => {
       referenceYear: { type: DataTypes.INTEGER, allowNull: false, field: 'reference_year' },
       dueAt: { type: DataTypes.DATEONLY, allowNull: false, field: 'due_at' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'PENDING' },
+      description: { type: DataTypes.TEXT, allowNull: false, field: 'description' },
+      dimobBatchId: { type: DataTypes.UUID, allowNull: true, field: 'dimob_batch_id' },
       completedAt: { type: DataTypes.DATE, allowNull: true, field: 'completed_at' },
     },
     {

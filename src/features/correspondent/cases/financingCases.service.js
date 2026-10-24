@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { publishFinancingCaseCreated } = require('../correspondentEvents.service');
 const { flagPossibleDuplicate } = require('../correspondentDuplicate.service');
+const { PRODUCTS } = require('../eligibility.service');
 
 const APPLICANT_ROLES = ['PRINCIPAL', 'CO_APPLICANT'];
 const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
@@ -17,7 +18,7 @@ const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
  * precisa ser PRINCIPAL.
  */
 async function createFinancingCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, providerCode, purpose, applicants, opportunityId } = payload;
+  const { groupId, companyId, propertyId, providerCode, purpose, applicants, opportunityId, product } = payload;
 
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCING_CASE_VALIDATION');
@@ -76,10 +77,16 @@ async function createFinancingCase(payload, actorUserId, transaction) {
     throw AppError.badRequest(`"purpose" precisa ser um de: ${FINANCING_PURPOSES.join(', ')}.`, 'FINANCING_CASE_VALIDATION');
   }
 
+  const resolvedProduct = product || 'FINANCIAMENTO_IMOBILIARIO';
+  if (!PRODUCTS.includes(resolvedProduct)) {
+    throw AppError.badRequest(`"product" precisa ser um de: ${PRODUCTS.join(', ')}.`, 'FINANCING_CASE_VALIDATION');
+  }
+
   const financingCase = await FinancingCase.create(
     {
       groupId,
       companyId,
+      product: resolvedProduct,
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
       providerCode: resolvedProviderCode,
@@ -113,6 +120,7 @@ async function createFinancingCase(payload, actorUserId, transaction) {
         status: financingCase.status,
         providerCode: financingCase.providerCode,
         purpose: financingCase.purpose,
+        product: financingCase.product,
       },
       reason: `Caso de financiamento criado com ${applicants.length} proponente(s), provider "${resolvedProviderCode}".`,
     },

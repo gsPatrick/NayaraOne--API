@@ -26,6 +26,8 @@ module.exports = (sequelize) => {
       product: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'FINANCIAMENTO_IMOBILIARIO', field: 'product' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
+      canceledReason: { type: DataTypes.TEXT, allowNull: true, field: 'canceled_reason' },
+      canceledAt: { type: DataTypes.DATE, allowNull: true, field: 'canceled_at' },
       // Contador dedicado de idempotência de submissão (Marco 8 Fase 5) — DELIBERADAMENTE
       // separado de `lockVersion` (controle otimista do Sequelize, que muda em QUALQUER save,
       // inclusive como efeito colateral de uma submissão com sucesso). Só muda via

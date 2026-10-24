@@ -23,6 +23,19 @@ const CONDITION_AST = { fact: 'commissionSplitActive', op: '==', value: true };
 const DEFAULT_ACTION = {
   percentageByProvider: { sandbox: 1.5, manual: 1 },
   defaultPercentage: 1,
+  // Split corretor/gerente: o caderno manda vir do Motor de Regras, mas não define os números;
+  // a semente não divide nada (100% corretor) e a empresa configura em "Parâmetros do correspondente".
+  brokerSharePctByProvider: {},
+  defaultBrokerSharePct: 100,
+  // Fato gerador da comissão (o caderno exige guardá-lo): lista configurável e o padrão.
+  allowedTriggerEvents: ['CONTRATO_ASSINADO', 'RECURSO_LIBERADO', 'REGISTRO_MANUAL'],
+  defaultTriggerEvent: 'REGISTRO_MANUAL',
+};
+
+const TRIGGER_EVENT_LABEL = {
+  CONTRATO_ASSINADO: 'Contrato assinado',
+  RECURSO_LIBERADO: 'Recurso liberado pelo banco',
+  REGISTRO_MANUAL: 'Registro manual',
 };
 
 function hashCondition(conditionAstJson) {
@@ -152,7 +165,26 @@ async function resolveCommissionSplit(providerCode, groupId, companyId, actorUse
       'COR_COMMISSION_SPLIT_PERCENTAGE_TOO_HIGH'
     );
   }
-  return { percentage: Number(percentage), ruleVersionId: evaluation.ruleVersionId };
+  const brokerRaw = (action.brokerSharePctByProvider || {})[providerCode] ?? action.defaultBrokerSharePct ?? 100;
+  const brokerSharePct = Number(brokerRaw);
+  if (!Number.isFinite(brokerSharePct) || brokerSharePct < 0 || brokerSharePct > 100) {
+    throw AppError.unprocessable(
+      `A parte do corretor configurada para o provider "${providerCode}" (${brokerRaw}%) precisa estar entre 0% e 100%.`,
+      'COR_COMMISSION_SPLIT_BROKER_SHARE_INVALID'
+    );
+  }
+  const allowedTriggerEvents = Array.isArray(action.allowedTriggerEvents) && action.allowedTriggerEvents.length
+    ? action.allowedTriggerEvents
+    : DEFAULT_ACTION.allowedTriggerEvents;
+  const defaultTriggerEvent = action.defaultTriggerEvent || DEFAULT_ACTION.defaultTriggerEvent;
+  return {
+    percentage: Number(percentage),
+    brokerSharePct,
+    managerSharePct: Math.round((100 - brokerSharePct) * 100) / 100,
+    allowedTriggerEvents,
+    defaultTriggerEvent,
+    ruleVersionId: evaluation.ruleVersionId,
+  };
 }
 
 module.exports = {
@@ -160,4 +192,5 @@ module.exports = {
   publishCommissionSplitVersion,
   RULE_CODE,
   DEFAULT_ACTION,
+  TRIGGER_EVENT_LABEL,
 };

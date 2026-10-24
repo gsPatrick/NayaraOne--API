@@ -101,7 +101,7 @@ async function recordProposal(financingCase, input, source, actorUserId, transac
  * applyStatusChange — troca o status do caso, grava o histórico (append-only), emite os eventos do
  * caderno e atualiza a oportunidade do CRM por evento. Quem chama já validou a transição.
  */
-async function applyStatusChange(financingCase, normalizedStatus, { rawStatus, source }, actorUserId, auditReason, transaction) {
+async function applyStatusChange(financingCase, normalizedStatus, { rawStatus, source, cancelReason }, actorUserId, auditReason, transaction) {
   const previousStatus = financingCase.status;
   const history = await ProviderStatusHistory.create(
     {
@@ -117,6 +117,10 @@ async function applyStatusChange(financingCase, normalizedStatus, { rawStatus, s
     { transaction }
   );
   financingCase.status = normalizedStatus;
+  if (normalizedStatus === 'CANCELED') {
+    financingCase.canceledReason = cancelReason || 'Cancelado sem motivo informado';
+    financingCase.canceledAt = new Date();
+  }
   financingCase.updatedBy = actorUserId || null;
   await financingCase.save({ transaction });
   await publishFinancingStatusChanged(financingCase, { previousStatus, normalizedStatus, historyId: history.id }, transaction);
@@ -200,7 +204,7 @@ async function cancelCase(financingCaseId, payload, actorUserId, groupId, compan
   await applyStatusChange(
     financingCase,
     'CANCELED',
-    { rawStatus: 'MANUAL:CANCELED', source: 'manual' },
+    { rawStatus: 'MANUAL:CANCELED', source: 'manual', cancelReason: reason },
     actorUserId,
     `Caso cancelado por uma pessoa. Motivo: ${reason.slice(0, 300)}.`,
     transaction

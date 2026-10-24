@@ -117,6 +117,8 @@ test('M8-CAN-01: cancelar exige motivo, cancela submissão pendente, bloqueia no
 
     const cancelado = await cancelar(t, caso.id, { reason: 'Cliente desistiu da compra' });
     assert.equal(cancelado.status, 'CANCELED');
+    assert.equal(cancelado.canceledReason, 'Cliente desistiu da compra');
+    assert.ok(cancelado.canceledAt);
     await pendente.reload({ transaction: t });
     assert.equal(pendente.status, 'CANCELED');
     assert.equal(pendente.failureReason, 'CASO_CANCELADO');

@@ -21,6 +21,13 @@ const RULE_NAME = 'Elegibilidade de provider de financiamento (produto, finalida
 const RULE_DOMAIN = 'correspondent';
 const CONDITION_AST = { fact: 'eligibilityCheckActive', op: '==', value: true };
 const PROVIDER_LABEL = { sandbox: 'Sandbox', manual: 'Manual' };
+const PRODUCTS = ['FINANCIAMENTO_IMOBILIARIO', 'REFINANCIAMENTO', 'CREDITO_COM_GARANTIA', 'CONSTRUCAO'];
+const PRODUCT_LABEL = {
+  FINANCIAMENTO_IMOBILIARIO: 'Financiamento imobiliário',
+  REFINANCIAMENTO: 'Refinanciamento',
+  CREDITO_COM_GARANTIA: 'Crédito com garantia de imóvel',
+  CONSTRUCAO: 'Financiamento de construção',
+};
 const PURPOSE_LABEL = { RESIDENCIAL: 'Residencial', COMERCIAL: 'Comercial' };
 
 function reais(value) {
@@ -35,6 +42,7 @@ function reais(value) {
 const DEFAULT_ACTION = {
   allowedProviders: ['sandbox', 'manual'],
   allowedPurposes: ['RESIDENCIAL', 'COMERCIAL'],
+  allowedProducts: ['FINANCIAMENTO_IMOBILIARIO', 'REFINANCIAMENTO', 'CREDITO_COM_GARANTIA', 'CONSTRUCAO'],
   // null = sem teto de valor para esse provider (ex.: "manual", workflow humano fora do sistema).
   maxAmountByProvider: { sandbox: 2000000, manual: null },
 };
@@ -173,6 +181,17 @@ async function assertEligible(financingCase, { amount } = {}, groupId, companyId
     );
   }
 
+  // Produto (o caderno lista "produto" entre os critérios): configuração antiga sem a lista aceita todos.
+  const product = financingCase.product || 'FINANCIAMENTO_IMOBILIARIO';
+  const allowedProducts = Array.isArray(action.allowedProducts) ? action.allowedProducts : PRODUCTS;
+  if (!allowedProducts.includes(product)) {
+    await logIneligible(groupId, companyId, actorUserId, financingCase.id, ruleVersionId, `Produto "${product}" não está elegível para financiamento.`, transaction);
+    throw AppError.unprocessable(
+      `O produto "${PRODUCT_LABEL[product] || product}" deste caso não está elegível no momento.`,
+      'COR_ELIGIBILITY_PRODUCT_NOT_ALLOWED'
+    );
+  }
+
   const allowedPurposes = Array.isArray(action.allowedPurposes) ? action.allowedPurposes : [];
   if (!allowedPurposes.includes(purpose)) {
     await logIneligible(groupId, companyId, actorUserId, financingCase.id, ruleVersionId, `Finalidade "${purpose}" não está elegível para financiamento.`, transaction);
@@ -262,4 +281,6 @@ module.exports = {
   publishProviderEligibilityVersion,
   RULE_CODE,
   DEFAULT_ACTION,
+  PRODUCTS,
+  PRODUCT_LABEL,
 };

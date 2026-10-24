@@ -14,6 +14,7 @@ const webhooksController = require('./webhooks.controller');
 const nayController = require('./correspondentNay.controller');
 const fiscalController = require('./fiscal/fiscal.controller');
 const providerAccountsController = require('./providerAccounts.controller');
+const parametersController = require('./parameters.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -149,6 +150,12 @@ correspondentRouter.post(
   commissionEntitlementsController.chargebackCommissionEntitlement
 );
 
+// Parâmetros do correspondente (Motor de Regras): elegibilidade e comissão/split. Ler é
+// correspondent:read; publicar nova versão exige a permissão dedicada correspondent:parameters.
+correspondentRouter.get('/parameters', requirePermission('correspondent:read'), parametersController.getParameters);
+correspondentRouter.put('/parameters/eligibility', requirePermission('correspondent:parameters'), parametersController.updateEligibility);
+correspondentRouter.put('/parameters/commission', requirePermission('correspondent:parameters'), parametersController.updateCommission);
+
 // Fase 10 — NAY Correspondente (restrita, somente leitura). Mesmo nível de permissão de leitura
 // do caso — a NAY aqui só sinaliza/compara dados já existentes, nunca decide nem altera nada.
 correspondentRouter.get(
@@ -240,5 +247,23 @@ correspondentRouter.get(
   requirePermission('correspondent:fiscal'),
   fiscalController.listExportBatches
 );
+
+// Conferências, export/retorno contábil, calendário fiscal e arquivos da NFS-e (Marco 8, fiscal).
+const fiscalRoutes = [
+  ['get', '/fiscal/invoices/:id/xml', 'downloadInvoiceXml'],
+  ['get', '/fiscal/invoices/:id/pdf', 'downloadInvoicePdf'],
+  ['get', '/fiscal/dimob-batches/:id/records', 'listDimobRecords'],
+  ['post', '/fiscal/reconciliations/run', 'runReconciliations'],
+  ['get', '/fiscal/export-candidates', 'listExportCandidates'],
+  ['get', '/fiscal/export-batches/:id', 'getExportBatch'],
+  ['post', '/fiscal/export-lines/:id/adjust', 'adjustExportLine'],
+  ['post', '/fiscal/export-batches/:id/return', 'importAccountingReturn'],
+  ['get', '/fiscal/obligations', 'listObligations'],
+  ['post', '/fiscal/obligations', 'createObligation'],
+  ['post', '/fiscal/obligations/:id/complete', 'completeObligation'],
+];
+for (const [method, path, handler] of fiscalRoutes) {
+  correspondentRouter[method](path, requirePermission('correspondent:fiscal'), fiscalController[handler]);
+}
 
 module.exports = correspondentRouter;

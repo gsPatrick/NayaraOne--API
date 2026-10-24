@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 548. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 565. Rotas só com login ou públicas: 22.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -244,13 +244,16 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/result-centers` | `finance:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:create` | não |
+| `POST` | `/api/v1/financing-cases/:id/cancel` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/chargeback` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/confirm` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/receive` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/commissions` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/documents` | `correspondent:create` | não |
+| `POST` | `/api/v1/financing-cases/:id/manual-status` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/nay/compare-simulations` | `correspondent:read` | não |
+| `GET` | `/api/v1/financing-cases/:id/proposals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/requirements/:requirementId/validate` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/requirements` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/requirements` | `correspondent:create` | não |
@@ -265,16 +268,27 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/financing-cases` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases` | `correspondent:create` | não |
 | `POST` | `/api/v1/fiscal/dimob-batches/:id/close` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/dimob-batches/:id/records` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/dimob-batches` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/dimob-batches` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/export-batches/:id/return` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/export-batches/:id` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/export-batches` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/export-batches` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/export-candidates` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/export-lines/:id/adjust` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/invoices/:id/cancel` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/invoices/:id/check-status` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/invoices/:id/events` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/invoices/:id/pdf` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/invoices/:id/xml` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/invoices` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/invoices` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/obligations/:id/complete` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/obligations` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/obligations` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/reconciliations/:id/resolve` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/reconciliations/run` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/reconciliations` | `correspondent:fiscal` | não |
 | `DELETE` | `/api/v1/groups/:id` | `groups:delete` | não |
 | `GET` | `/api/v1/groups/:id` | `groups:read` | não |
@@ -442,6 +456,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/opportunities/:id` | `crm:opportunities:update` | não |
 | `GET` | `/api/v1/opportunities` | `crm:opportunities:read` | não |
 | `POST` | `/api/v1/opportunities` | `crm:opportunities:create` | não |
+| `PUT` | `/api/v1/parameters/commission` | `correspondent:parameters` | não |
+| `PUT` | `/api/v1/parameters/eligibility` | `correspondent:parameters` | não |
+| `GET` | `/api/v1/parameters` | `correspondent:read` | não |
 | `GET` | `/api/v1/people/:id/addresses` | `people:read` | não |
 | `POST` | `/api/v1/people/:id/addresses` | `people:update` | não |
 | `GET` | `/api/v1/people/:id/consents` | `people:read` | não |
