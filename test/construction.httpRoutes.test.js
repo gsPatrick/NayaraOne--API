@@ -278,6 +278,22 @@ test('HTTP real: POST /construction/measurements/:id/approve SEM permissão cons
   assert.equal(stillReviewed.status, 'REVIEWED');
 });
 
+// Margem mínima da obra: quem só lê (sem "construction:update") não consegue publicar regra, e a
+// tentativa não cria versão nenhuma. A consulta da regra vigente continua liberada para leitura.
+test('HTTP real: POST /construction/margin-rules SEM permissão construction:update é bloqueado (403) e não cria versão', async () => {
+  const before = await (await authFetchAs(tokenWithoutApprove, 'GET', '/construction/margin-rules/active')).json();
+
+  const response = await authFetchAs(tokenWithoutApprove, 'POST', '/construction/margin-rules', { minMarginPct: 10, enforcementMode: 'ALERT' });
+  assert.equal(response.status, 403, `esperava 403, recebeu ${response.status}`);
+  const body = await response.json();
+  assert.equal(body.success, false);
+
+  const afterResponse = await authFetchAs(tokenWithoutApprove, 'GET', '/construction/margin-rules/active');
+  assert.equal(afterResponse.status, 200, 'perfil de leitura continua enxergando a regra vigente');
+  const after = await afterResponse.json();
+  assert.deepEqual(after.data, before.data, 'a tentativa recusada não pode ter criado nem alterado nenhuma versão da regra');
+});
+
 // --- POST /construction/warranty-cases (path canônico exigido pela fonte) ---
 
 test('HTTP real: POST /construction/warranty-cases cria o caso de garantia/pós-obra (201)', async () => {
