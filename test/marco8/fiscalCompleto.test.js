@@ -15,7 +15,7 @@ const exportService = require('../../src/features/correspondent/fiscal/accountin
 const obligations = require('../../src/features/correspondent/fiscal/obligations.service');
 const financingCases = require('../../src/features/correspondent/cases/financingCases.service');
 const commissions = require('../../src/features/correspondent/cases/commissionEntitlements.service');
-const { Person, CommissionEntitlement, FiscalReconciliation } = require('../../src/models');
+const { Person, FiscalReconciliation } = require('../../src/models');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
