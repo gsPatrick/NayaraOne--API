@@ -28,7 +28,8 @@ before(async () => {
 
 after(async () => {
   await sequelize.close();
-  process.exit(0);
+  // O servidor HTTP do app mantém o processo vivo; o atraso deixa o relatório do teste ser descarregado antes de sair.
+  setTimeout(() => process.exit(0), 700);
 });
 
 const caminho = (p) => p.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');
