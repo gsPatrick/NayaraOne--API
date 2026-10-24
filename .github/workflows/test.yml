@@ -45,6 +45,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # Antivírus real para os testes dos Marcos 3 e 8 (ClamAV, imagem oficial). Só os testes dos
+      # motores reais o usam (conectam em 127.0.0.1:3310 e definem as variáveis por conta própria);
+      # o restante da suíte segue com os adaptadores de laboratório.
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+
     env:
       NODE_ENV: development
       # DATABASE_URL fica sem o usuário fixo aqui de propósito — é definida passo a passo
@@ -108,6 +116,25 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Leitura real de documentos (Tesseract em português e poppler) e espera pelo ClamAV. Sem isto,
+      # os 7 testes dos motores reais ficariam pulados. Se o antivírus não responder, o build FALHA,
+      # para o pulo nunca passar despercebido.
+      - name: Instalar o leitor de documentos e aguardar o antivírus
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-por poppler-utils libtiff-tools
+          tesseract --version | head -1
+          pdftotext -v 2>&1 | head -1
+          for i in $(seq 1 120); do
+            if (exec 3<>/dev/tcp/127.0.0.1/3310 && printf 'PING\n' >&3 && timeout 3 head -n1 <&3 | grep -q PONG) 2>/dev/null; then
+              echo "clamd respondeu PONG (tentativa $i)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::o ClamAV não respondeu em 10 minutos"
+          exit 1
 
       # Guia §13 (Marco 7): lint. ESLint com as regras recomendadas, nada desligado; falha com
       # qualquer erro fora da linha de base dos arquivos dos Marcos 4/5 (scripts/lint-baseline.json,

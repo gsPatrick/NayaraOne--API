@@ -78,8 +78,13 @@ before(async () => {
     fs.writeFileSync(textPdfPath, textPdf);
     execFileSync('pdftoppm', ['-r', '200', '-png', '-singlefile', textPdfPath, path.join(workDir, 'texto')]);
     textPng = fs.readFileSync(path.join(workDir, 'texto.png'));
+    // PDF só com imagem (sem camada de texto): sips no macOS; tiff2pdf (libtiff-tools) no Linux do CI.
     if (have('sips')) {
       execFileSync('sips', ['-s', 'format', 'pdf', path.join(workDir, 'texto.png'), '--out', path.join(workDir, 'escaneado.pdf')], { stdio: 'ignore' });
+      scannedPdf = fs.readFileSync(path.join(workDir, 'escaneado.pdf'));
+    } else if (have('tiff2pdf')) {
+      execFileSync('pdftoppm', ['-r', '200', '-tiff', '-singlefile', textPdfPath, path.join(workDir, 'texto')]);
+      execFileSync('tiff2pdf', ['-o', path.join(workDir, 'escaneado.pdf'), path.join(workDir, 'texto.tif')], { stdio: 'ignore' });
       scannedPdf = fs.readFileSync(path.join(workDir, 'escaneado.pdf'));
     }
     const blankPdfPath = path.join(workDir, 'vazio.pdf');
