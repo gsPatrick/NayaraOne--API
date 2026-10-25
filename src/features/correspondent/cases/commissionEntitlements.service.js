@@ -1,6 +1,6 @@
 'use strict';
 
-const { FinancingCase, CommissionEntitlement, AuditLog, InvoiceRequest } = require('../../../models');
+const { FinancingCase, CommissionEntitlement, AuditLog, InvoiceRequest, FinancingProposal } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveCommissionSplit } = require('../commissionSplit.service');
@@ -36,7 +36,18 @@ async function findCase(financingCaseId, groupId, companyId, transaction) {
 async function createCommissionEntitlement(financingCaseId, payload, actorUserId, groupId, companyId, transaction) {
   const financingCase = await findCase(financingCaseId, groupId, companyId, transaction);
 
-  const baseAmount = Number(payload?.baseAmount);
+  // Base da comissão ("Chamar Motor de Regras para split/base quando aplicável"): informada por
+  // uma pessoa; sem valor informado, usa o valor aprovado da proposta vigente do banco.
+  let baseAmount = Number(payload?.baseAmount);
+  let baseOrigin = 'informado';
+  if (payload?.baseAmount === undefined || payload?.baseAmount === null || payload?.baseAmount === '') {
+    const proposal = await FinancingProposal.findOne({ where: { financingCaseId, groupId, companyId, status: 'ACTIVE' }, transaction });
+    if (!proposal) {
+      throw AppError.badRequest('Informe o valor-base da comissão: o caso ainda não tem proposta vigente do banco para servir de base.', 'COMMISSION_ENTITLEMENT_VALIDATION');
+    }
+    baseAmount = Number(proposal.approvedAmount);
+    baseOrigin = 'valor aprovado da proposta vigente do banco';
+  }
   if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
     throw AppError.badRequest('O campo "baseAmount" deve ser um número positivo.', 'COMMISSION_ENTITLEMENT_VALIDATION');
   }
@@ -87,7 +98,7 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
       action: 'correspondent.commission_entitlement.create',
       entityType: 'FinancingCase',
       entityId: financingCaseId,
-      reason: `Direito à comissão de correspondente registrado: R$ ${amount.toFixed(2)} (${percentage}% sobre R$ ${baseAmount.toFixed(2)}; corretor R$ ${brokerAmount.toFixed(2)} e gerente R$ ${managerAmount.toFixed(2)}; fato gerador ${triggerEvent}; regra versão ${ruleVersionId}).`,
+      reason: `Direito à comissão de correspondente registrado: R$ ${amount.toFixed(2)} (${percentage}% sobre R$ ${baseAmount.toFixed(2)}; corretor R$ ${brokerAmount.toFixed(2)} e gerente R$ ${managerAmount.toFixed(2)}; fato gerador ${triggerEvent}; base: ${baseOrigin}; regra versão ${ruleVersionId}).`,
     },
     transaction
   );

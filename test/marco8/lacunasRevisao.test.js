@@ -19,6 +19,7 @@ const nfse = require('../../src/features/correspondent/fiscal/nfse.service');
 const recon = require('../../src/features/correspondent/fiscal/reconciliation.service');
 const dimob = require('../../src/features/correspondent/fiscal/dimob.service');
 const { SANDBOX_REJECT_MARKER } = require('../../src/features/correspondent/adapters/NfseAdapter');
+const workflow = require('../../src/features/correspondent/cases/caseWorkflow.service');
 const simulationsService = require('../../src/features/correspondent/cases/simulations.service');
 const submissionsService = require('../../src/features/correspondent/cases/submissions.service');
 const { SandboxFinancingProviderAdapter } = require('../../src/features/correspondent/adapters/FinancingProviderAdapter');
@@ -366,5 +367,23 @@ test('M8-DOC-ENV-02: provider manual não recebe documento; falha do provider vi
     assert.equal(erros.length, 1);
     assert.equal(erros[0].errorCode, 'DOCUMENT_UPLOAD_FAILED');
     assert.ok(!/indisponível/.test(erros[0].message), 'a mensagem da exceção não vaza');
+  });
+});
+
+// ---------- Base da comissão ----------
+
+test('M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; sem proposta recusa; valor informado prevalece', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const caso = await novoCaso(t, await pessoa(t));
+    await assert.rejects(commissions.createCommissionEntitlement(caso.id, {}, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('COMMISSION_ENTITLEMENT_VALIDATION'));
+
+    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
+    await workflow.registerManualStatus(caso.id, { status: 'APPROVED', proposal: { approvedAmount: 300000, annualRatePct: 10, termMonths: 360 } }, tenant.userId, tenant.groupId, tenant.companyId, t);
+
+    const semBase = await commissions.createCommissionEntitlement(caso.id, {}, tenant.userId, tenant.groupId, tenant.companyId, t);
+    assert.equal(Number(semBase.baseAmount), 300000);
+    const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000 }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    assert.equal(Number(comBase.baseAmount), 120000);
+    await assert.rejects(commissions.createCommissionEntitlement(caso.id, { baseAmount: -5 }, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('COMMISSION_ENTITLEMENT_VALIDATION'));
   });
 });
