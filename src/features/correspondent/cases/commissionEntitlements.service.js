@@ -1,5 +1,6 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { FinancingCase, CommissionEntitlement, AuditLog, InvoiceRequest, FinancingProposal } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
@@ -146,6 +147,15 @@ async function confirmCommissionEntitlement(entitlementId, payload, actorUserId,
     throw AppError.conflict(
       'Este direito a comissão já foi confirmado com uma identificação diferente — não é possível confirmar de novo.',
       'COMMISSION_ENTITLEMENT_ALREADY_CONFIRMED'
+    );
+  }
+
+  // Cada confirmação do banco vale para uma única comissão (a identificação é única por empresa).
+  const reused = await CommissionEntitlement.findOne({ where: { companyId, externalConfirmationId, id: { [Op.ne]: entitlement.id } }, transaction });
+  if (reused) {
+    throw AppError.conflict(
+      'Esta identificação de confirmação já foi usada em outra comissão. Cada confirmação do banco vale para uma única comissão.',
+      'COMMISSION_EXTERNAL_CONFIRMATION_ALREADY_USED'
     );
   }
 

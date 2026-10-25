@@ -449,3 +449,18 @@ test('M8-AUD-04: a conferência conta todas as issues abertas e encerra a de ver
     assert.equal(r.openTotal, abertas.length);
   });
 });
+
+test('M8-AUD-05: a mesma identificação de confirmação não vale para duas comissões', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const e1 = await comissaoRecebivel(t);
+    const caso = await novoCaso(t, await pessoa(t));
+    const e2 = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 1000 }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    await assert.rejects(
+      commissions.confirmCommissionEntitlement(e2.id, { externalConfirmationId: e1.externalConfirmationId }, tenant.userId, tenant.groupId, tenant.companyId, t),
+      codigo('COMMISSION_EXTERNAL_CONFIRMATION_ALREADY_USED')
+    );
+    // a mesma confirmação na mesma comissão continua idempotente
+    const igual = await commissions.confirmCommissionEntitlement(e1.id, { externalConfirmationId: e1.externalConfirmationId }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    assert.equal(igual.id, e1.id);
+  });
+});
