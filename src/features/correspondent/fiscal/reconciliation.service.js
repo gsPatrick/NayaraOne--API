@@ -170,7 +170,7 @@ async function runReconciliations(actorUserId, groupId, companyId, transaction) 
     });
     const invoiced = related.reduce((sum, i) => sum + Number(i.amount), 0);
     const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
-    if (related.length === 0 && (entitlement.status === 'ADJUSTED' || new Date(entitlement.createdAt) > limit)) continue;
+    if (related.length === 0 && (entitlement.status === 'ADJUSTED' || new Date(entitlement.get('created_at') || entitlement.createdAt) > limit)) continue;
     result.checked.COMMISSION_X_FISCAL += 1;
     // eslint-disable-next-line no-await-in-loop
     const opened = await reconcile('COMMISSION_X_FISCAL', entitlement.id, expected, invoiced, actorUserId, groupId, companyId, transaction);
@@ -198,107 +198,6 @@ async function reconcileDimobBatch(batch, actorUserId, groupId, companyId, trans
   const live = await buildDimobDataset(batch.referenceYear, groupId, companyId, transaction);
   const records = await DimobRecord.findAll({ where: { dimobBatchId: batch.id, groupId, companyId }, transaction });
   const expected = live.reduce((sum, e) => sum + Number(e.amount), 0);
-  const actual = records.reduce((sum, r) => sum + Number(r.amount), 0);
-  return reconcile('DIMOB_X_CONTRACTS', batch.id, expected, actual, actorUserId, groupId, companyId, transaction);
-}
-
-async function resolveReconciliation(reconciliationId, reasonText, actorUserId, groupId, companyId, transaction) {
-  const reconciliation = await FiscalReconciliation.findOne({ where: { id: reconciliationId, groupId, companyId }, transaction });
-  if (!reconciliation) {
-    throw AppError.notFound('Reconciliação fiscal não encontrada.', 'FISCAL_RECONCILIATION_NOT_FOUND');
-  }
-  if (reconciliation.status === 'RESOLVED') {
-    throw AppError.conflict('Esta reconciliação já foi resolvida.', 'FISCAL_RECONCILIATION_ALREADY_RESOLVED');
-  }
-  if (!reasonText || !String(reasonText).trim()) {
-    throw AppError.badRequest('Resolver uma reconciliação exige um motivo documentado.', 'FISCAL_RECONCILIATION_REASON_REQUIRED');
-  }
-
-  reconciliation.status = 'RESOLVED';
-  reconciliation.resolvedAt = new Date();
-  await reconciliation.save({ transaction });
-
-  await registrarAuditoria(
-    {
-      groupId, companyId, actorUserId,
-      action: 'correspondent.fiscal.reconciliation_resolved',
-      entityType: 'FiscalReconciliation',
-      entityId: reconciliation.id,
-      reason: `Reconciliação fiscal resolvida: ${reasonText}.`,
-    },
-    transaction
-  );
-
-  return reconciliation;
-}
-
-/**
- * runReconciliations — conferência completa sob demanda (Financeiro × NFS-e e DIMOB × contratos).
- * Devolve o que foi conferido e as issues abertas; quando tudo bate, não abre nada.
- */
-async function runReconciliations(actorUserId, groupId, companyId, transaction) {
-  const result = { checked: { FINANCE_X_NFSE: 0, COMMISSION_X_FISCAL: 0, DIMOB_X_CONTRACTS: 0 }, opened: [] };
-
-  const invoices = await InvoiceRequest.findAll({
-    where: { groupId, companyId, status: 'AUTHORIZED', sourceType: 'COMMISSION_ENTITLEMENT' },
-    transaction,
-  });
-  for (const invoice of invoices) {
-    // eslint-disable-next-line no-await-in-loop
-    const entitlement = await CommissionEntitlement.findOne({ where: { id: invoice.sourceId, groupId, companyId }, transaction });
-    if (!entitlement) continue;
-    result.checked.FINANCE_X_NFSE += 1;
-    const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
-    // eslint-disable-next-line no-await-in-loop
-    const opened = await reconcile('FINANCE_X_NFSE', invoice.id, expected, Number(invoice.amount), actorUserId, groupId, companyId, transaction);
-    if (opened) result.opened.push(opened);
-  }
-
-  // Comissões × fiscal: toda comissão recebível precisa de NFS-e do mesmo valor (depois do prazo
-  // configurado em Parâmetros); comissão estornada não pode ter nota autorizada de pé.
-  const graceDays = await getInvoiceGraceDays(groupId, companyId, actorUserId, transaction);
-  const limit = new Date(Date.now() - graceDays * 86400000);
-  const entitlements = await CommissionEntitlement.findAll({ where: { groupId, companyId, status: { [Op.in]: ['RECEIVABLE', 'RECEIVED', 'ADJUSTED'] } }, transaction });
-  for (const entitlement of entitlements) {
-    // eslint-disable-next-line no-await-in-loop
-    const related = await InvoiceRequest.findAll({
-      where: { groupId, companyId, sourceType: 'COMMISSION_ENTITLEMENT', sourceId: entitlement.id, status: ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'] },
-      transaction,
-    });
-    const invoiced = related.reduce((sum, i) => sum + Number(i.amount), 0);
-    const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
-    if (related.length === 0 && (entitlement.status === 'ADJUSTED' || new Date(entitlement.createdAt) > limit)) continue;
-    result.checked.COMMISSION_X_FISCAL += 1;
-    // eslint-disable-next-line no-await-in-loop
-    const opened = await reconcile('COMMISSION_X_FISCAL', entitlement.id, expected, invoiced, actorUserId, groupId, companyId, transaction);
-    if (opened) result.opened.push(opened);
-  }
-
-  const batches = await DimobBatch.findAll({ where: { groupId, companyId }, order: [['reference_year', 'DESC'], ['version', 'DESC']], transaction });
-  const latestByYear = new Map();
-  for (const batch of batches) if (!latestByYear.has(batch.referenceYear)) latestByYear.set(batch.referenceYear, batch);
-  for (const batch of latestByYear.values()) {
-    result.checked.DIMOB_X_CONTRACTS += 1;
-    // eslint-disable-next-line no-await-in-loop
-    const opened = await reconcileDimobBatch(batch, actorUserId, groupId, companyId, transaction);
-    if (opened) result.opened.push(opened);
-  }
-  return result;
-}
-
-/**
- * reconcileDimobBatch — DIMOB × contratos/transações: o total do batch precisa bater com as
- * comissões recebíveis do ano que existem hoje no Financeiro.
- */
-async function reconcileDimobBatch(batch, actorUserId, groupId, companyId, transaction) {
-  const start = new Date(Date.UTC(batch.referenceYear, 0, 1));
-  const end = new Date(Date.UTC(batch.referenceYear + 1, 0, 1));
-  const entitlements = await CommissionEntitlement.findAll({
-    where: { groupId, companyId, status: { [Op.in]: ['RECEIVABLE', 'RECEIVED'] }, created_at: { [Op.gte]: start, [Op.lt]: end } },
-    transaction,
-  });
-  const records = await DimobRecord.findAll({ where: { dimobBatchId: batch.id, groupId, companyId }, transaction });
-  const expected = entitlements.reduce((sum, e) => sum + Number(e.amount), 0);
   const actual = records.reduce((sum, r) => sum + Number(r.amount), 0);
   return reconcile('DIMOB_X_CONTRACTS', batch.id, expected, actual, actorUserId, groupId, companyId, transaction);
 }

@@ -42,6 +42,8 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
       groupId, companyId,
       referenceYear,
       version: nextVersion,
+      // Layout anual versionado (caderno): a versão do layout acompanha o ano-base do batch.
+      layoutVersion: `DIMOB-${referenceYear}-v1`,
       status: 'DRAFT',
       snapshotHash,
       createdBy: actorUserId || null,

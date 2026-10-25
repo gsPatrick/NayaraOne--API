@@ -260,7 +260,7 @@ test('M8-DIMOB-LOC-02: contrato com cadastro completo fecha o batch, conclui a o
     const fechado = await dimob.closeDimobBatch(batch.id, ...a(), t);
     assert.equal(fechado.status, 'CLOSED');
     const abertas = (await recon.listReconciliations('OPEN', tenant.groupId, tenant.companyId, t)).filter((r) => r.referenceId === batch.id);
-    assert.equal(abertas.length, 0);
+    assert.equal(abertas.length, 0, JSON.stringify(abertas));
   });
 });
 
@@ -271,7 +271,8 @@ test('M8-DIMOB-LOC-03: arquivo de conferência traz layout, hash, documentos e n
     const batch = await dimob.generateDimobBatch(ano, ...a().slice(0, 1), tenant.groupId, tenant.companyId, t);
     const arquivo = await dimob.exportDimobFile(batch.id, ...a(), t);
     assert.equal(arquivo.fileName, `dimob-${ano}-v1.csv`);
-    assert.match(arquivo.content, /^# layout;DIMOB-2026-v1;formato interno de conferência/);
+    assert.match(arquivo.content, new RegExp(`^# layout;DIMOB-${ano}-v1;formato interno de conferência`));
+    assert.equal(batch.layoutVersion, `DIMOB-${ano}-v1`);
     assert.match(arquivo.content, new RegExp(`hash;${batch.snapshotHash}`));
     assert.match(arquivo.content, /LOCACAO/);
     assert.match(arquivo.content, /12345678909/);

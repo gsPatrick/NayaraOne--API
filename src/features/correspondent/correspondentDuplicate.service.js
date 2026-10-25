@@ -89,7 +89,7 @@ async function listPendingDuplicateReviews(groupId, companyId, transaction) {
   });
   const originalIds = cases.map((c) => c.possibleDuplicateOfCaseId).filter(Boolean);
   const originals = originalIds.length
-    ? await FinancingCase.findAll({ where: { id: originalIds, groupId, companyId }, attributes: ['id', 'status', 'providerCode', 'createdAt'], transaction })
+    ? await FinancingCase.findAll({ where: { id: originalIds, groupId, companyId }, transaction })
     : [];
   const byId = new Map(originals.map((o) => [o.id, o]));
   return cases.map((c) => ({ ...c.toJSON(), originalCase: byId.get(c.possibleDuplicateOfCaseId)?.toJSON() || null }));
