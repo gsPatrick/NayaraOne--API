@@ -123,4 +123,19 @@ async function completeByDimobBatch(batch, actorUserId, groupId, companyId, tran
   return completeObligation(obligation.id, null, actorUserId, groupId, companyId, transaction, { dimobBatchId: batch.id });
 }
 
-module.exports = { ensureObligation, listObligations, completeObligation, completeByDimobBatch, defaultDimobDueDate, OBLIGATION_TYPES };
+/** createObligation — cadastro pela tela: se já existe a do tipo/ano, recusa em vez de devolver a existente em silêncio. */
+async function createObligation(input, actorUserId, groupId, companyId, transaction) {
+  const year = Number(input?.referenceYear);
+  const existing = Number.isInteger(year) && OBLIGATION_TYPES[input?.obligationType]
+    ? await FiscalObligation.findOne({ where: { groupId, companyId, obligationType: input.obligationType, referenceYear: year }, transaction })
+    : null;
+  if (existing) {
+    throw AppError.conflict(
+      `Já existe a obrigação ${OBLIGATION_TYPES[existing.obligationType]} do ano-base ${year} (${{ PENDING: 'pendente', COMPLETED: 'concluída', OVERDUE: 'vencida' }[existing.status] || existing.status}). Ela está na lista do calendário.`,
+      'FISCAL_OBLIGATION_ALREADY_EXISTS'
+    );
+  }
+  return ensureObligation(input || {}, actorUserId, groupId, companyId, transaction);
+}
+
+module.exports = { createObligation, ensureObligation, listObligations, completeObligation, completeByDimobBatch, defaultDimobDueDate, OBLIGATION_TYPES };

@@ -418,3 +418,34 @@ test('M8-AUD-02: fila de duplicatas não lista caso já cancelado', async () => 
     assert.ok(!(await duplicates.listPendingDuplicateReviews(tenant.groupId, tenant.companyId, t)).some((c) => c.id === segundo.id));
   });
 });
+
+// ---------- Ajustes da segunda auditoria (25/10) ----------
+
+test('M8-AUD-03: valor-base absurdo é recusado; cadastrar obrigação repetida avisa em vez de calar', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const caso = await novoCaso(t, await pessoa(t));
+    await assert.rejects(
+      commissions.createCommissionEntitlement(caso.id, { baseAmount: 100000100000 }, tenant.userId, tenant.groupId, tenant.companyId, t),
+      (err) => err.code === 'COMMISSION_ENTITLEMENT_VALIDATION' && /alto demais/.test(err.message)
+    );
+    const obrigacoes = require('../../src/features/correspondent/fiscal/obligations.service');
+    await sequelize.query('DELETE FROM correspondent.fiscal_obligations WHERE reference_year = 2099', { transaction: t });
+    await obrigacoes.createObligation({ obligationType: 'DIMOB_ANNUAL', referenceYear: 2099 }, ...a(), t);
+    await assert.rejects(obrigacoes.createObligation({ obligationType: 'DIMOB_ANNUAL', referenceYear: 2099 }, ...a(), t), codigo('FISCAL_OBLIGATION_ALREADY_EXISTS'));
+  });
+});
+
+test('M8-AUD-04: a conferência conta todas as issues abertas e encerra a de versão antiga do DIMOB', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const ano = 2035;
+    const v1 = await dimob.generateDimobBatch(ano, ...a().slice(0, 1), tenant.groupId, tenant.companyId, t);
+    await recon.openReconciliation('DIMOB_X_CONTRACTS', v1.id, 100, 50, 50, tenant.userId, tenant.groupId, tenant.companyId, t);
+    await dimob.generateDimobBatch(ano, ...a().slice(0, 1), tenant.groupId, tenant.companyId, t);
+    const r = await recon.runReconciliations(tenant.userId, tenant.groupId, tenant.companyId, t);
+    const aindaAberta = (await recon.listReconciliations('OPEN', tenant.groupId, tenant.companyId, t)).some((x) => x.referenceId === v1.id);
+    assert.equal(aindaAberta, false, 'a issue da versão antiga foi encerrada');
+    assert.equal(typeof r.openTotal, 'number');
+    const abertas = await recon.listReconciliations('OPEN', tenant.groupId, tenant.companyId, t);
+    assert.equal(r.openTotal, abertas.length);
+  });
+});

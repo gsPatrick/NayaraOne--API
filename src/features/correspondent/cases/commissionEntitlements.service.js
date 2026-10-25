@@ -12,6 +12,7 @@ const { reconcile } = require('../fiscal/reconciliation.service');
 const INVOICE_SOURCE_TYPE_COMMISSION = 'COMMISSION_ENTITLEMENT';
 const INVOICE_NON_TERMINAL_STATUSES = ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'];
 
+const MAX_BASE_AMOUNT = 1000000000;
 const COMMISSION_RESULT_CENTER_CODE = 'CORRESPONDENT_COMMISSION';
 
 function round2(value) {
@@ -50,6 +51,10 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
   }
   if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
     throw AppError.badRequest('Informe um valor-base maior que zero para a comissão.', 'COMMISSION_ENTITLEMENT_VALIDATION');
+  }
+
+  if (baseAmount > MAX_BASE_AMOUNT) {
+    throw AppError.badRequest('O valor-base informado é alto demais para uma comissão (acima de R$ 1.000.000.000,00). Confira se não houve erro de digitação.', 'COMMISSION_ENTITLEMENT_VALIDATION');
   }
 
   const split = await resolveCommissionSplit(financingCase.providerCode, groupId, companyId, actorUserId, transaction);

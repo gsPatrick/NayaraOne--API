@@ -157,7 +157,7 @@ const listObligations = catchAsync(async (req, res) => {
 
 const createObligation = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    obligationsService.ensureObligation(req.body || {}, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+    obligationsService.createObligation(req.body || {}, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
   );
   return success(res, { statusCode: 201, data });
 });

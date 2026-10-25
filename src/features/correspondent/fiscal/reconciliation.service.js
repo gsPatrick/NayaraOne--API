@@ -42,7 +42,7 @@ async function reconcile(reconciliationType, referenceId, expectedAmount, actual
   return openReconciliation(reconciliationType, referenceId, expected, actual, difference, actorUserId, groupId, companyId, transaction);
 }
 
-async function autoResolveIfOpen(reconciliationType, referenceId, actorUserId, groupId, companyId, transaction) {
+async function autoResolveIfOpen(reconciliationType, referenceId, actorUserId, groupId, companyId, transaction, motivo = 'os valores voltaram a bater') {
   const open = await FiscalReconciliation.findOne({ where: { groupId, companyId, reconciliationType, referenceId, status: 'OPEN' }, transaction });
   if (!open) return;
   open.status = 'RESOLVED';
@@ -54,7 +54,7 @@ async function autoResolveIfOpen(reconciliationType, referenceId, actorUserId, g
       action: 'correspondent.fiscal.reconciliation_auto_resolved',
       entityType: 'FiscalReconciliation',
       entityId: open.id,
-      reason: `Reconciliação fiscal (${reconciliationType}) encerrada automaticamente: os valores voltaram a bater.`,
+      reason: `Reconciliação fiscal (${reconciliationType}) encerrada automaticamente: ${motivo}.`,
     },
     transaction
   );
@@ -180,12 +180,20 @@ async function runReconciliations(actorUserId, groupId, companyId, transaction) 
   const batches = await DimobBatch.findAll({ where: { groupId, companyId }, order: [['reference_year', 'DESC'], ['version', 'DESC']], transaction });
   const latestByYear = new Map();
   for (const batch of batches) if (!latestByYear.has(batch.referenceYear)) latestByYear.set(batch.referenceYear, batch);
+  // Versão antiga de um batch do mesmo ano: a issue aberta dela perde o sentido (a versão nova é que vale).
+  for (const batch of batches) {
+    if (latestByYear.get(batch.referenceYear)?.id === batch.id) continue;
+    // eslint-disable-next-line no-await-in-loop
+    await autoResolveIfOpen('DIMOB_X_CONTRACTS', batch.id, actorUserId, groupId, companyId, transaction, 'substituído por uma versão mais nova do mesmo ano');
+  }
   for (const batch of latestByYear.values()) {
     result.checked.DIMOB_X_CONTRACTS += 1;
     // eslint-disable-next-line no-await-in-loop
     const opened = await reconcileDimobBatch(batch, actorUserId, groupId, companyId, transaction);
     if (opened) result.opened.push(opened);
   }
+  // Total de issues abertas depois da conferência (as já existentes contam, não só as novas).
+  result.openTotal = await FiscalReconciliation.count({ where: { groupId, companyId, status: 'OPEN' }, transaction });
   return result;
 }
 
