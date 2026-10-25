@@ -1,55 +1,16 @@
 'use strict';
 
 const crypto = require('crypto');
-const { DimobBatch, DimobRecord, CommissionEntitlement } = require('../../../models');
+const { DimobBatch, DimobRecord, Person, Property } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { ensureObligation, completeByDimobBatch } = require('./obligations.service');
 const { reconcileDimobBatch } = require('./reconciliation.service');
-
-/**
- * buildDimobDataset — fonte real dos registros DIMOB: comissões de correspondente já RECEBÍVEIS
- * (status RECEIVABLE/RECEIVED/ADJUSTED) no ano de referência. Nunca copia dado de outra tabela
- * pro DIMOB — cada registro só guarda `sourceRefs` (referência rastreável ao
- * `commissionEntitlementId`/`financingCaseId`), citação literal do Caderno: "dataset com source
- * refs".
- *
- * Determinístico por construção (mesma entrada → mesma serialização → mesmo hash): ordenado por
- * id (chave estável, nunca por created_at, que teria resolução de milissegundo variável entre
- * execuções de teste).
- */
-async function buildDimobDataset(referenceYear, groupId, companyId, transaction) {
-  const { Op } = require('sequelize');
-  const start = new Date(Date.UTC(referenceYear, 0, 1));
-  const end = new Date(Date.UTC(referenceYear + 1, 0, 1));
-
-  const entitlements = await CommissionEntitlement.findAll({
-    where: {
-      groupId,
-      companyId,
-      // ADJUSTED (chargeback/estorno) fica de fora de propósito: é receita revertida, nunca
-      // deveria contar como renda recebida no DIMOB.
-      status: { [Op.in]: ['RECEIVABLE', 'RECEIVED'] },
-      // ATENÇÃO (PADRAO_COMPONENTES_E_REGRAS.md, achado real Fase 11): o model
-      // CommissionEntitlement define `createdAt: 'created_at'` como OVERRIDE DE NOME do próprio
-      // atributo Sequelize (não só da coluna) — a chave do where precisa ser 'created_at', nunca
-      // 'createdAt', senão o Postgres recebe um identificador cru que não existe.
-      created_at: { [Op.gte]: start, [Op.lt]: end },
-    },
-    order: [['id', 'ASC']],
-    transaction,
-  });
-
-  return entitlements.map((e) => ({
-    sourceRefs: { commissionEntitlementId: e.id, financingCaseId: e.financingCaseId },
-    amount: Number(e.amount),
-  }));
-}
+const { buildDimobDataset, canonicalLine, onlyDigits } = require('./dimobDataset.service');
 
 function hashDataset(dataset) {
-  // Serialização estável (ordem de registros já é determinística pela query; stringify de objeto
-  // plano com chaves fixas também é estável, sem depender de ordem de inserção de propriedade).
-  const canonical = dataset.map((r) => `${r.sourceRefs.commissionEntitlementId}:${r.sourceRefs.financingCaseId}:${r.amount.toFixed(2)}`).join('|');
+  // Serialização estável (a ordem já é determinística pela montagem do dataset).
+  const canonical = dataset.map((r) => canonicalLine({ recordType: r.recordType || 'CORRESPONDENT_COMMISSION', ...r })).join('|');
   return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -96,6 +57,10 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
         dimobBatchId: batch.id,
         sourceRefs: record.sourceRefs,
         amount: record.amount,
+        recordType: record.recordType,
+        validationStatus: record.validationStatus,
+        validationIssues: record.validationIssues,
+        detailJson: record.detailJson,
       },
       { transaction }
     );
@@ -122,6 +87,13 @@ async function closeDimobBatch(dimobBatchId, actorUserId, groupId, companyId, tr
   }
   if (batch.status === 'CLOSED') {
     throw AppError.conflict('Este batch DIMOB já está fechado — gere uma nova versão para corrigir.', 'DIMOB_BATCH_ALREADY_CLOSED');
+  }
+  const invalid = await DimobRecord.count({ where: { dimobBatchId: batch.id, groupId, companyId, validationStatus: 'INVALID' }, transaction });
+  if (invalid > 0) {
+    throw AppError.unprocessable(
+      `Este batch tem ${invalid} registro(s) com pendência de cadastro. Corrija os cadastros indicados e gere uma nova versão antes de fechar.`,
+      'DIMOB_BATCH_HAS_INVALID_RECORDS'
+    );
   }
   batch.status = 'CLOSED';
   await batch.save({ transaction });
@@ -153,10 +125,80 @@ async function listDimobRecords(dimobBatchId, groupId, companyId, transaction) {
   return { batch, records };
 }
 
+/**
+ * exportDimobFile — arquivo de conferência do batch (CSV com ponto e vírgula), com a versão do
+ * layout e o hash do snapshot. É o formato interno para o contador conferir; o arquivo oficial da
+ * Receita depende do layout vigente validado por ele (o caderno condiciona a produção a isso).
+ */
+async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, transaction) {
+  const { batch, records } = await listDimobRecords(dimobBatchId, groupId, companyId, transaction);
+  const personIds = new Set();
+  const propertyIds = new Set();
+  for (const r of records) {
+    (r.sourceRefs.landlordPersonIds || []).forEach((id) => personIds.add(id));
+    (r.sourceRefs.tenantPersonIds || []).forEach((id) => personIds.add(id));
+    if (r.sourceRefs.propertyId) propertyIds.add(r.sourceRefs.propertyId);
+  }
+  const people = personIds.size ? await Person.findAll({ where: { groupId, companyId, id: [...personIds] }, attributes: ['id', 'legalName', 'taxIdNormalized'], transaction }) : [];
+  const properties = propertyIds.size ? await Property.findAll({ where: { groupId, companyId, id: [...propertyIds] }, attributes: ['id', 'internalCode'], transaction }) : [];
+  const personById = new Map(people.map((p) => [p.id, p]));
+  const propertyById = new Map(properties.map((p) => [p.id, p]));
+
+  // Célula que começa com =, +, - ou @ vira fórmula na planilha: neutraliza com apóstrofo.
+  const cell = (value) => {
+    const text = String(value ?? '');
+    const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const names = (ids) => (ids || []).map((id) => personById.get(id)?.legalName || 'Sem nome').join(' / ');
+  const docs = (ids) => (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO').join(' / ');
+
+  const lines = [
+    `# layout;${batch.layoutVersion};formato interno de conferência, não é o arquivo oficial da Receita`,
+    `# batch;${batch.id};ano;${batch.referenceYear};versao;${batch.version};status;${batch.status};hash;${batch.snapshotHash}`,
+    'tipo;contrato;locador_documento;locador_nome;locatario_documento;locatario_nome;imovel;valor_no_ano;situacao;pendencias',
+  ];
+  for (const r of records) {
+    const refs = r.sourceRefs || {};
+    if (r.recordType === 'LEASE') {
+      lines.push([
+        'LOCACAO',
+        cell(r.detailJson?.contractNumber || refs.contractId),
+        cell(docs(refs.landlordPersonIds)),
+        cell(names(refs.landlordPersonIds)),
+        cell(docs(refs.tenantPersonIds)),
+        cell(names(refs.tenantPersonIds)),
+        cell(propertyById.get(refs.propertyId)?.internalCode || 'SEM IMOVEL'),
+        Number(r.amount).toFixed(2),
+        r.validationStatus === 'VALID' ? 'OK' : 'PENDENTE',
+        cell((r.validationIssues || []).map((i) => i.message).join(' | ')),
+      ].join(';'));
+    } else {
+      lines.push(['COMISSAO', cell(refs.commissionEntitlementId), '', '', '', '', '', Number(r.amount).toFixed(2), 'OK', ''].join(';'));
+    }
+  }
+
+  await registrarAuditoria(
+    {
+      groupId, companyId, actorUserId,
+      action: 'correspondent.dimob.file_exported',
+      entityType: 'DimobBatch',
+      entityId: batch.id,
+      reason: `Arquivo de conferência do DIMOB ${batch.referenceYear} v${batch.version} gerado (${records.length} registro(s), hash ${batch.snapshotHash}).`,
+    },
+    transaction
+  );
+  return {
+    content: `${lines.join('\n')}\n`,
+    fileName: `dimob-${batch.referenceYear}-v${batch.version}.csv`,
+    contentType: 'text/csv; charset=utf-8',
+  };
+}
+
 async function listDimobBatches(referenceYear, groupId, companyId, transaction) {
   const where = { groupId, companyId };
   if (referenceYear) where.referenceYear = referenceYear;
   return DimobBatch.findAll({ where, order: [['reference_year', 'DESC'], ['version', 'DESC']], transaction });
 }
 
-module.exports = { generateDimobBatch, closeDimobBatch, listDimobBatches, listDimobRecords, buildDimobDataset, hashDataset };
+module.exports = { generateDimobBatch, closeDimobBatch, listDimobBatches, listDimobRecords, exportDimobFile, buildDimobDataset, hashDataset };

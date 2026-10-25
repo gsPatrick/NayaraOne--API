@@ -146,6 +146,10 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
     throw AppError.badRequest('Pedido de NFS-e ainda não foi submetido ao emissor (sem id externo).', 'NFSE_NOT_SUBMITTED');
   }
 
+  if (['REJECTED', 'CANCELED'].includes(invoiceRequest.status)) {
+    return invoiceRequest; // estados finais: não há o que consultar
+  }
+
   const result = await adapter.getInvoiceStatus(invoiceRequest.externalId, {
     amount: invoiceRequest.amount,
     description: invoiceRequest.description,
@@ -154,6 +158,19 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
   invoiceRequest.updatedBy = actorUserId || null;
   await invoiceRequest.save({ transaction });
   await appendInvoiceEvent(invoiceRequest, result.rawProviderStatus, result.status, transaction);
+
+  if (result.status === 'REJECTED') {
+    await registrarAuditoria(
+      {
+        groupId, companyId, actorUserId,
+        action: 'correspondent.nfse.rejected',
+        entityType: 'InvoiceRequest',
+        entityId: invoiceRequest.id,
+        reason: `NFS-e recusada pelo emissor: ${result.rejectionReason || 'sem motivo informado'} Uma nova solicitação para a mesma origem é permitida.`,
+      },
+      transaction
+    );
+  }
 
   if (result.status === 'AUTHORIZED') {
     // Reusa "finance"."tax_documents" (scaffold já existente desde a migration 057, estendido

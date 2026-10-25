@@ -16,6 +16,10 @@ module.exports = (sequelize) => {
       dimobBatchId: { type: DataTypes.UUID, allowNull: false, field: 'dimob_batch_id' },
       sourceRefs: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'source_refs' },
       amount: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+      recordType: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'CORRESPONDENT_COMMISSION', field: 'record_type' },
+      validationStatus: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'VALID', field: 'validation_status' },
+      validationIssues: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'validation_issues' },
+      detailJson: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'detail_json' },
     },
     {
       schema: 'correspondent',

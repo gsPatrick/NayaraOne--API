@@ -19,4 +19,11 @@ const getCompareSimulations = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
-module.exports = { getStalledCases, getCompareSimulations };
+const getCaseSummary = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    service.summarizeCase(req.params.id, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data: result });
+});
+
+module.exports = { getStalledCases, getCompareSimulations, getCaseSummary };

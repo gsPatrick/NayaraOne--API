@@ -30,6 +30,8 @@ const DEFAULT_ACTION = {
   // Fato gerador da comissão (o caderno exige guardá-lo): lista configurável e o padrão.
   allowedTriggerEvents: ['CONTRATO_ASSINADO', 'RECURSO_LIBERADO', 'REGISTRO_MANUAL'],
   defaultTriggerEvent: 'REGISTRO_MANUAL',
+  // Dias que uma comissão recebível pode ficar sem NFS-e antes de a conferência fiscal abrir issue.
+  invoiceGraceDays: 5,
 };
 
 const TRIGGER_EVENT_LABEL = {
@@ -177,7 +179,9 @@ async function resolveCommissionSplit(providerCode, groupId, companyId, actorUse
     ? action.allowedTriggerEvents
     : DEFAULT_ACTION.allowedTriggerEvents;
   const defaultTriggerEvent = action.defaultTriggerEvent || DEFAULT_ACTION.defaultTriggerEvent;
+  const graceRaw = action.invoiceGraceDays ?? DEFAULT_ACTION.invoiceGraceDays;
   return {
+    invoiceGraceDays: Number.isInteger(Number(graceRaw)) && Number(graceRaw) >= 0 ? Number(graceRaw) : DEFAULT_ACTION.invoiceGraceDays,
     percentage: Number(percentage),
     brokerSharePct,
     managerSharePct: Math.round((100 - brokerSharePct) * 100) / 100,
@@ -187,7 +191,14 @@ async function resolveCommissionSplit(providerCode, groupId, companyId, actorUse
   };
 }
 
+/** getInvoiceGraceDays — prazo (em dias) para emitir a NFS-e de uma comissão, vindo da regra vigente. */
+async function getInvoiceGraceDays(groupId, companyId, actorUserId, transaction) {
+  const { invoiceGraceDays } = await resolveCommissionSplit('manual', groupId, companyId, actorUserId, transaction);
+  return invoiceGraceDays;
+}
+
 module.exports = {
+  getInvoiceGraceDays,
   resolveCommissionSplit,
   publishCommissionSplitVersion,
   RULE_CODE,

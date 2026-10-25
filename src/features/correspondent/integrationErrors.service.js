@@ -1,6 +1,8 @@
 'use strict';
 
 const { IntegrationError } = require('../../models');
+const AppError = require('../../utils/AppError');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 /**
  * Grava correspondent.integration_errors quando a integração falha.
@@ -24,4 +26,64 @@ async function recordIntegrationError(
   );
 }
 
-module.exports = { recordIntegrationError };
+const OPERATION_LABEL = {
+  submit: 'Envio do caso',
+  status: 'Consulta de status',
+  webhook: 'Webhook do provider',
+  'webhook.proposal': 'Proposta recebida do provider',
+  appraisal: 'Avaliação do imóvel',
+  simulate: 'Simulação',
+};
+
+/**
+ * listIntegrationErrors — erros de integração do correspondente (o evento
+ * `integration.correspondent.failed` já sai; aqui a pessoa enxerga a lista e dá baixa).
+ * Só mensagem de negócio: o corpo do provider nunca foi gravado.
+ */
+async function listIntegrationErrors({ status, limit = 200 } = {}, groupId, companyId, transaction) {
+  const where = { groupId, companyId };
+  if (status) {
+    if (!['OPEN', 'RESOLVED'].includes(status)) {
+      throw AppError.badRequest('O filtro "status" deve ser OPEN ou RESOLVED.', 'INTEGRATION_ERROR_VALIDATION');
+    }
+    where.status = status;
+  }
+  const rows = await IntegrationError.findAll({ where, order: [['created_at', 'DESC']], limit: Math.min(Number(limit) || 200, 500), transaction });
+  return rows.map((row) => ({ ...row.toJSON(), operationLabel: OPERATION_LABEL[row.operation] || row.operation }));
+}
+
+async function resolveIntegrationError(errorId, note, actorUserId, groupId, companyId, transaction) {
+  const error = await IntegrationError.findOne({ where: { id: errorId, groupId, companyId }, transaction });
+  if (!error) {
+    throw AppError.notFound('Erro de integração não encontrado.', 'INTEGRATION_ERROR_NOT_FOUND');
+  }
+  if (error.status === 'RESOLVED') {
+    throw AppError.conflict('Este erro de integração já foi resolvido.', 'INTEGRATION_ERROR_ALREADY_RESOLVED');
+  }
+  const text = String(note || '').trim();
+  if (text.length < 3) {
+    throw AppError.badRequest('Informe o que foi feito para resolver (mínimo 3 caracteres).', 'INTEGRATION_ERROR_VALIDATION');
+  }
+  error.status = 'RESOLVED';
+  error.resolvedAt = new Date();
+  error.resolvedBy = actorUserId || null;
+  error.resolutionNote = text.slice(0, 500);
+  await error.save({ transaction });
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'correspondent.integration_error.resolved',
+      entityType: 'IntegrationError',
+      entityId: error.id,
+      beforeJson: { status: 'OPEN' },
+      afterJson: { status: 'RESOLVED' },
+      reason: `Erro de integração "${error.errorCode}" (${error.operation}) resolvido por uma pessoa: ${text}.`,
+    },
+    transaction
+  );
+  return error;
+}
+
+module.exports = { recordIntegrationError, listIntegrationErrors, resolveIntegrationError };

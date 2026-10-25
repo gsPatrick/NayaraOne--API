@@ -21,6 +21,10 @@ module.exports = (sequelize) => {
       // Sinalização de possível duplicata (Marco 8 Fase 11) — nunca bloqueia a criação, só
       // sinaliza para revisão humana. Ver correspondentDuplicate.service.js.
       duplicateFingerprint: { type: DataTypes.STRING(64), allowNull: true, field: 'duplicate_fingerprint' },
+      duplicateReviewStatus: { type: DataTypes.STRING(16), allowNull: true, field: 'duplicate_review_status' },
+      duplicateReviewedBy: { type: DataTypes.UUID, allowNull: true, field: 'duplicate_reviewed_by' },
+      duplicateReviewedAt: { type: DataTypes.DATE, allowNull: true, field: 'duplicate_reviewed_at' },
+      duplicateReviewNote: { type: DataTypes.TEXT, allowNull: true, field: 'duplicate_review_note' },
       possibleDuplicateOfCaseId: { type: DataTypes.UUID, allowNull: true, field: 'possible_duplicate_of_case_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
       product: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'FINANCIAMENTO_IMOBILIARIO', field: 'product' },

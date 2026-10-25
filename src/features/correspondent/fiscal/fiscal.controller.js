@@ -99,6 +99,15 @@ const downloadInvoiceFile = (kind) =>
     return res.status(200).send(file.buffer);
   });
 
+const downloadDimobFile = catchAsync(async (req, res) => {
+  const file = await req.withTenantTransaction((t) =>
+    dimobService.exportDimobFile(req.params.id, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+  );
+  res.setHeader('Content-Type', file.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+  return res.status(200).send(file.content);
+});
+
 const listDimobRecords = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
     dimobService.listDimobRecords(req.params.id, req.auth.groupId, req.auth.companyId, t)
@@ -164,6 +173,7 @@ module.exports = {
   downloadInvoiceXml: downloadInvoiceFile('xml'),
   downloadInvoicePdf: downloadInvoiceFile('pdf'),
   listDimobRecords,
+  downloadDimobFile,
   runReconciliations,
   listExportCandidates,
   getExportBatch,

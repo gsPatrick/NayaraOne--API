@@ -1,6 +1,6 @@
 'use strict';
 
-const { FinancingCase, CaseRequirement, Simulation } = require('../../models');
+const { FinancingCase, CaseRequirement, Simulation, CaseApplicant, ProviderSubmission, FinancingProposal, CommissionEntitlement } = require('../../models');
 const AppError = require('../../utils/AppError');
 
 /**
@@ -137,4 +137,130 @@ async function compareSimulations(financingCaseId, groupId, companyId, transacti
   };
 }
 
-module.exports = { checkStalledCases, compareSimulations, STALLED_THRESHOLD_DAYS_DEFAULT };
+const STATUS_LABEL = {
+  DRAFT: 'Rascunho',
+  DOCUMENTS_PENDING: 'Documentos pendentes',
+  READY_TO_SUBMIT: 'Pronto para enviar',
+  SUBMITTED: 'Enviado ao provider',
+  UNDER_ANALYSIS: 'Em análise',
+  PENDING_CUSTOMER: 'Aguardando o cliente',
+  PENDING_PROPERTY: 'Aguardando documentação do imóvel',
+  APPROVED: 'Aprovado pelo banco',
+  REJECTED: 'Recusado pelo banco',
+  CONTRACTING: 'Em contratação',
+  COMPLETED: 'Concluído',
+  CANCELED: 'Cancelado',
+};
+const DOCUMENT_LABEL = {
+  RG_CPF: 'RG/CPF',
+  COMPROVANTE_RENDA: 'comprovante de renda',
+  COMPROVANTE_RESIDENCIA: 'comprovante de residência',
+  MATRICULA_IMOVEL: 'matrícula do imóvel',
+  CERTIDAO_ESTADO_CIVIL: 'certidão de estado civil',
+  IPTU: 'IPTU',
+  OUTRO: 'outro documento',
+};
+const docLabel = (type) => DOCUMENT_LABEL[type] || type;
+const SUBMISSION_LABEL = { PENDING: 'pendente de envio', SUBMITTED: 'enviado', UNKNOWN: 'com resultado desconhecido (consultar antes de reenviar)', FAILED: 'com falha', CANCELED: 'cancelado' };
+
+function reais(value) {
+  const [inteiro, centavos] = Number(value).toFixed(2).split('.');
+  return `${inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${centavos}`;
+}
+
+/**
+ * summarizeCase — "NAY resume e sugere" (Caderno). Síntese determinística do caso, montada só com
+ * dados já gravados (checklist, simulações, envio, proposta que o BANCO informou, comissão). Cada
+ * linha cita a origem do dado ("grounding"). SOMENTE LEITURA: não altera nada, não chama provider,
+ * não avalia crédito e não projeta taxa, prazo ou aprovação — a proposta citada é a que o banco
+ * já devolveu e foi registrada por uma pessoa ou pelo webhook.
+ */
+async function summarizeCase(financingCaseId, groupId, companyId, transaction) {
+  const financingCase = await FinancingCase.findOne({
+    where: { id: financingCaseId, groupId, companyId },
+    include: [
+      { model: CaseRequirement, as: 'requirements', required: false },
+      { model: CaseApplicant, as: 'applicants', required: false },
+    ],
+    transaction,
+  });
+  if (!financingCase) {
+    throw AppError.notFound('Caso de financiamento não encontrado.', 'FINANCING_CASE_NOT_FOUND');
+  }
+
+  const [simulations, submissions, proposal, commissions] = await Promise.all([
+    Simulation.findAll({ where: { financingCaseId, groupId, companyId }, order: [['created_at', 'DESC']], transaction }),
+    ProviderSubmission.findAll({ where: { financingCaseId, groupId, companyId }, order: [['created_at', 'DESC']], transaction }),
+    FinancingProposal.findOne({ where: { financingCaseId, groupId, companyId, status: 'ACTIVE' }, transaction }),
+    CommissionEntitlement.findAll({ where: { financingCaseId, groupId, companyId }, transaction }),
+  ]);
+
+  const requirements = financingCase.requirements || [];
+  const required = requirements.filter((r) => r.required);
+  const validated = required.filter((r) => r.status === 'VALIDATED');
+  const pending = required.filter((r) => r.status !== 'VALIDATED');
+  const lowest = simulations.length ? [...simulations].sort((a, b) => Number(a.monthlyPayment) - Number(b.monthlyPayment))[0] : null;
+  const lastSubmission = submissions[0] || null;
+  const activeCommissions = commissions.filter((c) => c.status !== 'ADJUSTED');
+
+  const lines = [];
+  lines.push({ topic: 'Situação', source: 'financing_cases.status', text: `O caso está em "${STATUS_LABEL[financingCase.status] || financingCase.status}", com ${(financingCase.applicants || []).length} proponente(s), provider "${financingCase.providerCode}".` });
+  lines.push({
+    topic: 'Documentos',
+    source: 'case_requirements',
+    text: required.length === 0
+      ? 'O checklist ainda não tem documento obrigatório cadastrado.'
+      : `${validated.length} de ${required.length} documento(s) obrigatório(s) validado(s)${pending.length ? `; falta(m): ${pending.map((r) => docLabel(r.documentType)).join(', ')}` : ''}.`,
+  });
+  lines.push({
+    topic: 'Simulações',
+    source: 'simulations',
+    text: simulations.length === 0
+      ? 'Nenhuma simulação registrada.'
+      : `${simulations.length} simulação(ões) registrada(s); a de menor parcela é de R$ ${reais(lowest.monthlyPayment)} em ${lowest.termMonths} meses (ordenação objetiva, não é recomendação de crédito).`,
+  });
+  lines.push({
+    topic: 'Envio',
+    source: 'provider_submissions',
+    text: lastSubmission ? `O último envio está ${SUBMISSION_LABEL[lastSubmission.status] || lastSubmission.status}.` : 'Ainda não houve envio ao provider.',
+  });
+  lines.push({
+    topic: 'Proposta do banco',
+    source: 'proposals',
+    text: proposal
+      ? `O banco informou proposta vigente de R$ ${reais(proposal.approvedAmount)} em ${proposal.termMonths} meses (registrada em ${new Date(proposal.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}).`
+      : 'O banco ainda não informou proposta.',
+  });
+  lines.push({
+    topic: 'Comissão',
+    source: 'commission_entitlements',
+    text: activeCommissions.length ? `${activeCommissions.length} direito(s) de comissão registrado(s), total de R$ ${reais(activeCommissions.reduce((sum, c) => sum + Number(c.amount), 0))}.` : 'Nenhuma comissão registrada.',
+  });
+  if (financingCase.possibleDuplicateOfCaseId && financingCase.duplicateReviewStatus === 'PENDING') {
+    lines.push({ topic: 'Duplicidade', source: 'financing_cases.possible_duplicate_of_case_id', text: 'O caso foi sinalizado como possível duplicata e aguarda revisão.' });
+  }
+
+  const suggestions = [];
+  if (!['COMPLETED', 'CANCELED', 'REJECTED'].includes(financingCase.status)) {
+    if (pending.length) suggestions.push(`Providenciar e validar o(s) documento(s) pendente(s): ${pending.map((r) => docLabel(r.documentType)).join(', ')}.`);
+    if (!pending.length && required.length && ['DRAFT', 'DOCUMENTS_PENDING', 'READY_TO_SUBMIT'].includes(financingCase.status) && !lastSubmission) suggestions.push('Checklist completo: uma pessoa pode registrar o consentimento do cliente e enviar o caso.');
+    if (lastSubmission && lastSubmission.status === 'UNKNOWN') suggestions.push('Consultar o status do envio antes de qualquer reenvio.');
+    if (financingCase.status === 'PENDING_CUSTOMER') suggestions.push('Contatar o cliente para entregar o que o banco pediu.');
+    if (financingCase.status === 'PENDING_PROPERTY') suggestions.push('Reunir a documentação do imóvel pedida pelo banco.');
+    if (simulations.length === 0 && financingCase.providerCode !== 'manual') suggestions.push('Registrar ao menos uma simulação para comparar parcelas.');
+  }
+
+  return {
+    component: COMPONENT_NAME,
+    method: 'RULE_BASED',
+    decisionsMade: [],
+    disclaimer: 'Resumo montado só com dados já registrados no caso. A NAY não aprova crédito, não promete taxa nem prazo e não envia documento: qualquer ação continua com uma pessoa.',
+    financingCaseId,
+    status: financingCase.status,
+    lines,
+    suggestions,
+    generatedAt: new Date(),
+  };
+}
+
+module.exports = { checkStalledCases, compareSimulations, summarizeCase, STALLED_THRESHOLD_DAYS_DEFAULT };

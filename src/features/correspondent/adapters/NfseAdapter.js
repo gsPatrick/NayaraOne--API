@@ -15,6 +15,8 @@ const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 
 const AUTHORIZE_THRESHOLD_MS = 1500;
+// Só o sandbox: uma descrição com este marcador é recusada pelo emissor, para exercitar o estado REJECTED.
+const SANDBOX_REJECT_MARKER = '[sandbox:rejeitar]';
 
 function escapeXml(value) {
   return String(value ?? '')
@@ -86,6 +88,18 @@ class SandboxNfseAdapter {
     const match = /-(\d+)$/.exec(String(externalId || ''));
     const submittedAt = match ? Number(match[1]) : Date.now();
     const elapsed = Date.now() - submittedAt;
+    const rejected = elapsed >= AUTHORIZE_THRESHOLD_MS && String(context.description || '').includes(SANDBOX_REJECT_MARKER);
+    if (rejected) {
+      return {
+        externalId,
+        status: 'REJECTED',
+        rawProviderStatus: 'REJECTED',
+        rejectionReason: 'Nota recusada pelo emissor de teste (marcador sandbox).',
+        officialNumber: null,
+        documents: null,
+        raw: { sandbox: true, elapsedMs: elapsed },
+      };
+    }
     const status = elapsed >= AUTHORIZE_THRESHOLD_MS ? 'AUTHORIZED' : 'SUBMITTED';
     const officialNumber = status === 'AUTHORIZED' ? `NFSE-${externalId.slice(-8)}` : null;
     let documents = null;
@@ -110,4 +124,4 @@ class SandboxNfseAdapter {
   }
 }
 
-module.exports = { SandboxNfseAdapter };
+module.exports = { SandboxNfseAdapter, SANDBOX_REJECT_MARKER };

@@ -15,6 +15,7 @@ const nayController = require('./correspondentNay.controller');
 const fiscalController = require('./fiscal/fiscal.controller');
 const providerAccountsController = require('./providerAccounts.controller');
 const parametersController = require('./parameters.controller');
+const reviewController = require('./correspondentReview.controller');
 
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
@@ -150,6 +151,13 @@ correspondentRouter.post(
   commissionEntitlementsController.chargebackCommissionEntitlement
 );
 
+// Revisão de possíveis duplicatas, erros de integração e resumo da NAY (lacunas da revisão de 24/10).
+correspondentRouter.get('/financing-cases/duplicates/pending', requirePermission('correspondent:read'), reviewController.listPendingDuplicates);
+correspondentRouter.post('/financing-cases/:id/duplicate-review', requirePermission('correspondent:create'), reviewController.reviewDuplicate);
+correspondentRouter.get('/integration-errors', requirePermission('correspondent:read'), reviewController.listIntegrationErrors);
+correspondentRouter.post('/integration-errors/:id/resolve', requirePermission('correspondent:create'), reviewController.resolveIntegrationError);
+correspondentRouter.get('/financing-cases/:id/nay/summary', requirePermission('correspondent:read'), nayController.getCaseSummary);
+
 // Parâmetros do correspondente (Motor de Regras): elegibilidade e comissão/split. Ler é
 // correspondent:read; publicar nova versão exige a permissão dedicada correspondent:parameters.
 correspondentRouter.get('/parameters', requirePermission('correspondent:read'), parametersController.getParameters);
@@ -253,6 +261,7 @@ const fiscalRoutes = [
   ['get', '/fiscal/invoices/:id/xml', 'downloadInvoiceXml'],
   ['get', '/fiscal/invoices/:id/pdf', 'downloadInvoicePdf'],
   ['get', '/fiscal/dimob-batches/:id/records', 'listDimobRecords'],
+  ['get', '/fiscal/dimob-batches/:id/file', 'downloadDimobFile'],
   ['post', '/fiscal/reconciliations/run', 'runReconciliations'],
   ['get', '/fiscal/export-candidates', 'listExportCandidates'],
   ['get', '/fiscal/export-batches/:id', 'getExportBatch'],

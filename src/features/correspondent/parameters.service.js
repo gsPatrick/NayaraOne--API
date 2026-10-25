@@ -74,7 +74,9 @@ function validateCommission(input) {
   const allowedTriggerEvents = subset(input?.allowedTriggerEvents, Object.keys(TRIGGER_EVENT_LABEL), 'Fatos geradores aceitos');
   const defaultTriggerEvent = input?.defaultTriggerEvent;
   if (!allowedTriggerEvents.includes(defaultTriggerEvent)) throw bad('O fato gerador padrão precisa estar entre os fatos geradores aceitos.');
-  return { percentageByProvider, defaultPercentage, brokerSharePctByProvider, defaultBrokerSharePct, allowedTriggerEvents, defaultTriggerEvent };
+  const grace = Number(input?.invoiceGraceDays);
+  if (!Number.isInteger(grace) || grace < 0 || grace > 365) throw bad('O prazo para emitir a NFS-e da comissão precisa ser um número inteiro de dias entre 0 e 365.');
+  return { percentageByProvider, defaultPercentage, brokerSharePctByProvider, defaultBrokerSharePct, allowedTriggerEvents, defaultTriggerEvent, invoiceGraceDays: grace };
 }
 
 async function history(code, groupId, companyId, transaction) {

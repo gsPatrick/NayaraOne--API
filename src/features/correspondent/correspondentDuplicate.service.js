@@ -2,7 +2,8 @@
 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { FinancingCase } = require('../../models');
+const { FinancingCase, CaseApplicant, Person } = require('../../models');
+const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const DUPLICATE_WINDOW_HOURS = 24;
@@ -53,6 +54,7 @@ async function flagPossibleDuplicate(financingCase, principalPersonId, actorUser
   financingCase.duplicateFingerprint = fingerprint;
   if (existing) {
     financingCase.possibleDuplicateOfCaseId = existing.id;
+    financingCase.duplicateReviewStatus = 'PENDING';
   }
   await financingCase.save({ transaction });
 
@@ -74,4 +76,81 @@ async function flagPossibleDuplicate(financingCase, principalPersonId, actorUser
   return { duplicateOfCaseId: existing ? existing.id : null };
 }
 
-module.exports = { computeDuplicateFingerprint, flagPossibleDuplicate };
+/**
+ * listPendingDuplicateReviews — fila de revisão do caderno ("fingerprint/review"): casos
+ * sinalizados que ainda não foram revisados por uma pessoa.
+ */
+async function listPendingDuplicateReviews(groupId, companyId, transaction) {
+  const cases = await FinancingCase.findAll({
+    where: { groupId, companyId, duplicateReviewStatus: 'PENDING' },
+    include: [{ model: CaseApplicant, as: 'applicants', include: [{ model: Person, as: 'person', attributes: ['id', 'legalName'] }] }],
+    order: [['created_at', 'DESC']],
+    transaction,
+  });
+  const originalIds = cases.map((c) => c.possibleDuplicateOfCaseId).filter(Boolean);
+  const originals = originalIds.length
+    ? await FinancingCase.findAll({ where: { id: originalIds, groupId, companyId }, attributes: ['id', 'status', 'providerCode', 'createdAt'], transaction })
+    : [];
+  const byId = new Map(originals.map((o) => [o.id, o]));
+  return cases.map((c) => ({ ...c.toJSON(), originalCase: byId.get(c.possibleDuplicateOfCaseId)?.toJSON() || null }));
+}
+
+/**
+ * reviewDuplicate — decisão humana sobre a sinalização:
+ *  - DISMISS: não é duplicata, o caso segue normalmente;
+ *  - CONFIRM: é duplicata, o caso é cancelado (motivo cita o original) e o trabalho continua no caso original ("reusa").
+ * Nunca é automático e sempre exige uma nota.
+ */
+async function reviewDuplicate(financingCaseId, { decision, note }, actorUserId, groupId, companyId, transaction) {
+  const financingCase = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
+  if (!financingCase) {
+    throw AppError.notFound('Caso de financiamento não encontrado.', 'FINANCING_CASE_NOT_FOUND');
+  }
+  if (!financingCase.possibleDuplicateOfCaseId || financingCase.duplicateReviewStatus !== 'PENDING') {
+    throw AppError.conflict('Este caso não está na fila de revisão de duplicatas.', 'CASE_DUPLICATE_REVIEW_NOT_PENDING');
+  }
+  const normalized = String(decision || '').toUpperCase();
+  if (!['DISMISS', 'CONFIRM'].includes(normalized)) {
+    throw AppError.badRequest('A decisão deve ser DISMISS (não é duplicata) ou CONFIRM (é duplicata).', 'CASE_DUPLICATE_REVIEW_VALIDATION');
+  }
+  const text = String(note || '').trim();
+  if (text.length < 3) {
+    throw AppError.badRequest('Informe uma observação sobre a decisão (mínimo 3 caracteres).', 'CASE_DUPLICATE_REVIEW_VALIDATION');
+  }
+
+  const originalId = financingCase.possibleDuplicateOfCaseId;
+  financingCase.duplicateReviewStatus = normalized === 'DISMISS' ? 'DISMISSED' : 'CONFIRMED';
+  financingCase.duplicateReviewedBy = actorUserId || null;
+  financingCase.duplicateReviewedAt = new Date();
+  financingCase.duplicateReviewNote = text.slice(0, 500);
+  await financingCase.save({ transaction });
+
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: `correspondent.case.duplicate_${normalized === 'DISMISS' ? 'dismissed' : 'confirmed'}`,
+      entityType: 'FinancingCase',
+      entityId: financingCase.id,
+      beforeJson: { duplicateReviewStatus: 'PENDING' },
+      afterJson: { duplicateReviewStatus: financingCase.duplicateReviewStatus, originalCaseId: originalId },
+      reason: normalized === 'DISMISS'
+        ? `Sinalização de duplicata do caso ${originalId} descartada por uma pessoa: ${text}.`
+        : `Duplicata do caso ${originalId} confirmada por uma pessoa: ${text}. O trabalho segue no caso original.`,
+    },
+    transaction
+  );
+
+  if (normalized === 'CONFIRM' && !['CANCELED', 'COMPLETED'].includes(financingCase.status)) {
+    // Carregado aqui para evitar dependência circular entre os serviços do correspondente.
+    // eslint-disable-next-line global-require
+    const { cancelCase } = require('./cases/caseWorkflow.service');
+    await cancelCase(financingCase.id, { reason: `Duplicata do caso ${originalId}. ${text}` }, actorUserId, groupId, companyId, transaction);
+  }
+
+  const refreshed = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
+  return { financingCase: refreshed, originalCaseId: originalId };
+}
+
+module.exports = { computeDuplicateFingerprint, flagPossibleDuplicate, listPendingDuplicateReviews, reviewDuplicate };
