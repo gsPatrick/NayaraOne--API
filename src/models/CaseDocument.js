@@ -24,6 +24,8 @@ module.exports = (sequelize) => {
       expiresAt: { type: DataTypes.DATE, allowNull: true, field: 'expires_at' },
       uploadedBy: { type: DataTypes.UUID, allowNull: true, field: 'uploaded_by' },
       duplicateOfDocumentId: { type: DataTypes.UUID, allowNull: true, field: 'duplicate_of_document_id' },
+      providerExternalDocumentId: { type: DataTypes.STRING(128), allowNull: true, field: 'provider_external_document_id' },
+      sentToProviderAt: { type: DataTypes.DATE, allowNull: true, field: 'sent_to_provider_at' },
       suggestedNote: { type: DataTypes.TEXT, allowNull: true, field: 'suggested_note' },
     },
     {

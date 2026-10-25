@@ -348,6 +348,10 @@ test('CORRESPONDENT-WEBHOOK-PROPOSTA-01: aprovação do provider com proposta gr
     const erros = await IntegrationError.findAll({ where: { financingCaseId, operation: 'webhook.proposal' }, transaction });
     assert.equal(erros.length, 1);
     assert.equal(erros[0].errorCode, 'PROPOSAL_VALIDATION');
+    // eslint-disable-next-line global-require
+    const { OutboxEvent } = require('../src/models');
+    const eventos = await OutboxEvent.findAll({ where: { aggregateId: financingCaseId, eventType: 'integration.correspondent.failed' }, transaction });
+    assert.equal(eventos.length, 1, 'a proposta recusada também emite integration.correspondent.failed');
   });
 });
 

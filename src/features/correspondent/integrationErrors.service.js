@@ -31,6 +31,7 @@ const OPERATION_LABEL = {
   status: 'Consulta de status',
   webhook: 'Webhook do provider',
   'webhook.proposal': 'Proposta recebida do provider',
+  upload_document: 'Envio de documento ao provider',
   appraisal: 'Avaliação do imóvel',
   simulate: 'Simulação',
 };

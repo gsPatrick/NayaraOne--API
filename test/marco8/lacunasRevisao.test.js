@@ -19,7 +19,10 @@ const nfse = require('../../src/features/correspondent/fiscal/nfse.service');
 const recon = require('../../src/features/correspondent/fiscal/reconciliation.service');
 const dimob = require('../../src/features/correspondent/fiscal/dimob.service');
 const { SANDBOX_REJECT_MARKER } = require('../../src/features/correspondent/adapters/NfseAdapter');
-const { Person, Property, Contract, ContractParty, FinancialEntry, FinancingCase } = require('../../src/models');
+const simulationsService = require('../../src/features/correspondent/cases/simulations.service');
+const submissionsService = require('../../src/features/correspondent/cases/submissions.service');
+const { SandboxFinancingProviderAdapter } = require('../../src/features/correspondent/adapters/FinancingProviderAdapter');
+const { Person, Property, Contract, ContractParty, FinancialEntry, FinancingCase, File, CaseDocument, IntegrationError } = require('../../src/models');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -294,5 +297,74 @@ test('M8-DIMOB-LOC-04: o mesmo ano gera o mesmo hash (reprodutível) e o dataset
     const { records } = await dimob.listDimobRecords(v1.id, tenant.groupId, tenant.companyId, t);
     assert.equal(records.filter((r) => r.recordType === 'LEASE').length, 1);
     assert.equal(records.reduce((s, r) => s + Number(r.amount), 0), 2000.5);
+  });
+});
+
+// ---------- Documentos enviados ao provider (uploadDocument) ----------
+
+async function requisitoValidado(t, caso, documentType, { required = true, validar = true } = {}) {
+  const requisito = await documentsService.createRequirement(caso.id, { documentType, required }, tenant.userId, ctx(), t);
+  const arquivo = await File.create(
+    { ...ctx(), fileName: `${documentType}-${uniqueSuffix()}.pdf`, mimeType: 'application/pdf', sizeBytes: 1024, storageKey: `test/${uniqueSuffix()}.pdf`, uploadedByUserId: tenant.userId },
+    { transaction: t }
+  );
+  await documentsService.uploadDocument(caso.id, requisito.id, { fileId: arquivo.id }, tenant.userId, ctx(), t);
+  if (validar) await documentsService.validateRequirement(caso.id, requisito.id, tenant.userId, ctx(), t);
+  return requisito;
+}
+
+async function enviar(t, caso) {
+  await simulationsService.createSimulation(caso.id, { amount: 150000, termMonths: 240 }, tenant.userId, tenant.groupId, tenant.companyId, t);
+  return submissionsService.submitFinancingCase(caso.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, t);
+}
+
+test('M8-DOC-ENV-01: só o documento obrigatório e validado vai ao provider, uma vez, e fica marcado', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const caso = await novoCaso(t, await pessoa(t), { providerCode: 'sandbox' });
+    const rg = await requisitoValidado(t, caso, 'RG_CPF');
+    const opcional = await requisitoValidado(t, caso, 'IPTU', { required: false });
+    const submissao = await enviar(t, caso);
+    assert.equal(submissao.status, 'SUBMITTED');
+
+    const docRg = await CaseDocument.findOne({ where: { requirementId: rg.id, supersededAt: null }, transaction: t });
+    assert.ok(docRg.providerExternalDocumentId, 'documento obrigatório validado foi enviado');
+    assert.ok(docRg.sentToProviderAt);
+    const docOpc = await CaseDocument.findOne({ where: { requirementId: opcional.id, supersededAt: null }, transaction: t });
+    assert.equal(docOpc.providerExternalDocumentId, null, 'documento fora do checklist obrigatório não vai');
+
+    // Rodar de novo não reenvia o que já foi.
+    const adapter = new SandboxFinancingProviderAdapter();
+    const reenvio = await submissionsService.sendNeededDocuments(adapter, submissao, await FinancingCase.findByPk(caso.id, { transaction: t }), submissao.externalCaseId, tenant.userId, t);
+    assert.equal(reenvio.length, 0);
+  });
+});
+
+test('M8-DOC-ENV-02: provider manual não recebe documento; falha do provider vira erro de integração sem desfazer o envio do caso', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const manual = await novoCaso(t, await pessoa(t), { providerCode: 'manual' });
+    await requisitoValidado(t, manual, 'RG_CPF');
+    await submissionsService.submitFinancingCase(manual.id, { consent: true }, tenant.userId, tenant.groupId, tenant.companyId, t).catch(() => null);
+    const enviadosManual = await CaseDocument.findAll({ where: { financingCaseId: manual.id }, transaction: t });
+    assert.ok(enviadosManual.every((d) => !d.providerExternalDocumentId), 'manual não tem envio de documento');
+  });
+
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const caso = await novoCaso(t, await pessoa(t), { providerCode: 'sandbox' });
+    const rg = await requisitoValidado(t, caso, 'RG_CPF');
+    const original = SandboxFinancingProviderAdapter.prototype.uploadDocument;
+    SandboxFinancingProviderAdapter.prototype.uploadDocument = async () => { throw new Error('indisponível'); };
+    let submissao;
+    try {
+      submissao = await enviar(t, caso);
+    } finally {
+      SandboxFinancingProviderAdapter.prototype.uploadDocument = original;
+    }
+    assert.equal(submissao.status, 'SUBMITTED', 'o envio do caso não é desfeito');
+    const doc = await CaseDocument.findOne({ where: { requirementId: rg.id, supersededAt: null }, transaction: t });
+    assert.equal(doc.providerExternalDocumentId, null, 'sem marca de enviado, fica para nova tentativa');
+    const erros = await IntegrationError.findAll({ where: { financingCaseId: caso.id, operation: 'upload_document' }, transaction: t });
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0].errorCode, 'DOCUMENT_UPLOAD_FAILED');
+    assert.ok(!/indisponível/.test(erros[0].message), 'a mensagem da exceção não vaza');
   });
 });

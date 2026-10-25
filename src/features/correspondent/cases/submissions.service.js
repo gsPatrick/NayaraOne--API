@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { FinancingCase, CaseRequirement, Simulation, ProviderSubmission, ExternalCaseRouting } = require('../../../models');
+const { FinancingCase, CaseRequirement, CaseDocument, Simulation, ProviderSubmission, ExternalCaseRouting } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
@@ -236,6 +236,66 @@ async function requestSubmission(financingCaseId, payload, actorUserId, groupId,
 }
 
 /**
+ * sendNeededDocuments — "Enviar ao provider somente o necessário" + uploadDocument() opcional do
+ * adapter. Depois que o caso foi aceito, envia SÓ os documentos obrigatórios já validados por uma
+ * pessoa e ainda não enviados (a versão vigente de cada requisito). O que vai ao adapter é a
+ * referência (tipo, arquivo, versão), nunca o conteúdo nem documento fora do checklist. Provider
+ * sem a capacidade (ex.: manual) não recebe nada. Uma falha aqui NÃO desfaz o envio do caso: vira
+ * erro de integração e evento, e o documento fica sem marca de enviado para nova tentativa.
+ */
+async function sendNeededDocuments(adapter, submission, financingCase, externalCaseId, actorUserId, transaction) {
+  const { groupId, companyId, id: financingCaseId } = financingCase;
+  if (typeof adapter.uploadDocument !== 'function' || !adapter.capabilities().uploadDocument) return [];
+
+  const requirements = await CaseRequirement.findAll({ where: { financingCaseId, groupId, companyId, required: true, status: 'VALIDATED' }, transaction });
+  const sent = [];
+  for (const requirement of requirements) {
+    // eslint-disable-next-line no-await-in-loop
+    const document = await CaseDocument.findOne({ where: { requirementId: requirement.id, supersededAt: null }, transaction });
+    if (!document || document.providerExternalDocumentId) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await withTimeout(
+        adapter.uploadDocument({
+          idempotencyKey: `${submission.idempotencyKey}:doc:${document.id}`,
+          externalCaseId,
+          documentType: requirement.documentType,
+          fileId: document.fileId,
+          version: document.version,
+        }),
+        SUBMIT_TIMEOUT_MS
+      );
+      document.providerExternalDocumentId = result.externalDocumentId;
+      document.sentToProviderAt = new Date();
+      // eslint-disable-next-line no-await-in-loop
+      await document.save({ transaction });
+      sent.push({ documentId: document.id, documentType: requirement.documentType });
+      // eslint-disable-next-line no-await-in-loop
+      await registrarAuditoria(
+        {
+          groupId, companyId, actorUserId,
+          action: 'correspondent.document.sent_to_provider',
+          entityType: 'CaseDocument',
+          entityId: document.id,
+          reason: `Documento "${requirement.documentType}" (versão ${document.version}) enviado ao provider "${financingCase.providerCode}" junto ao caso ${externalCaseId}. Só a referência foi enviada.`,
+        },
+        transaction
+      );
+    } catch (err) {
+      const reason = err instanceof SubmitTimeoutError ? 'Tempo esgotado ao enviar o documento ao provider.' : 'Falha ao enviar o documento ao provider.';
+      // eslint-disable-next-line no-await-in-loop
+      await recordIntegrationError(
+        { groupId, companyId, financingCaseId, providerCode: financingCase.providerCode, operation: 'upload_document', errorCode: err instanceof SubmitTimeoutError ? 'DOCUMENT_UPLOAD_TIMEOUT' : 'DOCUMENT_UPLOAD_FAILED', message: `${reason} Documento: ${requirement.documentType}.` },
+        transaction
+      );
+      // eslint-disable-next-line no-await-in-loop
+      await publishIntegrationCorrespondentFailed(financingCase, { providerCode: financingCase.providerCode, reason, submissionId: `${submission.id}:doc:${document.id}` }, transaction);
+    }
+  }
+  return sent;
+}
+
+/**
  * processPendingSubmission — a parte que ANTES rodava dentro do request HTTP, agora chamada pelo
  * job `correspondentSubmissionWorkerJob`. Recebe uma `ProviderSubmission` com status PENDING já
  * carregada (e o `financingCase` correspondente) e chama o adapter de verdade, com o mesmo
@@ -299,6 +359,8 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
       },
       transaction
     );
+
+    await sendNeededDocuments(adapter, submission, financingCase, result.externalId, actorUserId, transaction);
   } catch (err) {
     const isTimeout = err instanceof SubmitTimeoutError;
     submission.status = 'UNKNOWN';
@@ -417,6 +479,7 @@ async function submitFinancingCase(financingCaseId, payload, actorUserId, groupI
 }
 
 module.exports = {
+  sendNeededDocuments,
   requestSubmission,
   processPendingSubmission,
   submitFinancingCase,
