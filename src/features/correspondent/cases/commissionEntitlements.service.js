@@ -49,7 +49,7 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
     baseOrigin = 'valor aprovado da proposta vigente do banco';
   }
   if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
-    throw AppError.badRequest('O campo "baseAmount" deve ser um número positivo.', 'COMMISSION_ENTITLEMENT_VALIDATION');
+    throw AppError.badRequest('Informe um valor-base maior que zero para a comissão.', 'COMMISSION_ENTITLEMENT_VALIDATION');
   }
 
   const split = await resolveCommissionSplit(financingCase.providerCode, groupId, companyId, actorUserId, transaction);

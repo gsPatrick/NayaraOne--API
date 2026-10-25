@@ -6,6 +6,7 @@ const { AccountingExportBatch, AccountingExportLine, AccountingReturnImport, Com
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { openReconciliation } = require('./reconciliation.service');
+const { TRIGGER_EVENT_LABEL } = require('../commissionSplit.service');
 
 function hashLines(lines) {
   const canonical = lines.map((l) => `${l.sourceType}:${l.sourceId}:${Number(l.amount).toFixed(2)}`).join('|');
@@ -112,7 +113,7 @@ async function listExportCandidates(referencePeriod, groupId, companyId, transac
       sourceType: 'COMMISSION_ENTITLEMENT',
       sourceId: e.id,
       amount: Number(e.amount),
-      description: `Comissão de correspondente bancário, provider ${e.providerCode}, fato gerador ${e.triggerEvent}`,
+      description: `Comissão de correspondente bancário, provider ${e.providerCode}, fato gerador: ${TRIGGER_EVENT_LABEL[e.triggerEvent] || 'registro manual'}`,
     })),
     ...invoices.map((i) => ({
       sourceType: 'NFSE',
@@ -229,8 +230,10 @@ async function importAccountingReturn(batchId, payload, actorUserId, groupId, co
   );
 
   if (divergences.length) {
-    const absDiff = Math.round(divergences.reduce((a, d) => a + Math.abs(d.difference), 0) * 100) / 100;
-    await openReconciliation('ACCOUNTING_RETURN_X_EXPORT', record.id, expectedTotal, returnedTotal, absDiff, actorUserId, groupId, companyId, transaction);
+    // Esperado e real são os totais só das origens que divergem, então "diferença = esperado − real" sempre fecha.
+    const expectedDiv = Math.round(divergences.reduce((a, d) => a + d.expected, 0) * 100) / 100;
+    const returnedDiv = Math.round(divergences.reduce((a, d) => a + d.returned, 0) * 100) / 100;
+    await openReconciliation('ACCOUNTING_RETURN_X_EXPORT', record.id, expectedDiv, returnedDiv, Math.round((expectedDiv - returnedDiv) * 100) / 100, actorUserId, groupId, companyId, transaction);
   }
 
   await registrarAuditoria(

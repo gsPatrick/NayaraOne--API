@@ -161,6 +161,7 @@ const DOCUMENT_LABEL = {
   OUTRO: 'outro documento',
 };
 const docLabel = (type) => DOCUMENT_LABEL[type] || type;
+const PROVIDER_LABEL = { sandbox: 'Sandbox (simulação)', manual: 'Manual (conduzido com o banco fora do sistema)' };
 const SUBMISSION_LABEL = { PENDING: 'pendente de envio', SUBMITTED: 'enviado', UNKNOWN: 'com resultado desconhecido (consultar antes de reenviar)', FAILED: 'com falha', CANCELED: 'cancelado' };
 
 function reais(value) {
@@ -204,7 +205,7 @@ async function summarizeCase(financingCaseId, groupId, companyId, transaction) {
   const activeCommissions = commissions.filter((c) => c.status !== 'ADJUSTED');
 
   const lines = [];
-  lines.push({ topic: 'Situação', source: 'financing_cases.status', text: `O caso está em "${STATUS_LABEL[financingCase.status] || financingCase.status}", com ${(financingCase.applicants || []).length} proponente(s), provider "${financingCase.providerCode}".` });
+  lines.push({ topic: 'Situação', source: 'financing_cases.status', text: `O caso está em "${STATUS_LABEL[financingCase.status] || financingCase.status}", com ${(financingCase.applicants || []).length} proponente(s), provider ${PROVIDER_LABEL[financingCase.providerCode] || financingCase.providerCode}.` });
   lines.push({
     topic: 'Documentos',
     source: 'case_requirements',
@@ -228,7 +229,7 @@ async function summarizeCase(financingCaseId, groupId, companyId, transaction) {
     topic: 'Proposta do banco',
     source: 'proposals',
     text: proposal
-      ? `O banco informou proposta vigente de R$ ${reais(proposal.approvedAmount)} em ${proposal.termMonths} meses (registrada em ${new Date(proposal.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}).`
+      ? `O banco informou proposta vigente de R$ ${reais(proposal.approvedAmount)} em ${proposal.termMonths} meses (registrada em ${new Date(proposal.get('created_at') || proposal.get('createdAt') || Date.now()).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}).`
       : 'O banco ainda não informou proposta.',
   });
   lines.push({

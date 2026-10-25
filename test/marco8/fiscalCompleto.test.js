@@ -188,6 +188,7 @@ test('M8-RET-01: retorno com hash errado é recusado; hash certo e valores iguai
     const issues = (await recon.listReconciliations('OPEN', tenant.groupId, tenant.companyId, t)).filter((r) => r.reconciliationType === 'ACCOUNTING_RETURN_X_EXPORT' && r.referenceId === ruim.id);
     assert.equal(issues.length, 1);
     assert.equal(Number(issues[0].differenceAmount), 5);
+    assert.equal(Number(issues[0].expectedAmount) - Number(issues[0].actualAmount), Number(issues[0].differenceAmount), 'diferença = esperado − real');
     const { returns } = await exportService.getExportBatch(batch.id, tenant.groupId, tenant.companyId, t);
     assert.equal(returns.length, 2);
   });

@@ -90,7 +90,8 @@ test('M8-DUP-02: confirmar a duplicata cancela o caso novo com motivo e preserva
     assert.equal(r.originalCaseId, primeiro.id);
     assert.equal(r.financingCase.duplicateReviewStatus, 'CONFIRMED');
     assert.equal(r.financingCase.status, 'CANCELED');
-    assert.match(r.financingCase.canceledReason, new RegExp(`Duplicata do caso ${primeiro.id}`));
+    assert.match(r.financingCase.canceledReason, /^Duplicata do caso criado em \d{2}\/\d{2}\/\d{4}/);
+    assert.ok(!r.financingCase.canceledReason.includes(primeiro.id), 'o motivo mostrado ao usuário não carrega UUID');
     const original = await FinancingCase.findByPk(primeiro.id, { transaction: t });
     assert.equal(original.status, 'DRAFT');
   });
@@ -385,5 +386,35 @@ test('M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; s
     const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000 }, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(Number(comBase.baseAmount), 120000);
     await assert.rejects(commissions.createCommissionEntitlement(caso.id, { baseAmount: -5 }, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('COMMISSION_ENTITLEMENT_VALIDATION'));
+  });
+});
+
+// ---------- Ajustes da auditoria do Claude Browser (25/10) ----------
+
+test('M8-AUD-01: resumo da NAY mostra data válida da proposta e provider em português; base inválida tem mensagem sem nome de campo', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const caso = await novoCaso(t, await pessoa(t));
+    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
+    await workflow.registerManualStatus(caso.id, { status: 'APPROVED', proposal: { approvedAmount: 100000, annualRatePct: 9, termMonths: 120 } }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    const resumo = await nay.summarizeCase(caso.id, tenant.groupId, tenant.companyId, t);
+    const texto = resumo.lines.map((l) => l.text).join(' ');
+    assert.ok(!/Invalid Date/.test(texto), texto);
+    assert.match(resumo.lines.find((l) => l.topic === 'Proposta do banco').text, /registrada em \d{2}\/\d{2}\/\d{4}/);
+    assert.match(resumo.lines.find((l) => l.topic === 'Situação').text, /Manual \(conduzido com o banco/);
+    await assert.rejects(
+      commissions.createCommissionEntitlement(caso.id, { baseAmount: -1 }, tenant.userId, tenant.groupId, tenant.companyId, t),
+      (err) => err.code === 'COMMISSION_ENTITLEMENT_VALIDATION' && !/baseAmount/.test(err.message)
+    );
+  });
+});
+
+test('M8-AUD-02: fila de duplicatas não lista caso já cancelado', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const principal = await pessoa(t);
+    await novoCaso(t, principal);
+    const segundo = await novoCaso(t, principal);
+    assert.ok((await duplicates.listPendingDuplicateReviews(tenant.groupId, tenant.companyId, t)).some((c) => c.id === segundo.id));
+    await workflow.cancelCase(segundo.id, { reason: 'Cliente desistiu' }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    assert.ok(!(await duplicates.listPendingDuplicateReviews(tenant.groupId, tenant.companyId, t)).some((c) => c.id === segundo.id));
   });
 });

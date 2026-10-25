@@ -82,7 +82,7 @@ async function flagPossibleDuplicate(financingCase, principalPersonId, actorUser
  */
 async function listPendingDuplicateReviews(groupId, companyId, transaction) {
   const cases = await FinancingCase.findAll({
-    where: { groupId, companyId, duplicateReviewStatus: 'PENDING' },
+    where: { groupId, companyId, duplicateReviewStatus: 'PENDING', status: { [Op.ne]: 'CANCELED' } },
     include: [{ model: CaseApplicant, as: 'applicants', include: [{ model: Person, as: 'person', attributes: ['id', 'legalName'] }] }],
     order: [['created_at', 'DESC']],
     transaction,
@@ -146,7 +146,9 @@ async function reviewDuplicate(financingCaseId, { decision, note }, actorUserId,
     // Carregado aqui para evitar dependência circular entre os serviços do correspondente.
     // eslint-disable-next-line global-require
     const { cancelCase } = require('./cases/caseWorkflow.service');
-    await cancelCase(financingCase.id, { reason: `Duplicata do caso ${originalId}. ${text}` }, actorUserId, groupId, companyId, transaction);
+    const original = await FinancingCase.findOne({ where: { id: originalId, groupId, companyId }, transaction });
+    const quando = original?.get('created_at') ? new Date(original.get('created_at')).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' às') : 'data não disponível';
+    await cancelCase(financingCase.id, { reason: `Duplicata do caso criado em ${quando}. ${text}` }, actorUserId, groupId, companyId, transaction);
   }
 
   const refreshed = await FinancingCase.findOne({ where: { id: financingCaseId, groupId, companyId }, transaction });
