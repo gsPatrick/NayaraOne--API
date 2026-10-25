@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 565. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 571. Rotas só com login ou públicas: 22.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -251,8 +251,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/financing-cases/:id/commissions` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/documents` | `correspondent:create` | não |
+| `POST` | `/api/v1/financing-cases/:id/duplicate-review` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/manual-status` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/nay/compare-simulations` | `correspondent:read` | não |
+| `GET` | `/api/v1/financing-cases/:id/nay/summary` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases/:id/proposals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/requirements/:requirementId/validate` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/requirements` | `correspondent:read` | não |
@@ -264,10 +266,12 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/financing-cases/:id/submissions` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/submissions` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id` | `correspondent:read` | não |
+| `GET` | `/api/v1/financing-cases/duplicates/pending` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases/nay/stalled` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases` | `correspondent:create` | não |
 | `POST` | `/api/v1/fiscal/dimob-batches/:id/close` | `correspondent:fiscal` | não |
+| `GET` | `/api/v1/fiscal/dimob-batches/:id/file` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/dimob-batches/:id/records` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/dimob-batches` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/dimob-batches` | `correspondent:fiscal` | não |
@@ -295,6 +299,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/groups/:id` | `groups:update` | não |
 | `GET` | `/api/v1/groups` | `groups:read` | não |
 | `POST` | `/api/v1/groups` | `groups:create` | não |
+| `POST` | `/api/v1/integration-errors/:id/resolve` | `correspondent:create` | não |
+| `GET` | `/api/v1/integration-errors` | `correspondent:read` | não |
 | `POST` | `/api/v1/inventory/adjustment-proposals/:id/decide` | `inventory:approve` | não |
 | `GET` | `/api/v1/inventory/adjustment-proposals` | `inventory:read` | não |
 | `POST` | `/api/v1/inventory/adjustment-proposals` | `inventory:create` | não |
