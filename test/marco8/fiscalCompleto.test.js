@@ -102,6 +102,11 @@ test('M8-DIMOB-OBR-01: gerar batch cadastra a obrigação do ano; fechar conclui
     const lidos = await dimob.listDimobRecords(batch.id, tenant.groupId, tenant.companyId, t);
     assert.ok(lidos.records.length >= 1);
 
+    // O banco é compartilhado: se já há aluguel recebido no ano com cadastro incompleto, fechar é recusado (regra correta).
+    if (lidos.records.some((r) => r.validationStatus === 'INVALID')) {
+      await assert.rejects(dimob.closeDimobBatch(batch.id, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('DIMOB_BATCH_HAS_INVALID_RECORDS'));
+      return;
+    }
     await dimob.closeDimobBatch(batch.id, tenant.userId, tenant.groupId, tenant.companyId, t);
     lista = await obligations.listObligations(tenant.groupId, tenant.companyId, t);
     o = lista.find((x) => x.referenceYear === ano && x.obligationType === 'DIMOB_ANNUAL');
