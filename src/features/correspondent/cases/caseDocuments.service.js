@@ -31,8 +31,9 @@ function buildSuggestedNote(documentType, file) {
   if (DOCUMENT_TYPES_EXPECTING_PDF.includes(documentType) && file.mimeType && file.mimeType.startsWith('image/')) {
     notes.push('Arquivo enviado como imagem/foto, mas este tipo de documento normalmente é um PDF oficial — confirme se está legível e completo antes de validar.');
   }
-  if (file.sizeBytes && file.sizeBytes < 10 * 1024) {
-    notes.push('Arquivo muito pequeno (menos de 10KB) — pode estar incompleto ou ilegível.');
+  // PDF com texto pode ser pequeno de verdade; o alerta de tamanho vale para foto/imagem e outros formatos.
+  if (file.sizeBytes && file.sizeBytes < 10 * 1024 && file.mimeType !== 'application/pdf') {
+    notes.push('Arquivo muito pequeno (menos de 10KB): pode estar incompleto ou ilegível.');
   }
   return notes.length ? notes.join(' ') : null;
 }

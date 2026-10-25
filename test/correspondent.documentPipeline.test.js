@@ -161,3 +161,19 @@ test('CORRESPONDENT-PIPE-06: malware scan e hash do storage genérico já cobrem
   );
   assert.ok(!/resolveAntivirusAdapter|\.scan\(/.test(serviceSource), 'caseDocuments.service.js não deve reimplementar scan de antivírus — reusa files.service.js#uploadFile');
 });
+
+test('CORRESPONDENT-PIPE-07: PDF pequeno não leva o alerta de arquivo pequeno (PDF com texto é pequeno de verdade)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const financingCase = await makeCase(transaction);
+    const requirement = await caseDocumentsService.createRequirement(
+      financingCase.id, { documentType: 'COMPROVANTE_RENDA' }, tenant.userId,
+      { groupId: tenant.groupId, companyId: tenant.companyId }, transaction
+    );
+    const file = await makeFile(transaction, { name: 'renda.pdf', mimeType: 'application/pdf', sizeBytes: 2000 });
+    const document = await caseDocumentsService.uploadDocument(
+      financingCase.id, requirement.id, { fileId: file.id }, tenant.userId,
+      { groupId: tenant.groupId, companyId: tenant.companyId }, transaction
+    );
+    assert.ok(!document.suggestedNote || !/muito pequeno/.test(document.suggestedNote));
+  });
+});
