@@ -146,9 +146,14 @@ async function runReconciliations(actorUserId, groupId, companyId, transaction) 
     where: { groupId, companyId, status: 'AUTHORIZED', sourceType: 'COMMISSION_ENTITLEMENT' },
     transaction,
   });
+  // Uma consulta só para todas as comissões das notas (em vez de uma por nota): o banco costuma
+  // estar a algumas centenas de milissegundos de distância e a conferência ficava lenta.
+  const invoiceEntitlements = invoices.length
+    ? await CommissionEntitlement.findAll({ where: { id: invoices.map((i) => i.sourceId), groupId, companyId }, transaction })
+    : [];
+  const entitlementById = new Map(invoiceEntitlements.map((e) => [e.id, e]));
   for (const invoice of invoices) {
-    // eslint-disable-next-line no-await-in-loop
-    const entitlement = await CommissionEntitlement.findOne({ where: { id: invoice.sourceId, groupId, companyId }, transaction });
+    const entitlement = entitlementById.get(invoice.sourceId);
     if (!entitlement) continue;
     result.checked.FINANCE_X_NFSE += 1;
     const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
@@ -162,12 +167,14 @@ async function runReconciliations(actorUserId, groupId, companyId, transaction) 
   const graceDays = await getInvoiceGraceDays(groupId, companyId, actorUserId, transaction);
   const limit = new Date(Date.now() - graceDays * 86400000);
   const entitlements = await CommissionEntitlement.findAll({ where: { groupId, companyId, status: { [Op.in]: ['RECEIVABLE', 'RECEIVED', 'ADJUSTED'] } }, transaction });
-  for (const entitlement of entitlements) {
-    // eslint-disable-next-line no-await-in-loop
-    const related = await InvoiceRequest.findAll({
-      where: { groupId, companyId, sourceType: 'COMMISSION_ENTITLEMENT', sourceId: entitlement.id, status: ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'] },
+  const relatedInvoices = entitlements.length
+    ? await InvoiceRequest.findAll({
+      where: { groupId, companyId, sourceType: 'COMMISSION_ENTITLEMENT', sourceId: entitlements.map((e) => e.id), status: ['REQUESTED', 'SUBMITTED', 'UNKNOWN', 'AUTHORIZED'] },
       transaction,
-    });
+    })
+    : [];
+  for (const entitlement of entitlements) {
+    const related = relatedInvoices.filter((i) => i.sourceId === entitlement.id);
     const invoiced = related.reduce((sum, i) => sum + Number(i.amount), 0);
     const expected = entitlement.status === 'ADJUSTED' ? 0 : Number(entitlement.amount);
     if (related.length === 0 && (entitlement.status === 'ADJUSTED' || new Date(entitlement.get('created_at') || entitlement.createdAt) > limit)) continue;
