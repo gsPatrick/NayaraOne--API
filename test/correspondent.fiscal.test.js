@@ -11,6 +11,7 @@ const reconciliationService = require('../src/features/correspondent/fiscal/reco
 const exportService = require('../src/features/correspondent/fiscal/accountingExport.service');
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const commissionsService = require('../src/features/correspondent/cases/commissionEntitlements.service');
+const { publishCommissionSplitVersion, DEFAULT_ACTION: COMMISSION_DEFAULT } = require('../src/features/correspondent/commissionSplit.service');
 const { InvoiceRequest, Person } = require('../src/models');
 
 let tenant;
@@ -31,7 +32,7 @@ after(async () => {
 test('FISCAL-NFSE-01: emite NFS-e via adapter sandbox — vai de REQUESTED até AUTHORIZED com histórico completo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const invoiceRequest = await nfseService.requestInvoice(
-      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 1000, description: `Nota de teste ${uniqueSuffix()}` },
+      { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 1000, description: `Nota de teste ${uniqueSuffix()}` },
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     assert.equal(invoiceRequest.status, 'SUBMITTED');
@@ -53,7 +54,7 @@ test('FISCAL-NFSE-01: emite NFS-e via adapter sandbox — vai de REQUESTED até 
 test('FISCAL-NFSE-02: cancelar NFS-e autorizada preserva o documento e marca canceledAt, nunca apaga', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const invoiceRequest = await nfseService.requestInvoice(
-      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 500, description: `Nota a cancelar ${uniqueSuffix()}` },
+      { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 500, description: `Nota a cancelar ${uniqueSuffix()}` },
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await new Promise((r) => setTimeout(r, 1700));
@@ -76,7 +77,7 @@ test('FISCAL-NFSE-02: cancelar NFS-e autorizada preserva o documento e marca can
 test('FISCAL-NFSE-03: cancelar sem motivo é bloqueado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const invoiceRequest = await nfseService.requestInvoice(
-      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 500, description: `Nota sem motivo ${uniqueSuffix()}` },
+      { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 500, description: `Nota sem motivo ${uniqueSuffix()}` },
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await new Promise((r) => setTimeout(r, 1700));
@@ -94,7 +95,7 @@ test('FISCAL-NFSE-03: cancelar sem motivo é bloqueado', async () => {
 test('FISCAL-NFSE-04: RLS — pedido de NFS-e de outra empresa não é encontrado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const invoiceRequest = await nfseService.requestInvoice(
-      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 500, description: `Nota cross-company ${uniqueSuffix()}` },
+      { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 500, description: `Nota cross-company ${uniqueSuffix()}` },
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await assert.rejects(
@@ -161,9 +162,12 @@ test('FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEI
       tenant.userId, transaction
     );
 
+    // Comissão só entra no DIMOB se a empresa ligar o parâmetro (o caderno não pede).
+    await publishCommissionSplitVersion(tenant.groupId, tenant.companyId, { ...COMMISSION_DEFAULT, dimobIncludeCommissions: true }, tenant.userId, transaction);
+
     // Entitlement CONFIRMADO (RECEIVABLE) — deve entrar no dataset com o valor exato.
     const confirmed = await commissionsService.createCommissionEntitlement(
-      financingCase.id, { baseAmount: 50000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+      financingCase.id, { baseAmount: 50000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await commissionsService.confirmCommissionEntitlement(
       confirmed.id, { externalConfirmationId: `dimob-conf-${uniqueSuffix()}` }, tenant.userId, tenant.groupId, tenant.companyId, transaction
@@ -171,12 +175,12 @@ test('FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEI
 
     // Entitlement EXPECTED (nunca confirmado) — NÃO deve entrar (ainda não é renda recebível).
     await commissionsService.createCommissionEntitlement(
-      financingCase.id, { baseAmount: 30000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+      financingCase.id, { baseAmount: 30000, triggerEvent: 'RECURSO_LIBERADO' }, tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
 
     // Entitlement ADJUSTED (confirmado e depois estornado) — NÃO deve entrar (receita revertida).
     const adjusted = await commissionsService.createCommissionEntitlement(
-      financingCase.id, { baseAmount: 20000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction
+      financingCase.id, { baseAmount: 20000, triggerEvent: 'REGISTRO_MANUAL' }, tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await commissionsService.confirmCommissionEntitlement(
       adjusted.id, { externalConfirmationId: `dimob-adj-${uniqueSuffix()}` }, tenant.userId, tenant.groupId, tenant.companyId, transaction
@@ -248,7 +252,7 @@ test('FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha no
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const batch = await exportService.createExportBatch(
       '2026-01',
-      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 1000, description: 'Comissão de teste' }],
+      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: tenant.userId, amount: 1000, description: 'Comissão de teste' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     assert.ok(batch.batchHash);
@@ -273,13 +277,13 @@ test('FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes
     const sourceId = crypto.randomUUID();
     await exportService.createExportBatch(
       '2026-03',
-      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Comissão original' }],
+      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Comissão original' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await assert.rejects(
       () => exportService.createExportBatch(
         '2026-04',
-        [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Mesma comissão, batch diferente' }],
+        [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Mesma comissão, batch diferente' }],
         tenant.userId, tenant.groupId, tenant.companyId, transaction
       ),
       (err) => {
@@ -295,7 +299,7 @@ test('FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a che
     const sourceId = crypto.randomUUID();
     const batch = await exportService.createExportBatch(
       '2026-05',
-      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId, amount: 1000, description: 'Comissão original' }],
+      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Comissão original' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     const { AccountingExportLine } = require('../src/models');
@@ -307,7 +311,7 @@ test('FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a che
     const otherSourceId = crypto.randomUUID();
     const secondBatch = await exportService.createExportBatch(
       '2026-06',
-      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: otherSourceId, amount: 500, description: 'Comissão diferente' }],
+      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: otherSourceId, amount: 500, description: 'Comissão diferente' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     assert.ok(secondBatch.batchHash);
@@ -318,7 +322,7 @@ test('FISCAL-EXPORT-02: ajuste sem motivo é bloqueado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const batch = await exportService.createExportBatch(
       '2026-02',
-      [{ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 1000, description: 'Comissão' }],
+      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: tenant.userId, amount: 1000, description: 'Comissão' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     const { AccountingExportLine } = require('../src/models');
@@ -336,7 +340,7 @@ test('FISCAL-EXPORT-02: ajuste sem motivo é bloqueado', async () => {
 test('FISCAL-RLS-01: InvoiceRequest tem policy tenant_isolation aplicada (catálogo genérico)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const invoiceRequest = await nfseService.requestInvoice(
-      { sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 10, description: `RLS check ${uniqueSuffix()}` },
+      { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 10, description: `RLS check ${uniqueSuffix()}` },
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await sequelize.query('SET LOCAL app.company_id = :otherCompanyId', { replacements: { otherCompanyId }, transaction });

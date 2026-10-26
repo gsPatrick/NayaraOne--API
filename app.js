@@ -27,6 +27,7 @@ const { startBillingScheduleAutoGenerateJob } = require('./src/engines/jobs/bill
 const { startCollectionCadenceJob } = require('./src/engines/jobs/collectionCadenceJob');
 const { startCorrespondentSubmissionWorkerJob } = require('./src/engines/jobs/correspondentSubmissionWorkerJob');
 const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/correspondentAppraisalWorkerJob');
+const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspondentStatusPollJob');
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
@@ -70,16 +71,18 @@ app.use(
 // assinatura HMAC de webhooks de provedores externos (ex.: assinatura eletrônica) sobre os
 // BYTES exatos recebidos, antes de qualquer parsing/normalização do JSON. Não afeta nenhuma
 // outra rota: o corpo já parseado (`req.body`) continua disponível normalmente.
-app.use(
-  express.json({
-    // 28mb: cobre o limite de 20MB de src/features/files/files.service.js (upload de arquivo
-    // via base64 infla ~33% o tamanho) + folga pro resto do payload JSON da requisição.
-    limit: '28mb',
-    verify: (req, res, buf) => {
-      req.rawBody = buf;
-    },
-  })
-);
+const keepRawBody = (req, res, buf) => {
+  req.rawBody = buf;
+};
+const jsonParser = express.json({
+  // 28mb: cobre o limite de 20MB de src/features/files/files.service.js (upload de arquivo
+  // via base64 infla ~33% o tamanho) + folga pro resto do payload JSON da requisição.
+  limit: '28mb',
+  verify: keepRawBody,
+});
+// Webhook público de financiamento: sem login, então o corpo aceito é pequeno (evento de status, não arquivo).
+const webhookJsonParser = express.json({ limit: '256kb', verify: keepRawBody });
+app.use((req, res, next) => (req.path.includes('/correspondent/webhooks/') ? webhookJsonParser(req, res, next) : jsonParser(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 
 const apiPrefix = process.env.APP_API_PREFIX || '/api';
@@ -217,6 +220,9 @@ if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_SUBMISSION_WORK
 }
 if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_APPRAISAL_WORKER_DISABLED !== 'true') {
   startCorrespondentAppraisalWorkerJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_STATUS_POLL_DISABLED !== 'true') {
+  startCorrespondentStatusPollJob();
 }
 
 // B2 — reconciliação de pagamentos com resposta incerta do banco (revisão 18/10/2026).

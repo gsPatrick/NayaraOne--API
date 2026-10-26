@@ -16,11 +16,14 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       financingCaseId: { type: DataTypes.UUID, allowNull: false, field: 'financing_case_id' },
-      rawProviderStatus: { type: DataTypes.STRING(64), allowNull: false, field: 'raw_provider_status' },
+      rawProviderStatus: { type: DataTypes.STRING(255), allowNull: false, field: 'raw_provider_status' },
       normalizedStatus: { type: DataTypes.STRING(32), allowNull: true, field: 'normalized_status' },
       source: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'webhook' },
       applied: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      note: { type: DataTypes.TEXT, allowNull: true },
       occurredAt: { type: DataTypes.DATE, allowNull: false, field: 'occurred_at' },
+      // Hora informada pelo PROVIDER (relógio dele); fica separada da hora local para não misturar relógios.
+      providerOccurredAt: { type: DataTypes.DATE, allowNull: true, field: 'provider_occurred_at' },
     },
     {
       schema: 'correspondent',

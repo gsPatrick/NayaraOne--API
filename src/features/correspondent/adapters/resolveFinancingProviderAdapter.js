@@ -20,7 +20,11 @@ async function resolveFinancingProviderAdapter(tenant, transaction) {
   }
 
   // Qualquer outro valor (incluindo nomes de banco ainda não implementados) cai no sandbox —
-  // nunca tenta adivinhar uma integração que não existe de verdade.
+  // nunca tenta adivinhar uma integração que não existe de verdade. Em produção isso seria um
+  // "banco" que aprova sozinho, então lá um provider desconhecido é erro de configuração.
+  if (provider !== 'sandbox' && process.env.DEPLOY_ENVIRONMENT === 'production') {
+    throw new Error(`Provider de financiamento "${provider}" não está implementado neste ambiente.`);
+  }
   return new SandboxFinancingProviderAdapter();
 }
 
@@ -31,14 +35,19 @@ async function resolveFinancingProviderAdapter(tenant, transaction) {
 // webhook de seguro em insurance.controller.js, que resolve a submission antes do tenant).
 // "Registry resolve adapter" — Caderno Técnico, Marco 8, seção Webhook.
 const FINANCING_PROVIDER_REGISTRY = {
-  sandbox: () => new SandboxFinancingProviderAdapter(),
+  // O sandbox aprova sozinho: em produção/staging não existe (um caso sandbox lá seria um "banco" falso).
+  sandbox: () => (['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production' ? null : new SandboxFinancingProviderAdapter()),
   manual: () => new ManualWorkflowFinancingProviderAdapter(),
 };
 
 function resolveFinancingProviderAdapterByCode(providerCode) {
   const factory = FINANCING_PROVIDER_REGISTRY[String(providerCode || '').toLowerCase()];
   if (!factory) return null;
-  return factory();
+  return factory() || null;
 }
 
-module.exports = { resolveFinancingProviderAdapter, resolveFinancingProviderAdapterByCode };
+function listFinancingProviderCodes() {
+  return Object.keys(FINANCING_PROVIDER_REGISTRY);
+}
+
+module.exports = { resolveFinancingProviderAdapter, resolveFinancingProviderAdapterByCode, listFinancingProviderCodes };

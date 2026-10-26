@@ -17,9 +17,10 @@ async function recordIntegrationError(
       groupId,
       companyId,
       financingCaseId: financingCaseId || null,
-      providerCode,
-      operation,
-      errorCode,
+      providerCode: String(providerCode || '').slice(0, 32),
+      operation: String(operation || '').slice(0, 40),
+      // errorCode pode vir de uma exceção qualquer (código longo ou que nem é texto): cabe na coluna.
+      errorCode: (typeof errorCode === 'string' && errorCode ? errorCode : 'INTEGRATION_FAILED').slice(0, 64),
       message: String(message || '').slice(0, 500),
     },
     { transaction }
@@ -34,6 +35,8 @@ const OPERATION_LABEL = {
   upload_document: 'Envio de documento ao provider',
   appraisal: 'Avaliação do imóvel',
   simulate: 'Simulação',
+  cancel: 'Cancelamento no provider',
+  chargeback: 'Estorno de comissão no Financeiro',
 };
 
 /**
@@ -49,12 +52,15 @@ async function listIntegrationErrors({ status, limit = 200 } = {}, groupId, comp
     }
     where.status = status;
   }
-  const rows = await IntegrationError.findAll({ where, order: [['created_at', 'DESC']], limit: Math.min(Number(limit) || 200, 500), transaction });
+  const parsed = Number(limit);
+  const rowLimit = Number.isFinite(parsed) && parsed >= 1 ? Math.min(Math.floor(parsed), 500) : 200;
+  const rows = await IntegrationError.findAll({ where, order: [['created_at', 'DESC']], limit: rowLimit, transaction });
   return rows.map((row) => ({ ...row.toJSON(), operationLabel: OPERATION_LABEL[row.operation] || row.operation }));
 }
 
 async function resolveIntegrationError(errorId, note, actorUserId, groupId, companyId, transaction) {
-  const error = await IntegrationError.findOne({ where: { id: errorId, groupId, companyId }, transaction });
+  // Trava a linha: duas resoluções simultâneas não gravam duas auditorias (a segunda vê "já resolvido").
+  const error = await IntegrationError.findOne({ where: { id: errorId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (!error) {
     throw AppError.notFound('Erro de integração não encontrado.', 'INTEGRATION_ERROR_NOT_FOUND');
   }

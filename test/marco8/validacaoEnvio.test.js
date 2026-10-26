@@ -108,8 +108,7 @@ test('M8-VAL-02: validação humana deixa o caso pronto e o snapshot não leva o
       requirement.id,
       tenant.userId,
       { groupId: tenant.groupId, companyId: tenant.companyId },
-      transaction
-    );
+      transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
     const atual = await FinancingCase.findByPk(financingCase.id, { transaction });
     assert.equal(atual.status, 'READY_TO_SUBMIT');
 
@@ -122,7 +121,7 @@ test('M8-VAL-02: validação humana deixa o caso pronto e o snapshot não leva o
       transaction
     );
     assert.equal(submission.status, 'SUBMITTED');
-    assert.deepEqual(Object.keys(submission.requestSnapshot).sort(), ['amount', 'consent', 'financingCaseId', 'idempotencyKey']);
+    assert.deepEqual(Object.keys(submission.requestSnapshot).sort(), ['amount', 'applicants', 'consent', 'documents', 'eligibilityRuleVersionId', 'financingCaseId', 'idempotencyKey']);
     assert.equal(JSON.stringify(submission.requestSnapshot).includes(file.id), false);
   });
 });

@@ -7,6 +7,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('../testHelpers');
+const { validarChecklist } = require('./_checklist');
 const financingCasesService = require('../../src/features/correspondent/cases/financingCases.service');
 const submissionsService = require('../../src/features/correspondent/cases/submissions.service');
 const { Person, AuditLog, ProviderSubmission } = require('../../src/models');
@@ -72,6 +73,7 @@ test('M8-CONS-01: envio sem consentimento é recusado e não cria submissão', a
       tenant.userId,
       transaction
     );
+    await validarChecklist(financingCase, transaction, tenant);
     await assert.rejects(
       () => submissionsService.requestSubmission(
         financingCase.id,
@@ -100,6 +102,7 @@ test('M8-CONS-02: envio com consentimento grava o fato e a auditoria de antes/de
       tenant.userId,
       transaction
     );
+    await validarChecklist(financingCase, transaction, tenant);
     const submission = await submissionsService.submitFinancingCase(
       financingCase.id,
       { amount: 200000, consent: true },
@@ -109,7 +112,7 @@ test('M8-CONS-02: envio com consentimento grava o fato e a auditoria de antes/de
       transaction
     );
     assert.equal(submission.status, 'SUBMITTED');
-    assert.equal(submission.requestSnapshot.consent, true);
+    assert.equal(submission.requestSnapshot.consent.given, true);
     const row = await AuditLog.findOne({
       where: { action: 'correspondent.submission.submitted', entityId: financingCase.id },
       transaction,

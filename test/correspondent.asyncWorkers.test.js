@@ -103,8 +103,7 @@ async function completeChecklist(financingCaseId, transaction) {
     requirement.id,
     tenant.userId,
     { groupId: tenant.groupId, companyId: tenant.companyId },
-    transaction
-  );
+    transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
 }
 
 test('CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o adapter; o job processa e vira SUBMITTED', async () => {

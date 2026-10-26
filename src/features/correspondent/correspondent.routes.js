@@ -43,12 +43,33 @@ correspondentRouter.post(
   requirePermission('correspondent:create'),
   documentsController.validateRequirement
 );
+correspondentRouter.post(
+  '/financing-cases/:id/requirements/:requirementId/reject',
+  requirePermission('correspondent:create'),
+  documentsController.rejectRequirement
+);
+correspondentRouter.post(
+  '/financing-cases/:id/requirements/:requirementId/dismiss',
+  requirePermission('correspondent:create'),
+  documentsController.dismissRequirement
+);
+correspondentRouter.get(
+  '/financing-cases/:id/requirements/:requirementId/documents',
+  requirePermission('correspondent:documents:read'),
+  documentsController.listDocumentVersions
+);
 // Path "/financing-cases/:id/documents" segue literalmente a lista de "APIs mínimas" do Guia do
 // Marcelo (Marco 8) — requirementId vai no corpo, não na URL.
 correspondentRouter.post(
   '/financing-cases/:id/documents',
   requirePermission('correspondent:create'),
   documentsController.uploadDocument
+);
+
+correspondentRouter.post(
+  '/financing-cases/:id/documents/send-to-provider',
+  requirePermission('correspondent:create'),
+  submissionsController.resendDocuments
 );
 
 // Fase 3 — simulations. Criar exige correspondent:create (mesmo nível de criar o próprio caso);
@@ -122,9 +143,10 @@ correspondentRouter.get(
   appraisalsController.listAppraisals
 );
 
-// Fase 8 — comissões (NC). Criar/confirmar/estornar exigem correspondent:create (mesmo nível de
-// criar o próprio caso); listar é correspondent:read — valores de comissão não são documento
-// RESTRICTED, é informação de acompanhamento do negócio.
+// Fase 8 — comissões (NC). Criar e confirmar: correspondent:create (confirmar também exige finance:settle, conforme
+// o parâmetro da empresa). Receber, estornar e concluir o estorno financeiro mexem no caixa: exigem apenas a
+// permissão financeira finance:settle (o perfil financeiro faz a tarefa dele sem precisar criar casos). Listar é
+// correspondent:read — valores de comissão não são documento RESTRICTED.
 correspondentRouter.post(
   '/financing-cases/:id/commissions',
   requirePermission('correspondent:create'),
@@ -135,6 +157,11 @@ correspondentRouter.get(
   requirePermission('correspondent:read'),
   commissionEntitlementsController.listCommissionEntitlements
 );
+correspondentRouter.get(
+  '/financing-cases/:id/commissions/:entitlementId/adjustments',
+  requirePermission('correspondent:read'),
+  commissionEntitlementsController.listCommissionAdjustments
+);
 correspondentRouter.post(
   '/financing-cases/:id/commissions/:entitlementId/confirm',
   requirePermission('correspondent:create'),
@@ -142,12 +169,17 @@ correspondentRouter.post(
 );
 correspondentRouter.post(
   '/financing-cases/:id/commissions/:entitlementId/receive',
-  requirePermission('correspondent:create'),
+  requirePermission('finance:settle'),
   commissionEntitlementsController.receiveCommissionEntitlement
 );
 correspondentRouter.post(
+  '/financing-cases/:id/commissions/:entitlementId/complete-financial-reversal',
+  requirePermission('finance:settle'),
+  commissionEntitlementsController.completeFinancialReversal
+);
+correspondentRouter.post(
   '/financing-cases/:id/commissions/:entitlementId/chargeback',
-  requirePermission('correspondent:create'),
+  requirePermission('finance:settle'),
   commissionEntitlementsController.chargebackCommissionEntitlement
 );
 
@@ -236,12 +268,17 @@ correspondentRouter.post(
 
 correspondentRouter.post(
   '/provider-accounts',
-  requirePermission('correspondent:create'),
+  requirePermission('correspondent:parameters'),
   providerAccountsController.registerProviderAccount
+);
+correspondentRouter.patch(
+  '/provider-accounts/:id',
+  requirePermission('correspondent:parameters'),
+  providerAccountsController.updateProviderAccount
 );
 correspondentRouter.get(
   '/provider-accounts',
-  requirePermission('correspondent:read'),
+  requirePermission('correspondent:parameters'),
   providerAccountsController.listProviderAccounts
 );
 
@@ -270,6 +307,7 @@ const fiscalRoutes = [
   ['get', '/fiscal/obligations', 'listObligations'],
   ['post', '/fiscal/obligations', 'createObligation'],
   ['post', '/fiscal/obligations/:id/complete', 'completeObligation'],
+  ['put', '/fiscal/obligations/:id/due-date', 'updateObligationDueDate'],
 ];
 for (const [method, path, handler] of fiscalRoutes) {
   correspondentRouter[method](path, requirePermission('correspondent:fiscal'), fiscalController[handler]);

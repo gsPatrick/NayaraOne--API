@@ -1,16 +1,19 @@
 'use strict';
 
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const { DimobBatch, DimobRecord, Person, Property } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { ensureObligation, completeByDimobBatch } = require('./obligations.service');
 const { reconcileDimobBatch } = require('./reconciliation.service');
 const { buildDimobDataset, canonicalLine, onlyDigits } = require('./dimobDataset.service');
+const { isUuid } = require('./fiscalCommon');
 
 function hashDataset(dataset) {
   // Serialização estável (a ordem já é determinística pela montagem do dataset).
-  const canonical = dataset.map((r) => canonicalLine({ recordType: r.recordType || 'CORRESPONDENT_COMMISSION', ...r })).join('|');
+  // Ordem canônica (não depende da ordem de inserção): o mesmo conjunto gera sempre o mesmo hash.
+  const canonical = dataset.map((r) => canonicalLine({ recordType: r.recordType || 'CORRESPONDENT_COMMISSION', ...r })).sort().join('|');
   return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -24,12 +27,19 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
     throw AppError.badRequest('O campo "referenceYear" deve ser um ano válido.', 'DIMOB_VALIDATION');
   }
 
+  if (referenceYear > 2100) {
+    throw AppError.badRequest('O campo "referenceYear" deve ser um ano válido.', 'DIMOB_VALIDATION');
+  }
+  // A versão e o conteúdo são gerados sob a mesma trava (a primeira coisa da geração): duas gerações simultâneas
+  // esperam uma pela outra. O fechamento usa a mesma trava.
+  await DimobBatch.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `dimob:${companyId}:${referenceYear}` }, transaction });
+
   // Todo ano com batch gerado passa a constar no calendário fiscal.
   await ensureObligation({ obligationType: 'DIMOB_ANNUAL', referenceYear }, actorUserId, groupId, companyId, transaction);
-
   const dataset = await buildDimobDataset(referenceYear, groupId, companyId, transaction);
   const snapshotHash = hashDataset(dataset);
 
+  // Duas gerações simultâneas do mesmo ano esperam uma pela outra: a versão nunca se repete.
   const previous = await DimobBatch.findOne({
     where: { groupId, companyId, referenceYear },
     order: [['version', 'DESC']],
@@ -83,12 +93,42 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
 }
 
 async function closeDimobBatch(dimobBatchId, actorUserId, groupId, companyId, transaction) {
-  const batch = await DimobBatch.findOne({ where: { id: dimobBatchId, groupId, companyId }, transaction });
-  if (!batch) {
+  if (!isUuid(String(dimobBatchId || ''))) {
+    throw AppError.badRequest('Identificador de batch inválido.', 'DIMOB_VALIDATION');
+  }
+  const found = await DimobBatch.findOne({ where: { id: dimobBatchId, groupId, companyId }, transaction });
+  if (!found) {
     throw AppError.notFound('Batch DIMOB não encontrado.', 'DIMOB_BATCH_NOT_FOUND');
   }
+  // Mesma trava da geração: fechar a v1 enquanto a v2 é gerada espera a geração terminar; fechamento duplo também.
+  await DimobBatch.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `dimob:${companyId}:${found.referenceYear}` }, transaction });
+  const batch = await DimobBatch.findOne({ where: { id: dimobBatchId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
   if (batch.status === 'CLOSED') {
     throw AppError.conflict('Este batch DIMOB já está fechado — gere uma nova versão para corrigir.', 'DIMOB_BATCH_ALREADY_CLOSED');
+  }
+  const newer = await DimobBatch.count({ where: { groupId, companyId, referenceYear: batch.referenceYear, version: { [Op.gt]: batch.version } }, transaction });
+  if (newer > 0) {
+    throw AppError.conflict(
+      'Existe uma versão mais nova deste ano. Feche a versão mais recente: a anterior foi substituída.',
+      'DIMOB_BATCH_SUPERSEDED'
+    );
+  }
+  // O snapshot precisa continuar batendo com os registros guardados antes de fechar.
+  const stored = await DimobRecord.findAll({ where: { dimobBatchId: batch.id, groupId, companyId }, order: [['id', 'ASC']], transaction });
+  const recomputed = hashDataset(
+    stored.map((r) => ({ recordType: r.recordType, sourceRefs: r.sourceRefs, amount: r.amount, detailJson: r.detailJson }))
+  );
+  if (recomputed !== batch.snapshotHash) {
+    throw AppError.conflict('Os registros deste batch não conferem mais com o hash do snapshot. Gere uma nova versão.', 'DIMOB_BATCH_SNAPSHOT_MISMATCH');
+  }
+  // Os dados vivos do ano também precisam continuar iguais aos do snapshot: batch defasado não fecha
+  // (nem conclui a obrigação); gera-se uma nova versão.
+  const liveHash = hashDataset(await buildDimobDataset(batch.referenceYear, groupId, companyId, transaction));
+  if (liveHash !== batch.snapshotHash) {
+    throw AppError.conflict(
+      'Os lançamentos ou cadastros do ano mudaram depois que este batch foi gerado. Gere uma nova versão para refletir os dados de hoje e feche a nova versão.',
+      'DIMOB_BATCH_STALE'
+    );
   }
   const invalid = await DimobRecord.count({ where: { dimobBatchId: batch.id, groupId, companyId, validationStatus: 'INVALID' }, transaction });
   if (invalid > 0) {
@@ -128,7 +168,7 @@ async function listDimobRecords(dimobBatchId, groupId, companyId, transaction) {
 }
 
 /**
- * exportDimobFile — arquivo de conferência do batch (CSV com ponto e vírgula), com a versão do
+ * exportDimobFile — arquivo de conferência do batch (CSV com ponto e vírgula, vírgula decimal e BOM UTF-8), com a versão do
  * layout e o hash do snapshot. É o formato interno para o contador conferir; o arquivo oficial da
  * Receita depende do layout vigente validado por ele (o caderno condiciona a produção a isso).
  */
@@ -152,8 +192,13 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
     return `"${safe.replace(/"/g, '""')}"`;
   };
-  const names = (ids) => (ids || []).map((id) => personById.get(id)?.legalName || 'Sem nome').join(' / ');
-  const docs = (ids) => (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO').join(' / ');
+  // Batch novo: usa a foto gravada na geração. Batch antigo (sem foto): cai para o cadastro de hoje.
+  const names = (ids, snapshot) => (snapshot
+    ? snapshot.map((p) => p.name || 'Sem nome')
+    : (ids || []).map((id) => personById.get(id)?.legalName || 'Sem nome')).join(' / ');
+  const docs = (ids, snapshot) => (snapshot
+    ? snapshot.map((p) => p.taxId || 'SEM DOCUMENTO')
+    : (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO')).join(' / ');
 
   const lines = [
     `# layout;${batch.layoutVersion};formato interno de conferência, não é o arquivo oficial da Receita`,
@@ -166,17 +211,17 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
       lines.push([
         'LOCACAO',
         cell(r.detailJson?.contractNumber || refs.contractId),
-        cell(docs(refs.landlordPersonIds)),
-        cell(names(refs.landlordPersonIds)),
-        cell(docs(refs.tenantPersonIds)),
-        cell(names(refs.tenantPersonIds)),
-        cell(propertyById.get(refs.propertyId)?.internalCode || 'SEM IMOVEL'),
-        Number(r.amount).toFixed(2),
+        cell(docs(refs.landlordPersonIds, r.detailJson?.landlords)),
+        cell(names(refs.landlordPersonIds, r.detailJson?.landlords)),
+        cell(docs(refs.tenantPersonIds, r.detailJson?.tenants)),
+        cell(names(refs.tenantPersonIds, r.detailJson?.tenants)),
+        cell((r.detailJson && 'propertyCode' in r.detailJson ? r.detailJson.propertyCode : propertyById.get(refs.propertyId)?.internalCode) || 'SEM IMOVEL'),
+        Number(r.amount).toFixed(2).replace('.', ','),
         r.validationStatus === 'VALID' ? 'OK' : 'PENDENTE',
         cell((r.validationIssues || []).map((i) => i.message).join(' | ')),
       ].join(';'));
     } else {
-      lines.push(['COMISSAO', cell(refs.commissionEntitlementId), '', '', '', '', '', Number(r.amount).toFixed(2), 'OK', ''].join(';'));
+      lines.push(['COMISSAO', cell(refs.commissionEntitlementId), '', '', '', '', '', Number(r.amount).toFixed(2).replace('.', ','), 'OK', ''].join(';'));
     }
   }
 
@@ -191,7 +236,8 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     transaction
   );
   return {
-    content: `${lines.join('\n')}\n`,
+    // BOM UTF-8 + valor com vírgula decimal: o Excel em português lê acentos e números corretamente.
+    content: `\uFEFF${lines.join('\n')}\n`,
     fileName: `dimob-${batch.referenceYear}-v${batch.version}.csv`,
     contentType: 'text/csv; charset=utf-8',
   };
@@ -199,7 +245,12 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
 
 async function listDimobBatches(referenceYear, groupId, companyId, transaction) {
   const where = { groupId, companyId };
-  if (referenceYear) where.referenceYear = referenceYear;
+  if (referenceYear !== null && referenceYear !== undefined) {
+    if (!Number.isInteger(referenceYear) || referenceYear < 2000 || referenceYear > 2100) {
+      throw AppError.badRequest('O filtro "referenceYear" deve ser um ano válido.', 'DIMOB_VALIDATION');
+    }
+    where.referenceYear = referenceYear;
+  }
   return DimobBatch.findAll({ where, order: [['reference_year', 'DESC'], ['version', 'DESC']], transaction });
 }
 

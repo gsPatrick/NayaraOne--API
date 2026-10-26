@@ -1224,7 +1224,8 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   const beforeJson = entry.toJSON();
 
   entry.status = 'SETTLED';
-  entry.settledAt = new Date();
+  // Data efetiva do caixa informada por quem recebeu (ex.: comissão paga ontem); sem ela, agora.
+  entry.settledAt = options && options.settledAt ? new Date(options.settledAt) : new Date();
   if (settlementInfo) {
     entry.settlementMethod = settlementInfo.method;
     entry.settlementEvidenceFileId = settlementInfo.evidenceFileId;
@@ -1367,7 +1368,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
       // mesma; o que mudou foi só o momento do caixa).
       competenceMonth: entry.competenceMonth,
-      settledAt: new Date(),
+      settledAt: options && options.settledAt ? new Date(options.settledAt) : new Date(),
       status: 'SETTLED',
       idempotencyKey: null,
       reversalOfEntryId: null,
@@ -1422,7 +1423,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
 
   const newRemainingCents = remainingCents - appliedCents;
   entry.status = newRemainingCents === 0 ? 'SETTLED' : 'PARTIALLY_SETTLED';
-  if (newRemainingCents === 0) entry.settledAt = new Date();
+  if (newRemainingCents === 0) entry.settledAt = options && options.settledAt ? new Date(options.settledAt) : new Date();
   if (newRemainingCents === 0 && settlementInfo) {
     entry.settlementMethod = settlementInfo.method;
     entry.settlementEvidenceFileId = settlementInfo.evidenceFileId;
@@ -1575,7 +1576,7 @@ async function resolveClassificationPending(id, finalNature, actorUserId, transa
  * marca o original como REVERSED e cria um novo lançamento compensatório (`entryType`
  * invertido, mesmo `amount`) apontando de volta via `reversalOfEntryId`.
  */
-async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
+async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, options = {}) {
   // Lock pessimista: mesmo padrão de settleFinancialEntry — duas chamadas concorrentes de
   // estorno pro mesmo lançamento não podem ambas ler status != REVERSED antes de qualquer uma
   // commitar (senão criam DOIS lançamentos compensatórios pro mesmo original).
@@ -1608,6 +1609,16 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
   // — o estorno cria um NOVO FinancialEntry compensatório (status SETTLED) na mesma competência
   // do original, sem checar se esse mês já estava fechado.
   await assertPeriodOpenForEntry(original.companyId, [original.competenceMonth, new Date()], transaction);
+  // Competência em revisão também não recebe lançamento novo (mesma guarda da criação).
+  await assertCompetenceOpen(original.companyId, original.competenceMonth, transaction);
+
+  // Estorno parcial (ex.: o banco devolve só parte da comissão): lançamento compensatório só do valor
+  // informado; o original continua como está até o estorno final.
+  const partialCents = options.amount !== undefined && options.amount !== null ? toCents(options.amount) : null;
+  const isPartial = partialCents !== null && partialCents < toCents(original.amount);
+  if (partialCents !== null && (partialCents <= 0 || partialCents > toCents(original.amount))) {
+    throw AppError.badRequest('O valor do estorno precisa ser maior que zero e no máximo o valor do lançamento.', 'FINANCE_ENTRY_VALIDATION');
+  }
 
   const beforeJson = original.toJSON();
 
@@ -1622,7 +1633,8 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
       contractId: original.contractId,
       entryType: compensatingType,
       nature: 'ADJUSTMENT',
-      amount: original.amount,
+      amount: isPartial ? fromCents(partialCents) : original.amount,
+      description: isPartial ? `Estorno parcial de ${toBRLDisplay(fromCents(partialCents))} — ${original.description || 'lançamento financeiro'}` : null,
       dueAt: null,
       // O estorno pertence à mesma competência do lançamento estornado.
       competenceMonth: original.competenceMonth,
@@ -1630,17 +1642,22 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
       status: 'SETTLED',
       idempotencyKey: null,
       reversalOfEntryId: original.id,
+      // As dimensões contábeis do original acompanham o compensatório (plano de contas e obra).
+      chartOfAccountId: original.chartOfAccountId || null,
+      chartOfAccountVersionId: original.chartOfAccountVersionId || null,
+      constructionProjectId: original.constructionProjectId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
 
-  original.status = 'REVERSED';
-  original.updatedBy = actorUserId || null;
-  await original.save({ transaction });
-
-  await publishFinancialEntryReversed(original, reversal, transaction);
+  if (!isPartial) {
+    original.status = 'REVERSED';
+    original.updatedBy = actorUserId || null;
+    await original.save({ transaction });
+    await publishFinancialEntryReversed(original, reversal, transaction);
+  }
 
   await registrarAuditoria(
     {
@@ -1651,8 +1668,8 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
       entityType: 'FinancialEntry',
       entityId: original.id,
       beforeJson,
-      afterJson: { original: original.toJSON(), reversalEntryId: reversal.id },
-      reason: reasonText ? `Lançamento estornado: ${reasonText}` : 'Lançamento estornado.',
+      afterJson: { original: original.toJSON(), reversalEntryId: reversal.id, partial: isPartial },
+      reason: `${isPartial ? `Lançamento estornado em parte (${toBRLDisplay(fromCents(partialCents))})` : 'Lançamento estornado'}${reasonText ? `: ${reasonText}` : '.'}`,
     },
     transaction
   );
@@ -1662,7 +1679,8 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
   // só por teste. Agora, a cada estorno, confere se a empresa cruzou o limiar e abre um caso de
   // anomalia (idempotente o bastante na prática: um caso por estorno que cruza o limiar; não é
   // um problema duplicar o alerta aqui, ao contrário de duplicar dinheiro).
-  const reversalAlert = await checkFrequentReversalAlert(original.companyId, transaction);
+  // Estorno de origem comercial (chargeback de comissão do banco) não é sinal de fraude: fica fora do alerta.
+  const reversalAlert = options.skipFrequentAlert ? { flagged: false } : await checkFrequentReversalAlert(original.companyId, transaction);
   if (reversalAlert.flagged) {
     await createAnomalyCase(
       {
@@ -1682,7 +1700,57 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction) {
   return { original, reversal };
 }
 
+/**
+ * cancelPendingFinancialEntry — cancela um lançamento que NUNCA foi liquidado (PENDING). Não há
+ * movimento de caixa a desfazer, então não se cria lançamento compensatório (ao contrário do
+ * estorno de um lançamento liquidado): o original só passa a CANCELLED, com motivo e auditoria.
+ */
+async function cancelPendingFinancialEntry(id, reasonText, actorUserId, transaction, options = {}) {
+  const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
+  const statusOk = entry.status === 'PENDING' || (options.allowPartiallySettled && entry.status === 'PARTIALLY_SETTLED');
+  if (!statusOk) {
+    throw AppError.conflict(`Só um lançamento PENDING (nunca liquidado) pode ser cancelado (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
+  }
+  if (!reasonText || !String(reasonText).trim()) {
+    throw AppError.badRequest('Cancelar um lançamento exige um motivo documentado.', 'FINANCE_ENTRY_CANCEL_REASON_REQUIRED');
+  }
+  if (entry.status === 'PARTIALLY_SETTLED' && !options.balanceWrittenOff) {
+    // Só se cancela o saldo depois de estornar as baixas parciais (nada liquidado pode ficar de pé).
+    const standing = await FinancialEntry.count({ where: { parentEntryId: entry.id, status: 'SETTLED' }, transaction });
+    if (standing > 0) {
+      throw AppError.conflict('Estorne as baixas parciais antes de cancelar o saldo deste lançamento.', 'FINANCE_ENTRY_INVALID_STATUS');
+    }
+  }
+  // Cancelar muda o resultado do mês: período fechado ou em revisão não aceita (exceto baixa de diferença de recebimento,
+  // que é consequência de um fato externo já ocorrido).
+  if (!options.skipPeriodGuard) {
+    await assertPeriodOpenForEntry(entry.companyId, [entry.competenceMonth], transaction);
+    await assertCompetenceOpen(entry.companyId, entry.competenceMonth, transaction);
+  }
+  const beforeJson = entry.toJSON();
+  entry.status = 'CANCELLED';
+  entry.updatedBy = actorUserId || null;
+  await entry.save({ transaction });
+  await registrarAuditoria(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      actorUserId,
+      action: 'finance.entry.cancel_pending',
+      entityType: 'FinancialEntry',
+      entityId: entry.id,
+      beforeJson,
+      afterJson: entry.toJSON(),
+      reason: `Lançamento pendente de ${toBRLDisplay(entry.amount)} cancelado (nunca liquidado, sem movimento de caixa): ${String(reasonText).trim()}.`,
+    },
+    transaction
+  );
+  return entry;
+}
+
 module.exports = {
+  cancelPendingFinancialEntry,
   createFinancialEntry,
   listFinancialEntries,
   getFinancialEntry,

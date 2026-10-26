@@ -17,6 +17,7 @@ module.exports = (sequelize) => {
       invoiceRequestId: { type: DataTypes.UUID, allowNull: false, field: 'invoice_request_id' },
       rawStatus: { type: DataTypes.STRING(32), allowNull: false, field: 'raw_status' },
       normalizedStatus: { type: DataTypes.STRING(16), allowNull: true, field: 'normalized_status' },
+      note: { type: DataTypes.TEXT, allowNull: true },
       occurredAt: { type: DataTypes.DATE, allowNull: false, field: 'occurred_at' },
     },
     {

@@ -14,6 +14,7 @@ const recon = require('../../src/features/correspondent/fiscal/reconciliation.se
 const exportService = require('../../src/features/correspondent/fiscal/accountingExport.service');
 const obligations = require('../../src/features/correspondent/fiscal/obligations.service');
 const financingCases = require('../../src/features/correspondent/cases/financingCases.service');
+const { publishCommissionSplitVersion, DEFAULT_ACTION: COMMISSION_DEFAULT } = require('../../src/features/correspondent/commissionSplit.service');
 const commissions = require('../../src/features/correspondent/cases/commissionEntitlements.service');
 const { Person, FiscalReconciliation } = require('../../src/models');
 
@@ -35,7 +36,7 @@ async function comissaoRecebivel(t, base = 50000) {
 
 test('M8-NFSE-ARQ-01: NFS-e autorizada preserva XML, PDF, código de verificação e hashes que conferem no download', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const inv = await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 1234.5, description: `Serviço ${uniqueSuffix()}` }, ...a(), t);
+    const inv = await nfse.requestInvoice({ sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 1234.5, description: `Serviço ${uniqueSuffix()}` }, ...a(), t);
     await sleep(1700);
     await nfse.checkInvoiceStatus(inv.id, ...a(), t);
     const xml = await nfse.getInvoiceFile(inv.id, 'xml', tenant.groupId, tenant.companyId, t);
@@ -54,7 +55,7 @@ test('M8-NFSE-ARQ-01: NFS-e autorizada preserva XML, PDF, código de verificaç�
 
 test('M8-NFSE-ARQ-02: antes da autorização não há arquivo para baixar', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const inv = await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: tenant.userId, amount: 10, description: `Sem arquivo ${uniqueSuffix()}` }, ...a(), t);
+    const inv = await nfse.requestInvoice({ sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 10, description: `Sem arquivo ${uniqueSuffix()}` }, ...a(), t);
     await assert.rejects(nfse.getInvoiceFile(inv.id, 'xml', tenant.groupId, tenant.companyId, t), codigo('NFSE_DOCUMENT_NOT_AVAILABLE'));
   });
 });
@@ -120,6 +121,7 @@ test('M8-DIMOB-OBR-01: gerar batch cadastra a obrigação do ano; fechar conclui
 
 test('M8-DIMOB-OBR-02: comissão entra depois do batch → DIMOB x contratos abre issue', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
+    await publishCommissionSplitVersion(tenant.groupId, tenant.companyId, { ...COMMISSION_DEFAULT, dimobIncludeCommissions: true }, tenant.userId, t);
     const ano = new Date().getUTCFullYear();
     const batch = await dimob.generateDimobBatch(ano, tenant.userId, tenant.groupId, tenant.companyId, t);
     const nova = await comissaoRecebivel(t, 80000);

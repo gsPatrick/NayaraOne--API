@@ -202,10 +202,11 @@ test('CORRESPONDENT-ELIG-10: imóvel dentro da UF habilitada passa normalmente',
     const financingCase = await createCase(transaction, { propertyId: property.id });
     const result = await eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     assert.equal(result.eligible, true);
+
   });
 });
 
-test('CORRESPONDENT-ELIG-11: case sem propertyId vinculado nunca é bloqueado por região (não há como verificar)', async () => {
+test('CORRESPONDENT-ELIG-11: case sem propertyId vinculado não é bloqueado por região por padrão (não há como verificar); o admin pode ligar o bloqueio', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     await eligibilityService.publishProviderEligibilityVersion(
       tenant.groupId,
@@ -217,5 +218,17 @@ test('CORRESPONDENT-ELIG-11: case sem propertyId vinculado nunca é bloqueado po
     const financingCase = await createCase(transaction);
     const result = await eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction);
     assert.equal(result.eligible, true);
+    await eligibilityService.publishProviderEligibilityVersion(
+      tenant.groupId,
+      tenant.companyId,
+      { ...eligibilityService.DEFAULT_ACTION, allowedStatesByProvider: { sandbox: ['SP', 'RJ'] }, blockWhenPropertyRegionUnknown: true },
+      tenant.userId,
+      transaction
+    );
+    await assert.rejects(
+      () => eligibilityService.assertEligible(financingCase, { amount: 100000 }, tenant.groupId, tenant.companyId, tenant.userId, transaction),
+      (err) => err.code === 'COR_ELIGIBILITY_REGION_UNKNOWN'
+    );
+
   });
 });

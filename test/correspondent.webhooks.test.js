@@ -97,8 +97,7 @@ async function createSubmittedCase() {
       requirement.id,
       tenant.userId,
       { groupId: tenant.groupId, companyId: tenant.companyId },
-      transaction
-    );
+      transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>
@@ -133,7 +132,8 @@ test('CORRESPONDENT-WEBHOOK-01: webhook válido aplica status, grava histórico 
     const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
     assert.equal(financingCase.status, 'UNDER_ANALYSIS');
 
-    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 1);
     assert.equal(history[0].rawProviderStatus, 'ANALYSIS');
     assert.equal(history[0].normalizedStatus, 'UNDER_ANALYSIS');
@@ -157,7 +157,8 @@ test('CORRESPONDENT-WEBHOOK-02: webhook com assinatura inválida é rejeitado e 
   await withTenantTransaction(tenant, async (transaction) => {
     const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
     assert.equal(financingCase.status, 'SUBMITTED', 'status não pode ter mudado com assinatura inválida');
-    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 0, 'nenhum histórico deve ser gravado quando a assinatura é rejeitada');
   });
 });
@@ -179,7 +180,8 @@ test('CORRESPONDENT-WEBHOOK-03: webhook duplicado (mesmo externalEventId) aplica
   assert.equal(second.reason, 'duplicate_event');
 
   await withTenantTransaction(tenant, async (transaction) => {
-    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 1, 'webhook duplicado não pode gerar uma segunda linha de histórico');
   });
 });
@@ -213,7 +215,8 @@ test('CORRESPONDENT-WEBHOOK-11: duas entregas CONCORRENTES de verdade do mesmo e
   assert.equal(duplicadas.length, 1, 'a outra deve voltar como duplicate_event, nunca um erro cru de violação de unicidade');
 
   await withTenantTransaction(tenant, async (transaction) => {
-    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 1, 'mesmo sob concorrência real, nunca deve existir mais de 1 linha de histórico para o mesmo evento');
     const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
     assert.equal(financingCase.status, 'UNDER_ANALYSIS', 'o status deve ter sido aplicado exatamente uma vez');
@@ -242,7 +245,8 @@ test('CORRESPONDENT-WEBHOOK-04: status fora de ordem não regride o case, mas fi
     const financingCase = await FinancingCase.findByPk(financingCaseId, { transaction });
     assert.equal(financingCase.status, 'APPROVED', 'case não pode regredir pra UNDER_ANALYSIS');
 
-    const { history } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
+    const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 2, 'o evento fora de ordem ainda precisa aparecer no histórico (nunca perder o raw status)');
     const ignoredEntry = history.find((h) => h.rawProviderStatus === 'ANALYSIS');
     assert.ok(ignoredEntry);
@@ -270,11 +274,13 @@ test('CORRESPONDENT-WEBHOOK-06: provider desconhecido na URL retorna processed:f
   assert.equal(result.reason, 'unknown_provider');
 });
 
-test('CORRESPONDENT-WEBHOOK-07: externalCaseId desconhecido (roteamento) não lança erro, só não processa', async () => {
+test('CORRESPONDENT-WEBHOOK-07: externalCaseId desconhecido (roteamento) é recusado como assinatura inválida, sem revelar que o id não existe', async () => {
   const body = { externalCaseId: `inexistente-${uniqueSuffix()}`, externalEventId: 'evt-x', status: 'APPROVED' };
-  const result = await webhooksService.processFinancingWebhook('sandbox', Buffer.from('{}'), {}, body);
-  assert.equal(result.processed, false);
-  assert.equal(result.reason, 'unknown_routing');
+  // Mesma resposta de assinatura inválida: ninguém descobre, sem assinar, quais ids de caso existem.
+  await assert.rejects(
+    () => webhooksService.processFinancingWebhook('sandbox', Buffer.from('{}'), {}, body),
+    (err) => err.code === 'CORRESPONDENT_WEBHOOK_HMAC_INVALID'
+  );
 });
 
 test('CORRESPONDENT-WEBHOOK-08: payload sem campo obrigatório é rejeitado como invalid_payload', async () => {

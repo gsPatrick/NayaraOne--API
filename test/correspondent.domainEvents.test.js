@@ -84,7 +84,7 @@ test('CORRESPONDENT-EVT-02: completar o checklist de documentos emite financing.
     event = await findEvent('financing.documents.completed', financingCase.id, transaction);
     assert.equal(event, null, 'envio sem validação humana ainda não completa o checklist');
 
-    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
     event = await findEvent('financing.documents.completed', financingCase.id, transaction);
     assert.ok(event, 'evento financing.documents.completed não foi emitido após a validação humana');
 
@@ -106,7 +106,7 @@ test('CORRESPONDENT-EVT-03: payload de financing.documents.completed nunca inclu
     const requirement = await caseDocumentsService.createRequirement(financingCase.id, { documentType: 'RG_CPF' }, tenant.userId, actorContext, transaction);
     const file = await makeFile(transaction, 'rg.pdf');
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, actorContext, transaction);
-    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
 
     const event = await findEvent('financing.documents.completed', financingCase.id, transaction);
     const payloadStr = JSON.stringify(event.payloadJson);
@@ -122,7 +122,7 @@ test('CORRESPONDENT-EVT-04: submissão com sucesso emite financing.submitted', a
     const requirement = await caseDocumentsService.createRequirement(financingCase.id, { documentType: 'RG_CPF' }, tenant.userId, actorContext, transaction);
     const file = await makeFile(transaction, 'rg.pdf');
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, actorContext, transaction);
-    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, actorContext, transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
 
     const submission = await submissionsService.submitFinancingCase(
       financingCase.id,
@@ -181,7 +181,7 @@ async function createSubmittedCase(extra = {}) {
       { transaction }
     );
     await caseDocumentsService.uploadDocument(financingCase.id, requirement.id, { fileId: file.id }, tenant.userId, { groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
-    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, { groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
+    await caseDocumentsService.validateRequirement(financingCase.id, requirement.id, tenant.userId, { groupId: tenant.groupId, companyId: tenant.companyId }, transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
   });
 
   const submission = await withTenantTransaction(tenant, (transaction) =>

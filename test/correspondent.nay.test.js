@@ -49,6 +49,15 @@ async function backdateCase(id, days, transaction) {
     replacements: { days, id },
     transaction,
   });
+  // "Parado" considera a atividade real do caso (itens do checklist, simulações): o teste envelhece tudo junto.
+  await sequelize.query('UPDATE correspondent.case_requirements SET updated_at = now() - make_interval(days => :days) WHERE financing_case_id = :id', {
+    replacements: { days, id },
+    transaction,
+  });
+  await sequelize.query('UPDATE correspondent.simulations SET created_at = now() - make_interval(days => :days) WHERE financing_case_id = :id', {
+    replacements: { days, id },
+    transaction,
+  });
 }
 
 test('CORRESPONDENT-NAY-01: caso parado com documento pendente é sinalizado com o motivo certo', async () => {
@@ -67,7 +76,7 @@ test('CORRESPONDENT-NAY-01: caso parado com documento pendente é sinalizado com
     const found = result.cases.find((c) => c.financingCaseId === financingCase.id);
     assert.ok(found, 'caso parado deveria ser sinalizado');
     assert.ok(found.idleDays >= 7);
-    assert.ok(found.reason.includes('RG_CPF'));
+    assert.ok(found.reason.includes('RG/CPF'), 'o motivo mostra o nome do documento, não o código interno');
     assert.deepEqual(found.pendingRequirementTypes, ['RG_CPF']);
     assert.deepEqual(result.decisionsMade, []);
   });

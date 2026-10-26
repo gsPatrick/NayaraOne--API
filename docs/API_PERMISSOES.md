@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 571. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 579. Rotas só com login ou públicas: 22.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -245,17 +245,23 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/cancel` | `correspondent:create` | não |
-| `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/chargeback` | `correspondent:create` | não |
+| `GET` | `/api/v1/financing-cases/:id/commissions/:entitlementId/adjustments` | `correspondent:read` | não |
+| `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/chargeback` | `finance:settle` | não |
+| `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/complete-financial-reversal` | `finance:settle` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/confirm` | `correspondent:create` | não |
-| `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/receive` | `correspondent:create` | não |
+| `POST` | `/api/v1/financing-cases/:id/commissions/:entitlementId/receive` | `finance:settle` | não |
 | `GET` | `/api/v1/financing-cases/:id/commissions` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/commissions` | `correspondent:create` | não |
+| `POST` | `/api/v1/financing-cases/:id/documents/send-to-provider` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/documents` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/duplicate-review` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/manual-status` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/nay/compare-simulations` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases/:id/nay/summary` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases/:id/proposals` | `correspondent:read` | não |
+| `POST` | `/api/v1/financing-cases/:id/requirements/:requirementId/dismiss` | `correspondent:create` | não |
+| `GET` | `/api/v1/financing-cases/:id/requirements/:requirementId/documents` | `correspondent:documents:read` | não |
+| `POST` | `/api/v1/financing-cases/:id/requirements/:requirementId/reject` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/requirements/:requirementId/validate` | `correspondent:create` | não |
 | `GET` | `/api/v1/financing-cases/:id/requirements` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/requirements` | `correspondent:create` | não |
@@ -289,6 +295,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/fiscal/invoices` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/invoices` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/obligations/:id/complete` | `correspondent:fiscal` | não |
+| `PUT` | `/api/v1/fiscal/obligations/:id/due-date` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/obligations` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/obligations` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/reconciliations/:id/resolve` | `correspondent:fiscal` | não |
@@ -545,8 +552,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/properties/:id` | `properties:update` | não |
 | `GET` | `/api/v1/properties` | `properties:read` | não |
 | `POST` | `/api/v1/properties` | `properties:create` | não |
-| `GET` | `/api/v1/provider-accounts` | `correspondent:read` | não |
-| `POST` | `/api/v1/provider-accounts` | `correspondent:create` | não |
+| `PATCH` | `/api/v1/provider-accounts/:id` | `correspondent:parameters` | não |
+| `GET` | `/api/v1/provider-accounts` | `correspondent:parameters` | não |
+| `POST` | `/api/v1/provider-accounts` | `correspondent:parameters` | não |
 | `GET` | `/api/v1/radar/:id/matches/:propertyId/explain` | `radar:read` | não |
 | `GET` | `/api/v1/radar/:id/matches` | `radar:read` | não |
 | `DELETE` | `/api/v1/radar/:id` | `radar:delete` | não |

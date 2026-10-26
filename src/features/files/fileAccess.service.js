@@ -80,6 +80,7 @@ const CATEGORY_PERMISSIONS = {
   'property-documents': ['properties:read'],
   insurance: ['procurement:read'],
   'inventory-invoices': ['inventory:read'],
+  correspondent: ['correspondent:read'],
 };
 
 // Os predicados usam operadores que os índices da migration 20260101000395 atendem: btree para
@@ -219,6 +220,15 @@ async function assertCanAttachFiles(fileIds, auth, transaction) {
   if (unique.length === 0) return;
   const files = await File.findAll({ where: { id: unique }, attributes: FILE_ATTRIBUTES, transaction });
   for (const file of files) {
+    // Documento RESTRICTED do Correspondente só é reaproveitado por quem tem a permissão dedicada.
+    const { restricted } = await resolveFileOwnership(file.id, transaction);
+    if (restricted && !(auth?.permissions || []).includes('correspondent:documents:read')) {
+      throw AppError.forbidden(
+        'Este arquivo é um documento restrito de outro caso. Você não tem permissão para reutilizá-lo.',
+        'FILE_ATTACH_FORBIDDEN',
+        { fileId: file.id }
+      );
+    }
     if (!(await canReadFile(file, auth, transaction))) {
       throw AppError.forbidden(
         'Você não pode anexar um arquivo que não tem permissão para acessar — envie um arquivo seu ou peça a quem tem acesso ao módulo dele.',

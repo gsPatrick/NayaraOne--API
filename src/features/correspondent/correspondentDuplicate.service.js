@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { resolveEligibilityConfig } = require('./eligibility.service');
 const { Op } = require('sequelize');
 const { FinancingCase, CaseApplicant, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
@@ -39,12 +40,18 @@ async function flagPossibleDuplicate(financingCase, principalPersonId, actorUser
     propertyId: financingCase.propertyId,
   });
 
-  const since = new Date(Date.now() - DUPLICATE_WINDOW_HOURS * 60 * 60 * 1000);
+  const { action: eligibilityAction } = await resolveEligibilityConfig(financingCase.groupId, financingCase.companyId, transaction, actorUserId);
+  const windowHours = Number.isInteger(eligibilityAction.duplicateWindowHours) && eligibilityAction.duplicateWindowHours > 0 ? eligibilityAction.duplicateWindowHours : DUPLICATE_WINDOW_HOURS;
+  // Duas criações simultâneas do mesmo proponente e imóvel passam uma de cada vez por aqui (a segunda enxerga a primeira).
+  await FinancingCase.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `dup:${financingCase.companyId}:${fingerprint}` }, transaction });
+  const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
   const existing = await FinancingCase.findOne({
     where: {
       companyId: financingCase.companyId,
       duplicateFingerprint: fingerprint,
       id: { [Op.ne]: financingCase.id },
+      // Caso cancelado não conta como original: não faz sentido avisar duplicidade contra ele.
+      status: { [Op.ne]: 'CANCELED' },
       created_at: { [Op.gte]: since },
     },
     order: [['created_at', 'ASC']],
@@ -67,7 +74,7 @@ async function flagPossibleDuplicate(financingCase, principalPersonId, actorUser
         action: 'correspondent.case.possible_duplicate',
         entityType: 'FinancingCase',
         entityId: financingCase.id,
-        reason: `Possível duplicata do caso ${existing.id} — mesmo proponente principal, imóvel e janela de ${DUPLICATE_WINDOW_HOURS}h. Sinalizado para revisão, criação NÃO foi bloqueada.`,
+        reason: `Possível duplicata do caso ${existing.id} — mesmo proponente principal, imóvel e janela de ${windowHours}h. Sinalizado para revisão, criação NÃO foi bloqueada.`,
       },
       transaction
     );

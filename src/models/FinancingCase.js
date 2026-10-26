@@ -37,6 +37,7 @@ module.exports = (sequelize) => {
       // inclusive como efeito colateral de uma submissão com sucesso). Só muda via
       // acknowledgeUnknownSubmission. Ver migration 20260101000342.
       submissionVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'submission_version' },
+      clientRequestId: { type: DataTypes.STRING(64), allowNull: true, field: 'client_request_id' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

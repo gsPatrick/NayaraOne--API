@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
       providerCode: { type: DataTypes.STRING(32), allowNull: false, field: 'provider_code' },
       label: { type: DataTypes.STRING(120), allowNull: false },
       secretRef: { type: DataTypes.STRING(160), allowNull: false, field: 'secret_ref' },
+      active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },
     {

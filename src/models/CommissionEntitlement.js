@@ -28,6 +28,8 @@ module.exports = (sequelize) => {
       managerAmount: { type: DataTypes.DECIMAL(14, 2), allowNull: false, field: 'manager_amount' },
       ruleVersionId: { type: DataTypes.UUID, allowNull: true, field: 'rule_version_id' },
       externalConfirmationId: { type: DataTypes.STRING(128), allowNull: true, field: 'external_confirmation_id' },
+      confirmedAt: { type: DataTypes.DATE, allowNull: true, field: 'confirmed_at' },
+      receivedAt: { type: DataTypes.DATE, allowNull: true, field: 'received_at' },
       financialEntryId: { type: DataTypes.UUID, allowNull: true, field: 'financial_entry_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

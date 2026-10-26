@@ -20,7 +20,7 @@ const MAX_BYTES = 20 * 1024 * 1024;
 // listada aqui pra manter a validação de categoria centralizada.
 // "inventory-invoices": NF/foto de nota fiscal de entrada de estoque (Guia §6 — "NF/foto
 // armazenada em files"), enviada por receiptOcr.service.js antes da sugestão de OCR/IA.
-const KNOWN_CATEGORIES = ['contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'insurance', 'inventory-invoices', 'generic'];
+const KNOWN_CATEGORIES = ['correspondent', 'contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'insurance', 'inventory-invoices', 'generic'];
 
 // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): uploadFile aceitava
 // QUALQUER mimeType enviado pelo cliente, sem allowlist — um arquivo marcado "text/html" (mesmo
@@ -37,6 +37,33 @@ const ALLOWED_MIME_TYPES = [
   'video/mp4', 'video/quicktime', 'video/webm',
   'audio/mpeg', 'audio/mp4', 'audio/webm',
 ];
+
+// Assinatura (bytes iniciais) esperada por tipo declarado. Usada nos documentos do Correspondente, que
+// são restritos (renda, identidade): o tipo declarado pelo cliente precisa bater com o conteúdo real.
+const SIGNATURES = {
+  'image/jpeg': [(b) => b[0] === 0xff && b[1] === 0xd8],
+  'image/png': [(b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+  'image/gif': [(b) => /^GIF8[79]a/.test(b.slice(0, 6).toString('latin1'))],
+  'image/webp': [(b) => b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WEBP'],
+  'image/heic': [(b) => b.slice(4, 8).toString('latin1') === 'ftyp'],
+  'image/heif': [(b) => b.slice(4, 8).toString('latin1') === 'ftyp'],
+  'application/pdf': [(b) => b.slice(0, 1024).toString('latin1').includes('%PDF-')],
+  'application/msword': [(b) => b.slice(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))],
+  'application/vnd.ms-excel': [(b) => b.slice(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [(b) => b[0] === 0x50 && b[1] === 0x4b],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [(b) => b[0] === 0x50 && b[1] === 0x4b],
+  'video/mp4': [(b) => b.slice(4, 8).toString('latin1') === 'ftyp'],
+  'video/quicktime': [(b) => ['ftyp', 'moov', 'wide', 'mdat', 'free'].includes(b.slice(4, 8).toString('latin1'))],
+  'video/webm': [(b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3],
+  'audio/mpeg': [(b) => b.slice(0, 3).toString('latin1') === 'ID3', (b) => b[0] === 0xff && (b[1] & 0xe0) === 0xe0],
+  'audio/mp4': [(b) => b.slice(4, 8).toString('latin1') === 'ftyp'],
+  'audio/webm': [(b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3],
+};
+
+function matchesDeclaredType(buffer, mimeType) {
+  const checks = SIGNATURES[String(mimeType || '').toLowerCase()];
+  return !checks || checks.some((check) => check(buffer));
+}
 
 function resolveCategory(category) {
   if (category && KNOWN_CATEGORIES.includes(category)) return category;
@@ -60,6 +87,9 @@ async function uploadFile(payload, actorUserId, transaction) {
       'Os campos "groupId", "companyId" e "fileName" são obrigatórios.',
       'FILE_UPLOAD_VALIDATION'
     );
+  }
+  if (String(fileName).length > 255) {
+    throw AppError.badRequest('O nome do arquivo deve ter até 255 caracteres.', 'FILE_UPLOAD_VALIDATION');
   }
   // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 15, 2026-10-06): upload de arquivo
   // vazio (0 bytes) chega com contentBase64="" — a checagem acima tratava string vazia igual a
@@ -92,6 +122,14 @@ async function uploadFile(payload, actorUserId, transaction) {
     );
   }
 
+  // Documento do Correspondente (restrito): o conteúdo precisa ser do tipo que o cliente declarou.
+  if (resolveCategory(category) === 'correspondent' && !matchesDeclaredType(buffer, mimeType)) {
+    throw AppError.badRequest(
+      'O conteúdo do arquivo não corresponde ao tipo informado. Envie o arquivo original (PDF ou imagem) sem renomear a extensão.',
+      'FILE_UPLOAD_TYPE_MISMATCH'
+    );
+  }
+
   // GAP REAL CORRIGIDO (auditoria 2026-10-08): este era o ÚNICO ponto de upload (POST /files
   // genérico, usado por qualquer feature que apenas vincula um fileId depois — ex.
   // procurement/insurance.service.js#attachPolicyDocument) que NUNCA passava por scan de
@@ -113,6 +151,11 @@ async function uploadFile(payload, actorUserId, transaction) {
   const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
   const encryptedBuffer = encryptFileBuffer(buffer);
   const storageKey = diskStorage.saveFile(resolveCategory(category), groupId, fileName, encryptedBuffer);
+  // O binário já está em disco antes do registro no banco: se a transação voltar (por este ou por um passo
+  // seguinte da requisição), o arquivo cifrado órfão é removido.
+  if (transaction) {
+    transaction.afterRollbackCleanups = [...(transaction.afterRollbackCleanups || []), () => diskStorage.deleteFile(storageKey)];
+  }
 
   const file = await File.create(
     {
@@ -124,6 +167,8 @@ async function uploadFile(payload, actorUserId, transaction) {
       sizeBytes: buffer.length,
       checksumSha256,
       encryptedAtRest: true,
+      scanStatus: 'CLEAN',
+      scannedAt: new Date(),
       uploadedByUserId: actorUserId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -247,4 +292,4 @@ async function getFileMetadata(id, transaction) {
   return file;
 }
 
-module.exports = { uploadFile, getFileContent, getFileMetadata, MAX_BYTES, ALLOWED_MIME_TYPES };
+module.exports = { uploadFile, getFileContent, getFileMetadata, matchesDeclaredType, MAX_BYTES, ALLOWED_MIME_TYPES };

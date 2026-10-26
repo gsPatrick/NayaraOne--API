@@ -70,6 +70,7 @@ function publishAppraisalCompleted(appraisal, transaction) {
         id: appraisal.id,
         financingCaseId: appraisal.financingCaseId,
         providerCode: appraisal.providerCode,
+        appraisedValue: appraisal.requestedValue,
         requestedValue: appraisal.requestedValue,
       },
       idempotencyKey: `appraisal.completed:${appraisal.id}`,
@@ -83,6 +84,26 @@ function publishAppraisalCompleted(appraisal, transaction) {
  * / "commission.confirmed" (Caderno, Fase 9: lista de eventos mínimos). idempotencyKey reaproveita
  * o id do entitlement + o evento, pra nunca duplicar mesmo se o service for chamado de novo.
  */
+function commissionPayload(entitlement) {
+  return {
+    id: entitlement.id,
+    financingCaseId: entitlement.financingCaseId,
+    providerCode: entitlement.providerCode,
+    triggerEvent: entitlement.triggerEvent,
+    baseAmount: entitlement.baseAmount,
+    percentage: entitlement.percentage,
+    amount: entitlement.amount,
+    brokerSharePct: entitlement.brokerSharePct,
+    managerSharePct: entitlement.managerSharePct,
+    brokerAmount: entitlement.brokerAmount,
+    managerAmount: entitlement.managerAmount,
+    ruleVersionId: entitlement.ruleVersionId,
+    status: entitlement.status,
+    externalConfirmationId: entitlement.externalConfirmationId || null,
+    financialEntryId: entitlement.financialEntryId || null,
+  };
+}
+
 function publishCommissionEntitlementCreated(entitlement, transaction) {
   return publishDomainEvent(
     {
@@ -91,11 +112,7 @@ function publishCommissionEntitlementCreated(entitlement, transaction) {
       aggregateType: 'CommissionEntitlement',
       aggregateId: entitlement.id,
       eventType: 'commission.entitlement.created',
-      payload: {
-        id: entitlement.id,
-        financingCaseId: entitlement.financingCaseId,
-        amount: entitlement.amount,
-      },
+      payload: commissionPayload(entitlement),
       idempotencyKey: `commission.entitlement.created:${entitlement.id}`,
     },
     transaction
@@ -110,13 +127,47 @@ function publishCommissionConfirmed(entitlement, transaction) {
       aggregateType: 'CommissionEntitlement',
       aggregateId: entitlement.id,
       eventType: 'commission.confirmed',
-      payload: {
-        id: entitlement.id,
-        financingCaseId: entitlement.financingCaseId,
-        amount: entitlement.amount,
-        financialEntryId: entitlement.financialEntryId,
-      },
+      payload: { ...commissionPayload(entitlement), confirmedAt: entitlement.confirmedAt },
       idempotencyKey: `commission.confirmed:${entitlement.id}`,
+    },
+    transaction
+  );
+}
+
+/** commission.received — o banco pagou a comissão e o recebível foi liquidado no Financeiro. */
+function publishCommissionReceived(entitlement, extra, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entitlement.groupId,
+      companyId: entitlement.companyId,
+      aggregateType: 'CommissionEntitlement',
+      aggregateId: entitlement.id,
+      eventType: 'commission.received',
+      payload: { ...commissionPayload(entitlement), receivedAt: entitlement.receivedAt, ...extra },
+      idempotencyKey: `commission.received:${entitlement.id}`,
+    },
+    transaction
+  );
+}
+
+/** commission.adjusted — estorno (total ou parcial) ou diferença de recebimento; um evento por ajuste. */
+function publishCommissionAdjusted(entitlement, adjustment, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entitlement.groupId,
+      companyId: entitlement.companyId,
+      aggregateType: 'CommissionEntitlement',
+      aggregateId: entitlement.id,
+      eventType: 'commission.adjusted',
+      payload: {
+        ...commissionPayload(entitlement),
+        adjustmentId: adjustment.id,
+        adjustmentType: adjustment.adjustmentType,
+        adjustmentAmount: adjustment.amount,
+        reason: adjustment.reason,
+        statusBefore: adjustment.statusBefore,
+      },
+      idempotencyKey: `commission.adjusted:${adjustment.id}`,
     },
     transaction
   );
@@ -157,7 +208,12 @@ function publishFinancingCaseCreated(financingCase, transaction) {
  * para qualquer comando seguinte, inclusive o commit do upload que disparou esta checagem).
  */
 async function publishFinancingDocumentsCompleted(financingCase, transaction) {
-  const idempotencyKey = `financing.documents.completed:${financingCase.id}`;
+  // Um evento por CICLO do checklist: se um documento vence e o checklist reabre e fecha de novo, sai outro evento.
+  const { CaseRequirement } = require('../../models');
+  const expiredCycles = await CaseRequirement.count({ where: { financingCaseId: financingCase.id, status: 'EXPIRED' }, transaction });
+  const idempotencyKey = expiredCycles === 0
+    ? `financing.documents.completed:${financingCase.id}`
+    : `financing.documents.completed:${financingCase.id}:c${expiredCycles}`;
   const already = await OutboxEvent.findOne({ where: { idempotencyKey }, transaction });
   if (already) return already;
   return publishDomainEvent(
@@ -190,6 +246,8 @@ function publishFinancingSubmitted(financingCase, submission, transaction) {
         id: financingCase.id,
         providerCode: financingCase.providerCode,
         externalCaseId: submission.externalCaseId,
+        // Provider de workflow manual: nada foi enviado pelo sistema, o caso só foi registrado para envio manual ao banco.
+        manualWorkflow: submission.responseSnapshot?.status === 'PENDING_MANUAL_ACTION',
       },
       idempotencyKey: `financing.submitted:${submission.id}`,
     },
@@ -270,6 +328,8 @@ module.exports = {
   publishAppraisalCompleted,
   publishCommissionEntitlementCreated,
   publishCommissionConfirmed,
+  publishCommissionReceived,
+  publishCommissionAdjusted,
   publishFinancingCaseCreated,
   publishFinancingDocumentsCompleted,
   publishFinancingSubmitted,

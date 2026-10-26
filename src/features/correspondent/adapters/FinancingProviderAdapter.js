@@ -66,6 +66,21 @@ const SANDBOX_STATUS_THRESHOLDS_MS = {
   APPROVED: 6000, // a partir de 6s desde a submissão
 };
 
+const SANDBOX_SUBMISSIONS = new Map();
+
+// Cenários de falha do sandbox (DoD "sandbox/failure drills"), escolhidos pelos CENTAVOS do valor da
+// operação: assim dá para ensaiar UNKNOWN, recusa e pendência do cliente sem mock de código.
+//   R$ x,13 → o provider falha ao receber o caso (erro)
+//   R$ x,14 → o provider não responde a tempo (timeout → UNKNOWN)
+//   R$ x,15 → o banco recusa (a consulta devolve DENIED)
+//   R$ x,16 → o banco pede documento do cliente (a consulta devolve DOC_PENDING)
+// Qualquer outro valor segue o fluxo normal (SUBMITTED → UNDER_ANALYSIS → APPROVED).
+const SANDBOX_SCENARIO_BY_CENTS = { 13: 'FAIL', 14: 'TIMEOUT', 15: 'DENIED', 16: 'DOC' };
+function sandboxScenario(amount) {
+  const cents = Math.round((Number(amount) || 0) * 100) % 100;
+  return SANDBOX_SCENARIO_BY_CENTS[cents] || null;
+}
+
 class SandboxFinancingProviderAdapter {
   capabilities() {
     return {
@@ -74,6 +89,7 @@ class SandboxFinancingProviderAdapter {
       getCaseStatus: true,
       uploadDocument: true,
       requestAppraisal: true,
+      cancelCase: true,
       verifyWebhook: true,
     };
   }
@@ -97,11 +113,35 @@ class SandboxFinancingProviderAdapter {
     };
   }
 
+  // Consulta por chave de idempotência (o que um provider real faz com a "referência do cliente").
+  // O sandbox guarda as submissões que aceitou em memória: depois de um reinício ele não lembra,
+  // e responder "não encontrado" é o comportamento esperado de um sandbox efêmero.
+  // Cancela o caso no provider (contrato opcional `cancelCase`). O sandbox só registra o cancelamento.
+  async cancelCase(externalCaseId) {
+    for (const [key, value] of SANDBOX_SUBMISSIONS.entries()) {
+      if (value.externalId === externalCaseId) SANDBOX_SUBMISSIONS.set(key, { ...value, status: 'CANCELED' });
+    }
+    return { externalId: externalCaseId, canceled: true };
+  }
+
+  async findSubmissionByKey(idempotencyKey) {
+    const known = SANDBOX_SUBMISSIONS.get(String(idempotencyKey || ''));
+    return known ? { found: true, externalId: known.externalId, status: known.status } : { found: false };
+  }
+
   async submitCase(req) {
     // Timestamp embutido no externalId — é isso que permite getCaseStatus ser determinístico
     // por tempo decorrido, sem precisar de nenhuma tabela ainda (Fase 0 não cria schema).
+    // Idempotente pela chave: reenviar a mesma chave (ex.: o worker repete porque o commit local
+    // falhou) devolve o mesmo caso, como um provider real que respeita a chave de idempotência.
+    const known = req?.idempotencyKey ? SANDBOX_SUBMISSIONS.get(String(req.idempotencyKey)) : null;
+    if (known) return { externalId: known.externalId, status: 'SUBMITTED', raw: { sandbox: true, replayed: true } };
+    const scenario = sandboxScenario(req?.amount);
+    if (scenario === 'FAIL') throw new Error('Falha simulada do sandbox: o provider não conseguiu receber o caso.');
+    if (scenario === 'TIMEOUT') await new Promise((resolve) => setTimeout(resolve, 30000));
     const submittedAt = Date.now();
-    const externalId = `sandbox-case-${req?.idempotencyKey || submittedAt}-${submittedAt}`;
+    const externalId = `sandbox-case-${req?.idempotencyKey || submittedAt}${scenario === 'DENIED' ? '-DENIED' : ''}${scenario === 'DOC' ? '-DOC' : ''}-${submittedAt}`;
+    if (req?.idempotencyKey) SANDBOX_SUBMISSIONS.set(String(req.idempotencyKey), { externalId, status: 'SUBMITTED' });
     return { externalId, status: 'SUBMITTED', raw: { sandbox: true, submittedAt, req } };
   }
 
@@ -112,6 +152,8 @@ class SandboxFinancingProviderAdapter {
     let status = 'SUBMITTED';
     if (elapsed >= SANDBOX_STATUS_THRESHOLDS_MS.APPROVED) status = 'APPROVED';
     else if (elapsed >= SANDBOX_STATUS_THRESHOLDS_MS.UNDER_ANALYSIS) status = 'UNDER_ANALYSIS';
+    if (/-DENIED-\d+$/.test(String(externalId)) && elapsed >= SANDBOX_STATUS_THRESHOLDS_MS.UNDER_ANALYSIS) status = 'DENIED';
+    if (/-DOC-\d+$/.test(String(externalId)) && elapsed >= SANDBOX_STATUS_THRESHOLDS_MS.UNDER_ANALYSIS) status = 'DOC_PENDING';
     return { externalId, status, rawProviderStatus: status, raw: { sandbox: true, elapsedMs: elapsed } };
   }
 
@@ -160,6 +202,8 @@ class SandboxFinancingProviderAdapter {
   normalizeProviderStatus(rawStatus) {
     const MAP = {
       RECEIVED: 'SUBMITTED',
+      SUBMITTED: 'SUBMITTED',
+      UNDER_ANALYSIS: 'UNDER_ANALYSIS',
       ANALYSIS: 'UNDER_ANALYSIS',
       DOC_PENDING: 'PENDING_CUSTOMER',
       APPROVED: 'APPROVED',

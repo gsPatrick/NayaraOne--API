@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
     'ExternalCaseRouting',
     {
       externalCaseId: { type: DataTypes.STRING(160), primaryKey: true, allowNull: false, field: 'external_case_id' },
-      providerCode: { type: DataTypes.STRING(32), allowNull: false, field: 'provider_code' },
+      providerCode: { type: DataTypes.STRING(32), primaryKey: true, allowNull: false, field: 'provider_code' },
       financingCaseId: { type: DataTypes.UUID, allowNull: false, field: 'financing_case_id' },
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },

@@ -260,9 +260,10 @@ test('CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro origina
     // financeiro real criado na confirmação — nunca deixar um recebível "fantasma" aberto no
     // Financeiro depois que a comissão que o originou foi estornada aqui.
     const entryAfter = await FinancialEntry.findByPk(confirmed.financialEntryId, { transaction });
-    assert.equal(entryAfter.status, 'REVERSED', 'o FinancialEntry original precisa ser estornado quando a comissão é charged back');
+    // Recebível que nunca foi liquidado: é CANCELADO (sem criar uma saída de caixa que nunca existiu).
+    assert.equal(entryAfter.status, 'CANCELLED', 'o FinancialEntry pendente é cancelado quando a comissão é charged back');
     const reversal = await FinancialEntry.findOne({ where: { reversalOfEntryId: confirmed.financialEntryId }, transaction });
-    assert.ok(reversal, 'deveria existir um lançamento compensatório de estorno');
+    assert.equal(reversal, null, 'não existe lançamento compensatório para um recebível nunca liquidado');
   });
 });
 
@@ -340,8 +341,8 @@ test('CORRESPONDENT-COM-10: eventos commission.entitlement.created e commission.
 test('CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const financingCase = await createCase(transaction);
-    const first = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 10000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
-    const second = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 20000 }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const first = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 10000, triggerEvent: 'REGISTRO_MANUAL' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    const second = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 20000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     const list = await commissionsService.listCommissionEntitlements(financingCase.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(list.length, 2);
     assert.equal(list[0].id, second.id);

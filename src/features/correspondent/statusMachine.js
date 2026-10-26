@@ -63,9 +63,33 @@ function shouldApplyTransition(currentStatus, candidateStatus) {
   const candidateRank = RANK[candidateStatus];
   if (candidateRank === undefined) return false;
   if (currentRank === undefined) return true; // estado atual não reconhecido — qualquer status válido pode assumir
+  // Repetir o status em que o caso já está não é transição: um webhook reentregue com outro id de
+  // evento não pode reemitir eventos nem duplicar proposta.
+  if (currentStatus === candidateStatus) return false;
   if (isExclusiveTerminalFlip(currentStatus, candidateStatus)) return false;
+  // Caso recusado só pode terminar cancelado: nunca "contratando" nem "concluído" (um banco que
+  // recusou não pode virar contrato por um evento atrasado ou por um registro manual errado).
+  if (currentStatus === 'REJECTED' && !['REJECTED', 'CANCELED'].includes(candidateStatus)) return false;
+  // Caso concluído ou cancelado é final: nada mais muda.
+  if (['COMPLETED', 'CANCELED'].includes(currentStatus) && candidateStatus !== currentStatus) return false;
   return candidateRank >= currentRank;
 }
+
+/**
+ * shouldApplyPolledTransition — consulta (poll) não tem hora do evento no provider, então não pode
+ * decidir entre dois estados "irmãos" (mesmo rank, ex.: Em análise e Aguardando cliente): uma consulta
+ * atrasada reverteria o estado mais novo. A consulta só AVANÇA (rank estritamente maior); movimento
+ * lateral só vem por webhook com hora do provider ou por registro manual.
+ */
+function shouldApplyPolledTransition(currentStatus, candidateStatus) {
+  if (!shouldApplyTransition(currentStatus, candidateStatus)) return false;
+  const currentRank = RANK[currentStatus];
+  if (currentRank === undefined) return true;
+  return RANK[candidateStatus] > currentRank;
+}
+
+// Etapas em que o caso já está com o provider e ainda não terminou: são as que a consulta de status acompanha.
+const IN_PROGRESS_STATUSES = Object.keys(RANK).filter((status) => RANK[status] >= RANK.SUBMITTED && RANK[status] <= RANK.CONTRACTING && status !== 'REJECTED');
 
 /**
  * assertCaseNotCanceled — um caso cancelado não recebe documento, simulação, avaliação nem envio.
@@ -76,4 +100,4 @@ function assertCaseNotCanceled(financingCase) {
   }
 }
 
-module.exports = { assertCaseNotCanceled, RANK, shouldApplyTransition };
+module.exports = { assertCaseNotCanceled, RANK, shouldApplyTransition, shouldApplyPolledTransition, IN_PROGRESS_STATUSES };

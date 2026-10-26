@@ -22,6 +22,9 @@ module.exports = (sequelize) => {
       differenceAmount: { type: DataTypes.DECIMAL(14, 2), allowNull: false, field: 'difference_amount' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN' },
       detectedAt: { type: DataTypes.DATE, allowNull: false, field: 'detected_at' },
+      resolutionNote: { type: DataTypes.TEXT, allowNull: true, field: 'resolution_note' },
+      resolutionKind: { type: DataTypes.STRING(16), allowNull: true, field: 'resolution_kind' },
+      acceptedDifference: { type: DataTypes.DECIMAL(14, 2), allowNull: true, field: 'accepted_difference' },
       resolvedAt: { type: DataTypes.DATE, allowNull: true, field: 'resolved_at' },
     },
     {

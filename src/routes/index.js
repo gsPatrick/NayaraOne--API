@@ -26,6 +26,7 @@ const procurementRouter = require('../features/procurement/procurement.routes');
 const correspondentRouter = require('../features/correspondent/correspondent.routes');
 const correspondentWebhooksController = require('../features/correspondent/webhooks.controller');
 const insuranceController = require('../features/procurement/insurance.controller');
+const { createWebhookRateLimiter } = require('../middlewares/webhookRateLimit.middleware');
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
@@ -62,7 +63,8 @@ router.post('/v1/finance/webhooks/bank-payment', financeController.bankPaymentPu
 router.post('/v1/procurement/webhooks/insurance', insuranceController.insurancePublicWebhook);
 // Marco 8 Fase 6 — webhook de financiamento. Path segue a API mínima literal do Caderno
 // ("POST /webhooks/financing/:provider"), prefixado com /v1/correspondent como os demais.
-router.post('/v1/correspondent/webhooks/financing/:provider', correspondentWebhooksController.financingPublicWebhook);
+// Limite por IP/provider antes de qualquer consulta ao banco (webhook público, sem login).
+router.post('/v1/correspondent/webhooks/financing/:provider', createWebhookRateLimiter(), correspondentWebhooksController.financingPublicWebhook);
 // Carrinho de imóveis compartilhável (crm.carts, item 3) — link PÚBLICO, sem JWT (quem recebe
 // o link é um lead/cliente final, não um usuário do sistema). Resolve o tenant via
 // CartShareRouting (sem RLS), mesmo padrão dos webhooks acima.

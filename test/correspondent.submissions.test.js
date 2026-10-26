@@ -82,8 +82,7 @@ async function completeChecklist(financingCaseId, transaction) {
     requirement.id,
     tenant.userId,
     { groupId: tenant.groupId, companyId: tenant.companyId },
-    transaction
-  );
+    transaction, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
 }
 
 test('CORRESPONDENT-SUB-01: submete com sucesso (sandbox) quando checklist completo e elegível', async () => {
@@ -217,7 +216,7 @@ test('CORRESPONDENT-SUB-07: acknowledgeUnknownSubmission exige status UNKNOWN', 
     assert.equal(submission.status, 'SUBMITTED');
 
     await assert.rejects(
-      () => submissionsService.acknowledgeUnknownSubmission(submission.id, tenant.userId, tenant.groupId, tenant.companyId, transaction),
+      () => submissionsService.acknowledgeUnknownSubmission(submission.id, {}, tenant.userId, tenant.groupId, tenant.companyId, transaction),
       (err) => err.code === 'SUBMISSION_NOT_UNKNOWN'
     );
   });

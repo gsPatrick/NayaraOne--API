@@ -6,6 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('../testHelpers');
+const { validarChecklist } = require('./_checklist');
 const financingCasesService = require('../../src/features/correspondent/cases/financingCases.service');
 const submissionsService = require('../../src/features/correspondent/cases/submissions.service');
 const providerAccountsService = require('../../src/features/correspondent/providerAccounts.service');
@@ -55,6 +56,7 @@ test('M8-INT-01: falha no envio grava erro de integração sem o texto do provid
         tenant.userId,
         transaction
       );
+    await validarChecklist(financingCase, transaction, tenant);
       const submission = await submissionsService.submitFinancingCase(
         financingCase.id,
         { amount: 200000, consent: true },

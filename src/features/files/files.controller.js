@@ -6,6 +6,22 @@ const AppError = require('../../utils/AppError');
 const filesService = require('./files.service');
 const fileAccessService = require('./fileAccess.service');
 const { CaseDocument } = require('../../models');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+
+// Nome do arquivo no cabeçalho: versão simples (ASCII) para navegadores antigos e a versão UTF-8 (RFC 5987) com acentos.
+function contentDisposition(disposition, fileName) {
+  const clean = String(fileName || 'arquivo').replace(/[\r\n"\\]/g, '_');
+  const ascii = clean.normalize('NFKD').replace(/[^\x20-\x7e]/g, '_');
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+}
+
+// Quem leu documento restrito (renda, extrato, identidade) fica registrado.
+async function auditRestrictedRead(file, auth, action, transaction) {
+  await registrarAuditoria(
+    { groupId: auth.groupId, companyId: auth.companyId, actorUserId: auth.userId, action, entityType: 'File', entityId: file.id, reason: `Documento restrito "${file.fileName}" ${action === 'files.read_restricted' ? 'aberto ou baixado' : 'consultado'} por uma pessoa.` },
+    transaction
+  );
+}
 
 /**
  * assertNotRestrictedFile — achado real (Marco 8, auditoria pós-DoD, Frente RLS, Ciclo 4): o
@@ -52,6 +68,7 @@ const getFileMetadata = catchAsync(async (req, res) => {
     // A checagem de documento RESTRICTED vem na mesma consulta de vínculos (fileAccess.service).
     const { file, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
+    if (restricted) await auditRestrictedRead(file, req.auth, 'files.read_restricted_metadata', t);
     return file;
   });
   return success(res, { data: item });
@@ -67,7 +84,9 @@ const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction(async (t) => {
     const { file: metadata, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
-    return filesService.getFileContent(req.params.id, t, req.auth.userId, metadata);
+    const withContent = await filesService.getFileContent(req.params.id, t, req.auth.userId, metadata);
+    if (restricted) await auditRestrictedRead(metadata, req.auth, 'files.read_restricted', t);
+    return withContent;
   });
   const total = file.content.length;
   // Defesa em profundidade (auditoria E2E ao vivo, Marco 6, Ciclo 4): uploadFile agora bloqueia
@@ -80,23 +99,38 @@ const downloadFile = catchAsync(async (req, res) => {
 
   res.set('Accept-Ranges', 'bytes');
   res.set('Content-Type', mimeType);
-  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(file.fileName)}"`);
+  res.set('Content-Disposition', contentDisposition(disposition, file.fileName));
   res.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
   const range = req.headers.range;
-  if (!range) {
+  // Sem Range, ou com vários intervalos (que a API não monta), responde o arquivo inteiro (RFC 7233).
+  if (!range || range.includes(',')) {
     res.set('Content-Length', String(total));
     return res.status(200).send(file.content);
   }
 
-  const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-  if (!match) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match || (match[1] === '' && match[2] === '')) {
     res.set('Content-Range', `bytes */${total}`);
     return res.status(416).end();
   }
-  let start = match[1] ? parseInt(match[1], 10) : 0;
-  let end = match[2] ? parseInt(match[2], 10) : total - 1;
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= total) {
+  let start;
+  let end;
+  if (match[1] === '') {
+    // "bytes=-N": os ÚLTIMOS N bytes.
+    const suffix = parseInt(match[2], 10);
+    if (!(suffix > 0)) {
+      res.set('Content-Range', `bytes */${total}`);
+      return res.status(416).end();
+    }
+    start = Math.max(total - suffix, 0);
+    end = total - 1;
+  } else {
+    start = parseInt(match[1], 10);
+    // Fim além do tamanho do arquivo é truncado no último byte (leitores de PDF/mídia pedem blocos fixos).
+    end = match[2] === '' ? total - 1 : Math.min(parseInt(match[2], 10), total - 1);
+  }
+  if (Number.isNaN(start) || Number.isNaN(end) || start >= total || start > end) {
     res.set('Content-Range', `bytes */${total}`);
     return res.status(416).end();
   }

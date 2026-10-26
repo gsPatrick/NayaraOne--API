@@ -17,6 +17,7 @@ module.exports = (sequelize) => {
       batchId: { type: DataTypes.UUID, allowNull: true, field: 'batch_id' },
       expectedHash: { type: DataTypes.STRING(64), allowNull: true, field: 'expected_hash' },
       returnedHash: { type: DataTypes.STRING(64), allowNull: true, field: 'returned_hash' },
+      informedHash: { type: DataTypes.STRING(64), allowNull: true, field: 'informed_hash' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'MATCHED' },
       lineCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'line_count' },
       expectedTotal: { type: DataTypes.DECIMAL(14, 2), allowNull: false, defaultValue: 0, field: 'expected_total' },

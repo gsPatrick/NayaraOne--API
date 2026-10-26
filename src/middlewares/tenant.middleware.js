@@ -3,6 +3,7 @@
 const AppError = require('../utils/AppError');
 const { sequelize } = require('../config/database');
 const fileAttachGuard = require('./fileAttachGuard.middleware');
+const { registrarAuditoria } = require('../engines/audit/auditLog.service');
 
 /**
  * Middleware de contexto de tenant/RLS.
@@ -41,7 +42,42 @@ function tenantMiddleware(req, res, next) {
   const { groupId, companyId, userId } = req.auth;
 
   req.withTenantTransaction = async (fn) => {
+    let currentTransaction = null;
+    try {
+      return await runInTenantTransaction(fn, (tx) => { currentTransaction = tx; });
+    } catch (err) {
+      // Auditorias que o serviço marcou para sobreviver ao rollback (ex.: provider inelegível).
+      const pending = currentTransaction && currentTransaction.afterRollbackAudits;
+      if (pending && pending.length) {
+        try {
+          await sequelize.transaction(async (tx) => {
+            await sequelize.query(
+              'SELECT set_config(\'app.group_id\', :groupId, true), set_config(\'app.company_id\', :companyId, true), set_config(\'app.user_id\', :userId, true)',
+              { replacements: { groupId, companyId, userId }, transaction: tx }
+            );
+            for (const entry of pending) {
+              // eslint-disable-next-line no-await-in-loop
+              await registrarAuditoria(entry, tx);
+            }
+          });
+        } catch (auditErr) {
+          // A auditoria extra nunca esconde o erro de negócio original.
+        }
+      }
+      // Limpezas que o serviço marcou para depois do rollback (ex.: arquivo gravado em disco antes do banco).
+      const cleanups = currentTransaction && currentTransaction.afterRollbackCleanups;
+      if (cleanups && cleanups.length) {
+        for (const cleanup of cleanups) {
+          try { await cleanup(); } catch (cleanupErr) { /* limpeza best-effort: nunca esconde o erro original */ }
+        }
+      }
+      throw err;
+    }
+  };
+
+  function runInTenantTransaction(fn, onTransaction) {
     return sequelize.transaction(async (transaction) => {
+      onTransaction(transaction);
       // GAP REAL CORRIGIDO (load test real, 08/10/2026 — GATE-DB-09/DB-TS-015): os 3 SET LOCAL
       // eram 3 round-trips de rede SERIAIS até o Postgres (remoto) por requisição, antes de
       // qualquer query de negócio rodar. `set_config(..., true)` faz exatamente o mesmo efeito
@@ -54,7 +90,7 @@ function tenantMiddleware(req, res, next) {
       );
       return fn(transaction);
     });
-  };
+  }
 
   // Vínculo de arquivo: o ator só anexa arquivo que já pode ler (ver fileAttachGuard).
   return fileAttachGuard(req, res, next);

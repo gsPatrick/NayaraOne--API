@@ -22,6 +22,8 @@ module.exports = (sequelize) => {
       externalId: { type: DataTypes.STRING(128), allowNull: true, field: 'external_id' },
       amount: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
       description: { type: DataTypes.TEXT, allowNull: false },
+      rejectionReason: { type: DataTypes.TEXT, allowNull: true, field: 'rejection_reason' },
+      attemptNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'attempt_number' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

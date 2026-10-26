@@ -11,14 +11,14 @@ const getParameters = catchAsync(async (req, res) => {
 
 const updateEligibility = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    service.updateEligibility(req.body?.config, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+    service.updateEligibility(req.body?.config, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t, { expectedVersionId: req.body?.baseVersionId })
   );
   return success(res, { data });
 });
 
 const updateCommission = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    service.updateCommission(req.body?.config, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+    service.updateCommission(req.body?.config, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t, { expectedVersionId: req.body?.baseVersionId })
   );
   return success(res, { data });
 });

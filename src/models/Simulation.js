@@ -18,7 +18,7 @@ module.exports = (sequelize) => {
       amount: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
       termMonths: { type: DataTypes.INTEGER, allowNull: false, field: 'term_months' },
       monthlyPayment: { type: DataTypes.DECIMAL(14, 2), allowNull: false, field: 'monthly_payment' },
-      rate: { type: DataTypes.DECIMAL(9, 6), allowNull: false },
+      rate: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
       requestSnapshot: { type: DataTypes.JSONB, allowNull: false, field: 'request_snapshot' },
       responseSnapshot: { type: DataTypes.JSONB, allowNull: false, field: 'response_snapshot' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },

@@ -7,12 +7,25 @@ const dimobService = require('./dimob.service');
 const reconciliationService = require('./reconciliation.service');
 const exportService = require('./accountingExport.service');
 const obligationsService = require('./obligations.service');
+const AppError = require('../../../utils/AppError');
+const { getFiscalSettings } = require('../commissionSplit.service');
+const { onlyString } = require('./fiscalCommon');
+
+// Segregação de funções (Parâmetros): quando ligada, as ações fiscais sensíveis exigem também a permissão financeira.
+async function assertFinanceIfConfigured(req, transaction, actionLabel) {
+  const { fiscalSensitiveRequiresFinance } = await getFiscalSettings(req.auth.groupId, req.auth.companyId, req.auth.userId, transaction);
+  if (fiscalSensitiveRequiresFinance && !(req.auth.permissions || []).includes('finance:settle')) {
+    throw AppError.forbidden(`${actionLabel} exige também a permissão financeira (finance:settle), conforme a configuração da empresa em Parâmetros.`, 'PERMISSION_DENIED', { required: 'finance:settle' });
+  }
+}
 
 const requestInvoice = catchAsync(async (req, res) => {
   const invoiceRequest = await req.withTenantTransaction((t) =>
     nfseService.requestInvoice(req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
   );
-  return success(res, { statusCode: 201, data: invoiceRequest });
+  // Já existia um pedido em andamento para a origem: 200 (não 201) e a marca "reused" para a tela avisar.
+  const reused = invoiceRequest.get('reused') === true;
+  return success(res, { statusCode: reused ? 200 : 201, data: invoiceRequest, ...(reused ? { message: 'Já existia uma NFS-e em andamento para esta origem: ela foi reaproveitada.' } : {}) });
 });
 
 const checkInvoiceStatus = catchAsync(async (req, res) => {
@@ -23,14 +36,15 @@ const checkInvoiceStatus = catchAsync(async (req, res) => {
 });
 
 const cancelInvoice = catchAsync(async (req, res) => {
-  const invoiceRequest = await req.withTenantTransaction((t) =>
-    nfseService.cancelInvoice(req.params.id, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
-  );
+  const invoiceRequest = await req.withTenantTransaction(async (t) => {
+    await assertFinanceIfConfigured(req, t, 'Cancelar uma NFS-e');
+    return nfseService.cancelInvoice(req.params.id, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t);
+  });
   return success(res, { data: invoiceRequest });
 });
 
 const listInvoiceRequests = catchAsync(async (req, res) => {
-  const invoices = await req.withTenantTransaction((t) => nfseService.listInvoiceRequests(req.auth.groupId, req.auth.companyId, t));
+  const invoices = await req.withTenantTransaction((t) => nfseService.listInvoiceRequests(req.auth.groupId, req.auth.companyId, t, { limit: onlyString(req.query.limit), offset: onlyString(req.query.offset) }));
   return success(res, { data: invoices });
 });
 
@@ -49,22 +63,27 @@ const generateDimobBatch = catchAsync(async (req, res) => {
 });
 
 const closeDimobBatch = catchAsync(async (req, res) => {
-  const batch = await req.withTenantTransaction((t) =>
-    dimobService.closeDimobBatch(req.params.id, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
-  );
+  const batch = await req.withTenantTransaction(async (t) => {
+    await assertFinanceIfConfigured(req, t, 'Fechar o batch DIMOB');
+    return dimobService.closeDimobBatch(req.params.id, req.auth.userId, req.auth.groupId, req.auth.companyId, t);
+  });
   return success(res, { data: batch });
 });
 
 const listDimobBatches = catchAsync(async (req, res) => {
+  const yearText = onlyString(req.query.referenceYear);
+  if (req.query.referenceYear !== undefined && !/^\d{4}$/.test(yearText)) {
+    throw AppError.badRequest('O filtro "referenceYear" deve ser um ano com 4 dígitos.', 'DIMOB_VALIDATION');
+  }
   const batches = await req.withTenantTransaction((t) =>
-    dimobService.listDimobBatches(req.query.referenceYear ? Number(req.query.referenceYear) : null, req.auth.groupId, req.auth.companyId, t)
+    dimobService.listDimobBatches(yearText ? Number(yearText) : null, req.auth.groupId, req.auth.companyId, t)
   );
   return success(res, { data: batches });
 });
 
 const listReconciliations = catchAsync(async (req, res) => {
   const reconciliations = await req.withTenantTransaction((t) =>
-    reconciliationService.listReconciliations(req.query.status || null, req.auth.groupId, req.auth.companyId, t)
+    reconciliationService.listReconciliations(onlyString(req.query.status) || null, req.auth.groupId, req.auth.companyId, t, { limit: onlyString(req.query.limit) })
   );
   return success(res, { data: reconciliations });
 });
@@ -84,14 +103,14 @@ const createExportBatch = catchAsync(async (req, res) => {
 });
 
 const listExportBatches = catchAsync(async (req, res) => {
-  const batches = await req.withTenantTransaction((t) => exportService.listExportBatches(req.auth.groupId, req.auth.companyId, t));
+  const batches = await req.withTenantTransaction((t) => exportService.listExportBatches(req.auth.groupId, req.auth.companyId, t, { limit: onlyString(req.query.limit) }));
   return success(res, { data: batches });
 });
 
 const downloadInvoiceFile = (kind) =>
   catchAsync(async (req, res) => {
     const file = await req.withTenantTransaction((t) =>
-      nfseService.getInvoiceFile(req.params.id, kind, req.auth.groupId, req.auth.companyId, t)
+      nfseService.getInvoiceFile(req.params.id, kind, req.auth.groupId, req.auth.companyId, t, req.auth.userId)
     );
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
@@ -124,7 +143,7 @@ const runReconciliations = catchAsync(async (req, res) => {
 
 const listExportCandidates = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    exportService.listExportCandidates(req.query.period, req.auth.groupId, req.auth.companyId, t)
+    exportService.listExportCandidates(onlyString(req.query.period), req.auth.groupId, req.auth.companyId, t)
   );
   return success(res, { data });
 });
@@ -137,16 +156,18 @@ const getExportBatch = catchAsync(async (req, res) => {
 });
 
 const adjustExportLine = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) =>
-    exportService.adjustExportLine(req.params.id, req.body?.deltaAmount, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
-  );
+  const data = await req.withTenantTransaction(async (t) => {
+    await assertFinanceIfConfigured(req, t, 'Ajustar a exportação contábil');
+    return exportService.adjustExportLine(req.params.id, req.body?.deltaAmount, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t);
+  });
   return success(res, { statusCode: 201, data });
 });
 
 const importAccountingReturn = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) =>
-    exportService.importAccountingReturn(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
-  );
+  const data = await req.withTenantTransaction(async (t) => {
+    await assertFinanceIfConfigured(req, t, 'Importar o retorno do contador');
+    return exportService.importAccountingReturn(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t);
+  });
   return success(res, { statusCode: 201, data });
 });
 
@@ -160,6 +181,13 @@ const createObligation = catchAsync(async (req, res) => {
     obligationsService.createObligation(req.body || {}, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
   );
   return success(res, { statusCode: 201, data });
+});
+
+const updateObligationDueDate = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    obligationsService.updateObligationDueDate(req.params.id, req.body?.dueAt, req.body?.reason, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
+  );
+  return success(res, { data });
 });
 
 const completeObligation = catchAsync(async (req, res) => {
@@ -182,6 +210,7 @@ module.exports = {
   listObligations,
   createObligation,
   completeObligation,
+  updateObligationDueDate,
   requestInvoice,
   checkInvoiceStatus,
   cancelInvoice,

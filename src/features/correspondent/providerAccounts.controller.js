@@ -18,4 +18,9 @@ const listProviderAccounts = catchAsync(async (req, res) => {
   return success(res, { data: accounts });
 });
 
-module.exports = { registerProviderAccount, listProviderAccounts };
+const updateProviderAccount = catchAsync(async (req, res) => {
+  const account = await req.withTenantTransaction((t) => service.updateProviderAccount(req.params.id, req.body, req.auth.userId, req.auth.groupId, req.auth.companyId, t));
+  return success(res, { data: account });
+});
+
+module.exports = { registerProviderAccount, listProviderAccounts, updateProviderAccount };

@@ -37,10 +37,13 @@ const STATUS_LABEL_PT = {
  * Não escreve nada — só audita — quando `financingCase.opportunityId` é nulo (caso sem CRM
  * vinculado, maioria dos casos nesta fase).
  */
-async function syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction) {
+async function syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction, { manual = false } = {}) {
   if (!financingCase.opportunityId) return null;
 
-  const label = STATUS_LABEL_PT[normalizedStatus] || normalizedStatus;
+  // Provider de workflow manual: nada foi enviado pelo sistema, o caso só foi registrado para a pessoa levar ao banco.
+  const label = manual && normalizedStatus === 'SUBMITTED'
+    ? 'Registrado para envio manual ao banco'
+    : (STATUS_LABEL_PT[normalizedStatus] || normalizedStatus);
   return registrarAuditoria(
     {
       groupId: financingCase.groupId,

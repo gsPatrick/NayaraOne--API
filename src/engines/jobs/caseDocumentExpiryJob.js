@@ -1,7 +1,10 @@
 'use strict';
 
+const { sanitizeProviderMessage } = require('../../features/correspondent/sanitizeProviderMessage');
+
 const { Op } = require('sequelize');
-const { sequelize, Group, Company, CaseDocument, CaseRequirement } = require('../../models');
+const { sequelize, Group, Company, CaseDocument, CaseRequirement, FinancingCase } = require('../../models');
+const { syncCaseChecklistStatus } = require('../../features/correspondent/cases/caseDocuments.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**
@@ -38,6 +41,10 @@ async function expireDueDocuments(transaction, now = new Date()) {
         const document = await CaseDocument.findByPk(candidate.id, { transaction: nested });
         if (!document || document.supersededAt || !document.expiresAt || document.expiresAt >= now) return false;
 
+        // Caso que já tem decisão final (recusado, concluído ou cancelado) não reabre checklist.
+        const financingCase = await FinancingCase.findByPk(requirement.financingCaseId, { transaction: nested });
+        if (!financingCase || ['CANCELED', 'REJECTED', 'COMPLETED'].includes(financingCase.status)) return false;
+
         const beforeJson = requirement.toJSON();
         requirement.status = 'EXPIRED';
         requirement.updatedBy = null;
@@ -70,12 +77,13 @@ async function expireDueDocuments(transaction, now = new Date()) {
           },
           nested
         );
+        await syncCaseChecklistStatus(requirement.financingCaseId, requirement.groupId, requirement.companyId, null, nested);
         return true;
       });
       if (didExpire) expired += 1;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error(`[CaseDocumentExpiryJob] Falha ao expirar documento ${candidate.id}: ${err.message}`);
+      console.error(`[CaseDocumentExpiryJob] Falha ao expirar documento ${candidate.id}: ${sanitizeProviderMessage(err.message)}`);
     }
   }
 
@@ -111,7 +119,7 @@ async function runCaseDocumentExpiryJob() {
         summary.errors += 1;
         // eslint-disable-next-line no-console
         console.error(
-          `[CaseDocumentExpiryJob] Falha ao processar empresa ${company.id} (grupo ${group.id}): ${err.message}`
+          `[CaseDocumentExpiryJob] Falha ao processar empresa ${company.id} (grupo ${group.id}): ${sanitizeProviderMessage(err.message)}`
         );
       }
     }
@@ -131,12 +139,12 @@ const DEFAULT_INTERVAL_MS = 60 * 60 * 1000; // 1 hora — mesmo intervalo do job
 function startCaseDocumentExpiryJob(intervalMs = DEFAULT_INTERVAL_MS) {
   runCaseDocumentExpiryJob().catch((err) => {
     // eslint-disable-next-line no-console
-    console.error(`[CaseDocumentExpiryJob] Falha na execução inicial: ${err.message}`);
+    console.error(`[CaseDocumentExpiryJob] Falha na execução inicial: ${sanitizeProviderMessage(err.message)}`);
   });
   return setInterval(() => {
     runCaseDocumentExpiryJob().catch((err) => {
       // eslint-disable-next-line no-console
-      console.error(`[CaseDocumentExpiryJob] Falha na execução agendada: ${err.message}`);
+      console.error(`[CaseDocumentExpiryJob] Falha na execução agendada: ${sanitizeProviderMessage(err.message)}`);
     });
   }, intervalMs);
 }

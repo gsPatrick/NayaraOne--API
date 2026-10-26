@@ -1,7 +1,9 @@
 'use strict';
 
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
+const { getDimobIncludeCommissions, getDimobExcludedKeywords } = require('../commissionSplit.service');
 const { CommissionEntitlement, Contract, ContractParty, FinancialEntry, Person, Property } = require('../../../models');
+const { isValidTaxId } = require('./fiscalCommon');
 
 const LEASE_TYPES_PATTERN = 'LEASE%';
 
@@ -24,6 +26,7 @@ function validateLease({ landlords, tenants, property, amount }) {
       const digits = onlyDigits(person?.taxIdNormalized);
       if (!digits) add(`${papel === 'locador' ? 'LOCADOR' : 'LOCATARIO'}_SEM_DOCUMENTO`, `O ${papel} "${person?.legalName || 'sem nome'}" está sem CPF/CNPJ no cadastro.`);
       else if (![11, 14].includes(digits.length)) add('DOCUMENTO_INVALIDO', `O documento do ${papel} "${person?.legalName || 'sem nome'}" não tem 11 (CPF) nem 14 (CNPJ) dígitos.`);
+      else if (!isValidTaxId(digits)) add('DOCUMENTO_INVALIDO', `O CPF/CNPJ do ${papel} "${person?.legalName || 'sem nome'}" não é válido (dígitos verificadores incorretos).`);
     }
   }
   if (!property) add('IMOVEL_AUSENTE', 'O contrato não está vinculado a um imóvel.');
@@ -40,8 +43,9 @@ function validateLease({ landlords, tenants, property, amount }) {
  * Determinístico (mesma entrada, mesma serialização, mesmo hash): ordenado por tipo e id.
  */
 async function buildDimobDataset(referenceYear, groupId, companyId, transaction) {
-  const start = new Date(Date.UTC(referenceYear, 0, 1));
-  const end = new Date(Date.UTC(referenceYear + 1, 0, 1));
+  // O ano fiscal é o de Brasília (UTC-3): um recebimento liquidado em 31/12 às 22h entra nesse ano.
+  const start = new Date(Date.UTC(referenceYear, 0, 1, 3));
+  const end = new Date(Date.UTC(referenceYear + 1, 0, 1, 3));
   const dataset = [];
 
   const leaseContracts = await Contract.findAll({
@@ -59,12 +63,30 @@ async function buildDimobDataset(referenceYear, groupId, companyId, transaction)
         nature: 'RECEIVABLE',
         entryType: 'CREDIT',
         status: 'SETTLED',
+        // Dinheiro de terceiros (caução, garantia) não é aluguel recebido: fica fora da DIMOB.
+        isThirdPartyFunds: { [Op.not]: true },
         settledAt: { [Op.gte]: start, [Op.lt]: end },
       },
       transaction,
     });
+    // Baixa parcial: o pagamento real são as filhas (cada uma com a sua data); o lançamento pai, que
+    // volta como liquidado com o valor cheio, NÃO conta de novo. Cobrança que a empresa classifica
+    // como não-aluguel (condomínio, IPTU, multa, taxa...: palavras em Parâmetros) fica de fora.
+    // Só as baixas efetivamente liquidadas contam como pagamento: filha estornada, cancelada ou pendente não cobre o pai.
+    const parentsWithChildren = new Set(
+      (await FinancialEntry.findAll({ where: { groupId, companyId, contractId: contractIds, parentEntryId: { [Op.ne]: null }, status: 'SETTLED' }, attributes: ['parentEntryId'], transaction }))
+        .map((c) => c.parentEntryId)
+    );
+    const plain = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const keywords = (await getDimobExcludedKeywords(groupId, companyId, null, transaction)).map(plain).filter(Boolean);
+    const isRent = (entry) => {
+      if (parentsWithChildren.has(entry.id)) return false;
+      // Palavra inteira (ou começo de palavra, para palavras longas): "taxa" não pega "taxativa" e "agua" não pega "aguardando".
+      const words = plain(entry.description).match(/[a-z0-9]+/g) || [];
+      return !keywords.some((k) => words.some((w) => w === k || (k.length >= 5 && w.startsWith(k))));
+    };
     const received = new Map();
-    for (const entry of entries) received.set(entry.contractId, round2((received.get(entry.contractId) || 0) + Number(entry.amount)));
+    for (const entry of entries.filter(isRent)) received.set(entry.contractId, round2((received.get(entry.contractId) || 0) + Number(entry.amount)));
 
     const parties = await ContractParty.findAll({ where: { groupId, companyId, contractId: contractIds, partyRole: ['LANDLORD', 'TENANT'] }, transaction });
     const people = await Person.findAll({ where: { groupId, companyId, id: [...new Set(parties.map((p) => p.personId))] }, attributes: ['id', 'legalName', 'taxIdNormalized'], transaction });
@@ -92,24 +114,33 @@ async function buildDimobDataset(referenceYear, groupId, companyId, transaction)
         amount,
         validationStatus: issues.length ? 'INVALID' : 'VALID',
         validationIssues: issues,
-        detailJson: { contractNumber: contract.contractNumber || null },
+        // Foto dos dados no momento da geração: o arquivo de um batch fechado sai desta foto, não do
+        // cadastro de hoje (mudar o CPF de alguém depois não pode mudar um batch já gerado).
+        detailJson: {
+          contractNumber: contract.contractNumber || null,
+          landlords: landlords.map((p) => ({ id: p.id, name: p.legalName || null, taxId: onlyDigits(p.taxIdNormalized) || null })),
+          tenants: tenants.map((p) => ({ id: p.id, name: p.legalName || null, taxId: onlyDigits(p.taxIdNormalized) || null })),
+          propertyCode: property?.internalCode || null,
+        },
       });
     }
   }
 
-  const entitlements = await CommissionEntitlement.findAll({
+  // Comissão de correspondente só entra na DIMOB se a empresa assim configurou (o caderno não pede).
+  const includeCommissions = await getDimobIncludeCommissions(groupId, companyId, null, transaction);
+  const entitlements = includeCommissions ? await CommissionEntitlement.findAll({
     where: {
       groupId,
       companyId,
       // ADJUSTED (chargeback/estorno) fica de fora de propósito: é receita revertida, nunca
       // deveria contar como renda recebida no DIMOB.
       status: { [Op.in]: ['RECEIVABLE', 'RECEIVED'] },
-      // O model define `createdAt: 'created_at'` como override de nome do atributo: a chave do where é 'created_at'.
-      created_at: { [Op.gte]: start, [Op.lt]: end },
+      // Competência pela data em que a comissão foi recebida (ou, na falta, confirmada/criada).
+      [Op.and]: [sequelizeLiteralYear(start, end)],
     },
     order: [['id', 'ASC']],
     transaction,
-  });
+  }) : [];
   for (const e of entitlements) {
     dataset.push({
       recordType: 'CORRESPONDENT_COMMISSION',
@@ -124,8 +155,20 @@ async function buildDimobDataset(referenceYear, groupId, companyId, transaction)
   return dataset;
 }
 
+// COALESCE(recebida, confirmada, criada) dentro do ano fiscal. As datas vêm de Date (ISO), nunca de texto livre.
+function sequelizeLiteralYear(start, end) {
+  return literal(`COALESCE("CommissionEntitlement"."received_at", "CommissionEntitlement"."confirmed_at", "CommissionEntitlement"."created_at") >= '${start.toISOString()}' AND COALESCE("CommissionEntitlement"."received_at", "CommissionEntitlement"."confirmed_at", "CommissionEntitlement"."created_at") < '${end.toISOString()}'`);
+}
+
 function canonicalLine(record) {
-  if (record.recordType === 'LEASE') return `LEASE:${record.sourceRefs.contractId}:${Number(record.amount).toFixed(2)}`;
+  if (record.recordType === 'LEASE') {
+    // O hash cobre também quem são as partes (documento) e o imóvel: mudar locador, locatário ou
+    // CPF gera um snapshot diferente.
+    const docs = (list) => (list || []).map((p) => p.taxId || '').sort().join(',');
+    const detail = record.detailJson || {};
+    const names = (list) => (list || []).map((p) => p.name || '').sort().join(',');
+    return `LEASE:${record.sourceRefs.contractId}:${Number(record.amount).toFixed(2)}:L=${docs(detail.landlords)}:T=${docs(detail.tenants)}:P=${detail.propertyCode || ''}:N=${detail.contractNumber || ''}:LN=${names(detail.landlords)}:TN=${names(detail.tenants)}`;
+  }
   return `${record.sourceRefs.commissionEntitlementId}:${record.sourceRefs.financingCaseId}:${Number(record.amount).toFixed(2)}`;
 }
 

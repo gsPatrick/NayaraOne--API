@@ -311,7 +311,7 @@ async function requisitoValidado(t, caso, documentType, { required = true, valid
     { transaction: t }
   );
   await documentsService.uploadDocument(caso.id, requisito.id, { fileId: arquivo.id }, tenant.userId, ctx(), t);
-  if (validar) await documentsService.validateRequirement(caso.id, requisito.id, tenant.userId, ctx(), t);
+  if (validar) await documentsService.validateRequirement(caso.id, requisito.id, tenant.userId, ctx(), t, { manualFields: { taxId: '52998224725', name: 'Fulano de Tal', income: 5000, accountNumber: '12345-6' } });
   return requisito;
 }
 
@@ -383,7 +383,7 @@ test('M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; s
 
     const semBase = await commissions.createCommissionEntitlement(caso.id, {}, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(Number(semBase.baseAmount), 300000);
-    const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000 }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(Number(comBase.baseAmount), 120000);
     await assert.rejects(commissions.createCommissionEntitlement(caso.id, { baseAmount: -5 }, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('COMMISSION_ENTITLEMENT_VALIDATION'));
   });

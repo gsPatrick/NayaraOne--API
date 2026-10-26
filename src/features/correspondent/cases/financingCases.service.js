@@ -66,7 +66,9 @@ async function createFinancingCase(payload, actorUserId, transaction) {
     }
   }
 
-  const resolvedProviderCode = providerCode || 'sandbox';
+  // Sem provider informado, vale o padrão da empresa (Configurações); sem configuração, sandbox.
+  const { getSetting } = require('../../settings/settings.service');
+  const resolvedProviderCode = (providerCode ? String(providerCode).trim().toLowerCase() : '') || await getSetting('correspondent.financing_provider', { groupId, companyId }, transaction, 'sandbox') || 'sandbox';
   // Mesmo adapter registry da Fase 0 — provider desconhecido nunca é aceito silenciosamente.
   if (!resolveFinancingProviderAdapterByCode(resolvedProviderCode)) {
     throw AppError.badRequest(`Provider "${resolvedProviderCode}" não é suportado.`, 'FINANCING_CASE_PROVIDER_UNKNOWN');
