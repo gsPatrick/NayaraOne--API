@@ -341,6 +341,7 @@ test('CORRESPONDENT-COM-10: eventos commission.entitlement.created e commission.
 test('CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const financingCase = await createCase(transaction);
+    await sequelize.query("UPDATE correspondent.financing_cases SET status = 'APPROVED' WHERE id = :id", { replacements: { id: financingCase.id }, transaction: transaction });
     const first = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 10000, triggerEvent: 'REGISTRO_MANUAL' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     const second = await commissionsService.createCommissionEntitlement(financingCase.id, { baseAmount: 20000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     const list = await commissionsService.listCommissionEntitlements(financingCase.id, tenant.groupId, tenant.companyId, transaction);
@@ -396,6 +397,9 @@ test('CORRESPONDENT-COM-13: chargeback de comissão com NFS-e já emitida abre r
       tenant.companyId,
       transaction
     );
+    // Estornar com a nota ainda em andamento é recusado; o caso deste teste é o da nota já autorizada pelo emissor.
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+    await nfseService.checkInvoiceStatus(invoice.id, tenant.userId, tenant.groupId, tenant.companyId, transaction);
     assert.notEqual(invoice.status, 'CANCELED');
 
     await commissionsService.chargebackCommissionEntitlement(

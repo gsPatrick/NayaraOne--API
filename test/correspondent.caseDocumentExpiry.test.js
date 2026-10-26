@@ -63,14 +63,17 @@ async function createCaseWithDocument(transaction, expiresAt) {
     },
     { transaction }
   );
-  await caseDocumentsService.uploadDocument(
+  // O envio recusa validade no passado; o documento que já nasceu vencido é simulado ajustando a data depois do envio.
+  const jaVencido = expiresAt && new Date(expiresAt).getTime() < Date.now();
+  const document = await caseDocumentsService.uploadDocument(
     financingCase.id,
     requirement.id,
-    { fileId: file.id, expiresAt },
+    jaVencido || !expiresAt ? { fileId: file.id } : { fileId: file.id, expiresAt: new Date(expiresAt).toISOString().slice(0, 10) },
     tenant.userId,
     tenant,
     transaction
   );
+  if (jaVencido) await CaseDocument.update({ expiresAt }, { where: { id: document.id }, transaction });
   return { financingCase, requirement };
 }
 

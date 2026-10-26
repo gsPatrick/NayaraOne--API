@@ -10,7 +10,7 @@ const submissionsService = require('../src/features/correspondent/cases/submissi
 const appraisalsService = require('../src/features/correspondent/cases/appraisals.service');
 const { processCompanyPendingSubmissionsForTest } = require('../src/engines/jobs/correspondentSubmissionWorkerJob');
 const { processCompanyPendingAppraisalsForTest } = require('../src/engines/jobs/correspondentAppraisalWorkerJob');
-const { Person, File, ProviderSubmission, Appraisal } = require('../src/models');
+const { Person, File, ProviderSubmission, Appraisal, Property } = require('../src/models');
 
 let tenant;
 const createdCaseIds = [];
@@ -61,6 +61,10 @@ async function createReadyCase(transaction) {
       companyId: tenant.companyId,
       providerCode: 'sandbox',
       purpose: 'RESIDENCIAL',
+      propertyId: (await Property.create(
+        { groupId: tenant.groupId, companyId: tenant.companyId, title: `Imóvel worker ${uniqueSuffix()}`, internalCode: `WRK-${uniqueSuffix()}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId },
+        { transaction }
+      )).id,
       applicants: [{ personId: principal.id, role: 'PRINCIPAL' }],
     },
     tenant.userId,

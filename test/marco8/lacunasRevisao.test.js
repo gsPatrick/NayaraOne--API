@@ -167,7 +167,9 @@ test('M8-CXF-01: comissão sem NFS-e só vira issue depois do prazo; emitir a no
     await recon.runReconciliations(tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal((await abertas()).length, 1, 'rodar de novo não duplica');
 
-    await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: e.id, amount: Number(e.amount), description: `Nota da comissão ${uniqueSuffix()}` }, ...a(), t);
+    const nota = await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: e.id, amount: Number(e.amount), description: `Nota da comissão ${uniqueSuffix()}` }, ...a(), t);
+    await sleep(1700);
+    await nfse.checkInvoiceStatus(nota.id, ...a(), t);
     await recon.runReconciliations(tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal((await abertas()).length, 0, 'a nota do mesmo valor encerra a issue');
   });
@@ -176,7 +178,9 @@ test('M8-CXF-01: comissão sem NFS-e só vira issue depois do prazo; emitir a no
 test('M8-CXF-02: nota com valor diferente da comissão abre issue COMMISSION_X_FISCAL', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const e = await comissaoRecebivel(t);
-    await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: e.id, amount: Number(e.amount) + 50, description: `Nota maior ${uniqueSuffix()}` }, ...a(), t);
+    const nota = await nfse.requestInvoice({ sourceType: 'COMMISSION_ENTITLEMENT', sourceId: e.id, amount: Number(e.amount) + 50, description: `Nota maior ${uniqueSuffix()}` }, ...a(), t);
+    await sleep(1700);
+    await nfse.checkInvoiceStatus(nota.id, ...a(), t);
     const r = await recon.runReconciliations(tenant.userId, tenant.groupId, tenant.companyId, t);
     const issue = r.opened.find((x) => x.reconciliationType === 'COMMISSION_X_FISCAL' && x.referenceId === e.id);
     assert.ok(issue);
@@ -276,7 +280,7 @@ test('M8-DIMOB-LOC-03: arquivo de conferência traz layout, hash, documentos e n
     const batch = await dimob.generateDimobBatch(ano, ...a().slice(0, 1), tenant.groupId, tenant.companyId, t);
     const arquivo = await dimob.exportDimobFile(batch.id, ...a(), t);
     assert.equal(arquivo.fileName, `dimob-${ano}-v1.csv`);
-    assert.match(arquivo.content, new RegExp(`^# layout;DIMOB-${ano}-v1;formato interno de conferência`));
+    assert.match(arquivo.content, new RegExp(`^\uFEFF?# layout;DIMOB-${ano}-v1;formato interno de conferência`));
     assert.equal(batch.layoutVersion, `DIMOB-${ano}-v1`);
     assert.match(arquivo.content, new RegExp(`hash;${batch.snapshotHash}`));
     assert.match(arquivo.content, /LOCACAO/);
@@ -383,7 +387,9 @@ test('M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; s
 
     const semBase = await commissions.createCommissionEntitlement(caso.id, {}, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(Number(semBase.baseAmount), 300000);
-    const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, t);
+    const semJustificativa = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, t).then(() => assert.fail('base 60% abaixo da proposta exige justificativa'), (err) => err.code);
+    assert.equal(semJustificativa, 'COMMISSION_BASE_DIVERGES_FROM_PROPOSAL');
+    const comBase = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 120000, triggerEvent: 'CONTRATO_ASSINADO', baseJustification: 'Financiamento parcial combinado com o cliente' }, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(Number(comBase.baseAmount), 120000);
     await assert.rejects(commissions.createCommissionEntitlement(caso.id, { baseAmount: -5 }, tenant.userId, tenant.groupId, tenant.companyId, t), codigo('COMMISSION_ENTITLEMENT_VALIDATION'));
   });

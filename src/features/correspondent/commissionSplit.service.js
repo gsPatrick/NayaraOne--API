@@ -255,6 +255,13 @@ function normalizeSettings(action) {
 
 /** readCommissionSettings — parâmetros gerais vigentes, sem exigir percentual válido de provider. */
 async function readCommissionSettings(groupId, companyId, actorUserId, transaction) {
+  // Leitura sem pessoa (relatórios como a DIMOB): publicar a regra padrão exige um autor, então, enquanto a
+  // empresa não tiver regra vigente, vale o padrão sem gravar nada.
+  if (!actorUserId) {
+    const current = await evaluateCurrent(groupId, companyId, transaction);
+    if (current.decision === 'APPLY') return { ...normalizeSettings(current.action), ruleVersionId: current.ruleVersionId };
+    return { ...normalizeSettings(DEFAULT_ACTION), ruleVersionId: null };
+  }
   const evaluation = await evaluateOrSeed(groupId, companyId, actorUserId, transaction);
   return { ...normalizeSettings(evaluation.action), ruleVersionId: evaluation.ruleVersionId };
 }

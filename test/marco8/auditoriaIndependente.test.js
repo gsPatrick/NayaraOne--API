@@ -22,7 +22,7 @@ const nfse = require('../../src/features/correspondent/fiscal/nfse.service');
 const dimob = require('../../src/features/correspondent/fiscal/dimob.service');
 const { SandboxFinancingProviderAdapter } = require('../../src/features/correspondent/adapters/FinancingProviderAdapter');
 const { SandboxNfseAdapter } = require('../../src/features/correspondent/adapters/NfseAdapter');
-const { Person, File, FinancingCase, ProviderStatusHistory, InvoiceRequest, DimobBatch } = require('../../src/models');
+const { Person, File, FinancingCase, ProviderStatusHistory, InvoiceRequest, DimobBatch, Property } = require('../../src/models');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -42,6 +42,17 @@ async function novoCaso(t, providerCode = 'sandbox') {
     tenant.userId,
     t
   );
+}
+
+// A avaliação é do imóvel: o caso precisa ter um imóvel vinculado (regra de Parâmetros).
+async function comImovel(caso, t) {
+  const imovel = await Property.create(
+    { ...ctx(), title: `Imóvel auditoria ${uniqueSuffix()}`, internalCode: `AUD-${uniqueSuffix()}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction: t }
+  );
+  await FinancingCase.update({ propertyId: imovel.id }, { where: { id: caso.id }, transaction: t });
+  await caso.reload({ transaction: t });
+  return caso;
 }
 
 async function checklistValidado(caso, t) {
@@ -203,11 +214,11 @@ test('M8-AUDI-08: a NAY só recomenda entre simulações do mesmo valor financia
     await simulationsService.createSimulation(caso.id, { amount: 10000, termMonths: 360 }, ...a(), t);
     await simulationsService.createSimulation(caso.id, { amount: 500000, termMonths: 360 }, ...a(), t);
     const diferentes = await nay.compareSimulations(caso.id, tenant.groupId, tenant.companyId, t);
-    assert.equal(diferentes.recommendedSimulationId, null, 'valores diferentes não são comparáveis');
+    assert.equal(diferentes.lowestPaymentSimulationId, null, 'valores diferentes não são comparáveis');
 
     await simulationsService.createSimulation(caso.id, { amount: 500000, termMonths: 120 }, ...a(), t);
     const iguais = await nay.compareSimulations(caso.id, tenant.groupId, tenant.companyId, t);
-    const recomendada = iguais.simulations.find((s) => s.recommended);
+    const recomendada = iguais.simulations.find((s) => s.lowestPayment);
     assert.ok(recomendada);
     assert.equal(recomendada.amount, 500000);
   });
@@ -253,7 +264,7 @@ test('M8-AUDI-11: NFS-e UNKNOWN sem id externo é resolvida pela consulta (achad
     let invoice;
     const sourceId = crypto.randomUUID();
     try {
-      invoice = await nfse.requestInvoice({ sourceType: 'OUTRA_ORIGEM', sourceId, amount: 100, description: 'Serviço de teste' }, ...a(), t);
+      invoice = await nfse.requestInvoice({ sourceType: 'SERVICE_ORDER', sourceId, amount: 100, description: 'Serviço de teste' }, ...a(), t);
     } finally {
       SandboxNfseAdapter.prototype.requestInvoice = originalRequest;
     }
@@ -263,7 +274,7 @@ test('M8-AUDI-11: NFS-e UNKNOWN sem id externo é resolvida pela consulta (achad
     await atualizarElegibilidade(t, { unknownReleaseMinutes: 0 });
     const resolvida = await nfse.checkInvoiceStatus(invoice.id, ...a(), t);
     assert.equal(resolvida.status, 'CANCELED');
-    const nova = await nfse.requestInvoice({ sourceType: 'OUTRA_ORIGEM', sourceId, amount: 100, description: 'Serviço de teste' }, ...a(), t);
+    const nova = await nfse.requestInvoice({ sourceType: 'SERVICE_ORDER', sourceId, amount: 100, description: 'Serviço de teste' }, ...a(), t);
     assert.notEqual(nova.id, invoice.id);
     assert.equal(nova.status, 'SUBMITTED');
     assert.ok(await InvoiceRequest.findByPk(nova.id, { transaction: t }));
@@ -276,7 +287,7 @@ test('M8-AUDI-12: em produção o emissor sandbox não emite nota', async () => 
     process.env.DEPLOY_ENVIRONMENT = 'production';
     try {
       await assert.rejects(
-        nfse.requestInvoice({ sourceType: 'OUTRA_ORIGEM', sourceId: crypto.randomUUID(), amount: 100, description: 'Serviço' }, ...a(), t),
+        nfse.requestInvoice({ sourceType: 'SERVICE_ORDER', sourceId: crypto.randomUUID(), amount: 100, description: 'Serviço' }, ...a(), t),
         codigo('NFSE_ISSUER_NOT_CONFIGURED')
       );
     } finally {
@@ -521,6 +532,7 @@ test('M8-AUDI-27: com região configurada para o provider, caso sem imóvel com 
 test('M8-AUDI-28: avaliação respeita a elegibilidade e não aceita dois pedidos abertos', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'sandbox');
+    await comImovel(caso, t);
     await atualizarElegibilidade(t, { allowedProviders: ['manual'] });
     await assert.rejects(appraisalsService.requestAppraisalRecord(caso.id, {}, ...a(), t), codigo('COR_ELIGIBILITY_PROVIDER_NOT_ALLOWED'));
     await atualizarElegibilidade(t, { allowedProviders: ['sandbox', 'manual'] });
@@ -630,10 +642,13 @@ test('M8-AUDI-35: se o registro local falha depois de o provider aceitar, a subm
     const caso = await casoPronto(t);
     const pendente = await submissionsService.requestSubmission(caso.id, { consent: true }, ...a(), t);
     const originalSubmit = SandboxFinancingProviderAdapter.prototype.submitCase;
-    const originalUpsert = ExternalCaseRouting.upsert;
+    const originalQuery = sequelize.query;
     let chamadas = 0;
     SandboxFinancingProviderAdapter.prototype.submitCase = async function contada(req) { chamadas += 1; return originalSubmit.call(this, req); };
-    ExternalCaseRouting.upsert = async () => { throw new Error('Falha simulada ao gravar o roteamento.'); };
+    sequelize.query = function falhaNoRoteamento(sql, ...resto) {
+      if (typeof sql === 'string' && sql.includes('external_case_routing') && /INSERT/i.test(sql)) throw new Error('Falha simulada ao gravar o roteamento.');
+      return originalQuery.call(this, sql, ...resto);
+    };
     try {
       const casoAtual = await FinancingCase.findByPk(caso.id, { transaction: t });
       const depois = await submissionsService.processPendingSubmission(pendente, casoAtual, tenant.userId, t);
@@ -643,7 +658,7 @@ test('M8-AUDI-35: se o registro local falha depois de o provider aceitar, a subm
       assert.equal(chamadas, 1);
     } finally {
       SandboxFinancingProviderAdapter.prototype.submitCase = originalSubmit;
-      ExternalCaseRouting.upsert = originalUpsert;
+      sequelize.query = originalQuery;
     }
   });
 });
@@ -697,6 +712,7 @@ test('M8-AUDI-39: comissão prevista não pode ser confirmada depois que o caso 
 test('M8-AUDI-40: avaliação que o provider não conclui vira falha visível, não pedido eterno', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'sandbox');
+    await comImovel(caso, t);
     const original = SandboxFinancingProviderAdapter.prototype.requestAppraisal;
     SandboxFinancingProviderAdapter.prototype.requestAppraisal = async () => ({ externalId: 'x', status: 'IN_PROGRESS' });
     try {
@@ -719,15 +735,18 @@ test('M8-AUDI-41: finalização local pendente é retomada sem chamar o provider
     const caso = await casoPronto(t);
     const pendente = await submissionsService.requestSubmission(caso.id, { consent: true }, ...a(), t);
     const originalSubmit = SandboxFinancingProviderAdapter.prototype.submitCase;
-    const originalUpsert = ExternalCaseRouting.upsert;
+    const originalQuery = sequelize.query;
     let chamadas = 0;
     SandboxFinancingProviderAdapter.prototype.submitCase = async function contada(req) { chamadas += 1; return originalSubmit.call(this, req); };
-    ExternalCaseRouting.upsert = async () => { throw new Error('Falha simulada.'); };
+    sequelize.query = function falhaNoRoteamento(sql, ...resto) {
+      if (typeof sql === 'string' && sql.includes('external_case_routing') && /INSERT/i.test(sql)) throw new Error('Falha simulada.');
+      return originalQuery.call(this, sql, ...resto);
+    };
     let depois;
     try {
       depois = await submissionsService.processPendingSubmission(pendente, await FinancingCase.findByPk(caso.id, { transaction: t }), tenant.userId, t);
     } finally {
-      ExternalCaseRouting.upsert = originalUpsert;
+      sequelize.query = originalQuery;
     }
     try {
       assert.equal(depois.failureReason, 'FINALIZACAO_LOCAL_PENDENTE');
@@ -774,6 +793,7 @@ test('M8-AUDI-43: em produção e staging o provider sandbox não existe', () =>
 test('M8-AUDI-44: avaliação pedida antes e processada depois que o provider ficou inelegível não é enviada', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'sandbox');
+    await comImovel(caso, t);
     const pedido = await appraisalsService.requestAppraisalRecord(caso.id, {}, ...a(), t);
     await atualizarElegibilidade(t, { allowedProviders: ['manual'] });
     let chamadas = 0;
@@ -1080,10 +1100,11 @@ test('M8-AUDI-62: nota de lançamento do Financeiro é conferida contra o valor 
 test('M8-AUDI-63: o provider cancelou ou recusou o caso: comissão prevista é estornada e a confirmada vira alerta', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'manual');
-    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
+    await FinancingCase.update({ status: 'APPROVED' }, { where: { id: caso.id }, transaction: t });
     const prevista = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 100000, triggerEvent: 'REGISTRO_MANUAL' }, ...a(), t);
     const outra = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 50000, triggerEvent: 'CONTRATO_ASSINADO' }, ...a(), t);
     await commissions.confirmCommissionEntitlement(outra.id, { externalConfirmationId: `fc-${uniqueSuffix()}` }, ...a(), t);
+    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
     await onCaseClosedByProvider(await FinancingCase.findByPk(caso.id, { transaction: t }), 'REJECTED', t);
     const lista = await commissions.listCommissionEntitlements(caso.id, tenant.groupId, tenant.companyId, t);
     assert.equal(lista.find((x) => x.id === prevista.id).status, 'ADJUSTED');
@@ -1131,7 +1152,13 @@ test('M8-AUDI-66: o roteamento de webhook é gravado de verdade (fora da transa�
   const { sequelize: seq } = require('../../src/models');
   const externalId = `teste-rota-${uniqueSuffix()}`;
   const [[outra]] = await seq.query('SELECT id, group_id FROM core.companies WHERE id <> :c LIMIT 1', { replacements: { c: tenant.companyId } });
-  const novoCaso2 = { id: crypto.randomUUID(), providerCode: 'sandbox', groupId: tenant.groupId, companyId: tenant.companyId };
+  // O roteamento tem chave estrangeira para o caso: o caso precisa existir de verdade (transação própria, confirmada).
+  const novoCaso2 = await seq.transaction(async (tx) => {
+    await seq.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: tx });
+    await seq.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: tx });
+    await seq.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction: tx });
+    return novoCaso(tx);
+  });
   try {
     // roteamento da empresa atual, gravado em transação própria
     await seq.transaction((tx) => ExternalCaseRouting.create({ externalCaseId: externalId, providerCode: 'sandbox', financingCaseId: novoCaso2.id, groupId: tenant.groupId, companyId: tenant.companyId }, { transaction: tx }));
@@ -1143,6 +1170,7 @@ test('M8-AUDI-66: o roteamento de webhook é gravado de verdade (fora da transa�
     assert.equal(existente.companyId, tenant.companyId);
   } finally {
     await ExternalCaseRouting.destroy({ where: { providerCode: 'sandbox', externalCaseId: externalId }, force: true });
+    await seq.query('DELETE FROM correspondent.financing_cases WHERE id = :id', { replacements: { id: novoCaso2.id } }).catch(() => {});
   }
 });
 
@@ -1174,10 +1202,11 @@ test('M8-AUDI-68: sem data informada, o documento vence no prazo definido em Par
 test('M8-AUDI-69: cancelar o caso estorna a comissão prevista e alerta sobre a já confirmada; recusa manual faz o mesmo', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'manual');
-    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
+    await FinancingCase.update({ status: 'APPROVED' }, { where: { id: caso.id }, transaction: t });
     const prevista = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 100000, triggerEvent: 'REGISTRO_MANUAL' }, ...a(), t);
     const confirmada = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 50000, triggerEvent: 'CONTRATO_ASSINADO' }, ...a(), t);
     await commissions.confirmCommissionEntitlement(confirmada.id, { externalConfirmationId: `m-${uniqueSuffix()}` }, ...a(), t);
+    await FinancingCase.update({ status: 'SUBMITTED' }, { where: { id: caso.id }, transaction: t });
     await workflow.registerManualStatus(caso.id, { status: 'REJECTED', note: 'Banco recusou a operação' }, ...a(), t);
     const lista = await commissions.listCommissionEntitlements(caso.id, tenant.groupId, tenant.companyId, t);
     assert.equal(lista.find((x) => x.id === prevista.id).status, 'ADJUSTED');
@@ -1240,6 +1269,7 @@ test('M8-AUDI-73: comissão que arredonda para zero é recusada e o prazo de rec
 test('M8-AUDI-74: provider manual registra a simulação e a avaliação que o banco informou, no mesmo modelo interno', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const caso = await novoCaso(t, 'manual');
+    await comImovel(caso, t);
     await assert.rejects(simulationsService.createSimulation(caso.id, { amount: 200000, termMonths: 240 }, ...a(), t), codigo('SIMULATION_VALIDATION'));
     const simulacao = await simulationsService.createSimulation(caso.id, { amount: 200000, termMonths: 240, monthlyPayment: 2100.55, monthlyRatePct: 0.95 }, ...a(), t);
     assert.equal(Number(simulacao.monthlyPayment), 2100.55);

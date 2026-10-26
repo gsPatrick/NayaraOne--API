@@ -121,7 +121,7 @@ test('M8-VAL-02: validação humana deixa o caso pronto e o snapshot não leva o
       transaction
     );
     assert.equal(submission.status, 'SUBMITTED');
-    assert.deepEqual(Object.keys(submission.requestSnapshot).sort(), ['amount', 'applicants', 'consent', 'documents', 'eligibilityRuleVersionId', 'financingCaseId', 'idempotencyKey']);
+    assert.deepEqual(Object.keys(submission.requestSnapshot).sort(), ['amount', 'applicants', 'consent', 'documents', 'eligibilityRuleVersionId', 'financingCaseId', 'idempotencyKey', 'providerCode', 'simulation']);
     assert.equal(JSON.stringify(submission.requestSnapshot).includes(file.id), false);
   });
 });

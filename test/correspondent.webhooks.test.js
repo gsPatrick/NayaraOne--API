@@ -267,11 +267,12 @@ test('CORRESPONDENT-WEBHOOK-05: mapa de status do sandbox normaliza corretamente
   assert.equal(adapter.normalizeProviderStatus('ALGO_DESCONHECIDO'), null);
 });
 
-test('CORRESPONDENT-WEBHOOK-06: provider desconhecido na URL retorna processed:false sem lançar erro', async () => {
+test('CORRESPONDENT-WEBHOOK-06: provider desconhecido na URL é recusado como assinatura inválida, sem revelar quais providers existem', async () => {
   const body = { externalCaseId: 'nao-importa', externalEventId: 'evt-x', status: 'APPROVED' };
-  const result = await webhooksService.processFinancingWebhook('banco-inexistente', Buffer.from('{}'), {}, body);
-  assert.equal(result.processed, false);
-  assert.equal(result.reason, 'unknown_provider');
+  await assert.rejects(
+    () => webhooksService.processFinancingWebhook('banco-inexistente', Buffer.from('{}'), {}, body),
+    (err) => err.code === 'CORRESPONDENT_WEBHOOK_HMAC_INVALID' && err.statusCode === 401 && err.rejectionReason === 'provider desconhecido na URL'
+  );
 });
 
 test('CORRESPONDENT-WEBHOOK-07: externalCaseId desconhecido (roteamento) é recusado como assinatura inválida, sem revelar que o id não existe', async () => {

@@ -115,12 +115,12 @@ test('CORRESPONDENT-SIM-06: rejeita termMonths ausente/inválido', async () => {
   });
 });
 
-test('CORRESPONDENT-SIM-07: provider manual não suporta simulação — erro claro, nunca 500 cru', async () => {
+test('CORRESPONDENT-SIM-07: provider manual não simula sozinho — sem a parcela que o banco simulou, erro claro, nunca 500 cru', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const financingCase = await createCase(transaction, 'manual');
     await assert.rejects(
       () => simulationsService.createSimulation(financingCase.id, { amount: 100000, termMonths: 120 }, tenant.userId, tenant.groupId, tenant.companyId, transaction),
-      (err) => err.code === 'SIMULATION_NOT_SUPPORTED' && err.statusCode === 400
+      (err) => err.code === 'SIMULATION_VALIDATION' && err.statusCode === 400 && /parcela que o banco simulou/.test(err.message)
     );
   });
 });

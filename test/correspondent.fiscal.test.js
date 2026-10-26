@@ -2,7 +2,6 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const crypto = require('crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const nfseService = require('../src/features/correspondent/fiscal/nfse.service');
@@ -12,7 +11,7 @@ const exportService = require('../src/features/correspondent/fiscal/accountingEx
 const financingCasesService = require('../src/features/correspondent/cases/financingCases.service');
 const commissionsService = require('../src/features/correspondent/cases/commissionEntitlements.service');
 const { publishCommissionSplitVersion, DEFAULT_ACTION: COMMISSION_DEFAULT } = require('../src/features/correspondent/commissionSplit.service');
-const { InvoiceRequest, Person } = require('../src/models');
+const { InvoiceRequest, Person, FinancialEntry } = require('../src/models');
 
 let tenant;
 let otherCompanyId;
@@ -161,6 +160,7 @@ test('FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEI
       { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', applicants: [{ personId: principal.id, role: 'PRINCIPAL' }] },
       tenant.userId, transaction
     );
+    await sequelize.query("UPDATE correspondent.financing_cases SET status = 'COMPLETED' WHERE id = :id", { replacements: { id: financingCase.id }, transaction: transaction });
 
     // Comissão só entra no DIMOB se a empresa ligar o parâmetro (o caderno não pede).
     await publishCommissionSplitVersion(tenant.groupId, tenant.companyId, { ...COMMISSION_DEFAULT, dimobIncludeCommissions: true }, tenant.userId, transaction);
@@ -248,11 +248,20 @@ test('FISCAL-RECON-03: resolver exige motivo documentado', async () => {
   });
 });
 
+// O export contábil só aceita origem real: lançamento existente, de pé e com o mesmo valor da linha.
+async function lancamentoReal(transaction, amount) {
+  const entry = await FinancialEntry.create(
+    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', status: 'PENDING', amount, description: `Origem de exportação ${uniqueSuffix()}`, dueAt: new Date(), createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  return entry.id;
+}
+
 test('FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha nova, nunca edita a original', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const batch = await exportService.createExportBatch(
       '2026-01',
-      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: tenant.userId, amount: 1000, description: 'Comissão de teste' }],
+      [{ sourceType: 'FINANCIAL_ENTRY', sourceId: await lancamentoReal(transaction, 1000), amount: 1000, description: 'Comissão de teste' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     assert.ok(batch.batchHash);
@@ -274,16 +283,16 @@ test('FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha no
 
 test('FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes (nunca duplica o fato contábil)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const sourceId = crypto.randomUUID();
+    const sourceId = await lancamentoReal(transaction, 1000);
     await exportService.createExportBatch(
       '2026-03',
-      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Comissão original' }],
+      [{ sourceType: 'FINANCIAL_ENTRY', sourceId, amount: 1000, description: 'Comissão original' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     await assert.rejects(
       () => exportService.createExportBatch(
         '2026-04',
-        [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Mesma comissão, batch diferente' }],
+        [{ sourceType: 'FINANCIAL_ENTRY', sourceId, amount: 1000, description: 'Mesma comissão, batch diferente' }],
         tenant.userId, tenant.groupId, tenant.companyId, transaction
       ),
       (err) => {
@@ -296,10 +305,10 @@ test('FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes
 
 test('FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a checagem de origem', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const sourceId = crypto.randomUUID();
+    const sourceId = await lancamentoReal(transaction, 1000);
     const batch = await exportService.createExportBatch(
       '2026-05',
-      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId, amount: 1000, description: 'Comissão original' }],
+      [{ sourceType: 'FINANCIAL_ENTRY', sourceId, amount: 1000, description: 'Comissão original' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     const { AccountingExportLine } = require('../src/models');
@@ -308,10 +317,10 @@ test('FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a che
     // confundido como "exportação duplicada" por uma futura chamada de createExportBatch.
     await exportService.adjustExportLine(originalLine.id, -100, 'Correção', tenant.userId, tenant.groupId, tenant.companyId, transaction);
 
-    const otherSourceId = crypto.randomUUID();
+    const otherSourceId = await lancamentoReal(transaction, 500);
     const secondBatch = await exportService.createExportBatch(
       '2026-06',
-      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: otherSourceId, amount: 500, description: 'Comissão diferente' }],
+      [{ sourceType: 'FINANCIAL_ENTRY', sourceId: otherSourceId, amount: 500, description: 'Comissão diferente' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     assert.ok(secondBatch.batchHash);
@@ -322,7 +331,7 @@ test('FISCAL-EXPORT-02: ajuste sem motivo é bloqueado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const batch = await exportService.createExportBatch(
       '2026-02',
-      [{ sourceType: 'LANCAMENTO_MANUAL', sourceId: tenant.userId, amount: 1000, description: 'Comissão' }],
+      [{ sourceType: 'FINANCIAL_ENTRY', sourceId: await lancamentoReal(transaction, 1000), amount: 1000, description: 'Comissão' }],
       tenant.userId, tenant.groupId, tenant.companyId, transaction
     );
     const { AccountingExportLine } = require('../src/models');

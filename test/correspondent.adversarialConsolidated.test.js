@@ -41,7 +41,7 @@ after(async () => {
 test('FISCAL-NFSE-05: pedir NFS-e duas vezes pra mesma origem (sourceType+sourceId) retorna o MESMO InvoiceRequest, nunca cria um segundo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const sourceId = tenant.userId;
-    const sourceType = `TEST_DEDUP_${uniqueSuffix()}`;
+    const sourceType = 'SERVICE_ORDER';
     const payload = { sourceType, sourceId, amount: 500, description: `Dedup ${uniqueSuffix()}` };
 
     const first = await nfseService.requestInvoice(payload, tenant.userId, tenant.groupId, tenant.companyId, transaction);
@@ -80,7 +80,7 @@ test('FISCAL-NFSE-07: requestInvoice real com adapter "travado" marca UNKNOWN e 
     const nfseServiceFreshTimeout = require('../src/features/correspondent/fiscal/nfse.service');
     await withRollbackTenantTransaction(tenant, async (transaction) => {
       const invoiceRequest = await nfseServiceFreshTimeout.requestInvoice(
-        { sourceType: `TEST_TIMEOUT_${uniqueSuffix()}`, sourceId: tenant.userId, amount: 100, description: `Timeout ${uniqueSuffix()}` },
+        { sourceType: 'SERVICE_ORDER', sourceId: tenant.userId, amount: 100, description: `Timeout ${uniqueSuffix()}` },
         tenant.userId, tenant.groupId, tenant.companyId, transaction
       );
       assert.equal(invoiceRequest.status, 'UNKNOWN');

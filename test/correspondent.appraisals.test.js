@@ -72,7 +72,7 @@ async function createCase(transaction, providerCode, propertyId) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       providerCode,
-      propertyId: propertyId || null,
+      propertyId: propertyId || (await createProperty(transaction)).id,
       applicants: [{ personId: principal.id, role: 'PRINCIPAL' }],
     },
     tenant.userId,
@@ -99,7 +99,7 @@ test('CORRESPONDENT-APR-01: solicita avaliação via adapter sandbox e persiste 
   });
 });
 
-test('CORRESPONDENT-APR-02: provider "manual" não suporta avaliação — bloqueia com erro de negócio claro', async () => {
+test('CORRESPONDENT-APR-02: provider "manual" não avalia sozinho — sem o valor informado pelo banco, bloqueia com erro de negócio claro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const financingCase = await createCase(transaction, 'manual');
     await assert.rejects(
@@ -113,7 +113,7 @@ test('CORRESPONDENT-APR-02: provider "manual" não suporta avaliação — bloqu
           transaction
         ),
       (err) => {
-        assert.equal(err.code, 'APPRAISAL_NOT_SUPPORTED');
+        assert.equal(err.code, 'APPRAISAL_VALIDATION');
         assert.ok(!/sandbox|adapter|undefined/i.test(err.message));
         return true;
       }

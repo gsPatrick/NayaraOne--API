@@ -114,9 +114,9 @@ test('CORRESPONDENT-NAY-04: compara simulações e recomenda a de menor parcela,
     const result = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(result.simulations.length, 2);
     const lowest = [simA, simB].reduce((a, b) => (Number(a.monthlyPayment) <= Number(b.monthlyPayment) ? a : b));
-    assert.equal(result.recommendedSimulationId, lowest.id);
-    const recommendedEntry = result.simulations.find((s) => s.id === result.recommendedSimulationId);
-    assert.equal(recommendedEntry.recommended, true);
+    assert.equal(result.lowestPaymentSimulationId, lowest.id);
+    const recommendedEntry = result.simulations.find((s) => s.id === result.lowestPaymentSimulationId);
+    assert.equal(recommendedEntry.lowestPayment, true);
     assert.deepEqual(result.decisionsMade, []);
   });
 });
@@ -235,12 +235,12 @@ test('CORRESPONDENT-NAY-10 (auditoria ciclo 2): regex de promessa ampliado não 
   });
 });
 
-test('CORRESPONDENT-NAY-11 (auditoria ciclo 2): compareSimulations com zero simulações não quebra e recommendedSimulationId é null', async () => {
+test('CORRESPONDENT-NAY-11 (auditoria ciclo 2): compareSimulations com zero simulações não quebra e lowestPaymentSimulationId é null', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const financingCase = await createCase(transaction);
     const result = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
     assert.equal(result.simulations.length, 0);
-    assert.equal(result.recommendedSimulationId, null);
+    assert.equal(result.lowestPaymentSimulationId, null);
   });
 });
 
@@ -252,9 +252,9 @@ test('CORRESPONDENT-NAY-12 (auditoria ciclo 2): empate técnico entre simulaçõ
     assert.equal(Number(simA.monthlyPayment), Number(simB.monthlyPayment), 'pré-condição: mesmo valor/prazo deveria gerar a mesma parcela no sandbox determinístico');
 
     const result = await nayService.compareSimulations(financingCase.id, tenant.groupId, tenant.companyId, transaction);
-    const recommendedCount = result.simulations.filter((s) => s.recommended).length;
+    const recommendedCount = result.simulations.filter((s) => s.lowestPayment).length;
     assert.equal(recommendedCount, 1, 'mesmo empatado, só uma simulação deveria estar marcada como recomendada');
-    assert.ok([simA.id, simB.id].includes(result.recommendedSimulationId));
+    assert.ok([simA.id, simB.id].includes(result.lowestPaymentSimulationId));
   });
 });
 

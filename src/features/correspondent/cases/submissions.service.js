@@ -979,7 +979,8 @@ async function acknowledgeUnknownSubmission(submissionId, payload, actorUserId, 
         if (!validExternalId(lookup.externalId)) {
           throw AppError.unprocessable('O provider confirmou o caso, mas sem um identificador válido. Nada foi liberado: confira com o provider.', 'SUBMISSION_EXTERNAL_ID_INVALID');
         }
-        found = { externalId: lookup.externalId, status: lookup.status || 'SUBMITTED' };
+        // A proposta que o provider já devolveu acompanha a recuperação: sem ela o caso iria a APPROVED sem as condições do banco.
+        found = { externalId: lookup.externalId, status: lookup.status || 'SUBMITTED', ...(lookup.proposal ? { proposal: lookup.proposal } : {}) };
       }
     } else if (verification.length < verificationMin) {
       throw AppError.unprocessable(

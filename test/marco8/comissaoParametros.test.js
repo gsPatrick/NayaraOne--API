@@ -42,6 +42,7 @@ test('M8-COM-01: comissão guarda provider, fato gerador, split e valores somand
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurarComissao(t, { percentageByProvider: { sandbox: 1.5, manual: 2 }, brokerSharePctByProvider: { sandbox: 100, manual: 60 } });
     const caso = await novoCaso(t);
+    await sequelize.query("UPDATE correspondent.financing_cases SET status = 'APPROVED' WHERE id = :id", { replacements: { id: caso.id }, transaction: t });
     const e = await commissions.createCommissionEntitlement(caso.id, { baseAmount: 100000, triggerEvent: 'CONTRATO_ASSINADO' }, tenant.userId, tenant.groupId, tenant.companyId, t);
     assert.equal(e.providerCode, 'manual');
     assert.equal(e.triggerEvent, 'CONTRATO_ASSINADO');
@@ -82,6 +83,8 @@ test('M8-PAR-01: parâmetros inválidos são recusados e a alteração gera vers
     await assert.rejects(parameters.updateCommission({ ...antes.commission.action, defaultBrokerSharePct: 120 }, 'x erro', tenant.userId, tenant.groupId, tenant.companyId, t), codigo('CORRESPONDENT_PARAMETERS_VALIDATION'));
     await assert.rejects(parameters.updateCommission(antes.commission.action, '', tenant.userId, tenant.groupId, tenant.companyId, t), codigo('CORRESPONDENT_PARAMETERS_VALIDATION'));
     await assert.rejects(parameters.updateEligibility({ ...antes.eligibility.action, allowedProducts: [] }, 'sem produto', tenant.userId, tenant.groupId, tenant.companyId, t), codigo('CORRESPONDENT_PARAMETERS_VALIDATION'));
+    // Garante uma versão anterior mesmo num banco novo, em que só existe a versão inicial.
+    await parameters.updateEligibility({ ...antes.eligibility.action, maxAmountByProvider: { sandbox: 1400000, manual: null } }, 'Teto inicial do teste', tenant.userId, tenant.groupId, tenant.companyId, t);
     const r = await parameters.updateEligibility({ ...antes.eligibility.action, maxAmountByProvider: { sandbox: 1500000, manual: null } }, 'Novo teto do sandbox', tenant.userId, tenant.groupId, tenant.companyId, t);
     const depois = await parameters.getParameters(tenant.groupId, tenant.companyId, tenant.userId, t);
     assert.equal(depois.eligibility.history[0].versionNumber, r.versionNumber);
