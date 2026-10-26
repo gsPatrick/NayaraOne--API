@@ -11,6 +11,7 @@
 // Nos casos recusados, nada pode ser gravado: movimento, saldo e evento (outbox) permanecem
 // exatamente como antes.
 
+const { Op } = require('sequelize');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -129,7 +130,8 @@ async function snapshot(t, itemId) {
   const opts = { transaction: t };
   const movements = await InventoryMovement.count({ where: { inventoryItemId: itemId }, ...opts });
   const balances = await InventoryStockBalance.findAll({ where: { inventoryItemId: itemId }, order: [['locationId', 'ASC']], ...opts });
-  const events = await OutboxEvent.count({ where: { companyId: tenant.companyId }, ...opts });
+  // Só eventos de estoque: o outbox da empresa recebe eventos de outros fluxos que rodam em paralelo na suíte inteira.
+  const events = await OutboxEvent.count({ where: { companyId: tenant.companyId, eventType: { [Op.like]: 'inventory.%' } }, ...opts });
 
   const balancesByLocation = {};
   let totalOnHand = 0;

@@ -122,14 +122,6 @@ async function uploadFile(payload, actorUserId, transaction) {
     );
   }
 
-  // Documento do Correspondente (restrito): o conteúdo precisa ser do tipo que o cliente declarou.
-  if (resolveCategory(category) === 'correspondent' && !matchesDeclaredType(buffer, mimeType)) {
-    throw AppError.badRequest(
-      'O conteúdo do arquivo não corresponde ao tipo informado. Envie o arquivo original (PDF ou imagem) sem renomear a extensão.',
-      'FILE_UPLOAD_TYPE_MISMATCH'
-    );
-  }
-
   // GAP REAL CORRIGIDO (auditoria 2026-10-08): este era o ÚNICO ponto de upload (POST /files
   // genérico, usado por qualquer feature que apenas vincula um fileId depois — ex.
   // procurement/insurance.service.js#attachPolicyDocument) que NUNCA passava por scan de
@@ -143,6 +135,15 @@ async function uploadFile(payload, actorUserId, transaction) {
   const scan = await antivirus.scan(buffer);
   if (!scan.clean) {
     throw AppError.unprocessable('Arquivo rejeitado pelo antivírus: assinatura de malware detectada.', 'FILE_UPLOAD_MALWARE_DETECTED', { signature: scan.signature });
+  }
+
+  // Ordem do caderno ("upload → malware scan → hash ..."): o antivírus olha primeiro; só depois o tipo declarado
+  // precisa bater com o conteúdo, no caso dos documentos restritos do Correspondente.
+  if (resolveCategory(category) === 'correspondent' && !matchesDeclaredType(buffer, mimeType)) {
+    throw AppError.badRequest(
+      'O conteúdo do arquivo não corresponde ao tipo informado. Envie o arquivo original (PDF ou imagem) sem renomear a extensão.',
+      'FILE_UPLOAD_TYPE_MISMATCH'
+    );
   }
 
   // Checksum é sempre sobre o conteúdo PLAINTEXT (o que o cliente enviou/vai receber de volta),
