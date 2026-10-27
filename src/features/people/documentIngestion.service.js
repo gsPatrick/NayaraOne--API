@@ -49,6 +49,9 @@ const CRITICAL_FIELDS_BY_TYPE = {
   IR: ['name', 'taxId', 'income'],
   HOLERITE: ['name', 'income'],
   BANK_STATEMENT: ['name', 'accountNumber'],
+  CPF: ['name', 'taxId'],
+  RG_CPF: ['name', 'taxId'],
+  CNPJ: ['taxId'],
 };
 
 function validateCriticalFields(documentType, fields) {
@@ -217,4 +220,4 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
   return { file, personDocument, extraction, pendingTask };
 }
 
-module.exports = { ingestPersonDocument, validateCriticalFields, CONFIDENCE_THRESHOLD };
+module.exports = { ingestPersonDocument, validateCriticalFields, CRITICAL_FIELDS_BY_TYPE, CONFIDENCE_THRESHOLD };

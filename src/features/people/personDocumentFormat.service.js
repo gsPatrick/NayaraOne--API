@@ -53,4 +53,25 @@ function hashTaxId(taxIdDigits) {
   return crypto.createHmac('sha256', requirePiiHashSecret()).update(taxIdDigits).digest('hex');
 }
 
-module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId };
+/** isValidTaxIdDigits — CPF (11) ou CNPJ (14) com os dígitos verificadores corretos; sequência repetida é inválida. */
+function isValidTaxIdDigits(digits) {
+  if (typeof digits !== 'string' || /^(\d)\1+$/.test(digits)) return false;
+  const check = (base, weights) => {
+    const sum = base.split('').reduce((acc, d, i) => acc + Number(d) * weights[i], 0);
+    const rest = sum % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
+  if (digits.length === 11) {
+    const d1 = check(digits.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    const d2 = check(digits.slice(0, 9) + d1, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    return digits.endsWith(`${d1}${d2}`);
+  }
+  if (digits.length === 14) {
+    const d1 = check(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+    const d2 = check(digits.slice(0, 12) + d1, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+    return digits.endsWith(`${d1}${d2}`);
+  }
+  return false;
+}
+
+module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId, isValidTaxIdDigits };

@@ -119,6 +119,16 @@ async function createPerson(payload, actorUserId, transaction) {
   if (Array.isArray(documents)) {
     for (const document of documents) {
       if (!document.documentType || !document.fileId) continue;
+      // Documento já verificado na criação: mesma regra da verificação (sem leitura gravada, campos críticos informados).
+      const documentStatus = document.verificationStatus ? String(document.verificationStatus).toUpperCase() : 'PENDING';
+      let documentExtracted = null;
+      if (documentStatus === 'VERIFIED') {
+        const { assertReadingAllowsVerification } = require('./personDocuments.service');
+        const entries = assertReadingAllowsVerification(document.documentType, null, document.manualFields);
+        if (entries.length) {
+          documentExtracted = { manualFields: Object.fromEntries(entries), manualFieldsConfirmedBy: actorUserId || null, manualFieldsConfirmedAt: new Date().toISOString() };
+        }
+      }
       await PersonDocument.create(
         {
           groupId,
@@ -129,7 +139,8 @@ async function createPerson(payload, actorUserId, transaction) {
           versionNo: document.versionNo || 1,
           issuedAt: document.issuedAt || null,
           expiresAt: document.expiresAt || null,
-          verificationStatus: document.verificationStatus || 'PENDING',
+          verificationStatus: documentStatus,
+          extractedDataJson: documentExtracted,
           createdBy: actorUserId || null,
           updatedBy: actorUserId || null,
         },

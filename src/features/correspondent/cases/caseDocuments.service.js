@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const { Op } = require('sequelize');
 const { sequelize, FinancingCase, CaseRequirement, CaseDocument, CaseApplicant, File, Task } = require('../../../models');
+const { isValidTaxIdDigits } = require('../../people/personDocumentFormat.service');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishFinancingDocumentsCompleted, publishFinancingStatusChanged } = require('../correspondentEvents.service');
@@ -559,7 +560,7 @@ function normalizeManualField(field, raw) {
   const text = String(raw).trim();
   if (field === 'taxId') {
     const digits = text.replace(/\D/g, '');
-    if (!isValidTaxId(digits)) {
+    if (!isValidTaxIdDigits(digits)) {
       throw AppError.badRequest('O CPF/CNPJ informado é inválido. Confira os dígitos no arquivo original.', 'CASE_REQUIREMENT_MANUAL_FIELD_INVALID');
     }
     return digits;
@@ -575,26 +576,6 @@ function normalizeManualField(field, raw) {
     throw AppError.badRequest(`O campo ${READING_FIELD_LABELS[field]} informado precisa ter entre 3 e 120 caracteres.`, 'CASE_REQUIREMENT_MANUAL_FIELD_INVALID');
   }
   return text;
-}
-
-function isValidTaxId(digits) {
-  if (/^(\d)\1+$/.test(digits)) return false;
-  const check = (base, weights) => {
-    const sum = base.split('').reduce((acc, d, i) => acc + Number(d) * weights[i], 0);
-    const rest = sum % 11;
-    return rest < 2 ? 0 : 11 - rest;
-  };
-  if (digits.length === 11) {
-    const d1 = check(digits.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]);
-    const d2 = check(digits.slice(0, 9) + d1, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
-    return digits.endsWith(`${d1}${d2}`);
-  }
-  if (digits.length === 14) {
-    const d1 = check(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-    const d2 = check(digits.slice(0, 12) + d1, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-    return digits.endsWith(`${d1}${d2}`);
-  }
-  return false;
 }
 
 /**

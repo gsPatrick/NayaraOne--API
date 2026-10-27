@@ -95,20 +95,44 @@ async function invariants(c, label) {
     SELECT COUNT(*) AS itens,
            COUNT(*) FILTER (WHERE poi.received_quantity <> COALESCE(g.soma, 0)) AS divergentes
       FROM procurement.purchase_order_items poi
-      LEFT JOIN (SELECT purchase_order_item_id, SUM(received_quantity) AS soma FROM procurement.goods_receipt_items GROUP BY 1) g
+      LEFT JOIN (
+        -- O excedente de um recebimento (OVER_RECEIPT) fica fora do item do pedido até a divergência ser ACEITA (correção B1).
+        SELECT gri.purchase_order_item_id,
+               SUM(CASE WHEN o.id IS NULL OR o.status = 'ACCEPTED' THEN gri.received_quantity ELSE GREATEST(o.expected_value, 0) END) AS soma
+          FROM procurement.goods_receipt_items gri
+          LEFT JOIN procurement.receipt_discrepancies o ON o.goods_receipt_item_id = gri.id AND o.discrepancy_type = 'OVER_RECEIPT'
+         GROUP BY 1) g
         ON g.purchase_order_item_id = poi.id`);
-  check(`${label}: recebido por item de pedido = soma dos itens de recebimento`, Number(poq.divergentes) === 0, `${poq.itens} itens de pedido, ${poq.divergentes} divergente(s)`);
+  check(`${label}: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito)`, Number(poq.divergentes) === 0, `${poq.itens} itens de pedido, ${poq.divergentes} divergente(s)`);
 
   const gr = await one(c, `
     SELECT COUNT(*) AS confirmados,
            COUNT(*) FILTER (WHERE gr.inventory_receipt_id IS NOT NULL AND (r.id IS NULL OR r.status <> 'COMPLETED')) AS recibo_estoque_invalido,
            COUNT(*) FILTER (WHERE gr.financial_entry_id IS NOT NULL AND fe.id IS NULL) AS payable_ausente,
            COUNT(*) FILTER (WHERE fe.id IS NOT NULL AND (fe.nature <> 'PAYABLE' OR fe.entry_type <> 'DEBIT')) AS payable_tipo_errado,
-           COUNT(*) FILTER (WHERE fe.id IS NOT NULL AND gr.invoice_total_amount IS NOT NULL AND fe.amount <> gr.invoice_total_amount) AS payable_valor_divergente,
+           COUNT(*) FILTER (WHERE fe.id IS NOT NULL AND ABS(fe.amount - GREATEST(ROUND(COALESCE(t.base, 0) + COALESCE(t.aceito, 0)
+               + CASE WHEN COALESCE(pm.aceita, false) AND gr.invoice_total_amount IS NOT NULL THEN gr.invoice_total_amount - COALESCE(t.cheio, 0) ELSE 0 END, 2), 0)) >= 0.005) AS payable_valor_divergente,
            COUNT(*) FILTER (WHERE gr.financial_entry_id IS NOT NULL) AS com_payable
       FROM procurement.goods_receipts gr
       LEFT JOIN inventory.receipts r ON r.id = gr.inventory_receipt_id
       LEFT JOIN finance.financial_entries fe ON fe.id = gr.financial_entry_id
+      -- Valor devido do payable, pela mesma regra do serviço de Compras: o excedente só entra se aceito e a diferença de
+      -- preço só entra se a divergência de preço foi aceita; antes disso o payable fica no valor capado ao saldo do pedido.
+      LEFT JOIN (
+        SELECT gri.goods_receipt_id AS gr_id,
+               SUM(GREATEST(COALESCE(o.expected_value, gri.received_quantity), 0) * poi.unit_price) AS base,
+               SUM(CASE WHEN o.status = 'ACCEPTED' THEN (gri.received_quantity - GREATEST(o.expected_value, 0)) * poi.unit_price ELSE 0 END) AS aceito,
+               SUM(gri.received_quantity * poi.unit_price) AS cheio
+          FROM procurement.goods_receipt_items gri
+          JOIN procurement.purchase_order_items poi ON poi.id = gri.purchase_order_item_id
+          LEFT JOIN procurement.receipt_discrepancies o ON o.goods_receipt_item_id = gri.id AND o.discrepancy_type = 'OVER_RECEIPT'
+         GROUP BY 1) t ON t.gr_id = gr.id
+      LEFT JOIN (
+        SELECT gri.goods_receipt_id AS gr_id, bool_or(d.status = 'ACCEPTED') AS aceita
+          FROM procurement.receipt_discrepancies d
+          JOIN procurement.goods_receipt_items gri ON gri.id = d.goods_receipt_item_id
+         WHERE d.discrepancy_type = 'PRICE_MISMATCH'
+         GROUP BY 1) pm ON pm.gr_id = gr.id
      WHERE gr.status = 'CONFIRMED'`);
   check(`${label}: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro`,
     Number(gr.recibo_estoque_invalido) + Number(gr.payable_ausente) + Number(gr.payable_tipo_errado) + Number(gr.payable_valor_divergente) === 0,

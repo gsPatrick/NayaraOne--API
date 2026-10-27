@@ -49,7 +49,8 @@ async function main() {
     tenant.userId, t
   ));
   await T((t) => ctx.requisitionsService.decideRequisition(requisition.id, 'APPROVED', approver.id, tenant.groupId, tenant.companyId, t), approver.id);
-  await T((t) => ctx.requisitionsService.issueRequisition(requisition.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, t));
+  // A entrega de material exige a pessoa que retira (responsiblePersonId).
+  await T((t) => ctx.requisitionsService.issueRequisition(requisition.id, { userId: tenant.userId, canApprove: true }, tenant.groupId, tenant.companyId, t, { responsiblePersonId: base.retirante.id }));
 
   // Compras: pedido com 2 linhas; recebimento parcial com NF; depois excedente na linha 1 e
   // NF com valor divergente.
