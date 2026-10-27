@@ -1194,7 +1194,8 @@ test('M8-AUDI-68: sem data informada, o documento vence no prazo definido em Par
     const doc = await CaseDocument.findOne({ where: { financingCaseId: caso.id }, transaction: t });
     assert.ok(doc.expiresAt, 'o prazo do tipo vira a validade');
     const dias = Math.round((new Date(doc.expiresAt).getTime() - Date.now()) / 86400000);
-    assert.ok(dias >= 89 && dias <= 90);
+    // A validade vai até o fim do dia em Brasília: conforme a hora em que o teste roda, a diferença é de 89 a 91 dias.
+    assert.ok(dias >= 89 && dias <= 91, `dias até vencer: ${dias}`);
     await assert.rejects(atualizarElegibilidade(t, { documentValidityDays: { RG_CPF: 0 } }), codigo('CORRESPONDENT_PARAMETERS_VALIDATION'));
   });
 });

@@ -50,6 +50,9 @@ function todayBR() {
 
 test('Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledger -> extrato -> conciliação -> relatório', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
+    // O relatório soma a empresa inteira antes e depois: com outra transação gravando a pagar em paralelo (suíte
+    // inteira no mesmo banco), a diferença deixava de ser só deste teste. Foto fixa da transação: só entra o que ele grava.
+    await sequelize.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', { transaction: t });
     const suffix = uniqueSuffix();
     const W = (fields) => ({ groupId: tenant.groupId, companyId: tenant.companyId, ...fields });
 
