@@ -31,8 +31,8 @@ after(async () => {
 //   migrations/20260101000172-create-legal-signature_provider_routing.js
 //   migrations/20260101000271-extend-payment-intents-for-bank-adapter.js (bank_payment_provider_routing)
 //   migrations/20260101000286-create-crm-carts.js (cart_share_routing — link público do carrinho de imóveis)
-//   migrations/20260101000272-create-procurement-insurance-hub.js (insurance_provider_submissions
-//     — webhook público da seguradora, mesmo motivo)
+// (insurance_provider_submissions saiu da lista: tem RLS e FORCE RLS pela migration 646; o webhook público
+//  da seguradora descobre a empresa pela função SECURITY DEFINER resolve_insurance_submission_routing.)
 //   migrations/20260101000345-create-correspondent-external-case-routing.js
 //     (correspondent.external_case_routing — webhook público de financiamento, Marco 8 Fase 6,
 //     mesmo motivo; mapeamento mínimo só de IDs, nunca fonte de verdade de negócio)
@@ -43,7 +43,6 @@ const DELIBERATE_NO_RLS_EXCEPTIONS = new Set([
   'legal.signature_provider_routing',
   'finance.bank_payment_provider_routing',
   'crm.cart_share_routing',
-  'procurement.insurance_provider_submissions',
   'correspondent.external_case_routing',
 ]);
 
