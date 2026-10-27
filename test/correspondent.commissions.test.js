@@ -348,6 +348,8 @@ test('CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro', 
     assert.equal(list.length, 2);
     assert.equal(list[0].id, second.id);
     assert.equal(list[1].id, first.id);
+    // A tela mostra a data de criação na primeira coluna: o atributo do modelo é `created_at` e saía vazio ("Sem data").
+    assert.ok(list.every((c) => c.createdAt && !Number.isNaN(new Date(c.createdAt).getTime())), 'toda comissão listada traz a data de criação');
   });
 });
 

@@ -763,7 +763,7 @@ async function completeFinancialReversal(entitlementId, actorUserId, groupId, co
 }
 
 function adjustmentView(r) {
-  return { id: r.id, adjustmentType: r.adjustmentType, statusBefore: r.statusBefore, adjustmentAmount: Number(r.amount), reason: r.reason, createdBy: r.createdBy || null, createdAt: r.createdAt };
+  return { id: r.id, adjustmentType: r.adjustmentType, statusBefore: r.statusBefore, adjustmentAmount: Number(r.amount), reason: r.reason, createdBy: r.createdBy || null, createdAt: r.created_at || r.createdAt };
 }
 
 async function getCommissionEntitlementAdjustments(entitlementId, transaction) {
@@ -829,7 +829,8 @@ async function listCommissionEntitlements(financingCaseId, groupId, companyId, t
       balanceAmount: fromCents(toCents(r.amount) + adjustedCents),
       // Estornada cujo lançamento financeiro ainda está de pé (estorno financeiro pendente).
       financialReversalPending: Boolean(r.status === 'ADJUSTED' && entry && !['REVERSED', 'CANCELLED'].includes(entry.status)),
-      createdAt: r.createdAt,
+      // O modelo mapeia o atributo de criação como `created_at` (opção createdAt: 'created_at'); `r.createdAt` vem vazio.
+      createdAt: r.created_at || r.createdAt,
     };
   });
 }
