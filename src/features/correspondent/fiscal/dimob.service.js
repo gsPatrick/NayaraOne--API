@@ -9,6 +9,7 @@ const { ensureObligation, completeByDimobBatch } = require('./obligations.servic
 const { reconcileDimobBatch } = require('./reconciliation.service');
 const { buildDimobDataset, canonicalLine, onlyDigits } = require('./dimobDataset.service');
 const { isUuid } = require('./fiscalCommon');
+const { getFiscalSettings } = require('../commissionSplit.service');
 
 function hashDataset(dataset) {
   // Serialização estável (a ordem já é determinística pela montagem do dataset).
@@ -53,7 +54,7 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
       referenceYear,
       version: nextVersion,
       // Layout anual versionado (caderno): a versão do layout acompanha o ano-base do batch.
-      layoutVersion: `DIMOB-${referenceYear}-v1`,
+      layoutVersion: (await getFiscalSettings(groupId, companyId, actorUserId, transaction)).dimobLayoutLabel.replace(/\{ano\}/gi, String(referenceYear)).slice(0, 16),
       status: 'DRAFT',
       snapshotHash,
       createdBy: actorUserId || null,
@@ -200,29 +201,31 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     ? snapshot.map((p) => p.taxId || 'SEM DOCUMENTO')
     : (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO')).join(' / ');
 
+  const fiscal = await getFiscalSettings(groupId, companyId, actorUserId, transaction);
+  const sep = fiscal.dimobFileDelimiter;
+  const money = (v) => Number(v).toFixed(2).replace('.', ',');
+  // Cada coluna do arquivo sabe tirar o seu valor do registro; a empresa escolhe quais entram e em que ordem.
+  const COLUMN_VALUE = {
+    tipo: (r) => (r.recordType === 'LEASE' ? 'LOCACAO' : 'COMISSAO'),
+    contrato: (r, refs) => cell(r.recordType === 'LEASE' ? (r.detailJson?.contractNumber || refs.contractId) : refs.commissionEntitlementId),
+    locador_documento: (r, refs) => (r.recordType === 'LEASE' ? cell(docs(refs.landlordPersonIds, r.detailJson?.landlords)) : ''),
+    locador_nome: (r, refs) => (r.recordType === 'LEASE' ? cell(names(refs.landlordPersonIds, r.detailJson?.landlords)) : ''),
+    locatario_documento: (r, refs) => (r.recordType === 'LEASE' ? cell(docs(refs.tenantPersonIds, r.detailJson?.tenants)) : ''),
+    locatario_nome: (r, refs) => (r.recordType === 'LEASE' ? cell(names(refs.tenantPersonIds, r.detailJson?.tenants)) : ''),
+    imovel: (r, refs) => (r.recordType === 'LEASE' ? cell((r.detailJson && 'propertyCode' in r.detailJson ? r.detailJson.propertyCode : propertyById.get(refs.propertyId)?.internalCode) || 'SEM IMOVEL') : ''),
+    valor_no_ano: (r) => money(r.amount),
+    situacao: (r) => (r.recordType === 'LEASE' ? (r.validationStatus === 'VALID' ? 'OK' : 'PENDENTE') : 'OK'),
+    pendencias: (r) => (r.recordType === 'LEASE' ? cell((r.validationIssues || []).map((i) => i.message).join(' | ')) : ''),
+  };
+  const columns = fiscal.dimobFileColumns;
   const lines = [
-    `# layout;${batch.layoutVersion};formato interno de conferência, não é o arquivo oficial da Receita`,
-    `# batch;${batch.id};ano;${batch.referenceYear};versao;${batch.version};status;${batch.status};hash;${batch.snapshotHash}`,
-    'tipo;contrato;locador_documento;locador_nome;locatario_documento;locatario_nome;imovel;valor_no_ano;situacao;pendencias',
+    `# layout${sep}${batch.layoutVersion}${fiscal.dimobFileNotice ? `${sep}${fiscal.dimobFileNotice}` : ''}`,
+    `# batch${sep}${batch.id}${sep}ano${sep}${batch.referenceYear}${sep}versao${sep}${batch.version}${sep}status${sep}${batch.status}${sep}hash${sep}${batch.snapshotHash}`,
+    columns.join(sep),
   ];
   for (const r of records) {
     const refs = r.sourceRefs || {};
-    if (r.recordType === 'LEASE') {
-      lines.push([
-        'LOCACAO',
-        cell(r.detailJson?.contractNumber || refs.contractId),
-        cell(docs(refs.landlordPersonIds, r.detailJson?.landlords)),
-        cell(names(refs.landlordPersonIds, r.detailJson?.landlords)),
-        cell(docs(refs.tenantPersonIds, r.detailJson?.tenants)),
-        cell(names(refs.tenantPersonIds, r.detailJson?.tenants)),
-        cell((r.detailJson && 'propertyCode' in r.detailJson ? r.detailJson.propertyCode : propertyById.get(refs.propertyId)?.internalCode) || 'SEM IMOVEL'),
-        Number(r.amount).toFixed(2).replace('.', ','),
-        r.validationStatus === 'VALID' ? 'OK' : 'PENDENTE',
-        cell((r.validationIssues || []).map((i) => i.message).join(' | ')),
-      ].join(';'));
-    } else {
-      lines.push(['COMISSAO', cell(refs.commissionEntitlementId), '', '', '', '', '', Number(r.amount).toFixed(2).replace('.', ','), 'OK', ''].join(';'));
-    }
+    lines.push(columns.map((c) => COLUMN_VALUE[c](r, refs)).join(sep));
   }
 
   await registrarAuditoria(

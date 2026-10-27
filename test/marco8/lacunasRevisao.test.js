@@ -470,3 +470,61 @@ test('M8-AUD-05: a mesma identificação de confirmação não vale para duas co
     assert.equal(igual.id, e1.id);
   });
 });
+
+async function configurarFiscal(t, patch) {
+  const atual = await parameters.getParameters(tenant.groupId, tenant.companyId, tenant.userId, t);
+  return parameters.updateCommission({ ...atual.commission.action, ...patch }, 'Teste do layout da DIMOB', tenant.userId, tenant.groupId, tenant.companyId, t);
+}
+
+test('M8-DIMOB-LAYOUT-01: versão do layout, colunas, ordem, separador e aviso vêm dos Parâmetros (sem mexer no código)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const ano = 2034;
+    await configurarFiscal(t, { dimobLayoutLabel: 'LEIAUTE-{ano}-A', dimobFileColumns: ['contrato', 'valor_no_ano', 'locador_documento'], dimobFileDelimiter: '|', dimobFileNotice: '' });
+    await locacao(t, { ano, comImovel: false });
+    const batch = await dimob.generateDimobBatch(ano, ...a().slice(0, 1), tenant.groupId, tenant.companyId, t);
+    assert.equal(batch.layoutVersion, `LEIAUTE-${ano}-A`);
+    const arquivo = await dimob.exportDimobFile(batch.id, ...a(), t);
+    const linhas = arquivo.content.replace('﻿', '').split('\n');
+    assert.equal(linhas[0], `# layout|LEIAUTE-${ano}-A`, 'sem aviso quando a empresa apaga o texto');
+    assert.match(linhas[1], new RegExp(`^# batch\\|${batch.id}\\|ano\\|${ano}\\|versao\\|1\\|status\\|DRAFT\\|hash\\|${batch.snapshotHash}$`));
+    assert.equal(linhas[2], 'contrato|valor_no_ano|locador_documento');
+    assert.ok(linhas.slice(3).filter(Boolean).every((l) => l.split('|').length === 3), 'toda linha tem exatamente as 3 colunas escolhidas');
+    assert.doesNotMatch(arquivo.content, /formato interno/);
+  });
+});
+
+test('M8-DIMOB-LAYOUT-02: configuração inválida do arquivo da DIMOB é recusada em português', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const invalidos = [
+      [{ dimobFileColumns: [] }, /ao menos uma coluna/],
+      [{ dimobFileColumns: ['contrato', 'inexistente'] }, /não reconhecidas/],
+      [{ dimobFileColumns: ['contrato', 'contrato'] }, /repetir a mesma coluna/],
+      [{ dimobFileDelimiter: '#' }, /separador/],
+      [{ dimobLayoutLabel: '  ' }, /nome da versão do layout/],
+      [{ dimobLayoutLabel: 'LAYOUT-MUITO-LONGO-{ano}' }, /no máximo 16 caracteres/],
+      [{ dimobLayoutLabel: 'A;B' }, /ponto e vírgula/],
+      [{ dimobFileNotice: 'a\nb' }, /quebra de linha/],
+    ];
+    for (const [patch, mensagem] of invalidos) {
+      await assert.rejects(configurarFiscal(t, patch), (err) => { assert.equal(err.code, 'CORRESPONDENT_PARAMETERS_VALIDATION'); assert.match(err.message, mensagem); return true; });
+    }
+  });
+});
+
+test('M8-DIMOB-LAYOUT-03: salvar Parâmetros sem os campos fiscais não zera o que já estava configurado', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    await configurarFiscal(t, { dimobDueMonth: 5, nfseCancelMaxDays: 30, nfseServiceCode: '1.05', dimobLayoutLabel: 'LEIAUTE-{ano}-B' });
+    const atual = await parameters.getParameters(tenant.groupId, tenant.companyId, tenant.userId, t);
+    // o que a tela de Parâmetros envia: só os campos de comissão, sem os fiscais
+    const soTela = { ...atual.commission.action };
+    for (const k of ['dimobDueMonth', 'nfseCancelMaxDays', 'nfseServiceCode', 'dimobLayoutLabel', 'dimobFileColumns', 'dimobFileDelimiter', 'dimobFileNotice']) delete soTela[k];
+    soTela.receivableDueDays = 45;
+    await parameters.updateCommission(soTela, 'Alterou só o prazo de recebimento', tenant.userId, tenant.groupId, tenant.companyId, t);
+    const depois = (await parameters.getParameters(tenant.groupId, tenant.companyId, tenant.userId, t)).commission.action;
+    assert.equal(depois.receivableDueDays, 45);
+    assert.equal(depois.dimobDueMonth, 5);
+    assert.equal(depois.nfseCancelMaxDays, 30);
+    assert.equal(depois.nfseServiceCode, '1.05');
+    assert.equal(depois.dimobLayoutLabel, 'LEIAUTE-{ano}-B');
+  });
+});

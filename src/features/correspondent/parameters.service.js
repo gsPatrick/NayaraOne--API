@@ -17,6 +17,9 @@ const {
   DEFAULT_ACTION: COMMISSION_DEFAULT_ACTION,
   TRIGGER_EVENT_LABEL,
   ACCOUNTING_EXPORT_SOURCE_MODES,
+  DIMOB_FILE_COLUMNS,
+  DIMOB_FILE_DELIMITERS,
+  DIMOB_FILE_NOTICE_DEFAULT,
 } = require('./commissionSplit.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
@@ -171,6 +174,22 @@ function validateCommission(input) {
   if (!Number.isFinite(maxBaseAmount) || maxBaseAmount <= 0 || maxBaseAmount > 999999999999.99) throw bad('O teto do valor-base da comissão precisa ser um número positivo de até R$ 999.999.999.999,99.');
   const nfseCancelMaxDays = requiredInt(input?.nfseCancelMaxDays, 'o prazo para cancelar a NFS-e (dias)', { min: 0, max: 3650, unit: 'dias', fallback: 0 });
   const dimobDueMonth = requiredInt(input?.dimobDueMonth, 'o mês do prazo da DIMOB', { min: 1, max: 12, fallback: 2 });
+  const dimobLayoutLabelRaw = input?.dimobLayoutLabel === undefined ? COMMISSION_DEFAULT_ACTION.dimobLayoutLabel : String(input.dimobLayoutLabel ?? '').trim();
+  if (!dimobLayoutLabelRaw) throw bad('Informe o nome da versão do layout do arquivo da DIMOB (ex.: DIMOB-{ano}-v1).');
+  if (dimobLayoutLabelRaw.replace(/\{ano\}/gi, '2026').length > 16) throw bad('O nome da versão do layout da DIMOB aceita no máximo 16 caracteres (contando o ano no lugar de {ano}).');
+  if (/[;\r\n]/.test(dimobLayoutLabelRaw)) throw bad('O nome da versão do layout da DIMOB não pode ter ponto e vírgula nem quebra de linha.');
+  const dimobLayoutLabel = dimobLayoutLabelRaw;
+  const dimobFileColumns = input?.dimobFileColumns === undefined ? COMMISSION_DEFAULT_ACTION.dimobFileColumns : input.dimobFileColumns;
+  if (!Array.isArray(dimobFileColumns) || dimobFileColumns.length === 0) throw bad('Escolha ao menos uma coluna para o arquivo da DIMOB.');
+  const unknownColumns = dimobFileColumns.filter((c) => !DIMOB_FILE_COLUMNS.includes(c));
+  if (unknownColumns.length) throw bad(`Colunas do arquivo da DIMOB não reconhecidas: ${unknownColumns.join(', ')}.`);
+  if (new Set(dimobFileColumns).size !== dimobFileColumns.length) throw bad('O arquivo da DIMOB não pode repetir a mesma coluna.');
+  const dimobFileDelimiter = input?.dimobFileDelimiter === undefined ? COMMISSION_DEFAULT_ACTION.dimobFileDelimiter : input.dimobFileDelimiter;
+  if (!DIMOB_FILE_DELIMITERS.includes(dimobFileDelimiter)) throw bad('O separador do arquivo da DIMOB precisa ser ponto e vírgula, vírgula ou barra vertical.');
+  const dimobFileNoticeRaw = input?.dimobFileNotice === undefined ? DIMOB_FILE_NOTICE_DEFAULT : String(input.dimobFileNotice ?? '').trim();
+  if (dimobFileNoticeRaw.length > 200) throw bad('O aviso do cabeçalho do arquivo da DIMOB aceita no máximo 200 caracteres.');
+  if (/[\r\n]/.test(dimobFileNoticeRaw)) throw bad('O aviso do cabeçalho do arquivo da DIMOB não pode ter quebra de linha.');
+  const dimobFileNotice = dimobFileNoticeRaw;
   const serviceCodeRaw = input?.nfseServiceCode === undefined || input?.nfseServiceCode === null ? '' : String(input.nfseServiceCode).trim();
   if (serviceCodeRaw.length > 20) throw bad('O código do serviço da NFS-e aceita no máximo 20 caracteres.');
   const nfseServiceCode = serviceCodeRaw;
@@ -212,7 +231,7 @@ function validateCommission(input) {
     if (unknown.length) throw bad(`Etapas do caso não reconhecidas para o fato gerador "${TRIGGER_EVENT_LABEL[trigger] || trigger}": ${unknown.map((st) => CASE_STATUS_LABEL[st] || st).join(', ')}.`);
     caseStatusesByTriggerEvent[trigger] = Array.from(new Set(list)).filter((st) => !blockedCaseStatuses.includes(st));
   }
-  return { percentageByProvider, defaultPercentage, brokerSharePctByProvider, defaultBrokerSharePct, allowedTriggerEvents, defaultTriggerEvent, invoiceGraceDays, nfseCancelMaxDays, dimobDueMonth, nfseServiceCode, nfseIssRatePct, reconciliationToleranceReais, accountingExportSourceMode, fiscalSensitiveRequiresFinance, dimobIncludeCommissions, blockedCaseStatuses, blockDuplicateCommissionPerTrigger, confirmRequiresFinancePermission, receivableDueDays, dimobExcludedKeywords, caseStatusesByTriggerEvent, baseAmountTolerancePct, maxBaseAmount, defaultReceiptBankAccountId, defaultChartOfAccountId, chargebackAllowedWithInvoiceInFlight };
+  return { percentageByProvider, defaultPercentage, brokerSharePctByProvider, defaultBrokerSharePct, allowedTriggerEvents, defaultTriggerEvent, invoiceGraceDays, nfseCancelMaxDays, dimobDueMonth, dimobLayoutLabel, dimobFileColumns, dimobFileDelimiter, dimobFileNotice, nfseServiceCode, nfseIssRatePct, reconciliationToleranceReais, accountingExportSourceMode, fiscalSensitiveRequiresFinance, dimobIncludeCommissions, blockedCaseStatuses, blockDuplicateCommissionPerTrigger, confirmRequiresFinancePermission, receivableDueDays, dimobExcludedKeywords, caseStatusesByTriggerEvent, baseAmountTolerancePct, maxBaseAmount, defaultReceiptBankAccountId, defaultChartOfAccountId, chargebackAllowedWithInvoiceInFlight };
 }
 
 const PARAM_LABEL = {
@@ -226,7 +245,7 @@ const PARAM_LABEL = {
   defaultTriggerEvent: 'Fato gerador padrão', invoiceGraceDays: 'Prazo da NFS-e', dimobIncludeCommissions: 'Comissões na DIMOB',
   blockedCaseStatuses: 'Etapas bloqueadas', blockDuplicateCommissionPerTrigger: 'Bloquear comissão repetida', confirmRequiresFinancePermission: 'Confirmação exige permissão financeira',
   receivableDueDays: 'Prazo de recebimento', dimobExcludedKeywords: 'Palavras excluídas da DIMOB', caseStatusesByTriggerEvent: 'Etapas por fato gerador',
-  baseAmountTolerancePct: 'Tolerância da base', maxBaseAmount: 'Teto do valor-base', defaultReceiptBankAccountId: 'Conta de recebimento', defaultChartOfAccountId: 'Conta do plano de contas', chargebackAllowedWithInvoiceInFlight: 'Estorno com NFS-e em andamento', nfseCancelMaxDays: 'Prazo para cancelar NFS-e', dimobDueMonth: 'Mês do prazo da DIMOB', nfseServiceCode: 'Código do serviço da NFS-e', nfseIssRatePct: 'Alíquota de ISS', reconciliationToleranceReais: 'Tolerância das conferências fiscais', accountingExportSourceMode: 'Origem da exportação contábil', fiscalSensitiveRequiresFinance: 'Ações fiscais sensíveis exigem permissão financeira', blockedActionCaseStatuses: 'Etapas que não aceitam novas ações', requirePropertyForAppraisal: 'Imóvel obrigatório na avaliação', validatorMustDifferFromUploader: 'Validador diferente de quem enviou', requireProposalOnApproval: 'Proposta obrigatória na aprovação', appraisalInProgressMinutes: 'Espera da avaliação em andamento',
+  baseAmountTolerancePct: 'Tolerância da base', maxBaseAmount: 'Teto do valor-base', defaultReceiptBankAccountId: 'Conta de recebimento', defaultChartOfAccountId: 'Conta do plano de contas', chargebackAllowedWithInvoiceInFlight: 'Estorno com NFS-e em andamento', nfseCancelMaxDays: 'Prazo para cancelar NFS-e', dimobDueMonth: 'Mês do prazo da DIMOB', dimobLayoutLabel: 'Versão do layout da DIMOB', dimobFileColumns: 'Colunas do arquivo da DIMOB', dimobFileDelimiter: 'Separador do arquivo da DIMOB', dimobFileNotice: 'Aviso do arquivo da DIMOB', nfseServiceCode: 'Código do serviço da NFS-e', nfseIssRatePct: 'Alíquota de ISS', reconciliationToleranceReais: 'Tolerância das conferências fiscais', accountingExportSourceMode: 'Origem da exportação contábil', fiscalSensitiveRequiresFinance: 'Ações fiscais sensíveis exigem permissão financeira', blockedActionCaseStatuses: 'Etapas que não aceitam novas ações', requirePropertyForAppraisal: 'Imóvel obrigatório na avaliação', validatorMustDifferFromUploader: 'Validador diferente de quem enviou', requireProposalOnApproval: 'Proposta obrigatória na aprovação', appraisalInProgressMinutes: 'Espera da avaliação em andamento',
 };
 
 function changedLabels(before, after) {
@@ -356,14 +375,21 @@ async function updateEligibility(input, reason, actorUserId, groupId, companyId,
   return { versionId: version.id, versionNumber: version.versionNumber, action: validated };
 }
 
+// Campos que a tela de Parâmetros não envia: se vierem omitidos, vale o que já está publicado (e não o padrão).
+const KEEP_WHEN_OMITTED = ['nfseCancelMaxDays', 'dimobDueMonth', 'dimobLayoutLabel', 'dimobFileColumns', 'dimobFileDelimiter', 'dimobFileNotice', 'nfseServiceCode', 'nfseIssRatePct', 'reconciliationToleranceReais', 'accountingExportSourceMode', 'fiscalSensitiveRequiresFinance', 'baseAmountTolerancePct', 'maxBaseAmount', 'defaultReceiptBankAccountId', 'defaultChartOfAccountId', 'chargebackAllowedWithInvoiceInFlight', 'caseStatusesByTriggerEvent'];
+
 async function updateCommission(input, reason, actorUserId, groupId, companyId, transaction, { expectedVersionId } = {}) {
-  const action = validateCommission(input);
   assertReason(reason);
   // A edição não depende da regra atual estar válida (senão uma regra com erro trancaria a correção) e
   // lê o "antes" dentro do trava de publicação.
   await lockRule('commission_split_rule', COMMISSION_RULE_CODE, groupId, companyId, transaction);
   const current = await evaluateRule(COMMISSION_RULE_CODE, { commissionSplitActive: true }, { groupId, companyId }, { transaction });
   assertExpectedVersion(expectedVersionId, current.decision === 'APPLY' ? current.ruleVersionId : null);
+  const merged = { ...(input || {}) };
+  if (current.decision === 'APPLY' && current.action) {
+    for (const key of KEEP_WHEN_OMITTED) if (merged[key] === undefined && current.action[key] !== undefined) merged[key] = current.action[key];
+  }
+  const action = validateCommission(merged);
   const version = await publishCommissionSplitVersion(groupId, companyId, action, actorUserId, transaction);
   await registrarAuditoria(
     {

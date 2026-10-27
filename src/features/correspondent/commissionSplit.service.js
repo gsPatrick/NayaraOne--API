@@ -21,6 +21,12 @@ const CONDITION_AST = { fact: 'commissionSplitActive', op: '==', value: true };
 // Semente inicial — nenhum documento fonte define percentuais exatos ("split vem do Motor de
 // Regras" sem definir o número); usado só como valor padrão no primeiro uso do tenant. Depois de
 // publicada, quem decide é a RuleVersion (editável via publishCommissionSplitVersion).
+// Arquivo do DIMOB: o layout oficial da Receita é decisão da empresa/contador. Versão do layout, colunas (e a ordem),
+// separador e aviso do cabeçalho são parâmetros, para trocar o formato sem mexer no código.
+const DIMOB_FILE_COLUMNS = ['tipo', 'contrato', 'locador_documento', 'locador_nome', 'locatario_documento', 'locatario_nome', 'imovel', 'valor_no_ano', 'situacao', 'pendencias'];
+const DIMOB_FILE_DELIMITERS = [';', ',', '|'];
+const DIMOB_FILE_NOTICE_DEFAULT = 'formato interno de conferência, não é o arquivo oficial da Receita';
+
 const DEFAULT_ACTION = {
   percentageByProvider: { sandbox: 1.5, manual: 1 },
   defaultPercentage: 1,
@@ -54,6 +60,10 @@ const DEFAULT_ACTION = {
   // do serviço enviados ao emissor, tolerância das conferências e qual origem a exportação contábil leva.
   nfseCancelMaxDays: 0,
   dimobDueMonth: 2,
+  dimobLayoutLabel: 'DIMOB-{ano}-v1',
+  dimobFileColumns: DIMOB_FILE_COLUMNS,
+  dimobFileDelimiter: ';',
+  dimobFileNotice: DIMOB_FILE_NOTICE_DEFAULT,
   nfseServiceCode: '',
   nfseIssRatePct: 0,
   reconciliationToleranceReais: 0,
@@ -245,6 +255,10 @@ function normalizeSettings(action) {
     chargebackAllowedWithInvoiceInFlight: a.chargebackAllowedWithInvoiceInFlight === true,
     nfseCancelMaxDays: Number.isInteger(a.nfseCancelMaxDays) && a.nfseCancelMaxDays >= 0 ? a.nfseCancelMaxDays : DEFAULT_ACTION.nfseCancelMaxDays,
     dimobDueMonth: Number.isInteger(a.dimobDueMonth) && a.dimobDueMonth >= 1 && a.dimobDueMonth <= 12 ? a.dimobDueMonth : DEFAULT_ACTION.dimobDueMonth,
+    dimobLayoutLabel: typeof a.dimobLayoutLabel === 'string' && a.dimobLayoutLabel.trim() ? a.dimobLayoutLabel : DEFAULT_ACTION.dimobLayoutLabel,
+    dimobFileColumns: Array.isArray(a.dimobFileColumns) && a.dimobFileColumns.length && a.dimobFileColumns.every((c) => DIMOB_FILE_COLUMNS.includes(c)) ? a.dimobFileColumns : DEFAULT_ACTION.dimobFileColumns,
+    dimobFileDelimiter: DIMOB_FILE_DELIMITERS.includes(a.dimobFileDelimiter) ? a.dimobFileDelimiter : DEFAULT_ACTION.dimobFileDelimiter,
+    dimobFileNotice: typeof a.dimobFileNotice === 'string' ? a.dimobFileNotice : DEFAULT_ACTION.dimobFileNotice,
     nfseServiceCode: typeof a.nfseServiceCode === 'string' ? a.nfseServiceCode : DEFAULT_ACTION.nfseServiceCode,
     nfseIssRatePct: Number.isFinite(Number(a.nfseIssRatePct)) && Number(a.nfseIssRatePct) >= 0 ? Number(a.nfseIssRatePct) : DEFAULT_ACTION.nfseIssRatePct,
     reconciliationToleranceReais: Number.isFinite(Number(a.reconciliationToleranceReais)) && Number(a.reconciliationToleranceReais) >= 0 ? Number(a.reconciliationToleranceReais) : DEFAULT_ACTION.reconciliationToleranceReais,
@@ -317,6 +331,10 @@ async function getFiscalSettings(groupId, companyId, actorUserId, transaction) {
   return {
     nfseCancelMaxDays: s.nfseCancelMaxDays,
     dimobDueMonth: s.dimobDueMonth,
+    dimobLayoutLabel: s.dimobLayoutLabel,
+    dimobFileColumns: s.dimobFileColumns,
+    dimobFileDelimiter: s.dimobFileDelimiter,
+    dimobFileNotice: s.dimobFileNotice,
     nfseServiceCode: s.nfseServiceCode,
     nfseIssRatePct: s.nfseIssRatePct,
     reconciliationToleranceReais: s.reconciliationToleranceReais,
@@ -357,6 +375,9 @@ module.exports = {
   publishCommissionSplitVersion,
   RULE_CODE,
   DEFAULT_ACTION,
+  DIMOB_FILE_COLUMNS,
+  DIMOB_FILE_DELIMITERS,
+  DIMOB_FILE_NOTICE_DEFAULT,
   TRIGGER_EVENT_LABEL,
   ACCOUNTING_EXPORT_SOURCE_MODES,
 };
