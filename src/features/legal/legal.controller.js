@@ -107,7 +107,7 @@ const satisfyContractRequirement = catchAsync(async (req, res) => {
   const body = req.body || {};
   if (body.waivedReason !== undefined && body.waivedReason !== null && body.waivedReason !== '') {
     if (!(req.auth.permissions || []).includes('legal:waive')) {
-      throw AppError.forbidden('Permissão ausente: legal:waive.', 'PERMISSION_DENIED', { required: 'legal:waive' });
+      throw AppError.forbidden('Você não tem permissão para dispensar esta exigência. Peça o acesso a quem administra o seu perfil.', 'PERMISSION_DENIED', { required: 'legal:waive' });
     }
   }
   const item = await req.withTenantTransaction((t) => requirementsService.satisfyRequirement(req.params.requirementId, body, req.auth.userId, t));

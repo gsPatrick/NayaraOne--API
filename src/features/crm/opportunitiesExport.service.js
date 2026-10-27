@@ -81,7 +81,7 @@ function assertExportPermission(permissions) {
   const granted = Array.isArray(permissions) ? permissions : [];
   if (!granted.includes(EXPORT_PERMISSION)) {
     throw AppError.forbidden(
-      `Permissão ausente: ${EXPORT_PERMISSION}.`,
+      'Você não tem permissão para exportar oportunidades. Peça o acesso a quem administra o seu perfil.',
       'PERMISSION_DENIED',
       { required: EXPORT_PERMISSION }
     );

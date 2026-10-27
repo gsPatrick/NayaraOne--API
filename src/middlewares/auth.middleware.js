@@ -123,7 +123,8 @@ function requirePermission(permissionCode) {
     if (!req.auth.permissions.includes(permissionCode)) {
       return next(
         AppError.forbidden(
-          `Permissão ausente: ${permissionCode}.`,
+          // A permissão exigida segue em details.required (para o suporte); o texto que a pessoa vê não traz código técnico.
+          'Você não tem permissão para realizar esta ação. Peça o acesso a quem administra o seu perfil.',
           'PERMISSION_DENIED',
           { required: permissionCode }
         )
