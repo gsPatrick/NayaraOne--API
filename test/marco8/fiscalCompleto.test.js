@@ -92,6 +92,8 @@ test('M8-DIMOB-OBR-01: gerar batch cadastra a obrigação do ano; fechar conclui
     const ano = new Date().getUTCFullYear();
     // O banco é compartilhado: a obrigação do ano pode já existir (concluída). Dentro desta transação (revertida) parte-se do zero.
     await sequelize.query('DELETE FROM correspondent.fiscal_obligations WHERE reference_year = :ano', { replacements: { ano }, transaction: t });
+    // A comissão só entra na DIMOB se a empresa ligar o parâmetro; sem isso o resultado dependia da ordem dos outros testes.
+    await publishCommissionSplitVersion(tenant.groupId, tenant.companyId, { ...COMMISSION_DEFAULT, dimobIncludeCommissions: true }, tenant.userId, t);
     await comissaoRecebivel(t);
     const batch = await dimob.generateDimobBatch(ano, tenant.userId, tenant.groupId, tenant.companyId, t);
     let lista = await obligations.listObligations(tenant.groupId, tenant.companyId, t);

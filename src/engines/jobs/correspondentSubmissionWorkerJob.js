@@ -39,7 +39,10 @@ async function tenantTx(group, company, fn) {
 async function lockCaseThenSubmission(candidateId, transaction) {
   const peek = await ProviderSubmission.findByPk(candidateId, { transaction });
   if (!peek) return {};
-  const financingCase = await FinancingCase.findOne({ where: { id: peek.financingCaseId, groupId: peek.groupId, companyId: peek.companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  // NO KEY UPDATE (e não UPDATE): em modo de produção o roteamento do webhook é gravado numa segunda conexão, e a chave
+  // estrangeira dele para o caso pede um lock de chave compartilhada na linha. Com FOR UPDATE esse lock esperava este
+  // worker, que esperava a segunda conexão: deadlock sem fim. NO KEY UPDATE continua excluindo cancelamento e outros workers.
+  const financingCase = await FinancingCase.findOne({ where: { id: peek.financingCaseId, groupId: peek.groupId, companyId: peek.companyId }, transaction, lock: transaction.LOCK.NO_KEY_UPDATE });
   const submission = await ProviderSubmission.findByPk(candidateId, { transaction, lock: transaction.LOCK.UPDATE });
   return { financingCase, submission };
 }

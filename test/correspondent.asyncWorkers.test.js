@@ -131,6 +131,32 @@ test('CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o ad
   assert.ok(refreshed.externalCaseId);
 });
 
+test('CORRESPONDENT-WORKER-05: em modo de produção (transações separadas) o worker não trava no roteamento do caso', async () => {
+  // O roteamento do webhook tem chave estrangeira para o caso e, em produção, é gravado numa segunda conexão enquanto
+  // o worker segura a linha do caso. Com FOR UPDATE isso era um deadlock sem fim (o worker esperava a conexão, que
+  // esperava o worker); os testes normais não pegavam porque rodam sempre em modo de teste.
+  const financingCase = await withCommitted((t) => createReadyCase(t));
+  await withCommitted((t) => completeChecklist(financingCase.id, t));
+  const submission = await withCommitted((t) =>
+    submissionsService.requestSubmission(financingCase.id, { consent: true, amount: 150000 }, tenant.userId, tenant.groupId, tenant.companyId, t)
+  );
+  assert.equal(submission.status, 'PENDING');
+
+  submissionsService.setDetachedCommitsForTest(true);
+  try {
+    const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('o worker travou: roteamento esperando o lock do caso')), 25000));
+    await Promise.race([processCompanyPendingSubmissionsForTest({ id: tenant.groupId }, { id: tenant.companyId }), limite]);
+  } finally {
+    submissionsService.setDetachedCommitsForTest(false);
+  }
+
+  const refreshed = await withCommitted((t) => ProviderSubmission.findByPk(submission.id, { transaction: t }));
+  assert.equal(refreshed.status, 'SUBMITTED');
+  assert.ok(refreshed.externalCaseId);
+  const [[rota]] = await sequelize.query('SELECT count(*)::int AS n FROM correspondent.external_case_routing WHERE financing_case_id = :id', { replacements: { id: financingCase.id } });
+  assert.equal(rota.n, 1, 'o roteamento do webhook foi gravado uma vez');
+});
+
 test('CORRESPONDENT-WORKER-02: rodar o job 2x não processa a mesma submissão PENDING duas vezes', async () => {
   const financingCase = await withCommitted((t) => createReadyCase(t));
   await withCommitted((t) => completeChecklist(financingCase.id, t));
