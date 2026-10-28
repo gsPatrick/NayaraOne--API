@@ -71,30 +71,43 @@ async function publishDomainEvent(event, transaction) {
   const existente = await OutboxEvent.findOne({ where: { idempotencyKey }, transaction });
   if (existente) return existente;
 
-  return OutboxEvent.create(
-    {
-      groupId,
-      companyId,
-      aggregateType,
-      aggregateId,
-      eventType,
-      eventVersion: eventVersion || 1,
-      payloadJson: payload || {},
-      // TEC-08: se o chamador não informar explicitamente (a grande maioria não informa), usa
-      // o correlationId da requisição HTTP em curso (AsyncLocalStorage, ver
-      // correlationId.middleware.js) — liga automaticamente o evento à requisição que o
-      // originou, sem precisar tocar cada um dos pontos que chamam publishDomainEvent.
-      correlationId: correlationId || getCurrentCorrelationId(),
-      causationId: causationId || null,
-      idempotencyKey,
-      classification: classification || null,
-      targetDomain: targetDomain || null,
-      connectionId: connectionId || null,
-      occurredAt: new Date(),
-      status: 'PENDING',
-    },
-    { transaction }
-  );
+  const valores = {
+    groupId,
+    companyId,
+    aggregateType,
+    aggregateId,
+    eventType,
+    eventVersion: eventVersion || 1,
+    payloadJson: payload || {},
+    // TEC-08: se o chamador não informar explicitamente (a grande maioria não informa), usa
+    // o correlationId da requisição HTTP em curso (AsyncLocalStorage, ver
+    // correlationId.middleware.js) — liga automaticamente o evento à requisição que o
+    // originou, sem precisar tocar cada um dos pontos que chamam publishDomainEvent.
+    correlationId: correlationId || getCurrentCorrelationId(),
+    causationId: causationId || null,
+    idempotencyKey,
+    classification: classification || null,
+    targetDomain: targetDomain || null,
+    connectionId: connectionId || null,
+    occurredAt: new Date(),
+    status: 'PENDING',
+  };
+
+  // Concorrência: duas transações com a mesma chave passam ambas pelo findOne; a segunda bloqueia
+  // no índice único até a primeira decidir. O INSERT roda num SAVEPOINT para que o conflito não
+  // aborte a transação de negócio do chamador: perdendo a corrida, republicar é no-op e devolve o
+  // evento já gravado (a leitura seguinte enxerga a linha confirmada pela outra transação).
+  try {
+    return await OutboxEvent.sequelize.transaction({ transaction }, (savepoint) =>
+      OutboxEvent.create(valores, { transaction: savepoint })
+    );
+  } catch (err) {
+    if (err && err.name === 'SequelizeUniqueConstraintError') {
+      const vencedor = await OutboxEvent.findOne({ where: { idempotencyKey }, transaction });
+      if (vencedor) return vencedor;
+    }
+    throw err;
+  }
 }
 
 module.exports = { publishDomainEvent };
