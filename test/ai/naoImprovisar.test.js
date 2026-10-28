@@ -85,7 +85,7 @@ test('naoimprovisar_02_sem_secret_manager_nem_shell', async () => {
   assert.equal(v.length, 0, guard.formatar(v));
 });
 
-test('naoimprovisar_03_sem_superusuario', async () => {
+test('naoimprovisar_03_sem_superuser', async () => {
   const tenant = await getSeedTenant();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     // read model de teste: roda na conexão da transação do request (role runtime sob RLS)
