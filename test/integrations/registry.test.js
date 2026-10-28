@@ -333,7 +333,7 @@ test('registry_resolve_connection_ambiente_do_servidor', async () => {
 
 test('connections_auditoria_antes_depois', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const c = await registry.createConnection(novaConexao({ secretRef: 'vault:qa-m9/aud', configJson: { baseUrl: 'https://a.exemplo.com' } }), ctx, transaction);
+    const c = await registry.createConnection(novaConexao({ secretRef: `company/${tenant.companyId}/qa-m9-aud/api-key`, configJson: { baseUrl: 'https://a.exemplo.com' } }), ctx, transaction);
     await registry.updateConnection(c.id, { label: `${c.label} v2`, configJson: { baseUrl: 'https://b.exemplo.com' } }, ctx, transaction);
     await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
     const logs = await AuditLog.findAll({ where: { action: 'integration.connection.changed', entityId: c.id }, order: [['occurredAt', 'ASC']], transaction });
@@ -344,7 +344,7 @@ test('connections_auditoria_antes_depois', async () => {
     assert.equal(logs[2].beforeJson.status, 'DRAFT');
     assert.equal(logs[2].afterJson.status, 'ACTIVE');
     const tudo = JSON.stringify(logs.map((l) => l.toJSON()));
-    assert.equal(tudo.includes('vault:qa-m9/aud'), false, 'nem a referência do cofre vai para a auditoria');
+    assert.equal(tudo.includes('qa-m9-aud/api-key'), false, 'nem a referência do cofre vai para a auditoria');
     assert.ok(logs[2].afterJson.secretRefConfigured === true);
   });
 });

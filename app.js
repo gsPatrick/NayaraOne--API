@@ -97,6 +97,9 @@ app.get('/', (req, res) => {
 // Error handler global — deve ser o último middleware montado.
 app.use(errorHandler);
 
+// M9-D202: em produção, sem cofre de segredos configurado a API não sobe (nunca cai em .env).
+require('./src/features/integrations/secrets').assertSecretStoreAtBoot();
+
 if (process.env.NODE_ENV !== 'test') {
   runMigrationsOnBoot();
 }

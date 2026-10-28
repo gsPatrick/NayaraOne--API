@@ -128,7 +128,8 @@ async function registerProviderAccount(payload, actorUserId, transaction) {
     connection = await registry.createConnection(
       { providerCode: code, environment: registry.getServerEnvironment(), label: cleanLabel, secretRef: cleanSecretRef },
       ctx,
-      transaction
+      transaction,
+      { legacySecretRef: true }
     );
   } catch (err) {
     if (err.code === 'INTEGRATION_CONNECTION_DUPLICATE_LABEL') {
@@ -219,7 +220,7 @@ async function updateProviderAccount(accountId, payload, actorUserId, groupId, c
   }
   let connection = atual;
   try {
-    if (Object.keys(patch).length) connection = await registry.updateConnection(atual.id, patch, ctx, transaction);
+    if (Object.keys(patch).length) connection = await registry.updateConnection(atual.id, patch, ctx, transaction, { legacySecretRef: true });
     if (enviado.active === false && connection.status === 'ACTIVE') {
       connection = await registry.transitionConnection(connection.id, 'PAUSED', ctx, transaction);
     } else if (enviado.active === true && connection.status !== 'ACTIVE') {

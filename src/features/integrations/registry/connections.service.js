@@ -8,6 +8,8 @@ const { ENVIRONMENTS } = require('./registry.constants');
 const { ctxOk, texto } = require('./registry.helpers');
 const { conferirSemSegredo } = require('./registry.segredo');
 const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registry.auditoria');
+const { validarSecretRefDaConexao } = require('../secrets/secretRefRules');
+const { exigirMfaSegredoBank } = require('../secrets/secretPolicy');
 
 /** Conexões de cada empresa com cada fornecedor, por ambiente (`integration.connections`). */
 
@@ -37,7 +39,7 @@ async function rotuloEmUso(c, transaction) {
   });
 }
 
-async function createConnection(payload, ctx, transaction) {
+async function createConnection(payload, ctx, transaction, opts = {}) {
   ctxOk(ctx);
   const p = payload || {};
   if (!ENVIRONMENTS.includes(p.environment)) {
@@ -60,6 +62,8 @@ async function createConnection(payload, ctx, transaction) {
   conferirVersao(provider, apiVersion);
   const secretRef = texto(p.secretRef, 'referência do cofre', 160);
   const webhookChannel = texto(p.webhookChannel, 'canal do webhook', 48);
+  await validarSecretRefDaConexao({ secretRef, companyId: ctx.companyId, legacy: opts.legacySecretRef, ctx, transaction });
+  if (secretRef) await exigirMfaSegredoBank(provider.domain, ctx, transaction);
 
   const novo = {
     groupId: ctx.groupId, companyId: ctx.companyId, providerCode: provider.code, environment: p.environment,
@@ -109,7 +113,7 @@ async function listConnections(ctx, filtro, transaction) {
   return IntegrationConnection.findAll({ where, order: [['providerCode', 'ASC'], ['environment', 'ASC'], ['label', 'ASC']], transaction });
 }
 
-async function updateConnection(id, patch, ctx, transaction) {
+async function updateConnection(id, patch, ctx, transaction, opts = {}) {
   const c = await carregarTravada(id, ctx, transaction);
   const p = patch || {};
   if (p.environment !== undefined && p.environment !== c.environment) {
@@ -132,7 +136,14 @@ async function updateConnection(id, patch, ctx, transaction) {
   if (p.configJson !== undefined) { conferirConfigContraSchema(provider, p.configJson); c.configJson = p.configJson; }
   if (p.policyJson !== undefined) c.policyJson = p.policyJson;
   if (p.apiVersion !== undefined) { const v = texto(p.apiVersion, 'versão da API', 16); conferirVersao(provider, v); c.apiVersion = v; }
-  if (p.secretRef !== undefined) c.secretRef = texto(p.secretRef, 'referência do cofre', 160);
+  if (p.secretRef !== undefined) {
+    const novoRef = texto(p.secretRef, 'referência do cofre', 160);
+    if (novoRef !== c.secretRef) {
+      await validarSecretRefDaConexao({ secretRef: novoRef, companyId: c.companyId, connectionId: c.id, legacy: opts.legacySecretRef, ctx, transaction });
+      if (novoRef) await exigirMfaSegredoBank(provider.domain, ctx, transaction);
+    }
+    c.secretRef = novoRef;
+  }
   if (p.webhookChannel !== undefined) c.webhookChannel = texto(p.webhookChannel, 'canal do webhook', 48);
   if (await rotuloEmUso(c, transaction)) {
     throw AppError.conflict('Já existe uma integração deste fornecedor, neste ambiente, com este nome.', 'INTEGRATION_CONNECTION_DUPLICATE_LABEL');

@@ -11,8 +11,8 @@ function ctxOk(ctx) {
 }
 
 /** O ambiente vem da configuração do servidor, nunca do pedido do usuário (D200 3.3). */
-function getServerEnvironment() {
-  const explicito = process.env.INTEGRATION_ENVIRONMENT;
+function getServerEnvironment(env = process.env) {
+  const explicito = env.INTEGRATION_ENVIRONMENT;
   if (explicito) {
     const valor = String(explicito).trim().toUpperCase();
     if (!ENVIRONMENTS.includes(valor)) {
@@ -20,8 +20,8 @@ function getServerEnvironment() {
     }
     return valor;
   }
-  if (process.env.DEPLOY_ENVIRONMENT === 'staging') return 'HOMOLOG';
-  if (process.env.DEPLOY_ENVIRONMENT === 'production' || process.env.NODE_ENV === 'production') return 'PRODUCTION';
+  if (env.DEPLOY_ENVIRONMENT === 'staging') return 'HOMOLOG';
+  if (env.DEPLOY_ENVIRONMENT === 'production' || env.NODE_ENV === 'production') return 'PRODUCTION';
   return 'SANDBOX';
 }
 
