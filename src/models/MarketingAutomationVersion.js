@@ -18,6 +18,7 @@ module.exports = (sequelize) => {
       triggerType: { type: DataTypes.STRING(8), allowNull: false, field: 'trigger_type' },
       triggerConfig: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'trigger_config' },
       conditions: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'conditions' },
+      conditionsEmptyReason: { type: DataTypes.TEXT, allowNull: true, field: 'conditions_empty_reason' },
       actions: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'actions' },
       cooldown: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'cooldown' },
       frequencyCap: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'frequency_cap' },

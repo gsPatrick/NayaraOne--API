@@ -1,13 +1,10 @@
 'use strict';
 
-const { mktNotImplemented } = require('../marketing.errors');
-
 /**
- * Marketing / automations — serviço da área. A fundação (M9-D402) entrega a casa e as portas de permissão; as regras de negócio entram
- * nas demandas dona de cada rota (M9-D435 lista as rotas e as demandas que as preenchem), sobre este mesmo arquivo.
+ * Marketing / automations — serviço da área. A definição (fluxo, versão, publicação e pausa) é da M9-D413 (definition.service.js);
+ * o runner é da M9-D414 e a validade da versão está em definition.validity.js.
  */
-function pendingOwner(owner) {
-  throw mktNotImplemented(owner);
-}
-
-module.exports = { pendingOwner };
+module.exports = {
+  ...require('./definition.service'),
+  ...require('./definition.validity'),
+};
