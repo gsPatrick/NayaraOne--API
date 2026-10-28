@@ -7,7 +7,7 @@ const { parseCreateInput, parseListFilters, isUuid } = require('./template.valid
 const { assertLogoMatchesFile } = require('./template.brandTokens');
 const { assertNoUnknownVariables } = require('./template.variables');
 const { readOfficialChannels } = require('./template.settings');
-const { templateNotFound, templateImmutable, templateVersionOutdated, officialRefRequired } = require('./template.errors');
+const { templateNotFound, templateVersionOutdated, officialRefRequired } = require('./template.errors');
 
 const ENTITY = 'marketing.template';
 const summary = (dto) => ({ code: dto.code, versionNo: dto.versionNo, status: dto.status, kind: dto.kind, channel: dto.channel, contentHash: dto.contentHash });
@@ -54,9 +54,9 @@ async function publishTemplate(tenant, actorUserId, templateId, transaction) {
   const row = await repo.lockById(templateId, transaction);
   if (!row) throw templateNotFound();
   if (row.status === 'PUBLISHED') return { template: repo.toDto(row), replay: true, retiredVersionNo: null };
-  if (row.status === 'RETIRED') throw templateImmutable({ templateId, status: row.status });
-
   const highest = await repo.highestReleasedVersion(row.code, transaction);
+  // Versão aposentada só existe porque uma maior foi publicada: publicá-la é sempre "versão desatualizada", qualquer que seja a ordem da corrida.
+  if (row.status === 'RETIRED') throw templateVersionOutdated({ versionNo: row.version_no, highestVersionNo: highest, status: row.status });
   if (highest !== null && highest > row.version_no) throw templateVersionOutdated({ versionNo: row.version_no, highestVersionNo: highest });
   assertNoUnknownVariables(row.body, row.variables_json);
   assertOfficialReference(row, await readOfficialChannels(tenant, transaction));

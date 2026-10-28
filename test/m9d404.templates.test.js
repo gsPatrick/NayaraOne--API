@@ -61,7 +61,7 @@ test('template_publicado_e_imutavel: PUBLISHED e RETIRED não mudam; nova versã
     assert.equal(pub2.retiredVersionNo, 1);
     const [old] = await q(t, 'SELECT status FROM marketing.templates WHERE id = :id', { id: v1.id });
     assert.equal(old.status, 'RETIRED');
-    await rejectsWith(templates.publishTemplate(tenant, tenant.userId, v1.id, t), 409, 'MKT_TEMPLATE_IMMUTABLE');
+    await rejectsWith(templates.publishTemplate(tenant, tenant.userId, v1.id, t), 409, 'MKT_TEMPLATE_VERSION_OUTDATED');
     await sequelize.query('SAVEPOINT s2', { transaction: t });
     await assert.rejects(() => q(t, "UPDATE marketing.templates SET status = 'PUBLISHED' WHERE id = :id", { id: v1.id }), /MKT_TEMPLATE_IMMUTABLE/);
     await sequelize.query('ROLLBACK TO SAVEPOINT s2', { transaction: t });
@@ -231,7 +231,9 @@ test('publicacao_simultanea_de_versao_uma_vence: duas publicações da mesma ver
     assert.equal(same.filter((r) => r.replay === true).length, 2);
     // Versões diferentes em paralelo: ao final só UMA publicada (a maior) e a outra aposentada.
     const diff = await Promise.allSettled([run(v1.id), run(v2.id)]);
-    assert.ok(diff.every((r) => r.status === 'fulfilled' || r.reason.code === 'MKT_TEMPLATE_VERSION_OUTDATED'));
+    // v2 sempre publica; v1 ou publica antes (e é aposentada) ou é recusada como desatualizada, nunca como imutável.
+    assert.equal(diff[1].status, 'fulfilled');
+    assert.ok(diff[0].status === 'fulfilled' || diff[0].reason.code === 'MKT_TEMPLATE_VERSION_OUTDATED', String(diff[0].reason && diff[0].reason.code));
     const rows = await withTenantTransaction(tenant, (t) => q(t, 'SELECT version_no, status FROM marketing.templates WHERE code = :c ORDER BY version_no', { c: input.code }));
     assert.deepEqual(rows.map((r) => r.status), ['RETIRED', 'PUBLISHED']);
   } finally {
