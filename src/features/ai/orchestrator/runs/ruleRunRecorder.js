@@ -8,6 +8,7 @@ const C = require('./runs.constants');
 const { toRun } = require('./runs.mapper');
 const { publishRunEvent, auditRun } = require('./runEvents');
 const { guarded } = require('./runLifecycle');
+const { sanitizeSummary, sanitizeToolCalls, summaryLimit } = require('../../audit/auditSanitizer');
 
 /**
  * Versão do agente a gravar no run de uma NAY determinística (sem modelo): a ACTIVE da empresa, senão a ACTIVE do sistema,
@@ -33,11 +34,12 @@ async function recordRuleRun(ctx, data, transaction) {
   if (!C.GROUNDING.includes(grounding)) throw E.invalid('Estado de aterramento inválido.');
   return guarded(async () => {
     const stamp = await findAgentStamp(ctx, data.agentName, transaction);
+    const limit = await summaryLimit(ctx, transaction);
     const now = new Date();
     const row = await AiRun.create({
       groupId: ctx.groupId, companyId: ctx.companyId, userId: ctx.userId || null, agentName: data.agentName, agentId: stamp ? stamp.agentId : null,
-      agentVersion: stamp ? stamp.agentVersion : null, purpose: data.purpose || null, inputSummary: data.inputSummary,
-      toolCallsJson: data.toolCallsJson || null, outputSummary: data.outputSummary, status: 'COMPLETED', routingPath: 'RULE',
+      agentVersion: stamp ? stamp.agentVersion : null, purpose: data.purpose || null, inputSummary: sanitizeSummary(data.inputSummary, limit),
+      toolCallsJson: sanitizeToolCalls(data.toolCallsJson) || null, outputSummary: sanitizeSummary(data.outputSummary, limit), status: 'COMPLETED', routingPath: 'RULE',
       groundingStatus: grounding, tokensIn: 0, tokensOut: 0, costAmount: '0.000000', startedAt: now, finishedAt: now,
       createdBy: ctx.userId || null, updatedBy: ctx.userId || null,
     }, { transaction });

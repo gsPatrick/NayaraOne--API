@@ -4,6 +4,8 @@ const E = require('./runs.errors');
 const C = require('./runs.constants');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Teto só contra abuso: o resumo é redigido e cortado no limite do parâmetro por auditSanitizer (M9-D028), nunca recusado por tamanho.
+const RAW_TEXT_MAX = 500000;
 const HASH_RE = /^[0-9a-f]{64}$/;
 const isUuid = (v) => typeof v === 'string' && UUID_RE.test(v);
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -71,7 +73,7 @@ function parseStart(data = {}) {
     agentId: stamp.agentId === undefined ? null : stamp.agentId,
     agentVersion: stamp.agentVersion === undefined ? null : count(stamp.agentVersion, 'A versão do agente'),
     purpose: text(data.purpose, 'A finalidade', 200),
-    inputSummary: text(data.inputSummary, 'O resumo da entrada', 4000),
+    inputSummary: text(data.inputSummary, 'O resumo da entrada', RAW_TEXT_MAX),
     idempotencyKey: text(data.idempotencyKey, 'A chave de idempotência', 200),
     requestHash: hash(data.requestHash, 'requestHash'),
     parentRunId: data.parentRunId === undefined ? null : data.parentRunId,
@@ -87,7 +89,7 @@ function parseFinish(data = {}) {
   if (!status) throw E.invalid('O estado de destino é obrigatório.');
   const out = { status };
   const put = (k, v) => { if (v !== undefined) out[k] = v; };
-  put('outputSummary', text(data.outputSummary, 'O resumo da saída', 8000) ?? undefined);
+  put('outputSummary', text(data.outputSummary, 'O resumo da saída', RAW_TEXT_MAX) ?? undefined);
   put('providerCode', text(data.providerCode, 'O provider', 60) ?? undefined);
   put('modelCode', text(data.modelCode, 'O modelo', 120) ?? undefined);
   put('routingPath', oneOf(data.routingPath, C.ROUTING_PATHS, 'O caminho de roteamento'));

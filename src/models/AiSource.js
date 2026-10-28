@@ -56,6 +56,7 @@ module.exports = (sequelize) => {
       usedInAnswer: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'used_in_answer' },
       statusAtRetrieval: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'VIGENTE', field: 'status_at_retrieval' },
       contentHash: { type: DataTypes.STRING(64), allowNull: true, field: 'content_hash' },
+      contentPurgedAt: { type: DataTypes.DATE, allowNull: true, field: 'content_purged_at' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

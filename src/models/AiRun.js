@@ -90,6 +90,7 @@ module.exports = (sequelize) => {
       finishedAt: { type: DataTypes.DATE, allowNull: true, field: 'finished_at' },
       snapshotAt: { type: DataTypes.DATE, allowNull: true, field: 'snapshot_at', comment: 'instante do dado usado' },
       requestHash: { type: DataTypes.STRING(64), allowNull: true, field: 'request_hash' },
+      contentPurgedAt: { type: DataTypes.DATE, allowNull: true, field: 'content_purged_at' },
       fallbackTrail: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'fallback_trail', comment: 'saltos {from,to,reason} (M9-D013)' },
       escalated: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'escalated', comment: 'M9-D012' },
       cached: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'cached', comment: 'M9-D015' },

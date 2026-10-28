@@ -32,6 +32,7 @@ const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/cor
 const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspondentStatusPollJob');
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integrationHealthAggregateJob');
+const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -253,6 +254,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.BANK_PAYMENT_RECONCILIATION_J
 // Marco 9, M9-D206 — saúde dos fornecedores: janelas de 5 min, 1 h e 1 dia e linha atual por connection ACTIVE.
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_JOB_DISABLED !== 'true') {
   startIntegrationHealthAggregateJob();
+  startAiRetentionJob();
 }
 
 module.exports = app;

@@ -8,6 +8,7 @@ const V = require('./runs.validation');
 const { toRun } = require('./runs.mapper');
 const { computeRunCost } = require('./runCost');
 const { publishRunEvent, auditRun } = require('./runEvents');
+const { sanitizeSummary, summaryLimit } = require('../../audit/auditSanitizer');
 
 /** Traduz recusas do banco (gatilhos) e deixa passar qualquer outro erro. */
 async function guarded(fn) {
@@ -34,6 +35,7 @@ async function startRun(ctx, data, transaction) {
   V.ctxOk(ctx);
   const d = V.parseStart(data);
   return guarded(async () => {
+    d.inputSummary = sanitizeSummary(d.inputSummary, await summaryLimit(ctx, transaction));
     if (d.idempotencyKey) {
       await acquireRunKeyLock(ctx.companyId, d.idempotencyKey, transaction);
       const existing = await AiRun.findOne({ where: { companyId: ctx.companyId, idempotencyKey: d.idempotencyKey }, transaction });
@@ -82,6 +84,7 @@ async function finishRun(ctx, runId, data, transaction) {
   V.ctxOk(ctx);
   const f = V.parseFinish(data);
   return guarded(async () => {
+    if (f.outputSummary !== undefined) f.outputSummary = sanitizeSummary(f.outputSummary, await summaryLimit(ctx, transaction));
     const row = await loadOwn(ctx, runId, transaction, { lock: true });
     const before = toRun(row);
     if (C.FINAL_STATUSES.includes(row.status)) throw E.immutable();

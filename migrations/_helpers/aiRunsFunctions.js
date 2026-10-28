@@ -10,6 +10,9 @@
  */
 const FINAIS = "('COMPLETED','FAILED','BLOCKED','CANCELLED')";
 const IDENTIDADE = ['id', 'group_id', 'company_id', 'created_at', 'idempotency_key', 'parent_run_id', 'started_at'];
+// Colunas que o expurgo de retenção (M9-D028) pode alterar: o conteúdo e a marca de expurgo.
+const NEUTRAS_RUN = "ARRAY['input_summary','output_summary','tool_calls_json','content_purged_at','updated_at']";
+const NEUTRAS_FONTE = "ARRAY['excerpt','content_purged_at','updated_at']";
 const mudou = (campos) => campos.map((c) => `NEW.${c} IS DISTINCT FROM OLD.${c}`).join(' OR ');
 
 async function criarFuncoesRuns(q) {
@@ -21,6 +24,14 @@ async function criarFuncoesRuns(q) {
       IF TG_OP = 'INSERT' THEN
         IF NEW.status IN ${FINAIS} AND NEW.finished_at IS NULL THEN NEW.finished_at := CURRENT_TIMESTAMP; END IF;
         RETURN NEW;
+      END IF;
+      -- M9-D028: única exceção em estado final é o expurgo por retenção (ai.purge_ai_content liga ai.purge_mode), que só APAGA conteúdo.
+      IF current_setting('ai.purge_mode', true) = 'on' THEN
+        IF NEW.input_summary IS NULL AND NEW.output_summary IS NULL AND NEW.content_purged_at IS NOT NULL
+           AND NEW.tool_calls_json IS NOT DISTINCT FROM ai.strip_tool_content(OLD.tool_calls_json)
+           AND (to_jsonb(NEW) - ${NEUTRAS_RUN}) = (to_jsonb(OLD) - ${NEUTRAS_RUN}) THEN
+          RETURN NEW;
+        END IF;
       END IF;
       IF OLD.status IN ${FINAIS} THEN
         RAISE EXCEPTION 'AI_RUN_IMMUTABLE: execução finalizada (%) não pode ser alterada', OLD.status USING ERRCODE = 'AI011';
@@ -44,6 +55,12 @@ async function criarFuncoesRuns(q) {
       alvo uuid;
       estado text;
     BEGIN
+      IF TG_OP = 'UPDATE' AND current_setting('ai.purge_mode', true) = 'on' THEN
+        IF NEW.excerpt IS NULL AND NEW.content_purged_at IS NOT NULL
+           AND (to_jsonb(NEW) - ${NEUTRAS_FONTE}) = (to_jsonb(OLD) - ${NEUTRAS_FONTE}) THEN
+          RETURN NEW;
+        END IF;
+      END IF;
       alvo := CASE WHEN TG_OP = 'INSERT' THEN NEW.ai_run_id ELSE OLD.ai_run_id END;
       SELECT status INTO estado FROM ai.ai_runs WHERE id = alvo;
       IF estado IN ${FINAIS} THEN
