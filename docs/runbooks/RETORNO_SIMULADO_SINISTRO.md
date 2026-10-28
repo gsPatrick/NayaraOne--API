@@ -4,7 +4,7 @@ Serve para a conferência do Marco 7: provar que o retorno da seguradora fecha o
 
 ## Pré-requisitos
 1. Provider de seguro da empresa em `sandbox` (configuração `procurement.insurance_provider`; o padrão já é `sandbox`).
-2. Um segredo de teste para o webhook gravado na empresa (configuração `procurement.insurance_webhook_secret`, guardada cifrada). Quem tem `settings:update` grava: `PUT /v1/settings/procurement.insurance_webhook_secret` com `{ "value": "<segredo de teste>" }`. O mesmo segredo é passado ao script pela variável `INSURANCE_WEBHOOK_SECRET` (nunca por argumento).
+2. Um segredo de teste para o webhook gravado na empresa (configuração `procurement.insurance_webhook_secret`, guardada cifrada). Quem opera o servidor grava com `node scripts/seed-homo-segredo-webhook-seguro.js --out <arquivo>` (gera o segredo, grava cifrado, salva num arquivo 0600 fora do repositório e nunca imprime o segredo; não troca um segredo existente sem `--girar`). O conteúdo do arquivo (`INSURANCE_WEBHOOK_SECRET=...`) é entregue pelo meio seguro a quem vai conferir e passado ao script pela variável de ambiente (nunca por argumento). Alternativa por API: `PUT /v1/settings/procurement.insurance_webhook_secret` com `{ "value": "<segredo>" }` (exige `settings:update`).
 3. Uma apólice emitida (Compras › Seguros) e dois usuários: quem abre o sinistro (`procurement:create`) e quem submete (`procurement:approve`).
 
 ## Passo a passo
