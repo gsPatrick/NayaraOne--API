@@ -1,0 +1,46 @@
+'use strict';
+
+/**
+ * Providers que o seed do catálogo cadastra (Marco 9, M9-D201): um sandbox determinístico por família
+ * (é o que o laboratório usa) e os fornecedores que o código já tinha. Quando a Nayara contratar um
+ * fornecedor real, ele entra como linha nova + um adapter; o sandbox permanece.
+ */
+const { DEFAULT_CRITICALITY } = require('./catalog.domains');
+
+const sandbox = (domain, code, displayName, capabilities) => ({
+  code, displayName, domain, capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY[domain], sandboxAvailable: true,
+});
+
+const SANDBOX_PROVIDERS = Object.freeze([
+  sandbox('MESSAGING', 'messaging-sandbox', 'Mensageria (WhatsApp e atendimento) — sandbox', ['sendText', 'sendTemplate', 'sendMedia', 'getStatus']),
+  sandbox('EMAIL', 'email-sandbox', 'E-mail — sandbox', ['sendEmail', 'getDeliveryStatus', 'receiveInbound']),
+  sandbox('SITE', 'site-sandbox', 'Site — sandbox', ['publishPage', 'unpublishPage', 'getPageStatus']),
+  sandbox('PORTAL', 'portal-sandbox', 'Portais imobiliários — sandbox', ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']),
+  sandbox('SIGNATURE', 'signature-sandbox', 'Assinatura digital — sandbox', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook']),
+  sandbox('BANK', 'bank-sandbox', 'Bancos, extratos e pagamentos — sandbox', ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']),
+  sandbox('INSURANCE', 'insurance-sandbox', 'Seguradoras e garantias — sandbox', ['quote', 'propose', 'getPolicy', 'getStatus']),
+  // O sandbox de financiamento já verificava o webhook (assinatura HMAC) antes do catálogo: mantém verifyWebhook (DI-D201-3).
+  sandbox('FINANCING', 'financing-sandbox', 'Financiamento e promotoras — sandbox', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook']),
+  sandbox('FISCAL', 'fiscal-sandbox', 'NFS-e e fiscal — sandbox', ['issueNfse', 'getNfseStatus', 'cancelNfse']),
+  sandbox('SOCIAL', 'social-sandbox', 'Redes sociais e publicação — sandbox', ['publishPost', 'getPostStatus', 'deletePost']),
+  sandbox('STORAGE', 'storage-sandbox', 'Armazenamento de objetos — sandbox', ['putObject', 'getObject', 'deleteObject', 'headObject']),
+  sandbox('IDENTITY', 'identity-sandbox', 'Identidade e autenticação — sandbox', ['verifyToken', 'getUserInfo', 'revokeSession']),
+  sandbox('AI', 'ai-sandbox', 'Modelos de IA — sandbox', ['generate', 'embed', 'transcribe', 'analyzeImage']),
+  sandbox('ANALYTICS', 'analytics-sandbox', 'Analytics e monitoramento — sandbox', ['emitMetric', 'emitEvent', 'queryHealth']),
+]);
+
+/** Fornecedores que não são sandbox mas já existiam no código (fluxo manual assistido e Clicksign). */
+const EXISTING_PROVIDERS = Object.freeze([
+  {
+    code: 'financing-manual', displayName: 'Financiamento — fluxo manual assistido', domain: 'FINANCING',
+    capabilities: ['submitCase', 'getCaseStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.FINANCING, sandboxAvailable: false,
+  },
+  {
+    code: 'signature-clicksign', displayName: 'Assinatura digital — Clicksign', domain: 'SIGNATURE',
+    capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
+  },
+]);
+
+const SEED_PROVIDERS = Object.freeze([...SANDBOX_PROVIDERS, ...EXISTING_PROVIDERS]);
+
+module.exports = { SANDBOX_PROVIDERS, EXISTING_PROVIDERS, SEED_PROVIDERS };

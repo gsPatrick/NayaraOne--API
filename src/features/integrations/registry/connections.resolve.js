@@ -5,6 +5,8 @@ const { IntegrationProvider, IntegrationConnection } = require('../../../models'
 const AppError = require('../../../utils/AppError');
 const { getSetting } = require('../../settings/settings.service');
 const { getServerEnvironment } = require('./registry.helpers');
+const { assertDomain } = require('../providers/catalog.validate');
+const { triggerContingency } = require('../providers/contingency.registry');
 
 /**
  * Devolve a connection ACTIVE da empresa para o fornecedor ou domínio. O ambiente é o do servidor:
@@ -14,6 +16,7 @@ async function resolveConnection({ companyId, providerCode, domain }, transactio
   if (!companyId || (!providerCode && !domain)) {
     throw AppError.badRequest('Informe a empresa e o fornecedor ou o domínio.', 'VALIDATION_ERROR');
   }
+  if (domain) assertDomain(String(domain));
   const environment = getServerEnvironment();
   const where = { companyId, environment, status: 'ACTIVE' };
   if (providerCode) where.providerCode = String(providerCode);
@@ -23,6 +26,9 @@ async function resolveConnection({ companyId, providerCode, domain }, transactio
   }
   const candidatas = await IntegrationConnection.findAll({ where, order: [['created_at', 'ASC'], ['id', 'ASC']], transaction });
   if (candidatas.length === 0) {
+    // Família sem connection ativa: aciona o modo de contingência dela (se houver) e responde 404 (M9-D201, regra 3).
+    const familia = domain ? String(domain) : (await IntegrationProvider.findByPk(String(providerCode), { attributes: ['domain'], transaction }))?.domain;
+    if (familia) await triggerContingency({ domain: familia, companyId, providerCode: providerCode ? String(providerCode) : null }, transaction);
     throw AppError.notFound('Nenhuma integração ativa para este recurso: configure em Integrações.', 'INTEGRATION_CONNECTION_NOT_FOUND');
   }
   if (candidatas.length > 1 && !providerCode) {

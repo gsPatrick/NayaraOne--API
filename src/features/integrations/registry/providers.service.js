@@ -4,9 +4,10 @@ const { IntegrationProvider } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { acharSegredo } = require('./secretScan');
-const { DOMAINS, CRITICALITIES, PROVIDER_STATUSES, ANTES_CRIACAO, CODE_RE } = require('./registry.constants');
+const { CRITICALITIES, PROVIDER_STATUSES, ANTES_CRIACAO, CODE_RE } = require('./registry.constants');
 const { ctxOk, texto, comPlataforma } = require('./registry.helpers');
 const { recusarSegredo } = require('./registry.segredo');
+const { assertDomain, assertCapabilitiesForDomain } = require('../providers/catalog.validate');
 
 /** Catálogo global de fornecedores (`integration.providers`, M9-D200). */
 
@@ -14,7 +15,7 @@ function validarProvider(p, { parcial = false } = {}) {
   const saida = {};
   if (!parcial || p.displayName !== undefined) saida.displayName = texto(p.displayName, 'nome', 120, { obrigatorio: true });
   if (!parcial || p.domain !== undefined) {
-    if (!DOMAINS.includes(p.domain)) throw AppError.badRequest(`Domínio inválido. Use: ${DOMAINS.join(', ')}.`, 'VALIDATION_ERROR');
+    assertDomain(p.domain);
     saida.domain = p.domain;
   }
   if (!parcial || p.criticality !== undefined) {
@@ -63,6 +64,7 @@ async function createProvider(payload, ctx, transaction) {
     throw AppError.badRequest('O código do fornecedor usa só letras minúsculas, números, "-" e "_" (até 48).', 'VALIDATION_ERROR');
   }
   const dados = validarProvider({ status: 'ACTIVE', defaultPolicyJson: {}, configSchema: {}, ...payload });
+  assertCapabilitiesForDomain(dados.domain, dados.capabilities);
   if (await IntegrationProvider.findByPk(code, { transaction })) {
     throw AppError.conflict('Já existe um fornecedor com este código.', 'INTEGRATION_PROVIDER_DUPLICATE');
   }
@@ -81,7 +83,11 @@ async function updateProvider(code, payload, ctx, transaction) {
   const provider = await IntegrationProvider.findByPk(code, { transaction, lock: transaction.LOCK.UPDATE });
   if (!provider) throw AppError.unprocessable('Fornecedor não cadastrado no catálogo de integrações.', 'INTEGRATION_PROVIDER_UNKNOWN');
   const antes = provider.toJSON();
-  Object.assign(provider, validarProvider(payload || {}, { parcial: true }));
+  const mudancas = validarProvider(payload || {}, { parcial: true });
+  if (mudancas.domain !== undefined || mudancas.capabilities !== undefined) {
+    assertCapabilitiesForDomain(mudancas.domain ?? provider.domain, mudancas.capabilities ?? provider.capabilities);
+  }
+  Object.assign(provider, mudancas);
   await comPlataforma(transaction);
   await provider.save({ transaction });
   await registrarAuditoria({

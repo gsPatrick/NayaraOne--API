@@ -3,6 +3,7 @@
 const { IntegrationConnection } = require('../../models');
 const registry = require('../integrations/registry/registry.service');
 const AppError = require('../../utils/AppError');
+const { toCatalogCode, toCorrespondentCode } = require('../integrations/providers/catalog.legacy');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const ANTES_CRIACAO = 'Não existia (registro criado nesta ação)';
@@ -15,7 +16,7 @@ function paraConta(c) {
     id: c.id,
     groupId: c.groupId,
     companyId: c.companyId,
-    providerCode: c.providerCode,
+    providerCode: toCorrespondentCode(c.providerCode),
     label: c.label,
     secretRef: c.secretRef,
     active: c.status === 'ACTIVE',
@@ -116,7 +117,8 @@ async function registerProviderAccount(payload, actorUserId, transaction) {
     );
   }
 
-  const code = String(providerCode).toLowerCase();
+  // O Correspondente fala "sandbox"/"manual"; o catálogo, "financing-sandbox"/"financing-manual" (M9-D201).
+  const code = toCatalogCode(providerCode);
   if (await nomeEmUso(companyId, code, cleanLabel, null, transaction)) {
     throw AppError.conflict('Já existe uma conta ativa deste provider com este nome. Edite a existente ou escolha outro nome.', 'PROVIDER_ACCOUNT_DUPLICATE');
   }

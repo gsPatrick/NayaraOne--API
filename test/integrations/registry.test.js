@@ -45,7 +45,7 @@ after(async () => {
 });
 
 function novaConexao(over = {}) {
-  return { providerCode: 'manual', environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}`, ...over };
+  return { providerCode: 'financing-manual', environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}`, ...over };
 }
 
 async function comPlataforma(transaction) {
@@ -172,7 +172,7 @@ test('connections_segredo_embutido_recusado', async () => {
     // Valores realmente vazios sob chave de segredo continuam aceitos.
     await registry.createConnection(novaConexao({ label: `QA-M9 vazios ${uniqueSuffix()}`, configJson: { token: null, apiKey: '', secret: [], password: {} } }), ctx, transaction);
     // Catálogo: política padrão do provider também é varrida.
-    await recusa(registry.createProvider({ code: `qa-m9-seg-${uniqueSuffix()}`.toLowerCase(), displayName: 'QA-M9', domain: 'MESSAGING', capabilities: ['x'], supportedVersions: ['v1'], criticality: 'LOW', sandboxAvailable: true, defaultPolicyJson: { apiKey: 123456789 } }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
+    await recusa(registry.createProvider({ code: `qa-m9-seg-${uniqueSuffix()}`.toLowerCase(), displayName: 'QA-M9', domain: 'MESSAGING', capabilities: ['sendText'], supportedVersions: ['v1'], criticality: 'LOW', sandboxAvailable: true, defaultPolicyJson: { apiKey: 123456789 } }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
     // secretRef não pode ser o próprio segredo.
     await recusa(registry.createConnection(novaConexao({ secretRef: 'Bearer abc.def' }), ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
     // Campo de segredo solto no corpo.
@@ -303,7 +303,7 @@ test('migracao_provider_accounts_idempotente', async () => {
     assert.equal(por['Conta A'].status, 'ACTIVE');
     assert.equal(por['Conta B'].status, 'PAUSED');
     assert.equal(por['Conta C'].status, 'DISABLED');
-    assert.ok(linhas.every((l) => l.environment === 'SANDBOX' && l.providerCode === 'sandbox'));
+    assert.ok(linhas.every((l) => l.environment === 'SANDBOX' && l.providerCode === 'financing-sandbox'));
   });
 });
 
@@ -317,12 +317,12 @@ test('registry_resolve_connection_ambiente_do_servidor', async () => {
       const hml = await registry.createConnection(novaConexao({ environment: 'HOMOLOG' }), ctx, transaction);
       await registry.transitionConnection(sbx.id, 'ACTIVE', ctx, transaction);
       await registry.transitionConnection(hml.id, 'ACTIVE', ctx, transaction);
-      const r = await registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'manual', environment: 'SANDBOX' }, transaction);
+      const r = await registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'financing-manual', environment: 'SANDBOX' }, transaction);
       assert.equal(r.id, hml.id, 'o ambiente do pedido é ignorado');
       const porDominio = await registry.resolveConnection({ companyId: tenant.companyId, domain: 'FINANCING' }, transaction);
       assert.equal(porDominio.id, hml.id);
       await registry.transitionConnection(hml.id, 'PAUSED', ctx, transaction);
-      await recusa(registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'manual' }, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
+      await recusa(registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'financing-manual' }, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
     });
     process.env.INTEGRATION_ENVIRONMENT = 'QUALQUER';
     assert.throws(() => registry.getServerEnvironment());
@@ -373,7 +373,8 @@ test('correspondente_usa_o_registro_e_o_legado_e_somente_leitura', async () => {
     const con = await IntegrationConnection.findByPk(conta.id, { transaction });
     assert.ok(con, 'a conta virou connection');
     assert.equal(con.secretRef, 'vault:qa-m9/corr');
-    assert.equal(con.providerCode, 'sandbox');
+    assert.equal(con.providerCode, 'financing-sandbox');
+    assert.equal(conta.providerCode, 'sandbox', 'o Correspondente continua vendo o código antigo');
     const lista = await providerAccountsService.listProviderAccounts(tenant.groupId, tenant.companyId, transaction);
     assert.ok(lista.some((a) => a.id === conta.id && a.secretRef === 'vault:qa-m9/corr' && a.active === true));
     await providerAccountsService.updateProviderAccount(conta.id, { active: false }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
@@ -401,6 +402,6 @@ test('permissoes_e_parametros_do_registro', async () => {
   for (const [key, tipo] of [['integration.admin.mfa_on_prod_connection_change', 'boolean'], ['integration.admin.mfa_on_prod_test_connection', 'boolean'], ['integration.registry.secret_scan_min_length', 'integer']]) {
     assert.equal(settingsService.SETTINGS_SCHEMA[key]?.type, tipo, key);
   }
-  const pr = await IntegrationProvider.findAll({ where: { code: ['sandbox', 'manual'] } });
+  const pr = await IntegrationProvider.findAll({ where: { code: ['financing-sandbox', 'financing-manual'] } });
   assert.equal(pr.length, 2);
 });
