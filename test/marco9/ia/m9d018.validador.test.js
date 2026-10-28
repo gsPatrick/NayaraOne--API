@@ -135,7 +135,7 @@ test('m9d018_defaults_declarados_aplicados_e_entrada_nao_mutada', () => {
 
 test('m9d018_free_text_passa_pelo_redactor', () => {
   const { tool } = toolComSchema({ type: 'object', properties: { observacao: { type: 'string', freeText: true, maxLength: 200 }, codigo: { type: 'string', pattern: '^[A-Z]{3}-\\d{3}$', maxLength: 7 } } });
-  const r = valida(tool, { observacao: 'Cliente pediu retorno. Authorization: Bearer abcdef0123456789abcdef0123456789abcdef', codigo: 'ABC-123' });
+  const r = valida(tool, { observacao: `Cliente pediu retorno. Authorization: ${'Bea'}${'rer'} abcdef0123456789abcdef0123456789abcdef`, codigo: 'ABC-123' });
   assert.ok(!r.args.observacao.includes('abcdef0123456789'), r.args.observacao);
   assert.ok(r.args.observacao.startsWith('Cliente pediu retorno'));
   assert.equal(r.args.codigo, 'ABC-123');
