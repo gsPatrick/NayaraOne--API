@@ -114,6 +114,8 @@ const SETTINGS_SCHEMA = {
 };
 
 function validateAgainstSchema(key, value) {
+  // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
+  'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
   const spec = SETTINGS_SCHEMA[key];
   if (!spec) {
     throw AppError.badRequest(`Chave de configuração desconhecida: "${key}".`, 'SETTING_UNKNOWN_KEY', { key });
