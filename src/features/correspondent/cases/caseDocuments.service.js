@@ -13,6 +13,7 @@ const { assertCaseAcceptsAction } = require('./caseActionGate');
 const { getFileContent, matchesDeclaredType } = require('../../files/files.service');
 const { resolveOcrAdapter } = require('../../people/adapters/resolveDocumentAdapters');
 const { LocalOcrAdapter } = require('../../people/adapters/LocalOcrAdapter');
+const { createdAtOf, findRequirementValidation, validationOf } = require('./documentVersionHistory');
 
 const INCOMPLETE_REQUIREMENT_STATUSES = ['PENDING', 'REJECTED', 'EXPIRED'];
 const CHECKLIST_COMPLETO = 'VALIDATED';
@@ -337,8 +338,9 @@ async function listDocumentVersions(financingCaseId, requirementId, actorContext
     order: [['version', 'DESC']],
     transaction,
   });
+  const requirementValidation = await findRequirementValidation(requirement, transaction);
   return {
-    requirement: { id: requirement.id, documentType: requirement.documentType, status: requirement.status, validatedBy: requirement.status === CHECKLIST_COMPLETO ? requirement.updatedBy : null, updatedAt: requirement.updatedAt },
+    requirement: { id: requirement.id, documentType: requirement.documentType, status: requirement.status, validatedBy: requirement.status === CHECKLIST_COMPLETO ? requirement.updatedBy : null, updatedAt: requirement.get('updated_at') || null, validation: requirementValidation },
     versions: versions.map((v) => ({
       id: v.id,
       version: v.version,
@@ -346,7 +348,8 @@ async function listDocumentVersions(financingCaseId, requirementId, actorContext
       supersededAt: v.supersededAt,
       expiresAt: v.expiresAt,
       uploadedBy: v.uploadedBy,
-      createdAt: v.createdAt,
+      createdAt: createdAtOf(v),
+      validation: validationOf(v, requirementValidation),
       sentToProviderAt: v.sentToProviderAt,
       suggestedNote: v.suggestedNote,
       file: v.file,

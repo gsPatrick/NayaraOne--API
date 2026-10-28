@@ -266,7 +266,7 @@ async function history(code, groupId, companyId, transaction) {
   const reasonByVersion = {};
   for (const audit of audits) {
     const match = /\(versão (\d+)\):\s*(.*)$/s.exec(audit.reason || '');
-    if (match && !reasonByVersion[match[1]]) reasonByVersion[match[1]] = { reason: match[2].replace(/\.$/, ''), at: audit.createdAt };
+    if (match && !reasonByVersion[match[1]]) reasonByVersion[match[1]] = { reason: match[2].replace(/\.$/, ''), at: audit.occurredAt || audit.get('created_at') || null };
   }
   const authorIds = Array.from(new Set(visible.map((v) => v.publishedByUserId).filter(Boolean)));
   const authors = authorIds.length ? await User.findAll({ where: { id: authorIds }, attributes: ['id', 'name'], transaction }) : [];
