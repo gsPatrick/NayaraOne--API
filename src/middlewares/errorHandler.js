@@ -43,6 +43,9 @@ function mapMarketingDatabaseError(err) {
   if (pg.code === 'MK003') {
     return { statusCode: 409, code: 'MKT_AUTOMATION_VERSION_IMMUTABLE', message: 'A versão publicada é imutável; crie uma nova versão.' };
   }
+  if (pg.code === 'MK004') {
+    return { statusCode: 409, code: 'MKT_TEMPLATE_IMMUTABLE', message: 'Template publicado não pode ser editado; crie uma nova versão.' };
+  }
   if (pg.code === '23502' && pg.schema === 'marketing' && (pg.column === 'group_id' || pg.column === 'company_id')) {
     return { statusCode: 400, code: 'MKT_TENANT_REQUIRED', message: 'O contexto de empresa é obrigatório.' };
   }

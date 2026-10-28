@@ -10,6 +10,7 @@ const { AI_SETTINGS_SCHEMA } = require('../../modules/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../modules/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../modules/marketing/content/publicFields.settings');
+const { TEMPLATE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/template.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 
 /**
@@ -113,6 +114,8 @@ const SETTINGS_SCHEMA = {
   ...MARKETING_SETTINGS_SCHEMA,
   // Marco 9, M9-D403 — campos publicáveis (allowlist) e características permitidas em conteúdo público.
   ...PUBLIC_FIELDS_SETTINGS_SCHEMA,
+  // Marco 9, M9-D404 — canais cujo template precisa de referência oficial aprovada no provedor.
+  ...TEMPLATE_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
