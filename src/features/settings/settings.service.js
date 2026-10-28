@@ -14,6 +14,7 @@ const { TEMPLATE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/te
 const { CADENCE_SETTINGS_SCHEMA } = require('../../modules/marketing/automations/cadence/cadence.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
+const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../modules/analytics/readOnly/readOnly.settings');
 
@@ -144,6 +145,8 @@ const SETTINGS_SCHEMA = {
   ...CATALOG_SETTINGS_SCHEMA,
   // Marco 9, M9-D202 — cofre de segredos: cache, janela de graça, idade máxima BANK, avisos, prefixo da empresa e MFA do BANK.
   ...SECRET_SETTINGS_SCHEMA,
+  // Marco 9, M9-D206 — saúde dos fornecedores: dado velho, janela do job, retenção, falhas até DOWN e meta de SLO por criticidade.
+  ...HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D208 — sincronização retomável: página, lease, sobreposição, falhas até parar e limite de sync parado por criticidade.
   ...SYNC_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).

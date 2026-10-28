@@ -29,6 +29,7 @@ const { startCorrespondentSubmissionWorkerJob } = require('./src/engines/jobs/co
 const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/correspondentAppraisalWorkerJob');
 const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspondentStatusPollJob');
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
+const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integrationHealthAggregateJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -231,6 +232,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.CORRESPONDENT_STATUS_POLL_DIS
 // B2 — reconciliação de pagamentos com resposta incerta do banco (revisão 18/10/2026).
 if (process.env.NODE_ENV !== 'test' && process.env.BANK_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
   startBankPaymentReconciliationJob();
+}
+
+// Marco 9, M9-D206 — saúde dos fornecedores: janelas de 5 min, 1 h e 1 dia e linha atual por connection ACTIVE.
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_JOB_DISABLED !== 'true') {
+  startIntegrationHealthAggregateJob();
 }
 
 module.exports = app;

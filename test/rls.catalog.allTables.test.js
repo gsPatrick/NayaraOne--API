@@ -166,3 +166,23 @@ test('M9-D602: analytics.alert_definitions, alert_instances, data_quality_checks
     assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
   }
 });
+
+// M9-D206: integration.provider_health (saúde por connection) com RLS, FORCE RLS, política tenant_isolation e função de expurgo.
+test('M9-D206: integration.provider_health tem RLS, FORCE RLS, a política tenant_isolation e a função de expurgo SECURITY DEFINER', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'integration' AND c.relname = 'provider_health'`
+  );
+  assert.equal(rows.length, 1, 'integration.provider_health não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS');
+  assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+  const [fn] = await sequelize.query(
+    `SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'integration' AND p.proname = 'purge_provider_health'`
+  );
+  assert.equal(fn.length, 1, 'integration.purge_provider_health não existe');
+  assert.equal(fn[0].prosecdef, true, 'a função de expurgo precisa ser SECURITY DEFINER');
+});

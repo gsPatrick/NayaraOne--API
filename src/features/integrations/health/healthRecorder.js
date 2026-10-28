@@ -1,0 +1,28 @@
+'use strict';
+
+const { loadConnection, loadHealthContext, statusOf } = require('./healthContext');
+const { ensureCurrentRow, writeStatus, q, SELECT } = require('./healthStore');
+
+/**
+ * Resultado de um health check ativo (M9-D223 chama esta função): atualiza `last_check_*`, a contagem de falhas
+ * seguidas (um sucesso zera) e o estado de saúde. Não mexe no circuito (M9-D217 é a única dona das transições).
+ * Devolve a linha atual (snake_case).
+ */
+async function recordHealthCheck(connectionId, { ok, latencyMs = null, at = new Date() }, transaction) {
+  const connection = await loadConnection(connectionId, transaction);
+  await ensureCurrentRow(connection, at, transaction);
+  const rows = await q(
+    `UPDATE "integration"."provider_health" SET
+       last_check_at = :at, last_check_ok = :ok, last_check_latency_ms = :lat,
+       check_consecutive_failures = CASE WHEN :ok THEN 0 ELSE check_consecutive_failures + 1 END,
+       updated_at = :at
+     WHERE connection_id = :id AND window_minutes = 0 RETURNING *`,
+    { id: connectionId, at, ok: ok === true, lat: Number.isFinite(Number(latencyMs)) ? Math.max(0, Math.round(Number(latencyMs))) : null },
+    transaction,
+    SELECT,
+  );
+  const healthCtx = await loadHealthContext(connection, transaction);
+  return writeStatus(connectionId, statusOf(rows[0], healthCtx, at), at, transaction);
+}
+
+module.exports = { recordHealthCheck };

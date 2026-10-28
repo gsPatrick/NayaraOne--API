@@ -17,6 +17,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync, spawnSync } = require('child_process');
+const { revokeDeleteSql } = require('./runtimeNoDelete');
 
 const API_ROOT = path.join(__dirname, '..', '..');
 const SUPER = 'drill_super';
@@ -96,6 +97,8 @@ function grantRuntime(port, db) {
   for (const schema of schemas) {
     psql(port, db, `GRANT USAGE ON SCHEMA "${schema}" TO ${APP_ROLE}; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "${schema}" TO ${APP_ROLE}; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${schema}" TO ${APP_ROLE};`);
   }
+  // M9-D206: tabelas cuja retenção é por função SECURITY DEFINER ficam sem DELETE para o runtime, como em produção.
+  for (const sql of revokeDeleteSql(APP_ROLE)) psql(port, db, sql);
   return schemas.length;
 }
 

@@ -18,6 +18,8 @@ require('dotenv').config();
 require('dotenv').config({ path: '.env.migration.local' });
 const { Client } = require('pg');
 
+const { revokeDeleteSql } = require('./lib/runtimeNoDelete');
+
 const ROLE = 'nayara_runtime';
 const SIMULAR = process.argv.includes('--simular');
 
@@ -55,6 +57,8 @@ const REVOKES = [
     comandos.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${s}" TO ${ROLE}`);
   }
   for (const r of REVOKES) comandos.push(r.replace('%ROLE%', ROLE));
+  // M9-D206: tabelas de integração cuja retenção é por função SECURITY DEFINER (runtime sem DELETE).
+  for (const r of revokeDeleteSql(ROLE)) comandos.push(r);
   // M9-D612: o role de leitura do BI (se existir) volta a ter SELECT em tudo, inclusive nas tabelas criadas depois da migration.
   const leitor = await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'nayara_analytics_reader'");
   if (leitor.rowCount) {
