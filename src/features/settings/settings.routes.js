@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { isAiSettingKey } = require('../../modules/ai/ai.settings');
 const { requireTemplateManageToAddPublicFields } = require('../../modules/marketing/content/publicFields.settings');
+const { requireAutomationManageForCadence } = require('../../modules/marketing/automations/cadence/cadence.guard');
 const settingsController = require('./settings.controller');
 
 const settingsRouter = Router();
@@ -17,6 +18,6 @@ const requireAiAdminForAiKeys = (req, res, next) => (isAiSettingKey(req.params.k
 settingsRouter.get('/settings', requirePermission('settings:read'), settingsController.listSettings);
 settingsRouter.get('/settings/integrations/status', requirePermission('settings:read'), settingsController.getIntegrationsStatus);
 settingsRouter.get('/settings/:key', requirePermission('settings:read'), settingsController.getSetting);
-settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireTemplateManageToAddPublicFields, settingsController.upsertSetting);
+settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, settingsController.upsertSetting);
 
 module.exports = settingsRouter;
