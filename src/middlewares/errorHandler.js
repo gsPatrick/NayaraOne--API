@@ -20,6 +20,31 @@ const MISSING_CONFIG_RESPONSES = {
   PII_HASH_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
 };
 
+// M9-D400: erros previsíveis do schema "marketing" (trigger de versão imutável, CHECKs da campanha e contexto de
+// empresa ausente) viram resposta amigável em português em vez de erro cru do banco.
+const MKT_CAMPAIGN_CHECK_MESSAGES = {
+  mkt_campaigns_objective_chk: 'Informe o objetivo da campanha (mínimo 10 caracteres).',
+  mkt_campaigns_budget_justification_chk: 'Informe a justificativa do orçamento zerado da campanha.',
+  mkt_campaigns_period_chk: 'O fim da campanha deve ser depois do início.',
+  mkt_campaigns_objective_metric_chk: 'Escolha uma métrica-alvo válida para a campanha.',
+  mkt_campaigns_target_value_chk: 'A meta da campanha deve ser maior que zero.',
+};
+
+function mapMarketingDatabaseError(err) {
+  const pg = err && err.parent;
+  if (!pg || typeof pg !== 'object') return null;
+  if (pg.code === 'MK001') {
+    return { statusCode: 409, code: 'MKT_CONTENT_VERSION_IMMUTABLE', message: 'A versão do conteúdo é imutável; crie uma nova versão.' };
+  }
+  if (pg.code === '23502' && pg.schema === 'marketing' && (pg.column === 'group_id' || pg.column === 'company_id')) {
+    return { statusCode: 400, code: 'MKT_TENANT_REQUIRED', message: 'O contexto de empresa é obrigatório.' };
+  }
+  if (pg.code === '23514' && typeof pg.constraint === 'string' && pg.constraint.startsWith('mkt_campaigns_')) {
+    return { statusCode: 400, code: 'MKT_CAMPAIGN_VALIDATION', message: MKT_CAMPAIGN_CHECK_MESSAGES[pg.constraint] || 'Os dados da campanha são inválidos.' };
+  }
+  return null;
+}
+
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
@@ -59,6 +84,9 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
       details: err.errors ? err.errors.map((e) => e.message) : undefined,
     });
   }
+
+  const marketingMapped = mapMarketingDatabaseError(err);
+  if (marketingMapped) return failure(res, marketingMapped);
 
   // FIX (auditoria E2E de browser, 01/10/2026): um id de rota com formato inválido (ex.:
   // /construction/projects/id-que-nao-existe-123, resultado comum de favoritos velhos ou link
