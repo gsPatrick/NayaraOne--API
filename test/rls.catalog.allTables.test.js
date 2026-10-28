@@ -114,3 +114,21 @@ test('RLS/FORCE RLS habilitados em 100% das tabelas multiempresa (coluna company
       offenders.join('\n')
   );
 });
+
+// M9-D600: as tabelas do núcleo de métricas do BI (schema analytics) precisam existir COM RLS + FORCE RLS
+// e com as 4 políticas (leitura por empresa/grupo; escrita só do worker de BI).
+test('M9-D600: analytics.metric_definitions, metric_versions e metric_snapshots têm RLS, FORCE RLS e 4 políticas', async () => {
+  for (const table of ['metric_definitions', 'metric_versions', 'metric_snapshots']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
+  }
+});
