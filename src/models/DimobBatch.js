@@ -20,6 +20,8 @@ module.exports = (sequelize) => {
       version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'DRAFT' },
       snapshotHash: { type: DataTypes.STRING(64), allowNull: false, field: 'snapshot_hash' },
+      fileModelJson: { type: DataTypes.JSONB, allowNull: true, field: 'file_model_json' },
+      fileModelHash: { type: DataTypes.STRING(64), allowNull: true, field: 'file_model_hash' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },
     {

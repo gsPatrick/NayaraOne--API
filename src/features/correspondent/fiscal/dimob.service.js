@@ -18,6 +18,15 @@ function hashDataset(dataset) {
   return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
+// Modelo do arquivo (colunas, separador, aviso, rótulo do layout) fotografado por versão do lote.
+function buildFileModel(fiscal, layoutVersion) {
+  return { layout: layoutVersion, columns: [...fiscal.dimobFileColumns], delimiter: fiscal.dimobFileDelimiter, notice: fiscal.dimobFileNotice || '' };
+}
+function hashFileModel(model) {
+  const canonical = JSON.stringify([model.layout, model.columns, model.delimiter, model.notice]);
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
 /**
  * generateDimobBatch — gera uma NOVA versão do batch anual (nunca sobrescreve uma já fechada —
  * "layout anual versionado, correção por nova versão", citação literal do Caderno). Reproduzível:
@@ -48,13 +57,18 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
   });
   const nextVersion = previous ? previous.version + 1 : 1;
 
+  const fiscalNow = await getFiscalSettings(groupId, companyId, actorUserId, transaction);
+  const layoutVersion = fiscalNow.dimobLayoutLabel.replace(/\{ano\}/gi, String(referenceYear)).slice(0, 16);
+  const fileModel = buildFileModel(fiscalNow, layoutVersion);
   const batch = await DimobBatch.create(
     {
       groupId, companyId,
       referenceYear,
       version: nextVersion,
       // Layout anual versionado (caderno): a versão do layout acompanha o ano-base do batch.
-      layoutVersion: (await getFiscalSettings(groupId, companyId, actorUserId, transaction)).dimobLayoutLabel.replace(/\{ano\}/gi, String(referenceYear)).slice(0, 16),
+      layoutVersion,
+      fileModelJson: fileModel,
+      fileModelHash: hashFileModel(fileModel),
       status: 'DRAFT',
       snapshotHash,
       createdBy: actorUserId || null,
@@ -85,7 +99,7 @@ async function generateDimobBatch(referenceYear, actorUserId, groupId, companyId
       action: 'correspondent.dimob.batch_generated',
       entityType: 'DimobBatch',
       entityId: batch.id,
-      reason: `Batch DIMOB ${referenceYear} v${nextVersion} gerado — ${dataset.length} registro(s), hash ${snapshotHash}.`,
+      reason: `Batch DIMOB ${referenceYear} v${nextVersion} gerado — ${dataset.length} registro(s), hash ${snapshotHash}, modelo do arquivo ${hashFileModel(fileModel)}.`,
     },
     transaction
   );
@@ -201,8 +215,28 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     ? snapshot.map((p) => p.taxId || 'SEM DOCUMENTO')
     : (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO')).join(' / ');
 
-  const fiscal = await getFiscalSettings(groupId, companyId, actorUserId, transaction);
-  const sep = fiscal.dimobFileDelimiter;
+  // O arquivo usa SEMPRE o modelo gravado no lote. Lote antigo (sem modelo): congela o modelo vigente agora.
+  let model = batch.fileModelJson;
+  if (!model) {
+    model = buildFileModel(await getFiscalSettings(groupId, companyId, actorUserId, transaction), batch.layoutVersion);
+    await DimobBatch.sequelize.query(
+      'UPDATE "correspondent"."dimob_batches" SET file_model_json = :json, file_model_hash = :hash WHERE id = :id AND file_model_json IS NULL',
+      { replacements: { json: JSON.stringify(model), hash: hashFileModel(model), id: batch.id }, transaction }
+    );
+    batch.fileModelJson = model;
+    batch.fileModelHash = hashFileModel(model);
+    await registrarAuditoria(
+      {
+        groupId, companyId, actorUserId,
+        action: 'correspondent.dimob.file_model_frozen',
+        entityType: 'DimobBatch',
+        entityId: batch.id,
+        reason: `Lote DIMOB ${batch.referenceYear} v${batch.version} era anterior ao registro do modelo: o modelo vigente foi congelado na primeira exportação (modelo ${batch.fileModelHash}).`,
+      },
+      transaction
+    );
+  }
+  const sep = model.delimiter;
   const money = (v) => Number(v).toFixed(2).replace('.', ',');
   // Cada coluna do arquivo sabe tirar o seu valor do registro; a empresa escolhe quais entram e em que ordem.
   const COLUMN_VALUE = {
@@ -217,10 +251,11 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     situacao: (r) => (r.recordType === 'LEASE' ? (r.validationStatus === 'VALID' ? 'OK' : 'PENDENTE') : 'OK'),
     pendencias: (r) => (r.recordType === 'LEASE' ? cell((r.validationIssues || []).map((i) => i.message).join(' | ')) : ''),
   };
-  const columns = fiscal.dimobFileColumns;
+  const columns = model.columns;
   const lines = [
-    `# layout${sep}${batch.layoutVersion}${fiscal.dimobFileNotice ? `${sep}${fiscal.dimobFileNotice}` : ''}`,
+    `# layout${sep}${model.layout}${model.notice ? `${sep}${model.notice}` : ''}`,
     `# batch${sep}${batch.id}${sep}ano${sep}${batch.referenceYear}${sep}versao${sep}${batch.version}${sep}status${sep}${batch.status}${sep}hash${sep}${batch.snapshotHash}`,
+    `# modelo${sep}${batch.fileModelHash}`,
     columns.join(sep),
   ];
   for (const r of records) {
@@ -234,7 +269,7 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
       action: 'correspondent.dimob.file_exported',
       entityType: 'DimobBatch',
       entityId: batch.id,
-      reason: `Arquivo de conferência do DIMOB ${batch.referenceYear} v${batch.version} gerado (${records.length} registro(s), hash ${batch.snapshotHash}).`,
+      reason: `Arquivo de conferência do DIMOB ${batch.referenceYear} v${batch.version} gerado (${records.length} registro(s), hash ${batch.snapshotHash}, modelo ${batch.fileModelHash}).`,
     },
     transaction
   );
