@@ -1,6 +1,7 @@
 'use strict';
 
 const { getSetting } = require('../../settings/settings.service');
+const { isSandboxBlocked } = require('../../../utils/sandboxPolicy');
 const {
   SandboxFinancingProviderAdapter,
   ManualWorkflowFinancingProviderAdapter,
@@ -35,8 +36,9 @@ async function resolveFinancingProviderAdapter(tenant, transaction) {
 // webhook de seguro em insurance.controller.js, que resolve a submission antes do tenant).
 // "Registry resolve adapter" — Caderno Técnico, Marco 8, seção Webhook.
 const FINANCING_PROVIDER_REGISTRY = {
-  // O sandbox aprova sozinho: em produção/staging não existe (um caso sandbox lá seria um "banco" falso).
-  sandbox: () => (['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production' ? null : new SandboxFinancingProviderAdapter()),
+  // O sandbox aprova sozinho: em produção real não existe (um caso sandbox lá seria um "banco" falso).
+  // Em desenvolvimento, CI e homologação ele fica disponível (ver utils/sandboxPolicy.js).
+  sandbox: () => (isSandboxBlocked() ? null : new SandboxFinancingProviderAdapter()),
   manual: () => new ManualWorkflowFinancingProviderAdapter(),
 };
 

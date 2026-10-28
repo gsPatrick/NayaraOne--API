@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { sequelize, InvoiceRequest, InvoiceEvent, TaxDocument, CommissionEntitlement, FinancialEntry } = require('../../../models');
 const AppError = require('../../../utils/AppError');
+const { isSandboxBlocked } = require('../../../utils/sandboxPolicy');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { SandboxNfseAdapter } = require('../adapters/NfseAdapter');
 const { reconcile, autoResolveIfOpen } = require('./reconciliation.service');
@@ -34,7 +35,7 @@ function withTimeout(promise, ms) {
 // O emissor sandbox gera uma "nota" em memória: em produção isso viraria um documento fiscal falso
 // gravado como oficial. Enquanto não houver emissor real configurado, produção recusa emitir.
 function assertIssuerAllowed() {
-  if ((['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production') && typeof adapter.isSandbox === 'function' && adapter.isSandbox()) {
+  if (isSandboxBlocked() && typeof adapter.isSandbox === 'function' && adapter.isSandbox()) {
     throw AppError.unprocessable(
       'O emissor de NFS-e ainda não está configurado para produção. Configure o emissor oficial antes de emitir notas.',
       'NFSE_ISSUER_NOT_CONFIGURED'

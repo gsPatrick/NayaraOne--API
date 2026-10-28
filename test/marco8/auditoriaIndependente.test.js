@@ -775,18 +775,27 @@ test('M8-AUDI-42: a consulta de status também registra a proposta do banco quan
   });
 });
 
-test('M8-AUDI-43: em produção e staging o provider sandbox não existe', () => {
-  const anterior = process.env.DEPLOY_ENVIRONMENT;
+test('M8-AUDI-43: só em produção real o provider sandbox não existe; em homologação ele fica disponível', () => {
+  const anterior = { deploy: process.env.DEPLOY_ENVIRONMENT, permitir: process.env.ALLOW_SANDBOX_PROVIDERS, node: process.env.NODE_ENV };
   try {
+    delete process.env.ALLOW_SANDBOX_PROVIDERS;
     process.env.DEPLOY_ENVIRONMENT = 'production';
     assert.equal(resolveFinancingProviderAdapterByCode('sandbox'), null);
-    process.env.DEPLOY_ENVIRONMENT = 'staging';
-    assert.equal(resolveFinancingProviderAdapterByCode('sandbox'), null);
     assert.ok(resolveFinancingProviderAdapterByCode('manual'));
+    // homologação, mesmo com a imagem rodando em NODE_ENV=production: o sandbox é o fluxo que a cliente testa
+    process.env.DEPLOY_ENVIRONMENT = 'staging';
+    process.env.NODE_ENV = 'production';
+    assert.ok(resolveFinancingProviderAdapterByCode('sandbox'));
     delete process.env.DEPLOY_ENVIRONMENT;
     assert.ok(resolveFinancingProviderAdapterByCode('sandbox'));
+    // liberação explícita e consciente também em produção
+    process.env.DEPLOY_ENVIRONMENT = 'production';
+    process.env.ALLOW_SANDBOX_PROVIDERS = 'true';
+    assert.ok(resolveFinancingProviderAdapterByCode('sandbox'));
   } finally {
-    if (anterior === undefined) delete process.env.DEPLOY_ENVIRONMENT; else process.env.DEPLOY_ENVIRONMENT = anterior;
+    for (const [k, v] of [['DEPLOY_ENVIRONMENT', anterior.deploy], ['ALLOW_SANDBOX_PROVIDERS', anterior.permitir], ['NODE_ENV', anterior.node]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
   }
 });
 
