@@ -3,6 +3,7 @@
 const { OutboxEvent } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { getCurrentCorrelationId } = require('../../middlewares/correlationId.middleware');
+const { DOMAINS } = require('../../features/integrations/registry/registry.constants');
 
 /**
  * publishDomainEvent — grava um evento de domínio em "integration"."outbox_events" NA MESMA
@@ -25,6 +26,12 @@ const { getCurrentCorrelationId } = require('../../middlewares/correlationId.mid
  * `idempotencyKey` é obrigatória (coluna UNIQUE) — recomenda-se `<eventType>:<aggregateId>`
  * ou `<eventType>:<aggregateId>:<causationId>` quando o mesmo aggregate pode gerar o mesmo
  * eventType mais de uma vez de forma legítima.
+ *
+ * M9-D204: a `transaction` é OBRIGATÓRIA (INT-012: o evento nasce com o dado de negócio; sem
+ * transação seria publicar fora dela). Evento com destino externo informa `targetDomain` (família
+ * do catálogo de integrações) e, opcionalmente, `connectionId`; sem `targetDomain` o evento segue
+ * para os consumidores internos como sempre. Republicar a mesma `idempotencyKey` é no-op: devolve
+ * o evento já gravado.
  */
 async function publishDomainEvent(event, transaction) {
   const {
@@ -39,7 +46,13 @@ async function publishDomainEvent(event, transaction) {
     causationId,
     eventVersion,
     classification,
+    targetDomain,
+    connectionId,
   } = event;
+
+  if (!transaction) {
+    throw AppError.internal('O evento precisa ser gravado na mesma transação do dado de negócio.', 'INTEGRATION_OUTBOX_TRANSACTION_REQUIRED');
+  }
 
   if (!groupId || !companyId) {
     throw AppError.internal('publishDomainEvent requer groupId/companyId (contexto de tenant).', 'OUTBOX_TENANT_MISSING');
@@ -50,6 +63,13 @@ async function publishDomainEvent(event, transaction) {
   if (!idempotencyKey) {
     throw AppError.internal('publishDomainEvent requer idempotencyKey (FIN-004/ARC — idempotência obrigatória).', 'OUTBOX_IDEMPOTENCY_KEY_MISSING');
   }
+
+  if (targetDomain !== undefined && targetDomain !== null && !DOMAINS.includes(targetDomain)) {
+    throw AppError.badRequest('Domínio de destino do evento fora do catálogo de integrações.', 'INTEGRATION_OUTBOX_TARGET_DOMAIN_INVALID', { targetDomain });
+  }
+
+  const existente = await OutboxEvent.findOne({ where: { idempotencyKey }, transaction });
+  if (existente) return existente;
 
   return OutboxEvent.create(
     {
@@ -68,6 +88,8 @@ async function publishDomainEvent(event, transaction) {
       causationId: causationId || null,
       idempotencyKey,
       classification: classification || null,
+      targetDomain: targetDomain || null,
+      connectionId: connectionId || null,
       occurredAt: new Date(),
       status: 'PENDING',
     },

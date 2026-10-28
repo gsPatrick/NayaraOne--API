@@ -101,6 +101,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'dead_letter_reason',
       },
+      connectionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'connection_id',
+        comment: 'M9-D204: connection de destino, quando o evento tem destino externo.',
+      },
+      targetDomain: {
+        type: DataTypes.STRING(24),
+        allowNull: true,
+        field: 'target_domain',
+        comment: 'M9-D204: família do catálogo de integrações; nulo = consumidor interno.',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

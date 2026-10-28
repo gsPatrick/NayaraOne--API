@@ -8,7 +8,9 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../modules/core-governance/governance.settings');
 const { AI_SETTINGS_SCHEMA } = require('../../modules/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../modules/marketing/marketing.settings');
+const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../modules/marketing/content/publicFields.settings');
+const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -120,6 +122,17 @@ const SETTINGS_SCHEMA = {
   'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
   // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
   'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
+  // M9-D204: esperas (ms) entre as tentativas de publicação interna do outbox; o tamanho da lista é o limite de tentativas.
+  'integration.outbox.backoff_ms': {
+    type: 'string',
+    validate: (key, value) => {
+      if (!parseBackoffList(value)) {
+        throw AppError.badRequest(`O valor de "${key}" deve ser uma lista de milissegundos inteiros positivos separados por vírgula (ex.: 60000,300000).`, 'SETTING_INVALID_VALUE', { key, value });
+      }
+    },
+  },
+  // Marco 9, M9-D201 — criticidade de cada uma das 14 famílias do catálogo (integration.catalog.criticality.<domínio>).
+  ...CATALOG_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };

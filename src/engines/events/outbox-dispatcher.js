@@ -3,6 +3,8 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, OutboxEvent } = require('../../models');
 const { outboxPendingGauge, outboxDeadLetterGauge } = require('../../utils/metrics');
+const { getDispatchEnqueuer, buildEnqueueArgs } = require('./dispatchGateway');
+const { getOutboxBackoff, applyFailure } = require('./outboxBackoff');
 
 /**
  * Outbox dispatcher — worker/processor simples do padrão Transactional Outbox
@@ -25,8 +27,21 @@ async function publishToBroker(event) {
   return true;
 }
 
-const RETRY_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 4 * 60 * 60_000]; // 1m/5m/15m/1h/4h (§2.3 TRANSIENT)
-const MAX_RETRIES = RETRY_BACKOFF_MS.length;
+// Backoff (1m/5m/15m/1h/4h por padrão, §2.3 TRANSIENT) e limite de tentativas vêm do parâmetro
+// integration.outbox.backoff_ms (M9-D204); ver outboxBackoff.js.
+
+/**
+ * Evento com destino externo (M9-D204): o evento vira uma linha de dispatch na própria transação do
+ * despacho e só então é marcado PUBLISHED. Quem confirma o fornecedor é o dispatch, não o outbox.
+ * Um savepoint isola a falha de um evento para não abortar o lote.
+ */
+async function publishExternalEvent(event, enqueue, transaction) {
+  await sequelize.transaction({ transaction }, async (savepoint) => {
+    await enqueue(buildEnqueueArgs(event, savepoint));
+  });
+  event.status = 'PUBLISHED';
+  await event.save({ transaction });
+}
 
 /**
  * dispatchPendingEventsForCompany — a query original não definia `app.company_id` nenhuma
@@ -54,24 +69,28 @@ async function dispatchPendingEventsForCompany(group, company, { limit }) {
       transaction,
     });
 
-    const results = { dispatched: 0, deadLettered: 0, failed: 0 };
+    const results = { dispatched: 0, published: 0, waiting: 0, deadLettered: 0, failed: 0 };
+    const backoff = await getOutboxBackoff(company, transaction);
+    const enqueue = getDispatchEnqueuer();
 
     for (const event of pending) {
       try {
-        await publishToBroker(event);
-        event.status = 'DISPATCHED';
-        await event.save({ transaction });
-        results.dispatched += 1;
-      } catch (err) {
-        event.retryCount += 1;
-        if (event.retryCount >= MAX_RETRIES) {
-          event.status = 'DEAD_LETTER';
-          event.deadLetterReason = err.message;
-          results.deadLettered += 1;
+        if (event.targetDomain) {
+          if (!enqueue) {
+            results.waiting += 1; // sem Dispatch Service registrado: continua PENDING, sem gastar tentativa
+            continue;
+          }
+          await publishExternalEvent(event, enqueue, transaction);
+          results.published += 1;
         } else {
-          event.nextRetryAt = new Date(Date.now() + RETRY_BACKOFF_MS[event.retryCount - 1]);
-          results.failed += 1;
+          await publishToBroker(event);
+          event.status = 'DISPATCHED';
+          await event.save({ transaction });
+          results.dispatched += 1;
         }
+      } catch (err) {
+        const outcome = applyFailure(event, err, backoff);
+        results[outcome] += 1;
         await event.save({ transaction });
       }
     }
@@ -82,7 +101,7 @@ async function dispatchPendingEventsForCompany(group, company, { limit }) {
 
 async function dispatchPendingEvents({ limit = 100 } = {}) {
   const groups = await Group.findAll();
-  const totals = { dispatched: 0, deadLettered: 0, failed: 0, companiesChecked: 0, errors: 0 };
+  const totals = { dispatched: 0, published: 0, waiting: 0, deadLettered: 0, failed: 0, companiesChecked: 0, errors: 0 };
 
   for (const group of groups) {
     const companies = await sequelize.transaction(async (transaction) => {
@@ -95,6 +114,8 @@ async function dispatchPendingEvents({ limit = 100 } = {}) {
       try {
         const result = await dispatchPendingEventsForCompany(group, company, { limit });
         totals.dispatched += result.dispatched;
+        totals.published += result.published;
+        totals.waiting += result.waiting;
         totals.deadLettered += result.deadLettered;
         totals.failed += result.failed;
       } catch (err) {
