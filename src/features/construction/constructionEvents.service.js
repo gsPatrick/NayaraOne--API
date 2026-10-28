@@ -1,6 +1,7 @@
 'use strict';
 
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { projectCalendarFields, warrantyCaseCalendarFields } = require('./constructionCalendarEvents.service');
 
 // Publicação dos domain events do módulo construction (Transactional Outbox), seguindo o
 // mesmo padrão de src/features/legal/legalEvents.service.js e financeEvents.service.js —
@@ -35,7 +36,7 @@ function publishProjectCreated(project, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'project.created',
-      payload: { id: project.id, name: project.name, status: project.status },
+      payload: { id: project.id, name: project.name, status: project.status, ...projectCalendarFields(project) },
       idempotencyKey: `project.created:${project.id}`,
     },
     transaction
@@ -50,7 +51,7 @@ function publishProjectStatusChanged(project, fromStatus, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'construction.project.status_changed',
-      payload: { id: project.id, fromStatus, toStatus: project.status },
+      payload: { id: project.id, name: project.name, fromStatus, toStatus: project.status, ...projectCalendarFields(project) },
       // FIX (auditoria E2E de browser, 01/10/2026): a chave anterior
       // `${project.id}:${fromStatus}:${project.status}` não incluía nada que distinguisse duas
       // ocorrências LEGÍTIMAS da MESMA transição no mesmo projeto (ex.: ACTIVE -> FINAL_INSPECTION
@@ -140,7 +141,7 @@ function publishMaintenanceCaseOpened(maintenanceCase, transaction) {
       aggregateType: 'MaintenanceCase',
       aggregateId: maintenanceCase.id,
       eventType: 'warranty.case.opened',
-      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, status: maintenanceCase.status },
+      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, status: maintenanceCase.status, ...warrantyCaseCalendarFields(maintenanceCase) },
       idempotencyKey: `warranty.case.opened:${maintenanceCase.id}`,
     },
     transaction
@@ -201,7 +202,7 @@ function publishWarrantyCaseEscalated(maintenanceCase, transaction) {
       aggregateType: 'MaintenanceCase',
       aggregateId: maintenanceCase.id,
       eventType: 'warranty.case.escalated',
-      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, escalationLevel: maintenanceCase.escalationLevel },
+      payload: { id: maintenanceCase.id, propertyId: maintenanceCase.propertyId, escalationLevel: maintenanceCase.escalationLevel, ...warrantyCaseCalendarFields(maintenanceCase) },
       idempotencyKey: `warranty.case.escalated:${maintenanceCase.id}:${maintenanceCase.escalationLevel}`,
     },
     transaction
@@ -252,7 +253,7 @@ function publishProjectDelivered(project, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'project.delivered',
-      payload: { id: project.id, name: project.name, status: project.status },
+      payload: { id: project.id, name: project.name, status: project.status, ...projectCalendarFields(project) },
       idempotencyKey: `project.delivered:${project.id}`,
     },
     transaction
@@ -261,7 +262,8 @@ function publishProjectDelivered(project, transaction) {
 
 // M6-18: obra entra em garantia imediatamente após a entrega (DELIVERED -> WARRANTY, mesma
 // chamada de deliverProject).
-function publishProjectWarrantyStarted(project, transaction) {
+// M9-D803: `warrantyEndsAt` (AAAA-MM-DD) alimenta o item PROJECT_WARRANTY do Calendário; calculado em computeProjectWarrantyEndsAt.
+function publishProjectWarrantyStarted(project, transaction, warrantyEndsAt = null) {
   return publishDomainEvent(
     {
       groupId: project.groupId,
@@ -269,7 +271,7 @@ function publishProjectWarrantyStarted(project, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'project.warranty_started',
-      payload: { id: project.id, name: project.name, status: project.status },
+      payload: { id: project.id, name: project.name, status: project.status, warrantyEndsAt, ...projectCalendarFields(project) },
       idempotencyKey: `project.warranty_started:${project.id}`,
     },
     transaction
@@ -285,7 +287,7 @@ function publishProjectClosed(project, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'project.closed',
-      payload: { id: project.id, name: project.name, status: project.status },
+      payload: { id: project.id, name: project.name, status: project.status, ...projectCalendarFields(project) },
       idempotencyKey: `project.closed:${project.id}`,
     },
     transaction
@@ -303,7 +305,7 @@ function publishProjectStarted(project, transaction) {
       aggregateType: 'Project',
       aggregateId: project.id,
       eventType: 'project.started',
-      payload: { id: project.id, name: project.name },
+      payload: { id: project.id, name: project.name, status: project.status, ...projectCalendarFields(project) },
       idempotencyKey: `project.started:${project.id}`,
     },
     transaction

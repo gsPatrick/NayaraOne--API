@@ -5,6 +5,7 @@ const { ProjectStage, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishStageCompleted } = require('./constructionEvents.service');
+const { publishProjectStageUpdated } = require('./constructionCalendarEvents.service');
 const { assertPredecessorsDone } = require('./stageDependencies.service');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
@@ -120,6 +121,8 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
     },
     { transaction }
   );
+  // M9-D803: a etapa nasce no Calendário (quando tem prazo).
+  await publishProjectStageUpdated(stage, transaction);
 
   await registrarAuditoria(
     {
@@ -156,6 +159,7 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   const beforeJson = stage.toJSON();
   const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost, publicVisible } = payload;
   const previousStatus = stage.status;
+  const previousEndsAt = stage.endsAt ? new Date(stage.endsAt).getTime() : null;
   if (name !== undefined) stage.name = name;
   if (sequence !== undefined && sequence !== stage.sequence) {
     const duplicateSequence = await ProjectStage.findOne({
@@ -234,6 +238,11 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   // estavam DONE) — nome canônico definido em constructionEvents.service.js.
   if (previousStatus !== 'DONE' && stage.status === 'DONE') {
     await publishStageCompleted(stage, transaction);
+  }
+  // M9-D803: prazo ou situação da etapa mudou -> o item do Calendário acompanha (uma vez por mudança, chave pela versão).
+  const currentEndsAt = stage.endsAt ? new Date(stage.endsAt).getTime() : null;
+  if (currentEndsAt !== previousEndsAt || stage.status !== previousStatus) {
+    await publishProjectStageUpdated(stage, transaction);
   }
 
   await registrarAuditoria(

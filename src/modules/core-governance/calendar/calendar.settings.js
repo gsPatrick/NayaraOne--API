@@ -15,6 +15,9 @@ const PERMISSION_KEY = 'governanca.calendario.permissao_por_fonte';
 const WINDOW_DAYS_KEY = 'governanca.calendario.janela_padrao_dias';
 const PAGE_SIZE_KEY = 'governanca.calendario.tamanho_pagina_padrao';
 const DURATION_KEY = 'governanca.calendario.duracao_padrao_min';
+// M9-D803: prazo da garantia da obra entregue (project.warranty_started) e hora da varredura diária das fontes.
+const WARRANTY_MONTHS_KEY = 'governanca.calendario.garantia_obra_meses';
+const BACKFILL_HOUR_KEY = 'governanca.calendario.varredura_hora';
 
 const CALENDAR_SETTING_DEFAULTS = Object.freeze({
   [SEVERITY_KEY]: 'LEGAL_DEADLINE=CRITICAL, FISCAL=CRITICAL, BILLING=WARNING, GUARANTEE=WARNING',
@@ -24,6 +27,8 @@ const CALENDAR_SETTING_DEFAULTS = Object.freeze({
   [WINDOW_DAYS_KEY]: 30,
   [PAGE_SIZE_KEY]: 50,
   [DURATION_KEY]: 60,
+  [WARRANTY_MONTHS_KEY]: 60,
+  [BACKFILL_HOUR_KEY]: 6,
 });
 
 /** Divide "A=B, C=D" em pares [chave, valor]; ignora vazios e itens sem "=". */
@@ -77,9 +82,11 @@ const CALENDAR_SETTINGS_SCHEMA = {
   [WINDOW_DAYS_KEY]: { type: 'integer', min: 1, max: 366 },
   [PAGE_SIZE_KEY]: { type: 'integer', min: 1, max: 200 },
   [DURATION_KEY]: { type: 'integer', min: 1, max: 1440 },
+  [WARRANTY_MONTHS_KEY]: { type: 'integer', min: 1, max: 600 },
+  [BACKFILL_HOUR_KEY]: { type: 'integer', min: 0, max: 23 },
 };
 
 module.exports = {
-  SEVERITY_KEY, PERMISSION_KEY, WINDOW_DAYS_KEY, PAGE_SIZE_KEY, DURATION_KEY,
+  SEVERITY_KEY, PERMISSION_KEY, WINDOW_DAYS_KEY, PAGE_SIZE_KEY, DURATION_KEY, WARRANTY_MONTHS_KEY, BACKFILL_HOUR_KEY,
   CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA, parsePairs, parseSeverityMap, parsePermissionMap,
 };

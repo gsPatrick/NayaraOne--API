@@ -4,6 +4,7 @@ const { Guarantee } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishGuaranteeCreated, publishGuaranteeReplaced } = require('./legalEvents.service');
+const { publishGuaranteeUpdated, publishGuaranteeEnded } = require('./legalCalendarEvents.service');
 const { getContract } = require('./contracts.service');
 
 // FIX AUD-014 (auditoria externa Nayara, 11/10/2026, JUR-006 "Garantia rastreável com
@@ -83,7 +84,7 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
     { transaction }
   );
 
-  await publishGuaranteeCreated(guarantee, transaction);
+  await publishGuaranteeCreated(guarantee, transaction, contract);
 
   await registrarAuditoria(
     {
@@ -115,9 +116,25 @@ async function getGuarantee(id, transaction) {
   return guarantee;
 }
 
+/**
+ * M9-D803: o que o Calendário precisa saber de uma alteração. Saiu de ACTIVE (liberada/cancelada) = legal.guarantee.ended;
+ * mudou o fim ou a situação e segue ACTIVE (ou voltou a ACTIVE) = legal.guarantee.updated. Sem mudança, nenhum evento.
+ */
+async function publishGuaranteeCalendarChange(guarantee, { previousStatus, previousEndsAt }, transaction) {
+  if (previousStatus === 'ACTIVE' && guarantee.status !== 'ACTIVE') {
+    await publishGuaranteeEnded(guarantee, guarantee.status, transaction);
+    return;
+  }
+  if (guarantee.status !== previousStatus || String(guarantee.endsAt || '') !== String(previousEndsAt || '')) {
+    await publishGuaranteeUpdated(guarantee, await getContract(guarantee.contractId, transaction), transaction);
+  }
+}
+
 async function updateGuarantee(id, payload, actorUserId, transaction) {
   const guarantee = await getGuarantee(id, transaction);
   const beforeJson = guarantee.toJSON();
+  const previousStatus = guarantee.status;
+  const previousEndsAt = guarantee.endsAt;
   const { status, startsAt, endsAt, value } = payload;
   if (status !== undefined) {
     if (!GUARANTEE_STATUSES.includes(status)) {
@@ -137,6 +154,7 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
   }
   guarantee.updatedBy = actorUserId || null;
   await guarantee.save({ transaction });
+  await publishGuaranteeCalendarChange(guarantee, { previousStatus, previousEndsAt }, transaction);
 
   await registrarAuditoria(
     {
@@ -162,6 +180,7 @@ async function deleteGuarantee(id, actorUserId, transaction) {
   guarantee.deletedBy = actorUserId || null;
   await guarantee.save({ transaction });
   await guarantee.destroy({ transaction });
+  await publishGuaranteeEnded(guarantee, 'DELETED', transaction);
 
   await registrarAuditoria(
     {
@@ -206,7 +225,7 @@ async function replaceGuarantee(oldGuaranteeId, newGuaranteePayload, actorUserId
   oldGuarantee.updatedBy = actorUserId || null;
   await oldGuarantee.save({ transaction });
 
-  await publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction);
+  await publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction, await getContract(oldGuarantee.contractId, transaction));
 
   await registrarAuditoria(
     {

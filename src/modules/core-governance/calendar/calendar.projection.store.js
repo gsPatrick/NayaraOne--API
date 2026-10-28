@@ -51,4 +51,24 @@ async function upsertItem(tenant, item, transaction) {
   return rows[0];
 }
 
-module.exports = { upsertItem };
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+/** Fecha (DONE) os itens ABERTOS de um `source_kind` cujo prazo já passou (ex.: PROJECT_WARRANTY depois do fim da garantia). */
+async function closeExpiredItems(tenant, sourceKind, now, transaction) {
+  return sequelize.query(
+    `UPDATE governance.calendar_items SET status = 'DONE', projection_version = projection_version + 1, updated_at = now()
+      WHERE company_id = :companyId AND source_kind = :sourceKind AND status = 'OPEN' AND due_at < :now RETURNING id`,
+    { type: QueryTypes.SELECT, transaction, replacements: { companyId: tenant.companyId, sourceKind, now } }
+  );
+}
+
+/** Cancela os itens ABERTOS dos `source_kinds` cuja origem não está mais entre `keepSourceIds` (origem encerrada ou removida). */
+async function cancelStaleItems(tenant, sourceKinds, keepSourceIds, reason, transaction) {
+  return sequelize.query(
+    `UPDATE governance.calendar_items SET status = 'CANCELLED', cancel_reason = :reason, projection_version = projection_version + 1, updated_at = now()
+      WHERE company_id = :companyId AND source_kind IN (:sourceKinds) AND status = 'OPEN' AND source_id NOT IN (:keep) RETURNING id`,
+    { type: QueryTypes.SELECT, transaction, replacements: { companyId: tenant.companyId, sourceKinds, reason, keep: keepSourceIds.length ? keepSourceIds : [NIL_UUID] } }
+  );
+}
+
+module.exports = { upsertItem, closeExpiredItems, cancelStaleItems };

@@ -12,6 +12,7 @@ const { requestLoggerMiddleware, metricsRecorderMiddleware } = require('./src/mi
 const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecycleJob');
+const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -122,6 +123,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !
 // Ciclo de vida das campanhas de Marketing (M9-D412): inicia, encerra e dispara os steps, a cada minuto.
 if (process.env.NODE_ENV !== 'test' && process.env.CAMPAIGN_LIFECYCLE_JOB_DISABLED !== 'true') {
   startCampaignLifecycleJob();
+}
+
+// Varredura diária do Calendário nas fontes de obras e garantias (M9-D803), na hora configurada (padrão 06:00 de Brasília).
+if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_BACKFILL_JOB_DISABLED !== 'true') {
+  startCalendarBackfillJob();
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;

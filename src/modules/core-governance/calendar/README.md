@@ -17,8 +17,14 @@ Calendário unificado: uma agenda única, sem ser nova fonte de verdade. `calend
 ## Eventos
 - `calendar.item.updated` é publicado pelo projetor (M9-D802) ao gravar o item; M9-D801 não publica evento.
 
+## Fontes de obras e garantias (M9-D803)
+- `sources/` (funções puras, sem banco): `mapSourceEvent(event, {companyId, severityMap})` devolve `{ items, transitions }`. `items` são rascunhos para `upsertItem`; `transitions` são fechamentos (`DONE` ou `CANCELLED` com `cancelReason`) que o projetor aplica pela matriz de M9-D802. Item com `preserveStatus` (escalonamento de caso em garantia) só sobe a severidade: o projetor não reabre item fechado. Evento de outra empresa: `GOV_CALENDAR_TENANT_MISMATCH`; tipo sem origem: `GOV_CALENDAR_EVENT_UNKNOWN`.
+- CONSTRUCTION (`source_kind` STAGE ou PROJECT): `project.stage.updated` (novo), `project.stage.completed`, `project.created|started|delivered|closed`, `construction.project.status_changed`, `project.schedule.updated` (novo, DI-D803-3). GUARANTEE (`source_kind` LEGAL_GUARANTEE, WARRANTY_CASE ou PROJECT_WARRANTY): `legal.guarantee.created|updated|ended|replaced`, `warranty.case.opened|escalated|closed`, `project.warranty_started` (agora com `warrantyEndsAt`). Os publicadores novos estão em `features/construction/constructionCalendarEvents.service.js` e `features/legal/legalCalendarEvents.service.js`.
+- `calendarBackfillJob` (`src/engines/jobs`): varredura diária por empresa na hora de `governanca.calendario.varredura_hora` (padrão 6, America/Sao_Paulo) que traz os registros abertos já existentes (idempotente), fecha `PROJECT_WARRANTY` vencido lendo só `calendar_items` e cancela (`SOURCE_NOT_OPEN`) item aberto cuja origem não está mais aberta. Desligar no processo: `CALENDAR_BACKFILL_JOB_DISABLED=true`.
+- Parâmetro `governanca.calendario.garantia_obra_meses` (60): meses de garantia somados à data da entrega para o `warrantyEndsAt`.
+
 ## Jobs e horários
-Nenhum job em M9-D801. O job diário de vencidos e o de conflito de agenda são do M9-D802 (06:00 America/Sao_Paulo).
+`calendarBackfillJob` (M9-D803, diário na hora configurada, padrão 06:00 America/Sao_Paulo). O job diário de vencidos e o de conflito de agenda são do M9-D802.
 
 ## Parâmetros
 Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametros.csv`):

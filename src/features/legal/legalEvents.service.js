@@ -1,6 +1,7 @@
 'use strict';
 
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { guaranteeCalendarFields } = require('./legalCalendarEvents.service');
 
 // Publicação dos domain events do módulo legal (Transactional Outbox), seguindo o mesmo
 // padrão de src/features/finance/financeEvents.service.js — sempre dentro da MESMA
@@ -109,7 +110,7 @@ function publishSignatureSigned(signature, transaction) {
   );
 }
 
-function publishGuaranteeCreated(guarantee, transaction) {
+function publishGuaranteeCreated(guarantee, transaction, contract = null) {
   return publishDomainEvent(
     {
       groupId: guarantee.groupId,
@@ -117,7 +118,7 @@ function publishGuaranteeCreated(guarantee, transaction) {
       aggregateType: 'Guarantee',
       aggregateId: guarantee.id,
       eventType: 'legal.guarantee.created',
-      payload: { id: guarantee.id, contractId: guarantee.contractId, guaranteeType: guarantee.guaranteeType },
+      payload: { id: guarantee.id, contractId: guarantee.contractId, guaranteeType: guarantee.guaranteeType, ...guaranteeCalendarFields(guarantee, contract) },
       idempotencyKey: `legal.guarantee.created:${guarantee.id}`,
     },
     transaction
@@ -146,7 +147,7 @@ function publishGuaranteeExpiring(guarantee, daysUntilExpiry, transaction) {
   );
 }
 
-function publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction) {
+function publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction, contract = null) {
   return publishDomainEvent(
     {
       groupId: oldGuarantee.groupId,
@@ -154,7 +155,13 @@ function publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction) {
       aggregateType: 'Guarantee',
       aggregateId: oldGuarantee.id,
       eventType: 'legal.guarantee.replaced',
-      payload: { id: oldGuarantee.id, contractId: oldGuarantee.contractId, replacedByGuaranteeId: newGuarantee.id },
+      payload: {
+        id: oldGuarantee.id,
+        contractId: oldGuarantee.contractId,
+        replacedByGuaranteeId: newGuarantee.id,
+        // M9-D803: o Calendário fecha o item da garantia antiga e abre o da nova com este mesmo evento.
+        newGuarantee: { id: newGuarantee.id, contractId: newGuarantee.contractId, guaranteeType: newGuarantee.guaranteeType, ...guaranteeCalendarFields(newGuarantee, contract) },
+      },
       idempotencyKey: `legal.guarantee.replaced:${oldGuarantee.id}:${newGuarantee.id}`,
     },
     transaction

@@ -22,6 +22,7 @@ const {
   publishProjectWarrantyStarted,
   publishProjectClosed,
 } = require('./constructionEvents.service');
+const { publishProjectScheduleChanged, computeProjectWarrantyEndsAt } = require('./constructionCalendarEvents.service');
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 
 // M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
@@ -249,6 +250,7 @@ async function getProject(id, transaction) {
 async function updateProject(id, payload, actorUserId, transaction) {
   const project = await getProject(id, transaction);
   const beforeJson = project.toJSON();
+  const scheduleBefore = { endsAtPlanned: project.endsAtPlanned, responsibleUserId: project.responsibleUserId };
   const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId } = payload;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
@@ -306,6 +308,8 @@ async function updateProject(id, payload, actorUserId, transaction) {
   );
   project.updatedBy = actorUserId || null;
   await project.save({ transaction });
+  // M9-D803: prazo final ou responsável mudou -> o item do Calendário acompanha.
+  await publishProjectScheduleChanged(project, scheduleBefore, transaction);
 
   await registrarAuditoria(
     {
@@ -509,7 +513,7 @@ async function deliverProject(id, actorUserId, transaction) {
   // Entra em garantia imediatamente após a entrega — DELIVERED não é um estado de repouso.
   project.status = 'WARRANTY';
   await project.save({ transaction });
-  await publishProjectWarrantyStarted(project, transaction);
+  await publishProjectWarrantyStarted(project, transaction, await computeProjectWarrantyEndsAt(project, transaction));
   await registrarAuditoria(
     {
       groupId: project.groupId,
