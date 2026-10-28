@@ -203,6 +203,7 @@ const modelDefiners = {
   IntegrationInbox: require('./IntegrationInbox'),
   IntegrationProvider: require('./IntegrationProvider'),
   IntegrationConnection: require('./IntegrationConnection'),
+  IntegrationSyncCursor: require('./IntegrationSyncCursor'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
   AiAgent: require('./AiAgent'),
