@@ -5,6 +5,9 @@
 const js = require('@eslint/js');
 const globals = require('globals');
 const analyticsReadOnlyImports = require('./scripts/eslint-rules/analyticsReadOnlyImports');
+const analyticsCamadas = require('./scripts/eslint-rules/analyticsCamadas');
+
+const nayaraPlugin = { rules: { 'analytics-somente-leitura': analyticsReadOnlyImports, 'analytics-camadas': analyticsCamadas } };
 
 module.exports = [
   { ignores: ['.claude/**', 'node_modules/**', 'uploads/**', 'backups/**', 'scratchpad/**', 'coverage/**'] },
@@ -23,7 +26,13 @@ module.exports = [
   {
     // M9-D612 (BI-001): o BI não importa serviço de escrita de outros módulos.
     files: ['src/modules/analytics/**/*.js', 'src/features/analytics/**/*.js'],
-    plugins: { nayara: { rules: { 'analytics-somente-leitura': analyticsReadOnlyImports } } },
+    plugins: { nayara: nayaraPlugin },
     rules: { 'nayara/analytics-somente-leitura': 'error' },
+  },
+  {
+    // M9-D613: dependências entre as camadas do BI (fórmula pura; dashboards e briefs sem tabelas de origem).
+    files: ['src/modules/analytics/**/*.js'],
+    plugins: { nayara: nayaraPlugin },
+    rules: { 'nayara/analytics-camadas': 'error' },
   },
 ];
