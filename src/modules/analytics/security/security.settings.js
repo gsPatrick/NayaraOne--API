@@ -14,6 +14,7 @@ const KEYS = Object.freeze({
   EXTRA_MASKED_FIELDS: 'analytics.mascaramento.campos_extras',
   PANEL_OPEN_LOG: 'analytics.log_acesso.abertura_painel',
   LOG_MAX_ROWS: 'analytics.log_acesso.consulta_max_linhas',
+  P95_DEFAULT_MS: 'analytics.painel.p95_ms_padrao',
 });
 
 const NONE = 'nenhum';
@@ -24,6 +25,7 @@ const SECURITY_SETTING_DEFAULTS = Object.freeze({
   [KEYS.EXTRA_MASKED_FIELDS]: NONE,
   [KEYS.PANEL_OPEN_LOG]: 'CRITICAL',
   [KEYS.LOG_MAX_ROWS]: 200,
+  [KEYS.P95_DEFAULT_MS]: 3000,
 });
 
 const SECURITY_SETTINGS_SCHEMA = {
@@ -32,6 +34,7 @@ const SECURITY_SETTINGS_SCHEMA = {
   [KEYS.EXTRA_MASKED_FIELDS]: { type: 'string' },
   [KEYS.PANEL_OPEN_LOG]: { type: 'string', enum: ['CRITICAL', 'TODOS'] },
   [KEYS.LOG_MAX_ROWS]: { type: 'integer', min: 1, max: 1000 },
+  [KEYS.P95_DEFAULT_MS]: { type: 'integer', min: 100, max: 60000 },
 };
 
 module.exports = { KEYS, NONE, SECURITY_SETTING_DEFAULTS, SECURITY_SETTINGS_SCHEMA };

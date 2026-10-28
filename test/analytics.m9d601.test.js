@@ -125,11 +125,11 @@ test('m9d601 painel publicado lista widgets na ordem de position e fica imutáve
     assert.equal(d.version, 1);
     await dashboards.addDashboardWidget(d.id, { widgetType: 'BAR', metricCode: code, title: 'B', position: 3 }, ctxOf(tenantA), tx);
     await dashboards.addDashboardWidget(d.id, { widgetType: 'KPI_CARD', metricCode: code, title: 'K', position: 1 }, ctxOf(tenantA), tx);
-    await dashboards.addDashboardWidget(d.id, { widgetType: 'QUALITY_BANNER', title: 'Q', position: 2 }, ctxOf(tenantA), tx);
+    await dashboards.addDashboardWidget(d.id, { widgetType: 'QUALITY_BANNER', title: 'Q', position: 0 }, ctxOf(tenantA), tx);
     const pub = await dashboards.publishDashboard(d.id, ctxOf(tenantA), tx);
     assert.equal(pub.status, 'PUBLISHED');
     const full = await dashboards.getDashboardWithWidgets(d.id, tx);
-    assert.deepEqual(full.widgets.map((w) => w.position), [1, 2, 3]);
+    assert.deepEqual(full.widgets.map((w) => w.position), [0, 1, 3]); // M9-D687: a faixa de qualidade é o primeiro widget
     await expectCode(tx, () => dashboards.addDashboardWidget(d.id, { widgetType: 'QUALITY_BANNER', title: 'X', position: 9 }, ctxOf(tenantA), tx), 409, 'ANALYTICS_DASHBOARD_PUBLISHED_IMMUTABLE');
     const v2 = await dashboards.createDashboardDefinition({ ...input, baseDashboardId: d.id }, ctxOf(tenantA), tx);
     assert.equal(v2.version, 2);

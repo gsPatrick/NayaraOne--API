@@ -159,6 +159,7 @@ test('m9d603 aposentar métrica em uso é recusado e sem uso aposenta, sem volta
       scopeLevel: 'COMPANY', groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, dashboardCode: `fin_${sup.sfx()}`,
       name: 'Financeiro', domain: 'FINANCE', audienceRoles: ['DIRETORIA'], requiredPermission: 'analytics:read', p95TargetMs: 1500,
     }, ctxOf(env.tenantA), tx);
+    await dashboards.addDashboardWidget(dash.id, { widgetType: 'QUALITY_BANNER', title: 'Qualidade', position: 0 }, ctxOf(env.tenantA), tx);
     await dashboards.addDashboardWidget(dash.id, { widgetType: 'KPI_CARD', metricCode: input.metricCode, title: 'Caixa', position: 1 }, ctxOf(env.tenantA), tx);
     await dashboards.publishDashboard(dash.id, ctxOf(env.tenantA), tx);
     await assert.rejects(registry.retireMetric({ ...input, scopeLevel: 'COMPANY' }, ctxOf(env.tenantA), tx), (e) => {

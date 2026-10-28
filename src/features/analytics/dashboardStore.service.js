@@ -14,10 +14,13 @@ const { sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { DOMAINS } = require('./metricStore.service');
+const { assertPublishable, loadWidgets, widgetDiff } = require('./dashboardPublishRules');
 const { normalizeWidget } = require('./dashboardWidgetRules');
 const { run, invalid, requireOneOf, requireText, resolveScope, assertWriter } = require('./analyticsStoreSupport');
 
 const CODE = 'ANALYTICS_DASHBOARD_INVALID';
+// Painéis gerais (Saúde Geral e Centro de Comando) não pertencem a um domínio de métrica.
+const DASHBOARD_DOMAINS = [...DOMAINS, 'GENERAL'];
 const DASHBOARD_CODE_RE = /^[a-z][a-z0-9_]*$/;
 const SAME_SCOPE = `company_id IS NOT DISTINCT FROM :companyId AND group_id IS NOT DISTINCT FROM :groupId`;
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');
@@ -49,7 +52,7 @@ function validateDefinition(input) {
     throw invalid(CODE, 'O código do painel deve ser minúsculo, com números e "_".');
   }
   requireText(input.name, 'O nome do painel', CODE);
-  requireOneOf(input.domain, DOMAINS, 'Domínio', CODE);
+  requireOneOf(input.domain, DASHBOARD_DOMAINS, 'Domínio', CODE);
   requireText(input.requiredPermission, 'A permissão de leitura do painel', CODE);
   if (input.audienceRoles !== undefined && !Array.isArray(input.audienceRoles)) throw invalid(CODE, 'Os papéis do painel devem ser uma lista.');
   if (input.p95TargetMs != null && (!Number.isInteger(input.p95TargetMs) || input.p95TargetMs <= 0)) throw invalid(CODE, 'A meta p95 deve ser um inteiro positivo (ms).');
@@ -140,6 +143,7 @@ async function publishDashboard(dashboardId, ctx, transaction) {
     if (missing.length) {
       throw AppError.unprocessable('O painel referencia um indicador que não está publicado.', 'ANALYTICS_DASHBOARD_INVALID_METRIC', { metricCodes: missing });
     }
+    const widgets = await assertPublishable(dash, transaction);
     const [retired] = await sequelize.query(
       `UPDATE analytics.dashboard_definitions SET status = 'RETIRED', updated_at = now(), updated_by = :actor
         WHERE dashboard_code = :code AND ${SAME_SCOPE} AND status = 'PUBLISHED' AND id <> :id RETURNING id, version`,
@@ -150,12 +154,13 @@ async function publishDashboard(dashboardId, ctx, transaction) {
         WHERE id = :id RETURNING *`,
       { replacements: { id: dash.id, actor: ctx?.actorUserId || null }, transaction }
     );
+    const previousWidgets = retired[0] ? await loadWidgets(retired[0].id, transaction) : [];
     await registrarAuditoria(
       {
         groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: ctx.actorUserId, action: 'analytics.dashboard.publish',
         entityType: 'analytics.dashboard', entityId: dash.id,
         beforeJson: { dashboardCode: dash.dashboard_code, status: dash.status, versaoAposentada: retired[0]?.version ?? null },
-        afterJson: { dashboardCode: dash.dashboard_code, status: 'PUBLISHED', versao: dash.version },
+        afterJson: { dashboardCode: dash.dashboard_code, status: 'PUBLISHED', versao: dash.version, diferencaWidgets: widgetDiff(previousWidgets, widgets) },
         reason: `Publicação do painel ${dash.dashboard_code} (versão ${dash.version})`,
       },
       transaction

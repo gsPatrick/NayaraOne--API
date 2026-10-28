@@ -10,6 +10,35 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 
 | Método | Caminho | Permissão exigida | MFA recente |
 |---|---|---|---|
+| `POST` | `/api/v1/admin/integrations/errors/:id/resolve` | `integration:retry` | não |
+| `GET` | `/api/v1/admin/integrations/errors` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections/:id/transition` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:read` | não |
+| `PATCH` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/registry/connections` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections` | `integration:manage` | não |
+| `PATCH` | `/api/v1/admin/integrations/registry/providers/:code` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/registry/providers` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations` | `integration:read` | não |
+| `POST` | `/api/v1/ai/agents/:code/chat` | `ai:use` | não |
+| `POST` | `/api/v1/ai/agents/:code/versions/:version/activate` | `ai:admin` | não |
+| `PUT` | `/api/v1/ai/agents/:code/versions/:version/activate` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/agents/:code/versions/:version/homologate` | `ai:evaluate` | não |
+| `POST` | `/api/v1/ai/agents/:code/versions/:version/retire` | `ai:admin` | não |
+| `PUT` | `/api/v1/ai/agents/:code/versions/:version/tools` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/agents/:code/versions/:version` | `ai:admin|ai:evaluate` | não |
+| `PATCH` | `/api/v1/ai/agents/:code/versions/:version` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/agents/:code/versions` | `ai:admin|ai:evaluate` | não |
+| `POST` | `/api/v1/ai/agents/:code/versions` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/agents` | `ai:use` | não |
+| `GET` | `/api/v1/ai/runs/:id` | `ai:read|ai:audit` | não |
+| `POST` | `/api/v1/ai/runs` | `ai:use` | não |
+| `GET` | `/api/v1/ai/status` | `ai:read` | não |
+| `GET` | `/api/v1/analytics/access-log` | `analytics:audit:read` | não |
+| `GET` | `/api/v1/analytics/dashboards/:code` | `analytics:read` | não |
+| `POST` | `/api/v1/analytics/dashboards` | `analytics:manage` | não |
+| `GET` | `/api/v1/api-governance/consumers` | `governance:api:read` | não |
 | `GET` | `/api/v1/assets/:id/disposal` | `inventory:read` | não |
 | `POST` | `/api/v1/assets/:id/dispose` | `inventory:approve` | não |
 | `POST` | `/api/v1/assets/:id/loan` | `inventory:create` | não |

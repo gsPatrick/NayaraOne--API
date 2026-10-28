@@ -9,6 +9,8 @@
 const ANALYTICS_WRITE_ROUTES = Object.freeze([
   Object.freeze({ method: 'POST', path: '/analytics/alerts/:id/ack' }),
   Object.freeze({ method: 'POST', path: '/analytics/exports' }),
+  // M9-D687: publicação administrativa de painel (analytics:manage); grava só em analytics.dashboard_*.
+  Object.freeze({ method: 'POST', path: '/analytics/dashboards' }),
 ]);
 
 module.exports = { ANALYTICS_WRITE_ROUTES };

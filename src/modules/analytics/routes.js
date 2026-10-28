@@ -5,6 +5,7 @@ const { authMiddleware } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { analyticsMethodGuard, analyticsReadOnlyTransaction } = require('./readOnly');
 const { createMetricsRouter } = require('./metrics/metrics.routes');
+const { registerDashboardRoutes } = require('./dashboards/dashboard.routes');
 const { registerAccessLogRoutes } = require('./security/accessLog.routes');
 
 /**
@@ -16,6 +17,7 @@ function createAnalyticsRouter({ authChain = [authMiddleware, tenantMiddleware] 
   const router = Router();
   router.use('/analytics', ...authChain, analyticsMethodGuard, analyticsReadOnlyTransaction);
   router.use('/analytics/metrics', createMetricsRouter());
+  registerDashboardRoutes(router);
   registerAccessLogRoutes(router);
   return router;
 }
