@@ -1,32 +1,42 @@
 # Governança — Calendário unificado (`calendar`)
 
 ## Objetivo
-Calendário unificado: projeção dos prazos de origem (jurídico, fiscal, cobrança, garantias, obras) em itens únicos, atualizados por eventos de forma idempotente. Este módulo nasce no alicerce M9-D800 (esqueleto, permissões, liga/desliga e rota do livro); as regras entram em M9-D801, M9-D802 e M9-D803, e cada demanda dona atualiza este README no mesmo commit.
+Calendário unificado: uma agenda única, sem ser nova fonte de verdade. `calendar_items` guarda por item só `source_type`, `source_id`, `title`, `owner`, `due_at`, `severity`, `status` e `deep_link` (mais apoio técnico) e aponta de volta para a origem. M9-D801 entrega a tabela, a origem dos compromissos avulsos e o `GET /calendar`; M9-D802 (projetor por eventos, alertas) e M9-D803 (origens de obras e garantias) usam estas tabelas e `calendar.projection.store.js`.
 
 ## Tabelas
-Nenhuma ainda. O alicerce cria o schema `governance` e a função `governance.apply_tenant_rls(regclass)`, que toda tabela do módulo chama na sua migration (faixa 20260101000800 a 20260101000869 no bloco E) para ganhar RLS + FORCE RLS, política `tenant_isolation` e GRANT protegido por existência do role `nayara_runtime`. Colunas padrão: `id uuid`, `group_id`, `company_id`, `created_at`, `updated_at`.
+- `governance.calendar_items` (lista única de colunas do M9-D801 §3.1; `UNIQUE (company_id, source_type, source_id)`; `deep_link` relativo validado por CHECK; "vencido" NÃO é coluna).
+- `governance.calendar_commitments` (origem do tipo COMMITMENT: título, início, fim, responsável, status).
+- Migration `20260101000801-create-governance-calendar.js`; as duas tabelas chamam `governance.apply_tenant_rls` (RLS + FORCE RLS).
 
 ## Rotas e permissões
-- `GET /calendar` exige `governance:calendar:read` e o módulo ligado para a empresa (esqueleto do alicerce: devolve o estado do módulo). Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`.
-- Corpo de erro único: `{success:false,error:{code,message,details?,traceId}}` (traceId dentro de `error`).
+- `GET /calendar` (`governance:calendar:read`): filtros `from`, `to` (ISO ou AAAA-MM-DD; padrão hoje 00:00 até hoje + janela, em America/Sao_Paulo), `sourceType` (lista), `ownerUserId`, `status`, `page`, `pageSize` (1 a 200). Ordem `due_at` e `id`. Só aparecem itens cuja origem a pessoa pode ler (permissão do módulo de origem, mapa configurável); o total reflete a omissão. Resposta: `data` (itens, com `isOverdue` derivado), `pagination`, `meta {from,to,timezone}`.
+- `POST /calendar/commitments`, `GET|PATCH /calendar/commitments/:id`: compromisso avulso. Criar exige `governance:calendar:read`; alterar exige ser a pessoa responsável ou ADMIN.
+- `PATCH`, `PUT` e `DELETE` em `/calendar/items/:id`: 404 `GOV_NOT_FOUND` (item é derivado; o status muda só pelo projetor).
+- Erros: `PERMISSION_DENIED` 403, `GOV_CALENDAR_RANGE_INVALID` 400, `GOV_CALENDAR_SOURCE_INVALID` 400, `GOV_COMMITMENT_INVALID` 400, `GOV_COMMITMENT_OWNER_ONLY` 403, `GOV_COMMITMENT_TRANSITION_INVALID` 409, `VALIDATION_ERROR` 400, `GOV_NOT_FOUND` 404, `GOV_MODULE_DISABLED` 403.
 
 ## Eventos
-- `calendar.item.updated` (publicado pelo serviço do módulo via `publishGovernanceEvent`, na mesma transação, com `idempotencyKey`).
+- `calendar.item.updated` é publicado pelo projetor (M9-D802) ao gravar o item; M9-D801 não publica evento.
 
 ## Jobs e horários
-Nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela demanda dona e listados aqui com horário e parâmetro que o controla.
+Nenhum job em M9-D801. O job diário de vencidos e o de conflito de agenda são do M9-D802 (06:00 America/Sao_Paulo).
 
 ## Parâmetros
-- `governanca.modulos.calendar.habilitado` (booleano, padrão ligado): o administrador liga ou desliga o módulo para a empresa em Configurações > Governança.
-- Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
+Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametros.csv`):
+- `governanca.modulos.calendar.habilitado` (padrão ligado).
+- `governanca.calendario.severidade_por_fonte`: `FONTE=NIVEL` (padrão: LEGAL_DEADLINE e FISCAL = CRITICAL; BILLING e GUARANTEE = WARNING; demais INFO). Lido ao projetar o compromisso e pelo projetor.
+- `governanca.calendario.permissao_por_fonte`: permissão do módulo de origem por tipo (`|` = qualquer uma). Lido a cada `GET /calendar`.
+- `governanca.calendario.janela_padrao_dias` (30) e `governanca.calendario.tamanho_pagina_padrao` (50): consulta sem filtros.
+- `governanca.calendario.duracao_padrao_min` (60): fim de compromisso sem `endsAt`; M9-D802 usa o mesmo valor para visita e manutenção.
 
 ## Decisões (ADR)
-- K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
-- Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.
-- Decisões de implementação do bloco: `Maturacao/demandas/decisoes-de-implementacao.md`.
+- K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_`.
+- DI-D801-1 a DI-D801-6 em `Maturacao/demandas/decisoes-de-implementacao.md` (permissão por origem configurável, severidade em texto `FONTE=NIVEL`, janela e página como parâmetro, duração padrão do compromisso, dono do compromisso, deep link do compromisso).
+- Único ponto de escrita em `calendar_items`: `calendar.projection.store.js` (UPSERT por origem na transação do chamador).
 
 ## Como testar
-`node scripts/withDisposableDb.js --port <porta> -- ...` com `test/m9d800.alicerceGovernanca.test.js` (alicerce) e os testes da demanda dona. Nunca contra o banco do `.env`.
+`test/m9d801.calendario.regras.test.js` e `test/m9d801.calendario.http.test.js` em banco descartável: `node scripts/withDisposableDb.js --port <55000-55999> -- env CI_TENANT_USERS_PASSWORD=... bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node --test --test-concurrency=1 <arquivos>"`. Nunca contra o banco do `.env`.
 
 ## Como diagnosticar
-Use o `traceId` da resposta de erro (igual ao cabeçalho `X-Correlation-Id`) para achar a requisição nos logs e no registro de auditoria. Módulo respondendo 403 `GOV_MODULE_DISABLED`: conferir a chave `governanca.modulos.calendar.habilitado` em Configurações > Governança.
+- Item não aparece: conferir a janela (`meta.from`/`meta.to`), o status e se a pessoa tem a permissão da origem (`governanca.calendario.permissao_por_fonte`); o total já desconta o que ela não pode ver.
+- Compromisso sem item: o item é gravado na mesma transação; consultar `governance.calendar_items` por `source_type = 'COMMITMENT'` e `source_id`.
+- `traceId` da resposta de erro = `X-Correlation-Id`, para achar a requisição nos logs e na auditoria (`entity_type = governance.calendar_commitment`).

@@ -204,7 +204,8 @@ test('m9d800 corpo de erro de governança tem formato único com error.traceId e
   const allowed = new Set(errors.DEFAULT_PREFIX_EXCEPTIONS);
   const offenders = [];
   for (const file of listJsFiles(GOV_DIR)) {
-    if (file.endsWith('governance.errors.js')) continue;
+    // *.constants.js guarda enumerações de domínio (ex.: tipos de origem do calendário), não códigos de erro.
+    if (file.endsWith('governance.errors.js') || file.endsWith('.constants.js')) continue;
     const text = fs.readFileSync(file, 'utf8');
     for (const m of text.matchAll(/['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) {
       if (!m[1].startsWith('GOV_') && !allowed.has(m[1])) offenders.push(`${path.relative(API_ROOT, file)}: ${m[1]}`);
@@ -416,8 +417,9 @@ test('m9d800 rota sem permissão devolve 403 (e 401 sem login, 200 com a permiss
   const comPermissao = await call('A:gestor', 'GET', '/calendar');
   assert.equal(comPermissao.status, 200, JSON.stringify(comPermissao.body));
   assert.equal(comPermissao.body.success, true);
-  assert.equal(comPermissao.body.data.modulo, 'calendar');
-  assert.equal(comPermissao.body.data.habilitado, true);
+  // M9-D801 trocou o corpo do alicerce pela lista real do calendário (itens + paginação).
+  assert.ok(Array.isArray(comPermissao.body.data));
+  assert.equal(comPermissao.body.pagination.page, 1);
 
   // Rota de outro módulo exige a permissão dele: o gestor de CI não tem flags:manage.
   const flags = await call('A:gestor', 'GET', '/feature-flags');

@@ -1,19 +1,32 @@
 'use strict';
 
-const { isModuleEnabled } = require('../governance.module');
+const { getSetting } = require('../../../features/settings/settings.service');
+const settings = require('./calendar.settings');
+const { TIMEZONE } = require('./calendar.constants');
+const { parseListQuery } = require('./calendar.query');
+const { allowedSourceTypes } = require('./calendar.visibility');
+const repository = require('./calendar.repository');
+const { presentItem, iso } = require('./calendar.presenter');
+
+const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, settings.CALENDAR_SETTING_DEFAULTS[key]);
 
 /**
- * Calendário unificado — serviço do módulo. O alicerce (M9-D800) entrega o esqueleto: o estado do módulo para a empresa. As regras de
- * negócio entram nas demandas M9-D801, M9-D802 e M9-D803, sobre este mesmo arquivo.
+ * GET /calendar: lista itens da janela pedida, com filtros, paginação e visibilidade por origem (o item cuja origem o usuário
+ * não pode ler é omitido e o total reflete a omissão). Janela padrão, tamanho de página e mapa de permissões vêm dos
+ * parâmetros do administrador. `now` é injetável para teste.
  */
-async function getOverview(tenant, transaction) {
+async function listCalendar(tenant, { permissions, query, now = new Date() }, transaction) {
+  const windowDays = Number(await read(settings.WINDOW_DAYS_KEY, tenant, transaction)) || settings.CALENDAR_SETTING_DEFAULTS[settings.WINDOW_DAYS_KEY];
+  const defaultPageSize = Number(await read(settings.PAGE_SIZE_KEY, tenant, transaction)) || settings.CALENDAR_SETTING_DEFAULTS[settings.PAGE_SIZE_KEY];
+  const filters = parseListQuery(query, { now, windowDays, defaultPageSize });
+  const permissionMap = settings.parsePermissionMap(await read(settings.PERMISSION_KEY, tenant, transaction));
+  const allowed = allowedSourceTypes(permissions, permissionMap);
+  const { rows, total } = await repository.listItems(filters, allowed, tenant, transaction);
   return {
-    modulo: 'calendar',
-    rotulo: 'Calendário unificado',
-    habilitado: await isModuleEnabled('calendar', tenant, transaction),
-    fase: 'alicerce',
-    itens: [],
+    items: rows.map((row) => presentItem(row, now)),
+    pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.max(1, Math.ceil(total / filters.pageSize)) },
+    meta: { from: iso(filters.from), to: iso(filters.to), timezone: TIMEZONE },
   };
 }
 
-module.exports = { getOverview };
+module.exports = { listCalendar };
