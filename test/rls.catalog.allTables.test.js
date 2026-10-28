@@ -132,3 +132,20 @@ test('M9-D600: analytics.metric_definitions, metric_versions e metric_snapshots 
     assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
   }
 });
+
+// M9-D601: dashboards, widgets, briefings e exportações do BI (schema analytics) com RLS + FORCE RLS e 4 políticas.
+test('M9-D601: analytics.dashboard_definitions, dashboard_widgets, executive_briefs e export_jobs têm RLS, FORCE RLS e 4 políticas', async () => {
+  for (const table of ['dashboard_definitions', 'dashboard_widgets', 'executive_briefs', 'export_jobs']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
+  }
+});

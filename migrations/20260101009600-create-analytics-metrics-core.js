@@ -350,7 +350,15 @@ module.exports = {
     await q(`DROP TABLE IF EXISTS "${SCHEMA}"."metric_definitions"`);
     await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".metric_versions_guard()`);
     await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".metric_snapshots_guard()`);
-    await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".analytics_scope_guard()`);
+    // O gatilho de escopo também é usado pelas tabelas da M9-D601: só sai quando nenhuma o usa mais.
+    await q(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgfoid = to_regprocedure('${SCHEMA}.analytics_scope_guard()')) THEN
+          DROP FUNCTION IF EXISTS "${SCHEMA}".analytics_scope_guard();
+        END IF;
+      END $$;
+    `);
     // Só remove o schema se nada de outras demandas (D601, D602, rm_*) estiver dentro dele.
     await q(`
       DO $$

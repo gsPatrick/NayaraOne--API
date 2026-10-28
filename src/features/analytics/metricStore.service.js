@@ -357,6 +357,7 @@ module.exports = {
   DOMAINS,
   VALUE_NATURES,
   enableAnalyticsWriter,
+  assertWriter,
   translateAnalyticsDbError,
   createMetricDefinition,
   publishMetricVersion,
