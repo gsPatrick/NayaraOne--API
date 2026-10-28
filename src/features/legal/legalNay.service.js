@@ -1,7 +1,7 @@
 'use strict';
 
+const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
 const {
-  AiRun,
   Contract,
   ContractParty,
   ContractVersion,
@@ -36,20 +36,16 @@ const AVISO = 'Não é conclusão jurídica definitiva; requer validação profi
 const MAX_TEXT = 20000;
 
 async function logRun(tenant, actorUserId, inputSummary, toolCallsJson, outputSummary, transaction) {
-  const run = await AiRun.create(
+  const run = await recordRuleRun(
+    { groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId || null },
     {
-      groupId: tenant.groupId,
-      companyId: tenant.companyId,
-      userId: actorUserId || null,
       agentName: AGENT_NAME,
       inputSummary,
       toolCallsJson: { method: 'RULE_BASED', ...toolCallsJson },
       outputSummary,
-      status: 'COMPLETED',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
+      groundingStatus: 'GROUNDED',
     },
-    { transaction }
+    transaction
   );
   return run.id;
 }

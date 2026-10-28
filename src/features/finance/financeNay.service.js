@@ -1,6 +1,7 @@
 'use strict';
 
-const { sequelize, AiRun, CostCenter } = require('../../models');
+const { sequelize, CostCenter } = require('../../models');
+const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
 const { getWeeklyHealthReport } = require('./financialHealthReport.service');
 const { resolveAntifraudThresholds } = require('./financeAntifraud.service');
 const { startOfBusinessDay } = require('../../utils/businessDate');
@@ -229,20 +230,16 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
     regras: [{ codigo: 'FIN-005', ruleVersionId: thresholds.ruleVersionId || null, origem: thresholds.ruleVersionId ? 'Motor de Regras' : 'padrão (regra não publicada)' }],
   };
 
-  const aiRun = await AiRun.create(
+  const aiRun = await recordRuleRun(
+    { groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId || null },
     {
-      groupId: tenant.groupId,
-      companyId: tenant.companyId,
-      userId: actorUserId || null,
       agentName: AGENT_NAME,
       inputSummary: `Explicação financeira e sugestões (${current} x ${previous}).`,
       toolCallsJson: { method: 'RULE_BASED', readModel: 'finance.weeklyHealthReport', months: [current, previous], ruleVersions: fontes.regras },
       outputSummary: `${sugestoes.cobranca.length + sugestoes.renegociacao.length + sugestoes.reducaoCusto.length + sugestoes.priorizacaoPagaveis.length} sugestão(ões); conclusão ${motivosParcial.length ? 'PARCIAL' : 'completa'}. Nenhuma ação executada (FIN-014).`,
-      status: 'COMPLETED',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
+      groundingStatus: motivosParcial.length ? 'INSUFFICIENT_SOURCES' : 'GROUNDED',
     },
-    { transaction }
+    transaction
   );
 
   return {

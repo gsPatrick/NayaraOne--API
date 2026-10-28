@@ -1,7 +1,8 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, AiRun, AiRecommendation, InventoryItem, Project } = require('../../models');
+const { sequelize, AiRecommendation, InventoryItem, Project } = require('../../models');
+const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getSetting } = require('../settings/settings.service');
@@ -441,11 +442,9 @@ async function generatePurchaseSuggestions(payload, actorUserId, transaction) {
 
   const computed = await computePurchaseSuggestions(tenant, { windowDays, inventoryItemId, locationId }, transaction);
 
-  const aiRun = await AiRun.create(
+  const aiRun = await recordRuleRun(
+    { groupId, companyId, userId: actorUserId || null },
     {
-      groupId,
-      companyId,
-      userId: actorUserId || null,
       agentName: AGENT_NAME,
       inputSummary: `Sugestão de compra (consumo ${computed.windowDays}d, obras ativas, lead time, estoque)${inventoryItemId ? ` — item ${inventoryItemId}` : ''}${locationId ? ` — local ${locationId}` : ''}.`,
       toolCallsJson: {
@@ -456,11 +455,9 @@ async function generatePurchaseSuggestions(payload, actorUserId, transaction) {
         filters: { inventoryItemId: inventoryItemId || null, locationId: locationId || null },
       },
       outputSummary: `${computed.suggestions.length} sugestão(ões) de compra calculada(s). Nenhuma compra efetivada (EST-013).`,
-      status: 'COMPLETED',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
+      groundingStatus: 'GROUNDED',
     },
-    { transaction }
+    transaction
   );
 
   const pendingWhere = { companyId, recommendationType: RECOMMENDATION_TYPE_PURCHASE, status: 'PENDING' };

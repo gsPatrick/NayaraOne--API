@@ -1,6 +1,7 @@
 'use strict';
 
-const { AiRun, InventoryItem, InventoryReceipt } = require('../../models');
+const { InventoryItem, InventoryReceipt } = require('../../models');
+const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { uploadFile } = require('../files/files.service');
@@ -207,20 +208,16 @@ async function suggestReceiptFromInvoice(payload, actorUserId, transaction) {
     message = 'Sugestão de itens gerada a partir da NF. Confira e ajuste antes de criar o recebimento.';
   }
 
-  const aiRun = await AiRun.create(
+  const aiRun = await recordRuleRun(
+    { groupId, companyId, userId: actorUserId || null },
     {
-      groupId,
-      companyId,
-      userId: actorUserId || null,
       agentName: AGENT_NAME,
       inputSummary: `OCR/IA de NF de entrada — arquivo ${file.id} (${fileName}).`,
       toolCallsJson: { documentType: DOCUMENT_TYPE, provider, configured: !isSandbox, confidence, illegible: Boolean(extraction?.illegible), fileId: file.id },
       outputSummary: `${status}: ${suggestion ? suggestion.items.length : 0} item(ns) sugerido(s). Nenhum recebimento criado — confirmação humana obrigatória.`,
-      status: 'COMPLETED',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
+      groundingStatus: 'NOT_APPLICABLE',
     },
-    { transaction }
+    transaction
   );
 
   await registrarAuditoria(

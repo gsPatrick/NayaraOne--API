@@ -7,6 +7,7 @@
  * acrescenta as suas chaves neste arquivo.
  */
 const { AGENT_SETTING_DEFAULTS, AGENT_SETTINGS_SCHEMA } = require('./agents/agents.settings');
+const { RUN_SETTING_DEFAULTS, RUN_SETTINGS_SCHEMA } = require('./orchestrator/runs/runs.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
@@ -20,12 +21,14 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   // "*" = todos os agentes; ou lista de códigos separados por vírgula (só esses rodam; os demais respondem 409).
   [AI_AGENTS_ENABLED_KEY]: '*',
   ...AGENT_SETTING_DEFAULTS,
+  ...RUN_SETTING_DEFAULTS,
 });
 
 const AI_SETTINGS_SCHEMA = {
   [AI_ENABLED_KEY]: { type: 'boolean' },
   [AI_AGENTS_ENABLED_KEY]: { type: 'string' },
   ...AGENT_SETTINGS_SCHEMA,
+  ...RUN_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {

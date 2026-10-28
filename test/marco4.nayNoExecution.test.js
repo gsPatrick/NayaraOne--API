@@ -65,15 +65,16 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   assert.equal(hasAiIntegration, false, 'não deveria existir integração de IA real no backend ainda (infraestrutura é Marco 9).');
 
   // 4. NAY Financeira (financeNay.service.js) é SOMENTE LEITURA por construção: só importa o read
-  // model, o resolvedor de limiares (leitura do Motor de Regras), AiRun/CostCenter e o sequelize
-  // para SELECT; a única escrita é a auditoria da execução em ai.ai_runs. Nenhuma rota de NAY
+  // model, o resolvedor de limiares (leitura do Motor de Regras), CostCenter, o sequelize para
+  // SELECT e o registrador de run por regra (M9-D005); a única escrita é a auditoria da execução
+  // em ai.ai_runs, feita só por recordRuleRun. Nenhuma rota de NAY
   // além da GET de leitura.
   const nay = fs.readFileSync(path.join(financeDir, 'financeNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const requires = [...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort();
-  assert.deepEqual(requires, ['../../models', '../../utils/businessDate', './financeAntifraud.service', './financialHealthReport.service'].sort());
-  assert.match(nay, /const \{ sequelize, AiRun, CostCenter \} = require\('\.\.\/\.\.\/models'\)/);
-  assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 1, 'só AiRun.create');
-  assert.match(nay, /AiRun\.create\(/);
+  assert.deepEqual(requires, ['../../models', '../../modules/ai/orchestrator/runs', '../../utils/businessDate', './financeAntifraud.service', './financialHealthReport.service'].sort());
+  assert.match(nay, /const \{ sequelize, CostCenter \} = require\('\.\.\/\.\.\/models'\)/);
+  assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
+  assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   assert.ok(!/\b(INSERT|UPDATE|DELETE|TRUNCATE)\b/.test(nay.replace(/'[^']*'/g, '')), 'SQL da NAY é só SELECT');
   assert.ok(!/(INSERT|UPDATE |DELETE|TRUNCATE)/.test((nay.match(/`[^`]*`/g) || []).join(' ')), 'SQL da NAY é só SELECT');
   const routesNay = routesContent.split('\n').filter((l) => /\/nay\//i.test(l));
