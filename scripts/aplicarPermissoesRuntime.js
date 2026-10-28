@@ -55,6 +55,14 @@ const REVOKES = [
     comandos.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${s}" TO ${ROLE}`);
   }
   for (const r of REVOKES) comandos.push(r.replace('%ROLE%', ROLE));
+  // M9-D612: o role de leitura do BI (se existir) volta a ter SELECT em tudo, inclusive nas tabelas criadas depois da migration.
+  const leitor = await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'nayara_analytics_reader'");
+  if (leitor.rowCount) {
+    for (const s of schemas) {
+      comandos.push(`GRANT USAGE ON SCHEMA "${s}" TO nayara_analytics_reader`);
+      comandos.push(`GRANT SELECT ON ALL TABLES IN SCHEMA "${s}" TO nayara_analytics_reader`);
+    }
+  }
 
   if (SIMULAR) {
     console.log(`[simulação] ${comandos.length} comandos em ${schemas.length} schemas:\n${comandos.join('\n')}`);

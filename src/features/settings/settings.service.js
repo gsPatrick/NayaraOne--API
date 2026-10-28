@@ -12,6 +12,7 @@ const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../modules/marketing/content/publicFields.settings');
 const { TEMPLATE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/template.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
+const { READ_ONLY_SETTINGS_SCHEMA } = require('../../modules/analytics/readOnly/readOnly.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -136,6 +137,8 @@ const SETTINGS_SCHEMA = {
   },
   // Marco 9, M9-D201 — criticidade de cada uma das 14 famílias do catálogo (integration.catalog.criticality.<domínio>).
   ...CATALOG_SETTINGS_SCHEMA,
+  // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
+  ...READ_ONLY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };

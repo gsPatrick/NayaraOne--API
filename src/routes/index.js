@@ -36,6 +36,7 @@ const filesRouter = require('../features/files/files.routes');
 const { router: governanceRouter } = require('../modules/core-governance');
 const { router: aiModuleRouter } = require('../modules/ai');
 const { router: marketingModuleRouter } = require('../modules/marketing');
+const { router: analyticsModuleRouter } = require('../modules/analytics');
 
 /**
  * Agregador único de rotas da API.
@@ -85,6 +86,8 @@ router.use('/v1', governanceRouter);
 router.use('/v1', aiModuleRouter);
 // Marco 9 — Marketing (src/modules/marketing, M9-D402): /v1/marketing/*, auth/tenant só sob /marketing, permissões marketing:*.
 router.use('/v1', marketingModuleRouter);
+// Marco 9 — BI (src/modules/analytics, M9-D612): /v1/analytics/*, GET em transação somente leitura e 405 em escrita de métrica/dashboard.
+router.use('/v1', analyticsModuleRouter);
 router.use('/v1', authRouter);
 router.use('/v1', groupsRouter);
 router.use('/v1', companiesRouter);
