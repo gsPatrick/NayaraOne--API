@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('../testHelpers');
-const { IntegrationConnection, IntegrationProvider, IntegrationError, IntegrationSyncCursor } = require('../../src/models');
+const { IntegrationProvider, IntegrationError, IntegrationSyncCursor } = require('../../src/models');
 const registry = require('../../src/features/integrations/registry/registry.service');
 const { runSyncCycle } = require('../../src/features/integrations/sync/sync.runner');
 
