@@ -66,7 +66,7 @@ test('m9d603 o registro não semeia métrica alguma (a semente é de M9-D712)', 
     const text = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'analytics', 'metrics', f), 'utf8');
     assert.ok(!/INSERT INTO analytics\.metric_definitions/.test(text), `${f} não pode semear métrica`);
   }
-  const migration = fs.readdirSync(path.join(__dirname, '..', 'migrations')).filter((f) => /^2026010100960[3-9]/.test(f));
+  const migration = fs.readdirSync(path.join(__dirname, '..', 'migrations')).filter((f) => /^20260101009603/.test(f)); // 9604 a 9614 pertencem às demais demandas do BI (D604...)
   assert.deepEqual(migration, [], 'D603 não entrega migration de semente');
 });
 

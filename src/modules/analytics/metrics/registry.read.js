@@ -77,4 +77,4 @@ async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, 
   };
 }
 
-module.exports = { listRegistry, getMetric, readMetricValue };
+module.exports = { listRegistry, getMetric, readMetricValue, findDefinition };

@@ -15,42 +15,9 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const store = require('../../../features/analytics/metricStore.service');
 const { assertCanManage } = require('./registry.permission');
 const { assertComplete, validateShape } = require('./registry.fields');
-const { getFormulaCatalog, runFormulaTests } = require('./formulaCatalog');
-
-const ZERO = '00000000-0000-0000-0000-000000000000';
-
-function resolveScope(input, ctx) {
-  const scopeLevel = input.scopeLevel || 'GLOBAL';
-  if (scopeLevel === 'GLOBAL') return { scopeLevel, groupId: null, companyId: null };
-  if (scopeLevel === 'GROUP') return { scopeLevel, groupId: input.groupId || ctx.groupId, companyId: null };
-  return { scopeLevel, groupId: input.groupId || ctx.groupId, companyId: input.companyId || ctx.companyId };
-}
-
-async function assertReadModelExists(name, transaction) {
-  const [[row]] = await sequelize.query('SELECT to_regclass(:n) IS NOT NULL AS ok', { replacements: { n: `analytics.${name}` }, transaction });
-  if (!row.ok) throw AppError.unprocessable('O read model de origem não existe.', 'ANALYTICS_READ_MODEL_NOT_FOUND', { sourceReadModel: name });
-}
-
-function checkFormula(input, catalog) {
-  const formula = catalog.get(input.formulaId);
-  if (!formula) throw AppError.unprocessable('A fórmula informada não existe.', 'ANALYTICS_FORMULA_NOT_FOUND', { formulaId: input.formulaId });
-  const result = runFormulaTests(formula);
-  if (!result.ok) {
-    throw AppError.unprocessable('Os testes da fórmula não passaram; ela não pode ser publicada.', 'ANALYTICS_FORMULA_TESTS_FAILED', { falhas: result.failures });
-  }
-  return result.hash;
-}
-
-async function findDefinitionForUpdate(code, scope, transaction) {
-  const [rows] = await sequelize.query(
-    `SELECT * FROM analytics.metric_definitions WHERE metric_code = :code
-        AND COALESCE(company_id, '${ZERO}'::uuid) = COALESCE(CAST(:companyId AS uuid), '${ZERO}'::uuid)
-        AND COALESCE(group_id, '${ZERO}'::uuid) = COALESCE(CAST(:groupId AS uuid), '${ZERO}'::uuid)
-      FOR UPDATE`,
-    { replacements: { code, companyId: scope.companyId, groupId: scope.groupId }, transaction }
-  );
-  return rows[0] || null;
-}
+const { getFormulaCatalog } = require('./formulaCatalog');
+const { resolveScope, findDefinitionForUpdate } = require('./registry.scope');
+const { assertReadModelExists, checkFormula } = require('./registry.checks');
 
 async function prepareDefinition(input, domain, scope, ctx, transaction) {
   const existing = await findDefinitionForUpdate(input.metricCode, scope, transaction);
@@ -92,7 +59,7 @@ async function publishMetric(input, ctx, transaction, options = {}) {
     definitionId: definition.id, formulaId: input.formulaId, formulaSemantic: input.formulaSemantic,
     sourceReadModel: input.sourceReadModel, dimensions: input.dimensions, filters: input.filters, unit: input.unit,
     refreshPolicy: input.refreshPolicy, qualityRule: input.qualityRule, valueNature: input.valueNature,
-    formulaTestHash, validFrom: input.validFrom, expectedVersion: input.version - 1, changeReason: input.changeReason,
+    formulaTestHash, formulaParams: input.formulaParams, validFrom: input.validFrom, expectedVersion: input.version - 1, changeReason: input.changeReason,
   }, ctx, transaction);
   return { definition: { ...definition, status: 'PUBLISHED', current_version_id: version.id }, version };
 }

@@ -155,6 +155,7 @@ function validateVersionInput(input) {
     throw invalid('A política de atualização deve ter modo EVENT ou SCHEDULE.');
   }
   if (rp.mode === 'SCHEDULE' && (typeof rp.cron !== 'string' || !rp.cron.trim())) throw invalid('A política SCHEDULE exige o cron.');
+  if (input.formulaParams != null && (typeof input.formulaParams !== 'object' || Array.isArray(input.formulaParams))) throw invalid('Os parâmetros da fórmula devem ser um objeto.');
   if (input.formulaTestHash != null && !HASH_RE.test(input.formulaTestHash)) throw invalid('O hash do teste da fórmula deve ser SHA-256 em hexadecimal.');
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0) throw invalid('Informe a versão vigente que você viu (0 se ainda não há).');
   if (input.expectedVersion >= 1) requireText(input.changeReason, 'O motivo da mudança');
@@ -204,10 +205,10 @@ async function publishMetricVersion(input, ctx, transaction) {
     const [[version]] = await sequelize.query(
       `INSERT INTO analytics.metric_versions
          (company_id, group_id, metric_id, version, formula_id, formula_semantic, source_read_model, dimensions, filters, unit,
-          refresh_policy, quality_rule, value_nature, formula_test_hash, valid_from, published_by, change_reason)
+          refresh_policy, quality_rule, value_nature, formula_test_hash, valid_from, published_by, change_reason, formula_params)
        VALUES (:companyId, :groupId, :metricId, :version, :formulaId, :formulaSemantic, :sourceReadModel, CAST(:dimensions AS jsonb),
           CAST(:filters AS jsonb), :unit, CAST(:refreshPolicy AS jsonb), CAST(:qualityRule AS jsonb), :valueNature, :formulaTestHash,
-          :validFrom, :actor, :changeReason)
+          :validFrom, :actor, :changeReason, CAST(:formulaParams AS jsonb))
        RETURNING *`,
       {
         replacements: {
@@ -218,6 +219,7 @@ async function publishMetricVersion(input, ctx, transaction) {
           qualityRule: input.qualityRule == null ? null : JSON.stringify(input.qualityRule),
           valueNature: input.valueNature, formulaTestHash: input.formulaTestHash || null, validFrom: input.validFrom,
           actor: ctx?.actorUserId || null, changeReason: input.changeReason || null,
+          formulaParams: JSON.stringify(input.formulaParams || {}),
         },
         transaction,
       }
