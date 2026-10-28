@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, OutboxEvent } = require('../../models');
 const { outboxPendingGauge, outboxDeadLetterGauge } = require('../../utils/metrics');
+const { runEventConsumers } = require('./consumers');
 const { getDispatchEnqueuer, buildEnqueueArgs } = require('./dispatchGateway');
 const { getOutboxBackoff, applyFailure } = require('./outboxBackoff');
 
@@ -84,6 +85,7 @@ async function dispatchPendingEventsForCompany(group, company, { limit }) {
           results.published += 1;
         } else {
           await publishToBroker(event);
+          await runEventConsumers(event, transaction);
           event.status = 'DISPATCHED';
           await event.save({ transaction });
           results.dispatched += 1;

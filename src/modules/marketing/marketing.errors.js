@@ -35,10 +35,27 @@ function mktMassLimitExceeded(details) {
   return mktError(422, 'MKT_MASS_LIMIT_EXCEEDED', 'O número de destinatários excede o limite permitido.', details);
 }
 
+function mktSourceStale(details) {
+  return mktError(409, 'MKT_SOURCE_STALE', 'Os dados do imóvel mudaram; gere o conteúdo novamente.', details);
+}
+
+function mktContentVersionImmutable(details) {
+  return mktError(409, 'MKT_CONTENT_VERSION_IMMUTABLE', 'A versão publicada não pode ser alterada.', details);
+}
+
+function mktNayRunRequired(details) {
+  return mktError(422, 'MKT_NAY_RUN_REQUIRED', 'Conteúdo gerado pela NAY deve registrar a execução.', details);
+}
+
+function mktNayModelRequired(details) {
+  return mktError(422, 'MKT_NAY_MODEL_REQUIRED', 'A execução da NAY informada exige o nome do modelo usado.', details);
+}
+
 function mktNotImplemented(owner) {
   return mktError(501, 'MKT_ROUTE_NOT_IMPLEMENTED', 'Esta operação de Marketing ainda não está disponível.', { owner });
 }
 
 module.exports = {
   MKT_PREFIX, PLATFORM_CODES, isAllowedCode, mktError, mktForbidden, mktMassPermissionRequired, mktMassLimitExceeded, mktNotImplemented,
+  mktSourceStale, mktContentVersionImmutable, mktNayRunRequired, mktNayModelRequired,
 };

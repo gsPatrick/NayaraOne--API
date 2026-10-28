@@ -28,7 +28,9 @@ async function recordPriceHistory(
     { transaction }
   );
 
-  await publishPropertyPriceChanged(history, transaction);
+  // M9-D405: o conteúdo de Marketing precisa do imóvel dono da oferta para vigiar a mudança de preço.
+  const offer = await PropertyOffer.findByPk(offerId, { transaction });
+  await publishPropertyPriceChanged(history, transaction, offer ? offer.propertyId : null);
 
   return history;
 }

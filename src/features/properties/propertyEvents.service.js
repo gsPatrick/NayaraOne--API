@@ -50,7 +50,7 @@ async function publishPropertyPublished(property, transaction) {
   );
 }
 
-async function publishPropertyPriceChanged(priceHistory, transaction) {
+async function publishPropertyPriceChanged(priceHistory, transaction, propertyId = null) {
   return publishDomainEvent(
     {
       groupId: priceHistory.groupId,
@@ -60,6 +60,7 @@ async function publishPropertyPriceChanged(priceHistory, transaction) {
       eventType: 'property.price.changed',
       payload: {
         offerId: priceHistory.offerId,
+        propertyId,
         oldPrice: priceHistory.oldPrice,
         newPrice: priceHistory.newPrice,
         reasonCode: priceHistory.reasonCode,
