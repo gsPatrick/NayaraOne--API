@@ -26,7 +26,7 @@ const WRITER_ON = "COALESCE(current_setting('app.analytics_writer', true), '') =
 const READ_CATALOG = `((company_id IS NULL AND group_id IS NULL) OR company_id = ${COMPANY_GUC} OR (company_id IS NULL AND group_id = ${GROUP_GUC}))`;
 const READ_TENANT = `(company_id = ${COMPANY_GUC} OR (company_id IS NULL AND group_id = ${GROUP_GUC}))`;
 const TABLES = ['alert_definitions', 'alert_instances', 'read_model_refreshes', 'data_quality_checks'];
-const FUNCTIONS = ['jsonb_has_payment_keys(jsonb)', 'alert_definitions_guard()', 'alert_instances_guard()'];
+const FUNCTIONS = ['jsonb_has_payment_keys(jsonb)', 'alert_definitions_guard()', 'alert_instances_guard()', 'alert_links_guard()'];
 const SEVERITIES = "'INFO', 'WARNING', 'CRITICAL'";
 const ZERO = "'00000000-0000-0000-0000-000000000000'::uuid";
 
@@ -290,6 +290,34 @@ async function createGuards(q) {
   `);
   await q(`DROP TRIGGER IF EXISTS alert_instances_guard ON ${T('alert_instances')}`);
   await q(`CREATE TRIGGER alert_instances_guard BEFORE UPDATE ON ${T('alert_instances')} FOR EACH ROW EXECUTE FUNCTION ${SCHEMA}.alert_instances_guard()`);
+
+  // ANA05 = vínculo entre tabelas de outra empresa/grupo. A FK ignora a RLS, então o gatilho confere que a definição
+  // (global, do grupo ou da mesma empresa) e o refresh citados pertencem ao mesmo escopo da linha.
+  await q(`
+    CREATE OR REPLACE FUNCTION ${SCHEMA}.alert_links_guard() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    DECLARE
+      ref RECORD;
+    BEGIN
+      IF TG_TABLE_NAME = 'alert_instances' THEN
+        SELECT company_id, group_id INTO ref FROM ${T('alert_definitions')} WHERE id = NEW.alert_definition_id;
+        IF NOT FOUND OR (ref.company_id IS NOT NULL AND ref.company_id IS DISTINCT FROM NEW.company_id)
+           OR (ref.group_id IS NOT NULL AND ref.group_id IS DISTINCT FROM NEW.group_id) THEN
+          RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+        END IF;
+      ELSIF NEW.refresh_id IS NOT NULL THEN
+        SELECT company_id, group_id INTO ref FROM ${T('read_model_refreshes')} WHERE id = NEW.refresh_id;
+        IF NOT FOUND OR ref.company_id IS DISTINCT FROM NEW.company_id OR ref.group_id IS DISTINCT FROM NEW.group_id THEN
+          RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+        END IF;
+      END IF;
+      RETURN NEW;
+    END
+    $fn$
+  `);
+  await q(`DROP TRIGGER IF EXISTS alert_links_guard ON ${T('alert_instances')}`);
+  await q(`CREATE TRIGGER alert_links_guard BEFORE INSERT OR UPDATE OF alert_definition_id ON ${T('alert_instances')} FOR EACH ROW EXECUTE FUNCTION ${SCHEMA}.alert_links_guard()`);
+  await q(`DROP TRIGGER IF EXISTS alert_links_guard ON ${T('data_quality_checks')}`);
+  await q(`CREATE TRIGGER alert_links_guard BEFORE INSERT OR UPDATE OF refresh_id ON ${T('data_quality_checks')} FOR EACH ROW EXECUTE FUNCTION ${SCHEMA}.alert_links_guard()`);
 
   for (const table of TABLES) {
     await q(`DROP TRIGGER IF EXISTS analytics_scope_guard ON ${T(table)}`);
