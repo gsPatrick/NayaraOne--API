@@ -23,7 +23,6 @@ function migracoes(re) {
   return fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
     .map((f) => ({ f, txt: fs.readFileSync(path.join(dir, f), 'utf8') })).filter((m) => re.test(m.txt));
 }
-const sem = (rel, ...tokens) => (txt) => tokens.forEach((t) => assert.ok(txt.includes(t), `src/modules/ai/${rel} deveria conter "${t}"`));
 
 test('inv_ai_001_modelo_nao_e_fonte_de_verdade', () => {
   const orq = arquivo('orchestrator/AiOrchestrator.js', 'M9-D020');
