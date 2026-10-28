@@ -12,7 +12,7 @@ const { Client } = require('pg');
 const { Sequelize } = require('sequelize');
 
 const API_ROOT = path.join(__dirname, '..', '..');
-const GOV_DIR = path.join(API_ROOT, 'src', 'modules', 'core-governance');
+const GOV_DIR = path.join(API_ROOT, 'src', 'features', 'core-governance');
 const DEMANDAS_DIR = path.join(API_ROOT, '..', 'Maturacao', 'demandas', 'marco-9');
 
 const EXPECTED_MODULES = ['api-governance', 'bcp', 'calendar', 'data-quality', 'dlp', 'feature-flags', 'finops', 'lineage'];

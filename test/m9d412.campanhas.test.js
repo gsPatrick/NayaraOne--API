@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { upsertSetting } = require('../src/features/settings/settings.service');
-const campaigns = require('../src/modules/marketing/campaigns/campaigns.service');
+const campaigns = require('../src/features/marketing/campaigns/campaigns.service');
 const {
   tenants, asTenant, makePerson, makeOpportunity, makeRadar, makeTemplate, completeBody, loadCampaign, loadSteps, q, uid, rejectsWith,
 } = require('./helpers/m9d412Fixtures');
@@ -92,7 +92,7 @@ test('cross_company_audience_bloqueado', async () => {
 });
 
 test('transicao_invalida_recusa', async () => {
-  const { assertTransition } = require('../src/modules/marketing/campaigns/campaigns.stateMachine');
+  const { assertTransition } = require('../src/features/marketing/campaigns/campaigns.stateMachine');
   for (const [from, to] of [['DRAFT', 'SCHEDULED'], ['SCHEDULED', 'RUNNING'], ['RUNNING', 'ENDED']]) assert.doesNotThrow(() => assertTransition(from, to));
   for (const [from, to] of [['DRAFT', 'RUNNING'], ['DRAFT', 'ENDED'], ['SCHEDULED', 'DRAFT'], ['RUNNING', 'SCHEDULED'], ['RUNNING', 'DRAFT'], ['ENDED', 'RUNNING'], ['ENDED', 'DRAFT'], ['SCHEDULED', 'ENDED']]) {
     assert.throws(() => assertTransition(from, to), (e) => {
@@ -105,7 +105,7 @@ test('transicao_invalida_recusa', async () => {
 });
 
 test('exportar_audiencia_nao_existe', async () => {
-  const router = require('../src/modules/marketing/campaigns').router;
+  const router = require('../src/features/marketing/campaigns').router;
   const rotas = router.stack.filter((l) => l.route).map((l) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
   assert.deepEqual(rotas.sort(), ['get /marketing/campaigns/:id', 'post /marketing/campaigns']);
   await withRollbackTenantTransaction(A, async (t) => {

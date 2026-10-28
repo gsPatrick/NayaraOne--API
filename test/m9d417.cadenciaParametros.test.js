@@ -13,7 +13,7 @@ const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const { upsertSetting } = require('../src/features/settings/settings.service');
-const P = require('../src/modules/marketing/automations/cadence');
+const P = require('../src/features/marketing/automations/cadence');
 const { scanSource, scanDirectory } = require('../scripts/lib/noHardcodedCadence');
 
 let tenant;
@@ -134,14 +134,14 @@ test('ci_falha_com_cadencia_literal_no_codigo', () => {
     fuso: "const tz = 'America/Sao_Paulo';",
     cap: "const cap = '3 mensagens por 7 dias';",
   };
-  const kinds = Object.entries(ruim).map(([k, src]) => [k, scanSource('src/modules/marketing/automations/x.js', src).map((f) => f.kind)]);
+  const kinds = Object.entries(ruim).map(([k, src]) => [k, scanSource('src/features/marketing/automations/x.js', src).map((f) => f.kind)]);
   assert.deepEqual(kinds, [['cadencia', ['cadencia']], ['horario', ['horario_de_silencio']], ['fuso', ['fuso']], ['cap', ['frequency_cap']]]);
   // Comentário, lista não crescente e arquivos de padrões/dicionários não contam.
-  assert.deepEqual(scanSource('src/modules/marketing/a.js', '// [3, 30, 90, 365] e 21:00\nconst x = [5, 4, 3];'), []);
-  assert.deepEqual(scanSource('src/modules/marketing/automations/cadence/cadence.defaults.js', ruim.cadencia), []);
-  assert.deepEqual(scanSource('src/modules/marketing/marketing.settings.js', ruim.horario), []);
+  assert.deepEqual(scanSource('src/features/marketing/a.js', '// [3, 30, 90, 365] e 21:00\nconst x = [5, 4, 3];'), []);
+  assert.deepEqual(scanSource('src/features/marketing/automations/cadence/cadence.defaults.js', ruim.cadencia), []);
+  assert.deepEqual(scanSource('src/features/marketing/marketing.settings.js', ruim.horario), []);
   // O código real do módulo está limpo.
-  assert.deepEqual(scanDirectory(path.join(__dirname, '..', 'src', 'modules', 'marketing')), []);
+  assert.deepEqual(scanDirectory(path.join(__dirname, '..', 'src', 'features', 'marketing')), []);
 });
 
 test('parametros_do_csv_existem_no_dicionario_e_na_tela', () => {

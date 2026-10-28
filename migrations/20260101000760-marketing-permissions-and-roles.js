@@ -2,7 +2,7 @@
 
 /**
  * M9-D402 — 12 permissões `marketing:*`, os 3 papéis padrão (Assistente de Marketing, Gerente de Marketing, Diretoria) e a
- * concessão padrão. Mesma lista de src/modules/marketing/marketing.permissions.js (o teste m9d402 confere que coincidem).
+ * concessão padrão. Mesma lista de src/features/marketing/marketing.permissions.js (o teste m9d402 confere que coincidem).
  *
  *  - Permissões: idempotentes por código.
  *  - Papéis: criados por empresa quando nenhum papel da empresa tem um dos nomes da faixa (padrões dos parâmetros

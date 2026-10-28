@@ -26,7 +26,7 @@ after(async () => {
 
 
 test('m9d800 permissões governance:* semeadas e na matriz', async () => {
-  const perms = require('../src/modules/core-governance/governance.permissions');
+  const perms = require('../src/features/core-governance/governance.permissions');
   assert.deepEqual(perms.GOVERNANCE_PERMISSIONS.map((p) => p.code).sort(), [...EXPECTED_PERMISSIONS].sort());
   assert.equal(new Set(perms.GOVERNANCE_PERMISSIONS.map((p) => p.code)).size, 21);
 
@@ -51,7 +51,7 @@ test('m9d800 permissões governance:* semeadas e na matriz', async () => {
 });
 
 test('m9d800 concessão padrão: perfil operacional recebe só calendar:read e só o administrador recebe as 13 sensíveis', async () => {
-  const perms = require('../src/modules/core-governance/governance.permissions');
+  const perms = require('../src/features/core-governance/governance.permissions');
   assert.deepEqual([...perms.DEFAULT_GRANTS.GESTAO].sort(), [...GESTAO_6].sort());
   assert.deepEqual([...perms.DEFAULT_GRANTS.FINANCEIRO].sort(), [...FINANCEIRO_5].sort());
   assert.deepEqual(perms.DEFAULT_GRANTS.OPERACIONAL, ['governance:calendar:read']);

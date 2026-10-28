@@ -3,8 +3,8 @@
 const { Op } = require('sequelize');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { getSetting } = require('../settings/settings.service');
-const { WARRANTY_MONTHS_KEY, CALENDAR_SETTING_DEFAULTS } = require('../../modules/core-governance/calendar/calendar.settings');
-const { dateKeyInZone, addMonthsToDateKey } = require('../../modules/core-governance/calendar/sources/time');
+const { WARRANTY_MONTHS_KEY, CALENDAR_SETTING_DEFAULTS } = require('../../features/core-governance/calendar/calendar.settings');
+const { dateKeyInZone, addMonthsToDateKey } = require('../../features/core-governance/calendar/sources/time');
 
 /**
  * Eventos de obra que alimentam o Calendário unificado (M9-D803). Separado de constructionEvents.service.js (uma

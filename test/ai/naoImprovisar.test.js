@@ -9,9 +9,9 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('../testHelpers');
 const guard = require('../../scripts/lib/aiArchGuard');
 const settingsService = require('../../src/features/settings/settings.service');
-const { buildToolContext, CONTEXT_KEYS, MENSAGEM_CAPACIDADE_NEGADA } = require('../../src/modules/ai/orchestrator/toolContext');
-const { executeTool } = require('../../src/modules/ai/tools/toolExecutor');
-const naoImprovisar = require('../../src/modules/ai/guards/naoImprovisar');
+const { buildToolContext, CONTEXT_KEYS, MENSAGEM_CAPACIDADE_NEGADA } = require('../../src/features/ai/orchestrator/toolContext');
+const { executeTool } = require('../../src/features/ai/tools/toolExecutor');
+const naoImprovisar = require('../../src/features/ai/guards/naoImprovisar');
 
 after(async () => { await sequelize.close(); });
 
@@ -38,7 +38,7 @@ async function bloqueado(promessa, capacidade) {
 
 test('naoimprovisar_01_sem_sql_livre', async () => {
   assert.equal(MENSAGEM_CAPACIDADE_NEGADA, 'Esta capacidade não é concedida à NAY (regra de segurança do Nayara One).');
-  // varredura estática: nada em src/modules/ai usa SQL livre fora de readmodels/
+  // varredura estática: nada em src/features/ai usa SQL livre fora de readmodels/
   const v = guard.varrer().filter((x) => x.regra === 'sql-livre');
   assert.equal(v.length, 0, guard.formatar(v));
   // executor: tool sem execute registrada é recusada
@@ -80,7 +80,7 @@ test('naoimprovisar_02_sem_secret_manager_nem_shell', async () => {
   }
   assert.throws(() => buildToolContext(partes({ sequelize: {} })), (e) => e.code === 'AI_CAPABILITY_FORBIDDEN');
   assert.throws(() => buildToolContext(partes({ secrets: {} })), (e) => e.code === 'AI_CAPABILITY_FORBIDDEN');
-  // varredura estática: nenhum import de secret manager, shell ou adapter bancário em src/modules/ai
+  // varredura estática: nenhum import de secret manager, shell ou adapter bancário em src/features/ai
   const v = guard.varrer().filter((x) => ['secret-manager', 'shell', 'adapter-bancario'].includes(x.regra));
   assert.equal(v.length, 0, guard.formatar(v));
 });

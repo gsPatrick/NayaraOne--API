@@ -7,7 +7,7 @@
  *    870-899 do bloco F).
  *  - `governance.apply_tenant_rls(regclass)`: toda tabela de governança chama esta função na sua migration. Ela liga RLS + FORCE RLS,
  *    cria a política `tenant_isolation` (USING e WITH CHECK por company_id) e dá o GRANT ao role de runtime SOMENTE se ele existir.
- *  - Catálogo fechado de 21 permissões (mesma lista de src/modules/core-governance/governance.permissions.js) e a tabela de
+ *  - Catálogo fechado de 21 permissões (mesma lista de src/features/core-governance/governance.permissions.js) e a tabela de
  *    concessão padrão: ADMIN recebe as 21; perfis de Gestão (6), Financeiro (5) e os demais (só calendar:read). Os nomes dos perfis
  *    de Gestão/Financeiro usam os padrões do parâmetro; depois da migration o administrador pode reaplicar com os nomes que
  *    escolher (POST /governance/permissions/apply-default).

@@ -11,7 +11,7 @@ const { ModelRouter } = require('./providers');
 const { AiEvaluationService } = require('./evaluations');
 
 /**
- * src/modules/ai — a NAY do Marco 9 (Caderno, Guia do Marcelo §2): providers, agents, tools, retrieval, memory, evaluations,
+ * src/features/ai — a NAY do Marco 9 (Caderno, Guia do Marcelo §2): providers, agents, tools, retrieval, memory, evaluations,
  * budgets, orchestrator e readmodels. Rotas em /v1/ai/*; chave geral `ia.habilitada` e chave por agente `ai.agents.enabled`.
  */
 module.exports = {

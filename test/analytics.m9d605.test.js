@@ -9,14 +9,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { ESLint } = require('eslint');
-const money = require('../src/modules/analytics/metrics/formulas/money');
-const { calcHash } = require('../src/modules/analytics/metrics/calcHash');
+const money = require('../src/features/analytics/metrics/formulas/money');
+const { calcHash } = require('../src/features/analytics/metrics/calcHash');
 const { findFormulasWithoutTests } = require('../scripts/analytics/checkFormulaTests');
-const { assertDeterministicFormula } = require('../src/modules/analytics/metrics/formulaDeterminism');
+const { assertDeterministicFormula } = require('../src/features/analytics/metrics/formulaDeterminism');
 const { runFormulaTable } = require('./analytics/formulaTable');
 
 const API_ROOT = path.join(__dirname, '..');
-const FORMULAS_DIR = path.join(API_ROOT, 'src', 'modules', 'analytics', 'metrics', 'formulas');
+const FORMULAS_DIR = path.join(API_ROOT, 'src', 'features', 'analytics', 'metrics', 'formulas');
 
 const ROUNDING_TABLE = [
   ['0.005', '0.01'], ['-0.005', '-0.01'], ['0.004', '0.00'], ['-0.004', '0.00'], ['0.125', '0.13'], ['-0.125', '-0.13'],
@@ -76,7 +76,7 @@ test('m9d605 lint proíbe Date.now, Math.random e Number em dinheiro', async () 
   for (const code of fine) assert.deepEqual(await lint(code), [], `não deveria reprovar: ${code}`);
   const outside = (await eslint.lintText("'use strict';\nconst a = Date.now();\n", { filePath: path.join(API_ROOT, 'src', 'x.js') }))[0].messages;
   assert.ok(!outside.some((m) => m.ruleId === RULE), 'a regra vale só na pasta das fórmulas');
-  const real = await eslint.lintFiles(['src/modules/analytics/metrics/formulas/**/*.js']);
+  const real = await eslint.lintFiles(['src/features/analytics/metrics/formulas/**/*.js']);
   assert.deepEqual(real.flatMap((r) => r.messages), [], 'as fórmulas reais passam no lint');
 });
 

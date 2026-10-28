@@ -5,7 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sup = require('../_helpers/analyticsHttpEnv');
-const security = require('../../../src/modules/analytics/security');
+const security = require('../../../src/features/analytics/security');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 
 const { inTx, ctxOf, sequelize } = sup;

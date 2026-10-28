@@ -2,7 +2,7 @@
 
 const { Op } = require('sequelize');
 const { sequelize, AiRecommendation, InventoryItem, Project } = require('../../models');
-const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
+const { recordRuleRun } = require('../../features/ai/orchestrator/runs');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getSetting } = require('../settings/settings.service');

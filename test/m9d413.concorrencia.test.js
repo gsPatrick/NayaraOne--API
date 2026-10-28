@@ -10,7 +10,7 @@ const { sequelize } = require('../src/models');
 const { withTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const fx = require('./helpers/m9d413Fixtures');
-const svc = require('../src/modules/marketing/automations/automations.service');
+const svc = require('../src/features/marketing/automations/automations.service');
 
 const DISPOSABLE = process.env.DISPOSABLE_DB === '1' && Boolean(process.env.DATABASE_ADMIN_URL);
 const SKIP = !DISPOSABLE && 'precisa do banco descartável (transações concorrentes COMMITAM)';

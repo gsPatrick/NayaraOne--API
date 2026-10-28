@@ -45,7 +45,7 @@ test('m9d800 cada README tem os 9 títulos de seção', () => {
 });
 
 test('m9d800 catálogo de eventos tem exatamente os 7 tipos do livro', async () => {
-  const events = require('../src/modules/core-governance/governance.events');
+  const events = require('../src/features/core-governance/governance.events');
   assert.deepEqual([...events.GOVERNANCE_EVENT_TYPES].sort(), [...EVENTS_7].sort());
   const owned = EXPECTED_MODULES.flatMap((mod) => require(path.join(GOV_DIR, mod)).events);
   assert.deepEqual([...owned].sort(), [...EVENTS_7].sort(), 'cada evento pertence a exatamente um módulo');
@@ -65,7 +65,7 @@ test('m9d800 catálogo de eventos tem exatamente os 7 tipos do livro', async () 
 });
 
 test('m9d800 corpo de erro de governança tem formato único com error.traceId e código com prefixo GOV_ (exceto a lista fechada)', async () => {
-  const errors = require('../src/modules/core-governance/governance.errors');
+  const errors = require('../src/features/core-governance/governance.errors');
   assert.deepEqual(errors.DEFAULT_PREFIX_EXCEPTIONS, ['PERMISSION_DENIED', 'MISSING_ACCESS_TOKEN', 'MFA_STEP_UP_REQUIRED', 'MFA_REQUIRED_NOT_ENABLED', 'INTERNAL_ERROR', 'VALIDATION_ERROR']);
   const nf = errors.govNotFound();
   assert.equal(nf.statusCode, 404);

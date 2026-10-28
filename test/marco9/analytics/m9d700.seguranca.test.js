@@ -5,9 +5,9 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sup = require('../_helpers/analyticsHttpEnv');
-const security = require('../../../src/modules/analytics/security');
-const registry = require('../../../src/modules/analytics/metrics');
-const analytics = require('../../../src/modules/analytics');
+const security = require('../../../src/features/analytics/security');
+const registry = require('../../../src/features/analytics/metrics');
+const analytics = require('../../../src/features/analytics');
 
 const { inTx, ctxOf, sequelize } = sup;
 let env;

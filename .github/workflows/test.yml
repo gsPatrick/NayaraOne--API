@@ -152,7 +152,7 @@ jobs:
       - name: Scanner de hard-code (Obras/Construction)
         run: node scripts/scanConstructionHardcode.js
 
-      # M9-D001 (AI-002/AI-004): teste de arquitetura da NAY; reprova o merge se src/modules/ai/** tiver SQL livre,
+      # M9-D001 (AI-002/AI-004): teste de arquitetura da NAY; reprova o merge se src/features/ai/** tiver SQL livre,
       # shell, eval, escrita em disco, secret manager, adapter bancário, superusuário ou SDK de fornecedor fora de providers/.
       - name: archGuard da NAY (M9-D001)
         run: node scripts/ai-arch-guard.js

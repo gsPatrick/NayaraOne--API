@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D402 — Permissões marketing:*, estrutura src/modules/marketing e padrão de erro MKT_*.
+// M9-D402 — Permissões marketing:*, estrutura src/features/marketing e padrão de erro MKT_*.
 //
 // Rodar SEMPRE em banco descartável (nunca no .env remoto):
 //   node scripts/withDisposableDb.js --port <55000-55999> -- env CI_TENANT_USERS_PASSWORD=... bash -c \
@@ -17,7 +17,7 @@ const path = require('node:path');
 const { Client } = require('pg');
 
 const API_ROOT = path.join(__dirname, '..');
-const MKT_DIR = path.join(API_ROOT, 'src', 'modules', 'marketing');
+const MKT_DIR = path.join(API_ROOT, 'src', 'features', 'marketing');
 const MIGRATION_FILE = '20260101000760-marketing-permissions-and-roles.js';
 
 const AREAS = ['content', 'campaigns', 'automations', 'publications', 'tracking', 'suppression'];
@@ -103,7 +103,7 @@ before(async () => {
   users.gestor = row.user_id;
 
   // Cria os 3 papéis e concede o padrão (idempotente) pelo serviço real, numa transação com a empresa A.
-  const { aplicarConcessaoPadrao } = require('../src/modules/marketing/marketing.permissions');
+  const { aplicarConcessaoPadrao } = require('../src/features/marketing/marketing.permissions');
   await sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantA.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantA.companyId }, transaction });
@@ -211,7 +211,7 @@ test('m9d402 modulo_nao_tem_import_circular: nenhuma área importa outra por cam
 });
 
 test('m9d402 catálogo de 12 permissões, papéis e erro MKT_*: o código e a migration coincidem', () => {
-  const perms = require('../src/modules/marketing/marketing.permissions');
+  const perms = require('../src/features/marketing/marketing.permissions');
   assert.deepEqual(perms.MARKETING_PERMISSIONS.map((p) => p.code), PERMISSIONS_12);
   assert.deepEqual([...perms.DEFAULT_GRANTS.ASSISTENTE].sort(), [...ASSISTENTE].sort());
   assert.deepEqual([...perms.DEFAULT_GRANTS.GERENTE].sort(), [...GERENTE].sort());
@@ -226,7 +226,7 @@ test('m9d402 catálogo de 12 permissões, papéis e erro MKT_*: o código e a mi
   const migrationText = fs.readFileSync(path.join(API_ROOT, 'migrations', MIGRATION_FILE), 'utf8');
   assert.doesNotMatch(migrationText.replace(/\/\*[\s\S]*?\*\//g, ''), /\bGRANT\b|CREATE TABLE|nayara_runtime/, 'a migration só grava permissões, papéis e concessões: sem tabela nem GRANT');
 
-  const errors = require('../src/modules/marketing/marketing.errors');
+  const errors = require('../src/features/marketing/marketing.errors');
   const forbidden = errors.mktForbidden();
   assert.equal(forbidden.statusCode, 403);
   assert.equal(forbidden.code, 'MKT_FORBIDDEN');
@@ -235,7 +235,7 @@ test('m9d402 catálogo de 12 permissões, papéis e erro MKT_*: o código e a mi
 });
 
 test('m9d402 parâmetros de massa e de perfis estão no SETTINGS_SCHEMA com o padrão do catálogo e são lidos por código', async () => {
-  const settings = require('../src/modules/marketing/marketing.settings');
+  const settings = require('../src/features/marketing/marketing.settings');
   assert.equal(settings.MARKETING_SETTING_DEFAULTS['marketing.mass.max_recipients_sem_aprovacao'], 50);
   assert.equal(settings.MARKETING_SETTING_DEFAULTS['marketing.mass.max_recipients_absoluto'], 5000);
   const { SETTINGS_SCHEMA } = require('../src/features/settings/settings.service');
@@ -252,7 +252,7 @@ test('m9d402 parâmetros de massa e de perfis estão no SETTINGS_SCHEMA com o pa
 });
 
 test('m9d402 mass_messaging: a permissão send:mass e o guarda que lê os dois tetos existem (regra completa e recusas: M9-D433)', { skip: !DISPOSABLE && SKIP_DISPOSABLE }, async () => {
-  const { assertMassSendAllowed } = require('../src/modules/marketing/marketing.guards');
+  const { assertMassSendAllowed } = require('../src/features/marketing/marketing.guards');
   const run = (count, permissions) => sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantA.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantA.companyId }, transaction });
@@ -279,7 +279,7 @@ test('m9d402 permissoes_marketing_existem_e_estao_nos_papeis (banco: migration +
   assert.deepEqual(await grantsOf('Diretoria'), [...DIRETORIA].sort());
 
   // Idempotente: reaplicar não duplica papel nem concessão.
-  const { aplicarConcessaoPadrao } = require('../src/modules/marketing/marketing.permissions');
+  const { aplicarConcessaoPadrao } = require('../src/features/marketing/marketing.permissions');
   const result = await sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantA.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantA.companyId }, transaction });
@@ -325,7 +325,7 @@ test('m9d402 killswitch_reativacao_exige_mfa_step_up: ativar sem MFA passa pela 
   assert.equal(reativar.body.error.code, 'MFA_STEP_UP_REQUIRED');
 
   // Em serviço: com step-up recente a reativação passa; expirado volta a recusar.
-  const { assertKillSwitchChangeAllowed } = require('../src/modules/marketing/marketing.guards');
+  const { assertKillSwitchChangeAllowed } = require('../src/features/marketing/marketing.guards');
   const inTx = (fn) => sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantA.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantA.companyId }, transaction });

@@ -9,7 +9,7 @@
  * fechado pela publicação da próxima versão (M9-D604), por isso informar `validUntil` é recusado.
  */
 const AppError = require('../../../utils/AppError');
-const { UNITS, VALUE_NATURES, DOMAINS } = require('../../../features/analytics/metricStore.service');
+const { UNITS, VALUE_NATURES, DOMAINS } = require('../metricStore.service');
 
 const CRITICALITIES = ['CRITICAL', 'NORMAL'];
 const CODE_RE = /^[a-z][a-z0-9]*[.][a-z][a-z0-9_]*$/;

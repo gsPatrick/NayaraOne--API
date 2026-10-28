@@ -1,7 +1,7 @@
 'use strict';
 
 // Teste de arquitetura da NAY (M9-D001, AI-002 e AI-004; "Não improvisar" do Marco 9).
-// Varre src/modules/ai/** e devolve cada violação com arquivo e linha. É uma prova por ausência:
+// Varre src/features/ai/** e devolve cada violação com arquivo e linha. É uma prova por ausência:
 // a NAY não tem SQL livre, shell, eval, escrita em disco, secret manager, adapter bancário de
 // execução, string de conexão/role de superusuário, nem SDK de fornecedor de modelo fora de
 // `providers/`. Usado pelo CI (scripts/ai-arch-guard.js) e por test/ai/archGuard.test.js.
@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const RAIZ_PADRAO = path.join(__dirname, '..', '..', 'src', 'modules', 'ai');
+const RAIZ_PADRAO = path.join(__dirname, '..', '..', 'src', 'features', 'ai');
 
 // Pacotes/hosts de fornecedor de modelo: só o diretório providers/ pode tocá-los (AI-002).
 const FORNECEDORES = [
@@ -104,11 +104,11 @@ function varrer(raiz = RAIZ_PADRAO) {
   return violacoes;
 }
 
-// Princípio AI-002 fora da NAY: nenhum arquivo do ERP (fora de src/modules/ai/providers/) importa SDK
+// Princípio AI-002 fora da NAY: nenhum arquivo do ERP (fora de src/features/ai/providers/) importa SDK
 // de fornecedor de modelo nem chama o host dele.
 function varrerSdkFornecedorNoRestoDoCodigo(srcRaiz = path.join(__dirname, '..', '..', 'src')) {
   const violacoes = [];
-  const permitido = path.join(srcRaiz, 'modules', 'ai', 'providers') + path.sep;
+  const permitido = path.join(srcRaiz, 'features', 'ai', 'providers') + path.sep;
   const regraSdk = modulo(FORNECEDORES);
   const regraHost = new RegExp(HOSTS_FORNECEDOR.map(esc).join('|'), 'i');
   for (const arquivo of listarArquivos(srcRaiz)) {
@@ -116,7 +116,7 @@ function varrerSdkFornecedorNoRestoDoCodigo(srcRaiz = path.join(__dirname, '..',
     const linhas = limparComentarios(fs.readFileSync(arquivo, 'utf8')).split('\n');
     linhas.forEach((linha, idx) => {
       if (regraSdk.test(linha) || regraHost.test(linha)) {
-        violacoes.push({ regra: 'sdk-fornecedor-fora-do-adapter', arquivo: path.relative(path.join(srcRaiz, '..'), arquivo), linha: idx + 1, mensagem: 'SDK/HTTP de fornecedor de modelo fora de src/modules/ai/providers/ (AI-002)', trecho: linha.trim().slice(0, 160) });
+        violacoes.push({ regra: 'sdk-fornecedor-fora-do-adapter', arquivo: path.relative(path.join(srcRaiz, '..'), arquivo), linha: idx + 1, mensagem: 'SDK/HTTP de fornecedor de modelo fora de src/features/ai/providers/ (AI-002)', trecho: linha.trim().slice(0, 160) });
       }
     });
   }

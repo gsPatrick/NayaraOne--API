@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { Sequelize } = require('sequelize');
 
 const { sequelize } = require('../src/models');
-const idem = require('../src/modules/marketing/automations/idempotency');
+const idem = require('../src/features/marketing/automations/idempotency');
 const messagesService = require('../src/features/crm/messages.service');
 const opportunityTasksService = require('../src/features/crm/opportunityTasks.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D605 (3.1) — regra `nayara/no-float-money` para src/modules/analytics/metrics/formulas/: a fórmula é função pura e o dinheiro nunca
+ * M9-D605 (3.1) — regra `nayara/no-float-money` para src/features/analytics/metrics/formulas/: a fórmula é função pura e o dinheiro nunca
  * passa por ponto flutuante. Proíbe relógio (Date.now, new Date() sem argumento), sorteio (Math.random), Number(...)/parseFloat/
  * Number.parseFloat, .toFixed, Math.round/floor/ceil/trunc, `+x` (coerção) e literal numérico com fração. Use money.js.
  */

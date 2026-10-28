@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * M9-D605 (3.3) — passo de CI "metric formula tests": toda fórmula de src/modules/analytics/metrics/formulas/ precisa de um arquivo de
+ * M9-D605 (3.3) — passo de CI "metric formula tests": toda fórmula de src/features/analytics/metrics/formulas/ precisa de um arquivo de
  * teste de tabela `<fórmula>.formula.test.js` em test/analytics/formulas/. Sai com código 1 e lista as fórmulas sem teste. O M9-D705
  * chama este script no pipeline.
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { isFormulaFile } = require('../../src/modules/analytics/metrics/formulaCatalog');
+const { isFormulaFile } = require('../../src/features/analytics/metrics/formulaCatalog');
 
-const DEFAULT_FORMULAS = path.join(__dirname, '..', '..', 'src', 'modules', 'analytics', 'metrics', 'formulas');
+const DEFAULT_FORMULAS = path.join(__dirname, '..', '..', 'src', 'features', 'analytics', 'metrics', 'formulas');
 const DEFAULT_TESTS = path.join(__dirname, '..', '..', 'test', 'analytics', 'formulas');
 
 /** Arquivos de fórmula (ex.: "freeCash.js") sem o "freeCash.formula.test.js" correspondente. */

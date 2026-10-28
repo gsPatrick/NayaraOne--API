@@ -30,7 +30,7 @@ async function setup() {
     req.auth = { ...t, roles: [], permissions: (req.get('x-test-perms') || '').split(',').filter(Boolean) };
     next();
   };
-  const { createAnalyticsRouter } = require('../../../src/modules/analytics');
+  const { createAnalyticsRouter } = require('../../../src/features/analytics');
   const router = createAnalyticsRouter({ authChain: [fakeAuth, tenantMiddleware] });
   const app = express();
   app.use(correlationIdMiddleware);
@@ -87,7 +87,7 @@ async function publishTestMetric(env, { prefix = 'fin', criticality = 'CRITICAL'
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
-  const registry = require('../../../src/modules/analytics/metrics');
+  const registry = require('../../../src/features/analytics/metrics');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d687-formulas-'));
   const formulaId = `${prefix}.m9d687_soma_${sfx()}`;
   fs.writeFileSync(path.join(dir, 'soma.js'), `module.exports = { id: '${formulaId}', version: 1, compute: () => ({ value: '3' }),

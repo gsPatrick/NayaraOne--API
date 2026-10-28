@@ -6,12 +6,12 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mapSourceEvent, SOURCE_EVENT_TYPES } = require('../../../src/modules/core-governance/calendar/sources');
-const { endOfDayInZone, addMonthsToDateKey } = require('../../../src/modules/core-governance/calendar/sources/time');
-const { projectWarrantySourceId } = require('../../../src/modules/core-governance/calendar/sources/ids');
-const { allowedSourceTypes } = require('../../../src/modules/core-governance/calendar/calendar.visibility');
-const settings = require('../../../src/modules/core-governance/calendar/calendar.settings');
-const { isValidDeepLink } = require('../../../src/modules/core-governance/calendar/calendar.deeplinks');
+const { mapSourceEvent, SOURCE_EVENT_TYPES } = require('../../../src/features/core-governance/calendar/sources');
+const { endOfDayInZone, addMonthsToDateKey } = require('../../../src/features/core-governance/calendar/sources/time');
+const { projectWarrantySourceId } = require('../../../src/features/core-governance/calendar/sources/ids');
+const { allowedSourceTypes } = require('../../../src/features/core-governance/calendar/calendar.visibility');
+const settings = require('../../../src/features/core-governance/calendar/calendar.settings');
+const { isValidDeepLink } = require('../../../src/features/core-governance/calendar/calendar.deeplinks');
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
 const OWNER = '22222222-2222-4222-8222-222222222222';

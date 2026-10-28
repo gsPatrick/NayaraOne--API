@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sup = require('./analytics.m9d603.support');
-const registry = require('../src/modules/analytics/metrics');
+const registry = require('../src/features/analytics/metrics');
 const dashboards = require('../src/features/analytics/dashboardStore.service');
 
 const { inTx, ctxOf, metricInput } = sup;

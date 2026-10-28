@@ -12,7 +12,7 @@
 const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const store = require('../../../features/analytics/metricStore.service');
+const store = require('../metricStore.service');
 const { assertCanManage } = require('./registry.permission');
 const { assertComplete, validateShape } = require('./registry.fields');
 const { getFormulaCatalog } = require('./formulaCatalog');

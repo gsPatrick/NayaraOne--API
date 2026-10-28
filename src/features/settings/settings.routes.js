@@ -3,9 +3,9 @@
 const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
-const { isAiSettingKey } = require('../../modules/ai/ai.settings');
-const { requireTemplateManageToAddPublicFields } = require('../../modules/marketing/content/publicFields.settings');
-const { requireAutomationManageForCadence } = require('../../modules/marketing/automations/cadence/cadence.guard');
+const { isAiSettingKey } = require('../../features/ai/ai.settings');
+const { requireTemplateManageToAddPublicFields } = require('../../features/marketing/content/publicFields.settings');
+const { requireAutomationManageForCadence } = require('../../features/marketing/automations/cadence/cadence.guard');
 const settingsController = require('./settings.controller');
 
 const settingsRouter = Router();

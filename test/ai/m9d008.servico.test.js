@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { withRollbackTenantTransaction } = require('../testHelpers');
-const knowledge = require('../../src/modules/ai/knowledge');
+const knowledge = require('../../src/features/ai/knowledge');
 const { sequelize, uid, q, run, carregarPessoas, ctxDe, prepararTenants, expectDbError } = require('../helpers/aiRuns');
 
 let tenantA;

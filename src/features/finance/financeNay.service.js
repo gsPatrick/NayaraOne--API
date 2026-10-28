@@ -1,7 +1,7 @@
 'use strict';
 
 const { sequelize, CostCenter } = require('../../models');
-const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
+const { recordRuleRun } = require('../../features/ai/orchestrator/runs');
 const { getWeeklyHealthReport } = require('./financialHealthReport.service');
 const { resolveAntifraudThresholds } = require('./financeAntifraud.service');
 const { startOfBusinessDay } = require('../../utils/businessDate');

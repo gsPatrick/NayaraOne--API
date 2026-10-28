@@ -1,6 +1,6 @@
 'use strict';
 
-const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
+const { recordRuleRun } = require('../../features/ai/orchestrator/runs');
 const {
   Contract,
   ContractParty,

@@ -43,7 +43,7 @@ function gerar() {
  * rota (as demandas do bloco as ligam depois) continuam listadas: o catálogo é fechado e vem do código, não de digitação.
  */
 function gerarCatalogoGovernanca(rotas) {
-  const { GOVERNANCE_PERMISSIONS } = require('../src/modules/core-governance/governance.permissions');
+  const { GOVERNANCE_PERMISSIONS } = require('../src/features/core-governance/governance.permissions');
   return GOVERNANCE_PERMISSIONS.map((p) => ({
     code: p.code,
     risk: p.risk,

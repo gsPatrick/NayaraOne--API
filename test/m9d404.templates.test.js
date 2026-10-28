@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const { sequelize } = require('../src/models');
 const { getSeedTenant, withRollbackTenantTransaction, withTenantTransaction } = require('./testHelpers');
 const { upsertSetting } = require('../src/features/settings/settings.service');
-const templates = require('../src/modules/marketing/content/template.service');
+const templates = require('../src/features/marketing/content/template.service');
 const { q, uid, sha, templateInput } = require('./helpers/m9d404Fixtures');
 
 const DISPOSABLE = process.env.DISPOSABLE_DB === '1';

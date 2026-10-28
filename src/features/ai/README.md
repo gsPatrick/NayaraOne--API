@@ -1,4 +1,4 @@
-# src/modules/ai — a NAY
+# src/features/ai — a NAY
 
 Pastas do livro: `providers/`, `agents/`, `tools/`, `retrieval/`, `memory/`, `evaluations/`, `budgets/`, mais `orchestrator/` e `readmodels/`. Serviços exportados por `index.js`: AiOrchestrator, ToolRegistry, RetrievalService, MemoryService, ModelRouter, AiEvaluationService.
 

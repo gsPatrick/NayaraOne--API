@@ -184,7 +184,7 @@ test('rotas_de_campanha_exigem_permissao_agendam_e_isolam_empresas', { skip: !DI
       VALUES ($1, $2, $3, $4, 'VISIT', '{FIRST,LAST}', '{"fonte":"QA-M9 D412"}'::jsonb, true, $5)`, [camp.group_id, camp.company_id, ids.personA, id, new Date(new Date(camp.ends_at).getTime() - 3600e3)]);
   }
   await adminQuery('UPDATE marketing.campaigns SET cost_actual = 9180 WHERE id = $1', [id]);
-  const lifecycle = require('../src/modules/marketing/campaigns').lifecycle;
+  const lifecycle = require('../src/features/marketing/campaigns').lifecycle;
   await sequelize.transaction(async (transaction) => {
     await sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true)", { replacements: { g: camp.group_id, c: camp.company_id }, transaction });
     await lifecycle.runLifecycleTick({ groupId: camp.group_id, companyId: camp.company_id }, transaction, new Date(new Date(camp.ends_at).getTime() + 1000));

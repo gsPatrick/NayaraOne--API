@@ -71,7 +71,7 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   // além da GET de leitura.
   const nay = fs.readFileSync(path.join(financeDir, 'financeNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const requires = [...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort();
-  assert.deepEqual(requires, ['../../models', '../../modules/ai/orchestrator/runs', '../../utils/businessDate', './financeAntifraud.service', './financialHealthReport.service'].sort());
+  assert.deepEqual(requires, ['../../models', '../../features/ai/orchestrator/runs', '../../utils/businessDate', './financeAntifraud.service', './financialHealthReport.service'].sort());
   assert.match(nay, /const \{ sequelize, CostCenter \} = require\('\.\.\/\.\.\/models'\)/);
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');

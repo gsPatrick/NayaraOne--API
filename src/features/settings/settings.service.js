@@ -5,15 +5,15 @@ const { TenantSetting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
-const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../modules/core-governance/governance.settings');
-const { AI_SETTINGS_SCHEMA } = require('../../modules/ai/ai.settings');
-const { MARKETING_SETTINGS_SCHEMA } = require('../../modules/marketing/marketing.settings');
+const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
+const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
+const { MARKETING_SETTINGS_SCHEMA } = require('../../features/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
-const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../modules/marketing/content/publicFields.settings');
-const { TEMPLATE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/template.settings');
-const { PIPELINE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/pipeline.settings');
-const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../modules/marketing/campaigns/campaigns.settings');
-const { CADENCE_SETTINGS_SCHEMA } = require('../../modules/marketing/automations/cadence/cadence.settings');
+const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../features/marketing/content/publicFields.settings');
+const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/template.settings');
+const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
+const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
+const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
 const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
@@ -22,9 +22,9 @@ const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
-const { READ_ONLY_SETTINGS_SCHEMA } = require('../../modules/analytics/readOnly/readOnly.settings');
-const { METRICS_SETTINGS_SCHEMA } = require('../../modules/analytics/metrics/metrics.settings');
-const { SECURITY_SETTINGS_SCHEMA } = require('../../modules/analytics/security/security.settings');
+const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
+const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
+const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de

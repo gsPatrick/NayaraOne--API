@@ -1,6 +1,6 @@
 # core-governance — Governança operacional (Marco 9, bloco E/F)
 
-Pasta nova (`src/modules`): o restante da API usa `src/features/*`, mas o livro manda esta estrutura (Guia do Marcelo §2). Oito subpastas, cada uma com `index.js` (exporta `router`, `service`, `events`), `*.routes.js`, `*.controller.js`, `*.service.js` e `README.md` com os 9 títulos fixos (M9-D891 confere o conteúdo).
+Feature em `src/features/core-governance` (decisão DI-ESTRUTURA-1: nunca existe `src/modules`; o que é feature fica em `src/features/<área>`), com a estrutura do livro (Guia do Marcelo §2). Oito subpastas, cada uma com `index.js` (exporta `router`, `service`, `events`), `*.routes.js`, `*.controller.js`, `*.service.js` e `README.md` com os 9 títulos fixos (M9-D891 confere o conteúdo).
 
 | Subpasta | Prefixo de rota | Demandas |
 |---|---|---|

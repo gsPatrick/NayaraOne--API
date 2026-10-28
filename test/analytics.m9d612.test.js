@@ -51,7 +51,7 @@ before(async () => {
   assert.match(process.env.DATABASE_ADMIN_URL, /@127\.0\.0\.1:/, 'o destino precisa ser 127.0.0.1');
   admin = new Sequelize(process.env.DATABASE_ADMIN_URL, { dialect: 'postgres', logging: false });
   tenant = await getSeedTenant();
-  analytics = require('../src/modules/analytics');
+  analytics = require('../src/features/analytics');
   const router = analytics.createAnalyticsRouter({ authChain: [fakeAuth, tenantMiddleware] });
   router.get('/analytics/probe/estado', async (req, res, next) => {
     try { res.json({ data: await txInfo(req) }); } catch (e) { next(e); }
@@ -209,22 +209,22 @@ test('m9d612 lint proíbe import de serviço de escrita em analytics', async () 
   };
   const proibidos = [
     'src/features/finance/financialEntry.service', 'src/features/crm/crm.service',
-    'src/modules/marketing/campaigns/campaign.service', 'src/modules/ai/tools/x',
+    'src/features/marketing/campaigns/campaign.service', 'src/features/ai/tools/x',
   ];
   for (const target of proibidos) {
-    for (const file of ['src/modules/analytics/dashboards/x.js', 'src/features/analytics/x.js']) {
+    for (const file of ['src/features/analytics/dashboards/x.js', 'src/features/analytics/x.js']) {
       assert.ok((await lint(target, file)).some((m) => m.ruleId === RULE), `deveria reprovar: ${target} em ${file}`);
     }
   }
   const permitidos = [
     'src/models/index', 'src/utils/AppError', 'src/engines/audit/auditLog.service', 'src/middlewares/auth.middleware',
-    'src/features/analytics/metricStore.service', 'src/modules/analytics/metrics/index',
+    'src/features/analytics/metricStore.service', 'src/features/analytics/metrics/index',
     'src/features/settings/settings.service', 'src/features/finance/finance.readRepository',
   ];
   for (const target of permitidos) {
-    assert.ok(!(await lint(target, 'src/modules/analytics/dashboards/x.js')).some((m) => m.ruleId === RULE), `não deveria reprovar: ${target}`);
+    assert.ok(!(await lint(target, 'src/features/analytics/dashboards/x.js')).some((m) => m.ruleId === RULE), `não deveria reprovar: ${target}`);
   }
-  const fora = await lint('src/features/finance/financialEntry.service', 'src/modules/marketing/x.js');
+  const fora = await lint('src/features/finance/financialEntry.service', 'src/features/marketing/x.js');
   assert.ok(!fora.some((m) => m.ruleId === RULE), 'a regra vale só para o analytics');
 });
 

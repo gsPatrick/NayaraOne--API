@@ -13,7 +13,7 @@ const casesService = require('../../../src/features/construction/maintenanceCase
 const guaranteesService = require('../../../src/features/legal/guarantees.service');
 const calendarEvents = require('../../../src/features/construction/constructionCalendarEvents.service');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
-const { dateKeyInZone, addMonthsToDateKey } = require('../../../src/modules/core-governance/calendar/sources/time');
+const { dateKeyInZone, addMonthsToDateKey } = require('../../../src/features/core-governance/calendar/sources/time');
 const { warrantyCaseCalendarFields } = calendarEvents;
 
 let tenant;

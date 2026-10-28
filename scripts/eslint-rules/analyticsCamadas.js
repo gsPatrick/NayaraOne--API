@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D613 (3.2) — regras de dependência entre as camadas de src/modules/analytics:
+ * M9-D613 (3.2) — regras de dependência entre as camadas de src/features/analytics:
  *  - metrics/formulas/*: puras; só importam arquivos de metrics/ (e módulos nativos do Node). Sem models, sequelize, pg, utils.
  *  - dashboards/ e briefs/: sem models/sequelize/pg e sem serviço de outro módulo (nunca tabelas de origem); a camada
  *    read-models é consumida só pelo index.js (API pública).
@@ -11,7 +11,7 @@ const path = require('node:path');
 const { builtinModules } = require('node:module');
 
 const SRC = path.resolve(__dirname, '..', '..', 'src');
-const BASE = path.join(SRC, 'modules', 'analytics');
+const BASE = path.join(SRC, 'features', 'analytics');
 const DB_PACKAGES = new Set(['sequelize', 'pg', 'pg-hstore', 'knex']);
 
 function camadaDe(filename) {
@@ -36,8 +36,8 @@ function motivo(camada, spec, dir) {
     return alvo === path.join(BASE, 'metrics') || alvo.startsWith(path.join(BASE, 'metrics') + path.sep) ? null : 'a fórmula só importa de metrics/';
   }
   if (rel === 'models' || rel.startsWith('models/')) return 'tabelas de origem pelos models';
-  if (/^(features|modules)\//.test(rel) && !rel.startsWith('features/analytics') && !rel.startsWith('modules/analytics')) return 'serviço de outro módulo';
-  const m = /^modules\/analytics\/read-models\/(.+)$/.exec(rel);
+  if (/^features\//.test(rel) && !rel.startsWith('features/analytics')) return 'serviço de outro módulo';
+  const m = /^features\/analytics\/read-models\/(.+)$/.exec(rel);
   if (m && m[1] !== 'index' && m[1] !== 'index.js') return 'use a API pública de read-models (index.js)';
   return null;
 }

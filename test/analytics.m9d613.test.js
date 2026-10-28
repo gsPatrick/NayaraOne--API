@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D613 — estrutura de src/modules/analytics e regras de dependência entre camadas. Testes estáticos (sem banco).
+// M9-D613 — estrutura de src/features/analytics e regras de dependência entre camadas. Testes estáticos (sem banco).
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -8,7 +8,7 @@ const path = require('node:path');
 const { ESLint } = require('eslint');
 
 const API_ROOT = path.join(__dirname, '..');
-const BASE = path.join(API_ROOT, 'src', 'modules', 'analytics');
+const BASE = path.join(API_ROOT, 'src', 'features', 'analytics');
 const DEMANDAS = path.join(API_ROOT, '..', 'Maturacao', 'demandas', 'marco-9');
 const CAMADAS = ['metrics', 'read-models', 'dashboards', 'alerts', 'quality', 'exports', 'briefs'];
 const RULE = 'nayara/analytics-camadas';
@@ -38,8 +38,8 @@ async function lintar(file, target) {
 }
 
 test('m9d613 lint barra fórmula com import de models', async () => {
-  const f = 'src/modules/analytics/metrics/formulas/x.formula.js';
-  for (const t of ['src/models/index', 'src/models/Property', 'src/utils/AppError', 'src/modules/analytics/dashboards/index', 'sequelize', 'pg']) {
+  const f = 'src/features/analytics/metrics/formulas/x.formula.js';
+  for (const t of ['src/models/index', 'src/models/Property', 'src/utils/AppError', 'src/features/analytics/dashboards/index', 'sequelize', 'pg']) {
     assert.ok((await lintar(f, t)).length > 0, `deveria reprovar ${t}`);
   }
   for (const t of ['../metricPeriod', './round.formula', 'node:crypto', 'crypto']) {
@@ -48,16 +48,16 @@ test('m9d613 lint barra fórmula com import de models', async () => {
 });
 
 test('m9d613 lint barra dashboards lendo tabelas de origem', async () => {
-  for (const f of ['src/modules/analytics/dashboards/x.js', 'src/modules/analytics/briefs/x.js']) {
-    for (const t of ['src/models/index', 'src/models/FinancialEntry', 'src/features/finance/finance.service', 'src/modules/analytics/read-models/crm.readmodel', 'sequelize']) {
+  for (const f of ['src/features/analytics/dashboards/x.js', 'src/features/analytics/briefs/x.js']) {
+    for (const t of ['src/models/index', 'src/models/FinancialEntry', 'src/features/finance/finance.service', 'src/features/analytics/read-models/crm.readmodel', 'sequelize']) {
       assert.ok((await lintar(f, t)).length > 0, `deveria reprovar ${t} em ${f}`);
     }
-    for (const t of ['src/modules/analytics/metrics/index', 'src/modules/analytics/read-models/index', 'src/utils/AppError', 'src/features/analytics/dashboardStore.service']) {
+    for (const t of ['src/features/analytics/metrics/index', 'src/features/analytics/read-models/index', 'src/utils/AppError', 'src/features/analytics/dashboardStore.service']) {
       assert.equal((await lintar(f, t)).length, 0, `deveria permitir ${t} em ${f}`);
     }
   }
   // Fora de dashboards/briefs/formulas a regra não se aplica (read-models é a camada que lê a origem).
-  assert.equal((await lintar('src/modules/analytics/read-models/x.js', 'src/models/index')).length, 0);
+  assert.equal((await lintar('src/features/analytics/read-models/x.js', 'src/models/index')).length, 0);
 });
 
 test('m9d613 lint de dependências ativo na configuração usada pelo npm run lint', async () => {
@@ -111,11 +111,11 @@ test('m9d613 documento da ordem de construção lista os 11 passos', () => {
 });
 
 test('m9d613 rotas /analytics montadas', () => {
-  const { router, createAnalyticsRouter } = require('../src/modules/analytics');
+  const { router, createAnalyticsRouter } = require('../src/features/analytics');
   assert.equal(typeof createAnalyticsRouter, 'function');
   assert.ok(router.stack.some((l) => l.regexp && l.regexp.test('/analytics/x')), 'router deve tratar /analytics');
   const index = fs.readFileSync(path.join(API_ROOT, 'src', 'routes', 'index.js'), 'utf8');
   assert.match(index, /router\.use\('\/v1', analyticsModuleRouter\)/);
-  const mod = require('../src/modules/analytics');
+  const mod = require('../src/features/analytics');
   for (const c of CAMADAS) assert.ok(mod.camadas.includes(c));
 });

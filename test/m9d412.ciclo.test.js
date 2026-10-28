@@ -8,11 +8,11 @@ const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
-const campaigns = require('../src/modules/marketing/campaigns/campaigns.service');
-const lifecycle = require('../src/modules/marketing/campaigns/lifecycle.service');
-const { assertCampaignRunning } = require('../src/modules/marketing/campaigns/runnerGuard');
-const { registerCampaignSendPort, clearCampaignSendPort } = require('../src/modules/marketing/campaigns/sendPort');
-const { recordApprovedHash } = require('../src/modules/marketing/content/approval.guard');
+const campaigns = require('../src/features/marketing/campaigns/campaigns.service');
+const lifecycle = require('../src/features/marketing/campaigns/lifecycle.service');
+const { assertCampaignRunning } = require('../src/features/marketing/campaigns/runnerGuard');
+const { registerCampaignSendPort, clearCampaignSendPort } = require('../src/features/marketing/campaigns/sendPort');
+const { recordApprovedHash } = require('../src/features/marketing/content/approval.guard');
 const { insertContent, insertJob } = require('./helpers/m9d404Fixtures');
 const { tenants, makePerson, makeTemplate, completeBody, loadCampaign, loadSteps, q, uid, DAY } = require('./helpers/m9d412Fixtures');
 

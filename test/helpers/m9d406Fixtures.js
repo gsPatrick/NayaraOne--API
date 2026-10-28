@@ -5,8 +5,8 @@
 const crypto = require('node:crypto');
 const fx = require('./m9d405Fixtures');
 const { templateInput } = require('./m9d404Fixtures');
-const templates = require('../../src/modules/marketing/content/template.service');
-const nay = require('../../src/modules/marketing/content/pipeline.nayPort');
+const templates = require('../../src/features/marketing/content/template.service');
+const nay = require('../../src/features/marketing/content/pipeline.nayPort');
 
 const uid = () => crypto.randomUUID();
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');

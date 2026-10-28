@@ -12,7 +12,7 @@ const suppression = require('./suppression');
 const killSwitchRouter = require('./killswitch.routes');
 
 /**
- * Módulo Marketing (Caderno §Marketing, Guia do Marcelo §2): seis áreas em src/modules/marketing/<área>/ (content, campaigns,
+ * Módulo Marketing (Caderno §Marketing, Guia do Marcelo §2): seis áreas em src/features/marketing/<área>/ (content, campaigns,
  * automations, publications, tracking, suppression), cada uma com service, controller, routes e index. Nenhuma área importa a
  * outra por caminho interno: só pelo index.js. As integrações ficam nos adapters já definidos (M9-D200). Rotas em /marketing/*.
  */

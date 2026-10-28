@@ -2,7 +2,7 @@
 
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
-const { runLifecycleTick } = require('../../modules/marketing/campaigns/lifecycle.service');
+const { runLifecycleTick } = require('../../features/marketing/campaigns/lifecycle.service');
 
 /**
  * campaignLifecycleJob (M9-D412) — a cada minuto, para cada empresa: campanha SCHEDULED com starts_at vencido vira RUNNING (evento

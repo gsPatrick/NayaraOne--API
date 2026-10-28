@@ -7,7 +7,7 @@
  * transação). `required_permission` pode apontar para permissão criada por migration posterior (a 9700); a existência é
  * conferida na PUBLICAÇÃO pelo serviço, não aqui. down: remove só as definições globais deste seed.
  */
-const { DASHBOARD_CATALOG, DASHBOARD_CODES, SEED_P95_MS } = require('../src/modules/analytics/dashboards/dashboard.catalog');
+const { DASHBOARD_CATALOG, DASHBOARD_CODES, SEED_P95_MS } = require('../src/features/analytics/dashboards/dashboard.catalog');
 
 const ZERO_SCOPE = 'company_id IS NULL AND group_id IS NULL';
 

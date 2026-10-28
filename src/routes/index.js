@@ -35,10 +35,10 @@ const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
-const { router: governanceRouter } = require('../modules/core-governance');
-const { router: aiModuleRouter } = require('../modules/ai');
-const { router: marketingModuleRouter } = require('../modules/marketing');
-const { router: analyticsModuleRouter } = require('../modules/analytics');
+const { router: governanceRouter } = require('../features/core-governance');
+const { router: aiModuleRouter } = require('../features/ai');
+const { router: marketingModuleRouter } = require('../features/marketing');
+const { router: analyticsModuleRouter } = require('../features/analytics');
 
 /**
  * Agregador único de rotas da API.
@@ -81,14 +81,14 @@ router.post('/v1/crm/carts/public/:token/properties/:propertyId/click', crmContr
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);
-// Marco 9 — governança (src/modules/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
+// Marco 9 — governança (src/features/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
 // autenticação valem só nos prefixos do bloco (nenhum router.use sem caminho), então as demais rotas de /v1 não são afetadas.
 router.use('/v1', governanceRouter);
-// Marco 9 — NAY (src/modules/ai, M9-D003): /v1/ai/*, auth/tenant só sob /ai, chave geral ia.habilitada no aiGate.
+// Marco 9 — NAY (src/features/ai, M9-D003): /v1/ai/*, auth/tenant só sob /ai, chave geral ia.habilitada no aiGate.
 router.use('/v1', aiModuleRouter);
-// Marco 9 — Marketing (src/modules/marketing, M9-D402): /v1/marketing/*, auth/tenant só sob /marketing, permissões marketing:*.
+// Marco 9 — Marketing (src/features/marketing, M9-D402): /v1/marketing/*, auth/tenant só sob /marketing, permissões marketing:*.
 router.use('/v1', marketingModuleRouter);
-// Marco 9 — BI (src/modules/analytics, M9-D612): /v1/analytics/*, GET em transação somente leitura e 405 em escrita de métrica/dashboard.
+// Marco 9 — BI (src/features/analytics, M9-D612): /v1/analytics/*, GET em transação somente leitura e 405 em escrita de métrica/dashboard.
 router.use('/v1', analyticsModuleRouter);
 router.use('/v1', authRouter);
 router.use('/v1', groupsRouter);

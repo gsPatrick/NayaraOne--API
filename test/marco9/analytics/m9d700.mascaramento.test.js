@@ -3,7 +3,7 @@
 // M9-D700 — mascaramento dos campos RESTRICTED, catálogo de permissões, mapa ABAC e chave de cache. Sem banco.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const security = require('../../../src/modules/analytics/security');
+const security = require('../../../src/features/analytics/security');
 
 const { maskRestricted, parseExtraFields, parseDomainMap, mergeDomainMap, domainPermissionOf, buildCacheKey } = security;
 

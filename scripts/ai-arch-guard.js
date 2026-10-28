@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Portão de CI do M9-D001: reprova (exit 1) se src/modules/ai/** ou o resto de src/ violar AI-002/AI-004.
+// Portão de CI do M9-D001: reprova (exit 1) se src/features/ai/** ou o resto de src/ violar AI-002/AI-004.
 // Uso: node scripts/ai-arch-guard.js [--raiz <pasta>]   (a raiz alternativa serve ao teste da fixture)
 const path = require('node:path');
 const { varrer, varrerSdkFornecedorNoRestoDoCodigo, formatar } = require('./lib/aiArchGuard');

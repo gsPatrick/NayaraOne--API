@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
 const { sequelize } = require('../src/models');
-const idem = require('../src/modules/marketing/automations/idempotency');
+const idem = require('../src/features/marketing/automations/idempotency');
 const { prepararTenants, mkFlow, mkAutoVersion, uid } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 

@@ -14,7 +14,8 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_DIRS = [
-  'src/modules',
+  'src/features/ai',
+  'src/features/core-governance',
   'src/features/integrations',
   'src/features/marketing',
   'src/features/analytics',

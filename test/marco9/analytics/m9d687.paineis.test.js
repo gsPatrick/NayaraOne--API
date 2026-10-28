@@ -7,7 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sup = require('../_helpers/analyticsHttpEnv');
 const dashboards = require('../../../src/features/analytics/dashboardStore.service');
-const catalog = require('../../../src/modules/analytics/dashboards/dashboard.catalog');
+const catalog = require('../../../src/features/analytics/dashboards/dashboard.catalog');
 const migration = require('../../../migrations/20260101009687-seed-analytics-dashboard-catalog');
 
 const { inTx, ctxOf, panelBody, BANNER, ALERTS, sequelize } = sup;
@@ -169,7 +169,7 @@ test('m9d687 publicar exige analytics:manage, escopo de empresa ou grupo e usa o
 });
 
 test('m9d687 painel com widget de métrica PUBLICADA publica e a retirada da métrica fica bloqueada enquanto o painel a usa', async () => {
-  const registry = require('../../../src/modules/analytics/metrics');
+  const registry = require('../../../src/features/analytics/metrics');
   const { metricCode, cleanup } = await sup.publishTestMetric(env);
   try {
     const body = panelBody({ widgets: [BANNER, { widgetType: 'KPI_CARD', title: 'Caixa livre', metricCode }] });

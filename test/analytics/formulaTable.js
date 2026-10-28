@@ -4,7 +4,7 @@
 // 5 tipos (vazio, um registro, caso típico, borda de período e arredondamento). Cada caso: { kind, name, input, params, expected }.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { canonical } = require('../../src/modules/analytics/metrics/formulaCatalog');
+const { canonical } = require('../../src/features/analytics/metrics/formulaCatalog');
 
 const KINDS = ['empty', 'single', 'typical', 'period_edge', 'rounding'];
 

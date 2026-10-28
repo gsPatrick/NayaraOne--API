@@ -1,7 +1,7 @@
 'use strict';
 
 // M9-D001: teste de arquitetura da NAY. Prova por ausência (AI-002, AI-004 e "Não improvisar"):
-// src/modules/ai/** não tem SQL livre, shell, eval, escrita em disco, secret manager, adapter
+// src/features/ai/** não tem SQL livre, shell, eval, escrita em disco, secret manager, adapter
 // bancário de execução, conexão de superusuário nem SDK de fornecedor fora de providers/.
 
 const { test } = require('node:test');
@@ -13,15 +13,15 @@ const guard = require('../../scripts/lib/aiArchGuard');
 const FIX = path.join(__dirname, 'fixtures');
 const REGRAS_ESPERADAS = ['sql-livre', 'shell', 'vm', 'eval', 'fs-escrita', 'sdk-fornecedor', 'secret-manager', 'adapter-bancario', 'superusuario'];
 
-test('archGuard: src/modules/ai/** e o resto de src/ não violam nenhuma regra', () => {
+test('archGuard: src/features/ai/** e o resto de src/ não violam nenhuma regra', () => {
   const v = [...guard.varrer(), ...guard.varrerSdkFornecedorNoRestoDoCodigo()];
   assert.equal(v.length, 0, `violações:\n${guard.formatar(v)}`);
 });
 
-test('archGuard: a árvore src/modules/ai existe (a NAY entregue é o que o guarda varre)', () => {
+test('archGuard: a árvore src/features/ai existe (a NAY entregue é o que o guarda varre)', () => {
   const fs = require('node:fs');
-  assert.ok(fs.existsSync(guard.RAIZ_PADRAO), 'src/modules/ai/ não existe: o guarda não pode provar ausência sobre uma árvore inexistente (M9-D003).');
-  assert.ok(guard.listarArquivos(guard.RAIZ_PADRAO).length > 0, 'src/modules/ai/ está vazia.');
+  assert.ok(fs.existsSync(guard.RAIZ_PADRAO), 'src/features/ai/ não existe: o guarda não pode provar ausência sobre uma árvore inexistente (M9-D003).');
+  assert.ok(guard.listarArquivos(guard.RAIZ_PADRAO).length > 0, 'src/features/ai/ está vazia.');
 });
 
 test('archGuard_reprova_fixture_violadora', () => {

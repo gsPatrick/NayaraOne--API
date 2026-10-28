@@ -7,7 +7,7 @@
  */
 const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
-const { getLatestSnapshot } = require('../../../features/analytics/metricStore.service');
+const { getLatestSnapshot } = require('../metricStore.service');
 const { assertCanRead } = require('./registry.permission');
 const { assertDomainAccess, loadDomainMap, domainPermissionOf, has } = require('../security');
 

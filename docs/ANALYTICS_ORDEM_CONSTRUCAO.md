@@ -1,6 +1,6 @@
 # Ordem exata de construção do BI (Guia §1, M9-D613)
 
-Código em `src/modules/analytics/{metrics,read-models,dashboards,alerts,quality,exports,briefs}`; rotas em `/v1/analytics`.
+Código em `src/features/analytics/{metrics,read-models,dashboards,alerts,quality,exports,briefs}`; rotas em `/v1/analytics`.
 Cada passo só vale com o teste da demanda verde e verificada; a demanda de um passo não pode estar `verificada` antes das dos passos anteriores
 (teste `m9d613 ordem exata dos 11 passos respeitada pelas demandas`; lista em `scripts/lib/analyticsBuildOrder.js`).
 

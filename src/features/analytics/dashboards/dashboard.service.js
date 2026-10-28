@@ -10,9 +10,9 @@
  * Publicar (POST): `analytics:manage`; cria version+1 em DRAFT, grava os widgets e publica (fecha a anterior) numa transação.
  */
 const AppError = require('../../../utils/AppError');
-const store = require('../../../features/analytics/dashboardStore.service');
-const readStore = require('../../../features/analytics/dashboardReadStore.service');
-const metricStore = require('../../../features/analytics/metricStore.service');
+const store = require('../dashboardStore.service');
+const readStore = require('../dashboardReadStore.service');
+const metricStore = require('../metricStore.service');
 const { assertPermission, P, recordAccess, readParam, KEYS } = require('../security');
 
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');

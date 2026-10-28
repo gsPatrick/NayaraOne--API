@@ -103,7 +103,7 @@ test('redaction_biblioteca_unica_sem_regex_de_deteccao_duplicada', () => {
   }
   assert.deepEqual(achados, [], `detecção de PII/segredo fora de src/shared/redaction:\n${achados.join('\n')}`);
   // a biblioteca existe e é consumida pelos perfis citados no livro
-  for (const consumidor of ['src/features/integrations/errors/sanitizeForError.js', 'src/modules/marketing/content/sanitize.js', 'src/utils/logger.js']) {
+  for (const consumidor of ['src/features/integrations/errors/sanitizeForError.js', 'src/features/marketing/content/sanitize.js', 'src/utils/logger.js']) {
     assert.match(fs.readFileSync(path.join(RAIZ, consumidor), 'utf8'), /shared\/redaction/, consumidor);
   }
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D003 — Estrutura src/modules/ai, serviços, permissões ai:* e chave geral da NAY (ia.habilitada).
+// M9-D003 — Estrutura src/features/ai, serviços, permissões ai:* e chave geral da NAY (ia.habilitada).
 // Rodar SEMPRE em banco descartável (nunca no .env remoto):
 //   node scripts/withDisposableDb.js --port <55000-55999> -- env CI_TENANT_USERS_PASSWORD=... bash -c \
 //     "node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node --test --test-concurrency=1 test/ai/m9d003.estruturaPermissoesChave.test.js"
@@ -14,7 +14,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const AI_DIR = path.join(__dirname, '..', '..', 'src', 'modules', 'ai');
+const AI_DIR = path.join(__dirname, '..', '..', 'src', 'features', 'ai');
 const PASTAS = ['providers', 'agents', 'tools', 'retrieval', 'memory', 'evaluations', 'budgets', 'orchestrator', 'readmodels'];
 const SERVICOS = ['AiOrchestrator', 'ToolRegistry', 'RetrievalService', 'MemoryService', 'ModelRouter', 'AiEvaluationService'];
 const PERMISSOES = ['ai:use', 'ai:read', 'ai:audit', 'ai:approve', 'ai:admin', 'ai:budget', 'ai:evaluate', 'ai:restricted'];
@@ -172,7 +172,7 @@ test('m9d003_empresa_b_nao_herda_chave_da_a', async (t) => {
 
 test('m9d003_permissoes_ai_seedadas_e_grants_runtime', async (t) => {
   // Estático: o catálogo do código tem os 8 códigos e a migration os semeia com guarda do role.
-  const catalogo = require('../../src/modules/ai/ai.permissions');
+  const catalogo = require('../../src/features/ai/ai.permissions');
   assert.deepEqual(catalogo.AI_PERMISSIONS.map((p) => p.code).sort(), [...PERMISSOES].sort());
   const migrations = fs.readdirSync(path.join(__dirname, '..', '..', 'migrations')).filter((f) => /^20260101000700-.*seed.*ai.*permissions/.test(f) || /^20260101000700-/.test(f));
   assert.equal(migrations.length, 1, 'migration 700 das permissões ai:*');
@@ -210,11 +210,11 @@ test('m9d003_permissoes_ai_seedadas_e_grants_runtime', async (t) => {
 
 test('m9d003_estrutura_de_pastas_e_servicos_exportados', () => {
   for (const pasta of PASTAS) {
-    assert.ok(fs.statSync(path.join(AI_DIR, pasta)).isDirectory(), `falta src/modules/ai/${pasta}/`);
+    assert.ok(fs.statSync(path.join(AI_DIR, pasta)).isDirectory(), `falta src/features/ai/${pasta}/`);
     assert.ok(fs.existsSync(path.join(AI_DIR, pasta, 'index.js')), `falta ${pasta}/index.js`);
   }
   assert.ok(fs.existsSync(path.join(AI_DIR, 'ai.routes.js')));
-  const ai = require('../../src/modules/ai');
+  const ai = require('../../src/features/ai');
   for (const nome of SERVICOS) {
     assert.equal(typeof ai[nome], 'function', `${nome} não exportado`);
     const instancia = new ai[nome]();
@@ -228,7 +228,7 @@ test('m9d003_parametros_no_schema_e_padrao_desligado', () => {
   const { SETTINGS_SCHEMA } = require('../../src/features/settings/settings.service');
   assert.deepEqual(SETTINGS_SCHEMA['ia.habilitada'], { type: 'boolean' });
   assert.deepEqual(SETTINGS_SCHEMA['ai.agents.enabled'], { type: 'string' });
-  const { AI_SETTING_DEFAULTS } = require('../../src/modules/ai/ai.settings');
+  const { AI_SETTING_DEFAULTS } = require('../../src/features/ai/ai.settings');
   assert.equal(AI_SETTING_DEFAULTS['ia.habilitada'], false);
   assert.equal(AI_SETTING_DEFAULTS['ai.agents.enabled'], '*');
 });

@@ -11,10 +11,10 @@ const projectsService = require('../../../src/features/construction/projects.ser
 const stagesService = require('../../../src/features/construction/projectStages.service');
 const casesService = require('../../../src/features/construction/maintenanceCases.service');
 const guaranteesService = require('../../../src/features/legal/guarantees.service');
-const { runBackfill } = require('../../../src/modules/core-governance/calendar/sources/backfill.service');
-const { projectWarrantySourceId } = require('../../../src/modules/core-governance/calendar/sources/ids');
+const { runBackfill } = require('../../../src/features/core-governance/calendar/sources/backfill.service');
+const { projectWarrantySourceId } = require('../../../src/features/core-governance/calendar/sources/ids');
 const { hourInSaoPaulo } = require('../../../src/engines/jobs/calendarBackfillJob');
-const { isValidDeepLink } = require('../../../src/modules/core-governance/calendar/calendar.deeplinks');
+const { isValidDeepLink } = require('../../../src/features/core-governance/calendar/calendar.deeplinks');
 
 let tenant;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);

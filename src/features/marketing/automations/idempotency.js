@@ -1,7 +1,7 @@
 'use strict';
 
 const { getSetting } = require('../../../features/settings/settings.service');
-const { createRunIdempotent } = require('../../../features/marketing/automationRuns.repository');
+const { createRunIdempotent } = require('../automationRuns.repository');
 const { RUNNER_TIMEOUT_KEY, MARKETING_SETTING_DEFAULTS } = require('../marketing.settings');
 const keys = require('./idempotency.keys');
 const replay = require('./idempotency.replay');

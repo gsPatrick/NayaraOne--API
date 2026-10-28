@@ -8,7 +8,7 @@
 const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const store = require('../../../features/analytics/metricStore.service');
+const store = require('../metricStore.service');
 const { assertCanManage } = require('./registry.permission');
 const { findVisibleDefinitionForUpdate } = require('./registry.scope');
 const { VERSIONED_FIELDS, versionFields, diffFields } = require('./registry.diff');

@@ -14,15 +14,15 @@ const { QueryTypes } = require('sequelize');
 
 const { sequelize, AuditLog } = require('../src/models');
 const { getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const { sanitizePublicFields, assertMinimumPublicFields, REDACTION_MARKER } = require('../src/modules/marketing/content/sanitize');
-const { loadPublicProperty, loadPublicConstruction, loadRelationshipFacts } = require('../src/modules/marketing/content/publicReadModel');
-const { deliverToAdapter, recordSanitizationChecks } = require('../src/modules/marketing/content/adapterGate');
-const { assertContentServiceSources, findInternalSourceViolations } = require('../src/modules/marketing/content/internalSourceGuard');
-const settings = require('../src/modules/marketing/content/publicFields.settings');
+const { sanitizePublicFields, assertMinimumPublicFields, REDACTION_MARKER } = require('../src/features/marketing/content/sanitize');
+const { loadPublicProperty, loadPublicConstruction, loadRelationshipFacts } = require('../src/features/marketing/content/publicReadModel');
+const { deliverToAdapter, recordSanitizationChecks } = require('../src/features/marketing/content/adapterGate');
+const { assertContentServiceSources, findInternalSourceViolations } = require('../src/features/marketing/content/internalSourceGuard');
+const settings = require('../src/features/marketing/content/publicFields.settings');
 const { upsertSetting, getSetting } = require('../src/features/settings/settings.service');
 const { updateProperty } = require('../src/features/properties/properties.service');
 
-const CONTENT_DIR = path.join(__dirname, '..', 'src', 'modules', 'marketing', 'content');
+const CONTENT_DIR = path.join(__dirname, '..', 'src', 'features', 'marketing', 'content');
 let tenant;
 const uid = () => crypto.randomUUID();
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');

@@ -7,7 +7,7 @@
  * passada com a fórmula da versão da época (prova de reprodução: mesmo valor e mesmo calc_hash).
  */
 const AppError = require('../../../utils/AppError');
-const store = require('../../../features/analytics/metricStore.service');
+const store = require('../metricStore.service');
 const { assertCanRead } = require('./registry.permission');
 const { findDefinition } = require('./registry.read');
 const { getFormulaCatalog } = require('./formulaCatalog');

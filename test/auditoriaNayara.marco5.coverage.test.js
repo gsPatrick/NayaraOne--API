@@ -238,7 +238,7 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError + o registrador de run por regra (M9-D005),
   // a única escrita é a auditoria da execução (recordRuleRun) e não usa SQL cru.
   const nay = fs.readFileSync(path.join(legalDir, 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../modules/ai/orchestrator/runs', '../../utils/AppError']);
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../features/ai/orchestrator/runs', '../../utils/AppError']);
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   const routeLines = fs.readFileSync(path.join(legalDir, 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));

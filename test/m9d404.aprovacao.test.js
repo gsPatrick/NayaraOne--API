@@ -7,9 +7,9 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../src/models');
 const { getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const templates = require('../src/modules/marketing/content/template.service');
-const guard = require('../src/modules/marketing/content/approval.guard');
-const hashes = require('../src/modules/marketing/content/template.hash');
+const templates = require('../src/features/marketing/content/template.service');
+const guard = require('../src/features/marketing/content/approval.guard');
+const hashes = require('../src/features/marketing/content/template.hash');
 const { q, uid, sha, templateInput, insertContent, insertNextVersion, insertJob } = require('./helpers/m9d404Fixtures');
 
 let tenant;

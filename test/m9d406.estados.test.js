@@ -9,12 +9,12 @@ const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const fx = require('./helpers/m9d406Fixtures');
-const states = require('../src/modules/marketing/content/pipeline.states');
-const service = require('../src/modules/marketing/content/content.service');
-const approvalGuard = require('../src/modules/marketing/content/approval.guard');
-const { blockStaleItem } = require('../src/modules/marketing/content/sourceStale');
-const { archiveSupersededOnPublish } = require('../src/modules/marketing/content/archiveSuperseded');
-const { sourceFromProperty, createContentWithProvenance } = require('../src/modules/marketing/content/contentProvenance');
+const states = require('../src/features/marketing/content/pipeline.states');
+const service = require('../src/features/marketing/content/content.service');
+const approvalGuard = require('../src/features/marketing/content/approval.guard');
+const { blockStaleItem } = require('../src/features/marketing/content/sourceStale');
+const { archiveSupersededOnPublish } = require('../src/features/marketing/content/archiveSuperseded');
+const { sourceFromProperty, createContentWithProvenance } = require('../src/features/marketing/content/contentProvenance');
 
 let tenant;
 before(async () => { ({ tenantA: tenant } = await prepararTenants()); });

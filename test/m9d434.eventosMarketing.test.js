@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const { QueryTypes } = require('sequelize');
 const { sequelize, getSeedTenant, withTenantTransaction } = require('./testHelpers');
 const { withRollbackTenantTransaction } = require('./testHelpers');
-const events = require('../src/modules/marketing/marketing.events');
+const events = require('../src/features/marketing/marketing.events');
 
 let A;
 const uid = () => crypto.randomUUID();

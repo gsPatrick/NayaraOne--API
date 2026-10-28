@@ -9,10 +9,10 @@ const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const fx = require('./helpers/m9d406Fixtures');
-const service = require('../src/modules/marketing/content/content.service');
-const factual = require('../src/modules/marketing/content/pipeline.factualPort');
-const policy = require('../src/modules/marketing/content/pipeline.approvalPolicy');
-const { parseCreateBody, parseScheduleBody } = require('../src/modules/marketing/content/content.input');
+const service = require('../src/features/marketing/content/content.service');
+const factual = require('../src/features/marketing/content/pipeline.factualPort');
+const policy = require('../src/features/marketing/content/pipeline.approvalPolicy');
+const { parseCreateBody, parseScheduleBody } = require('../src/features/marketing/content/content.input');
 
 let tenant;
 let tenantB;

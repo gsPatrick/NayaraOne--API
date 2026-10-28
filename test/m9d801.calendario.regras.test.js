@@ -14,7 +14,7 @@ const {
 } = require('./m9d801.helpers');
 
 const NOW = new Date('2026-10-27T12:00:00Z'); // 27/10/2026 09:00 em America/Sao_Paulo
-const CAL = '../src/modules/core-governance/calendar';
+const CAL = '../src/features/core-governance/calendar';
 let tenants;
 
 before(async () => {

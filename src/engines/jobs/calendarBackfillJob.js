@@ -3,10 +3,10 @@
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
 const { getSetting } = require('../../features/settings/settings.service');
-const settings = require('../../modules/core-governance/calendar/calendar.settings');
-const { moduleSettingKey } = require('../../modules/core-governance/governance.settings');
-const { runBackfill } = require('../../modules/core-governance/calendar/sources/backfill.service');
-const { dateKeyInZone, zoneOffsetMs } = require('../../modules/core-governance/calendar/sources/time');
+const settings = require('../../features/core-governance/calendar/calendar.settings');
+const { moduleSettingKey } = require('../../features/core-governance/governance.settings');
+const { runBackfill } = require('../../features/core-governance/calendar/sources/backfill.service');
+const { dateKeyInZone, zoneOffsetMs } = require('../../features/core-governance/calendar/sources/time');
 
 /**
  * calendarBackfillJob (M9-D803 §3.4 e §3.2.1) — varredura diária do Calendário nas fontes de obras e garantias: traz os

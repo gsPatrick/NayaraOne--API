@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const { Client } = require('pg');
 const { withRollbackTenantTransaction } = require('../testHelpers');
 const { upsertSetting } = require('../../src/features/settings/settings.service');
-const agents = require('../../src/modules/ai/agents');
+const agents = require('../../src/features/ai/agents');
 const {
   carregarPessoas, sequelize, uid, q, ctxDe, BASE_AGENT, FERRAMENTA, prepararTenants,
 } = require('../helpers/aiAgents');

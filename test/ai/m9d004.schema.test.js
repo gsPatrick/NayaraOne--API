@@ -150,7 +150,7 @@ test('m9d004_seed_dos_oito_agentes_em_draft_desabilitados', async () => {
 });
 
 test('m9d004_hash_do_seed_confere_com_o_calculo_da_aplicacao', async () => {
-  const { computeConfigHash } = require('../../src/modules/ai/agents/agentConfigHash');
+  const { computeConfigHash } = require('../../src/features/ai/agents/agentConfigHash');
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const linhas = await q('SELECT * FROM ai.agents WHERE company_id IS NULL', {}, tx);
     assert.equal(linhas.length, 8);

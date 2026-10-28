@@ -10,10 +10,10 @@ const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const fx = require('./helpers/m9d406Fixtures');
-const service = require('../src/modules/marketing/content/content.service');
-const nay = require('../src/modules/marketing/content/pipeline.nayPort');
-const factual = require('../src/modules/marketing/content/pipeline.factualPort');
-const { parseWhen } = require('../src/modules/marketing/content/pipeline.time');
+const service = require('../src/features/marketing/content/content.service');
+const nay = require('../src/features/marketing/content/pipeline.nayPort');
+const factual = require('../src/features/marketing/content/pipeline.factualPort');
+const { parseWhen } = require('../src/features/marketing/content/pipeline.time');
 const { upsertSetting } = require('../src/features/settings/settings.service');
 
 let tenant;

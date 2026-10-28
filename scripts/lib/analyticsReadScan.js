@@ -3,9 +3,9 @@
 /**
  * M9-D700 (3.6) — varredura de segurança do BI: nenhum caminho lê read model ou tabela do schema analytics sem passar pela
  * camada que confere permissão.
- *  R1  fora de src/modules/analytics/read-models e src/features/analytics, nenhum arquivo cita `analytics.rm_*`.
+ *  R1  fora de src/features/analytics/read-models e dos arquivos de store soltos na raiz de src/features/analytics, nenhum arquivo cita `analytics.rm_*`.
  *  R2  arquivo da camada read-models que cita `analytics.rm_*` precisa importar a segurança (`../security`).
- *  R3  NAY (src/modules/ai, src/features/ai), exports e briefs não fazem SQL direto em `analytics.*`: chamam o serviço do BI.
+ *  R3  NAY (src/features/ai), exports e briefs não fazem SQL direto em `analytics.*`: chamam o serviço do BI.
  * Usada pelo teste m9d700 e por qualquer verificação de CI; só lê arquivos.
  */
 const fs = require('node:fs');
@@ -18,15 +18,15 @@ const posix = (p) => p.split(path.sep).join('/');
 function scanSource(relPath, content) {
   const file = posix(relPath);
   const out = [];
-  const inReadModels = file.startsWith('src/modules/analytics/read-models/');
-  const inFeatures = file.startsWith('src/features/analytics/');
+  const inReadModels = file.startsWith('src/features/analytics/read-models/');
+  const inFeatures = /^src\/features\/analytics\/[^/]+$/.test(file); // stores soltos na raiz (as camadas ficam em subpastas)
   if (RM.test(content) && !inReadModels && !inFeatures) {
     out.push({ file, rule: 'R1', message: 'cita read model do BI fora da camada read-models' });
   }
   if (inReadModels && RM.test(content) && !/require\((['"])\.\.\/security(\/[a-zA-Z.]*)?\1\)/.test(content)) {
     out.push({ file, rule: 'R2', message: 'read model lido sem importar a segurança (permissão, ABAC, mascaramento, log)' });
   }
-  const restricted = /^src\/(modules|features)\/ai\//.test(file) || /^src\/modules\/analytics\/(exports|briefs)\//.test(file);
+  const restricted = /^src\/features\/ai\//.test(file) || /^src\/features\/analytics\/(exports|briefs)\//.test(file);
   if (restricted && SQL_ANALYTICS.test(content)) {
     out.push({ file, rule: 'R3', message: 'NAY, exportação ou brief faz SQL direto no BI; use o serviço de permissão' });
   }

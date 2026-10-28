@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { withTenantTransaction } = require('../testHelpers');
-const knowledge = require('../../src/modules/ai/knowledge');
+const knowledge = require('../../src/features/ai/knowledge');
 const { sequelize, q, uid, carregarPessoas, ctxDe, prepararTenants } = require('../helpers/aiRuns');
 
 const SKIP = process.env.DISPOSABLE_DB === '1' ? false : 'precisa do cluster descartável (nunca commitar no banco do .env)';

@@ -10,8 +10,8 @@ const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { prepararTenants } = require('./helpers/marketingExecucao');
 const fx = require('./helpers/m9d413Fixtures');
-const svc = require('../src/modules/marketing/automations/automations.service');
-const catalog = require('../src/modules/marketing/automations/catalog');
+const svc = require('../src/features/marketing/automations/automations.service');
+const catalog = require('../src/features/marketing/automations/catalog');
 
 let tenant;
 let tenantB;

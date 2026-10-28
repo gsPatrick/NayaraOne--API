@@ -2,7 +2,7 @@
 
 /**
  * M9-D003 — Permissões da NAY (8 códigos ai:*) e concessão ao perfil ADMIN.
- * Mesma lista de src/modules/ai/ai.permissions.js (cópia literal; o teste m9d003 confere). ADMIN recebe 7 das 8; `ai:restricted`
+ * Mesma lista de src/features/ai/ai.permissions.js (cópia literal; o teste m9d003 confere). ADMIN recebe 7 das 8; `ai:restricted`
  * (conteúdo RESTRICTED no contexto da NAY) só por concessão explícita (DI-300). O role de runtime já lê core.permissions por
  * privilégio existente; o GRANT abaixo só é emitido se o role existir. Idempotente e reversível.
  * core.roles tem FORCE RLS: a concessão cross-tenant desliga o FORCE só durante a migration (padrão das migrations 248, 633 e 800).

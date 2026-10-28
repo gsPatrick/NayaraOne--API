@@ -96,7 +96,7 @@ test('m9d800 o administrador liga e desliga cada módulo (configuração por emp
 
 test('m9d800 a lista de exceções ao prefixo GOV_ configurada pelo administrador vale de fato', async (t) => {
   // Parte pura (sem banco): o enforcement troca código fora do padrão e respeita a lista recebida.
-  const errors = require('../src/modules/core-governance/governance.errors');
+  const errors = require('../src/features/core-governance/governance.errors');
   assert.equal(typeof errors.enforceErrorCode, 'function', 'a lista configurável precisa de consumidor (enforceErrorCode)');
   const only = errors.parseExceptions('MFA_STEP_UP_REQUIRED, ');
   assert.deepEqual(only, ['MFA_STEP_UP_REQUIRED']);
@@ -137,7 +137,7 @@ test('m9d800 a lista de exceções ao prefixo GOV_ configurada pelo administrado
 
 test('m9d800 configurações de governança registradas no dicionário com os padrões do catálogo', () => {
   const { SETTINGS_SCHEMA } = require('../src/features/settings/settings.service');
-  const gov = require('../src/modules/core-governance/governance.settings');
+  const gov = require('../src/features/core-governance/governance.settings');
   assert.equal(SETTINGS_SCHEMA['governanca.erros.excecoes_prefixo_gov'].type, 'string');
   assert.equal(gov.GOVERNANCE_SETTING_DEFAULTS['governanca.erros.excecoes_prefixo_gov'], 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR');
   for (const mod of EXPECTED_MODULES) {

@@ -1,7 +1,7 @@
 'use strict';
 
 const { InventoryItem, InventoryReceipt } = require('../../models');
-const { recordRuleRun } = require('../../modules/ai/orchestrator/runs');
+const { recordRuleRun } = require('../../features/ai/orchestrator/runs');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { uploadFile } = require('../files/files.service');

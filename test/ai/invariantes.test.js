@@ -11,11 +11,11 @@ const path = require('node:path');
 const guard = require('../../scripts/lib/aiArchGuard');
 
 const API = path.join(__dirname, '..', '..');
-const AI = path.join(API, 'src', 'modules', 'ai');
+const AI = path.join(API, 'src', 'features', 'ai');
 
 function arquivo(rel, demanda) {
   const p = path.join(AI, rel);
-  assert.ok(fs.existsSync(p), `mecanismo ausente: src/modules/ai/${rel} (${demanda}).`);
+  assert.ok(fs.existsSync(p), `mecanismo ausente: src/features/ai/${rel} (${demanda}).`);
   return fs.readFileSync(p, 'utf8');
 }
 function migracoes(re) {

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D687 — consultas de leitura de painéis para a camada src/modules/analytics/dashboards (que não importa models nem
+ * M9-D687 — consultas de leitura de painéis para a camada src/features/analytics/dashboards (que não importa models nem
  * sequelize, regra de lint da M9-D613): painel PUBLICADO por código com precedência empresa > grupo > catálogo global, e a
  * pergunta "o painel tem indicador CRITICAL?" (decide o log de abertura).
  */

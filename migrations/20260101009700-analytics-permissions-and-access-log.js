@@ -3,7 +3,7 @@
 /**
  * Marco 9, demanda M9-D700 (BI-009): 12 permissões `analytics:*` e o log de acesso do BI.
  *
- * - Permissões: idempotentes por código (mesma lista de src/modules/analytics/security/permissionCatalog.js; o teste confere).
+ * - Permissões: idempotentes por código (mesma lista de src/features/analytics/security/permissionCatalog.js; o teste confere).
  *   O papel ADMIN de cada empresa recebe as 12; os demais papéis recebem o que o administrador concede (nada é retirado).
  * - analytics.access_log: uma linha por acesso sensível (usuário, empresa, rota, painel/métrica, filtro, linhas, mascaramento,
  *   IP hasheado, correlation_id, instante). IMUTÁVEL: o role de runtime só tem SELECT e INSERT; as políticas RLS são só de
@@ -11,7 +11,7 @@
  *   `app.analytics_log_retention = on` (expurgo da governança de dados, Bloco F, executado pelo dono da tabela).
  * RLS ENABLE + FORCE. GRANT ao nayara_runtime dentro de guarda de existência do role. Idempotente. Faixa do BI: 9600 a 9709.
  */
-const { ANALYTICS_PERMISSIONS, ANALYTICS_PERMISSION_CODES } = require('../src/modules/analytics/security/permissionCatalog');
+const { ANALYTICS_PERMISSIONS, ANALYTICS_PERMISSION_CODES } = require('../src/features/analytics/security/permissionCatalog');
 
 const T = '"analytics"."access_log"';
 const COMPANY_GUC = "NULLIF(current_setting('app.company_id', true), '')::uuid";
