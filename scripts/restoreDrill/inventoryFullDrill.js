@@ -14,6 +14,9 @@
  *      pedidos/recebimentos/divergências/payables, apólices/parcelas, ativos; origem × destino
  *      tabela a tabela (contagem + SHA-256); RLS da role de runtime no destino.
  *   6. Prova negativa: adultera um saldo no destino e confirma que a verificação ACUSA.
+ *   6b. Evidência complementar (28/10/2026): empréstimos, manutenção, perdas, contagens, sinistros e
+ *      anexos; o storage de anexos também passa por backup (backupStorage.js) e restore
+ *      (restoreStorage.js) em diretório novo, e cada anexo é aberto e conferido (SHA-256/tamanho).
  *   7. Relatório (--report-dir) e teardown.
  *
  * Uso: node scripts/restoreDrill/inventoryFullDrill.js [--keep] [--port 5452] [--report-dir <dir>]
@@ -44,6 +47,9 @@ async function main() {
   const backupDir = path.join(workDir, 'backup');
   const fixturesFile = path.join(workDir, 'fixtures.json');
   const reportFile = path.join(workDir, 'report.json');
+  const storageReportFile = path.join(workDir, 'storage-report.json');
+  const uploadsSource = path.join(workDir, 'uploads-source');
+  const uploadsTarget = path.join(workDir, 'uploads-target');
   const tamperReport = path.join(workDir, 'report-tamper.json');
   const git = cl.gitInfo();
   const startedAt = new Date();
@@ -62,14 +68,17 @@ async function main() {
     toStop.push(src.dataDir);
     log(`  role ${cl.APP_ROLE} NOSUPERUSER/NOBYPASSRLS; ${src.migrated} migrations; seeds base; GRANT em ${src.schemaCount} schemas.`);
 
+    fs.mkdirSync(uploadsSource, { recursive: true });
     step('2. Fixtures pelos serviços reais (role de runtime, RLS real)');
-    log(`  ${cl.mustRun('fixtures', 'node', ['scripts/restoreDrill/seedInventoryFixtures.js', '--out', fixturesFile], childEnv({ DATABASE_URL: src.appUrl }))}`);
+    log(`  ${cl.mustRun('fixtures', 'node', ['scripts/restoreDrill/seedInventoryFixtures.js', '--out', fixturesFile], childEnv({ DATABASE_URL: src.appUrl, UPLOADS_DIR: uploadsSource }))}`);
 
     step('3. Backup com o script real (npm run backup → pg_dump -Fc)');
     const backupOut = cl.mustRun('npm run backup', 'npm', ['run', '--silent', 'backup', '--', '--out', backupDir],
       childEnv({ DATABASE_URL: src.appUrl, DB_MIGRATION_USER: cl.SUPER, DB_MIGRATION_PASSWORD: 'trust-local' }));
     const dumpFile = path.join(backupDir, fs.readdirSync(backupDir).find((f) => f.endsWith('.dump')));
     log(`  ${backupOut.split('\n').filter(Boolean).pop().replace(workDir, '<tmp>')}`);
+    const storageBackup = path.join(backupDir, 'storage');
+    log(`  ${cl.mustRun('backupStorage', 'node', ['scripts/backupStorage.js', '--source', uploadsSource, '--out', storageBackup], childEnv({})).split('\n').filter(Boolean).pop().replace(workDir, '<tmp>')}`);
 
     step(`4. Cluster de DESTINO novo (porta ${PORT_TARGET}) + restore pelo runbook`);
     const dataTarget = path.join(workDir, 'pgdata-target');
@@ -82,10 +91,13 @@ async function main() {
       childEnv({ DATABASE_URL: cl.appUrl(PORT_TARGET, 'drill_main'), DB_MIGRATION_USER: cl.SUPER, DB_MIGRATION_PASSWORD: 'trust-local' }));
     log(`  ${restoreOut.split('\n').filter(Boolean).pop().replace(workDir, '<tmp>')}`);
 
+    log(`  storage de anexos (scripts/restoreStorage.js, diretório novo): ${cl.mustRun('restoreStorage', 'node', ['scripts/restoreStorage.js', '--backup', storageBackup, '--target', uploadsTarget], childEnv({})).split('\n').filter(Boolean).pop().replace(workDir, '<tmp>')}`);
+
     step('5. Verificação pós-restore (scripts/verifyRestoreInventoryProcurementData.js)');
     const verifyArgs = ['scripts/verifyRestoreInventoryProcurementData.js', '--source-url', src.superUrl, '--target-url', cl.superUrl(PORT_TARGET, 'drill_target'),
-      '--target-app-url', cl.appUrl(PORT_TARGET, 'drill_target'), '--fixtures', fixturesFile];
-    const verify = cl.run('node', [...verifyArgs, '--report', reportFile], childEnv({}));
+      '--target-app-url', cl.appUrl(PORT_TARGET, 'drill_target'), '--fixtures', fixturesFile,
+      '--source-uploads', uploadsSource, '--target-uploads', uploadsTarget];
+    const verify = cl.run('node', [...verifyArgs, '--report', reportFile, '--storage-report', storageReportFile], childEnv({}));
     for (const line of verify.output.split('\n')) log(line);
 
     step('6. Prova negativa: adultera 1 saldo no destino (+1 unidade) e roda a verificação de novo');
@@ -96,7 +108,17 @@ async function main() {
     const tamperDetected = !tampered.ok && flagged.some((l) => l.includes('soma dos movimentos')) && flagged.some((l) => l.includes('idênticas'));
     log(`  → adulteração ${tamperDetected ? 'DETECTADA ✅ (verificação saiu com erro)' : 'NÃO detectada ❌'}`);
 
-    exitCode = verify.ok && tamperDetected ? 0 : 1;
+    step('6b. Prova negativa da evidência complementar: adultera o valor liquidado do sinistro e a divergência de uma contagem no destino');
+    cl.psql(PORT_TARGET, 'drill_target', "UPDATE procurement.insurance_claims SET settled_amount = settled_amount + 1 WHERE status = 'SETTLED'");
+    cl.psql(PORT_TARGET, 'drill_target', 'UPDATE inventory.count_items SET divergence = divergence + 1 WHERE id = (SELECT id FROM inventory.count_items WHERE divergence <> 0 ORDER BY id LIMIT 1)');
+    const tampered2 = cl.run('node', [...verifyArgs, '--report', tamperReport], childEnv({}));
+    const flagged2 = tampered2.output.split('\n').filter((l) => l.includes('❌'));
+    for (const l of flagged2) log(`  ${l.trim()}`);
+    const tamper2Detected = !tampered2.ok && flagged2.some((l) => l.includes('sinistros')) && flagged2.some((l) => l.includes('insurance_claims'))
+      && flagged2.some((l) => l.includes('contagens')) && flagged2.some((l) => l.includes('inventory.count_items'));
+    log(`  → adulteração ${tamper2Detected ? 'DETECTADA ✅ (invariante e hash origem × destino acusaram)' : 'NÃO detectada ❌'}`);
+
+    exitCode = verify.ok && tamperDetected && tamper2Detected ? 0 : 1;
     log(`\nResultado do drill: ${exitCode === 0 ? 'APROVADO' : 'REPROVADO'}`);
   } catch (err) {
     log(`\n❌ Drill interrompido: ${err.message}`);
@@ -104,8 +126,14 @@ async function main() {
   } finally {
     step('7. Teardown');
     for (const d of toStop.reverse()) cl.stopCluster(d);
+    if (REPORT_DIR) fs.mkdirSync(REPORT_DIR, { recursive: true });
+    if (REPORT_DIR && fs.existsSync(storageReportFile)) {
+      const storageBase = `drill-storage-restore-${startedAt.toISOString().slice(0, 10)}-${git.commit.slice(0, 7)}`;
+      const storage = JSON.parse(fs.readFileSync(storageReportFile, 'utf8'));
+      fs.writeFileSync(path.join(REPORT_DIR, `${storageBase}.json`), JSON.stringify({ commit: git.commit, dirty: git.dirty, ...storage }, null, 2));
+      log(`  evidência de anexos salva em ${storageBase}.json`);
+    }
     if (REPORT_DIR) {
-      fs.mkdirSync(REPORT_DIR, { recursive: true });
       const base = `drill-inventory-restore-${startedAt.toISOString().slice(0, 10)}-${git.commit.slice(0, 7)}`;
       log(`  relatório salvo em ${path.relative(cl.API_ROOT, REPORT_DIR) || REPORT_DIR}/${base}.{log,json}`);
       fs.writeFileSync(path.join(REPORT_DIR, `${base}.log`), `${logLines.join('\n')}\n`);

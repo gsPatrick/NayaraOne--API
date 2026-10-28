@@ -28,17 +28,21 @@
  * Uso:
  *   node scripts/verifyRestoreInventoryProcurementData.js --source-url <url> --target-url <url>
  *        [--target-app-url <url-role-runtime>] [--fixtures <fixtures.json>] [--report <json>]
+ *   Evidência complementar (28/10/2026): [E] tabelas de empréstimo, manutenção, perda, contagem
+ *   (+ itens e propostas de ajuste) e sinistro (+ eventos), com contagem mínima > 0, invariantes
+ *   próprios e anexos (--target-uploads/--source-uploads, --storage-report) abertos e conferidos.
  *   As URLs de origem/destino precisam de uma credencial com BYPASSRLS (a de DDL/migração), como
  *   o pg_dump; a de runtime entra só no bloco C.
  */
 
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { Client } = require('pg');
 
 function parseArgs(argv) {
   const out = {};
-  const map = { '--source-url': 'sourceUrl', '--target-url': 'targetUrl', '--target-app-url': 'targetAppUrl', '--fixtures': 'fixtures', '--report': 'report' };
+  const map = { '--source-url': 'sourceUrl', '--target-url': 'targetUrl', '--target-app-url': 'targetAppUrl', '--fixtures': 'fixtures', '--report': 'report', '--source-uploads': 'sourceUploads', '--target-uploads': 'targetUploads', '--storage-report': 'storageReport' };
   for (let i = 0; i < argv.length; i += 1) {
     if (map[argv[i]] && argv[i + 1]) { out[map[argv[i]]] = argv[i + 1]; i += 1; }
   }
@@ -171,7 +175,95 @@ async function invariants(c, label) {
       LEFT JOIN inventory.inventory_items it ON it.id = a.inventory_item_id
      WHERE a.deleted_at IS NULL`);
   check(`${label}: ativos de patrimônio com local/item existentes`, Number(ast.local_orfao) + Number(ast.item_orfao) === 0, `${ast.n} ativo(s), valor de aquisição total ${ast.valor}`);
+  await complementInvariants(c, label);
   return { soma_saldos: lb.soma_saldos, saldos: lb.saldos };
+}
+
+// Evidência complementar: empréstimos, manutenção, perdas, contagens, propostas de ajuste e sinistros.
+async function complementInvariants(c, label) {
+  const loans = await one(c, `
+    SELECT COUNT(*) AS n,
+           COUNT(*) FILTER (WHERE l.status IN ('OPEN', 'OVERDUE')) AS abertos,
+           COUNT(*) FILTER (WHERE l.status IN ('OPEN', 'OVERDUE') AND (l.person_user_id IS NULL OR l.due_at IS NULL OR l.destination_location_id IS NULL OR u.id IS NULL)) AS aberto_sem_responsavel_ou_prazo,
+           COUNT(*) FILTER (WHERE l.status IN ('OPEN', 'OVERDUE') AND (a.id IS NULL OR a.status <> 'LOANED')) AS aberto_com_ativo_fora_de_emprestimo,
+           COUNT(*) FILTER (WHERE l.status = 'RETURNED' AND (l.returned_at IS NULL OR l.condition_code IS NULL)) AS devolvido_sem_data_ou_condicao,
+           COUNT(*) FILTER (WHERE a.id IS NULL) AS sem_ativo
+      FROM inventory.tool_loans l
+      LEFT JOIN inventory.assets a ON a.id = l.asset_id
+      LEFT JOIN core.users u ON u.id = l.person_user_id`);
+  check(`${label}: empréstimos — aberto tem responsável, destino e prazo e o ativo está emprestado; devolvido tem data e condição`,
+    Number(loans.n) > 0 && Number(loans.abertos) > 0 && Number(loans.aberto_sem_responsavel_ou_prazo) + Number(loans.aberto_com_ativo_fora_de_emprestimo) + Number(loans.devolvido_sem_data_ou_condicao) + Number(loans.sem_ativo) === 0,
+    `${loans.n} empréstimo(s), ${loans.abertos} aberto(s); sem responsável/prazo ${loans.aberto_sem_responsavel_ou_prazo}, ativo fora de empréstimo ${loans.aberto_com_ativo_fora_de_emprestimo}, devolvido incompleto ${loans.devolvido_sem_data_ou_condicao}, sem ativo ${loans.sem_ativo}`);
+
+  const mo = await one(c, `
+    SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE m.status = 'OPEN') AS abertas,
+           COUNT(*) FILTER (WHERE a.id IS NULL) AS sem_ativo,
+           COUNT(*) FILTER (WHERE m.status = 'OPEN' AND a.status <> 'MAINTENANCE') AS aberta_com_ativo_fora_de_manutencao,
+           COUNT(*) FILTER (WHERE m.source_tool_loan_id IS NOT NULL AND (l.id IS NULL OR l.asset_id <> m.asset_id OR l.condition_code <> 'DAMAGED')) AS origem_invalida
+      FROM inventory.maintenance_orders m
+      LEFT JOIN inventory.assets a ON a.id = m.asset_id
+      LEFT JOIN inventory.tool_loans l ON l.id = m.source_tool_loan_id`);
+  check(`${label}: ordens de manutenção — ligadas a ativo existente; aberta mantém o ativo em manutenção; origem = devolução danificada do mesmo ativo`,
+    Number(mo.n) > 0 && Number(mo.abertas) > 0 && Number(mo.sem_ativo) + Number(mo.aberta_com_ativo_fora_de_manutencao) + Number(mo.origem_invalida) === 0,
+    `${mo.n} ordem(ns), ${mo.abertas} aberta(s); sem ativo ${mo.sem_ativo}, ativo fora de manutenção ${mo.aberta_com_ativo_fora_de_manutencao}, origem inválida ${mo.origem_invalida}`);
+
+  const loss = await one(c, `
+    SELECT COUNT(*) AS n,
+           COUNT(*) FILTER (WHERE lc.status IN ('OPEN', 'PENDING_APPROVAL')) AS em_analise,
+           COUNT(*) FILTER (WHERE lc.status = 'APPROVED') AS decididas,
+           COUNT(*) FILTER (WHERE lc.status IN ('OPEN', 'PENDING_APPROVAL') AND (lc.resulting_movement_id IS NOT NULL
+               OR EXISTS (SELECT 1 FROM inventory.inventory_movements m WHERE m.source_type = 'LOSS_CASE' AND m.source_id = lc.id))) AS em_analise_que_baixou_saldo,
+           COUNT(*) FILTER (WHERE lc.status = 'APPROVED' AND lc.inventory_item_id IS NOT NULL AND (mv.id IS NULL OR mv.movement_type <> 'LOSS' OR mv.quantity <> lc.quantity)) AS aprovada_sem_movimento_correto,
+           COUNT(*) FILTER (WHERE cardinality(lc.evidence_file_ids) = 0
+               OR EXISTS (SELECT 1 FROM unnest(lc.evidence_file_ids) e WHERE NOT EXISTS (SELECT 1 FROM people.files f WHERE f.id = e))) AS evidencia_ausente
+      FROM inventory.loss_cases lc
+      LEFT JOIN inventory.inventory_movements mv ON mv.id = lc.resulting_movement_id`);
+  check(`${label}: perdas — em análise não baixou saldo; aprovada tem o movimento LOSS da mesma quantidade; toda perda tem arquivo de evidência existente`,
+    Number(loss.em_analise) > 0 && Number(loss.decididas) > 0 && Number(loss.em_analise_que_baixou_saldo) + Number(loss.aprovada_sem_movimento_correto) + Number(loss.evidencia_ausente) === 0,
+    `${loss.n} caso(s): ${loss.em_analise} em análise, ${loss.decididas} aprovado(s); em análise que baixou saldo ${loss.em_analise_que_baixou_saldo}, aprovada sem movimento correto ${loss.aprovada_sem_movimento_correto}, evidência ausente ${loss.evidencia_ausente}`);
+
+  const cnt = await one(c, `
+    SELECT (SELECT COUNT(*) FROM inventory.counts) AS contagens,
+           (SELECT COUNT(*) FROM inventory.counts WHERE status = 'COMPLETED') AS fechadas,
+           (SELECT COUNT(*) FROM inventory.counts WHERE status = 'OPEN') AS abertas,
+           (SELECT COUNT(*) FROM inventory.count_items) AS itens,
+           (SELECT COUNT(*) FROM inventory.count_items ci JOIN inventory.counts k ON k.id = ci.count_id
+             WHERE k.status = 'COMPLETED' AND (ci.expected_quantity IS NULL OR ci.divergence IS NULL OR ci.divergence <> ci.counted_quantity - ci.expected_quantity)) AS itens_fechados_inconsistentes,
+           (SELECT COUNT(*) FROM inventory.count_items ci WHERE ci.divergence <> 0) AS itens_com_divergencia,
+           (SELECT COUNT(*) FROM inventory.counts k WHERE k.status = 'COMPLETED' AND EXISTS (
+              SELECT 1 FROM inventory.inventory_movements m WHERE m.source_type = 'COUNT' AND m.source_id = k.id
+                AND NOT EXISTS (SELECT 1 FROM inventory.count_items ci WHERE ci.adjustment_movement_id = m.id))) AS fechada_que_alterou_saldo_sem_ajuste_aprovado,
+           (SELECT COUNT(*) FROM inventory.count_items ci JOIN inventory.counts k ON k.id = ci.count_id
+             WHERE k.status = 'OPEN' AND ci.adjustment_movement_id IS NOT NULL) AS aberta_com_ajuste`);
+  check(`${label}: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste`,
+    Number(cnt.fechadas) > 0 && Number(cnt.abertas) > 0 && Number(cnt.itens_com_divergencia) > 0 && Number(cnt.itens_fechados_inconsistentes) + Number(cnt.fechada_que_alterou_saldo_sem_ajuste_aprovado) + Number(cnt.aberta_com_ajuste) === 0,
+    `${cnt.contagens} contagem(ns) (${cnt.fechadas} fechada(s), ${cnt.abertas} aberta(s)), ${cnt.itens} item(ns), ${cnt.itens_com_divergencia} com divergência; incoerentes ${cnt.itens_fechados_inconsistentes}, saldo alterado sem ajuste ${cnt.fechada_que_alterou_saldo_sem_ajuste_aprovado}, aberta com ajuste ${cnt.aberta_com_ajuste}`);
+
+  const prop = await one(c, `
+    SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE status = 'PENDING') AS pendentes,
+           COUNT(*) FILTER (WHERE status = 'PENDING' AND (resulting_movement_id IS NOT NULL OR EXISTS (SELECT 1 FROM inventory.inventory_movements m WHERE m.source_type = 'ADJUSTMENT_PROPOSAL' AND m.source_id = p.id))) AS pendente_que_moveu_saldo,
+           COUNT(*) FILTER (WHERE status = 'APPROVED' AND resulting_movement_id IS NULL) AS aprovada_sem_movimento
+      FROM inventory.adjustment_proposals p`);
+  check(`${label}: propostas de ajuste — pendente não moveu saldo; aprovada tem o movimento`,
+    Number(prop.pendentes) > 0 && Number(prop.pendente_que_moveu_saldo) + Number(prop.aprovada_sem_movimento) === 0,
+    `${prop.n} proposta(s), ${prop.pendentes} pendente(s); pendente que moveu saldo ${prop.pendente_que_moveu_saldo}, aprovada sem movimento ${prop.aprovada_sem_movimento}`);
+
+  const cl = await one(c, `
+    SELECT COUNT(*) AS n,
+           COUNT(*) FILTER (WHERE k.status = 'OPEN') AS abertos,
+           COUNT(*) FILTER (WHERE k.status = 'SUBMITTED') AS submetidos,
+           COUNT(*) FILTER (WHERE k.status = 'SETTLED') AS liquidados,
+           COUNT(*) FILTER (WHERE k.status = 'SETTLED' AND (fe.id IS NULL OR fe.amount <> k.settled_amount OR fe.entry_type <> 'CREDIT' OR fe.nature <> 'RECEIVABLE')) AS liquidado_sem_lancamento_correto,
+           COUNT(*) FILTER (WHERE k.status <> 'SETTLED' AND k.financial_entry_id IS NOT NULL) AS lancamento_sem_liquidar,
+           COUNT(*) FILTER (WHERE k.status IN ('SUBMITTED', 'SETTLED') AND NOT EXISTS (SELECT 1 FROM procurement.insurance_provider_submissions s WHERE s.claim_id = k.id)) AS submetido_sem_envio,
+           COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM procurement.insurance_claim_events e WHERE e.claim_id = k.id AND e.event_type = 'OPENED')) AS sem_evento_abertura,
+           COUNT(*) FILTER (WHERE k.status = 'SETTLED' AND NOT EXISTS (SELECT 1 FROM procurement.insurance_claim_events e WHERE e.claim_id = k.id AND e.event_type = 'SETTLED')) AS liquidado_sem_evento
+      FROM procurement.insurance_claims k
+      LEFT JOIN finance.financial_entries fe ON fe.id = k.financial_entry_id`);
+  check(`${label}: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura`,
+    Number(cl.abertos) > 0 && Number(cl.submetidos) > 0 && Number(cl.liquidados) > 0
+      && Number(cl.liquidado_sem_lancamento_correto) + Number(cl.lancamento_sem_liquidar) + Number(cl.submetido_sem_envio) + Number(cl.sem_evento_abertura) + Number(cl.liquidado_sem_evento) === 0,
+    `${cl.n} sinistro(s): ${cl.abertos} aberto(s), ${cl.submetidos} submetido(s), ${cl.liquidados} liquidado(s); liquidado sem lançamento correto ${cl.liquidado_sem_lancamento_correto}, lançamento sem liquidar ${cl.lancamento_sem_liquidar}, submetido sem envio ${cl.submetido_sem_envio}, sem evento de abertura ${cl.sem_evento_abertura}, liquidado sem evento ${cl.liquidado_sem_evento}`);
 }
 
 async function tableFingerprints(c) {
@@ -186,6 +278,136 @@ async function tableFingerprints(c) {
     out[`${s}.${t}`] = { rows: rows.length, sha256: h.digest('hex') };
   }
   return out;
+}
+
+// Tabelas da evidência complementar: precisam ter linhas (a amostra anterior as tinha vazias) e ser
+// idênticas na origem e no destino. Algumas são recortes (lançamentos do sinistro, arquivos anexados).
+const COMPLEMENT_TABLES = [
+  ['inventory.tool_loans', 'SELECT * FROM inventory.tool_loans'],
+  ['inventory.maintenance_orders', 'SELECT * FROM inventory.maintenance_orders'],
+  ['inventory.loss_cases', 'SELECT * FROM inventory.loss_cases'],
+  ['inventory.counts', 'SELECT * FROM inventory.counts'],
+  ['inventory.count_items', 'SELECT * FROM inventory.count_items'],
+  ['inventory.adjustment_proposals', 'SELECT * FROM inventory.adjustment_proposals'],
+  ['procurement.insurance_claims', 'SELECT * FROM procurement.insurance_claims'],
+  ['procurement.insurance_claim_events', 'SELECT * FROM procurement.insurance_claim_events'],
+  ['procurement.insurance_provider_submissions (sinistros)', "SELECT * FROM procurement.insurance_provider_submissions WHERE claim_id IS NOT NULL"],
+  ['finance.financial_entries (indenizações de sinistro)', 'SELECT fe.* FROM finance.financial_entries fe JOIN procurement.insurance_claims k ON k.financial_entry_id = fe.id'],
+  ['procurement.supplier_qualifications', 'SELECT * FROM procurement.supplier_qualifications'],
+  ['people.files (anexos do Marco 7)', 'SELECT f.* FROM people.files f WHERE f.id IN (SELECT id FROM ({ATTACHMENTS}) a)'],
+  ['people.file_links (anexos do Marco 7)', "SELECT * FROM people.file_links WHERE related_entity_type IN ('InsuranceClaim', 'InsurancePolicy')"],
+];
+
+// Arquivos ligados aos registros do Marco 7: evidência de perda, documento de qualificação de
+// fornecedor, evidência de movimento/proposta e vínculos de apólice/sinistro.
+const ATTACHMENT_IDS_SQL = `
+  SELECT DISTINCT id FROM (
+    SELECT unnest(evidence_file_ids) AS id FROM inventory.loss_cases
+    UNION ALL SELECT (jsonb_array_elements_text(document_file_ids))::uuid FROM procurement.supplier_qualifications
+    UNION ALL SELECT evidence_file_id FROM inventory.inventory_movements WHERE evidence_file_id IS NOT NULL
+    UNION ALL SELECT evidence_file_id FROM inventory.adjustment_proposals WHERE evidence_file_id IS NOT NULL
+    UNION ALL SELECT file_id FROM people.file_links WHERE related_entity_type IN ('InsuranceClaim', 'InsurancePolicy')
+  ) x WHERE id IS NOT NULL`;
+
+async function complementFingerprint(c, sql) {
+  const { rows } = await c.query(`SELECT row_to_json(x)::text AS j FROM (${sql.replace('{ATTACHMENTS}', ATTACHMENT_IDS_SQL)}) x ORDER BY j`);
+  const h = crypto.createHash('sha256');
+  for (const r of rows) h.update(`${r.j}\n`);
+  return { rows: rows.length, sha256: h.digest('hex') };
+}
+
+async function complementComparison(source, target) {
+  console.log('\n[E] Evidência complementar — origem × destino (contagem > 0 e SHA-256 do conteúdo)');
+  const out = {};
+  for (const [name, sql] of COMPLEMENT_TABLES) {
+    const [a, b] = [await complementFingerprint(source, sql), await complementFingerprint(target, sql)];
+    out[name] = { origem: a, destino: b };
+    check(`${name}: ${b.rows} linha(s) na origem e no destino, conteúdo idêntico`, a.rows > 0 && a.rows === b.rows && a.sha256 === b.sha256,
+      `origem ${a.rows} (${a.sha256.slice(0, 12)}…), destino ${b.rows} (${b.sha256.slice(0, 12)}…)`);
+  }
+  return out;
+}
+
+// Abre cada anexo no storage RESTAURADO (decifra com a chave) e confere SHA-256 e tamanho contra o
+// cadastro (mesma lógica de scripts/restoreDrill/storageRestoreDrill.js).
+function openRestored(uploadsDir, storageKey, keyOverride) {
+  const { decryptFileBuffer } = require('../src/utils/fileCrypto');
+  const previous = process.env.FILES_ENCRYPTION_KEY;
+  try {
+    if (keyOverride === null) delete process.env.FILES_ENCRYPTION_KEY;
+    else if (keyOverride) process.env.FILES_ENCRYPTION_KEY = keyOverride;
+    const buf = decryptFileBuffer(fs.readFileSync(path.join(uploadsDir, storageKey)));
+    return { ok: true, sha256: crypto.createHash('sha256').update(buf).digest('hex'), bytes: buf.length };
+  } catch (e) {
+    return { ok: false, codigo: e.code || e.name, mensagem: String(e.message).slice(0, 120) };
+  } finally {
+    if (previous === undefined) delete process.env.FILES_ENCRYPTION_KEY; else process.env.FILES_ENCRYPTION_KEY = previous;
+  }
+}
+
+async function attachmentChecks(source, target, args, fixtures) {
+  console.log('\n[F] Anexos vinculados aos registros do Marco 7 (abertos no storage restaurado)');
+  const q = `SELECT f.id, f.file_name, f.mime_type, f.storage_key, f.checksum_sha256, f.size_bytes, f.encrypted_at_rest FROM people.files f WHERE f.id IN (${ATTACHMENT_IDS_SQL}) ORDER BY f.file_name, f.id`;
+  const rows = (await target.query(q)).rows;
+  const srcRows = (await source.query(q)).rows;
+  const linksSql = `SELECT 'perda' AS vinculo, id AS registro, unnest(evidence_file_ids) AS file_id FROM inventory.loss_cases
+    UNION ALL SELECT 'qualificação de fornecedor', id, (jsonb_array_elements_text(document_file_ids))::uuid FROM procurement.supplier_qualifications
+    UNION ALL SELECT 'movimento (evidência)', id, evidence_file_id FROM inventory.inventory_movements WHERE evidence_file_id IS NOT NULL
+    UNION ALL SELECT 'proposta de ajuste (evidência)', id, evidence_file_id FROM inventory.adjustment_proposals WHERE evidence_file_id IS NOT NULL
+    UNION ALL SELECT 'sinistro/apólice (' || related_entity_type || ')', related_entity_id, file_id FROM people.file_links WHERE related_entity_type IN ('InsuranceClaim', 'InsurancePolicy')`;
+  const links = (await target.query(linksSql)).rows;
+  const vinculosPorArquivo = new Map();
+  for (const l of links) vinculosPorArquivo.set(l.file_id, [...(vinculosPorArquivo.get(l.file_id) || []), l.vinculo]);
+  const expected = new Map(((fixtures && fixtures.complement && fixtures.complement.attachments) || []).map((a) => [a.id, a]));
+
+  const arquivos = rows.map((r) => {
+    const aberto = openRestored(args.targetUploads, r.storage_key);
+    const blobOrigem = fs.existsSync(path.join(args.sourceUploads || '', r.storage_key)) ? crypto.createHash('sha256').update(fs.readFileSync(path.join(args.sourceUploads, r.storage_key))).digest('hex') : null;
+    const blobDestino = fs.existsSync(path.join(args.targetUploads, r.storage_key)) ? crypto.createHash('sha256').update(fs.readFileSync(path.join(args.targetUploads, r.storage_key))).digest('hex') : null;
+    const esp = expected.get(r.id);
+    return {
+      arquivo: r.file_name, tipo: r.mime_type, vinculos: [...new Set(vinculosPorArquivo.get(r.id) || [])],
+      bytesDoCadastro: Number(r.size_bytes), bytesAbertos: aberto.bytes ?? null, abriu: aberto.ok,
+      sha256Confere: aberto.ok && aberto.sha256 === r.checksum_sha256, tamanhoConfere: aberto.ok && aberto.bytes === Number(r.size_bytes),
+      sha256IndependenteConfere: esp ? esp.expectedSha256 === r.checksum_sha256 && esp.expectedBytes === Number(r.size_bytes) : null,
+      blobCifradoIgualOrigemDestino: blobOrigem !== null && blobOrigem === blobDestino, sha256: r.checksum_sha256, _storageKey: r.storage_key,
+    };
+  });
+  const bons = arquivos.filter((a) => a.abriu && a.sha256Confere && a.tamanhoConfere && a.blobCifradoIgualOrigemDestino && a.sha256IndependenteConfere !== false).length;
+  const tipos = new Set(arquivos.flatMap((a) => a.vinculos).map((v) => v.split(' (')[0]));
+  check(`${arquivos.length} anexo(s) vinculados (${[...tipos].join(', ')}) abertos no storage restaurado, com SHA-256 e tamanho iguais ao cadastro`,
+    arquivos.length >= 5 && bons === arquivos.length && ['perda', 'qualificação de fornecedor', 'sinistro/apólice'].every((t) => tipos.has(t)),
+    `${bons}/${arquivos.length} conferem; vínculos: ${[...tipos].join(', ')}`);
+  check('cadastro dos anexos (people.files) idêntico na origem e no destino', JSON.stringify(srcRows) === JSON.stringify(rows), `${rows.length} arquivo(s)`);
+  const orfaos = links.filter((l) => !rows.some((r) => r.id === l.file_id)).length;
+  check('todo vínculo de anexo aponta para um arquivo existente', orfaos === 0, `${links.length} vínculo(s), ${orfaos} órfão(s)`);
+
+  // Provas negativas do storage: chave ausente, chave errada, blob adulterado.
+  const first = arquivos[0];
+  const semChave = openRestored(args.targetUploads, first._storageKey, null);
+  const chaveErrada = openRestored(args.targetUploads, first._storageKey, crypto.randomBytes(32).toString('hex'));
+  const blobPath = path.join(args.targetUploads, first._storageKey);
+  const original = fs.readFileSync(blobPath);
+  const adulterado = Buffer.from(original);
+  adulterado[adulterado.length - 1] ^= 0xff;
+  fs.writeFileSync(blobPath, adulterado);
+  const blobAdulterado = openRestored(args.targetUploads, first._storageKey);
+  fs.writeFileSync(blobPath, original);
+  check('sem a chave, com chave errada e com blob adulterado o anexo NÃO abre', !semChave.ok && !chaveErrada.ok && !blobAdulterado.ok,
+    `sem chave: ${semChave.codigo}; chave errada: ${chaveErrada.codigo}; adulterado: ${blobAdulterado.codigo}`);
+
+  const resultado = {
+    executadoEm: new Date().toISOString(),
+    escopo: 'Anexos vinculados a perdas, qualificação de fornecedor, apólice e sinistro do Marco 7 (drill de restore em banco/storage descartáveis)',
+    arquivosTestados: arquivos.map(({ _storageKey, ...rest }) => rest),
+    todosAbriramEConferem: bons === arquivos.length,
+    semChave: { recusou: !semChave.ok, codigo: semChave.codigo },
+    chaveErrada: { recusou: !chaveErrada.ok, codigo: chaveErrada.codigo },
+    blobAdulterado: { recusou: !blobAdulterado.ok, codigo: blobAdulterado.codigo },
+    observacao: 'A chave FILES_ENCRYPTION_KEY não vai dentro do backup. Sem a mesma chave os arquivos restaurados não abrem.',
+  };
+  if (args.storageReport) fs.writeFileSync(args.storageReport, JSON.stringify(resultado, null, 2));
+  return resultado;
 }
 
 async function rlsCheck(appUrl, tenant, expectedBalances) {
@@ -223,6 +445,33 @@ async function fixtureChecks(c, fixtures) {
   check('apólice e parcelas restauradas', pol && pol.status === 'ACTIVE' && Number(pol.parcelas) > 0, pol ? `${pol.status}, ${pol.parcelas} parcela(s)` : 'ausente');
   const as = await one(c, 'SELECT COUNT(*) AS n FROM inventory.assets WHERE id = ANY($1::uuid[])', [fixtures.assetIds]);
   check('ativos de patrimônio restaurados', Number(as.n) === fixtures.assetIds.length, `${as.n}/${fixtures.assetIds.length}`);
+  const cx = fixtures.complement;
+  if (!cx) return;
+  const loanRows = (await c.query('SELECT id, status, condition_code FROM inventory.tool_loans WHERE id = ANY($1::uuid[])', [Object.values(cx.toolLoans)])).rows;
+  const st = (id) => (loanRows.find((r) => r.id === id) || {});
+  check('empréstimos restaurados: 1 aberto, 1 devolvido OK, 1 devolvido danificado',
+    st(cx.toolLoans.openId).status === 'OPEN' && st(cx.toolLoans.returnedId).status === 'RETURNED' && st(cx.toolLoans.returnedId).condition_code === 'OK' && st(cx.toolLoans.damagedId).condition_code === 'DAMAGED',
+    loanRows.map((r) => `${r.status}/${r.condition_code || '-'}`).join(', '));
+  const os = await one(c, 'SELECT status, source_tool_loan_id FROM inventory.maintenance_orders WHERE id = $1', [cx.maintenanceOrderId]);
+  check('ordem de manutenção aberta pela devolução danificada restaurada', os && os.status === 'OPEN' && os.source_tool_loan_id === cx.toolLoans.damagedId, os ? `${os.status}, empréstimo de origem ${os.source_tool_loan_id === cx.toolLoans.damagedId ? 'confere' : 'DIFERENTE'}` : 'ausente');
+  const lc = (await c.query('SELECT id, status, resulting_movement_id FROM inventory.loss_cases WHERE id = ANY($1::uuid[])', [[cx.lossCases.analysisId, cx.lossCases.decidedId]])).rows;
+  const lcA = lc.find((r) => r.id === cx.lossCases.analysisId) || {};
+  const lcD = lc.find((r) => r.id === cx.lossCases.decidedId) || {};
+  check('casos de perda restaurados: 1 em análise sem movimento, 1 aprovado com o movimento LOSS',
+    ['OPEN', 'PENDING_APPROVAL'].includes(lcA.status) && !lcA.resulting_movement_id && lcD.status === 'APPROVED' && lcD.resulting_movement_id === cx.lossCases.decidedMovementId,
+    `${lcA.status} / ${lcD.status}`);
+  const kc = (await c.query('SELECT id, status FROM inventory.counts WHERE id = ANY($1::uuid[])', [[cx.counts.closedId, cx.counts.openId]])).rows;
+  const div = await one(c, 'SELECT COUNT(*) FILTER (WHERE divergence <> 0) AS div FROM inventory.count_items WHERE count_id = $1', [cx.counts.closedId]);
+  check('contagens restauradas: 1 fechada com divergência, 1 aberta; proposta de ajuste pendente',
+    kc.find((r) => r.id === cx.counts.closedId)?.status === 'COMPLETED' && kc.find((r) => r.id === cx.counts.openId)?.status === 'OPEN' && Number(div.div) === cx.counts.divergentItems
+      && (await one(c, 'SELECT status FROM inventory.adjustment_proposals WHERE id = $1', [cx.adjustmentProposalId]))?.status === 'PENDING',
+    `${div.div} item(ns) divergente(s)`);
+  const cl = (await c.query('SELECT id, status, settled_amount, financial_entry_id FROM procurement.insurance_claims WHERE id = ANY($1::uuid[])', [[cx.claims.openId, cx.claims.submittedId, cx.claims.settledId]])).rows;
+  const clS = cl.find((r) => r.id === cx.claims.settledId) || {};
+  check('sinistros restaurados: aberto, submetido e liquidado com o lançamento do Financeiro',
+    cl.find((r) => r.id === cx.claims.openId)?.status === 'OPEN' && cl.find((r) => r.id === cx.claims.submittedId)?.status === 'SUBMITTED'
+      && clS.status === 'SETTLED' && Number(clS.settled_amount) === cx.claims.settledAmount && clS.financial_entry_id === cx.claims.settledFinancialEntryId,
+    cl.map((r) => r.status).join(', '));
 }
 
 async function main() {
@@ -235,6 +484,7 @@ async function main() {
   const source = args.sourceUrl ? await connect(args.sourceUrl) : null;
   const fixtures = args.fixtures ? JSON.parse(fs.readFileSync(args.fixtures, 'utf8')) : null;
   let tables = {};
+  let extra = {};
   try {
     if (source) await invariants(source, 'origem');
     await invariants(target, 'destino');
@@ -252,15 +502,20 @@ async function main() {
       }
       check(`${names.length} tabelas idênticas na origem e no destino`, diff.length === 0, diff.length ? `diferentes: ${diff.join(', ')}` : `${totalRows} linhas no total`);
     }
+    let complement = null;
+    let storage = null;
+    if (source) complement = await complementComparison(source, target);
+    if (source && args.targetUploads) storage = await attachmentChecks(source, target, args, fixtures);
     if (args.targetAppUrl && fixtures) await rlsCheck(args.targetAppUrl, fixtures.tenant, (await one(target, 'SELECT COUNT(*) AS n FROM inventory.stock_balances WHERE company_id = $1', [fixtures.tenant.companyId])).n);
     if (fixtures) await fixtureChecks(target, fixtures);
+    extra = { complement, storage };
   } finally {
     await target.end();
     if (source) await source.end();
   }
   const failed = results.filter((r) => !r.ok).length;
   console.log(`\nResultado: ${results.length - failed}/${results.length} checagens OK${failed ? ` — ${failed} FALHA(S)` : ''}.`);
-  if (args.report) fs.writeFileSync(args.report, JSON.stringify({ checks: results, tables }, null, 2));
+  if (args.report) fs.writeFileSync(args.report, JSON.stringify({ checks: results, tables, complementoOrigemDestino: extra.complement || null, anexos: extra.storage || null }, null, 2));
   process.exit(failed ? 1 : 0);
 }
 

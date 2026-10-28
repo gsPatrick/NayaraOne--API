@@ -26,6 +26,11 @@ function load() {
     procurementService: req('features/procurement/procurement.service'),
     insuranceService: req('features/procurement/insurance.service'),
     filesService: req('features/files/files.service'),
+    toolLoansService: req('features/inventory/toolLoans.service'),
+    maintenanceService: req('features/inventory/maintenance.service'),
+    lossCasesService: req('features/inventory/lossCases.service'),
+    countsService: req('features/inventory/counts.service'),
+    movementsApprovalService: req('features/inventory/movements.service'),
   };
 }
 
