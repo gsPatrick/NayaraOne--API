@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../modules/core-governance/governance.settings');
 const { AI_SETTINGS_SCHEMA } = require('../../modules/ai/ai.settings');
+const { MARKETING_SETTINGS_SCHEMA } = require('../../modules/marketing/marketing.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -105,6 +106,8 @@ const SETTINGS_SCHEMA = {
   ...GOVERNANCE_SETTINGS_SCHEMA,
   // Marco 9, M9-D003 — chave geral da NAY (ia.habilitada, padrão Desligado) e chave por agente (ai.agents.enabled).
   ...AI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D402 — Marketing: tetos de mensagem em massa e nomes dos perfis da concessão padrão.
+  ...MARKETING_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.

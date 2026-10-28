@@ -34,6 +34,7 @@ const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
 const { router: governanceRouter } = require('../modules/core-governance');
 const { router: aiModuleRouter } = require('../modules/ai');
+const { router: marketingModuleRouter } = require('../modules/marketing');
 
 /**
  * Agregador único de rotas da API.
@@ -81,6 +82,8 @@ router.use('/v1', pingRouter);
 router.use('/v1', governanceRouter);
 // Marco 9 — NAY (src/modules/ai, M9-D003): /v1/ai/*, auth/tenant só sob /ai, chave geral ia.habilitada no aiGate.
 router.use('/v1', aiModuleRouter);
+// Marco 9 — Marketing (src/modules/marketing, M9-D402): /v1/marketing/*, auth/tenant só sob /marketing, permissões marketing:*.
+router.use('/v1', marketingModuleRouter);
 router.use('/v1', authRouter);
 router.use('/v1', groupsRouter);
 router.use('/v1', companiesRouter);

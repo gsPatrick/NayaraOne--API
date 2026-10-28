@@ -7,6 +7,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { tenantFromAuth } = require('./governance.module');
 const permissions = require('./governance.permissions');
+const marketingPermissions = require('../marketing/marketing.permissions');
 
 const router = Router();
 router.use('/governance', authMiddleware, tenantMiddleware);
@@ -25,8 +26,12 @@ router.get('/governance/permissions', requirePermission('roles:read'), catchAsyn
 }));
 
 // Aplica a concessão padrão aos perfis da empresa (idempotente; só concede o que falta). Quem edita perfis já tem roles:update.
+// Também aplica a concessão padrão de Marketing (M9-D402): cria os 3 papéis que faltam e concede o pacote de cada faixa.
 router.post('/governance/permissions/apply-default', requirePermission('roles:update'), catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((transaction) => permissions.aplicarConcessaoPadrao(tenantFromAuth(req), req.auth.userId, transaction));
+  const data = await req.withTenantTransaction(async (transaction) => ({
+    ...(await permissions.aplicarConcessaoPadrao(tenantFromAuth(req), req.auth.userId, transaction)),
+    marketing: await marketingPermissions.aplicarConcessaoPadrao(tenantFromAuth(req), req.auth.userId, transaction),
+  }));
   return success(res, { data });
 }));
 
