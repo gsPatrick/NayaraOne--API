@@ -4,6 +4,7 @@ const { Message, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { canContact } = require('../people/personConsents.service');
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -22,7 +23,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose } = payload;
+  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -77,7 +78,9 @@ async function createMessage(payload, actorUserId, transaction) {
     }
   }
 
-  const message = await Message.create(
+  // M9-D415: envio de automação leva a action_key; dois envios com a mesma chave resultam em uma mensagem (replay devolve a existente).
+  const { record: message, replay } = await createOnceByActionKey(
+    Message,
     {
       groupId,
       companyId,
@@ -90,11 +93,13 @@ async function createMessage(payload, actorUserId, transaction) {
       body: body || null,
       status: 'RECEIVED',
       externalMessageId: externalMessageId || null,
+      actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
+  if (replay) return message;
 
   // Caderno (seção 17, "Eventos mínimos"): crm.interaction.recorded — "Message" é a
   // implementação concreta de crm.interactions no sistema (ver Crm.md).

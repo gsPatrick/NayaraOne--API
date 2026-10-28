@@ -9,6 +9,7 @@
 const MASS_WITHOUT_APPROVAL_KEY = 'marketing.mass.max_recipients_sem_aprovacao';
 const MASS_ABSOLUTE_KEY = 'marketing.mass.max_recipients_absoluto';
 const AUTO_UPDATE_ON_SOURCE_CHANGE_KEY = 'marketing.conteudo.atualizacao_automatica_fonte';
+const RUNNER_TIMEOUT_KEY = 'marketing.runner.timeout_s';
 const PROFILES_ASSISTANT_KEY = 'marketing.permissoes.perfis_assistente';
 const PROFILES_MANAGER_KEY = 'marketing.permissoes.perfis_gerente';
 const PROFILES_DIRECTOR_KEY = 'marketing.permissoes.perfis_diretoria';
@@ -17,6 +18,7 @@ const MARKETING_SETTING_DEFAULTS = Object.freeze({
   [MASS_WITHOUT_APPROVAL_KEY]: 50,
   [MASS_ABSOLUTE_KEY]: 5000,
   [AUTO_UPDATE_ON_SOURCE_CHANGE_KEY]: true,
+  [RUNNER_TIMEOUT_KEY]: 300,
   [PROFILES_ASSISTANT_KEY]: 'ASSISTENTE DE MARKETING',
   [PROFILES_MANAGER_KEY]: 'GERENTE DE MARKETING',
   [PROFILES_DIRECTOR_KEY]: 'DIRETORIA',
@@ -26,6 +28,7 @@ const MARKETING_SETTINGS_SCHEMA = {
   [MASS_WITHOUT_APPROVAL_KEY]: { type: 'integer', min: 1, max: 100000 },
   [MASS_ABSOLUTE_KEY]: { type: 'integer', min: 1, max: 1000000 },
   [AUTO_UPDATE_ON_SOURCE_CHANGE_KEY]: { type: 'boolean' },
+  [RUNNER_TIMEOUT_KEY]: { type: 'integer', min: 1, max: 86400 },
   [PROFILES_ASSISTANT_KEY]: { type: 'string' },
   [PROFILES_MANAGER_KEY]: { type: 'string' },
   [PROFILES_DIRECTOR_KEY]: { type: 'string' },
@@ -41,6 +44,7 @@ module.exports = {
   MASS_WITHOUT_APPROVAL_KEY,
   MASS_ABSOLUTE_KEY,
   AUTO_UPDATE_ON_SOURCE_CHANGE_KEY,
+  RUNNER_TIMEOUT_KEY,
   PROFILES_ASSISTANT_KEY,
   PROFILES_MANAGER_KEY,
   PROFILES_DIRECTOR_KEY,

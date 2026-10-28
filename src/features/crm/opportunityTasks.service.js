@@ -3,6 +3,7 @@
 const { Task, Opportunity, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 
 /**
  * M3-11 — Tarefas no ciclo de vida da Oportunidade.
@@ -37,7 +38,7 @@ async function createOpportunityTask(opportunityId, payload, actorUserId, transa
   const opportunity = await Opportunity.findByPk(opportunityId, { transaction });
   if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
 
-  const { title, description, assignedToUserId, dueAt, status, priority } = payload || {};
+  const { title, description, assignedToUserId, dueAt, status, priority, actionKey } = payload || {};
 
   if (!title || !String(title).trim()) {
     throw AppError.badRequest('O campo "title" é obrigatório.', 'OPPORTUNITY_TASK_VALIDATION');
@@ -67,7 +68,9 @@ async function createOpportunityTask(opportunityId, payload, actorUserId, transa
     }
   }
 
-  const task = await Task.create(
+  // M9-D415: tarefa criada por automação leva a action_key; em replay devolve a tarefa existente, sem nova auditoria.
+  const { record: task, replay } = await createOnceByActionKey(
+    Task,
     {
       groupId: opportunity.groupId,
       companyId: opportunity.companyId,
@@ -79,11 +82,13 @@ async function createOpportunityTask(opportunityId, payload, actorUserId, transa
       dueAt: dueAt || null,
       status: normalizedStatus,
       priority: normalizedPriority,
+      actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
+  if (replay) return task;
 
   await registrarAuditoria(
     {

@@ -77,6 +77,12 @@ module.exports = (sequelize) => {
         field: 'external_message_id',
         comment: "ID do provedor — usado para deduplicação de webhook",
       },
+      actionKey: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'action_key',
+        comment: "M9-D415: chave de idempotência da ação de automação que gerou o registro (UNIQUE por empresa)",
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -75,6 +75,12 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      actionKey: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'action_key',
+        comment: "M9-D415: chave de idempotência da ação de automação que gerou o registro (UNIQUE por empresa)",
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
