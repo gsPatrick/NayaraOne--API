@@ -568,3 +568,137 @@ test('m9d600 GRANTs: nayara_runtime acessa as 3 tabelas e o schema existe só co
   assert.match(migration.up.toString(), /pg_roles WHERE rolname = 'nayara_runtime'/);
   assert.ok(randomUUID());
 });
+
+// ------------------------------------------------------------------ reabertura: escopo (empresa x grupo x usuário)
+const scopeErr = (e) => e.statusCode === 404 && e.code === 'ANALYTICS_SCOPE_NOT_FOUND' && e.message === 'Empresa não encontrada ou sem acesso.';
+
+test('m9d600 empresa de outro grupo ou sem vínculo responde 404 (definição)', async () => {
+  const base = { scopeLevel: 'COMPANY', name: 'Caixa livre', domain: 'FINANCE' };
+  await inTx(tenantA, { writer: true }, async (tx) => {
+    // (1) empresa de outro grupo, informando o grupo dela
+    await tx.sequelize.query('SAVEPOINT s1', { transaction: tx });
+    await assert.rejects(
+      store.createMetricDefinition({ ...base, groupId: tenantB.groupId, companyId: tenantB.companyId, metricCode: code() }, ctxOf(tenantA), tx),
+      scopeErr
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT s1', { transaction: tx });
+    // (2) empresa A com o grupo da B (par inconsistente)
+    await tx.sequelize.query('SAVEPOINT s2', { transaction: tx });
+    await assert.rejects(
+      store.createMetricDefinition({ ...base, groupId: tenantB.groupId, companyId: tenantA.companyId, metricCode: code() }, ctxOf(tenantA), tx),
+      scopeErr
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT s2', { transaction: tx });
+    // (3) empresa B com o grupo da A
+    await tx.sequelize.query('SAVEPOINT s3', { transaction: tx });
+    await assert.rejects(
+      store.createMetricDefinition({ ...base, groupId: tenantA.groupId, companyId: tenantB.companyId, metricCode: code() }, ctxOf(tenantA), tx),
+      scopeErr
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT s3', { transaction: tx });
+    // (4) métrica de grupo de outro grupo
+    await tx.sequelize.query('SAVEPOINT s4', { transaction: tx });
+    await assert.rejects(
+      store.createMetricDefinition({ scopeLevel: 'GROUP', name: 'Consolidado', domain: 'FINANCE', groupId: tenantB.groupId, metricCode: code() }, ctxOf(tenantA), tx),
+      scopeErr
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT s4', { transaction: tx });
+    // o caminho legítimo continua aceito
+    const ok = await newMetric(tx, tenantA);
+    assert.equal(ok.company_id, tenantA.companyId);
+    assert.equal(ok.group_id, tenantA.groupId);
+  });
+});
+
+test('m9d600 empresa de outro grupo ou sem vínculo responde 404 (snapshot)', async () => {
+  await inTx(tenantA, { writer: true }, async (tx) => {
+    const d = await newMetric(tx, tenantA);
+    const v1 = await store.publishMetricVersion(versionInput(d.id), ctxOf(tenantA), tx);
+    const bad = [
+      { companyId: tenantB.companyId, groupId: tenantB.groupId, scopeId: tenantB.companyId },
+      { companyId: tenantA.companyId, groupId: tenantB.groupId },
+      { companyId: tenantB.companyId, groupId: tenantA.groupId, scopeId: tenantB.companyId },
+    ];
+    let i = 0;
+    for (const extra of bad) {
+      i += 1;
+      await tx.sequelize.query(`SAVEPOINT b${i}`, { transaction: tx });
+      await assert.rejects(store.recordSnapshot(snapshotInput(d, v1, tenantA, extra), tx), scopeErr, `snapshot inválido #${i}`);
+      await tx.sequelize.query(`ROLLBACK TO SAVEPOINT b${i}`, { transaction: tx });
+    }
+    // rebuild com escopo alheio também
+    await store.recordSnapshot(snapshotInput(d, v1, tenantA), tx);
+    await tx.sequelize.query('SAVEPOINT r1', { transaction: tx });
+    await assert.rejects(
+      store.recordSnapshotRevision(snapshotInput(d, v1, tenantA, { companyId: tenantB.companyId, groupId: tenantB.groupId, scopeId: tenantB.companyId }), tx),
+      (e) => e.statusCode === 404
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT r1', { transaction: tx });
+    // snapshot de grupo com grupo alheio
+    await tx.sequelize.query('SAVEPOINT g1', { transaction: tx });
+    await assert.rejects(
+      store.recordSnapshot(snapshotInput(d, v1, tenantA, { scopeType: 'GROUP', companyId: null, groupId: tenantB.groupId, scopeId: tenantB.groupId }), tx),
+      scopeErr
+    );
+    await tx.sequelize.query('ROLLBACK TO SAVEPOINT g1', { transaction: tx });
+  });
+});
+
+test('m9d600 banco recusa empresa fora do grupo nas 3 tabelas, mesmo sem passar pelo serviço', async () => {
+  const t = await admin.transaction(); // superusuário: sem RLS, o gatilho de escopo é a única defesa
+  try {
+    const ins = async (sql, replacements) => {
+      await admin.query('SAVEPOINT x', { transaction: t });
+      try {
+        await admin.query(sql, { replacements, transaction: t });
+        return null;
+      } catch (e) {
+        return e.original?.code;
+      } finally {
+        await admin.query('ROLLBACK TO SAVEPOINT x', { transaction: t });
+      }
+    };
+    const defSql = `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, group_scoped)
+                    VALUES (:c, :g, :code, 'x', 'FINANCE', false)`;
+    assert.equal(await ins(defSql, { c: tenantA.companyId, g: tenantB.groupId, code: code() }), 'ANA05');
+    assert.equal(await ins(defSql, { c: tenantA.companyId, g: null, code: code() }), 'ANA05');
+    assert.equal(await ins(defSql, { c: tenantA.companyId, g: tenantA.groupId, code: code() }), null);
+
+    const [[def]] = await admin.query(
+      `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, group_scoped)
+       VALUES (:c, :g, :code, 'x', 'FINANCE', false) RETURNING id`,
+      { replacements: { c: tenantA.companyId, g: tenantA.groupId, code: code() }, transaction: t }
+    );
+    const verSql = `INSERT INTO analytics.metric_versions (company_id, group_id, metric_id, version, formula_id, formula_semantic, unit, refresh_policy, value_nature, valid_from)
+                    VALUES (:c, :g, :m, 1, 'f', 's', 'BRL', '{"mode":"EVENT"}', 'ACTUAL', '2026-01-01')`;
+    // a versão que declara empresa/grupo diferentes da definição cai no ANA04 ou no ANA05 (escopo): nunca é aceita
+    assert.ok(['ANA04', 'ANA05'].includes(await ins(verSql, { c: tenantB.companyId, g: tenantA.groupId, m: def.id })));
+    assert.equal(await ins(verSql, { c: tenantA.companyId, g: tenantA.groupId, m: def.id }), null);
+    const [[ver]] = await admin.query(
+      `INSERT INTO analytics.metric_versions (company_id, group_id, metric_id, version, formula_id, formula_semantic, unit, refresh_policy, value_nature, valid_from)
+       VALUES (:c, :g, :m, 1, 'f', 's', 'BRL', '{"mode":"EVENT"}', 'ACTUAL', '2026-01-01') RETURNING id`,
+      { replacements: { c: tenantA.companyId, g: tenantA.groupId, m: def.id }, transaction: t }
+    );
+    const snapSql = `INSERT INTO analytics.metric_snapshots (company_id, group_id, metric_id, metric_version_id, scope_type, scope_id, period_start, period_end, as_of_date, status, calc_hash)
+                     VALUES (:c, :g, :m, :v, 'COMPANY', :c, '2026-10-01', '2026-10-31', '2026-10-30', 'OK', :h)`;
+    const h = hash('x');
+    assert.equal(await ins(snapSql, { c: tenantA.companyId, g: tenantB.groupId, m: def.id, v: ver.id, h }), 'ANA05');
+    assert.equal(await ins(snapSql, { c: tenantB.companyId, g: tenantA.groupId, m: def.id, v: ver.id, h }), 'ANA05');
+    assert.equal(await ins(snapSql, { c: tenantA.companyId, g: tenantA.groupId, m: def.id, v: ver.id, h }), null);
+  } finally {
+    await t.rollback();
+  }
+});
+
+test('m9d600 snapshot recusa versão de outra métrica', async () => {
+  await inTx(tenantA, { writer: true }, async (tx) => {
+    const d1 = await newMetric(tx, tenantA);
+    const d2 = await newMetric(tx, tenantA);
+    await store.publishMetricVersion(versionInput(d1.id), ctxOf(tenantA), tx);
+    const v2 = await store.publishMetricVersion(versionInput(d2.id), ctxOf(tenantA), tx);
+    await assert.rejects(
+      store.recordSnapshot(snapshotInput(d1, v2, tenantA), tx),
+      (e) => e.statusCode === 400 && e.code === 'ANALYTICS_METRIC_INVALID'
+    );
+  });
+});

@@ -65,6 +65,8 @@ function translateAnalyticsDbError(err) {
   else if (code === 'ANA02') mapped = invalid('Numeração de versão inválida: as versões seguem 1, 2, 3 sem buracos.');
   else if (code === 'ANA03') mapped = AppError.conflict('Snapshot é imutável. Grave uma nova revisão.', 'ANALYTICS_SNAPSHOT_IMMUTABLE');
   else if (code === 'ANA04') mapped = invalid('A versão precisa ter o mesmo escopo da definição da métrica.');
+  else if (code === 'ANA05') mapped = AppError.notFound(MSG.SCOPE_NOT_FOUND, 'ANALYTICS_SCOPE_NOT_FOUND');
+  else if (code === 'ANA06') mapped = invalid('A versão informada não pertence a esta métrica.');
   else if (code === '23505' && /metric_snapshots/.test(constraint)) {
     mapped = AppError.conflict('Já existe um snapshot para esta métrica, escopo e data-base.', 'ANALYTICS_SNAPSHOT_DUPLICATE');
   } else if (code === '23505' && /metric_versions/.test(constraint)) {
@@ -72,7 +74,8 @@ function translateAnalyticsDbError(err) {
   } else if (code === '23505') {
     mapped = AppError.conflict('Já existe uma métrica com este código neste escopo.', 'ANALYTICS_METRIC_CODE_DUPLICATE');
   } else if (code === '23514') mapped = invalid('Valor fora do permitido para esta métrica.');
-  else if (code === '23503') mapped = AppError.notFound(MSG.SCOPE_NOT_FOUND, 'ANALYTICS_SCOPE_NOT_FOUND');
+  else if (code === '23503' && /company_id|group_id/.test(constraint)) mapped = AppError.notFound(MSG.SCOPE_NOT_FOUND, 'ANALYTICS_SCOPE_NOT_FOUND');
+  else if (code === '23503') mapped = AppError.notFound('Métrica ou versão não encontrada.', 'ANALYTICS_METRIC_NOT_FOUND');
   if (mapped) mapped.cause = err;
   return mapped || err;
 }

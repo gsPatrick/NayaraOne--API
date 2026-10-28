@@ -257,6 +257,61 @@ module.exports = {
         FOR EACH ROW EXECUTE FUNCTION "${SCHEMA}".metric_snapshots_guard()
     `);
 
+    // Integridade de escopo (empresa x grupo x usuário), nas 3 tabelas, no INSERT:
+    //   - empresa informada precisa existir no grupo informado (core.companies, sob a RLS de quem grava: empresa de
+    //     outro grupo é invisível e cai aqui);
+    //   - se há contexto de usuário (GUC), a empresa/grupo gravados precisam ser os do contexto;
+    //   - snapshot: a versão é da métrica informada e a métrica é do mesmo escopo (ou catálogo global).
+    // ANA05 = escopo inexistente ou sem acesso (404 ANALYTICS_SCOPE_NOT_FOUND); ANA06 = versão de outra métrica.
+    await q(`
+      CREATE OR REPLACE FUNCTION "${SCHEMA}".analytics_scope_guard() RETURNS trigger LANGUAGE plpgsql AS $fn$
+      DECLARE
+        ctx_company uuid := NULLIF(current_setting('app.company_id', true), '')::uuid;
+        ctx_group uuid := NULLIF(current_setting('app.group_id', true), '')::uuid;
+        def RECORD;
+        ver_metric uuid;
+      BEGIN
+        IF NEW.company_id IS NOT NULL THEN
+          IF NEW.group_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM "core"."companies" c WHERE c.id = NEW.company_id AND c.group_id = NEW.group_id
+          ) THEN
+            RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+          END IF;
+          IF ctx_company IS NOT NULL AND NEW.company_id <> ctx_company THEN
+            RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+          END IF;
+        END IF;
+        IF NEW.group_id IS NOT NULL AND ctx_group IS NOT NULL AND NEW.group_id <> ctx_group THEN
+          RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+        END IF;
+        IF NEW.company_id IS NULL AND NEW.group_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM "core"."groups" g WHERE g.id = NEW.group_id) THEN
+          RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+        END IF;
+        IF TG_TABLE_NAME = 'metric_snapshots' THEN
+          SELECT company_id, group_id INTO def FROM "${SCHEMA}"."metric_definitions" WHERE id = NEW.metric_id;
+          IF NOT FOUND
+             OR (def.company_id IS NOT NULL AND def.company_id IS DISTINCT FROM NEW.company_id)
+             OR (def.group_id IS NOT NULL AND def.group_id IS DISTINCT FROM NEW.group_id) THEN
+            RAISE EXCEPTION 'Empresa não encontrada ou sem acesso.' USING ERRCODE = 'ANA05';
+          END IF;
+          SELECT metric_id INTO ver_metric FROM "${SCHEMA}"."metric_versions" WHERE id = NEW.metric_version_id;
+          IF ver_metric IS DISTINCT FROM NEW.metric_id THEN
+            RAISE EXCEPTION 'A versão informada não pertence a esta métrica.' USING ERRCODE = 'ANA06';
+          END IF;
+        END IF;
+        RETURN NEW;
+      END
+      $fn$
+    `);
+    for (const table of ['metric_definitions', 'metric_versions', 'metric_snapshots']) {
+      await q(`DROP TRIGGER IF EXISTS analytics_scope_guard ON "${SCHEMA}"."${table}"`);
+      await q(`
+        CREATE TRIGGER analytics_scope_guard BEFORE INSERT ON "${SCHEMA}"."${table}"
+          FOR EACH ROW EXECUTE FUNCTION "${SCHEMA}".analytics_scope_guard()
+      `);
+    }
+
     // ---------------------------------------------------------------- RLS
     await applyRls(q, 'metric_definitions', READ_CATALOG);
     await applyRls(q, 'metric_versions', READ_CATALOG);
@@ -295,6 +350,7 @@ module.exports = {
     await q(`DROP TABLE IF EXISTS "${SCHEMA}"."metric_definitions"`);
     await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".metric_versions_guard()`);
     await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".metric_snapshots_guard()`);
+    await q(`DROP FUNCTION IF EXISTS "${SCHEMA}".analytics_scope_guard()`);
     // Só remove o schema se nada de outras demandas (D601, D602, rm_*) estiver dentro dele.
     await q(`
       DO $$
