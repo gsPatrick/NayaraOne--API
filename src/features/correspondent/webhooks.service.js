@@ -6,7 +6,6 @@ const {
   sequelize,
   FinancingCase,
   ProviderStatusHistory,
-  WebhookInbox,
   ExternalCaseRouting,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
@@ -22,10 +21,10 @@ const { recordIntegrationError } = require('./integrationErrors.service');
 const { peekEligibilityConfig } = require('./eligibility.service');
 const { sanitizeProviderMessage } = require('./sanitizeProviderMessage');
 const { storePendingWebhook } = require('./webhookPending.service');
+const { receiveEvent } = require('../integrations/inbox');
+const { findFinancingConnectionId } = require('./webhookInbox.bridge');
 
 const INVALID_SIGNATURE_MESSAGE = 'Assinatura do webhook de financiamento ausente ou inválida.';
-// O payload bruto do evento fica no inbox para auditoria, mas com teto: corpo enorme guarda só o resumo e o hash.
-const MAX_STORED_PAYLOAD_CHARS = 64 * 1024;
 
 function invalidSignature(reason) {
   const err = AppError.unauthorized(INVALID_SIGNATURE_MESSAGE, 'CORRESPONDENT_WEBHOOK_HMAC_INVALID');
@@ -190,40 +189,19 @@ async function processFinancingWebhook(providerCodeRaw, rawBody, headers, body, 
       // o lock da linha. Dois webhooks simultâneos válidos são aplicados em fila.
       await financingCase.reload({ transaction, lock: transaction.LOCK.UPDATE });
 
-      // Dedup: UNIQUE(company_id, provider_code, external_event_id) é a garantia de verdade (nível de banco);
-      // o findOne aqui é só pra decidir a resposta antes de tentar o INSERT.
-      const alreadyProcessed = await WebhookInbox.findOne({
-        where: { providerCode, externalEventId },
-        transaction,
-      });
-      if (alreadyProcessed) {
+      // Dedup: a caixa de entrada genérica (integration.webhook_inbox, M9-D203) tem UNIQUE(provider_code, external_event_id) e
+      // INSERT ... ON CONFLICT DO NOTHING; o duplicado nunca reaplica o efeito. O evento é processado aqui mesmo,
+      // por isso já nasce PROCESSED (o worker genérico não o repete).
+      const inboxResult = await receiveEvent(
+        { groupId, companyId },
+        {
+          providerCode, externalEventId, rawBody, body, headers, eventType: 'financing.status', connectionId: await findFinancingConnectionId(providerCode, companyId, transaction),
+          extraHeaders: { caseRef: financingCase.id }, processedInline: true,
+        },
+        transaction
+      );
+      if (inboxResult.status === 'duplicate') {
         return { received: true, processed: false, reason: 'duplicate_event' };
-      }
-
-      // O findOne acima só decide a resposta de forma otimista — duas entregas concorrentes podem passar por ele e a
-      // 2ª `create()` bate no índice único. Captura a violação num savepoint e trata como duplicata.
-      const payloadText = JSON.stringify(body);
-      const storedPayload = payloadText.length > MAX_STORED_PAYLOAD_CHARS
-        ? { truncated: true, size: payloadText.length, sha256: crypto.createHash('sha256').update(payloadText).digest('hex'), externalCaseId, externalEventId, status: rawProviderStatus }
-        : body;
-      try {
-        await sequelize.transaction({ transaction }, (savepoint) => WebhookInbox.create(
-          {
-            groupId,
-            companyId,
-            financingCaseId: financingCase.id,
-            providerCode,
-            externalEventId,
-            payload: storedPayload,
-            receivedAt: new Date(),
-          },
-          { transaction: savepoint }
-        ));
-      } catch (err) {
-        if (err?.name === 'SequelizeUniqueConstraintError') {
-          return { received: true, processed: false, reason: 'duplicate_event' };
-        }
-        throw err;
       }
 
       const normalizedStatus = adapter.normalizeProviderStatus(rawProviderStatus);

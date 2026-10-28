@@ -204,3 +204,23 @@ test('M9-D206: integration.provider_health tem RLS, FORCE RLS, a política tenan
   assert.equal(fn.length, 1, 'integration.purge_provider_health não existe');
   assert.equal(fn[0].prosecdef, true, 'a função de expurgo precisa ser SECURITY DEFINER');
 });
+
+// M9-D203: integration.webhook_inbox (eventos externos idempotentes) com RLS, FORCE RLS, tenant_isolation e função de expurgo.
+test('M9-D203: integration.webhook_inbox tem RLS, FORCE RLS, a política tenant_isolation e a função de retenção SECURITY DEFINER', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'integration' AND c.relname = 'webhook_inbox'`
+  );
+  assert.equal(rows.length, 1, 'integration.webhook_inbox não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS');
+  assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+  const [fn] = await sequelize.query(
+    `SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'integration' AND p.proname = 'purge_webhook_inbox'`
+  );
+  assert.equal(fn.length, 1, 'integration.purge_webhook_inbox não existe');
+  assert.equal(fn[0].prosecdef, true, 'a função de retenção precisa ser SECURITY DEFINER');
+});

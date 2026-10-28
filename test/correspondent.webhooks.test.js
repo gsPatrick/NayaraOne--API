@@ -183,6 +183,14 @@ test('CORRESPONDENT-WEBHOOK-03: webhook duplicado (mesmo externalEventId) aplica
     const { history: historyAll } = await webhooksService.getCaseStatus(financingCaseId, tenant.groupId, tenant.companyId, transaction);
     const history = historyAll.filter((h) => h.source === 'webhook');
     assert.equal(history.length, 1, 'webhook duplicado não pode gerar uma segunda linha de histórico');
+    // M9-D203: o evento está na caixa de entrada genérica, uma vez, já PROCESSED, com o caso só como referência.
+    const [linhas] = await sequelize.query(
+      "SELECT status, signature_valid, headers_json FROM integration.webhook_inbox WHERE provider_code = 'sandbox' AND external_event_id = :e",
+      { replacements: { e: externalEventId }, transaction }
+    );
+    assert.equal(linhas.length, 1);
+    assert.equal(linhas[0].status, 'PROCESSED');
+    assert.equal(linhas[0].headers_json.caseRef, financingCaseId);
   });
 });
 
