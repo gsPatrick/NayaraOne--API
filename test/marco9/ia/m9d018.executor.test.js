@@ -30,7 +30,7 @@ test('adv_tool_argumento_fora_do_schema_rejeitado', async () => {
   assert.equal(g.linhas[0].status, 'BLOCKED');
 });
 
-test('m9d018_falha_nao_executa_tool_e_registra_blocked_schema', async () => {
+test('m9d018_falha_nao_executa_tool', async () => {
   const { tool, chamadas } = toolComSchema(schemaOportunidade());
   const { g, p } = roda(tool, { opportunityId: '1; DROP TABLE x' });
   await assert.rejects(p, (e) => e.code === 'AI_TOOL_ARGS_INVALID' && e.details.fields.join() === 'opportunityId');
