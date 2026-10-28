@@ -206,6 +206,7 @@ const modelDefiners = {
   IntegrationProviderHealth: require('./IntegrationProviderHealth'),
   IntegrationSyncCursor: require('./IntegrationSyncCursor'),
   IntegrationWebhookInbox: require('./IntegrationWebhookInbox'),
+  IntegrationDispatch: require('./IntegrationDispatch'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
   AiAgent: require('./AiAgent'),

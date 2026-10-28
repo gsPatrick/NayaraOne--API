@@ -20,6 +20,7 @@ const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settin
 const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
+const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../modules/analytics/readOnly/readOnly.settings');
 
 /**
@@ -161,6 +162,8 @@ const SETTINGS_SCHEMA = {
   ...SYNC_SETTINGS_SCHEMA,
   // Marco 9, M9-D203 — caixa de entrada de webhooks: tentativas, retenção do corpo e da linha, espera entre tentativas, tamanho e cabeçalhos guardados.
   ...INBOX_SETTINGS_SCHEMA,
+  // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
+  ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).

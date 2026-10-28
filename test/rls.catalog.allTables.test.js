@@ -224,3 +224,25 @@ test('M9-D203: integration.webhook_inbox tem RLS, FORCE RLS, a política tenant_
   assert.equal(fn.length, 1, 'integration.purge_webhook_inbox não existe');
   assert.equal(fn[0].prosecdef, true, 'a função de retenção precisa ser SECURITY DEFINER');
 });
+
+// M9-D205: integration.dispatches (intenção local de toda chamada externa) com RLS, FORCE RLS, tenant_isolation, gatilho de imutabilidade e função de retenção.
+test('M9-D205: integration.dispatches tem RLS, FORCE RLS, a política tenant_isolation, o gatilho de imutabilidade e a função de retenção SECURITY DEFINER', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+            (SELECT count(*)::int FROM pg_trigger g WHERE g.tgrelid = c.oid AND g.tgname = 'dispatches_immutable') AS gatilho
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'integration' AND c.relname = 'dispatches'`
+  );
+  assert.equal(rows.length, 1, 'integration.dispatches não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS');
+  assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+  assert.equal(rows[0].gatilho, 1, 'gatilho de imutabilidade');
+  const [fn] = await sequelize.query(
+    `SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'integration' AND p.proname = 'purge_dispatches'`
+  );
+  assert.equal(fn.length, 1, 'integration.purge_dispatches não existe');
+  assert.equal(fn[0].prosecdef, true, 'a função de retenção precisa ser SECURITY DEFINER');
+});

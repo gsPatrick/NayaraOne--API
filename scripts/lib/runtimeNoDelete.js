@@ -8,6 +8,7 @@
 const RUNTIME_NO_DELETE = Object.freeze([
   '"integration"."provider_health"',
   '"integration"."webhook_inbox"',
+  '"integration"."dispatches"',
 ]);
 
 const revokeDeleteSql = (role) => RUNTIME_NO_DELETE.map((tabela) => `REVOKE DELETE ON ${tabela} FROM ${role}`);
