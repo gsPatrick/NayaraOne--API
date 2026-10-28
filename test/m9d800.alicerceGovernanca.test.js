@@ -463,6 +463,47 @@ test('m9d800 o administrador liga e desliga cada módulo (configuração por emp
   await assert.rejects(() => withTenant((t) => upsertSetting('governanca.modulos.inexistente.habilitado', true, tenant, user.id, t)), /desconhecida/);
 });
 
+test('m9d800 a lista de exceções ao prefixo GOV_ configurada pelo administrador vale de fato', async (t) => {
+  // Parte pura (sem banco): o enforcement troca código fora do padrão e respeita a lista recebida.
+  const errors = require('../src/modules/core-governance/governance.errors');
+  assert.equal(typeof errors.enforceErrorCode, 'function', 'a lista configurável precisa de consumidor (enforceErrorCode)');
+  const only = errors.parseExceptions('MFA_STEP_UP_REQUIRED, ');
+  assert.deepEqual(only, ['MFA_STEP_UP_REQUIRED']);
+  const trocado = errors.enforceErrorCode({ code: 'PERMISSION_DENIED', message: 'x', details: { required: 'a' } }, only);
+  assert.equal(trocado.code, 'GOV_CODIGO_FORA_DO_PADRAO');
+  assert.equal(trocado.details.codigoOriginal, 'PERMISSION_DENIED');
+  assert.equal(trocado.details.required, 'a');
+  assert.equal(errors.enforceErrorCode({ code: 'PERMISSION_DENIED' }, errors.DEFAULT_PREFIX_EXCEPTIONS).code, 'PERMISSION_DENIED');
+  assert.equal(errors.enforceErrorCode({ code: 'GOV_NOT_FOUND' }, only).code, 'GOV_NOT_FOUND');
+
+  if (httpSkip) return t.skip(httpSkip);
+  const { upsertSetting } = require('../src/features/settings/settings.service');
+  const { rows: [company] } = await adminQuery("SELECT c.id, c.group_id FROM core.companies c WHERE c.name LIKE 'CI%Empresa Fictícia A%'");
+  const tenant = { groupId: company.group_id, companyId: company.id };
+  const { rows: [user] } = await adminQuery("SELECT id FROM core.users WHERE email = 'ci-a-gestor@ci.nayaraone.test'");
+  const withTenant = (fn) => sequelize.transaction(async (tx) => {
+    await sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true), set_config('app.user_id', :u, true)", { replacements: { g: tenant.groupId, c: tenant.companyId, u: user.id }, transaction: tx });
+    return fn(tx);
+  });
+  const antes = await call('A:leitura', 'GET', '/calendar');
+  assert.equal(antes.body.error.code, 'PERMISSION_DENIED', 'padrão do livro: PERMISSION_DENIED é exceção permitida');
+  await withTenant((tx) => upsertSetting('governanca.erros.excecoes_prefixo_gov', 'MISSING_ACCESS_TOKEN', tenant, user.id, tx));
+  try {
+    const depois = await call('A:leitura', 'GET', '/calendar');
+    assert.equal(depois.status, 403, 'o status HTTP não muda');
+    assert.equal(depois.body.error.code, 'GOV_CODIGO_FORA_DO_PADRAO');
+    assert.equal(depois.body.error.details.codigoOriginal, 'PERMISSION_DENIED');
+    assert.equal(depois.body.error.traceId, depois.correlation);
+    // A configuração é por empresa: a empresa B continua com o padrão.
+    const outra = await call('B:gestor', 'GET', '/feature-flags');
+    assert.equal(outra.body.error.code, 'PERMISSION_DENIED');
+  } finally {
+    await withTenant((tx) => upsertSetting('governanca.erros.excecoes_prefixo_gov', 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR', tenant, user.id, tx));
+  }
+  const restaurado = await call('A:leitura', 'GET', '/calendar');
+  assert.equal(restaurado.body.error.code, 'PERMISSION_DENIED');
+});
+
 test('m9d800 configurações de governança registradas no dicionário com os padrões do catálogo', () => {
   const { SETTINGS_SCHEMA } = require('../src/features/settings/settings.service');
   const gov = require('../src/modules/core-governance/governance.settings');
