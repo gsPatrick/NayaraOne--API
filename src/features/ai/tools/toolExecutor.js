@@ -6,6 +6,8 @@
 
 const AppError = require('../../../utils/AppError');
 const { buildToolContext, guardContext, capacidadeNegada, CODIGO_CAPACIDADE_NEGADA } = require('../orchestrator/toolContext');
+const { validateToolArgs, BLOCKED_REASON } = require('./argsValidator');
+const { loadArgsLimits } = require('./argsSettings');
 
 const DOMINIOS_COM_WORKFLOW = new Set(['FINANCIAL', 'LEGAL', 'BANKING', 'PERMISSION', 'PUBLICATION']);
 const RISCOS_COM_WORKFLOW = new Set(['HIGH', 'CRITICAL']);
@@ -20,7 +22,11 @@ function tabela(registry, nome) {
   return Object.prototype.hasOwnProperty.call(registry, nome) ? registry[nome] : undefined;
 }
 
-async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction } = {}) {
+/**
+ * `argsLimits` ({ stringMax, arrayMax }) é opcional: sem ele, os limites da empresa (ia.tool.*) são lidos com a `transaction` do
+ * tenant (M9-D018). Os argumentos são validados contra o inputSchema da tool ANTES de qualquer proposta ou execução.
+ */
+async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction, argsLimits, transaction } = {}) {
   if (!recorder || typeof recorder.record !== 'function') {
     throw AppError.internal('Executor de tools sem registro de auditoria.', 'AI_AUDIT_RECORDER_REQUIRED');
   }
@@ -48,11 +54,23 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
     throw e;
   }
 
+  let args;
+  try {
+    const limites = argsLimits || await loadArgsLimits({ companyId: ctx.companyId, groupId: ctx.groupId }, transaction);
+    args = validateToolArgs(tool, input, limites).args;
+  } catch (e) {
+    if (!(e && e.details && e.details.blockedReason === BLOCKED_REASON) && !(e && e.code === 'AI_TOOL_DEFINITION_INVALID')) throw e;
+    const entrada = { ...base(), status: 'BLOCKED', blockedReason: BLOCKED_REASON, reason: e.code === 'AI_TOOL_DEFINITION_INVALID' ? 'definicao_invalida' : 'argumentos_invalidos', invalidFields: (e.details && e.details.fields) || [] };
+    await recorder.record(entrada);
+    if (typeof recorder.emit === 'function') await recorder.emit({ type: 'ai.tool_call.blocked', payload: entrada });
+    throw e;
+  }
+
   if (exigeWorkflow(tool)) {
     if (typeof proposeAction !== 'function') {
       return bloquear(capacidadeNegada('acao_critica_sem_workflow', { tool: toolName, reason: 'acao_critica_sem_workflow' }), 'acao_critica_sem_workflow');
     }
-    const proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args: input, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId });
+    const proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId });
     await recorder.record({ ...base(), status: 'PROPOSED', proposalId: proposta && proposta.id });
     return { status: 'PROPOSED', proposal: proposta };
   }
@@ -61,7 +79,7 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
   const visao = guardContext(ctx, (t) => tentativas.push(t));
   let saida;
   try {
-    saida = await tool.execute(visao, input);
+    saida = await tool.execute(visao, args);
   } catch (e) {
     if (tentativas.length || (e && e.code === CODIGO_CAPACIDADE_NEGADA)) {
       const cap = (tentativas[0] && tentativas[0].capability) || (e.details && e.details.capability) || 'desconhecida';

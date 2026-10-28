@@ -140,7 +140,7 @@ test('naoimprovisar_05_acao_critica_so_por_workflow', async () => {
     { riskLevel: 'LOW', domain: 'PUBLICATION' },
   ];
   for (const c of casos) {
-    const tool = ferramenta({ name: 'critica', ...c, category: 'WRITE', requiresHumanApproval: true, execute: async () => { executou += 1; } });
+    const tool = ferramenta({ name: 'critica', ...c, category: 'WRITE', requiresHumanApproval: true, inputSchema: { type: 'object', properties: { a: { type: 'integer', minimum: 0, maximum: 9 } } }, execute: async () => { executou += 1; } });
     const g = gravador();
     const r = await executeTool({ registry: { critica: tool }, toolName: 'critica', input: { a: 1 }, contextParts: partes(), recorder: g, proposeAction });
     assert.equal(r.status, 'PROPOSED', JSON.stringify(c));

@@ -31,6 +31,7 @@
     "test": "node --test test/*.test.js test/marco8/*.test.js test/integrations/*.test.js \"test/marco9/**/*.test.js\" \"test/analytics/**/*.test.js\""
   },
   "dependencies": {
+    "ajv": "^6.12.6",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
