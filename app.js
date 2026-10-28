@@ -11,6 +11,7 @@ const { correlationIdMiddleware } = require('./src/middlewares/correlationId.mid
 const { requestLoggerMiddleware, metricsRecorderMiddleware } = require('./src/middlewares/requestLogger.middleware');
 const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
+const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecycleJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -116,6 +117,11 @@ app.server = server;
 // colaterais/timers pendurados em test runners que importam este arquivo).
 if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !== 'true') {
   startRadarMatchingJob();
+}
+
+// Ciclo de vida das campanhas de Marketing (M9-D412): inicia, encerra e dispara os steps, a cada minuto.
+if (process.env.NODE_ENV !== 'test' && process.env.CAMPAIGN_LIFECYCLE_JOB_DISABLED !== 'true') {
+  startCampaignLifecycleJob();
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;

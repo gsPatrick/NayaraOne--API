@@ -259,7 +259,7 @@ test('orcamento_zero_exige_justificativa', async () => {
     await expectDbError(tx, sql, r('   '), /budget_justification|budget/i);
     await q(sql, r('Campanha orgânica, sem verba de mídia'), tx);
     const metricas = await q(
-      "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'marketing.campaigns'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ILIKE '%objective_metric%'"
+      "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'marketing.campaigns'::regclass AND contype = 'c' AND conname = 'mkt_campaigns_objective_metric_chk'"
     );
     assert.equal(metricas.length, 1);
     for (const m of ['LEADS', 'VISITS', 'PROPOSALS', 'SALES']) assert.match(metricas[0].def, new RegExp(m));
@@ -286,6 +286,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   const admin = new Sequelize(process.env.DATABASE_ADMIN_URL, { logging: false });
   const migration = require(path.resolve(__dirname, '../migrations/20260101000750-marketing-schema-parte-1.js'));
   const parte2 = require(path.resolve(__dirname, '../migrations/20260101000751-marketing-schema-parte-2.js'));
+  const parte3 = require(path.resolve(__dirname, '../migrations/20260101000754-marketing-campaign-lifecycle.js')); // M9-D412
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
   try {
@@ -293,6 +294,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     assert.equal(inicial, 6);
     await migration.up(qi); // segunda vez: sem erro e sem alteração
     // As tabelas da parte 2 (M9-D401) apontam para as da parte 1: o down da parte 1 só roda depois do down da parte 2.
+    await parte3.down(qi); // M9-D412: as tabelas do ciclo da campanha apontam para campaigns
     await parte2.down(qi);
     assert.equal(await contagem(), inicial);
     // down recusa com dados.
@@ -306,6 +308,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     await migration.up(qi);
     assert.equal(await contagem(), inicial);
     await parte2.up(qi);
+    await parte3.up(qi);
   } finally {
     await admin.close();
   }

@@ -20,6 +20,7 @@ module.exports = (sequelize) => {
       contentItemId: { type: DataTypes.UUID, allowNull: true, field: 'content_item_id' },
       offsetMinutes: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'offset_minutes' },
       status: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'PLANNED' },
+      statusReason: { type: DataTypes.STRING(60), allowNull: true, field: 'status_reason' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

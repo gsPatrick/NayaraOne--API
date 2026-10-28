@@ -11,6 +11,7 @@ const { MARKETING_SETTINGS_SCHEMA } = require('../../modules/marketing/marketing
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../modules/marketing/content/publicFields.settings');
 const { TEMPLATE_SETTINGS_SCHEMA } = require('../../modules/marketing/content/template.settings');
+const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../modules/marketing/campaigns/campaigns.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../modules/marketing/automations/cadence/cadence.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
@@ -122,6 +123,8 @@ const SETTINGS_SCHEMA = {
   ...PUBLIC_FIELDS_SETTINGS_SCHEMA,
   // Marco 9, M9-D404 — canais cujo template precisa de referência oficial aprovada no provedor.
   ...TEMPLATE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D412 — destinatários processados por step a cada rodada do job de campanhas.
+  ...CAMPAIGN_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // Marco 9, M9-D417 — cadência, quiet hours e frequency cap do Marketing (lidos por getMarketingParam; escrita exige marketing:automation:manage).
   ...CADENCE_SETTINGS_SCHEMA,
