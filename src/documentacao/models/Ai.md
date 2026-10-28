@@ -97,3 +97,35 @@ Recomendação/proposta gerada por um agente da NAY, sujeita a aprovação human
 | created_by / updated_by | UUID | não | auditoria de autoria |
 | deleted_at / deleted_by | DATE / UUID | não | soft delete |
 | created_at / updated_at | TIMESTAMPTZ | sim | automático |
+
+## `ai.agents` (model `AiAgent`) — M9-D004
+
+Uma linha por VERSÃO de agente da NAY (`code` + `version`). `company_id`/`group_id` nulos = padrão do sistema (os oito agentes do livro, em DRAFT e desabilitados), legível por toda empresa e nunca alterado pela aplicação.
+
+- Multiempresa (RLS FORCE): sim, com leitura do padrão do sistema; escrita só da própria empresa
+- Ciclo: DRAFT, HOMOLOGATED, ACTIVE, RETIRED; fora de DRAFT a linha é imutável (gatilho `ai.agents_guard`); uma ACTIVE por (empresa, code)
+- Unicidade (empresa, code, version) e uma ACTIVE por (empresa, code) por índices que tratam o NULL do sistema como valor
+
+| Coluna | Tipo | Obrigatório | Observação |
+|---|---|---|---|
+| id | UUID | sim | PK |
+| group_id / company_id | UUID | não | NULL nos dois = padrão do sistema |
+| code | STRING(60) | sim | ex. NAY_COMERCIAL |
+| version | INTEGER | sim | 1, 2, 3 por code e empresa |
+| status | STRING(12) | sim | DRAFT, HOMOLOGATED, ACTIVE, RETIRED |
+| purpose | TEXT | sim | finalidade (AI-003); CHECK recusa vazio |
+| system_policy | TEXT | sim | política do agente (só ai:admin lê/escreve) |
+| model_policy | JSONB | sim | capacidade exigida, classe de modelo, maxOutputTokens, cacheableTaskTypes |
+| permissions | JSONB | sim | permissões das tools habilitadas, mantidas por gatilho |
+| data_scopes | JSONB | sim | lista de escopos de dados |
+| limits | JSONB | sim | max_tool_calls_por_run, max_runs_por_minuto_usuario, timeout_ms, max_tokens_run (vencem o parâmetro `ia.agente.*`) |
+| criticality | STRING(12) | sim | CRITICAL ou NON_CRITICAL |
+| enabled | BOOLEAN | sim | true só enquanto ACTIVE |
+| config_hash | CHAR(64) | sim | sha256 do conteúdo e da allowlist |
+| homologated_by/at, homologation_note | UUID/TIMESTAMPTZ/TEXT | não | homologação humana (ai:evaluate) |
+| activated_by/at, retired_by/at | UUID/TIMESTAMPTZ | não | ativação e aposentadoria |
+| idempotency_key, created_from_version | STRING(200)/INTEGER | não | repetição segura e origem da cópia |
+
+## `ai.agent_tools` (model `AiAgentTool`) — M9-D004
+
+Allowlist de tools de uma versão (`UNIQUE (agent_id, tool_name)`); só muda com o agente em DRAFT. `risk_level` HIGH ou CRITICAL obriga `requires_human_approval = true` (CHECK). `permission_code` vem da definição da tool, nunca do agente nem do modelo.

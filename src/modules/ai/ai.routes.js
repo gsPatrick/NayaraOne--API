@@ -8,6 +8,7 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { getSetting } = require('../../features/settings/settings.service');
 const { aiGate } = require('./aiGate.middleware');
 const { aiNotAvailable } = require('./ai.errors');
+const { registerAgentRoutes } = require('./agents/agents.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -25,6 +26,9 @@ router.get('/ai/status', requirePermission('ai:read'), aiGate(), catchAsync(asyn
   const list = parseAgentList(raw);
   return success(res, { data: { habilitada: true, agentes: list.all ? '*' : [...list.codes] } });
 }));
+
+// Versões de agentes (M9-D004): GET /ai/agents e /ai/agents/:code/versions/*.
+registerAgentRoutes(router);
 
 router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
 router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));

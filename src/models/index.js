@@ -205,6 +205,8 @@ const modelDefiners = {
   IntegrationConnection: require('./IntegrationConnection'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
+  AiAgent: require('./AiAgent'),
+  AiAgentTool: require('./AiAgentTool'),
   AiSource: require('./AiSource'),
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),

@@ -1,4 +1,21 @@
 'use strict';
 
-// Conteúdo desta pasta entra nas demandas seguintes do bloco A (M9-D010 em diante).
-module.exports = {};
+const registry = require('./agentRegistry.service');
+const lifecycle = require('./agentLifecycle.service');
+const resolver = require('./agentResolver.service');
+const { computeConfigHash } = require('./agentConfigHash');
+const { resolveLimits } = require('./agentLimits');
+const { AgentRunGuard } = require('./AgentRunGuard');
+const { RunRateLimiter, defaultRunRateLimiter } = require('./RunRateLimiter');
+
+/** Agentes versionados da NAY (M9-D004): registro de versões, ciclo de vida, resolução da versão ativa, allowlist e limites do run. */
+module.exports = {
+  ...registry,
+  ...lifecycle,
+  ...resolver,
+  computeConfigHash,
+  resolveLimits,
+  AgentRunGuard,
+  RunRateLimiter,
+  defaultRunRateLimiter,
+};

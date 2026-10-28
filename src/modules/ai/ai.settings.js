@@ -6,6 +6,8 @@
  * tenant, transaction, padrão). O padrão é o valor inicial de Maturacao/demandas/parametros.csv. Cada demanda do bloco A
  * acrescenta as suas chaves neste arquivo.
  */
+const { AGENT_SETTING_DEFAULTS, AGENT_SETTINGS_SCHEMA } = require('./agents/agents.settings');
+
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
 
@@ -17,11 +19,13 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   [AI_ENABLED_KEY]: false,
   // "*" = todos os agentes; ou lista de códigos separados por vírgula (só esses rodam; os demais respondem 409).
   [AI_AGENTS_ENABLED_KEY]: '*',
+  ...AGENT_SETTING_DEFAULTS,
 });
 
 const AI_SETTINGS_SCHEMA = {
   [AI_ENABLED_KEY]: { type: 'boolean' },
   [AI_AGENTS_ENABLED_KEY]: { type: 'string' },
+  ...AGENT_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {
