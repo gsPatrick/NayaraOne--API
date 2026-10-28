@@ -154,7 +154,7 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   const stage = await ProjectStage.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
   if (!stage) throw AppError.notFound('Etapa de obra não encontrada.', 'PROJECT_STAGE_NOT_FOUND');
   const beforeJson = stage.toJSON();
-  const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost } = payload;
+  const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost, publicVisible } = payload;
   const previousStatus = stage.status;
   if (name !== undefined) stage.name = name;
   if (sequence !== undefined && sequence !== stage.sequence) {
@@ -171,6 +171,12 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
     stage.sequence = sequence;
   }
   if (plannedPct !== undefined) stage.plannedPct = assertValidPlannedPct(plannedPct);
+  if (publicVisible !== undefined) {
+    if (typeof publicVisible !== 'boolean') {
+      throw AppError.badRequest('"publicVisible" deve ser verdadeiro ou falso.', 'PROJECT_STAGE_VALIDATION');
+    }
+    stage.publicVisible = publicVisible;
+  }
   if (stageCode !== undefined) stage.stageCode = stageCode;
   if (plannedCost !== undefined) stage.plannedCost = assertValidPlannedCost(plannedCost);
   if (status !== undefined) {

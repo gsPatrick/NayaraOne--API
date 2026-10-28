@@ -80,6 +80,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'ends_at',
       },
+      // M9-D403: a etapa pode ser citada em conteúdo público de Marketing (padrão: não). public_since é mantido por gatilho.
+      publicVisible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'public_visible',
+      },
+      publicSince: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'public_since',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

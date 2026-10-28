@@ -8,6 +8,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
+// M9-D403: política de endereço em conteúdo público de Marketing (padrão do banco: SO_BAIRRO).
+const PUBLIC_ADDRESS_POLICIES = ['COMPLETO', 'RUA_SEM_NUMERO', 'SO_BAIRRO', 'OCULTO'];
 const PUBLICATION_STATUSES = ['DRAFT', 'READY', 'PUBLISHED', 'INACTIVE'];
 const AVAILABILITY_STATUSES = ['AVAILABLE', 'SOLD', 'RENTED', 'WITHDRAWN'];
 
@@ -218,8 +220,19 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     bedrooms,
     parkingSpots,
     attributesJson,
+    publicAddressPolicy,
   } = payload;
 
+  if (publicAddressPolicy !== undefined) {
+    const normalizedPolicy = String(publicAddressPolicy).toUpperCase();
+    if (!PUBLIC_ADDRESS_POLICIES.includes(normalizedPolicy)) {
+      throw AppError.badRequest(
+        `O campo "publicAddressPolicy" deve ser um de: ${PUBLIC_ADDRESS_POLICIES.join(', ')}.`,
+        'PROPERTY_VALIDATION'
+      );
+    }
+    property.publicAddressPolicy = normalizedPolicy;
+  }
   if (description !== undefined) property.description = description;
   if (bedrooms !== undefined) property.bedrooms = bedrooms;
   if (parkingSpots !== undefined) property.parkingSpots = parkingSpots;

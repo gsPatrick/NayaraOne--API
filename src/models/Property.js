@@ -139,6 +139,26 @@ module.exports = (sequelize) => {
         field: 'availability_status',
         comment: 'AVAILABLE|SOLD|RENTED|WITHDRAWN',
       },
+      // M9-D403: política de endereço em conteúdo público (padrão SO_BAIRRO), identificador opaco público e instante da publicação
+      // (mantido por gatilho do banco).
+      publicAddressPolicy: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'SO_BAIRRO',
+        field: 'public_address_policy',
+        comment: 'COMPLETO|RUA_SEM_NUMERO|SO_BAIRRO|OCULTO',
+      },
+      publicId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        defaultValue: DataTypes.UUIDV4,
+        field: 'public_id',
+      },
+      publishedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'published_at',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,
