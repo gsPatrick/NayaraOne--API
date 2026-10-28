@@ -150,6 +150,20 @@ test('M9-D601: analytics.dashboard_definitions, dashboard_widgets, executive_bri
   }
 });
 
+// M9-D700: log de acesso do BI (analytics.access_log) com RLS + FORCE RLS e só as políticas de leitura e inserção (imutável).
+test('M9-D700: analytics.access_log tem RLS, FORCE RLS e só as políticas de SELECT e INSERT', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT array_agg(p.polcmd::text ORDER BY p.polcmd::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS cmds
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'analytics' AND c.relname = 'access_log'`
+  );
+  assert.equal(rows.length, 1, 'analytics.access_log não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS');
+  assert.deepEqual(rows[0].cmds, ['a', 'r'], 'políticas: INSERT (a) e SELECT (r), nenhuma de UPDATE/DELETE');
+});
+
 // M9-D602: alertas, qualidade e diário de refresh do BI (schema analytics) com RLS + FORCE RLS e 4 políticas.
 test('M9-D602: analytics.alert_definitions, alert_instances, data_quality_checks e read_model_refreshes têm RLS, FORCE RLS e 4 políticas', async () => {
   for (const table of ['alert_definitions', 'alert_instances', 'data_quality_checks', 'read_model_refreshes']) {

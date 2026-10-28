@@ -26,7 +26,7 @@ test('m9d603 listar o registry devolve código, nome, owner, unidade, versão e 
   await inTx(env.tenantA, {}, async (tx) => {
     const input = metricInput(env);
     await registry.publishMetric(input, ctxOf(env.tenantA), tx, { catalog });
-    const lista = await registry.listRegistry(ctxOf(env.tenantA, ['analytics:read']), {}, tx);
+    const lista = await registry.listRegistry(ctxOf(env.tenantA, ['analytics:read', 'finance:read']), {}, tx);
     const m = lista.find((x) => x.metricCode === input.metricCode);
     assert.deepEqual(
       { name: m.name, ownerRole: m.ownerRole, unit: m.unit, version: m.version, status: m.status },
@@ -46,7 +46,7 @@ test('m9d603 resposta de métrica traz valor, unidade, versão e sourceRefs', as
       valueNumeric: '120000.5000', status: 'OK', sourceSnapshotAt: '2026-10-31T23:00:00Z', sourceRefs: [{ table: 'finance.entries', id: 'abc' }],
       calcHash: createHash('sha256').update('x').digest('hex'),
     }, tx);
-    const r = await registry.readMetricValue(ctxOf(env.tenantA, ['analytics:read']), {
+    const r = await registry.readMetricValue(ctxOf(env.tenantA, ['analytics:read', 'finance:read']), {
       metricCode: input.metricCode, scopeType: 'COMPANY', scopeId: env.tenantA.companyId, asOfDate: '2026-10-31',
     }, tx);
     assert.equal(r.value, '120000.5000');
@@ -55,7 +55,7 @@ test('m9d603 resposta de métrica traz valor, unidade, versão e sourceRefs', as
     assert.equal(r.status, 'OK');
     assert.deepEqual(r.sourceRefs, [{ table: 'finance.entries', id: 'abc' }]);
     assert.ok(r.sourceSnapshotAt && r.refreshedAt);
-    await assert.rejects(registry.readMetricValue(ctxOf(env.tenantA), { metricCode: input.metricCode, scopeType: 'COMPANY', scopeId: env.tenantA.companyId, asOfDate: '2026-09-30' }, tx),
+    await assert.rejects(registry.readMetricValue(ctxOf(env.tenantA, ['analytics:read', 'finance:read']), { metricCode: input.metricCode, scopeType: 'COMPANY', scopeId: env.tenantA.companyId, asOfDate: '2026-09-30' }, tx),
       (e) => e.statusCode === 404 && e.code === 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
   });
 });

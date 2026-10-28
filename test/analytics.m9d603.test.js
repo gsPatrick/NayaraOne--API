@@ -173,11 +173,11 @@ test('m9d603 aposentar métrica em uso é recusado e sem uso aposenta, sem volta
     assert.equal(retired.status, 'RETIRED');
     await expectErr(registry.retireMetric({ ...free, scopeLevel: 'COMPANY' }, ctxOf(env.tenantA), tx), 409, 'ANALYTICS_METRIC_STATE_INVALID');
     await expectErr(publish(free, env.tenantA, tx), 409, 'ANALYTICS_METRIC_RETIRED');
-    const ativos = await registry.listRegistry(ctxOf(env.tenantA), {}, tx);
+    const ativos = await registry.listRegistry(ctxOf(env.tenantA, ['analytics:manage', 'finance:read']), {}, tx);
     assert.ok(!ativos.some((m) => m.metricCode === free.metricCode), 'RETIRED some do catálogo ativo');
-    const todos = await registry.listRegistry(ctxOf(env.tenantA), { includeRetired: true }, tx);
+    const todos = await registry.listRegistry(ctxOf(env.tenantA, ['analytics:manage', 'finance:read']), { includeRetired: true }, tx);
     assert.ok(todos.some((m) => m.metricCode === free.metricCode && m.status === 'RETIRED'));
-    const detalhe = await registry.getMetric(ctxOf(env.tenantA), free.metricCode, tx);
+    const detalhe = await registry.getMetric(ctxOf(env.tenantA, ['analytics:manage', 'finance:read']), free.metricCode, tx);
     assert.equal(detalhe.versions.length, 1, 'histórico legível após aposentar');
     const [[aud]] = await sup.sequelize.query(`SELECT before_json, after_json FROM audit.audit_log WHERE action = 'analytics.metric.retire' AND entity_id = :id`, { replacements: { id: detalhe.definition.id }, transaction: tx });
     assert.equal(aud.before_json.status, 'PUBLISHED');

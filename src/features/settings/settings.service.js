@@ -22,6 +22,7 @@ const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../modules/analytics/readOnly/readOnly.settings');
+const { SECURITY_SETTINGS_SCHEMA } = require('../../modules/analytics/security/security.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -166,6 +167,8 @@ const SETTINGS_SCHEMA = {
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
+  ...SECURITY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };

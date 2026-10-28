@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { analyticsMethodGuard, analyticsReadOnlyTransaction } = require('./readOnly');
+const { registerAccessLogRoutes } = require('./security/accessLog.routes');
 
 /**
  * Rotas do BI em /v1/analytics/*. Ordem em toda rota: autenticação -> tenant -> guarda de método (405) -> transação somente
@@ -13,6 +14,7 @@ const { analyticsMethodGuard, analyticsReadOnlyTransaction } = require('./readOn
 function createAnalyticsRouter({ authChain = [authMiddleware, tenantMiddleware] } = {}) {
   const router = Router();
   router.use('/analytics', ...authChain, analyticsMethodGuard, analyticsReadOnlyTransaction);
+  registerAccessLogRoutes(router);
   return router;
 }
 

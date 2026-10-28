@@ -9,6 +9,7 @@ const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { getLatestSnapshot } = require('../../../features/analytics/metricStore.service');
 const { assertCanRead } = require('./registry.permission');
+const { assertDomainAccess, loadDomainMap, domainPermissionOf, has } = require('../security');
 
 const ORDER_SCOPE = 'ORDER BY (d.company_id IS NULL), (d.group_id IS NULL)';
 
@@ -25,7 +26,9 @@ async function listRegistry(ctx, { domain = null, status = null, includeRetired 
       ORDER BY d.metric_code, (d.company_id IS NULL), (d.group_id IS NULL)`,
     { replacements: { domain, status, includeRetired: includeRetired === true }, transaction }
   );
-  return rows;
+  // ABAC (M9-D700): só aparecem as métricas dos domínios cuja permissão de origem o usuário tem.
+  const map = await loadDomainMap(ctx, transaction);
+  return rows.filter((r) => has(ctx, domainPermissionOf(map, r.domain)));
 }
 
 async function findDefinition(code, transaction) {
@@ -41,6 +44,7 @@ async function findDefinition(code, transaction) {
 async function getMetric(ctx, metricCode, transaction) {
   assertCanRead(ctx);
   const definition = await findDefinition(metricCode, transaction);
+  await assertDomainAccess(ctx, definition.domain, transaction);
   const [versions] = await sequelize.query(
     'SELECT * FROM analytics.metric_versions WHERE metric_id = :id ORDER BY version DESC',
     { replacements: { id: definition.id }, transaction }
@@ -52,6 +56,7 @@ async function getMetric(ctx, metricCode, transaction) {
 async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, dimensionKey = '' }, transaction) {
   assertCanRead(ctx);
   const definition = await findDefinition(metricCode, transaction);
+  await assertDomainAccess(ctx, definition.domain, transaction);
   const snapshot = await getLatestSnapshot({ metricId: definition.id, scopeType, scopeId, asOfDate, dimensionKey }, transaction);
   if (!snapshot) throw AppError.notFound('Não há valor calculado para esta data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
   const [[version]] = await sequelize.query('SELECT version, unit, value_nature FROM analytics.metric_versions WHERE id = :id', {
