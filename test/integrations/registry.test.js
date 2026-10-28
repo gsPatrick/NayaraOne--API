@@ -146,6 +146,15 @@ test('connections_segredo_embutido_recusado', async () => {
       { config: { pem: '-----BEGIN PRIVATE KEY-----\nabc' } },
       { policy: { auth: { password: 'senha' } } },
       { policy: { lista: [{ webhook_secret: 'w' }] } },
+      // Reabertura: chave de segredo com valor não vazio de qualquer tipo (número, booleano, lista).
+      { config: { apiKey: 123456789 } },
+      { config: { api_key: true } },
+      { config: { nested: { client_secret: 42 } } },
+      { config: { token: [123, 456] } },
+      { config: { password: { valor: 987654 } } },
+      { policy: { auth: { password: 0 } } },
+      { policy: { lista: [{ webhook_secret: false }] } },
+      { policy: { privateKey: 1 } },
     ];
     for (const m of maus) {
       await recusa(
@@ -160,6 +169,10 @@ test('connections_segredo_embutido_recusado', async () => {
     await recusa(registry.updateConnection(ok.id, { configJson: { apiKey: 'abc' } }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
     assert.deepEqual((await IntegrationConnection.findByPk(ok.id, { transaction })).configJson, { baseUrl: 'https://api.exemplo.com/v1', accountId: '12345', token: '' });
     assert.equal(await IntegrationConnection.count({ where: { companyId: tenant.companyId }, transaction }), antes + 1);
+    // Valores realmente vazios sob chave de segredo continuam aceitos.
+    await registry.createConnection(novaConexao({ label: `QA-M9 vazios ${uniqueSuffix()}`, configJson: { token: null, apiKey: '', secret: [], password: {} } }), ctx, transaction);
+    // Catálogo: política padrão do provider também é varrida.
+    await recusa(registry.createProvider({ code: `qa-m9-seg-${uniqueSuffix()}`.toLowerCase(), displayName: 'QA-M9', domain: 'MESSAGING', capabilities: ['x'], supportedVersions: ['v1'], criticality: 'LOW', sandboxAvailable: true, defaultPolicyJson: { apiKey: 123456789 } }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
     // secretRef não pode ser o próprio segredo.
     await recusa(registry.createConnection(novaConexao({ secretRef: 'Bearer abc.def' }), ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
     // Campo de segredo solto no corpo.

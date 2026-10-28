@@ -49,8 +49,7 @@ function acharSegredo(valor, { tamanhoMinimo = TAMANHO_MINIMO_PADRAO, caminho = 
   if (typeof valor === 'object') {
     for (const [chave, v] of Object.entries(valor)) {
       const sub = caminho ? `${caminho}.${chave}` : chave;
-      if (chaveParecidaComSegredo(chave) && typeof v === 'string' && v.trim() !== '') return sub;
-      if (chaveParecidaComSegredo(chave) && v && typeof v === 'object' && acharSegredoPorChave(v)) return sub;
+      if (chaveParecidaComSegredo(chave) && acharSegredoPorChave(v)) return sub;
       const achou = acharSegredo(v, { tamanhoMinimo, caminho: sub });
       if (achou) return achou;
     }
@@ -58,9 +57,11 @@ function acharSegredo(valor, { tamanhoMinimo = TAMANHO_MINIMO_PADRAO, caminho = 
   return null;
 }
 
-// Objeto/lista debaixo de uma chave de segredo: qualquer texto não vazio dentro dele conta.
+// Valor debaixo de uma chave de segredo: qualquer valor não vazio conta, seja texto, número,
+// booleano (inclusive false e 0) ou lista/objeto que contenha algum.
 function acharSegredoPorChave(valor) {
   if (typeof valor === 'string') return valor.trim() !== '';
+  if (typeof valor === 'number' || typeof valor === 'boolean' || typeof valor === 'bigint') return true;
   if (Array.isArray(valor)) return valor.some(acharSegredoPorChave);
   if (valor && typeof valor === 'object') return Object.values(valor).some(acharSegredoPorChave);
   return false;
