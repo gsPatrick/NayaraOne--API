@@ -1,29 +1,40 @@
 'use strict';
 
-const { IntegrationError } = require('../../models');
+const { Op, literal } = require('sequelize');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { IntegrationError } = require('../../models');
+const { recordError, resolveError } = require('../integrations/errors');
 
 /**
- * Grava correspondent.integration_errors quando a integração falha.
- * A mensagem é de negócio. Corpo do provider, stack e segredo não entram.
+ * Erros de integração do Correspondente (Marco 8). Desde o Marco 9 (M9-D207) este serviço DELEGA ao serviço genérico
+ * (integration.integration_errors), com as mesmas assinaturas e os mesmos códigos de erro de antes. O id do caso fica em
+ * `source_ref_id` (atributo `financingCaseId`); a tabela correspondent.integration_errors virou legado somente leitura.
+ * A mensagem é de negócio e passa pelo sanitizador único: corpo do provider, stack e segredo não entram.
  */
+function sourceOf(operation) {
+  const op = String(operation || '');
+  if (op.startsWith('webhook')) return 'WEBHOOK';
+  if (op === 'status') return 'SYNC';
+  return 'DISPATCH';
+}
+
 async function recordIntegrationError(
   { groupId, companyId, financingCaseId, providerCode, operation, errorCode, message },
   transaction
 ) {
-  return IntegrationError.create(
+  return recordError(
+    { groupId, companyId },
     {
-      groupId,
-      companyId,
-      financingCaseId: financingCaseId || null,
       providerCode: String(providerCode || '').slice(0, 32),
+      source: sourceOf(operation),
+      sourceRefId: financingCaseId || null,
       operation: String(operation || '').slice(0, 40),
+      errorClass: 'UNKNOWN',
       // errorCode pode vir de uma exceção qualquer (código longo ou que nem é texto): cabe na coluna.
-      errorCode: (typeof errorCode === 'string' && errorCode ? errorCode : 'INTEGRATION_FAILED').slice(0, 64),
-      message: String(message || '').slice(0, 500),
+      errorCode: typeof errorCode === 'string' && errorCode ? errorCode : 'INTEGRATION_FAILED',
+      message,
     },
-    { transaction }
+    transaction
   );
 }
 
@@ -45,7 +56,12 @@ const OPERATION_LABEL = {
  * Só mensagem de negócio: o corpo do provider nunca foi gravado.
  */
 async function listIntegrationErrors({ status, limit = 200 } = {}, groupId, companyId, transaction) {
-  const where = { groupId, companyId };
+  // A tabela genérica guarda erros de todas as famílias; esta lista continua sendo só a do financiamento.
+  const where = {
+    groupId,
+    companyId,
+    [Op.or]: [{ providerCode: ['sandbox', 'manual'] }, literal(`"IntegrationError"."provider_code" IN (SELECT code FROM integration.providers WHERE domain = 'FINANCING')`)],
+  };
   if (status) {
     if (!['OPEN', 'RESOLVED'].includes(status)) {
       throw AppError.badRequest('O filtro "status" deve ser OPEN ou RESOLVED.', 'INTEGRATION_ERROR_VALIDATION');
@@ -59,38 +75,25 @@ async function listIntegrationErrors({ status, limit = 200 } = {}, groupId, comp
 }
 
 async function resolveIntegrationError(errorId, note, actorUserId, groupId, companyId, transaction) {
-  // Trava a linha: duas resoluções simultâneas não gravam duas auditorias (a segunda vê "já resolvido").
-  const error = await IntegrationError.findOne({ where: { id: errorId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
-  if (!error) {
-    throw AppError.notFound('Erro de integração não encontrado.', 'INTEGRATION_ERROR_NOT_FOUND');
-  }
-  if (error.status === 'RESOLVED') {
-    throw AppError.conflict('Este erro de integração já foi resolvido.', 'INTEGRATION_ERROR_ALREADY_RESOLVED');
-  }
   const text = String(note || '').trim();
-  if (text.length < 3) {
-    throw AppError.badRequest('Informe o que foi feito para resolver (mínimo 3 caracteres).', 'INTEGRATION_ERROR_VALIDATION');
+  try {
+    return await resolveError(
+      errorId,
+      { note: text },
+      { groupId, companyId, userId: actorUserId },
+      transaction,
+      { auditAction: 'correspondent.integration_error.resolved' }
+    );
+  } catch (err) {
+    // Mantém os códigos que o Correspondente já devolvia.
+    if (err.code === 'INTEGRATION_ERROR_ALREADY_CLOSED') {
+      throw AppError.conflict('Este erro de integração já foi resolvido.', 'INTEGRATION_ERROR_ALREADY_RESOLVED');
+    }
+    if (err.code === 'INTEGRATION_ERROR_NOTE_REQUIRED') {
+      throw AppError.badRequest('Informe o que foi feito para resolver (mínimo 3 caracteres).', 'INTEGRATION_ERROR_VALIDATION');
+    }
+    throw err;
   }
-  error.status = 'RESOLVED';
-  error.resolvedAt = new Date();
-  error.resolvedBy = actorUserId || null;
-  error.resolutionNote = text.slice(0, 500);
-  await error.save({ transaction });
-  await registrarAuditoria(
-    {
-      groupId,
-      companyId,
-      actorUserId,
-      action: 'correspondent.integration_error.resolved',
-      entityType: 'IntegrationError',
-      entityId: error.id,
-      beforeJson: { status: 'OPEN' },
-      afterJson: { status: 'RESOLVED' },
-      reason: `Erro de integração "${error.errorCode}" (${error.operation}) resolvido por uma pessoa: ${text}.`,
-    },
-    transaction
-  );
-  return error;
 }
 
 module.exports = { recordIntegrationError, listIntegrationErrors, resolveIntegrationError };

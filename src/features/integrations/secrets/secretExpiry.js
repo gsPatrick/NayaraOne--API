@@ -57,7 +57,7 @@ async function enforceSecretExpiry(connection, ctx, transaction, { store, now = 
     await reportSecretIncident({
       code: 'INTEGRATION_SECRET_EXPIRED', connectionId: connection.id, companyId: connection.companyId, groupId: connection.groupId,
       providerCode: connection.providerCode, environment: connection.environment, deadline: avaliacao.deadline,
-    });
+    }, { transaction });
   }
   return { ...avaliacao, transitioned };
 }

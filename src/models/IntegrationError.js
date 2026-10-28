@@ -3,8 +3,10 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * IntegrationError — "correspondent"."integration_errors" (caderno do Marco 8).
- * Guarda o código e uma mensagem de negócio. Não guarda corpo de resposta nem segredo.
+ * IntegrationError — "integration"."integration_errors" (Marco 9, M9-D207): falhas operacionais de qualquer integração.
+ * A tabela antiga correspondent.integration_errors virou legado somente leitura; o Correspondente grava aqui com
+ * `source = 'DISPATCH'` e guarda o id do caso em `source_ref_id` (atributo `financingCaseId`, nome que o Correspondente
+ * já usa). O payload é sempre sanitizado (errors/sanitizeForError.js); nunca há corpo bruto nem segredo.
  */
 module.exports = (sequelize) => {
   const IntegrationError = sequelize.define(
@@ -13,22 +15,31 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true, allowNull: false },
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
-      financingCaseId: { type: DataTypes.UUID, allowNull: true, field: 'financing_case_id' },
-      providerCode: { type: DataTypes.STRING(32), allowNull: false, field: 'provider_code' },
-      operation: { type: DataTypes.STRING(40), allowNull: false },
-      status: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'OPEN', field: 'status' },
-      resolvedAt: { type: DataTypes.DATE, allowNull: true, field: 'resolved_at' },
-      resolvedBy: { type: DataTypes.UUID, allowNull: true, field: 'resolved_by' },
-      resolutionNote: { type: DataTypes.TEXT, allowNull: true, field: 'resolution_note' },
+      connectionId: { type: DataTypes.UUID, allowNull: true, field: 'connection_id' },
+      providerCode: { type: DataTypes.STRING(48), allowNull: false, field: 'provider_code' },
+      source: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'DISPATCH' },
+      financingCaseId: { type: DataTypes.UUID, allowNull: true, field: 'source_ref_id' },
+      operation: { type: DataTypes.STRING(40), allowNull: true },
+      errorClass: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'UNKNOWN', field: 'error_class' },
       errorCode: { type: DataTypes.STRING(64), allowNull: false, field: 'error_code' },
+      severity: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'MEDIUM' },
       message: { type: DataTypes.STRING(500), allowNull: false },
+      sanitizedPayload: { type: DataTypes.JSONB, allowNull: true, field: 'sanitized_payload' },
+      payloadHash: { type: DataTypes.CHAR(64), allowNull: true, field: 'payload_hash' },
+      httpStatus: { type: DataTypes.INTEGER, allowNull: true, field: 'http_status' },
+      attempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+      status: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'OPEN' },
+      resolvedBy: { type: DataTypes.UUID, allowNull: true, field: 'resolved_by' },
+      resolvedAt: { type: DataTypes.DATE, allowNull: true, field: 'resolved_at' },
+      resolutionNote: { type: DataTypes.STRING(500), allowNull: true, field: 'resolution_note' },
+      correlationId: { type: DataTypes.STRING(64), allowNull: true, field: 'correlation_id' },
     },
     {
-      schema: 'correspondent',
+      schema: 'integration',
       tableName: 'integration_errors',
       timestamps: true,
       createdAt: 'created_at',
-      updatedAt: 'updated_at',
+      updatedAt: false,
       underscored: true,
     }
   );

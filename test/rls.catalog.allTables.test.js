@@ -167,6 +167,24 @@ test('M9-D602: analytics.alert_definitions, alert_instances, data_quality_checks
   }
 });
 
+// M9-D207: erros de integração por empresa (RLS + FORCE, política de isolamento) e o contador agregado de webhook
+// desconhecido (sem empresa: RLS + FORCE e só a marca de administração de plataforma enxerga).
+test('M9-D207: integration.integration_errors e integration.platform_unknown_webhooks têm RLS e FORCE RLS', async () => {
+  for (const [table, minPolicies] of [['integration_errors', 1], ['platform_unknown_webhooks', 1]]) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'integration' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `integration.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `integration.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `integration.${table}: FORCE RLS`);
+    assert.ok(rows[0].policies >= minPolicies, `integration.${table}: política de isolamento`);
+  }
+});
+
 // M9-D206: integration.provider_health (saúde por connection) com RLS, FORCE RLS, política tenant_isolation e função de expurgo.
 test('M9-D206: integration.provider_health tem RLS, FORCE RLS, a política tenant_isolation e a função de expurgo SECURITY DEFINER', async () => {
   const [rows] = await sequelize.query(
