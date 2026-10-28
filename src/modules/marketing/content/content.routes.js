@@ -8,4 +8,6 @@ module.exports = buildMarketingRouter([
   { method: 'post', path: '/marketing/content', permission: 'marketing:content:write', handler: controller.create },
   { method: 'post', path: '/marketing/content/:id/approve', permission: 'marketing:content:approve', handler: controller.approve },
   { method: 'post', path: '/marketing/content/:id/schedule', permission: 'marketing:content:publish', handler: controller.schedule },
+  // Rota inferida I1 (M9-D435): linha do tempo do conteúdo.
+  { method: 'get', path: '/marketing/content/:id', permission: 'marketing:content:read', handler: controller.get },
 ]);
