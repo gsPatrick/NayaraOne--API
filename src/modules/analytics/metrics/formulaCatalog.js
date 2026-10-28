@@ -82,4 +82,4 @@ function runFormulaTests(formula) {
   return { ok: failures.length === 0, hash, failures, total: cases.length };
 }
 
-module.exports = { createFormulaCatalog, getFormulaCatalog, runFormulaTests, canonical, DEFAULT_DIR };
+module.exports = { createFormulaCatalog, getFormulaCatalog, runFormulaTests, canonical, isFormulaFile, DEFAULT_DIR };

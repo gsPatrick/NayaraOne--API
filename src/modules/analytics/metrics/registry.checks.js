@@ -7,6 +7,7 @@
 const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { runFormulaTests } = require('./formulaCatalog');
+const { assertDeterministicFormula } = require('./formulaDeterminism');
 
 async function assertReadModelExists(name, transaction) {
   const [[row]] = await sequelize.query('SELECT to_regclass(:n) IS NOT NULL AS ok', { replacements: { n: `analytics.${name}` }, transaction });
@@ -20,6 +21,7 @@ function checkFormula(input, catalog) {
   if (!result.ok) {
     throw AppError.unprocessable('Os testes da fórmula não passaram; ela não pode ser publicada.', 'ANALYTICS_FORMULA_TESTS_FAILED', { falhas: result.failures });
   }
+  assertDeterministicFormula(formula);
   return result.hash;
 }
 

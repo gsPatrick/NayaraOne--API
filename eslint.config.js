@@ -6,8 +6,9 @@ const js = require('@eslint/js');
 const globals = require('globals');
 const analyticsReadOnlyImports = require('./scripts/eslint-rules/analyticsReadOnlyImports');
 const analyticsCamadas = require('./scripts/eslint-rules/analyticsCamadas');
+const noFloatMoney = require('./scripts/eslint-rules/noFloatMoney');
 
-const nayaraPlugin = { rules: { 'analytics-somente-leitura': analyticsReadOnlyImports, 'analytics-camadas': analyticsCamadas } };
+const nayaraPlugin = { rules: { 'analytics-somente-leitura': analyticsReadOnlyImports, 'analytics-camadas': analyticsCamadas, 'no-float-money': noFloatMoney } };
 
 module.exports = [
   { ignores: ['.claude/**', 'node_modules/**', 'uploads/**', 'backups/**', 'scratchpad/**', 'coverage/**'] },
@@ -34,5 +35,11 @@ module.exports = [
     files: ['src/modules/analytics/**/*.js'],
     plugins: { nayara: nayaraPlugin },
     rules: { 'nayara/analytics-camadas': 'error' },
+  },
+  {
+    // M9-D605: fórmula pura, dinheiro em decimal, sem relógio nem sorteio.
+    files: ['src/modules/analytics/metrics/formulas/**/*.js'],
+    plugins: { nayara: nayaraPlugin },
+    rules: { 'nayara/no-float-money': 'error' },
   },
 ];
