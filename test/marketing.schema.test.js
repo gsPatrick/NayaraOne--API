@@ -285,12 +285,15 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   }
   const admin = new Sequelize(process.env.DATABASE_ADMIN_URL, { logging: false });
   const migration = require(path.resolve(__dirname, '../migrations/20260101000750-marketing-schema-parte-1.js'));
+  const parte2 = require(path.resolve(__dirname, '../migrations/20260101000751-marketing-schema-parte-2.js'));
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
   try {
     const inicial = await contagem();
     assert.equal(inicial, 6);
     await migration.up(qi); // segunda vez: sem erro e sem alteração
+    // As tabelas da parte 2 (M9-D401) apontam para as da parte 1: o down da parte 1 só roda depois do down da parte 2.
+    await parte2.down(qi);
     assert.equal(await contagem(), inicial);
     // down recusa com dados.
     await admin.query(`INSERT INTO marketing.templates (group_id, company_id, code, version_no, kind, status, body, content_hash)
@@ -302,6 +305,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     assert.equal(await contagem(), 0);
     await migration.up(qi);
     assert.equal(await contagem(), inicial);
+    await parte2.up(qi);
   } finally {
     await admin.close();
   }

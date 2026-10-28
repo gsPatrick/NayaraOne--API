@@ -33,6 +33,7 @@ const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
 const { router: governanceRouter } = require('../modules/core-governance');
+const { router: aiModuleRouter } = require('../modules/ai');
 
 /**
  * Agregador único de rotas da API.
@@ -78,6 +79,8 @@ router.use('/v1', pingRouter);
 // Marco 9 — governança (src/modules/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
 // autenticação valem só nos prefixos do bloco (nenhum router.use sem caminho), então as demais rotas de /v1 não são afetadas.
 router.use('/v1', governanceRouter);
+// Marco 9 — NAY (src/modules/ai, M9-D003): /v1/ai/*, auth/tenant só sob /ai, chave geral ia.habilitada no aiGate.
+router.use('/v1', aiModuleRouter);
 router.use('/v1', authRouter);
 router.use('/v1', groupsRouter);
 router.use('/v1', companiesRouter);

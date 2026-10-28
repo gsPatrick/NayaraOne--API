@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../modules/core-governance/governance.settings');
+const { AI_SETTINGS_SCHEMA } = require('../../modules/ai/ai.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -102,6 +103,8 @@ const SETTINGS_SCHEMA = {
   'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
   // Marco 9 — governança (M9-D800): liga/desliga dos 8 módulos, exceções ao prefixo GOV_ e perfis da concessão padrão.
   ...GOVERNANCE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D003 — chave geral da NAY (ia.habilitada, padrão Desligado) e chave por agente (ai.agents.enabled).
+  ...AI_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
@@ -111,11 +114,11 @@ const SETTINGS_SCHEMA = {
   'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
   // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
   'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
+  // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
+  'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };
 
 function validateAgainstSchema(key, value) {
-  // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
-  'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
   const spec = SETTINGS_SCHEMA[key];
   if (!spec) {
     throw AppError.badRequest(`Chave de configuração desconhecida: "${key}".`, 'SETTING_UNKNOWN_KEY', { key });

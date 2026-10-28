@@ -20,6 +20,7 @@ const MISSING_CONFIG_RESPONSES = {
   PII_HASH_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
 };
 
+// M9-D401 acrescenta MK002 (resultado de publicação append-only) e MK003 (versão de automação imutável).
 // M9-D400: erros previsíveis do schema "marketing" (trigger de versão imutável, CHECKs da campanha e contexto de
 // empresa ausente) viram resposta amigável em português em vez de erro cru do banco.
 const MKT_CAMPAIGN_CHECK_MESSAGES = {
@@ -35,6 +36,12 @@ function mapMarketingDatabaseError(err) {
   if (!pg || typeof pg !== 'object') return null;
   if (pg.code === 'MK001') {
     return { statusCode: 409, code: 'MKT_CONTENT_VERSION_IMMUTABLE', message: 'A versão do conteúdo é imutável; crie uma nova versão.' };
+  }
+  if (pg.code === 'MK002') {
+    return { statusCode: 409, code: 'MKT_RESULT_APPEND_ONLY', message: 'O resultado de publicação não pode ser alterado.' };
+  }
+  if (pg.code === 'MK003') {
+    return { statusCode: 409, code: 'MKT_AUTOMATION_VERSION_IMMUTABLE', message: 'A versão publicada é imutável; crie uma nova versão.' };
   }
   if (pg.code === '23502' && pg.schema === 'marketing' && (pg.column === 'group_id' || pg.column === 'company_id')) {
     return { statusCode: 400, code: 'MKT_TENANT_REQUIRED', message: 'O contexto de empresa é obrigatório.' };
