@@ -103,6 +103,10 @@ app.use(errorHandler);
 // M9-D202: em produção, sem cofre de segredos configurado a API não sobe (nunca cai em .env).
 require('./src/features/integrations/secrets').assertSecretStoreAtBoot();
 
+// M9-D209: todo adapter cumpre o contrato IntegrationAdapter; contrato inválido derruba o boot (INTEGRATION_ADAPTER_CONTRACT_INVALID).
+const registeredAdapters = require('./src/features/integrations/adapters').registerBuiltInAdapters();
+logger.info({ adapters: registeredAdapters }, `Adapters de integração registrados: ${registeredAdapters.length}`);
+
 if (process.env.NODE_ENV !== 'test') {
   runMigrationsOnBoot();
 }
