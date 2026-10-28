@@ -5,6 +5,7 @@ const { TenantSetting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
+const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../modules/core-governance/governance.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -99,6 +100,8 @@ const SETTINGS_SCHEMA = {
   // Secret HMAC-SHA256 do webhook do provider sandbox (`verifyWebhook` em
   // FinancingProviderAdapter.js) — mesmo padrão de procurement.insurance_webhook_secret.
   'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
+  // Marco 9 — governança (M9-D800): liga/desliga dos 8 módulos, exceções ao prefixo GOV_ e perfis da concessão padrão.
+  ...GOVERNANCE_SETTINGS_SCHEMA,
 };
 
 function validateAgainstSchema(key, value) {

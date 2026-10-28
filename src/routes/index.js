@@ -31,6 +31,7 @@ const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
+const { router: governanceRouter } = require('../modules/core-governance');
 
 /**
  * Agregador único de rotas da API.
@@ -73,6 +74,9 @@ router.post('/v1/crm/carts/public/:token/properties/:propertyId/click', crmContr
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);
+// Marco 9 — governança (src/modules/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
+// autenticação valem só nos prefixos do bloco (nenhum router.use sem caminho), então as demais rotas de /v1 não são afetadas.
+router.use('/v1', governanceRouter);
 router.use('/v1', authRouter);
 router.use('/v1', groupsRouter);
 router.use('/v1', companiesRouter);

@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const bcrypt = require('bcryptjs');
 const { sequelize, Group, Company, User, UserMembership, Role, Permission, RolePermission } = require('../src/models');
+const { ALL_CODES: GOVERNANCE_CODES } = require('../src/modules/core-governance/governance.permissions');
 
 /**
  * Seed de desenvolvimento — cria um group + company + role admin (com permissões amplas) +
@@ -59,6 +60,8 @@ const ADMIN_PERMISSIONS = [
   // consegue agir (returnTool)" passava sempre em dev e só quebrava no banco fresh do CI.
   'inventory:create', 'inventory:read', 'inventory:update', 'inventory:approve',
   'procurement:create', 'procurement:read', 'procurement:approve',
+  // Marco 9 — governança (M9-D800): as 21 permissões governance:* (catálogo em src/modules/core-governance/governance.permissions.js).
+  ...GOVERNANCE_CODES,
 ];
 
 async function upsertPermissions() {

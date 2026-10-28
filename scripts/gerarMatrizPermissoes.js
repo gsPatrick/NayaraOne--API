@@ -38,7 +38,20 @@ function gerar() {
   return out.sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 }
 
-module.exports = { gerar };
+/**
+ * Catálogo das permissões de governança (M9-D800: 21 códigos governance:*) com as rotas que já usam cada uma. Permissões ainda sem
+ * rota (as demandas do bloco as ligam depois) continuam listadas: o catálogo é fechado e vem do código, não de digitação.
+ */
+function gerarCatalogoGovernanca(rotas) {
+  const { GOVERNANCE_PERMISSIONS } = require('../src/modules/core-governance/governance.permissions');
+  return GOVERNANCE_PERMISSIONS.map((p) => ({
+    code: p.code,
+    risk: p.risk,
+    rotas: rotas.filter((r) => r.permissions.includes(p.code)).map((r) => `${r.method} ${r.path}`),
+  }));
+}
+
+module.exports = { gerar, gerarCatalogoGovernanca };
 
 if (require.main === module) {
   const rotas = gerar();
@@ -69,6 +82,14 @@ if (require.main === module) {
       '| Método | Caminho | Permissão exigida | MFA recente |',
       '|---|---|---|---|',
       ...protegidas.map(linha),
+      '',
+      '## Catálogo de permissões de governança (governance:*)',
+      '',
+      'Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda não foi ligada por uma demanda do bloco.',
+      '',
+      '| Permissão | Risco | Rotas que a exigem |',
+      '|---|---|---|',
+      ...gerarCatalogoGovernanca(rotas).map((c) => `| \`${c.code}\` | ${c.risk} | ${c.rotas.length ? c.rotas.map((x) => `\`${x}\``).join(', ') : 'nenhuma ainda'} |`),
       '',
       '## Rotas só com login ou públicas',
       '',
