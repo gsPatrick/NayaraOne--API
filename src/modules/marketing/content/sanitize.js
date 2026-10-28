@@ -2,6 +2,7 @@
 
 const { PUBLIC_FIELDS_DEFAULTS, PUBLIC_FIELDS_ALLOWLIST_KEY, PUBLIC_FIELDS_FEATURES_KEY, parseList } = require('./publicFields.settings');
 const { mktError } = require('../marketing.errors');
+const { SOURCES } = require('../../../shared/redaction');
 
 /**
  * M9-D403 — sanitizePublicFields(payload, policy, options): função PURA e determinística (não muta a entrada, sem relógio nem
@@ -26,13 +27,10 @@ const FORBIDDEN_KEY_TERMS = Object.freeze([
 
 /** Padrões na ordem de aplicação (o mais específico primeiro, para um CNPJ não ser lido como CPF). */
 const PII_PATTERNS = Object.freeze([
-  { name: 'CNPJ', re: /(?<!\d)\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}(?!\d)/g },
-  { name: 'CPF', re: /(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)/g },
-  { name: 'EMAIL', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g },
-  {
-    name: 'TELEFONE',
-    re: /(?:\+55[\s.-]?)?\(\d{2}\)[\s.-]?9?\d{4}[\s.-]?\d{4}(?!\d)|\+55[\s.-]?\d{2}[\s.-]?9?\d{4}[\s.-]?\d{4}(?!\d)|(?<!\d)\d{2}\s9\d{4}[\s-]?\d{4}(?!\d)|(?<![\d-])9?\d{4}-\d{4}(?!\d)/g,
-  },
+  { name: 'CNPJ', re: new RegExp(`(?<!\\d)${SOURCES.cnpjLoose}(?!\\d)`, 'g') },
+  { name: 'CPF', re: new RegExp(`(?<!\\d)${SOURCES.cpfLoose}(?!\\d)`, 'g') },
+  { name: 'EMAIL', re: new RegExp(SOURCES.email, 'g') },
+  { name: 'TELEFONE', re: new RegExp(`${SOURCES.phone}|${SOURCES.localPhone}`, 'g') },
   { name: 'MATRICULA', re: /(matr[íi]cula(?:\s+(?:n[º°o.]*|n[úu]mero))?\s*[:#-]?\s*)(?=[\w./-]*\d)[\w./-]{3,}/gi, keep: 1 },
 ]);
 

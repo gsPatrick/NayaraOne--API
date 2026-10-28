@@ -2,6 +2,11 @@
 
 const { AuditLog, sequelize } = require('../../models');
 const { getCurrentCorrelationId } = require('../../middlewares/correlationId.middleware');
+const { redactDeep, redactText } = require('../../shared/redaction');
+
+// M9-D246: a trilha de auditoria de integração nunca guarda segredo (nome de chave e padrão de valor); dados pessoais seguem como estão.
+const INTEGRATION_AUDIT = /integration|webhook|secret|provider[_-]?account|connection/i;
+const scrub = (value) => (value === null || value === undefined ? value : redactDeep(value, { secretsOnly: true }));
 
 /**
  * registrarAuditoria — grava uma entrada em "audit"."audit_log". "audit"."audit_log" tem RLS
@@ -32,6 +37,7 @@ async function registrarAuditoria(
   { groupId, companyId, actorUserId, action, entityType, entityId, beforeJson, afterJson, reason },
   transaction
 ) {
+  const integrationScope = INTEGRATION_AUDIT.test(`${action || ''} ${entityType || ''}`);
   const payload = {
     groupId,
     companyId,
@@ -39,9 +45,9 @@ async function registrarAuditoria(
     action,
     entityType,
     entityId: entityId || null,
-    beforeJson: beforeJson || null,
-    afterJson: afterJson || null,
-    reason: reason || null,
+    beforeJson: (integrationScope ? scrub(beforeJson) : beforeJson) || null,
+    afterJson: (integrationScope ? scrub(afterJson) : afterJson) || null,
+    reason: (integrationScope ? redactText(reason, { secretsOnly: true }) : reason) || null,
     correlationId: getCurrentCorrelationId(),
     occurredAt: new Date(),
     createdBy: actorUserId || null,

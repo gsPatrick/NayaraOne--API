@@ -100,3 +100,9 @@ Nenhuma ocorrência de `eval(`, `child_process.exec(` com interpolação, senha 
 concatenado com `req.*` em todo `src/` — todo o acesso a banco no repositório usa
 `sequelize.query(..., { replacements: ... })` (bind parameters), confirmado pela ausência de
 achados desta regra.
+
+## Redaction de logs e varredura de segredo (M9-D246)
+
+- Biblioteca única: `src/shared/redaction/` (nome de chave, padrão de valor, classe `SecretValue`, mascaramento de CPF/CNPJ/e-mail/telefone, cartão por Luhn). O logger (`src/utils/logger.js`) grava toda linha já redigida; auditoria de integração e respostas de erro de rotas de integração/webhook passam pela mesma biblioteca. Nenhum outro arquivo de `src/` pode ter detecção própria (teste `redaction_biblioteca_unica_sem_regex_de_deteccao_duplicada`).
+- Corpo bruto de webhook e payload de provider nunca vão a log: use `describeForLog(corpo, tipoDoEvento)` (só hash, tamanho e tipo).
+- Varredura estática: `npm run scan:secrets` (`scripts/secretScan.js`), roda no CI antes dos testes e sobre o log da execução; sai com 1 e `INTEGRATION_SECRET_SCAN_FAILED` se achar `AKIA…`, chave PEM, `sk_live_`, `xox*-`, `ghp_`, JWT, `Bearer …` ou cadeia de conexão com senha. Falso positivo só entra em `scripts/secretScan.allowlist.json` com `file`, `pattern`, `reason` e `reviewedBy`. Segredo real exige rotação.

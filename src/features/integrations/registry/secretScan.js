@@ -4,6 +4,7 @@
  * Varredura anti-segredo do registro de integrações (M9-D200 3.2 d).
  * config_json e policy_json guardam parâmetros NÃO secretos; o segredo mora no cofre (secret_ref).
  */
+const { looksLikeEmbeddedSecret } = require('../../../shared/redaction');
 
 const NOMES_DE_SEGREDO = ['secret', 'token', 'password', 'passwd', 'apikey', 'privatekey', 'clientsecret', 'webhooksecret'];
 const TAMANHO_MINIMO_PADRAO = 40;
@@ -14,14 +15,7 @@ function chaveParecidaComSegredo(chave) {
 }
 
 function textoParecidoComSegredoEmbutido(valor) {
-  const texto = String(valor || '');
-  return /postgres(ql)?:\/\//i.test(texto)
-    || /^bearer\s/i.test(texto)
-    || /-----BEGIN /.test(texto)
-    || /:\/\/[^/\s]*:[^@\s]*@/.test(texto)
-    || /^(sk|pk|rk)_(live|test)_/i.test(texto)
-    || /\bAKIA[0-9A-Z]{16}\b/.test(texto)
-    || /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(texto);
+  return looksLikeEmbeddedSecret(valor);
 }
 
 function textoLongoOpaco(valor, tamanhoMinimo) {

@@ -157,6 +157,11 @@ jobs:
       - name: archGuard da NAY (M9-D001)
         run: node scripts/ai-arch-guard.js
 
+      # M9-D246: varredura de segredo no repositório e nos logs de CI guardados (AKIA, chave PEM, sk_live_, xox, ghp_, JWT,
+      # Bearer, string de conexão com senha). Falso positivo só entra na allowlist revisada (scripts/secretScan.allowlist.json).
+      - name: Varredura de segredo (M9-D246)
+        run: node scripts/secretScan.js
+
       # Caderno Técnico, página 165, item 13 ("segurança/antifraude do módulo de Obras") — a
       # auditora externa pediu evidência de "security scan" pro Marco 6. Dois steps novos:
       # SAST simples (regex sobre src/, sem AST, mesma filosofia do scanner de hard-code acima)
@@ -272,6 +277,10 @@ jobs:
             echo "::error::test-results.log contém padrão de segredo (JWT ou string de conexão)"; exit 1
           fi
           echo "test-results.log sem padrões de segredo (Bearer ey, eyJ, string de conexão)."
+
+      - name: Varredura de segredo no log desta execução (M9-D246)
+        if: always()
+        run: node scripts/secretScan.js --extra test-results.log
 
       # E01 (Nayara, 18/10/2026): a API de download de artifacts do GitHub exige login mesmo em
       # repositório público (a auditora recebeu HTTP 403). O resumo do job, ao contrário, é

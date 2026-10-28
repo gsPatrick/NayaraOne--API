@@ -5,6 +5,7 @@ const registry = require('../integrations/registry/registry.service');
 const AppError = require('../../utils/AppError');
 const { toCatalogCode, toCorrespondentCode } = require('../integrations/providers/catalog.legacy');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { looksLikeEmbeddedSecret } = require('../../shared/redaction');
 
 const ANTES_CRIACAO = 'Não existia (registro criado nesta ação)';
 
@@ -59,14 +60,7 @@ const CAMPOS_DE_SEGREDO = [
 ];
 
 function pareceSegredoEmbutido(valor) {
-  const texto = String(valor || '');
-  return /postgres(ql)?:\/\//i.test(texto)
-    || /^bearer\s/i.test(texto)
-    || /-----BEGIN /.test(texto)
-    || /:\/\/[^/\s]*:[^@\s]*@/.test(texto) // endereço com usuário e senha
-    || /^(sk|pk|rk)_(live|test)_/i.test(texto) // chaves de API com prefixo conhecido
-    || /\bAKIA[0-9A-Z]{16}\b/.test(texto)
-    || /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(texto); // token JWT
+  return looksLikeEmbeddedSecret(valor);
 }
 
 function validateText(valor, nome, max) {

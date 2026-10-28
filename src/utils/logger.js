@@ -15,6 +15,10 @@
  * externo ser plugado depois sem precisar mudar uma linha de código de negócio.
  */
 const pino = require('pino');
+const { redactText, createRedactingStream } = require('../shared/redaction');
+
+// M9-D246: toda linha passa pela biblioteca única de redaction (por nome de chave, por padrão de valor e por classe) antes de ser gravada.
+const logStream = createRedactingStream(process.stdout);
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -41,7 +45,14 @@ const logger = pino({
     censor: '[REDACTED]',
   },
   timestamp: pino.stdTimeFunctions.isoTime,
-});
+  hooks: {
+    // pino usa a mensagem do Error quando não há texto; redige antes para o texto não escapar da biblioteca.
+    logMethod(args, method) {
+      if (args[0] instanceof Error && args[1] === undefined) args[1] = redactText(args[0].message);
+      return method.apply(this, args);
+    },
+  },
+}, logStream);
 
 /**
  * redactUrl — mascara o valor de parâmetros sensíveis na query string de uma URL
@@ -66,3 +77,5 @@ function redactUrl(url) {
 
 module.exports = logger;
 module.exports.redactUrl = redactUrl;
+/** Captura em memória do que foi gravado (já redigido): usado pelo teste de canário. */
+module.exports.addLogTap = logStream.addTap;

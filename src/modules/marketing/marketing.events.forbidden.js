@@ -1,5 +1,7 @@
 'use strict';
 
+const { containsEmail, containsSecretLike } = require('../../shared/redaction');
+
 /**
  * M9-D434 — dado que NUNCA entra no payload de evento de Marketing: endereço de contato (e-mail, telefone, endereço postal), texto
  * integral de mensagem e segredo. Vale para nomes de campo (em qualquer profundidade) e para valores de texto.
@@ -8,9 +10,7 @@
 // "accepted" não seja confundido com "cep".
 const FORBIDDEN_KEY_PART = /(e-?mail|phone|telefone|celular|address|endereco|logradouro|password|senha|secret|segredo|credential|authorization|api_?key|message|mensagem|assunto)/i;
 const FORBIDDEN_KEY_TERM = /(^|[^a-z])(body|corpo|text|texto|html|msg|fone|cep|zip|street|token|cpf|cnpj)($|[^a-z])/;
-const EMAIL_VALUE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const PHONE_VALUE = /^\+\d{10,15}$|^\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]\d{4}$/;
-const SECRET_VALUE = /(bearer\s+\S{8,}|sk-[a-z0-9]{12,}|-----BEGIN [A-Z ]+-----|eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})/i;
 const MAX_TEXT = 512;
 
 function forbiddenKey(key) {
@@ -22,9 +22,9 @@ function forbiddenKey(key) {
 function forbiddenValue(text) {
   if (typeof text !== 'string') return null;
   if (text.length > MAX_TEXT) return 'TEXT_TOO_LONG';
-  if (EMAIL_VALUE.test(text)) return 'EMAIL';
+  if (containsEmail(text)) return 'EMAIL';
   if (PHONE_VALUE.test(text.trim())) return 'PHONE';
-  if (SECRET_VALUE.test(text)) return 'SECRET';
+  if (containsSecretLike(text)) return 'SECRET';
   return null;
 }
 

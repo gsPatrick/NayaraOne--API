@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const AppError = require('../../../utils/AppError');
+const { findDocumentNumbers } = require('../../../shared/redaction');
 
 // LocalOcrAdapter — extração real, sem serviço externo pago: PDF com texto via pdftotext (poppler),
 // imagem e PDF escaneado via Tesseract. Mesma interface do SandboxOcrAdapter:
@@ -96,10 +97,9 @@ function extractFields(text) {
   }
 
   for (const line of lines) {
-    const cnpj = line.match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/);
-    const cpf = line.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/);
-    if (cnpj) set('taxId', cnpj[0].replace(/\D/g, ''), line.trim());
-    else if (cpf) set('taxId', cpf[0].replace(/\D/g, ''), line.trim());
+    const { cpf, cnpj } = findDocumentNumbers(line);
+    if (cnpj) set('taxId', cnpj.replace(/\D/g, ''), line.trim());
+    else if (cpf) set('taxId', cpf.replace(/\D/g, ''), line.trim());
 
     const name = line.match(/^\s*nome(?:\s+completo)?\s*[:-]\s*(\S.{2,80}?)\s*$/i);
     if (name) set('name', name[1], line.trim());

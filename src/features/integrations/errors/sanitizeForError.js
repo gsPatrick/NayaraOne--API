@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { SOURCES, rx, redactText } = require('../../../shared/redaction');
 
 /**
  * sanitizeForError — função única que decide o que pode ser guardado em integration_errors (M9-D207, regra 4).
@@ -24,15 +25,15 @@ const PII_TEXT_RULES = [
   [/https?:\/\/\S+/gi, '[endereço removido]'],
   [/\b(bearer|basic|token|apikey|api-key|secret|password|senha)\b\s*[:=]?\s*\S+/gi, '$1 [removido]'],
   [/\b\d{1,3}(\.\d{1,3}){3}(:\d+)?\b/g, '[ip removido]'],
-  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[e-mail removido]'],
-  [/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '[CNPJ removido]'],
-  [/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF removido]'],
-  [/(?<![\w])(?:\+?55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}(?![\w])/g, '[telefone removido]'],
+  [rx('email'), '[e-mail removido]'],
+  [new RegExp(`\\b${SOURCES.cnpjLoose}\\b`, 'g'), '[CNPJ removido]'],
+  [new RegExp(`\\b${SOURCES.cpfLoose}\\b`, 'g'), '[CPF removido]'],
+  [new RegExp(`(?<![\\w])${SOURCES.phoneLoose}(?![\\w])`, 'g'), '[telefone removido]'],
   [/\b[A-Za-z0-9_\-+/=]{32,}\b/g, '[removido]'],
 ];
 
 function sanitizeText(value, maxLength = 500) {
-  let text = String(value ?? '').trim();
+  let text = redactText(String(value ?? '').trim(), { secretsOnly: true });
   for (const [re, troca] of PII_TEXT_RULES) text = text.replace(re, troca);
   return text.slice(0, maxLength);
 }

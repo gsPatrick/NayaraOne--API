@@ -3,6 +3,7 @@
 const AppError = require('../utils/AppError');
 const { failure } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
+const { redactText, redactDeep } = require('../shared/redaction');
 
 /**
  * Middleware de erro global do Express — único ponto que traduz qualquer
@@ -55,6 +56,8 @@ function mapMarketingDatabaseError(err) {
   return null;
 }
 
+const isIntegrationRoute = (req) => /\/(integrations|webhooks)(\/|\?|$)/i.test(String(req.originalUrl || ''));
+
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
@@ -72,8 +75,9 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     return failure(res, {
       statusCode: err.statusCode,
       code: err.code,
-      message: err.message,
-      details: err.details,
+      // M9-D246: rotas de integração e webhooks nunca devolvem segredo na mensagem nem nos detalhes do erro.
+      message: isIntegrationRoute(req) ? redactText(err.message, { secretsOnly: true }) : err.message,
+      details: isIntegrationRoute(req) ? redactDeep(err.details, { secretsOnly: true }) : err.details,
     });
   }
 
