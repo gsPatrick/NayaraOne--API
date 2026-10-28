@@ -1,0 +1,23 @@
+{
+  "_comentario": "Catálogo dos tipos que o perfil `ai` troca por [REDIGIDO:tipo] (M9-D027). Não há expressão regular aqui: cada tipo aponta para a(s) regra(s) da biblioteca única src/shared/redaction (M9-D246), que é a dona da detecção.",
+  "perfil": "ai",
+  "formato": "[REDIGIDO:tipo]",
+  "tipos": [
+    { "tipo": "cpf", "fonte": ["cpfFormatted", "cpfBare"], "validacao": "digito_verificador", "reversivel": true },
+    { "tipo": "cnpj", "fonte": ["cnpjFormatted", "cnpjBare"], "validacao": "digito_verificador", "reversivel": true },
+    { "tipo": "rg", "fonte": ["rgLabeled", "rgFormatted"], "reversivel": true },
+    { "tipo": "email", "fonte": ["email"], "reversivel": true },
+    { "tipo": "telefone", "fonte": ["phone"], "reversivel": true },
+    { "tipo": "cep", "fonte": ["cepFormatted", "cepLabeled"], "reversivel": true },
+    { "tipo": "endereco", "fonte": ["addressPattern"], "reversivel": true },
+    { "tipo": "cartao", "fonte": ["cardCandidate"], "validacao": "luhn", "reversivel": true },
+    { "tipo": "conta", "fonte": ["accountLabeled"], "reversivel": true },
+    { "tipo": "agencia", "fonte": ["agencyLabeled"], "reversivel": true },
+    { "tipo": "pix", "fonte": ["pixLabeled"], "reversivel": true },
+    { "tipo": "boleto", "fonte": ["boletoFormatted", "boletoDigits"], "reversivel": true },
+    { "tipo": "token", "fonte": ["pem", "jwt", "bearer", "awsKey", "providerKey", "slackToken", "githubToken", "openAiKey", "assignment", "keywordValue"], "reversivel": false },
+    { "tipo": "senha", "fonte": ["connectionPassword", "assignment", "keywordValue"], "reversivel": false },
+    { "tipo": "segredo", "fonte": ["chave sensível por nome"], "reversivel": false },
+    { "tipo": "restrito", "fonte": ["classificação RESTRICTED"], "reversivel": false }
+  ]
+}

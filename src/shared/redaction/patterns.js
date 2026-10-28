@@ -31,6 +31,18 @@ const SOURCES = Object.freeze({
   cpfLoose: '\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}',
   cnpjLoose: '\\d{2}\\.?\\d{3}\\.?\\d{3}\\/?\\d{4}-?\\d{2}',
   emailLoose: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
+  // Perfil `ai` (M9-D027): tipos além de documento/cartão/e-mail/telefone. Os rótulos ("RG", "conta", "agência", "pix") evitam
+  // mascarar número comum; o que tem formato próprio (linha digitável, CEP com hífen) dispensa rótulo.
+  rgLabeled: '(\\bRG\\b\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{1,2}\\.?\\d{3}\\.?\\d{3}-?[\\dxX]\\b)',
+  rgFormatted: '(?<![\\d.])\\d{2}\\.\\d{3}\\.\\d{3}-[\\dxX](?![\\w-])',
+  pixLabeled: '(\\b(?:chave\\s+)?pix\\b\\s*[:=-]?\\s*)([A-Za-z0-9._%+@-]{8,})',
+  boletoFormatted: '(?<!\\d)\\d{5}\\.\\d{5}\\s\\d{5}\\.\\d{6}\\s\\d{5}\\.\\d{6}\\s\\d\\s\\d{14}(?!\\d)',
+  boletoDigits: '(?<![\\d.-])(?:\\d{47}|\\d{48})(?![\\d.-])',
+  agencyLabeled: '(\\bag(?:[eê]ncia|\\.)?\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{3,5}(?:-[\\dxX])?\\b)',
+  accountLabeled: '(\\b(?:conta(?:\\s+(?:corrente|poupan[cç]a))?|c\\/c|cc|c\\.c\\.)\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{4,12}-?[\\dxX]\\b)',
+  addressPattern: '\\b(?:rua|avenida|av\\.|alameda|travessa|rodovia|estrada|pra[cç]a)\\s+[^\\n,;.]{2,60}?,?\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}(?:\\s*[,-]\\s*[^\\n,;]{2,40})?',
+  cepFormatted: '(?<![\\d.-])\\d{5}-\\d{3}(?![\\d-])',
+  cepLabeled: '(\\bCEP\\b\\s*[:=-]?\\s*)(\\d{8}\\b)',
 });
 
 /** Cria uma RegExp nova (nunca compartilhada: flag `g` guarda estado em `lastIndex`). */

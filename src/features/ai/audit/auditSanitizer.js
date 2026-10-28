@@ -1,7 +1,7 @@
 'use strict';
 
 const { getSetting } = require('../../settings/settings.service');
-const { redactText, redactDeep, isSensitiveKey } = require('../../../shared/redaction');
+const { redactForAi, redactDeepForAi, isSensitiveKey } = require('../../../shared/redaction');
 const { SUMMARY_MAX_KEY, AUDIT_SETTING_DEFAULTS } = require('./audit.settings');
 
 /**
@@ -31,16 +31,16 @@ async function summaryLimit(ctx, transaction) {
   return Number.isInteger(n) && n >= 1 ? Math.min(n, AUDIT_SETTING_DEFAULTS[SUMMARY_MAX_KEY]) : AUDIT_SETTING_DEFAULTS[SUMMARY_MAX_KEY];
 }
 
-/** Resumo redigido (sem segredo nem dado pessoal) e cortado em `limit` caracteres; null continua null. */
+/** Resumo redigido pelo perfil `ai` (`[REDIGIDO:tipo]`, M9-D027: sem segredo nem dado pessoal) e cortado em `limit` caracteres; null continua null. */
 function sanitizeSummary(text, limit) {
   if (text === null || text === undefined) return text;
-  return redactText(String(text)).slice(0, limit);
+  return redactForAi(String(text)).slice(0, limit);
 }
 
 /** JSON de chamadas de ferramenta: sem conteúdo bruto e redigido pela biblioteca única. */
 function sanitizeToolCalls(value) {
   if (value === null || value === undefined) return value;
-  return redactDeep(dropForbidden(value));
+  return redactDeepForAi(dropForbidden(value));
 }
 
 module.exports = { sanitizeSummary, sanitizeToolCalls, summaryLimit, dropForbidden, isForbiddenKey, isSensitiveKey };

@@ -8,8 +8,9 @@ const detect = require('./detect');
 const { describeForLog } = require('./webhookLog');
 const { createRedactingStream } = require('./stream');
 const { CONSERVATIVE_SECRET_PATTERNS } = require('./conservative');
+const aiProfile = require('./aiProfile');
 
 module.exports = {
-  ...text, ...detect, redactDeep, isSensitiveKey, SENSITIVE_KEY_NAMES, describeForLog, createRedactingStream, CONSERVATIVE_SECRET_PATTERNS,
+  ...text, ...detect, ...aiProfile, redactDeep, isSensitiveKey, SENSITIVE_KEY_NAMES, describeForLog, createRedactingStream, CONSERVATIVE_SECRET_PATTERNS,
   rx: patterns.rx, SOURCES: patterns.SOURCES, luhnValid: patterns.luhnValid, cpfValid: patterns.cpfValid, cnpjValid: patterns.cnpjValid,
 };

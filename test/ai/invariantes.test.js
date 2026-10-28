@@ -103,7 +103,7 @@ test('inv_ai_010_memoria_estruturada_com_retencao', () => {
 
 test('inv_ai_011_pii_minimizada_restricted_so_se_permitido', () => {
   const r = arquivo('security/piiRedactor.js', 'M9-D027');
-  arquivo('security/patterns.json', 'M9-D027');
+  arquivo('security/piiTypes.json', 'M9-D027');
   assert.match(r, /RESTRICTED/, 'redactor deve tratar classificação RESTRICTED');
 });
 
