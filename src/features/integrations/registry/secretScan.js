@@ -1,0 +1,69 @@
+'use strict';
+
+/**
+ * Varredura anti-segredo do registro de integrações (M9-D200 3.2 d).
+ * config_json e policy_json guardam parâmetros NÃO secretos; o segredo mora no cofre (secret_ref).
+ */
+
+const NOMES_DE_SEGREDO = ['secret', 'token', 'password', 'passwd', 'apikey', 'privatekey', 'clientsecret', 'webhooksecret'];
+const TAMANHO_MINIMO_PADRAO = 40;
+
+function chaveParecidaComSegredo(chave) {
+  const normal = String(chave).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return NOMES_DE_SEGREDO.some((n) => normal.includes(n));
+}
+
+function textoParecidoComSegredoEmbutido(valor) {
+  const texto = String(valor || '');
+  return /postgres(ql)?:\/\//i.test(texto)
+    || /^bearer\s/i.test(texto)
+    || /-----BEGIN /.test(texto)
+    || /:\/\/[^/\s]*:[^@\s]*@/.test(texto)
+    || /^(sk|pk|rk)_(live|test)_/i.test(texto)
+    || /\bAKIA[0-9A-Z]{16}\b/.test(texto)
+    || /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(texto);
+}
+
+function textoLongoOpaco(valor, tamanhoMinimo) {
+  const texto = String(valor);
+  return texto.length >= tamanhoMinimo && /^[A-Za-z0-9+/=_-]+$/.test(texto);
+}
+
+/**
+ * Devolve o caminho do primeiro valor com cara de segredo, ou null se estiver limpo.
+ */
+function acharSegredo(valor, { tamanhoMinimo = TAMANHO_MINIMO_PADRAO, caminho = '' } = {}) {
+  if (valor === null || valor === undefined) return null;
+  if (typeof valor === 'string') {
+    if (!valor.trim()) return null;
+    if (textoParecidoComSegredoEmbutido(valor) || textoLongoOpaco(valor, tamanhoMinimo)) return caminho || '(valor)';
+    return null;
+  }
+  if (Array.isArray(valor)) {
+    for (let i = 0; i < valor.length; i += 1) {
+      const achou = acharSegredo(valor[i], { tamanhoMinimo, caminho: `${caminho}[${i}]` });
+      if (achou) return achou;
+    }
+    return null;
+  }
+  if (typeof valor === 'object') {
+    for (const [chave, v] of Object.entries(valor)) {
+      const sub = caminho ? `${caminho}.${chave}` : chave;
+      if (chaveParecidaComSegredo(chave) && typeof v === 'string' && v.trim() !== '') return sub;
+      if (chaveParecidaComSegredo(chave) && v && typeof v === 'object' && acharSegredoPorChave(v)) return sub;
+      const achou = acharSegredo(v, { tamanhoMinimo, caminho: sub });
+      if (achou) return achou;
+    }
+  }
+  return null;
+}
+
+// Objeto/lista debaixo de uma chave de segredo: qualquer texto não vazio dentro dele conta.
+function acharSegredoPorChave(valor) {
+  if (typeof valor === 'string') return valor.trim() !== '';
+  if (Array.isArray(valor)) return valor.some(acharSegredoPorChave);
+  if (valor && typeof valor === 'object') return Object.values(valor).some(acharSegredoPorChave);
+  return false;
+}
+
+module.exports = { acharSegredo, chaveParecidaComSegredo, textoParecidoComSegredoEmbutido, TAMANHO_MINIMO_PADRAO };

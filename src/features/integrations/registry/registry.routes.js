@@ -1,0 +1,24 @@
+'use strict';
+
+const { Router } = require('express');
+const { authMiddleware, requirePermission } = require('../../../middlewares/auth.middleware');
+const tenantMiddleware = require('../../../middlewares/tenant.middleware');
+const controller = require('./registry.controller');
+
+// Registro de integração (M9-D200). As listagens por fornecedor/saúde (`/admin/integrations/:provider/...`)
+// são da M9-D249; aqui ficam só os caminhos do registro, sob `/admin/integrations/registry`.
+const registryRouter = Router();
+registryRouter.use(authMiddleware, tenantMiddleware);
+
+const base = '/admin/integrations/registry';
+registryRouter.get(`${base}/providers`, requirePermission('integration:read'), controller.listProviders);
+registryRouter.post(`${base}/providers`, requirePermission('integration:manage'), controller.createProvider);
+registryRouter.patch(`${base}/providers/:code`, requirePermission('integration:manage'), controller.updateProvider);
+
+registryRouter.get(`${base}/connections`, requirePermission('integration:read'), controller.listConnections);
+registryRouter.post(`${base}/connections`, requirePermission('integration:manage'), controller.createConnection);
+registryRouter.get(`${base}/connections/:id`, requirePermission('integration:read'), controller.getConnection);
+registryRouter.patch(`${base}/connections/:id`, requirePermission('integration:manage'), controller.updateConnection);
+registryRouter.post(`${base}/connections/:id/transition`, requirePermission('integration:manage'), controller.transitionConnection);
+
+module.exports = registryRouter;

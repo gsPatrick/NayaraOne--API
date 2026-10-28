@@ -102,6 +102,15 @@ const SETTINGS_SCHEMA = {
   'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
   // Marco 9 — governança (M9-D800): liga/desliga dos 8 módulos, exceções ao prefixo GOV_ e perfis da concessão padrão.
   ...GOVERNANCE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
+  // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
+  // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
+  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },
+  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean' },
+  // Tamanho mínimo (caracteres) de texto base64/hex sem espaço tratado como segredo embutido em config_json/policy_json.
+  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
+  // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
+  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
 };
 
 function validateAgainstSchema(key, value) {

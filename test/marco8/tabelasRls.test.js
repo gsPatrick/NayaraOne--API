@@ -75,6 +75,8 @@ test('M8-TAB-02: o calendário fiscal do caderno é o vencimento da obrigação'
 test('M8-TAB-03: conta de provider e erro de integração não vazam para outra empresa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
+    // M9-D200: provider_accounts é legado somente leitura; a prova de RLS grava com a marca reservada ao legado.
+    await sequelize.query("SET LOCAL app.integration_legacy_write = 'on'", { transaction });
     const account = await ProviderAccount.create(
       {
         groupId: tenant.groupId,

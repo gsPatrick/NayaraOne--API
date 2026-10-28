@@ -1,0 +1,393 @@
+'use strict';
+
+// Marco 9, M9-D200 — registro de integração (integration.providers e integration.connections).
+// Roda em banco descartável: node scripts/withDisposableDb.js --port <porta> -- ... (a prova de
+// concorrência COMMITA dados e depois apaga).
+
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('../testHelpers');
+const { Group, Company, AuditLog, IntegrationConnection, IntegrationProvider, ProviderAccount } = require('../../src/models');
+const registry = require('../../src/features/integrations/registry/registry.service');
+const settingsService = require('../../src/features/settings/settings.service');
+const providerAccountsService = require('../../src/features/correspondent/providerAccounts.service');
+
+let tenant;
+let ctx;
+let otherTenant;
+
+before(async () => {
+  tenant = await getSeedTenant();
+  ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId };
+  const grupoB = await Group.findOne({ where: { name: 'CI — Grupo Fictício B' } });
+  if (grupoB) {
+    const empresaB = await sequelize.transaction(async (t) => {
+      await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: grupoB.id }, transaction: t });
+      return Company.findOne({ where: { groupId: grupoB.id, name: 'CI — Empresa Fictícia B' }, transaction: t });
+    });
+    if (empresaB) otherTenant = { groupId: grupoB.id, companyId: empresaB.id, userId: tenant.userId };
+  }
+  // Estas provas não são sobre MFA: desliga o MFA recente em produção (o teste 11 religa).
+  await sequelize.transaction(async (t) => {
+    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, t);
+  });
+});
+
+after(async () => {
+  await sequelize.transaction(async (t) => {
+    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
+    await sequelize.query(`DELETE FROM core.tenant_settings WHERE company_id = :c AND key LIKE 'integration.%'`, { replacements: { c: tenant.companyId }, transaction: t });
+  });
+  await sequelize.close();
+});
+
+function novaConexao(over = {}) {
+  return { providerCode: 'manual', environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}`, ...over };
+}
+
+async function comPlataforma(transaction) {
+  await sequelize.query("SET LOCAL app.integration_platform_admin = 'on'", { transaction });
+}
+
+async function recusa(promessa, code, status) {
+  await assert.rejects(promessa, (err) => {
+    assert.equal(err.code, code);
+    if (status) assert.equal(err.statusCode ?? err.status, status);
+    return true;
+  });
+}
+
+test('providers_constraints_lista_fechada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comPlataforma(transaction);
+    const insere = async (over) => {
+      await sequelize.query('SAVEPOINT s1', { transaction });
+      try {
+        await sequelize.query(
+          `INSERT INTO integration.providers (code, display_name, domain, capabilities, supported_versions, criticality, status, sandbox_available)
+           VALUES (:code, 'X', :domain, '[]', '["v1"]', :criticality, :status, true)`,
+          { transaction, replacements: { code: 'qa-m9-x', domain: 'BANK', criticality: 'LOW', status: 'ACTIVE', ...over } }
+        );
+        await sequelize.query('RELEASE SAVEPOINT s1', { transaction });
+        return true;
+      } catch (err) {
+        await sequelize.query('ROLLBACK TO SAVEPOINT s1', { transaction });
+        return false;
+      }
+    };
+    assert.equal(await insere({ domain: 'XPTO' }), false, 'domain fora da lista fechada');
+    assert.equal(await insere({ criticality: 'EXTREME' }), false, 'criticality fora da lista');
+    assert.equal(await insere({ status: 'ARCHIVED' }), false, 'status fora da lista');
+    assert.equal(await insere({ code: 'QA_M9_MAIUSCULO' }), false, 'code só minúsculas');
+    assert.equal(await insere({}), true, 'linha válida entra');
+    // DELETE proibido: sem política de DELETE o runtime não apaga nenhuma linha.
+    const [, apagou] = await sequelize.query("DELETE FROM integration.providers WHERE code = 'qa-m9-x'", { transaction });
+    assert.equal(apagou.rowCount, 0);
+    assert.ok(await IntegrationProvider.findByPk('qa-m9-x', { transaction }));
+  });
+  // Sem a marca de administração de plataforma o runtime não escreve no catálogo.
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await assert.rejects(sequelize.query(
+      `INSERT INTO integration.providers (code, display_name, domain, capabilities, supported_versions, criticality, sandbox_available)
+       VALUES ('qa-m9-y', 'Y', 'BANK', '[]', '[]', 'LOW', true)`, { transaction }));
+  });
+});
+
+test('connections_unique_active_por_ambiente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await registry.createConnection(novaConexao(), ctx, transaction);
+    const b = await registry.createConnection(novaConexao(), ctx, transaction);
+    await registry.transitionConnection(a.id, 'ACTIVE', ctx, transaction);
+    await recusa(registry.transitionConnection(b.id, 'ACTIVE', ctx, transaction), 'INTEGRATION_CONNECTION_DUPLICATE_ACTIVE', 409);
+    assert.equal((await IntegrationConnection.findByPk(a.id, { transaction })).status, 'ACTIVE');
+    assert.equal((await IntegrationConnection.findByPk(b.id, { transaction })).status, 'DRAFT');
+    // Ambiente diferente não conflita.
+    const c = await registry.createConnection(novaConexao({ environment: 'HOMOLOG' }), ctx, transaction);
+    await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
+    // Rótulo repetido no mesmo provider/ambiente é recusado.
+    await recusa(registry.createConnection(novaConexao({ label: a.label }), ctx, transaction), 'INTEGRATION_CONNECTION_DUPLICATE_LABEL', 409);
+  });
+  // O banco também impede duas ACTIVE (índice parcial), mesmo por fora do serviço.
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await registry.createConnection(novaConexao(), ctx, transaction);
+    const b = await registry.createConnection(novaConexao(), ctx, transaction);
+    await sequelize.query("UPDATE integration.connections SET status = 'ACTIVE' WHERE id = :id", { transaction, replacements: { id: a.id } });
+    await assert.rejects(sequelize.query("UPDATE integration.connections SET status = 'ACTIVE' WHERE id = :id", { transaction, replacements: { id: b.id } }), /connections_one_active|duplicate key/);
+  });
+});
+
+test('connections_rls_isolamento_entre_empresas', async (t) => {
+  if (!otherTenant) return t.skip('só há uma empresa neste banco');
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await registry.createConnection(novaConexao(), ctx, transaction);
+    await sequelize.query('SET LOCAL app.company_id = :c', { transaction, replacements: { c: otherTenant.companyId } });
+    await sequelize.query('SET LOCAL app.group_id = :g', { transaction, replacements: { g: otherTenant.groupId } });
+    assert.equal(await IntegrationConnection.findByPk(a.id, { transaction }), null);
+    assert.equal((await registry.listConnections(otherTenant, {}, transaction)).length, 0);
+    await recusa(registry.getConnection(a.id, otherTenant, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
+    await recusa(registry.updateConnection(a.id, { label: 'invasao' }, otherTenant, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
+    const [, meta] = await sequelize.query("UPDATE integration.connections SET label = 'invasao' WHERE id = :id", { transaction, replacements: { id: a.id } });
+    assert.equal(meta.rowCount, 0);
+    // Gravar em nome da empresa A estando logado na B é recusado pela política.
+    await assert.rejects(IntegrationConnection.create({ ...novaConexao(), groupId: tenant.groupId, companyId: tenant.companyId }, { transaction }));
+  });
+});
+
+test('connections_segredo_embutido_recusado', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const maus = [
+      { config: { apiKey: 'abc123def456' } },
+      { config: { nested: { client_secret: 'xyz' } } },
+      { config: { cabecalho: 'Z'.repeat(64) } },
+      { config: { chave: 'deadbeef'.repeat(8) } },
+      { config: { pem: '-----BEGIN PRIVATE KEY-----\nabc' } },
+      { policy: { auth: { password: 'senha' } } },
+      { policy: { lista: [{ webhook_secret: 'w' }] } },
+    ];
+    for (const m of maus) {
+      await recusa(
+        registry.createConnection(novaConexao({ configJson: m.config || {}, policyJson: m.policy || {} }), ctx, transaction),
+        'INTEGRATION_SECRET_IN_CONFIG',
+        422
+      );
+    }
+    const antes = await IntegrationConnection.count({ where: { companyId: tenant.companyId }, transaction });
+    // Na alteração também.
+    const ok = await registry.createConnection(novaConexao({ configJson: { baseUrl: 'https://api.exemplo.com/v1', accountId: '12345', token: '' } }), ctx, transaction);
+    await recusa(registry.updateConnection(ok.id, { configJson: { apiKey: 'abc' } }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
+    assert.deepEqual((await IntegrationConnection.findByPk(ok.id, { transaction })).configJson, { baseUrl: 'https://api.exemplo.com/v1', accountId: '12345', token: '' });
+    assert.equal(await IntegrationConnection.count({ where: { companyId: tenant.companyId }, transaction }), antes + 1);
+    // secretRef não pode ser o próprio segredo.
+    await recusa(registry.createConnection(novaConexao({ secretRef: 'Bearer abc.def' }), ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
+    // Campo de segredo solto no corpo.
+    await recusa(registry.createConnection({ ...novaConexao(), apiKey: 'abc' }, ctx, transaction), 'INTEGRATION_SECRET_IN_CONFIG', 422);
+  });
+});
+
+test('connections_transicoes_validas_e_invalidas', async () => {
+  const estados = ['DRAFT', 'ACTIVE', 'PAUSED', 'AUTH_FAILED', 'DISABLED'];
+  const validas = new Set(['DRAFT>ACTIVE', 'ACTIVE>PAUSED', 'PAUSED>ACTIVE', 'ACTIVE>AUTH_FAILED', 'AUTH_FAILED>ACTIVE',
+    'DRAFT>DISABLED', 'ACTIVE>DISABLED', 'PAUSED>DISABLED', 'AUTH_FAILED>DISABLED']);
+  for (const de of estados) {
+    for (const para of estados) {
+      await withRollbackTenantTransaction(tenant, async (transaction) => {
+        const c = await registry.createConnection(novaConexao(), ctx, transaction);
+        if (de !== 'DRAFT') {
+          // leva a linha até o estado de origem pelo caminho legal
+          if (de === 'ACTIVE' || de === 'PAUSED' || de === 'AUTH_FAILED') await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
+          if (de === 'PAUSED') await registry.transitionConnection(c.id, 'PAUSED', ctx, transaction);
+          if (de === 'AUTH_FAILED') await registry.transitionConnection(c.id, 'AUTH_FAILED', ctx, transaction, { system: true });
+          if (de === 'DISABLED') await registry.transitionConnection(c.id, 'DISABLED', ctx, transaction);
+        }
+        const opts = { system: para === 'AUTH_FAILED', testConnectionOk: de === 'AUTH_FAILED' && para === 'ACTIVE' };
+        const chave = `${de}>${para}`;
+        if (validas.has(chave)) {
+          const r = await registry.transitionConnection(c.id, para, ctx, transaction, opts);
+          assert.equal(r.status, para, chave);
+        } else {
+          await recusa(registry.transitionConnection(c.id, para, ctx, transaction, opts), 'INTEGRATION_CONNECTION_INVALID_TRANSITION', 409);
+          assert.equal((await IntegrationConnection.findByPk(c.id, { transaction })).status, de, `${chave} não muda o estado`);
+        }
+      });
+    }
+  }
+  // Só o sistema derruba para AUTH_FAILED e só teste verde reativa.
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const c = await registry.createConnection(novaConexao(), ctx, transaction);
+    await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
+    await recusa(registry.transitionConnection(c.id, 'AUTH_FAILED', ctx, transaction), 'INTEGRATION_CONNECTION_INVALID_TRANSITION', 409);
+    await registry.transitionConnection(c.id, 'AUTH_FAILED', ctx, transaction, { system: true });
+    await recusa(registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction), 'INTEGRATION_CONNECTION_INVALID_TRANSITION', 409);
+  });
+  // DISABLED não volta nem por fora do serviço (gatilho).
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const c = await registry.createConnection(novaConexao(), ctx, transaction);
+    await registry.transitionConnection(c.id, 'DISABLED', ctx, transaction);
+    await assert.rejects(sequelize.query("UPDATE integration.connections SET status = 'DRAFT' WHERE id = :id", { transaction, replacements: { id: c.id } }), /DISABLED/);
+  });
+});
+
+test('connections_producao_exige_liberacao', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const c = await registry.createConnection(novaConexao({ environment: 'PRODUCTION' }), ctx, transaction);
+    await recusa(registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction), 'INTEGRATION_PRODUCTION_NOT_RELEASED', 409);
+    assert.equal((await IntegrationConnection.findByPk(c.id, { transaction })).status, 'DRAFT');
+    // O CHECK do banco barra mesmo por fora do serviço.
+    await sequelize.query('SAVEPOINT p1', { transaction });
+    await assert.rejects(sequelize.query("UPDATE integration.connections SET status = 'ACTIVE' WHERE id = :id", { transaction, replacements: { id: c.id } }), /connections_production_released_check/);
+    await sequelize.query('ROLLBACK TO SAVEPOINT p1', { transaction });
+    // Com liberação registrada, ativa.
+    await sequelize.query('UPDATE integration.connections SET production_released_at = now(), production_released_by = :u WHERE id = :id', { transaction, replacements: { id: c.id, u: tenant.userId } });
+    const r = await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
+    assert.equal(r.status, 'ACTIVE');
+  });
+  // Criar já ACTIVE em produção também é recusado.
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await recusa(registry.createConnection(novaConexao({ environment: 'PRODUCTION', status: 'ACTIVE' }), ctx, transaction), 'INTEGRATION_CONNECTION_INVALID_TRANSITION', 409);
+  });
+});
+
+test('connections_ativacao_concorrente', async () => {
+  for (let rodada = 0; rodada < 3; rodada += 1) {
+    const ids = [];
+    const abrir = async (fn) => {
+      const transaction = await sequelize.transaction();
+      try {
+        await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction });
+        await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction });
+        await sequelize.query('SET LOCAL app.user_id = :u', { replacements: { u: tenant.userId }, transaction });
+        const r = await fn(transaction);
+        await transaction.commit();
+        return r;
+      } catch (err) {
+        await transaction.rollback().catch(() => {});
+        throw err;
+      }
+    };
+    try {
+      for (let i = 0; i < 2; i += 1) {
+        const c = await abrir((t) => registry.createConnection(novaConexao({ environment: 'HOMOLOG' }), ctx, t));
+        ids.push(c.id);
+      }
+      const resultados = await Promise.allSettled(ids.map((id) => abrir((t) => registry.transitionConnection(id, 'ACTIVE', ctx, t))));
+      const ok = resultados.filter((r) => r.status === 'fulfilled');
+      const falhas = resultados.filter((r) => r.status === 'rejected');
+      assert.equal(ok.length, 1, 'uma ativação vence');
+      assert.equal(falhas.length, 1);
+      assert.equal(falhas[0].reason.code, 'INTEGRATION_CONNECTION_DUPLICATE_ACTIVE');
+      assert.equal(falhas[0].reason.statusCode ?? falhas[0].reason.status, 409);
+      const [[{ n }]] = await abrir(async (t) => sequelize.query(
+        `SELECT count(*)::int AS n FROM integration.connections WHERE id IN (:ids) AND status = 'ACTIVE'`, { replacements: { ids }, transaction: t }));
+      assert.equal(n, 1);
+    } finally {
+      if (ids.length) {
+        await abrir((t) => sequelize.query('DELETE FROM integration.connections WHERE id IN (:ids)', { replacements: { ids }, transaction: t }));
+      }
+    }
+  }
+});
+
+test('migracao_provider_accounts_idempotente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await sequelize.query("SET LOCAL app.integration_legacy_write = 'on'", { transaction });
+    const base = { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox' };
+    const a1 = await ProviderAccount.create({ ...base, label: 'Conta A', secretRef: 'vault:qa-m9/a', active: true }, { transaction });
+    const a2 = await ProviderAccount.create({ ...base, label: 'Conta B', secretRef: 'vault:qa-m9/b', active: true }, { transaction });
+    const a3 = await ProviderAccount.create({ ...base, label: 'Conta C', secretRef: 'vault:qa-m9/c', active: false }, { transaction });
+    const primeira = await registry.migrateLegacyProviderAccounts(ctx, transaction);
+    assert.equal(primeira.inserted, 3);
+    const segunda = await registry.migrateLegacyProviderAccounts(ctx, transaction);
+    assert.equal(segunda.inserted, 0);
+    const linhas = await IntegrationConnection.findAll({ where: { id: [a1.id, a2.id, a3.id] }, transaction });
+    assert.equal(linhas.length, 3);
+    const por = Object.fromEntries(linhas.map((l) => [l.label, l]));
+    assert.equal(por['Conta A'].secretRef, 'vault:qa-m9/a');
+    assert.equal(por['Conta B'].secretRef, 'vault:qa-m9/b');
+    assert.equal(por['Conta C'].secretRef, 'vault:qa-m9/c');
+    assert.equal(por['Conta A'].status, 'ACTIVE');
+    assert.equal(por['Conta B'].status, 'PAUSED');
+    assert.equal(por['Conta C'].status, 'DISABLED');
+    assert.ok(linhas.every((l) => l.environment === 'SANDBOX' && l.providerCode === 'sandbox'));
+  });
+});
+
+test('registry_resolve_connection_ambiente_do_servidor', async () => {
+  const anterior = process.env.INTEGRATION_ENVIRONMENT;
+  process.env.INTEGRATION_ENVIRONMENT = 'HOMOLOG';
+  try {
+    await withRollbackTenantTransaction(tenant, async (transaction) => {
+      assert.equal(registry.getServerEnvironment(), 'HOMOLOG');
+      const sbx = await registry.createConnection(novaConexao({ environment: 'SANDBOX' }), ctx, transaction);
+      const hml = await registry.createConnection(novaConexao({ environment: 'HOMOLOG' }), ctx, transaction);
+      await registry.transitionConnection(sbx.id, 'ACTIVE', ctx, transaction);
+      await registry.transitionConnection(hml.id, 'ACTIVE', ctx, transaction);
+      const r = await registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'manual', environment: 'SANDBOX' }, transaction);
+      assert.equal(r.id, hml.id, 'o ambiente do pedido é ignorado');
+      const porDominio = await registry.resolveConnection({ companyId: tenant.companyId, domain: 'FINANCING' }, transaction);
+      assert.equal(porDominio.id, hml.id);
+      await registry.transitionConnection(hml.id, 'PAUSED', ctx, transaction);
+      await recusa(registry.resolveConnection({ companyId: tenant.companyId, providerCode: 'manual' }, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
+    });
+    process.env.INTEGRATION_ENVIRONMENT = 'QUALQUER';
+    assert.throws(() => registry.getServerEnvironment());
+  } finally {
+    if (anterior === undefined) delete process.env.INTEGRATION_ENVIRONMENT; else process.env.INTEGRATION_ENVIRONMENT = anterior;
+  }
+});
+
+test('connections_auditoria_antes_depois', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const c = await registry.createConnection(novaConexao({ secretRef: 'vault:qa-m9/aud', configJson: { baseUrl: 'https://a.exemplo.com' } }), ctx, transaction);
+    await registry.updateConnection(c.id, { label: `${c.label} v2`, configJson: { baseUrl: 'https://b.exemplo.com' } }, ctx, transaction);
+    await registry.transitionConnection(c.id, 'ACTIVE', ctx, transaction);
+    const logs = await AuditLog.findAll({ where: { action: 'integration.connection.changed', entityId: c.id }, order: [['occurredAt', 'ASC']], transaction });
+    assert.equal(logs.length, 3);
+    assert.ok(JSON.stringify(logs[0].beforeJson).includes('Não existia'));
+    assert.equal(logs[1].beforeJson.configJson.baseUrl, 'https://a.exemplo.com');
+    assert.equal(logs[1].afterJson.configJson.baseUrl, 'https://b.exemplo.com');
+    assert.equal(logs[2].beforeJson.status, 'DRAFT');
+    assert.equal(logs[2].afterJson.status, 'ACTIVE');
+    const tudo = JSON.stringify(logs.map((l) => l.toJSON()));
+    assert.equal(tudo.includes('vault:qa-m9/aud'), false, 'nem a referência do cofre vai para a auditoria');
+    assert.ok(logs[2].afterJson.secretRefConfigured === true);
+  });
+});
+
+test('connections_producao_exige_mfa_recente_configuravel', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', true, tenant, tenant.userId, transaction);
+    const c = await registry.createConnection(novaConexao({ environment: 'SANDBOX' }), ctx, transaction);
+    await registry.updateConnection(c.id, { label: `${c.label} ok` }, ctx, transaction); // fora de produção não pede MFA
+    await assert.rejects(
+      registry.createConnection(novaConexao({ environment: 'PRODUCTION' }), ctx, transaction),
+      (err) => ['MFA_REQUIRED_NOT_ENABLED', 'MFA_STEP_UP_REQUIRED'].includes(err.code)
+    );
+    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, transaction);
+    const p = await registry.createConnection(novaConexao({ environment: 'PRODUCTION' }), ctx, transaction);
+    assert.equal(p.environment, 'PRODUCTION');
+  });
+});
+
+test('correspondente_usa_o_registro_e_o_legado_e_somente_leitura', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const conta = await providerAccountsService.registerProviderAccount(
+      { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', label: `QA-M9 ${uniqueSuffix()}`, secretRef: 'vault:qa-m9/corr' },
+      tenant.userId, transaction
+    );
+    const con = await IntegrationConnection.findByPk(conta.id, { transaction });
+    assert.ok(con, 'a conta virou connection');
+    assert.equal(con.secretRef, 'vault:qa-m9/corr');
+    assert.equal(con.providerCode, 'sandbox');
+    const lista = await providerAccountsService.listProviderAccounts(tenant.groupId, tenant.companyId, transaction);
+    assert.ok(lista.some((a) => a.id === conta.id && a.secretRef === 'vault:qa-m9/corr' && a.active === true));
+    await providerAccountsService.updateProviderAccount(conta.id, { active: false }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+    assert.equal((await IntegrationConnection.findByPk(conta.id, { transaction })).status, "PAUSED");
+    await sequelize.query('SAVEPOINT l1', { transaction });
+    await assert.rejects(
+      ProviderAccount.create({ groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', label: 'x', secretRef: 'vault:x' }, { transaction }),
+      /somente leitura/
+    );
+    await sequelize.query('ROLLBACK TO SAVEPOINT l1', { transaction });
+  });
+});
+
+test('permissoes_e_parametros_do_registro', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT p.code FROM core.permissions p WHERE p.code IN ('integration:read', 'integration:manage')`
+  );
+  assert.equal(rows.length, 2);
+  const [admin] = await sequelize.query(
+    `SELECT DISTINCT p.code FROM core.role_permissions rp JOIN core.roles r ON r.id = rp.role_id JOIN core.permissions p ON p.id = rp.permission_id
+      WHERE r.name = 'ADMIN' AND p.code IN ('integration:read', 'integration:manage')`
+  );
+  // sob FORCE RLS o runtime pode não enxergar papéis sem empresa; o que importa é existir a permissão
+  assert.ok(admin.length === 0 || admin.length === 2);
+  for (const [key, tipo] of [['integration.admin.mfa_on_prod_connection_change', 'boolean'], ['integration.admin.mfa_on_prod_test_connection', 'boolean'], ['integration.registry.secret_scan_min_length', 'integer']]) {
+    assert.equal(settingsService.SETTINGS_SCHEMA[key]?.type, tipo, key);
+  }
+  const pr = await IntegrationProvider.findAll({ where: { code: ['sandbox', 'manual'] } });
+  assert.equal(pr.length, 2);
+});

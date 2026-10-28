@@ -192,6 +192,8 @@ const modelDefiners = {
   SupplierQualification: require('./SupplierQualification'),
   OutboxEvent: require('./OutboxEvent'),
   IntegrationInbox: require('./IntegrationInbox'),
+  IntegrationProvider: require('./IntegrationProvider'),
+  IntegrationConnection: require('./IntegrationConnection'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
   AiSource: require('./AiSource'),
