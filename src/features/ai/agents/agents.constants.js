@@ -7,7 +7,7 @@ const RISK_LEVELS = Object.freeze(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const HIGH_RISK = Object.freeze(['HIGH', 'CRITICAL']);
 
 const CODE_RE = /^[A-Z][A-Z0-9_]{2,59}$/;
-const TOOL_NAME_RE = /^[a-z][a-z0-9_.]{1,99}$/;
+const TOOL_NAME_RE = /^[a-z][a-zA-Z0-9_.]{1,99}$/; // aceita camelCase depois do primeiro caractere: crm.getOpportunity (M9-D016)
 const SCOPE_RE = /^[a-z][a-z0-9_.]{1,80}$/;
 
 /**

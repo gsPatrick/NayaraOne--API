@@ -110,6 +110,14 @@ logger.info({ adapters: registeredAdapters }, `Adapters de integração registra
 
 if (process.env.NODE_ENV !== 'test') {
   runMigrationsOnBoot();
+  // M9-D016: o registro de tools da NAY confere cada definição contra core.permissions; definição inválida derruba o boot.
+  require('./src/features/ai/tools').initToolRegistry()
+    .then((registry) => logger.info({ tools: registry.list().length }, `Tools da NAY registradas: ${registry.list().length}`))
+    .catch((err) => {
+      logger.error({ err }, `Registro de tools da NAY falhou: ${err.message}`);
+      // Definição inválida derruba o boot; indisponibilidade passageira do banco não (o registro é montado de novo no primeiro uso).
+      if (err.code === 'AI_TOOL_DEFINITION_INVALID') process.exit(1);
+    });
 }
 
 const port = Number(process.env.PORT) || 3000;
