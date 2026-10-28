@@ -53,4 +53,16 @@ function scanFrontForEditableKpi(frontRoot) {
   return { scanned, violations };
 }
 
-module.exports = { scanFrontForEditableKpi };
+/** Arquivos de tela de BI do Front (mesma definição de "tela de BI"): [{ relative, text }]. Reuso: M9-D603. */
+function listBiSources(frontRoot) {
+  const files = [...walk(path.join(frontRoot, 'app'), []), ...walk(path.join(frontRoot, 'components'), [])];
+  const out = [];
+  for (const file of files) {
+    const text = fs.readFileSync(file, 'utf8');
+    const relative = path.relative(frontRoot, file);
+    if (isBiFile(relative, text)) out.push({ relative, text });
+  }
+  return out;
+}
+
+module.exports = { scanFrontForEditableKpi, listBiSources };
