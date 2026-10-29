@@ -359,6 +359,20 @@ test('M9-D009: ai.memories tem RLS, FORCE RLS, tenant_isolation e os gatilhos de
   assert.deepEqual(rows[0].gatilhos, ['memories_guard', 'memories_no_truncate']);
 });
 
+// M9-D625: analytics.rm_finance_intercompany (transferências entre empresas para o consolidado do grupo) tem RLS, FORCE RLS e 4 políticas.
+test('M9-D625: analytics.rm_finance_intercompany tem RLS, FORCE RLS e 4 políticas', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'analytics' AND c.relname = 'rm_finance_intercompany'`
+  );
+  assert.equal(rows.length, 1, 'analytics.rm_finance_intercompany existe');
+  assert.equal(rows[0].relrowsecurity, true);
+  assert.equal(rows[0].relforcerowsecurity, true);
+  assert.equal(rows[0].policies, 4);
+});
+
 // M9-D615: read models do Financeiro no BI (saúde por empresa e margem por setor) com RLS + FORCE RLS e 4 políticas.
 test('M9-D615: analytics.rm_finance_health e rm_finance_sector_margin têm RLS, FORCE RLS e 4 políticas', async () => {
   for (const table of ['rm_finance_health', 'rm_finance_sector_margin']) {
@@ -402,7 +416,7 @@ test('M9-D618: os 9 read models de Obras, Estoque e Pós-obra têm RLS, FORCE RL
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
 });
 
-// M9-D616: read models de Comercial/CRM e Imóveis (9) no BI com RLS + FORCE RLS e 4 políticas.
+// M9-D616 e M9-D617: read models de Comercial/CRM e Imóveis (9) e de Locação (9) no BI com RLS + FORCE RLS e 4 políticas.
 test('M9-D616: os 9 read models de Comercial/CRM e Imóveis têm RLS, FORCE RLS e 4 políticas', async () => {
   const tables = ['rm_crm_lead_daily', 'rm_crm_opportunity_stage', 'rm_crm_outcome', 'rm_crm_next_action', 'rm_crm_visits_proposals', 'rm_property_portfolio', 'rm_property_price_changes', 'rm_radar_matches', 'rm_broker_performance'];
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
@@ -411,13 +425,13 @@ test('M9-D616: os 9 read models de Comercial/CRM e Imóveis têm RLS, FORCE RLS 
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
 });
 
-// M9-D617: read models de Locação (9) no BI com RLS + FORCE RLS e 4 políticas.
 test('M9-D617: os 9 read models de Locação têm RLS, FORCE RLS e 4 políticas', async () => {
   const tables = ['rm_rental_contracts', 'rm_rental_vacancy', 'rm_rental_arrears', 'rm_rental_guarantees', 'rm_rental_obligations', 'rm_rental_inspections_keys', 'rm_rental_tickets', 'rm_rental_satisfaction', 'rm_rental_repasses'];
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as nove tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+});
 
 // M9-D802: tabela nova do bloco de governança com RLS + FORCE RLS e a política de isolamento por empresa.
 test('M9-D802: calendar_alert_log tem RLS, FORCE RLS e a política tenant_isolation', async () => {
@@ -428,7 +442,6 @@ test('M9-D802: calendar_alert_log tem RLS, FORCE RLS e a política tenant_isolat
   assert.equal(rows.length, tables.length, 'a tabela existe');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
 });
-});
 
 // M9-D619: read models de Jurídico e Correspondente Bancário no BI com RLS + FORCE RLS e 4 políticas.
 test('M9-D619: os 7 read models de Jurídico e Correspondente têm RLS, FORCE RLS e 4 políticas', async () => {
@@ -437,6 +450,7 @@ test('M9-D619: os 7 read models de Jurídico e Correspondente têm RLS, FORCE RL
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as sete tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+});
 
 // M9-D804: domínios de dados e designações de owner/steward com RLS + FORCE RLS e a política tenant_isolation.
 test('M9-D804: data_domains e data_domain_assignments têm RLS, FORCE RLS e a política tenant_isolation', async () => {
@@ -468,8 +482,8 @@ test('M9-D214: integration.dispatch_attempts tem RLS, FORCE RLS e a política te
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
 });
 
-// M9-D022: ai.ingestions e ai.chunks (RAG da NAY) com RLS, FORCE RLS, a política tenant_isolation e os gatilhos que impedem apagar.
-test('M9-D022: ai.ingestions e ai.chunks têm RLS, FORCE RLS, tenant_isolation e gatilho de não apagar', async () => {
+// M9-D022/D023: ai.ingestions e ai.chunks (RAG da NAY) com RLS, FORCE RLS, a política tenant_isolation e os gatilhos que impedem apagar.
+test('M9-D022/D023: ai.ingestions e ai.chunks têm RLS, FORCE RLS, tenant_isolation e gatilho de não apagar', async () => {
   const gatilhos = { ingestions: 'ingestions_guard', chunks: 'chunks_guard' };
   for (const [tabela, gatilho] of Object.entries(gatilhos)) {
     const [rows] = await sequelize.query(
@@ -508,4 +522,12 @@ test('M9-D805: review_queue_items tem RLS, FORCE RLS e a política tenant_isolat
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'review_queue_items'`);
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
+});
+
+// M9-D652: read model das ocorrências de obra (recorrência) com RLS + FORCE RLS e 4 políticas.
+test('M9-D652: rm_project_occurrences tem RLS, FORCE RLS e 4 políticas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_project_occurrences'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });

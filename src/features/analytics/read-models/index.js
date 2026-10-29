@@ -21,6 +21,7 @@ const { onRefreshed } = require('./readModel.refreshed');
 consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
 require('./financeiro-finance-health.readmodel'); // M9-D615: saúde financeira por empresa e data-base
 require('./financeiro-finance-sector-margin.readmodel'); // M9-D615: margem por setor
+require('./financeiro-finance-intercompany.readmodel'); // M9-D625: transferências entre empresas (eliminação do intercompany no consolidado)
 require('./matview.finance'); // M9-D698: série mensal do caixa (materialized view)
 require('./comercial-imoveis.readmodel'); // M9-D616: Comercial/CRM e Imóveis
 require('./locacao.readmodel'); // M9-D617: Locação
@@ -41,6 +42,7 @@ module.exports = {
   afterRun,
   onBatchFlushed,
   readAggregate,
+  readIntercompanyPairs: require('./intercompany.read').readIntercompanyPairs, // M9-D625
   assertReadModelTable,
   rebuildReadModel,
   onRebuildChecks,

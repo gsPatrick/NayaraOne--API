@@ -4,6 +4,7 @@ const { Router } = require('express');
 const AppError = require('../../../utils/AppError');
 const { readMetricAsOf } = require('./registry.asOf');
 const { resolveAsOf } = require('./period');
+const { consolidateMetric } = require('./consolidation.service');
 
 /**
  * GET /analytics/metrics/:code?asOf=AAAA-MM-DD (M9-D604, 3.4). Resolve a versão vigente na data e devolve o snapshot gravado dela,
@@ -17,6 +18,12 @@ async function getMetric(req, res, next) {
       throw AppError.notFound('Empresa não encontrada ou sem acesso.', 'ANALYTICS_SCOPE_NOT_FOUND');
     }
     const asOfDate = resolveAsOf(req.query.asOf); // M9-D606: data de calendário de SP; futuro é 400 ANALYTICS_AS_OF_FUTURE
+    if (req.query.groupId !== undefined) { // M9-D625: consolidado do grupo, calculado só na leitura (grupo alheio 404, sem analytics:read:group 403)
+      const data = await req.withTenantTransaction((transaction) => consolidateMetric(
+        { companyId, groupId, actorUserId: req.auth.userId, permissions }, { metricCode: req.params.code, groupId: req.query.groupId, asOfDate }, transaction
+      ));
+      return res.json({ data });
+    }
     const data = await req.withTenantTransaction((transaction) => readMetricAsOf(
       { companyId, groupId, permissions }, { metricCode: req.params.code, scopeType: 'COMPANY', scopeId: companyId, asOfDate }, transaction
     ));
