@@ -1,39 +1,11 @@
 'use strict';
 
-const https = require('https');
-const { URL } = require('url');
 const AppError = require('../../../utils/AppError');
+const { IntegrationHttpClient, createMtlsAgent } = require('../../integrations/http/IntegrationHttpClient');
 
-// Node 24 (`fetch` global do undici) não aceita `agent`/certificado mTLS sem instalar o pacote
-// `undici` separadamente. Em vez de somar uma dependência nova só pra isso, o provider
-// Santander usa https.request nativo, que já suporta `agent: new https.Agent({cert, key})`
-// nativamente — mesmo mecanismo, sem dependência extra.
-function httpsRequestJson({ method, url, headers, body, agent }) {
-  return new Promise((resolve, reject) => {
-    const target = new URL(url);
-    const req = https.request(
-      {
-        method,
-        hostname: target.hostname,
-        path: `${target.pathname}${target.search}`,
-        headers,
-        agent,
-      },
-      (res) => {
-        let raw = '';
-        res.on('data', (chunk) => { raw += chunk; });
-        res.on('end', () => {
-          let parsed = null;
-          try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = raw; }
-          resolve({ statusCode: res.statusCode, body: parsed });
-        });
-      }
-    );
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
+// M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient (o transporte https com mTLS mora em integrations/http).
+const httpClient = new IntegrationHttpClient({ providerCode: 'bank-santander' });
+const httpsRequestJson = (opts) => httpClient.httpsJson(opts);
 
 // Interface comum (duck-typed, mesmo estilo de legal/adapters/SignatureAdapter.js):
 //   async submitPayment(req) -> { externalId, status, raw }
@@ -77,7 +49,7 @@ class SantanderBankAdapter {
     this.clientSecret = clientSecret;
     this.workspaceId = workspaceId;
     this.baseUrl = baseUrl || 'https://trust-sandbox.api.santander.com.br';
-    this._httpsAgent = new https.Agent({ cert: certPem, key: keyPem });
+    this._httpsAgent = createMtlsAgent({ cert: certPem, key: keyPem });
     this._accessToken = null;
     this._tokenExpiresAt = 0;
   }

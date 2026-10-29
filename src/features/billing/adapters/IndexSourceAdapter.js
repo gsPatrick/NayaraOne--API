@@ -1,6 +1,10 @@
 'use strict';
 
 const { getDecryptedSetting } = require('../../settings/settings.service');
+const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
+
+// M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient.
+const httpClient = new IntegrationHttpClient({ providerCode: 'billing-index' });
 
 /**
  * IndexSourceAdapter — interface simples para consultar o valor bruto de um índice de reajuste
@@ -59,7 +63,7 @@ async function fetchIpcaFromIbge(period) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await httpClient.fetch(url, { signal: controller.signal });
     if (!response.ok) return { available: false };
 
     const json = await response.json();
@@ -116,7 +120,7 @@ class FgvIgpmIndexSourceAdapter {
 
   async _request(apiToken, period) {
     const url = `https://api.fgvdados.fgv.br/v1/indicadores/igpm/${period}`;
-    const response = await fetch(url, {
+    const response = await httpClient.fetch(url, {
       headers: { Authorization: `Bearer ${apiToken}` },
     });
     if (!response.ok) return { available: false };

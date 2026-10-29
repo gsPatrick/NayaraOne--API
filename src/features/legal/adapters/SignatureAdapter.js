@@ -3,7 +3,11 @@
 const crypto = require('crypto');
 const { Person } = require('../../../models');
 const AppError = require('../../../utils/AppError');
+const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
 const { generateContractPdf } = require('../contractPdf.service');
+
+// M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient.
+const httpClient = new IntegrationHttpClient({ providerCode: 'signature' });
 
 /**
  * SignatureAdapter — contrato de integração com provedores de assinatura eletrônica.
@@ -123,7 +127,7 @@ class ClicksignSignatureAdapter {
   // Centraliza a chamada HTTP — isola a camada de transporte para facilitar ajuste futuro
   // (retry, logging, mudança de endpoint) sem tocar na lógica de negócio do adapter.
   async _request(method, path, body) {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await httpClient.fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         Accept: 'application/vnd.api+json',
@@ -318,7 +322,7 @@ class ClicksignSignatureAdapter {
     // URL presignada — SEM os headers de autenticação da API (Authorization/Accept JSON:API),
     // que não se aplicam a um download direto de S3 e podem até fazer a assinatura da URL
     // presignada ser rejeitada.
-    const fileResponse = await fetch(downloadUrl);
+    const fileResponse = await httpClient.fetch(downloadUrl);
     if (!fileResponse.ok) {
       throw AppError.internal(
         `Falha ao baixar o documento assinado do Clicksign (HTTP ${fileResponse.status}).`,
@@ -352,7 +356,7 @@ class ZapSignSignatureAdapter {
   }
 
   async _request(method, path, body) {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await httpClient.fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -440,7 +444,7 @@ class ZapSignSignatureAdapter {
     const downloadUrl = doc && doc.signed_file_url;
     if (!downloadUrl) return null;
 
-    const fileResponse = await fetch(downloadUrl);
+    const fileResponse = await httpClient.fetch(downloadUrl);
     if (!fileResponse.ok) {
       throw AppError.internal(
         `Falha ao baixar o documento assinado do ZapSign (HTTP ${fileResponse.status}).`,

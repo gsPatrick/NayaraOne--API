@@ -1,7 +1,9 @@
 'use strict';
 
 const AppError = require('../../../utils/AppError');
-const { resilientFetch } = require('../../../utils/resilientFetch');
+const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
+
+const httpClient = new IntegrationHttpClient({ providerCode: 'insurance' });
 
 // Interface comum (duck-typed, mesmo estilo de BankAdapter.js/SignatureAdapter.js):
 //   async quote(req) -> { externalId, premiumAmount, coverageSummary, raw }
@@ -57,7 +59,7 @@ class SandboxInsuranceAdapter {
 // retry e sem circuit breaker — uma seguradora lenta/fora do ar travava a chamada indefinidamente
 // e cada tentativa nova martelava a rede de novo, sem parar. Ver src/utils/resilientFetch.js.
 async function httpRequestJson({ circuitKey, method, url, headers, body }) {
-  const response = await resilientFetch({ circuitKey, method, url, headers, body });
+  const response = await httpClient.request({ circuitKey, method, url, headers, body });
   let parsed = null;
   const raw = await response.text();
   try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = raw; }
