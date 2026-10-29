@@ -8,6 +8,18 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 |---|---|---|---|---|---|
 | `GOV_ANOMALY_INVALID_TRANSITION` | 409 | Esta anomalia não pode mudar para a situação pedida. | dlp | 1.0.0 | não |
 | `GOV_ANOMALY_REASON_REQUIRED` | 400 | Informe o motivo da revisão. | dlp | 1.0.0 | não |
+| `GOV_API_CONSUMER_EXISTS` | 409 | Já existe um consumidor com este nome ou esta credencial. | api-governance | 1.0.0 | não |
+| `GOV_API_CONSUMER_INVALID` | 422 | Dados do consumidor inválidos. | api-governance | 1.0.0 | não |
+| `GOV_API_DATE_INVALID` | 422 | Informe uma data válida (AAAA-MM-DD ou data e hora ISO). | api-governance | 1.0.0 | não |
+| `GOV_API_DEPRECATION_EXISTS` | 409 | Já existe uma deprecação em andamento para este alvo. | api-governance | 1.0.0 | não |
+| `GOV_API_DEPRECATION_FINAL` | 409 | Só uma deprecação anunciada pode ser cancelada. | api-governance | 1.0.0 | não |
+| `GOV_API_DEPRECATION_INVALID` | 422 | A data de desligamento deve ser posterior ao anúncio. | api-governance | 1.0.0 | não |
+| `GOV_API_OWNER_INVALID` | 422 | O responsável deve ser um usuário ativo da empresa. | api-governance | 1.0.0 | não |
+| `GOV_API_OWNER_REQUIRED` | 422 | Informe o responsável pela deprecação. | api-governance | 1.0.0 | não |
+| `GOV_API_REPLACEMENT_INVALID` | 422 | A substituta deve ser uma URL relativa iniciada por "/" com até 300 caracteres. | api-governance | 1.0.0 | não |
+| `GOV_API_SUNSET_REQUIRED` | 422 | Informe a data de desligamento. | api-governance | 1.0.0 | não |
+| `GOV_API_TARGET_INVALID` | 422 | Informe o alvo como "ROUTE:MÉTODO /caminho" ou "MAJOR:n". | api-governance | 1.0.0 | não |
+| `GOV_API_VERSION_SUNSET` | 410 | Esta versão da API foi desativada. | api-governance | 1.0.0 | não |
 | `GOV_ASSIGNEE_INACTIVE` | 422 | Só usuário ativo da empresa pode ser designado. | data-quality | 1.0.0 | não |
 | `GOV_BCP_ACTION_INVALID` | 422 | Esta ação não existe para o setor. | bcp | 1.0.0 | não |
 | `GOV_BCP_ALREADY_FINAL` | 409 | Esta operação já foi concluída. | bcp | 1.0.0 | não |

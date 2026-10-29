@@ -3,10 +3,27 @@
 const { success } = require('../../../utils/httpResponse');
 const { tenantFromAuth } = require('../governance.module');
 const service = require('./api-governance.service');
+const { parsePagination } = require('./standards');
 
-async function getOverview(req, res) {
-  const data = await req.withTenantTransaction((transaction) => service.getOverview(tenantFromAuth(req), transaction));
+async function listConsumers(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.listConsumers({ tenant: tenantFromAuth(req), query: req.query, transaction }));
+  return success(res, { data: data.items, pagination: data.pagination });
+}
+
+async function createDeprecation(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.createDeprecation({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId, body: req.body, transaction }));
+  return success(res, { statusCode: 201, data });
+}
+
+async function listDeprecations(req, res) {
+  const tenant = tenantFromAuth(req);
+  const data = await req.withTenantTransaction(async (transaction) => service.listDeprecations({ tenant, query: req.query, paging: await parsePagination(req.query, tenant, transaction), transaction }));
+  return success(res, { data: data.items, pagination: data.pagination });
+}
+
+async function cancelDeprecation(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.cancelDeprecation({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId, id: req.params.id, transaction }));
   return success(res, { data });
 }
 
-module.exports = { getOverview };
+module.exports = { listConsumers, createDeprecation, listDeprecations, cancelDeprecation };

@@ -23,6 +23,7 @@ const { startExportGenerationJob } = require('./src/engines/jobs/exportGeneratio
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
 const { startBcpPaymentReconciliationJob } = require('./src/engines/jobs/bcpPaymentReconciliationJob');
 const { startRateLimitCleanupJob } = require('./src/engines/jobs/rateLimitCleanupJob');
+const { startApiDeprecationJob } = require('./src/engines/jobs/apiDeprecationJob');
 const { startIdempotencyCleanupJob } = require('./src/engines/jobs/idempotencyCleanupJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
@@ -197,6 +198,10 @@ if (process.env.NODE_ENV !== 'test' && process.env.RATE_LIMIT_CLEANUP_JOB_DISABL
 }
 if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISABLED !== 'true') {
   startIdempotencyCleanupJob();
+}
+// Deprecação de API (M9-D841): avaliação diária às 07:00 de Brasília (vira SUNSET e publica api.consumer.deprecation_due).
+if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {
+  startApiDeprecationJob();
 }
 if (process.env.NODE_ENV !== 'test') {
   require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()

@@ -55,6 +55,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/analytics/exports/:id/file` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/metrics/:code/drilldown` | `analytics:read` | não |
 | `GET` | `/api/v1/api-governance/consumers` | `governance:api:read` | não |
+| `POST` | `/api/v1/api-governance/deprecations/:id/cancel` | `governance:api:manage` | não |
+| `GET` | `/api/v1/api-governance/deprecations` | `governance:api:read` | não |
+| `POST` | `/api/v1/api-governance/deprecations` | `governance:api:manage` | não |
 | `GET` | `/api/v1/assets/:id/disposal` | `inventory:read` | não |
 | `POST` | `/api/v1/assets/:id/dispose` | `inventory:approve` | não |
 | `POST` | `/api/v1/assets/:id/loan` | `inventory:create` | não |
@@ -710,8 +713,8 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:bcp:record` | MEDIUM | `GET /api/v1/bcp/form-templates/:sector/:formType/print`, `GET /api/v1/bcp/form-templates`, `PATCH /api/v1/bcp/manual-operations/:id`, `GET /api/v1/bcp/manual-operations`, `POST /api/v1/bcp/manual-operations`, `GET /api/v1/bcp` |
 | `governance:bcp:import` | HIGH | `POST /api/v1/bcp/manual-operations/import`, `GET /api/v1/bcp/reconciliations` |
 | `governance:bcp:approve` | CRITICAL | `POST /api/v1/bcp/reconciliations/:id/decide` |
-| `governance:api:read` | LOW | `GET /api/v1/api-governance/consumers` |
-| `governance:api:manage` | HIGH | nenhuma ainda |
+| `governance:api:read` | LOW | `GET /api/v1/api-governance/consumers`, `GET /api/v1/api-governance/deprecations` |
+| `governance:api:manage` | HIGH | `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
 | `governance:finops:read` | LOW | `GET /api/v1/finops/health` |
 | `governance:finops:manage` | HIGH | nenhuma ainda |
 | `governance:flags:manage` | CRITICAL | `GET /api/v1/feature-flags` |

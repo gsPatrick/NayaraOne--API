@@ -14,6 +14,90 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_API_CONSUMER_EXISTS": {
+      "status": 409,
+      "message": "Já existe um consumidor com este nome ou esta credencial.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_CONSUMER_INVALID": {
+      "status": 422,
+      "message": "Dados do consumidor inválidos.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_DATE_INVALID": {
+      "status": 422,
+      "message": "Informe uma data válida (AAAA-MM-DD ou data e hora ISO).",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_DEPRECATION_EXISTS": {
+      "status": 409,
+      "message": "Já existe uma deprecação em andamento para este alvo.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_DEPRECATION_FINAL": {
+      "status": 409,
+      "message": "Só uma deprecação anunciada pode ser cancelada.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_DEPRECATION_INVALID": {
+      "status": 422,
+      "message": "A data de desligamento deve ser posterior ao anúncio.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_OWNER_INVALID": {
+      "status": 422,
+      "message": "O responsável deve ser um usuário ativo da empresa.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_OWNER_REQUIRED": {
+      "status": 422,
+      "message": "Informe o responsável pela deprecação.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_REPLACEMENT_INVALID": {
+      "status": 422,
+      "message": "A substituta deve ser uma URL relativa iniciada por \"/\" com até 300 caracteres.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_SUNSET_REQUIRED": {
+      "status": 422,
+      "message": "Informe a data de desligamento.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_TARGET_INVALID": {
+      "status": 422,
+      "message": "Informe o alvo como \"ROUTE:MÉTODO /caminho\" ou \"MAJOR:n\".",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_VERSION_SUNSET": {
+      "status": 410,
+      "message": "Esta versão da API foi desativada.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
     "GOV_ASSIGNEE_INACTIVE": {
       "status": 422,
       "message": "Só usuário ativo da empresa pode ser designado.",

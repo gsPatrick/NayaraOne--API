@@ -43,6 +43,7 @@ const { router: aiModuleRouter } = require('../features/ai');
 const { router: marketingModuleRouter, publicRouter: marketingPublicRouter } = require('../features/marketing');
 const { router: analyticsModuleRouter } = require('../features/analytics');
 const { rateLimitMiddleware } = require('../features/core-governance/api-governance/standards');
+const { deprecationMiddleware } = require('../features/core-governance/api-governance/consumers');
 
 /**
  * Agregador único de rotas da API.
@@ -53,6 +54,8 @@ const router = Router();
 
 // Marco 9 (M9-D843): limite de requisições por credencial, com X-RateLimit-* em toda resposta; o contador está no banco e vale entre processos.
 router.use(rateLimitMiddleware);
+// Marco 9 (M9-D841): deprecação de rota ou major nas respostas (Deprecation, Sunset, Link; 410 após o desligamento) e rastro de uso por consumidor.
+router.use(deprecationMiddleware);
 
 // GET /health — fora do prefixo /v1, usado por health checks de infraestrutura.
 router.use('/', healthRouter);

@@ -723,3 +723,19 @@ test('M9-D843: idempotency_keys, error_catalog e rate_limit_counters têm RLS, F
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
   }
 });
+
+// M9-D841: o catálogo de consumidores, o uso por alvo e as deprecações da API são da EMPRESA. A consulta do consumidor de uma credencial externa pelo client_id tem política própria, só de leitura.
+test('M9-D841: api_consumers, api_consumer_usage e api_deprecations têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
+  const tables = ['api_consumers', 'api_consumer_usage', 'api_deprecations'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies,
+      (SELECT string_agg(p.polname, ',' ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS names
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  assert.equal(rows.find((r) => r.relname === 'api_consumers').names, 'api_consumer_client_lookup,tenant_isolation', 'consulta por client_id: política própria, só SELECT');
+  for (const table of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});
