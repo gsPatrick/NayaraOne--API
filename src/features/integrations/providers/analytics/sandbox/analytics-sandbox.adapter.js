@@ -5,6 +5,8 @@ const { AnalyticsAdapter } = require('../analytics.port');
 const { classifyHttpError } = require('../../../registry/classifyHttpError');
 
 const STATUS = Object.freeze({ ACCEPTED: 'ACCEPTED', REJECTED: 'REJECTED' });
+// Pares chave=valor em ordem estável (sem serializar o objeto inteiro: guarda de minimização da D219).
+const pares = (obj) => Object.keys(obj || {}).sort().map((k) => `${k}=${String(obj[k])}`).join(',');
 const idSimulado = (...partes) => `sbx-ana-${crypto.createHash('sha256').update(partes.join('|')).digest('hex').slice(0, 16)}`;
 
 /**
@@ -28,11 +30,11 @@ class AnalyticsSandboxAdapter extends AnalyticsAdapter {
   }
 
   async emitMetric(_ctx, request) {
-    return { externalRequestId: null, externalResourceId: idSimulado('metric', request.name, JSON.stringify(request.tags || {})), status: STATUS.ACCEPTED };
+    return { externalRequestId: null, externalResourceId: idSimulado('metric', request.name, pares(request.tags)), status: STATUS.ACCEPTED };
   }
 
   async emitEvent(_ctx, request) {
-    return { externalRequestId: null, externalResourceId: idSimulado('event', request.name, JSON.stringify(request.properties || {})), status: STATUS.ACCEPTED };
+    return { externalRequestId: null, externalResourceId: idSimulado('event', request.name, pares(request.properties)), status: STATUS.ACCEPTED };
   }
 
   async queryHealth() {
