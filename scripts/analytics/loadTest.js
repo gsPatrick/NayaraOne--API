@@ -11,8 +11,8 @@
  * inesperada. Sai com código 1 se algum critério falhar (reprova a etapa do pipeline) e imprime o painel ou a consulta responsável.
  *
  * SÓ em banco descartável (scripts/withDisposableDb.js ou o Postgres efêmero do CI). Uso:
- *   node scripts/withDisposableDb.js -- node scripts/analytics/loadTest.js [--scale light|full] [--seed 42] [--duration-sec 20] [--rounds 2]
- *        [--oltp-users 4] [--bi-users 8] [--think-ms 5] [--degradacao-max-pct N] [--json relatorio.json] [--keep]
+ *   node scripts/withDisposableDb.js -- node scripts/analytics/loadTest.js [--scale light|full] [--seed 42] [--duration-sec 20] [--rounds 5]
+ *        [--oltp-users 4] [--bi-users 8] [--think-ms 5] [--bi-think-ms 150] [--degradacao-max-pct N] [--tolerancia-absoluta-ms N] [--json relatorio.json] [--keep]
  */
 const { fork } = require('node:child_process');
 const path = require('node:path');
@@ -23,14 +23,14 @@ const { summarizeRaw, mergeRaw } = require('./load/stats');
 const { evaluate } = require('./load/verdict');
 const { buildReport, write, renderText } = require('./load/report');
 
-const DEFAULTS = Object.freeze({ scale: 'light', seed: 42, durationMs: 20000, rounds: 2, oltpUsers: 4, biUsers: 8, thinkMs: 5, rebuildAtFraction: 0.3, requestTimeoutMs: 20000 });
+const DEFAULTS = Object.freeze({ scale: 'light', seed: 42, durationMs: 20000, rounds: 5, oltpUsers: 4, biUsers: 8, thinkMs: 5, biThinkMs: 150, rebuildAtFraction: 0.3, requestTimeoutMs: 20000 });
 
 function parseArgs(argv) {
   const arg = (n) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : undefined);
   const num = (n) => (arg(n) === undefined ? undefined : Number(arg(n)));
   return {
     scale: arg('--scale'), seed: arg('--seed'), durationMs: num('--duration-sec') === undefined ? undefined : num('--duration-sec') * 1000, rounds: num('--rounds'),
-    oltpUsers: num('--oltp-users'), biUsers: num('--bi-users'), thinkMs: num('--think-ms'), maxPct: num('--degradacao-max-pct'), json: arg('--json'), keep: argv.includes('--keep'),
+    oltpUsers: num('--oltp-users'), biUsers: num('--bi-users'), thinkMs: num('--think-ms'), biThinkMs: num('--bi-think-ms'), maxPct: num('--degradacao-max-pct'), floorMs: num('--tolerancia-absoluta-ms'), json: arg('--json'), keep: argv.includes('--keep'),
   };
 }
 
@@ -62,12 +62,13 @@ async function warmReadModels(models, tenants) {
   }
 }
 
-async function resolveLimit(models, tenant, override) {
-  if (override !== undefined) return { maxPct: override, source: 'argumento --degradacao-max-pct' };
+async function resolveLimit(models, tenant, override, floorOverride) {
   const { inTenant } = require('./load/oltpOps');
-  const { readDegradationMaxPct } = require('../../src/features/analytics/loadTest.settings');
+  const { readDegradationMaxPct, readToleranceFloorMs } = require('../../src/features/analytics/loadTest.settings');
+  const floorMs = floorOverride !== undefined ? floorOverride : await inTenant(models.sequelize, tenant, (transaction) => readToleranceFloorMs(tenant, transaction));
+  if (override !== undefined) return { maxPct: override, floorMs, source: 'argumento --degradacao-max-pct' };
   const maxPct = await inTenant(models.sequelize, tenant, (transaction) => readDegradationMaxPct(tenant, transaction));
-  return { maxPct, source: 'parâmetro analytics.carga.degradacao_max_pct' };
+  return { maxPct, floorMs, source: 'parâmetros analytics.carga.degradacao_max_pct e analytics.carga.tolerancia_absoluta_ms' };
 }
 
 function unexpectedCount(...summaries) {
@@ -79,11 +80,11 @@ async function execute(opts, admin, massa, models) {
   const [rebuildTenant, ...oltpTenants] = tenants;
   const { panels, targets, permissions } = await loadTargets(admin);
   let metrics = [];
-  const limit = await resolveLimit(models, rebuildTenant, opts.maxPct);
+  const limit = await resolveLimit(models, rebuildTenant, opts.maxPct, opts.floorMs);
   await warmReadModels(models, tenants);
   metrics = (await loadTargets(admin)).metrics; // os KPIs financeiros são publicados no primeiro refresh
   const asOf = require('../../src/features/analytics/metrics/clock').businessToday();
-  const biConfig = { tenants, permissions, panels, metrics, asOf, requestTimeoutMs: opts.requestTimeoutMs, users: opts.biUsers, durationMs: opts.durationMs };
+  const biConfig = { tenants, permissions, panels, metrics, asOf, requestTimeoutMs: opts.requestTimeoutMs, users: opts.biUsers, thinkMs: opts.biThinkMs, durationMs: opts.durationMs };
   const child = fork(path.join(__dirname, 'load', 'biWorker.js'), { env: process.env });
   try {
     await askChild(child, { cmd: 'start', config: biConfig }, 'ready');
@@ -102,7 +103,7 @@ async function execute(opts, admin, massa, models) {
       const b = await runWindow(ctx, { durationMs: opts.durationMs, oltpUsers: opts.oltpUsers, withBi: true, rebuildAtMs: Math.round(opts.durationMs * opts.rebuildAtFraction) });
       base.push(a.oltp); withBi.push(b.oltp); biRaw.push(b.bi); if (b.rebuild) rebuilds.push(b.rebuild);
     }
-    return { base: mergeRaw(base), withBi: mergeRaw(withBi), biRaw: mergeRaw(biRaw), rebuilds, panels, targets, limit };
+    return { base: mergeRaw(base), withBi: mergeRaw(withBi), roundsRaw: base.map((b, i) => ({ base: b, withBi: withBi[i] })), biRaw: mergeRaw(biRaw), rebuilds, panels, targets, limit };
   } finally {
     child.send({ cmd: 'stop' });
   }
@@ -117,7 +118,7 @@ function consolidate(run) {
   const failedRebuild = run.rebuilds.find((r) => !r.completed || r.hashBefore !== r.hashAfter);
   const rebuild = failedRebuild || run.rebuilds[0] || { completed: false, error: 'o rebuild não rodou' };
   const unexpected = unexpectedCount(baseline, withBi, panelSummary, Object.fromEntries(Object.entries(other).filter(([k]) => k.startsWith('falha:'))));
-  const verdict = evaluate({ baseline, withBi, panels: panelSummary, targets: run.targets, rebuild: { ...rebuild, count: run.rebuilds.length }, maxPct: run.limit.maxPct, unexpected });
+  const verdict = evaluate({ baseline, withBi, panels: panelSummary, targets: run.targets, rebuild: { ...rebuild, count: run.rebuilds.length }, maxPct: run.limit.maxPct, floorMs: run.limit.floorMs, rounds: run.roundsRaw.map((r) => ({ baseline: summarizeRaw(r.base), withBi: summarizeRaw(r.withBi) })), unexpected });
   return { baseline, withBi, panelSummary, other, verdict };
 }
 

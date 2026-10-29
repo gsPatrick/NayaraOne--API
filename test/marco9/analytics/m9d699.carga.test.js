@@ -1,8 +1,8 @@
 'use strict';
 
 // M9-D699 — a carga de verdade (banco descartável): fluxo operacional sem e com os painéis sob carga, p95 dos painéis contra a meta de cada um e
-// rebuild do FinanceHealthReadModel durante a carga. A comparação roda em até 3 tentativas porque a máquina tem ruído: a etapa só reprova se
-// nenhuma tentativa ficar dentro do limite (degradação real reprova todas).
+// rebuild do FinanceHealthReadModel durante a carga. A medida é a mediana de 5 rodadas alternadas (base, BI) com piso absoluto de tolerância
+// (DI-D699-8 e DI-D699-9): ruído da máquina não reprova, degradação real aparece em todas as rodadas e reprova.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,24 +11,21 @@ const path = require('node:path');
 const { runLoadTest } = require('../../../scripts/analytics/loadTest');
 const { sequelize } = require('../../testHelpers');
 
-const OPTIONS = { scale: 'light', durationMs: 4000, rounds: 2, oltpUsers: 4, biUsers: 8, thinkMs: 5, closeModels: false };
+const OPTIONS = { scale: 'light', durationMs: 2500, rounds: 5, oltpUsers: 4, biUsers: 8, thinkMs: 5, closeModels: false };
 let result;
 let jsonFile;
-const attempts = [];
 
 before(async () => {
   jsonFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'm9d699-')), 'relatorio.json');
-  for (let i = 0; i < 3 && !(result && result.pass); i += 1) {
-    result = await runLoadTest({ ...OPTIONS, json: jsonFile });
-    attempts.push(result.report.verdict.pass);
-  }
+  result = await runLoadTest({ ...OPTIONS, json: jsonFile }); // uma execução só: a estabilidade vem do método (mediana de 5 rodadas e piso absoluto), não de repetir até passar
 });
 after(async () => { fs.rmSync(path.dirname(jsonFile), { recursive: true, force: true }); await sequelize.close(); });
 
 test('m9d699 dashboard pesado não degrada OLTP em teste de carga', () => {
   const v = result.report.verdict;
-  assert.equal(v.pass, true, `reprovou nas ${attempts.length} tentativas:\n${result.text}`);
+  assert.equal(v.pass, true, `reprovou:\n${result.text}`);
   assert.equal(v.maxPct, 10, 'limite vindo do parâmetro (padrão 10%)');
+  assert.equal(v.floorMs, 2, 'piso absoluto vindo do parâmetro (padrão 2 ms)');
   assert.deepEqual(Object.keys(v.oltp).sort(), ['apontar_relatorio', 'criar_lancamento', 'liquidar_lancamento', 'mover_oportunidade']);
   for (const [op, r] of Object.entries(v.oltp)) {
     assert.equal(r.pass, true, `${op}: ${r.reason}`);
@@ -46,7 +43,8 @@ test('m9d699 p95 dos painéis dentro das metas sob a carga', async () => {
     assert.ok(panels[code].p95 !== null && panels[code].p95 <= target, `${code}: p95 ${panels[code].p95} ms contra a meta de ${target} ms`);
     assert.equal(result.report.panels[code].errors, 0);
   }
-  assert.ok(result.report.other['metric:fin.reconciliations_pending'].count > 0, 'os KPIs financeiros também foram lidos');
+  const metricReads = Object.keys(result.report.other).filter((k) => k.startsWith('metric:'));
+  assert.ok(metricReads.length > 0 && metricReads.every((k) => result.report.other[k].count > 0), 'os KPIs publicados também foram lidos');
   assert.ok(result.report.other.drilldown.count > 0, 'o drill-down alternou com a abertura dos painéis');
 });
 
@@ -57,7 +55,7 @@ test('m9d699 rebuild sob carga conclui e reproduz o hash', () => {
   assert.equal(rebuild.hashBefore, rebuild.hashAfter, 'mesmo hash antes e depois');
   assert.match(rebuild.hashBefore, /^[0-9a-f]{64}$/);
   assert.equal(rebuild.changed, 0);
-  assert.ok(result.report.other.rebuilds.length >= 2, 'um rebuild por rodada de carga com BI');
+  assert.ok(result.report.other.rebuilds.length >= 5, 'um rebuild por rodada de carga com BI');
 });
 
 test('m9d699 o relatório JSON traz configuração, percentis, erros, massa e veredito, sem segredo', () => {

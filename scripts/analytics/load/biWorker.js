@@ -91,19 +91,26 @@ async function drill(sourceRef, tenantIndex, config, rec) {
   rec.record('drilldown', r.ms, served(r), served(r) ? null : failureOf(r));
 }
 
+const pause = (ms) => (ms > 0 ? new Promise((resolve) => { setTimeout(resolve, ms); }) : Promise.resolve());
+
+/** Usuário do BI: abre os painéis e lê os indicadores com uma pausa de leitura entre as ações (config.thinkMs), alternando drill-down. */
 async function user(index, config, rec, deadline) {
   const tenantIndex = index % config.tenants.length;
   let round = 0;
   while (Date.now() < deadline) {
-    for (const code of config.panels) {
+    for (let p = 0; p < config.panels.length; p += 1) {
       if (Date.now() >= deadline) break;
-      const ref = await openPanel(code, tenantIndex, config, rec);
-      if (ref && round % 2 === 0) await drill(ref, tenantIndex, config, rec); // alterna painel e drill-down
+      const ref = await openPanel(config.panels[p], tenantIndex, config, rec);
+      if (ref && (p + round) % 2 === 0) await drill(ref, tenantIndex, config, rec); // alterna painel e drill-down
+      await pause(config.thinkMs);
     }
-    for (const code of config.metrics || []) {
+    const metrics = config.metrics || [];
+    for (let k = 0; k < metrics.length; k += 1) {
       if (Date.now() >= deadline) break;
+      const code = metrics[(k + index * 7) % metrics.length]; // cada usuário começa num ponto diferente: com a janela curta, todos os indicadores são lidos
       const ref = await readMetric(code, tenantIndex, config, rec);
-      if (ref && round % 2 === 1) await drill(ref, tenantIndex, config, rec);
+      if (ref && (k + round) % 2 === 1) await drill(ref, tenantIndex, config, rec);
+      await pause(config.thinkMs);
     }
     round += 1;
   }
@@ -114,6 +121,7 @@ async function neutralUser(config, rec, deadline) {
   while (Date.now() < deadline) {
     const r = await get('/noop', 0, config.requestTimeoutMs);
     rec.record('neutral', r.ms, served(r), served(r) ? null : failureOf(r));
+    await pause(config.thinkMs);
   }
 }
 

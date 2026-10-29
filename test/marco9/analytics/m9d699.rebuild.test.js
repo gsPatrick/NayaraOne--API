@@ -85,7 +85,7 @@ test('m9d699 o rebuild de cada read model registrado reproduz o incremental (mes
       if (r.before.rows > 0) withRows += 1;
       if (r.before.hash !== r.after.hash || r.added + r.removed + r.changed !== 0) failures.push(`${def.name}: ${r.before.hash} x ${r.after.hash}`);
     } catch (err) {
-      failures.push(`${def.name}: ${err.code || err.name}: ${err.message}`);
+      failures.push(`${def.name}: ${err.code || err.name}: ${err.message}${err.details && err.details.checks ? ` ${JSON.stringify(err.details.checks.filter((c) => c.status !== 'PASSED')).slice(0, 600)}` : ''}`);
     }
   }
   assert.deepEqual(failures, []);
