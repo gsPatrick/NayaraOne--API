@@ -8,7 +8,7 @@ const messagesService = require('./messages.service');
 const proposalsService = require('./proposals.service');
 const dashboardService = require('./dashboard.service');
 const feedbackCasesService = require('./feedbackCases.service');
-const opportunitiesExportService = require('./opportunitiesExport.service');
+const { moved } = require('../core-governance/dlp/exports/export.errors');
 const opportunityTasksService = require('./opportunityTasks.service');
 const opportunityTimelineService = require('./opportunityTimeline.service');
 const cartsService = require('./carts.service');
@@ -274,25 +274,9 @@ const escalateFeedbackCase = catchAsync(async (req, res) => {
 
 // --- Exportação sensível (M3-21) ---
 
-const exportOpportunities = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((transaction) =>
-    opportunitiesExportService.exportOpportunities(
-      {
-        groupId: req.auth.groupId,
-        companyId: req.auth.companyId,
-        actorUserId: req.auth.userId,
-        actorPermissions: req.auth.permissions,
-        format: req.query.format,
-        filters: { stage: req.query.stage, personId: req.query.personId, propertyId: req.query.propertyId },
-      },
-      transaction
-    )
-  );
-
-  res.setHeader('Content-Type', result.contentType);
-  res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-  res.setHeader('X-Export-Record-Count', String(result.recordCount));
-  return res.status(200).send(result.content);
+// Desde o M9-D822 a exportação de oportunidades sai por POST /exports (resourceType crm.opportunities); a rota antiga só informa o novo caminho e não gera arquivo.
+const exportOpportunities = catchAsync(async () => {
+  throw moved();
 });
 
 // --- Carrinho de imóveis compartilhável (crm.carts, item 3) ---

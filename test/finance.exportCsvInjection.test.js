@@ -14,7 +14,6 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, c
 const { signAccessToken } = require('../src/utils/jwt');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const { exportFinancialEntries, csvCell } = require('../src/features/finance/financeExport.service');
-const mfaService = require('../src/features/users/mfa.service');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); await new Promise((r) => setTimeout(r, 300)); });
@@ -82,23 +81,12 @@ test('exportFinancialEntries: descrições maliciosas saem prefixadas; colunas e
   });
 });
 
-test('rota GET /finance/exports/entries: sem MFA recente recusa; com MFA recente (stub) devolve CSV com cabeçalho correto', async () => {
+test('rota GET /finance/exports/entries foi movida para POST /exports (M9-D822): 410 GOV_EXPORT_MOVED e nenhum arquivo sai por ela', async () => {
   const token = signAccessToken({ sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'], permissions: ['finance:read'] });
   const url = `http://127.0.0.1:${process.env.PORT}/api/v1/finance/exports/entries?competenceMonth=1999-01`;
-  const original = mfaService.assertRecentMfa;
-  try {
-    mfaService.assertRecentMfa = async () => { const AppError = require('../src/utils/AppError'); throw AppError.forbidden('MFA recente necessário.', 'MFA_STEP_UP_REQUIRED'); };
-    const denied = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    assert.equal(denied.status, 403);
-
-    mfaService.assertRecentMfa = async () => {};
-    const ok = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    assert.equal(ok.status, 200);
-    assert.match(ok.headers.get('content-type'), /text\/csv/);
-    const body = await ok.text();
-    assert.equal(body.split('\n')[0], 'id;competenceMonth;nature;entryType;status;amount;dueAt;settledAt;description;isThirdPartyFunds');
-    assert.ok(ok.headers.get('x-export-sha256'));
-  } finally {
-    mfaService.assertRecentMfa = original;
-  }
+  const moved = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(moved.status, 410);
+  assert.equal((await moved.json()).error.code, 'GOV_EXPORT_MOVED');
+  const denied = await fetch(url, { headers: { Authorization: `Bearer ${signAccessToken({ sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'], permissions: ['legal:read'] })}` } });
+  assert.equal(denied.status, 403, 'sem finance:read continua 403');
 });

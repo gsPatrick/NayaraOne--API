@@ -36,8 +36,8 @@ function csvCell(value, { numeric = false } = {}) {
   return /[",;\n\r\t]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
-  const maxRows = Number(options.maxRows) > 0 ? Number(options.maxRows) : EXPORT_MAX_ROWS;
+/** Filtros aceitos (competência AAAA-MM, natureza, situação) -> cláusula `where`; competência fora do formato é 400. */
+function buildEntryWhere(filters) {
   const where = {};
   if (filters.competenceMonth) {
     if (!/^\d{4}-\d{2}$/.test(String(filters.competenceMonth))) {
@@ -47,6 +47,20 @@ async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
   }
   if (filters.nature) where.nature = String(filters.nature).toUpperCase();
   if (filters.status) where.status = String(filters.status).toUpperCase();
+  return where;
+}
+
+const countFinancialEntries = (filters, transaction) => FinancialEntry.count({ where: buildEntryWhere(filters), transaction });
+
+/** Linhas da exportação como objetos simples (uma chave por coluna de COLUMNS), na ordem do arquivo; M9-D822 monta o CSV, XLSX ou PDF a partir delas. */
+async function collectFinancialEntries(filters, transaction) {
+  const rows = await FinancialEntry.findAll({ where: buildEntryWhere(filters), order: [['due_at', 'ASC'], ['id', 'ASC']], transaction });
+  return rows.map((row) => Object.fromEntries(COLUMNS.map((c) => [c, row.get(c)])));
+}
+
+async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
+  const maxRows = Number(options.maxRows) > 0 ? Number(options.maxRows) : EXPORT_MAX_ROWS;
+  const where = buildEntryWhere(filters);
 
   const total = await FinancialEntry.count({ where, transaction });
   if (total > maxRows) {
@@ -81,4 +95,4 @@ async function exportFinancialEntries(ctx, filters, transaction, options = {}) {
   return { csv, rows: rows.length, sha256, limit: maxRows };
 }
 
-module.exports = { exportFinancialEntries, csvCell, EXPORT_MAX_ROWS };
+module.exports = { exportFinancialEntries, collectFinancialEntries, countFinancialEntries, csvCell, EXPORT_MAX_ROWS, COLUMNS };

@@ -112,6 +112,12 @@ function rowsToCsv(rows) {
   return [header, ...body].join('\n');
 }
 
+/** Linhas da exportação como objetos simples (só os campos de EXPORT_FIELDS), pela mesma listagem da tela; M9-D822 monta o arquivo a partir delas. */
+async function collectOpportunityRows(filters, transaction) {
+  const applied = { stage: (filters && filters.stage) || undefined, personId: (filters && filters.personId) || undefined, propertyId: (filters && filters.propertyId) || undefined };
+  return (await listOpportunities(transaction, applied)).map(toExportRow);
+}
+
 /**
  * exportOpportunities — lê pela MESMA função de listagem usada por GET /crm/opportunities
  * (listOpportunities), então a exportação nunca mostra um recorte diferente do que a tela
@@ -186,4 +192,5 @@ module.exports = {
   MAX_EXPORT_RECORDS,
   assertExportPermission,
   exportOpportunities,
+  collectOpportunityRows,
 };

@@ -197,6 +197,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/crm/proposals/:id` | `crm:proposals:read` | não |
 | `GET` | `/api/v1/crm/proposals` | `crm:proposals:read` | não |
 | `POST` | `/api/v1/crm/proposals` | `crm:proposals:create` | não |
+| `GET` | `/api/v1/exports/:id/download` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/exports/:id` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/exports/catalog` | `governance:dlp:export` | não |
+| `POST` | `/api/v1/exports` | `governance:dlp:export` | não |
 | `POST` | `/api/v1/finance/anomaly-cases/:id/resolve` | `finance:update` | não |
 | `GET` | `/api/v1/finance/anomaly-cases` | `finance:read` | não |
 | `POST` | `/api/v1/finance/approval-requests/:id/decide` | `finance:approve` | não |
@@ -257,7 +261,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/entries/classification-pendings` | `finance:read` | não |
 | `GET` | `/api/v1/finance/entries` | `finance:read` | não |
 | `POST` | `/api/v1/finance/entries` | `finance:create` | não |
-| `GET` | `/api/v1/finance/exports/entries` | `finance:read` | sim |
+| `GET` | `/api/v1/finance/exports/entries` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reconcile` | `finance:reconcile` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reject` | `finance:approve` | não |

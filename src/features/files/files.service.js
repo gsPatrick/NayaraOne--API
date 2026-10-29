@@ -20,7 +20,7 @@ const MAX_BYTES = 20 * 1024 * 1024;
 // listada aqui pra manter a validação de categoria centralizada.
 // "inventory-invoices": NF/foto de nota fiscal de entrada de estoque (Guia §6 — "NF/foto
 // armazenada em files"), enviada por receiptOcr.service.js antes da sugestão de OCR/IA.
-const KNOWN_CATEGORIES = ['correspondent', 'contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'insurance', 'inventory-invoices', 'analytics-exports', 'generic'];
+const KNOWN_CATEGORIES = ['correspondent', 'contracts', 'contracts-signed', 'inspections', 'people-documents', 'property-documents', 'insurance', 'inventory-invoices', 'analytics-exports', 'dlp-exports', 'generic'];
 
 // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): uploadFile aceitava
 // QUALQUER mimeType enviado pelo cliente, sem allowlist — um arquivo marcado "text/html" (mesmo

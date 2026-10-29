@@ -18,6 +18,8 @@ const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJ
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
 const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
+const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
+const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -195,6 +197,14 @@ if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_MERGE_JOB_DISABL
 // Varredura noturna da qualidade de cadastro (M9-D806): nota por cadastro, issues e aviso dos domínios sem responsável, na hora configurada (padrão 03:00 de Brasília).
 if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_SCAN_JOB_DISABLED !== 'true') {
   startDataQualityScanJob();
+}
+
+// Exportações do DLP (M9-D822): a geração recolhe os pedidos aprovados que ficaram sem arquivo e a expiração apaga os arquivos vencidos (a cada 15 minutos por padrão).
+if (process.env.NODE_ENV !== 'test' && process.env.DLP_EXPORT_GENERATION_JOB_DISABLED !== 'true') {
+  startExportGenerationJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.DLP_EXPORT_EXPIRY_JOB_DISABLED !== 'true') {
+  startExportExpiryJob();
 }
 
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.

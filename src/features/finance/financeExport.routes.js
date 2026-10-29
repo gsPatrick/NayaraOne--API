@@ -1,13 +1,13 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
-const catchAsync = require('../../utils/catchAsync');
-const { exportFinancialEntries } = require('./financeExport.service');
+const { moved } = require('../core-governance/dlp/exports/export.errors');
 
-// Caderno Marco 4 §17: exportação financeira massiva exige MFA + auditoria + limite.
-// Middlewares por rota (nunca router.use sem path — ver comentário em src/routes/index.js).
+// Caderno Marco 4 §17: exportação financeira massiva exige MFA + auditoria + limite. Desde o M9-D822 todo arquivo sai por POST /exports (finalidade, justificativa, MFA,
+// auditoria, expiração e marca d'água opcional); esta rota antiga só avisa para onde foi (410 GOV_EXPORT_MOVED), sem gerar nada. O gerador continua em financeExport.service.js,
+// chamado pelo catálogo de exportações. Middlewares por rota (nunca router.use sem path — ver comentário em src/routes/index.js).
 const financeExportRouter = Router();
 
 financeExportRouter.get(
@@ -15,21 +15,7 @@ financeExportRouter.get(
   authMiddleware,
   tenantMiddleware,
   requirePermission('finance:read'),
-  requireRecentMfa,
-  catchAsync(async (req, res) => {
-    const result = await req.withTenantTransaction((t) =>
-      exportFinancialEntries(
-        { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId },
-        { competenceMonth: req.query.competenceMonth, nature: req.query.nature, status: req.query.status },
-        t
-      )
-    );
-    res.set('Content-Type', 'text/csv; charset=utf-8');
-    res.set('Content-Disposition', 'attachment; filename="lancamentos.csv"');
-    res.set('X-Export-Rows', String(result.rows));
-    res.set('X-Export-Sha256', result.sha256);
-    return res.status(200).send(result.csv);
-  })
+  (_req, _res, next) => next(moved())
 );
 
 module.exports = financeExportRouter;
