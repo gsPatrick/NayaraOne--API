@@ -11,6 +11,7 @@ const P = require('../_helpers/iaProviders');
 const H = require('../_helpers/iaAvaliacao');
 const { modelo, paraConfig } = require('../_helpers/iaAdapterCtx');
 const { useTempSecretStore } = require('../_helpers/mktSecretStore');
+const { liberarProducao } = require('../_helpers/iaLiberacao');
 
 let tenantA;
 let semCofre;
@@ -77,6 +78,7 @@ test('m9d012_sem_capability_falha_fechada', async () => {
     const ok = await decide(router, tx, { taskType: 'comparar_documentos', requiredCapabilities: ['generate', 'toolUse', 'structuredOutput'] });
     assert.equal(ok.path, 'ADVANCED_MODEL');
     // Produção: o sandbox (lab_only) sai e, sem conexão real, não há candidato.
+    await liberarProducao(tenantA, tx); // M9-D046: ir a PRODUCAO exige o portão de liberação completo
     await P.ajustar(tenantA, 'ia.ambiente', 'PRODUCAO', tx);
     await rejeita(decide(router, tx, { taskType: 'classificar' }), 503, 'AI_NO_ELIGIBLE_MODEL');
     // Entrada maior que a janela do modelo também não tem candidato.

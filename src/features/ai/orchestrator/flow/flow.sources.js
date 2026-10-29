@@ -1,5 +1,6 @@
 'use strict';
 
+const logger = require('../../../../utils/logger');
 const { screenUserInput } = require('../injectionScreen');
 const { loadInjectionLimits } = require('../injectionDetector');
 const { loadGroundingSettings } = require('../grounding');
@@ -44,6 +45,22 @@ function normalizeSource(raw) {
 }
 
 /**
+ * Busca no índice isolada em savepoint (failure drill c, M9-D046): falha de infraestrutura (índice, embedder, rede) vira "sem fontes" e a NAY
+ * responde a insuficiência, nunca inventa; o erro de regra (AppError: permissão, outra empresa) segue como erro. O log guarda só o tipo do erro.
+ */
+async function retrieveIsolated(state, args) {
+  const tx = state.transaction;
+  try {
+    return await (tx && tx.sequelize ? tx.sequelize.transaction({ transaction: tx }, () => state.deps.retrieve(args)) : state.deps.retrieve(args));
+  } catch (err) {
+    if (err && err.isOperational) throw err;
+    logger.error({ runId: state.runId, errorName: err && err.name }, 'ai.retrieval.unavailable');
+    state.retrievalUnavailable = true;
+    return [];
+  }
+}
+
+/**
  * Passo 4: triagem da entrada do usuário (D021: antes de qualquer busca; override ou exfiltração é 422 AI_INJECTION_BLOCKED e o run
  * fica BLOCKED) e busca das fontes AUTORIZADAS (D023, só o que o ator pode ver, vigente, D024). O retriever é injetado
  * (`deps.retrieve`, padrão: o índice do RAG por `RetrievalService.search`, M9-D023); sem ele a tarefa segue só com o que as ferramentas devolverem. Conteúdo RESTRICTED sem `ai:restricted` não entra.
@@ -56,7 +73,7 @@ async function fetchSources(state) {
   const policy = await providerPolicy(state.deps.registry, state.ctx, state.decision && state.decision.provider, state.transaction);
   state.sources.push(...(await memorySources(state, policy)));
   if (!(await needsSources(state)) || typeof state.deps.retrieve !== 'function') return state.sources;
-  const found = await state.deps.retrieve({
+  const found = await retrieveIsolated(state, {
     ctx: state.ctx, execCtx: state.execCtx, agent: state.agent, taskType: state.parsed.taskType, input: state.parsed.input, purpose: state.parsed.purpose,
     runId: state.runId, execution: state.execution, decision: state.decision, transaction: state.transaction,
   });

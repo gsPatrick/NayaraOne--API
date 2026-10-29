@@ -13,7 +13,8 @@ const BASE_PATTERNS = Object.freeze([
   /\bchaves? (?:d[aeo] api|secretas?|privadas?|do cofre|de acesso ao sistema)\b/,
 ]);
 
-const normalize = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+// Mesma normalização do detector de injeção (homóglifos, caracteres invisíveis, hifenização de PDF): o red-team da M9-D046 achou o pedido em cirílico passando.
+const { normalizeText: normalize } = require('../security/textNormalizer');
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** @returns {{ blocked: boolean, term: string|null }} o termo que caracterizou o pedido (para a trilha), sem o texto inteiro. */

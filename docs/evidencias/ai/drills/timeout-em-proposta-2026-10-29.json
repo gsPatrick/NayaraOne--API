@@ -1,0 +1,52 @@
+{
+  "drill": "timeout-em-proposta",
+  "letra": "g",
+  "titulo": "Timeout de tool no meio de uma escrita proposta",
+  "esperado": "Estouro de tempo depois de gravar não deixa meia execução (zero pagamentos) e a repetição não executa de novo; a decisão concluída e repetida devolve replayed com um só pagamento.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:20.750Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "o estouro de tempo vira EXECUTION_FAILED registrado",
+      "ok": true,
+      "detalhe": "EXECUTION_FAILED"
+    },
+    {
+      "nome": "nenhuma meia execução: zero pagamentos gravados",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "repetir a decisão não executa de novo (replayed)",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "continua sem pagamento depois da repetição",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "a recomendação guarda o motivo, sem pilha",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "a decisão concluída executa uma vez",
+      "ok": true,
+      "detalhe": "EXECUTED"
+    },
+    {
+      "nome": "a repetição devolve replayed",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "um só pagamento para a segunda proposta",
+      "ok": true,
+      "detalhe": null
+    }
+  ]
+}

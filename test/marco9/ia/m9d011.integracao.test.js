@@ -15,6 +15,7 @@ const { startProviderServer } = require('../_helpers/iaProviderServer');
 const { modelo, paraConfig, MODELO_EMBED } = require('../_helpers/iaAdapterCtx');
 const H = require('../_helpers/iaAvaliacao');
 const P = require('../_helpers/iaProviders');
+const { liberarProducao } = require('../_helpers/iaLiberacao');
 
 let tenantA;
 let tenantB;
@@ -67,6 +68,7 @@ test('m9d011_candidates_usa_politica_da_conexao_e_parametros_da_empresa', async 
     await P.ajustar(tenantA, 'ia.provedor.safety_tier_minimo_critico', 1, tx);
     assert.deepEqual((await por({ criticidade: 'CRITICAL' })).sort(), ['ai-sandbox/sandbox-1', 'ai-sandbox/sandbox-advanced-1', 'openai/oa-gen']);
     // Produção: o sandbox (lab_only) sai da lista.
+    await liberarProducao(tenantA, tx); // M9-D046: ir a PRODUCAO exige o portão de liberação completo
     await P.ajustar(tenantA, 'ia.ambiente', 'PRODUCAO', tx);
     assert.deepEqual(await por({}), ['openai/oa-gen']);
   });

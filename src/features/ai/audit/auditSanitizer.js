@@ -34,7 +34,8 @@ async function summaryLimit(ctx, transaction) {
 /** Resumo redigido pelo perfil `ai` (`[REDIGIDO:tipo]`, M9-D027: sem segredo nem dado pessoal) e cortado em `limit` caracteres; null continua null. */
 function sanitizeSummary(text, limit) {
   if (text === null || text === undefined) return text;
-  return redactForAi(String(text)).slice(0, limit);
+  // Hifenização de fim de linha (texto de PDF) é desfeita antes de procurar dado pessoal (red-team, M9-D046).
+  return redactForAi(String(text).replace(/-[ \t]*\r?\n[ \t]*/g, '')).slice(0, limit);
 }
 
 /** JSON de chamadas de ferramenta: sem conteúdo bruto e redigido pela biblioteca única. */

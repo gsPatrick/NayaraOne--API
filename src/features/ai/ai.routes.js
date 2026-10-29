@@ -19,6 +19,7 @@ const { registerApprovalRoutes } = require('./approval/approval.routes');
 const { registerBudgetRoutes } = require('./budgets/budgets.routes');
 const { registerMemoryRoutes } = require('./memory/memory.routes');
 const { registerIngestionRoutes } = require('./retrieval/ingestion.routes');
+const { registerReleaseGateRoutes } = require('./releaseGates');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -58,6 +59,9 @@ registerBudgetRoutes(router);
 registerMemoryRoutes(router);
 // Ingestão segura de arquivos, URLs e conhecimento no índice do RAG (M9-D022): POST/GET /ai/ingestions e PUT /ai/files/:fileId/classification.
 registerIngestionRoutes(router);
+
+// Portão de liberação para produção (M9-D046): GET/POST /ai/release-gates e a trava de `ia.ambiente`.
+registerReleaseGateRoutes(router);
 
 // Execução (M9-D030): POST /ai/runs e POST /ai/agents/:code/chat pelo AiOrchestrator.
 registerRunApiRoutes(router);

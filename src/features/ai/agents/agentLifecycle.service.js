@@ -8,6 +8,7 @@ const { requireOwn } = require('./agentAccess');
 const { normalizeCode } = require('./agents.validation');
 const { assertGreenEvaluation, assertHumanHomologatedEvaluation } = require('./evaluationGate');
 const { assertNotGoldenAuthor } = require('../evaluations/golden/goldenAuthors');
+const { assertAgentEnableAllowed } = require('../releaseGates');
 
 const SEGREGATION_KEY = 'ia.agente.segregacao_funcoes';
 
@@ -55,6 +56,7 @@ async function activate(ctx, rawCode, rawVersion, transaction) {
   if ((await segregationOn(ctx, transaction)) && current.homologatedBy === ctx.userId) {
     throw E.segregation('Quem homologou a versão não pode ativá-la; peça a outra pessoa com permissão de administração.');
   }
+  await assertAgentEnableAllowed(ctx, current.code, transaction); // M9-D046: em PRODUCAO com provedor real, só com o portão completo
   await assertHumanHomologatedEvaluation(ctx, current, transaction);
   for (const id of await repo.activeOwnRowIds(ctx, current.code, transaction)) {
     const before = await repo.findOwnById(ctx, id, transaction);

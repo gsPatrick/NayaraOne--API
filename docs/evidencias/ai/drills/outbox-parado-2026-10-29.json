@@ -1,0 +1,52 @@
+{
+  "drill": "outbox-parado",
+  "letra": "d",
+  "titulo": "O outbox de eventos está parado",
+  "esperado": "Os runs completam; cada run deixa um único evento ai.run.completed PENDING enquanto o worker está parado; ao voltar, cada evento é despachado uma vez só e nenhum se perde.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:16.649Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "os 3 runs completaram com o outbox parado",
+      "ok": true,
+      "detalhe": "3 de 3"
+    },
+    {
+      "nome": "um evento ai.run.completed por run, nenhum perdido",
+      "ok": true,
+      "detalhe": "3 eventos"
+    },
+    {
+      "nome": "todos acumulados como PENDING (nada foi despachado)",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "chaves de idempotência únicas",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "nenhum run preso em RUNNING",
+      "ok": true,
+      "detalhe": "COMPLETED,COMPLETED,COMPLETED"
+    },
+    {
+      "nome": "o worker despacha os eventos acumulados",
+      "ok": true,
+      "detalhe": "{\"dispatched\":6,\"published\":0,\"waiting\":0,\"deadLettered\":0,\"failed\":0}"
+    },
+    {
+      "nome": "os eventos do drill ficam DISPATCHED",
+      "ok": true,
+      "detalhe": "DISPATCHED,DISPATCHED,DISPATCHED"
+    },
+    {
+      "nome": "uma segunda passada não despacha de novo (exatamente uma vez)",
+      "ok": true,
+      "detalhe": null
+    }
+  ]
+}

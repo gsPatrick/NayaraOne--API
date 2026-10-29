@@ -739,3 +739,15 @@ test('M9-D841: api_consumers, api_consumer_usage e api_deprecations têm RLS, FO
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
   }
 });
+
+// M9-D046: ai.release_gates (portão de liberação da NAY para produção) com RLS, FORCE RLS e a política tenant_isolation (linhas da empresa e do grupo).
+test('M9-D046: ai.release_gates tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'ai' AND c.relname = 'release_gates'`
+  );
+  assert.equal(rows.length, 1, 'ai.release_gates não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS em ai.release_gates');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS em ai.release_gates');
+  assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+});

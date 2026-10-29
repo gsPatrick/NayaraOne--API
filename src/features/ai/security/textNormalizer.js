@@ -21,7 +21,7 @@ const HOMOGLIFOS = Object.freeze({
 
 function normalizeText(texto) {
   if (texto === null || texto === undefined) return '';
-  let s = String(texto).normalize('NFKC').toLowerCase();
+  let s = String(texto).replace(/-[ \t]*\r?\n[ \t]*/g, '').normalize('NFKC').toLowerCase();
   s = Array.from(s).filter((c) => !invisivel(c)).map((c) => HOMOGLIFOS[c] || c).join('');
   s = s.normalize('NFD').replace(MARCAS_DE_ACENTO, '');
   return s.replace(/\s+/g, ' ').trim();

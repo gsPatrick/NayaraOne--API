@@ -10,18 +10,21 @@ const { redactForAi, redactDeepForAi } = require('../../../shared/redaction');
 const { RedactionMap } = require('./redactionMap');
 const CATALOG = require('./piiTypes.json');
 
+/** Texto de PDF hifenizado em fim de linha ("123-\n.456") volta a ser uma palavra só antes de procurar dado pessoal (red-team, M9-D046). */
+const juntarHifenizacao = (texto) => (typeof texto === 'string' ? texto.replace(/-[ \t]*\r?\n[ \t]*/g, '') : texto);
+
 function createPiiRedactor({ map = new RedactionMap() } = {}) {
   const options = { placeholderFor: (tipo, valor, opts) => map.placeholderFor(tipo, valor, opts) };
   return {
     map,
-    text: (texto) => redactForAi(texto, options),
+    text: (texto) => redactForAi(juntarHifenizacao(texto), options),
     deep: (valor) => redactDeepForAi(valor, options),
     rehydrate: (texto) => map.rehydrate(texto),
   };
 }
 
 /** Troca definitiva (sem mapa) de texto que vai ser gravado: resumo, trecho de fonte, log. */
-const redactForStorage = (texto) => redactForAi(texto);
+const redactForStorage = (texto) => redactForAi(juntarHifenizacao(texto));
 
 /**
  * Texto de classe RESTRICTED nunca é gravado como trecho: só `[REDIGIDO:restrito]` (o hash da fonte prova o conteúdo). As demais

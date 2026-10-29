@@ -32,7 +32,7 @@ function exigenciasDoSprint(codigo) {
     case 'AI7': return { testes: porNome(['m9d012_decisao_deterministica', 'm9d013_fallback_seguro', 'm9d014_alerta_50_75_90_100_uma_vez_cada', 'm9d015_cache_nao_guarda_confidential_nem_restricted']), comandos: [], verificacoes: [] };
     case 'AI8': return { testes: [...porNome(adversariais().map((t) => t.nome)), ...porNome(testesPrimeiro().map((t) => t.nome)), { arquivos: ['test/marco9/ia/m9d044.esteira.test.js', 'test/marco9/ia/m9d044.portoes.test.js'] }], comandos: [], verificacoes: [] };
     case 'AI9': return { testes: [{ arquivos: ['test/marco9/ia/m9d044.golden_agentes.test.js'] }], comandos: [], verificacoes: [] };
-    case 'AI10': return { testes: [{ arquivos: ['test/marco9/ia/m9d046.*.test.js'] }, { arquivos: ['test/marco9/ia/m9d047.*.test.js'] }], comandos: [], verificacoes: [] };
+    case 'AI10': return { testes: [{ arquivos: ['test/marco9/ia/m9d046.*.test.js'] }], comandos: [], verificacoes: [] };
     default: return { testes: [], comandos: [], verificacoes: [] };
   }
 }

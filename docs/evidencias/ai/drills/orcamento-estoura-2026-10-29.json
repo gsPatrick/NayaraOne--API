@@ -1,0 +1,77 @@
+{
+  "drill": "orcamento-estoura",
+  "letra": "b",
+  "titulo": "O orçamento de IA estoura",
+  "esperado": "A 90%: modelo avançado recusado (429 AI_BUDGET_EXHAUSTED) e regra, cache e modelo pequeno atendem. A 100%: modelo pequeno, avançado e cache recusados e a regra segue. Agente crítico a 100%: só o avançado é recusado.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:13.076Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "a 90% o modelo avançado é recusado",
+      "ok": true,
+      "detalhe": "AI_BUDGET_EXHAUSTED"
+    },
+    {
+      "nome": "a 90% RULE atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "a 90% CACHE atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "a 90% SMALL_MODEL atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "a 100% SMALL_MODEL é recusado",
+      "ok": true,
+      "detalhe": "AI_BUDGET_EXHAUSTED"
+    },
+    {
+      "nome": "a 100% ADVANCED_MODEL é recusado",
+      "ok": true,
+      "detalhe": "AI_BUDGET_EXHAUSTED"
+    },
+    {
+      "nome": "a 100% CACHE é recusado",
+      "ok": true,
+      "detalhe": "AI_BUDGET_EXHAUSTED"
+    },
+    {
+      "nome": "a 100% a regra de custo zero segue",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "crítico a 100%: RULE atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "crítico a 100%: CACHE atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "crítico a 100%: SMALL_MODEL atende",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "crítico a 100%: o avançado é recusado",
+      "ok": true,
+      "detalhe": "AI_BUDGET_EXHAUSTED"
+    },
+    {
+      "nome": "o estado do orçamento é EXHAUSTED",
+      "ok": true,
+      "detalhe": null
+    }
+  ]
+}

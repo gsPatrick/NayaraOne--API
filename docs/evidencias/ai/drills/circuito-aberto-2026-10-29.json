@@ -1,0 +1,47 @@
+{
+  "drill": "circuito-aberto",
+  "letra": "f",
+  "titulo": "O circuito de um provedor está aberto",
+  "esperado": "Com o circuito aberto o provedor não é chamado e o fallback seguro usa o equivalente; falha ao ler o estado conta como aberto.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:19.460Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "circuito fechado no início",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "circuito fechado: o fallback usa o provedor mais barato",
+      "ok": true,
+      "detalhe": "openai"
+    },
+    {
+      "nome": "falhas seguidas abrem o circuito persistido",
+      "ok": true,
+      "detalhe": "OPEN"
+    },
+    {
+      "nome": "o fallback enxerga o circuito aberto",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "circuito aberto: o run termina pelo equivalente seguro",
+      "ok": true,
+      "detalhe": "prov-b"
+    },
+    {
+      "nome": "o provedor de circuito aberto nunca é chamado",
+      "ok": true,
+      "detalhe": "prov-a,prov-b"
+    },
+    {
+      "nome": "a troca fica registrada no run",
+      "ok": true,
+      "detalhe": null
+    }
+  ]
+}

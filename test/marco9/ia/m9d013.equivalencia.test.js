@@ -11,6 +11,7 @@ const { semearAprovada } = require('../_helpers/iaGolden');
 const { linha, decisao, registroFalso } = require('../_helpers/iaFallback');
 const { createFallbackSelector } = require('../../../src/features/ai/providers/fallback');
 const { AI_SETTING_DEFAULTS, AI_SETTINGS_SCHEMA } = require('../../../src/features/ai/ai.settings');
+const { liberarProducao } = require('../_helpers/iaLiberacao');
 
 let tenantA;
 before(async () => { ({ tenantA } = await prepararTenants()); });
@@ -98,6 +99,7 @@ test('m9d013_fallback_nunca_para_sandbox_em_producao', async () => {
     await semAvaliacao(tx);
     const sandbox = linha('ai-sandbox', {}, { labOnly: true });
     assert.equal((await tentar(tx, [sandbox], [sandbox])).d.provider, 'ai-sandbox', 'em laboratório o sandbox serve');
+    await liberarProducao(tenantA, tx); // M9-D046: ir a PRODUCAO exige o portão de liberação completo
     await definirParametro(tenantA, 'ia.ambiente', 'PRODUCAO', tx);
     unsafe(await tentar(tx, [sandbox], [sandbox]));
   });

@@ -12,6 +12,7 @@ const { readProviderParams } = require('../../../src/features/ai/providers/provi
 const { sequelize, prepararTenants, q } = require('../../helpers/aiAgents');
 const P = require('../_helpers/iaProviders');
 const { semearAprovada } = require('../_helpers/iaGolden');
+const { liberarProducao } = require('../_helpers/iaLiberacao');
 require('../../../src/features/ai/regression');
 
 let tenantA;
@@ -62,6 +63,7 @@ test('m9d011_sandbox_bloqueado_em_producao', async () => {
     // LAB (padrão): o sandbox atende, sem conexão nenhuma.
     assert.equal((await providerRegistry.instance('ai-sandbox', tenantA, tx)).providerCode(), 'ai-sandbox');
     assert.equal((await providerRegistry.defaultInstance(tenantA, tx)).providerCode(), 'ai-sandbox', 'ia.provedor.padrao = ai-sandbox');
+    await liberarProducao(tenantA, tx); // M9-D046: ir a PRODUCAO exige o portão de liberação completo
     await P.ajustar(tenantA, 'ia.ambiente', 'PRODUCAO', tx);
     assert.equal((await readProviderParams(tenantA, tx)).production, true);
     const err = await P.recusa(providerRegistry.instance('ai-sandbox', tenantA, tx), 'AI_SANDBOX_NOT_ALLOWED_IN_PRODUCTION', 409);
@@ -81,13 +83,13 @@ test('m9d011_sandbox_bloqueado_em_producao', async () => {
 test('m9d011_provedor_padrao_e_parametros_configuraveis', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const p0 = await readProviderParams(tenantA, tx);
-    assert.deepEqual(p0, { defaultProvider: 'ai-sandbox', criticalMinSafetyTier: 2, production: false });
+    assert.deepEqual(p0, { defaultProvider: 'ai-sandbox', criticalMinSafetyTier: 2, production: false, companyLab: false });
     // M9-D033: trocar o provedor padrão exige avaliação aprovada para o novo par.
     await P.recusa(P.ajustar(tenantA, 'ia.provedor.padrao', 'openai', tx), 'AI_REGRESSION_REQUIRED', 409);
     await semearAprovada(tenantA, tx, { code: 'NAY_COMERCIAL', provider: 'openai', model: 'gpt-teste' });
     await P.ajustar(tenantA, 'ia.provedor.padrao', 'openai', tx);
     await P.ajustar(tenantA, 'ia.provedor.safety_tier_minimo_critico', 3, tx);
-    assert.deepEqual(await readProviderParams(tenantA, tx), { defaultProvider: 'openai', criticalMinSafetyTier: 3, production: false });
+    assert.deepEqual(await readProviderParams(tenantA, tx), { defaultProvider: 'openai', criticalMinSafetyTier: 3, production: false, companyLab: false });
     // O padrão é lido de verdade: sem conexão ativa o openai não atende e a empresa vê o motivo.
     await P.recusa(providerRegistry.defaultInstance(tenantA, tx), 'AI_PROVIDER_NOT_ENABLED', 409);
     // A chave tem validação (fail-closed) na API de configurações.

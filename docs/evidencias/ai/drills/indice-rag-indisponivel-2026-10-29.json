@@ -1,0 +1,57 @@
+{
+  "drill": "indice-rag-indisponivel",
+  "letra": "c",
+  "titulo": "O índice do RAG está corrompido ou indisponível",
+  "esperado": "A NAY responde a frase de insuficiência de fontes, sem fonte e sem o valor que o modelo inventou; o run termina sem erro técnico exposto.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:14.362Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "índice vazio: o run termina",
+      "ok": true,
+      "detalhe": "null"
+    },
+    {
+      "nome": "índice vazio: status INSUFFICIENT_SOURCES",
+      "ok": true,
+      "detalhe": "INSUFFICIENT_SOURCES"
+    },
+    {
+      "nome": "índice vazio: resposta é a frase de insuficiência",
+      "ok": true,
+      "detalhe": "Não tenho informações suficientes nas fontes autorizadas para responder isso com segurança.\nFaltou uma fonte autorizada, vigente e relevante sobre o assunto."
+    },
+    {
+      "nome": "índice vazio: o valor inventado não aparece",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "índice vazio: nenhuma fonte citada",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "índice indisponível: o run termina",
+      "ok": true,
+      "detalhe": "null"
+    },
+    {
+      "nome": "índice indisponível: responde insuficiência",
+      "ok": true,
+      "detalhe": "Não tenho informações suficientes nas fontes autorizadas para responder isso com segurança.\nFaltou uma fonte autorizada, vigente e relevante sobre o assunto."
+    },
+    {
+      "nome": "índice indisponível: o valor inventado não aparece",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "índice indisponível: o erro técnico não vaza",
+      "ok": true,
+      "detalhe": "Não tenho informações suficientes nas fontes autorizadas para responder isso com segurança.\nFaltou uma fonte autorizada, vigente e relevante sobre o assunto."
+    }
+  ]
+}

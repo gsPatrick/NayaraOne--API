@@ -17,7 +17,8 @@ const E = require('./providers.errors');
  *  - register(AdapterClass): valida o contrato (boot) e, se o adapter é real, o oferece à avaliação de regressão;
  *  - resolve(code): o registro do adapter (404 AI_PROVIDER_NOT_FOUND);
  *  - instance(code, tenant, tx): o adapter pronto para chamar. O sandbox não tem conexão e é recusado em produção
- *    (409 AI_SANDBOX_NOT_ALLOWED_IN_PRODUCTION); o real exige conexão ACTIVE da empresa (409 AI_PROVIDER_NOT_ENABLED);
+ *    (409 AI_SANDBOX_NOT_ALLOWED_IN_PRODUCTION); o real exige conexão ACTIVE da empresa (409 AI_PROVIDER_NOT_ENABLED) e, em LAB, empresa
+ *    marcada como laboratório (`ia.empresa.lab`, 409 AI_PROVIDER_REAL_NOT_ALLOWED_IN_LAB, M9-D046);
  *  - candidates(...): lista ordenada por capability, política, criticidade, custo e latência. A decisão final é do ModelRouter.
  */
 class ProviderRegistry {
@@ -63,6 +64,8 @@ class ProviderRegistry {
     }
     const achado = (await this.activeAdapters(tenant, transaction)).find((x) => x.providerCode === String(code));
     if (!achado) throw E.providerNotEnabled();
+    const params = await readProviderParams(tenant, transaction);
+    if (!params.production && !params.companyLab) throw E.realNotAllowedInLab();
     return achado.adapter;
   }
 
@@ -92,7 +95,9 @@ class ProviderRegistry {
       const sem = this.semConexao(a.providerCode);
       if (sem) fontes.push({ providerCode: a.providerCode, adapter: sem, policy: { labOnly: this.classOf(a.providerCode).labOnly === true } });
     });
-    (await this.activeAdapters(tenant, transaction)).forEach((x) => fontes.push(x));
+    const params = await readProviderParams(tenant, transaction);
+    // Em LAB, o provedor real só entra na lista de empresa marcada como laboratório (M9-D046).
+    if (params.production || params.companyLab) (await this.activeAdapters(tenant, transaction)).forEach((x) => fontes.push(x));
     return fontes.flatMap((f) => f.adapter.models().map((model) => ({ providerCode: f.providerCode, policy: f.policy, model, capabilities: f.adapter.capabilities() })));
   }
 

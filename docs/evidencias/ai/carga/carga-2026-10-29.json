@@ -1,0 +1,45 @@
+{
+  "volume": {
+    "usuariosPorEmpresa": 3,
+    "execucoesPorUsuario": 4,
+    "custoPorExecucao": 10,
+    "limiteDoOrcamento": 60,
+    "aceitesSimultaneos": 5,
+    "repeticoesDaToolCall": 5
+  },
+  "empresas": 2,
+  "pessoasPorEmpresa": 3,
+  "execucoes": 40,
+  "aceitosPorEmpresa": [
+    6,
+    6
+  ],
+  "recusadosPorOrcamento": 12,
+  "duplicidade": {
+    "agentCode": "NAY_D019_179330714353211723",
+    "chamadasRepetidas": 5,
+    "propostas": 1,
+    "linhasDeToolCall": 1,
+    "aceitesEnviados": 5,
+    "aceitesConcluidos": 5,
+    "execucoesReais": 1,
+    "replays": 4,
+    "pagamentos": 1,
+    "recusados": []
+  },
+  "violacoes": {
+    "vazamento": [],
+    "estouroDeOrcamento": [],
+    "runPresoEmRunning": [],
+    "execucaoDuplicada": []
+  },
+  "totais": {
+    "vazamento": 0,
+    "estouroDeOrcamento": 0,
+    "runPresoEmRunning": 0,
+    "execucaoDuplicada": 0
+  },
+  "ok": true,
+  "duracaoMs": 2051,
+  "executadoEm": "2026-10-29T20:52:23.816Z"
+}

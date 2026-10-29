@@ -23,6 +23,8 @@ async function prepararAmbiente(tenant) {
 
 /** Cria a conexão de IA (rascunho). `config` completa o config_json; `segredo` grava o valor no cofre temporário. */
 async function criarConexao(tenant, tx, { providerCode = 'openai', config = {}, secretRef, ctx = comAdmin(tenant), segredo } = {}) {
+  // Em LAB o provedor real só roda em empresa marcada como laboratório (M9-D046): quem cria uma conexão real nos testes marca a empresa.
+  await upsertSetting('ia.empresa.lab', true, tenant, tenant.userId, tx);
   const ref = secretRef === undefined ? refDe(tenant, providerCode) : secretRef;
   if (segredo && ref) await getSecretStore().put(ref, segredo, {});
   return registry.createConnection({

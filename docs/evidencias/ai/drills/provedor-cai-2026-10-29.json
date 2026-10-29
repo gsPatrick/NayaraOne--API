@@ -1,0 +1,47 @@
+{
+  "drill": "provedor-cai",
+  "letra": "a",
+  "titulo": "O provedor de modelo cai",
+  "esperado": "Com candidato seguro: o run termina pelo fallback e a troca fica registrada. Sem candidato seguro: 503 AI_FALLBACK_UNSAFE, mensagem sem detalhe técnico e nenhuma tool executada.",
+  "ambiente": "LAB",
+  "provider": "ai-sandbox",
+  "executadoEm": "2026-10-29T20:52:11.984Z",
+  "ok": true,
+  "checagens": [
+    {
+      "nome": "com candidato seguro o run termina",
+      "ok": true,
+      "detalhe": "null"
+    },
+    {
+      "nome": "o fallback atendeu (provedor B)",
+      "ok": true,
+      "detalhe": "prov-b"
+    },
+    {
+      "nome": "a troca fica registrada no run (UNAVAILABLE)",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "sem candidato seguro: 503 AI_FALLBACK_UNSAFE",
+      "ok": true,
+      "detalhe": "AI_FALLBACK_UNSAFE"
+    },
+    {
+      "nome": "a mensagem não revela detalhe técnico",
+      "ok": true,
+      "detalhe": "A NAY não está disponível agora. Nenhuma ação foi executada."
+    },
+    {
+      "nome": "o candidato inferior nunca foi chamado",
+      "ok": true,
+      "detalhe": null
+    },
+    {
+      "nome": "nenhuma tool rodou",
+      "ok": true,
+      "detalhe": null
+    }
+  ]
+}

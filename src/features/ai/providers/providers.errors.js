@@ -37,10 +37,13 @@ const capabilityUnsupported = (operation) => new AppError(
 );
 const providerNotConfigured = () => new AppError('Informe a credencial do provedor antes de ativá-lo.', 400, 'AI_PROVIDER_NOT_CONFIGURED');
 const sandboxNotAllowedInProduction = () => new AppError('O provedor de testes não pode ser usado em produção.', 409, 'AI_SANDBOX_NOT_ALLOWED_IN_PRODUCTION');
+const realNotAllowedInLab = () => new AppError(
+  'Em ambiente de laboratório o provedor real só pode ser usado por empresa marcada como laboratório.', 409, 'AI_PROVIDER_REAL_NOT_ALLOWED_IN_LAB'
+);
 const providerNotFound = () => new AppError('Provedor não encontrado.', 404, 'AI_PROVIDER_NOT_FOUND');
 const providerNotEnabled = () => new AppError('O provedor não está habilitado para esta empresa.', 409, 'AI_PROVIDER_NOT_ENABLED');
 const adminRequired = () => new AppError('Só quem administra a NAY altera o que o provedor aceita receber.', 403, 'AI_ADMIN_REQUIRED');
 
 module.exports = {
-  AiProviderError, KINDS, BY_KIND, capabilityUnsupported, providerNotConfigured, sandboxNotAllowedInProduction, providerNotFound, providerNotEnabled, adminRequired,
+  AiProviderError, KINDS, BY_KIND, capabilityUnsupported, providerNotConfigured, sandboxNotAllowedInProduction, realNotAllowedInLab, providerNotFound, providerNotEnabled, adminRequired,
 };
