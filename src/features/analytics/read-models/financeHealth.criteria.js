@@ -24,6 +24,8 @@ function financeCriteria(companyId, bounds) {
     'fin.receivables_60d': pending('RECEIVABLE', 'today', 'horizon60'),
     'fin.overdue_payables': pending('PAYABLE', null, 'today'),
     'fin.overdue_receivables': pending('RECEIVABLE', null, 'today'),
+    'fin.reconciliations_pending': { companyId, period: { from: null, to: b('dayEnd') } }, // M9-D624: a origem exclui as transações já conciliadas
+    'fin.anomalies_open': { companyId, status: ['OPEN'] },
     'fin.commissions_unlinked_30d': { companyId, period: { from: null, to: b('horizon30') }, status: ['PENDING'], equals: { financialEntryId: null } },
   };
 }

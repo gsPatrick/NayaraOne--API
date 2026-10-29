@@ -36,6 +36,15 @@ const SPECS = [
     columns: { period: 'due_at', status: 'status', equals: { financialEntryId: 'financial_entry_id' } },
     describe: (f) => `Parcelas de comissão pendentes, sem lançamento a pagar, com vencimento antes de ${day(f.period.to)}`,
   },
+  { // M9-D624: transações bancárias importadas sem nenhuma conciliação (unidade COUNT: o detalhe reconcilia pela contagem)
+    metricCode: 'fin.reconciliations_pending', type: 'BANK_TRANSACTIONS', table: 'finance.bank_transactions', valueColumn: 'amount',
+    columns: { period: 'transaction_date' }, unlinked: { table: 'finance.reconciliations', column: 'bank_transaction_id' },
+    describe: (f) => `Transações bancárias importadas, sem conciliação, com data antes de ${day(f.period.to)}`,
+  },
+  { // M9-D624: casos de anomalia abertos no Financeiro
+    metricCode: 'fin.anomalies_open', type: 'ANOMALY_CASES', table: 'finance.anomaly_cases', columns: { status: 'status', equals: { riskLevel: 'risk_level' } },
+    describe: () => 'Casos de anomalia financeira com status aberto',
+  },
   { metricCode: 'fin.breathing_need', components: ['fin.overdue_payables', 'fin.payables_30d', 'fin.commissions_unlinked_30d', 'fin.free_cash'] },
 ];
 

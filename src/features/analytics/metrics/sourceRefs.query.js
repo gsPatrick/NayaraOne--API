@@ -11,6 +11,10 @@ function buildWhere(spec, filter) {
   const col = (name) => `t."${name}"`;
   const replacements = { companyId: filter.companyId };
   const parts = [`${col(spec.companyColumn)} = :companyId`];
+  if (spec.unlinked) { // parte FIXA da origem (identificadores validados no registro): linhas que nenhuma outra tabela referencia (M9-D624)
+    const [schema, table] = spec.unlinked.table.split('.');
+    parts.push(`NOT EXISTS (SELECT 1 FROM "${schema}"."${table}" u WHERE u."${spec.unlinked.column}" = ${col(spec.idColumn)})`);
+  }
   const c = spec.columns || {};
   if (filter.period) {
     if (!c.period) throw new Error(`Origem ${spec.metricCode}: não declara coluna de período.`);

@@ -20,10 +20,18 @@ const { readOverdueWindowDays } = require('./financeHealth.settings');
 
 const MODEL = 'rm_finance_health';
 
+/** M9-D624: campos extras que reproduzem os KPIs de conciliações pendentes e anomalias abertas (valor, idade, faixas, risco e tipo). */
+const kpiFields = (o) => ({
+  pending_reconciliations_amount: o.reconciliations.amount, pending_reconciliations_oldest_date: o.reconciliations.oldest,
+  pending_reconciliations_by_band: o.reconciliations.byBand, last_statement_import_date: o.reconciliations.lastImportDate,
+  open_anomalies_high: o.anomalies.byRisk.ALTO, open_anomalies_unclassified: o.anomalies.byRisk.NAO_CLASSIFICADO,
+  open_anomalies_oldest_date: o.anomalies.oldest, open_anomalies_by_risk: o.anomalies.byRisk, open_anomalies_by_type: o.anomalies.byType,
+});
+
 async function recompute({ companyId, groupId, key, now, transaction }) {
   const bounds = financeBounds(key.as_of_date, await readOverdueWindowDays({ companyId, groupId }, transaction));
   const e = await readEntryComponents(companyId, bounds, transaction);
-  const o = await readOtherComponents(companyId, bounds, transaction);
+  const o = await readOtherComponents(companyId, bounds, transaction, { groupId, asOf: key.as_of_date });
   const fields = {
     free_cash: e.free_cash, third_party_cash: e.third_party_cash,
     payables_7d: e.payables_7d, payables_30d: e.payables_30d, payables_60d: e.payables_60d,
@@ -33,6 +41,7 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
     pending_reconciliations: o.pendingReconciliations, pending_owner_repasses: o.pendingOwnerRepasses,
     provisioned_commissions: o.provisionedCommissions, paid_commissions: o.paidCommissions, commissions_unlinked_30d: o.commissionsUnlinked30d,
     open_anomalies: o.openAnomalies, entries_without_due_date: e.without_due_date,
+    ...kpiFields(o),
     source_criteria: financeCriteria(companyId, bounds),
   };
   fields.breathing_need = await breathingNeed({

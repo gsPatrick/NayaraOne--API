@@ -8,15 +8,13 @@
  */
 const { sequelize } = require('../../../models');
 const { iso } = require('./financeHealth.dates');
+const { readPendingReconciliations, readOpenAnomalies } = require('./financeHealth.pending');
 
 const one = async (sql, replacements, transaction) => (await sequelize.query(sql, { replacements, transaction }))[0][0];
 
-async function readOtherComponents(companyId, bounds, transaction) {
+async function readOtherComponents(companyId, bounds, transaction, { groupId = null, asOf } = {}) {
   const r = { companyId, dayEnd: iso(bounds.dayEnd), horizon30: iso(bounds.horizon30), monthStart: iso(bounds.monthStart), nextMonthStart: iso(bounds.nextMonthStart) };
-  const reconciliations = await one(
-    `SELECT count(*)::int AS n FROM finance.bank_transactions bt
-      WHERE bt.company_id = :companyId AND bt.transaction_date < :dayEnd
-        AND NOT EXISTS (SELECT 1 FROM finance.reconciliations r WHERE r.bank_transaction_id = bt.id)`, r, transaction);
+  const reconciliations = await readPendingReconciliations({ companyId, groupId }, asOf, r.dayEnd, transaction); // M9-D624: contagem, valor, idade e faixas
   const repasses = await one(
     `SELECT COALESCE(SUM(net_amount), 0)::text AS total FROM finance.owner_repasses WHERE company_id = :companyId AND status IN ('PENDING', 'APPROVED')`, r, transaction);
   const provisioned = await one(
@@ -31,10 +29,10 @@ async function readOtherComponents(companyId, bounds, transaction) {
   const unlinked = await one(
     `SELECT COALESCE(SUM(i.amount), 0)::text AS total FROM finance.commission_installments i
       WHERE i.company_id = :companyId AND i.status = 'PENDING' AND i.financial_entry_id IS NULL AND i.due_at < :horizon30`, r, transaction);
-  const anomalies = await one(`SELECT count(*)::int AS n FROM finance.anomaly_cases WHERE company_id = :companyId AND status = 'OPEN'`, r, transaction);
+  const anomalies = await readOpenAnomalies({ companyId, groupId }, transaction);
   return {
-    pendingReconciliations: reconciliations.n, pendingOwnerRepasses: repasses.total, provisionedCommissions: provisioned.total,
-    paidCommissions: paid.total, commissionsUnlinked30d: unlinked.total, openAnomalies: anomalies.n,
+    reconciliations, anomalies, pendingReconciliations: reconciliations.count, pendingOwnerRepasses: repasses.total, provisionedCommissions: provisioned.total,
+    paidCommissions: paid.total, commissionsUnlinked30d: unlinked.total, openAnomalies: anomalies.total,
   };
 }
 

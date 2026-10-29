@@ -10,6 +10,7 @@
  *     idColumn: 'id', companyColumn: 'company_id',
  *     columns: { period: 'settled_at', status: 'status', nature: 'nature', equals: { thirdParty: 'is_third_party_funds' } },
  *     valueColumn: 'amount', valueSign: { column: 'nature', negative: ['PAYABLE'] },   // modo SUM
+ *     unlinked: { table: 'finance.reconciliations', column: 'bank_transaction_id' },     // só linhas SEM nenhuma linha apontando para elas (M9-D624)
  *     formulaId: '...', rowColumns: ['...'], formulaParams: {},                       // modo RECOMPUTE
  *     describe: (filter) => 'Lançamentos liquidados da empresa ...',
  *   })
@@ -40,6 +41,7 @@ function assertLeaf(spec) {
   assertColumns(spec);
   if (spec.valueColumn !== undefined && !IDENT.test(spec.valueColumn)) fail(spec, 'valueColumn inválido.');
   if (spec.valueSign && (!IDENT.test(spec.valueSign.column) || !Array.isArray(spec.valueSign.negative))) fail(spec, 'valueSign inválido.');
+  if (spec.unlinked !== undefined && !(TABLE.test((spec.unlinked || {}).table || '') && IDENT.test((spec.unlinked || {}).column || ''))) fail(spec, 'unlinked exige table (schema.tabela) e column.');
   if (spec.rowColumns !== undefined && !(Array.isArray(spec.rowColumns) && spec.rowColumns.every((c) => IDENT.test(c)))) fail(spec, 'rowColumns inválido.');
   if (spec.reconcileMode !== undefined && !MODES.includes(spec.reconcileMode)) fail(spec, 'reconcileMode inválido.');
   if (typeof spec.describe !== 'function') fail(spec, 'informe describe(filter) em linguagem de negócio.');

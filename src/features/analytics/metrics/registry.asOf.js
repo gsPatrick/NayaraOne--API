@@ -14,6 +14,7 @@ const { getFormulaCatalog } = require('./formulaCatalog');
 const { recalculate } = require('./reproduction');
 const { natureLabel } = require('./registry.natures');
 const { buildFreshness } = require('./freshness');
+const { dimensionUnit } = require('./dimensionUnit');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 
@@ -33,7 +34,7 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
   return {
     metricCode: definition.metric_code,
     value: snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text,
-    unit: version.unit,
+    unit: dimensionUnit(dimensionKey, version.unit),
     status: snapshot.status,
     version: version.version,
     formulaId: version.formula_id,
