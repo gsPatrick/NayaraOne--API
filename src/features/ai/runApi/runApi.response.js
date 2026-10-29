@@ -19,6 +19,7 @@ async function toResponseData({ outcome, conversationId }, ctx, transaction) {
     proposals: outcome.proposals || [],
     cost: { amount: outcome.cost ? outcome.cost.amount : null, currency: run ? run.costCurrency : 'BRL' },
     routingPath: outcome.routingPath,
+    structured: outcome.structured || null,
     replayed: Boolean(outcome.replayed),
   };
   if (conversationId) data.conversationId = conversationId;

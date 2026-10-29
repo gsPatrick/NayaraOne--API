@@ -35,6 +35,9 @@ function presetAnswer(state, decision) {
   // Acerto de cache: o usuário vê a data real do dado (snapshot_at original), não a do acerto.
   if (decision.path === 'CACHE' && body.snapshotAt) state.parsed = { ...state.parsed, snapshotAt: body.snapshotAt };
   state.numbersPayload.push(...payload);
+  // Resposta estruturada e dados da regra que o agente usa depois (ex.: a recomendação da próxima ação, M9-D034).
+  state.structured = isPlainObject(body.structured) ? body.structured : null;
+  state.ruleMeta = isPlainObject(body.meta) ? body.meta : null;
   for (const s of body.sources || []) {
     state.sources.push({
       sourceType: s.sourceType || 'READ_MODEL', sourceRef: s.sourceRef || null, sourceVersion: s.sourceVersion || null, title: s.title || s.sourceRef || null, clause: s.clause || null,

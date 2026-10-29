@@ -14,9 +14,9 @@ const { legalExpiring, withStalledScope } = require('./scoped.services');
 
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
-    crmOpportunities: crmOpportunities(transaction),
+    crmOpportunities: crmOpportunities(transaction, scope),
     crmCustomers: crmCustomers(transaction),
-    radarMatches: radarMatches(transaction),
+    radarMatches: radarMatches(transaction, scope),
     financeHealth: financeHealth(transaction),
     constructionProjects: constructionProjects(transaction),
     legalContracts: legalContracts(transaction),

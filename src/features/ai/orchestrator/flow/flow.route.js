@@ -29,7 +29,7 @@ async function routerInput(state, { inputSize, skipShortCircuit = false } = {}) 
     maxOutputTokens: Number.isInteger(policy.maxOutputTokens) ? policy.maxOutputTokens : DEFAULT_MAX_OUTPUT,
     politica: { classification: highestClassification(state.sources) },
     budgetState: await budgets.budgetState(ctx, { agentCode: agent.code, criticality: agent.criticality, at: new Date(state.clock()) }, transaction),
-    ruleInput: { taskType: parsed.taskType, input: parsed.input, purpose: parsed.purpose, agentCode: agent.code, userId: ctx.userId, permissions: ctx.permissions || [] },
+    ruleInput: { taskType: parsed.taskType, input: parsed.input, purpose: parsed.purpose, agentCode: agent.code, userId: ctx.userId, permissions: ctx.permissions || [], subject: parsed.subject, now: new Date(state.clock()) },
     cacheKey: state.requestHash,
     skipShortCircuit,
   };

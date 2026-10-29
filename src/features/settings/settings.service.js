@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
+const { runSettingGuard } = require('./settingGuards');
 const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../features/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
@@ -365,6 +366,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction) {
   }
 
   validateAgainstSchema(key, value);
+  // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
+  await runSettingGuard(key, value, tenant, actorUserId, transaction);
 
   // Campos marcados `encrypted: true` no schema são criptografados ANTES de tocar o banco —
   // a coluna `value` (JSONB) nunca guarda o segredo em texto plano. `beforeJson`/`afterJson`

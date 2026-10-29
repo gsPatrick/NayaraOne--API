@@ -31,6 +31,7 @@ const { RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA } = require('./retrieval/retri
 const { ATENDIMENTO_SETTING_DEFAULTS, ATENDIMENTO_SETTINGS_SCHEMA } = require('./agents/nay_atendimento/atendimento.settings');
 const { CORRESPONDENTE_SETTING_DEFAULTS, CORRESPONDENTE_SETTINGS_SCHEMA } = require('./agents/nay_correspondente/correspondente.settings');
 const { RUN_API_SETTING_DEFAULTS, RUN_API_SETTINGS_SCHEMA } = require('./runApi/runApi.settings');
+const { COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA } = require('./agents/nay_comercial/comercial.settings');
 const { DIRETORIA_SETTING_DEFAULTS, DIRETORIA_SETTINGS_SCHEMA } = require('./agents/nay_diretoria/diretoria.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
@@ -69,6 +70,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...ATENDIMENTO_SETTING_DEFAULTS,
   ...CORRESPONDENTE_SETTING_DEFAULTS,
   ...RUN_API_SETTING_DEFAULTS,
+  ...COMERCIAL_SETTING_DEFAULTS,
   ...DIRETORIA_SETTING_DEFAULTS,
 });
 
@@ -100,6 +102,7 @@ const AI_SETTINGS_SCHEMA = {
   ...ATENDIMENTO_SETTINGS_SCHEMA,
   ...CORRESPONDENTE_SETTINGS_SCHEMA,
   ...RUN_API_SETTINGS_SCHEMA,
+  ...COMERCIAL_SETTINGS_SCHEMA,
   ...DIRETORIA_SETTINGS_SCHEMA,
 };
 

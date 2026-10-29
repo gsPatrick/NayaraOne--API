@@ -86,7 +86,7 @@ async function finish(state, text) {
 function successOutcome(state, run, answer, grounded, proposals) {
   return {
     ok: true, replayed: false, runId: run.id, status: run.status, answer, sources: grounded.sources || [], groundingStatus: run.groundingStatus, confidence: run.confidence,
-    snapshotAt: run.snapshotAt, proposals: [...state.proposals, ...proposals], cost: { amount: run.costAmount, tokensIn: run.tokensIn, tokensOut: run.tokensOut },
+    snapshotAt: run.snapshotAt, structured: state.structured || null, proposals: [...state.proposals, ...proposals], cost: { amount: run.costAmount, tokensIn: run.tokensIn, tokensOut: run.tokensOut },
     routingPath: run.routingPath, provider: run.providerCode, model: run.modelCode, escalated: run.escalated, cached: run.cached, budgetAlerts: state.alerts, trace: state.trace.spans,
   };
 }

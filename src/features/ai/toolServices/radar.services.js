@@ -1,22 +1,16 @@
 'use strict';
 
-const opportunityService = require('../../crm/opportunity.service');
-const radarService = require('../../radar/radar.service');
+// Radar para as tools da NAY (M9-D016/D034): os imóveis compatíveis já calculados pelo Radar, com pontuação e motivo, cortados em
+// `ia.comercial.radar_max_imoveis` quando a tool não pede um limite.
+const { listRadarMatches } = require('../agents/nay_comercial/comercial.radar');
+const { readComercialParams } = require('../agents/nay_comercial/comercial.params');
 
-const LIMITE_PADRAO = 10;
-
-function radarMatches(transaction) {
+function radarMatches(transaction, scope = {}) {
   return {
     async listForOpportunity(opportunityId, limit) {
-      const oportunidade = await opportunityService.getOpportunity(opportunityId, transaction);
-      const radars = (await radarService.listRadars(transaction, { personId: oportunidade.personId })).filter((r) => r.opportunityId === opportunityId);
-      const matches = [];
-      for (const radar of radars) {
-        for (const imovel of await radarService.getRadarMatches(radar.id, transaction)) {
-          matches.push({ propertyId: imovel.id, radarId: radar.id, score: null, title: imovel.title ?? null });
-        }
-      }
-      return { opportunityId, radars: radars.length, matches: matches.slice(0, limit || LIMITE_PADRAO) };
+      const params = await readComercialParams({ groupId: scope.groupId, companyId: scope.companyId }, transaction);
+      const list = await listRadarMatches(opportunityId, transaction, { limit: limit || params.radarMax });
+      return { opportunityId: list.opportunityId, radars: list.radars, total: list.total, hasMore: list.hasMore, extra: list.extra, matches: list.matches };
     },
   };
 }

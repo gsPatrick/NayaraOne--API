@@ -6,9 +6,28 @@ const opportunityService = require('../../crm/opportunity.service');
 const { createOpportunityTask } = require('../../crm/opportunityTasks.service');
 const personService = require('../../people/person.service');
 const { toPlain } = require('./plain');
+const { loadOpportunityFacts } = require('../agents/nay_comercial/comercial.data');
+const { readComercialParams } = require('../agents/nay_comercial/comercial.params');
 
-function crmOpportunities(transaction) {
-  return { getById: async (id) => toPlain(await opportunityService.getOpportunity(id, transaction)) };
+/**
+ * Oportunidade com a atividade calculada pelo código (M9-D034): interações recentes, dias sem contato, tarefas abertas, propostas enviadas sem
+ * resposta e documentos pendentes. O modelo lê esses fatos; nunca calcula.
+ */
+function crmOpportunities(transaction, scope = {}) {
+  return {
+    async getById(id) {
+      const base = toPlain(await opportunityService.getOpportunity(id, transaction));
+      const facts = await loadOpportunityFacts(id, transaction, { now: new Date() });
+      const params = await readComercialParams({ groupId: scope.groupId, companyId: scope.companyId }, transaction);
+      return {
+        ...base,
+        activity: {
+          lastInteractionAt: facts.lastInteractionAt, daysWithoutContact: facts.daysWithoutContact, contactBase: facts.contactBase,
+          interactions: facts.interactions.slice(0, params.summaryInteractions), openTasks: facts.openTasks, sentProposals: facts.proposals, pendingDocuments: facts.pendingDocuments, asOf: facts.asOf,
+        },
+      };
+    },
+  };
 }
 
 function crmCustomers(transaction) {
