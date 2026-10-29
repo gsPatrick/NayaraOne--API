@@ -47,6 +47,8 @@ const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyt
 const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
 const { startAnalyticsSnapshotJob } = require('./src/engines/jobs/analyticsSnapshotJob');
 const { startAnalyticsAlertEvaluationJob } = require('./src/engines/jobs/analyticsAlertEvaluationJob');
+const { startAnalyticsExportWorkerJob } = require('./src/engines/jobs/analyticsExportWorkerJob');
+const { startAnalyticsExportCleanupJob } = require('./src/engines/jobs/analyticsExportCleanupJob');
 const { startAnalyticsTechProbeJob } = require('./src/engines/jobs/analyticsTechProbeJob');
 const { startAnalyticsBriefJob } = require('./src/engines/jobs/analyticsBriefJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
@@ -316,6 +318,8 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
   startAnalyticsSnapshotJob(); // M9-D609: snapshot diário dos KPIs (D-1, 00:30 de São Paulo) com catch-up
   startAnalyticsAlertEvaluationJob(); // M9-D691: alert engine (a cada analytics.alert.intervalo_avaliacao_min e depois de cada refresh de read model)
+  startAnalyticsExportWorkerJob(); // M9-D701: fila de exportações do BI (QUEUED -> RUNNING -> READY), um worker por job com FOR UPDATE SKIP LOCKED
+  startAnalyticsExportCleanupJob(); // M9-D701: apaga o arquivo vencido (EXPIRED) e dá como falho o job preso em andamento
   startAnalyticsTechProbeJob(); // M9-D628: sondas de saúde (API, banco, fila, storage) a cada analytics.tec.intervalo_sonda_s
   startAnalyticsBriefJob(); // M9-D693: briefing executivo da NAY Diretoria (diário 06:30 e semanal segunda 07:00, horário de São Paulo)
 }

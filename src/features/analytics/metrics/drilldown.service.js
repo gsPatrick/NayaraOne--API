@@ -106,4 +106,4 @@ async function openDrilldown(ctx, input, transaction) {
   };
 }
 
-module.exports = { openDrilldown };
+module.exports = { openDrilldown, findDefinition, sourceCodeOf, parseFilter };

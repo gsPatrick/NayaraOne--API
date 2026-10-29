@@ -14,6 +14,7 @@ const { sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { run, invalid, requireOneOf, isPlainObject, assertWriter, MSG } = require('./analyticsStoreSupport');
+const { assertExportTransition } = require('./exportTransitions');
 
 const CODE = 'ANALYTICS_EXPORT_INVALID';
 const RISK_LEVELS = ['LOW', 'HIGH'];
@@ -98,6 +99,7 @@ async function updateExportJobState(jobId, patch, transaction) {
     validatePatch(patch, {
       status: cur.status, fileSha256: cur.file_sha256, expiresAt: cur.expires_at, rowCount: cur.row_count, errorCode: cur.error_code,
     });
+    if (patch.status !== undefined) assertExportTransition(cur.status, patch.status); // M9-D701 3.7
     const keys = Object.keys(patch);
     const sets = keys.map((k) => (k === 'maskedFields' ? `${STATE_COLUMNS[k]} = CAST(:${k} AS jsonb)` : `${STATE_COLUMNS[k]} = :${k}`));
     const replacements = { id: jobId, ...patch };

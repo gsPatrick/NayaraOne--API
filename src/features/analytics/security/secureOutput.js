@@ -13,17 +13,18 @@ const { readParam, KEYS } = require('./securityParams');
 
 /**
  * @param ctx { groupId, companyId, actorUserId, permissions }
- * @param options { permission (do catálogo), domain, action, resourceType, resourceCode, route, filters, rows, ip, transaction }
+ * @param options { permission (do catálogo), domain, action, resourceType, resourceCode, route, filters, rows, ip, transaction, rowsReturned? (quando as linhas não passam por aqui, como no pedido e no download do arquivo de exportação) }
  * @returns { rows, maskedCount }
  */
 async function prepareSecureRows(ctx, options) {
   const { permission, domain, action, resourceType, resourceCode, route, filters, rows, ip, transaction } = options;
+  const counted = Number.isInteger(options.rowsReturned) && options.rowsReturned >= 0 ? options.rowsReturned : null; // exportação: o arquivo tem as linhas, o log conta quantas
   assertPermission(ctx, permission);
   if (domain) await assertDomainAccess(ctx, domain, transaction);
   const extra = parseExtraFields(await readParam(KEYS.EXTRA_MASKED_FIELDS, ctx, transaction));
   const { data, maskedCount } = maskRestricted(rows, extra);
   await recordAccess(ctx, {
-    action, resourceType, resourceCode, route, filters, ip, rowsReturned: Array.isArray(data) ? data.length : 1, maskingApplied: maskedCount > 0,
+    action, resourceType, resourceCode, route, filters, ip, rowsReturned: counted !== null ? counted : (Array.isArray(data) ? data.length : 1), maskingApplied: maskedCount > 0,
   });
   return { rows: data, maskedCount };
 }

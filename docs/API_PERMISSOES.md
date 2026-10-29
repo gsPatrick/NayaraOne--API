@@ -49,6 +49,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/analytics/alerts/:id/ack` | `analytics:alert:ack` | não |
 | `GET` | `/api/v1/analytics/dashboards/:code` | `analytics:read` | não |
 | `POST` | `/api/v1/analytics/dashboards` | `analytics:manage` | não |
+| `POST` | `/api/v1/analytics/exports` | `analytics:export` | não |
+| `GET` | `/api/v1/analytics/exports/:id/download` | `analytics:export` | não |
+| `GET` | `/api/v1/analytics/exports/:id/file` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/metrics/:code/drilldown` | `analytics:read` | não |
 | `GET` | `/api/v1/api-governance/consumers` | `governance:api:read` | não |
 | `GET` | `/api/v1/assets/:id/disposal` | `inventory:read` | não |
