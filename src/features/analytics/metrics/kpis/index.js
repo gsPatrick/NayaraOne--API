@@ -16,6 +16,7 @@ const locacaoAtendimento = require('./locacao-atendimento'); // M9-D642: KPIs de
 const decisao = require('./decisao'); // M9-D709: KPIs da fila de decisão do Centro de Comando (aprovações financeiras, ajustes de estoque, regras e propostas da NAY)
 const centroComando = require('./centro-comando'); // M9-D710: KPIs de fatos do dia do Centro de Comando (contratos assinados, oportunidades ganhas, pagamentos liquidados)
 const tecnologia = require('./tecnologia'); // M9-D680: KPIs de Tecnologia (disponibilidade, filas, integrações, freshness, autenticação e bloqueios)
+const ia = require('./ia'); // M9-D681: KPIs de IA (custo por agente, grounding e avaliação, orçamento e chamadas de ferramenta bloqueadas)
 const obraPerdas = require('./obra-perdas'); // M9-D652: desperdício, custo pós-obra e recorrência
 const estoque = require('./estoque'); // M9-D653: KPIs de Estoque e Patrimônio
 
@@ -33,5 +34,6 @@ Object.assign(module.exports, atendimento); // M9-D672
 Object.assign(module.exports, locacaoPrazos); // M9-D641
 Object.assign(module.exports, locacaoAtendimento); // M9-D642
 Object.assign(module.exports, tecnologia); // M9-D680
+Object.assign(module.exports, ia); // M9-D681
 Object.assign(module.exports, { decisionQueueKpis: decisao, installDecisionQueueKpis: decisao.install }); // M9-D709
 Object.assign(module.exports, centroComando); // M9-D710

@@ -13,6 +13,7 @@ function dimensionUnit(dimensionKey, versionUnit) {
   if (/(^|:)[a-z_]*_qtd$/.test(dimensionKey || '')) return 'COUNT'; // M9-D623: quantidades dentro de um indicador em reais
   if (/(^|:)[a-z_]*_min$/.test(dimensionKey || '')) return 'MINUTES'; // M9-D630: tempo médio por origem e por corretor
   if (/(^|:)[a-z_]*_pp$/.test(dimensionKey || '')) return 'PP'; // M9-D650: desvio de avanço em pontos percentuais
+  if (/(^|:)[a-z_]*_nota$/.test(dimensionKey || '')) return 'SCORE'; // M9-D681: nota média das avaliações de 0 a 100
   return versionUnit;
 }
 

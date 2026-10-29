@@ -83,7 +83,8 @@ test('m9d628 falhas de autenticação: login, MFA e integração, com atores dis
 });
 
 test('m9d628 custo de IA: reais com 2 casas arredondados uma vez, orçamento ativo do mês e execução sem custo', async () => {
-  assert.deepEqual(await rows('rm_ai_cost'), [
+  // as colunas de cálculo dos KPIs (runs_without_cost, by_model) são da M9-D681 e têm teste próprio
+  assert.deepEqual((await rows('rm_ai_cost')).map(({ runs_without_cost: _w, by_model: _m, ...rest }) => rest), [
     { agent: 'NAY_COMERCIAL', month: '2026-09', cost_brl: '5.00', budget_brl: null, runs: '1' },
     { agent: 'NAY_COMERCIAL', month: '2026-10', cost_brl: '3.34', budget_brl: '100.00', runs: '4' }, // 1,234567 + 2,005 + 0,1 + (regra sem custo) = 3,339567 => 3,34; o orçamento pausado fica fora
   ]);
@@ -98,7 +99,7 @@ test('m9d628 qualidade da IA: fundamentação e avaliação por semana (segunda-
 });
 
 test('m9d628 chamadas de ferramenta: total e bloqueadas por agente e dia', async () => {
-  assert.deepEqual(await rows('rm_ai_tool_calls'), [
+  assert.deepEqual((await rows('rm_ai_tool_calls')).map(({ by_tool: _t, by_reason: _r, ...rest }) => rest), [
     { agent: 'NAY_COMERCIAL', day: '2026-10-10', calls: '2', blocked: '1' },
     { agent: 'NAY_COMERCIAL', day: '2026-10-20', calls: '1', blocked: '0' },
   ]);
