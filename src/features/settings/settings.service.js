@@ -42,6 +42,7 @@ const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/rea
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
+const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
 const { NAY_TOOLS_SETTINGS_SCHEMA } = require('../../features/analytics/nayToolsSettings');
@@ -229,6 +230,8 @@ const SETTINGS_SCHEMA = {
   ...LOCACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.
   ...OBRA_SETTINGS_SCHEMA,
+  // Marco 9, M9-D619 — read models do Jurídico: status que tiram o processo de "ativo".
+  ...JURIDICO_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.

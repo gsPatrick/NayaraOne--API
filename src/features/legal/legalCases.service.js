@@ -4,6 +4,7 @@ const { LegalCase, LegalCaseParty, Person, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishLegalCaseCreated } = require('./legalEvents.service');
+const { publishLegalCaseUpdated } = require('./legalBiEvents.service');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -54,6 +55,14 @@ function readCaseDetails(payload) {
     }
     out.estimatedAmount = amount.toFixed(2);
   } else if (payload.estimatedAmount === null) out.estimatedAmount = null;
+  // M9-D619: valor já CONFIRMADO (condenação, acordo ou perda), sempre separado do estimado no BI.
+  if (payload.confirmedAmount !== undefined && payload.confirmedAmount !== null && payload.confirmedAmount !== '') {
+    const confirmed = Number(payload.confirmedAmount);
+    if (!Number.isFinite(confirmed) || confirmed < 0) {
+      throw AppError.badRequest('"confirmedAmount" deve ser um número maior ou igual a zero (valor confirmado do processo).', 'LEGAL_CASE_VALIDATION');
+    }
+    out.confirmedAmount = confirmed.toFixed(2);
+  } else if (payload.confirmedAmount === null) out.confirmedAmount = null;
   return out;
 }
 
@@ -202,6 +211,7 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   Object.assign(legalCase, readCaseDetails(payload));
   legalCase.updatedBy = actorUserId || null;
   await legalCase.save({ transaction });
+  await publishLegalCaseUpdated(legalCase, transaction); // M9-D619: o BI recalcula risco, valores e processos ativos
 
   const phaseChanged = phase !== undefined && phase !== previousPhase;
 

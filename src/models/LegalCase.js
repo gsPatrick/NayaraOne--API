@@ -108,6 +108,8 @@ module.exports = (sequelize) => {
       court: { type: DataTypes.STRING(160), allowNull: true, field: 'court' },
       caseClass: { type: DataTypes.STRING(120), allowNull: true, field: 'case_class' },
       estimatedAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'estimated_amount' },
+      // M9-D619: valor já confirmado (condenação, acordo ou perda); o BI o mostra separado do estimado.
+      confirmedAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'confirmed_amount' },
       riskLevel: { type: DataTypes.STRING(16), allowNull: true, field: 'risk_level' },
       createdBy: {
         type: DataTypes.UUID,

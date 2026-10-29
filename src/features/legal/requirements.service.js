@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getContract, isLeaseLikeContractType } = require('./contracts.service');
 const { publishCadernoEvent } = require('./legalEvents.service');
+const { publishContractRequirementUpdated } = require('./legalBiEvents.service');
 
 /**
  * requirements.service.js — auditoria externa (contrato bruto, Anexo I "7. Checklist
@@ -191,6 +192,7 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
       { transaction }
     );
     created.push(requirement);
+    await publishContractRequirementUpdated(requirement, transaction); // M9-D619: documentos faltantes do BI
   }
 
   await registrarAuditoria(
@@ -253,6 +255,7 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
   }
   requirement.updatedBy = actorUserId || null;
   await requirement.save({ transaction });
+  await publishContractRequirementUpdated(requirement, transaction); // M9-D619: documentos faltantes do BI
 
   await registrarAuditoria(
     {

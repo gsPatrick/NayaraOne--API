@@ -19,6 +19,7 @@ require('./financeiro-finance-sector-margin.readmodel'); // M9-D615: margem por 
 require('./comercial-imoveis.readmodel'); // M9-D616: Comercial/CRM e Imóveis
 require('./locacao.readmodel'); // M9-D617: Locação
 require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Estoque/Patrimônio e Pós-obra
+require('./juridico-correspondente.readmodel'); // M9-D619: Jurídico e Correspondente Bancário
 require('./marketing-atendimento.readmodel'); // M9-D627: Marketing e Atendimento/Satisfação
 
 module.exports = {

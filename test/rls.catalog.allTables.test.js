@@ -402,3 +402,12 @@ test('M9-D802: calendar_alert_log tem RLS, FORCE RLS e a política tenant_isolat
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
 });
 });
+
+// M9-D619: read models de Jurídico e Correspondente Bancário no BI com RLS + FORCE RLS e 4 políticas.
+test('M9-D619: os 7 read models de Jurídico e Correspondente têm RLS, FORCE RLS e 4 políticas', async () => {
+  const tables = ['rm_legal_deadlines', 'rm_legal_cases_risk', 'rm_legal_values', 'rm_legal_missing_docs', 'rm_fin_cases_stage', 'rm_fin_provider_outcome', 'rm_fin_commission'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as sete tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+});
