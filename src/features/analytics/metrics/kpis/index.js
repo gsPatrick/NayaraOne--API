@@ -6,9 +6,11 @@ const { ensureFinanceKpisPublished } = require('./finance.register');
 const { materializeFinanceKpis, financeKpiCorrections } = require('./finance.materialize');
 const listener = require('./finance.listener');
 const snapshotProvider = require('./finance.snapshotProvider');
+const obras = require('./obras'); // M9-D650 / M9-D651: KPIs de Obras
 const crm = require('./crm'); // M9-D630 / M9-D631: KPIs do funil comercial
 
 snapshotProvider.register(); // M9-D609: o snapshot diário calcula estes KPIs pelo mesmo caminho do refresh
+obras.snapshotProvider.register();
 crm.snapshotProvider.register();
 
-module.exports = { KPI_DEFINITIONS, ensureFinanceKpisPublished, materializeFinanceKpis, financeKpiCorrections, installFinanceKpis: listener.install, ...crm.api };
+module.exports = { KPI_DEFINITIONS, ensureFinanceKpisPublished, materializeFinanceKpis, financeKpiCorrections, installFinanceKpis: listener.install, ...crm.api, ...obras.api };

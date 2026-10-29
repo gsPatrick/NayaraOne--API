@@ -16,6 +16,7 @@ const { natureLabel } = require('./registry.natures');
 const { presentSnapshot } = require('./freshness.present');
 const clock = require('./clock');
 const { dimensionUnit } = require('./dimensionUnit');
+const { dimensionNature } = require('./dimensionNature');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 
@@ -41,8 +42,8 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
     status: shown.status,
     version: version.version,
     formulaId: version.formula_id,
-    valueNature: version.value_nature,
-    valueNatureLabel: natureLabel(version.value_nature),
+    valueNature: dimensionNature(definition.metric_code, dimensionKey, version.value_nature), // M9-D650: cada série do custo da obra com a sua natureza
+    valueNatureLabel: natureLabel(dimensionNature(definition.metric_code, dimensionKey, version.value_nature)),
     asOfDate,
     revisionNo: snapshot.revision_no,
     calcHash: snapshot.calc_hash,

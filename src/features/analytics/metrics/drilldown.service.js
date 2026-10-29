@@ -22,6 +22,7 @@ const { readPageLimits } = require('./drilldown.settings');
 const { pageRows, aggregateOf } = require('./drilldown.rows');
 const { drilldownNotAvailable, pageSizeInvalid, pageInvalid, componentRequired, metricNotFound } = require('./drilldown.errors');
 require('./drilldown.details.finance');
+require('./drilldown.details.obras.custo'); // M9-D650
 
 const toInt = (v, fallback) => (v === undefined || v === null || v === '' ? fallback : (/^\d+$/.test(String(v)) ? Number(v) : NaN));
 

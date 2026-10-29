@@ -6,8 +6,10 @@
  *  - budget_cost: baseline do orçamento aprovado mais recente (Budget.baseline_amount); sem orçamento aprovado, o orçamento da própria obra; senão nulo.
  *  - actual_cost: saídas LIQUIDADAS ligadas à obra (financial_entries.construction_project_id) até o fim do dia-base de SP, do ledger (nunca planilha
  *    paralela), sem estorno, sem cancelado e sem dinheiro de terceiros.
- *  - forecast_cost: método RITMO (D650) = real + max(0, baseline × (1 − realizado%)) × max(1, real ÷ (baseline × realizado%)); sem avanço medido ou sem
- *    baseline é nulo (INCOMPLETE, nunca zero inventado). PLANEJADO = o baseline. Decimal exato no banco, arredondado uma vez, 2 casas.
+ *  - forecast_cost: método RITMO (D650) = real + max(0, baseline × (1 − realizado%)) × max(1, real ÷ (baseline × realizado%)); com realizado% = 0
+ *    o fator é 1 (real + baseline, regra do livro); sem avanço medido (nulo) ou sem baseline é nulo (INCOMPLETE, nunca zero inventado).
+ *    PLANEJADO = o baseline. Decimal exato no banco, arredondado uma vez, 2 casas.
+ *  - projected_margin: receita contratada − forecast_cost (M9-D650); nulo quando o forecast é nulo. É a coluna que o detalhe da margem projetada soma.
  *  - contract_revenue: Σ valor dos contratos da obra nos status do parâmetro analytics.obra.receita_contrato_status.
  */
 const { sequelize } = require('../../../models');
@@ -46,7 +48,11 @@ async function readLedgerAndRevenue(companyId, projectId, dayEnd, statuses, tran
 async function forecastCost({ method, budget, actual, percent }, transaction) {
   if (budget === null || budget === undefined) return null;
   if (method === 'PLANEJADO') return Number(budget) >= 0 ? String(budget) : null;
-  if (percent === null || percent === undefined || Number(percent) <= 0) return null;
+  if (percent === null || percent === undefined) return null;
+  if (Number(percent) <= 0) { // realizado 0%: o fator de desvio é 1 (livro, M9-D650), o custo a fazer é o orçamento inteiro
+    const [[zero]] = await sequelize.query('SELECT ROUND(CAST(:actual AS numeric) + CAST(:budget AS numeric), 2)::text AS forecast', { replacements: { budget, actual }, transaction });
+    return zero.forecast;
+  }
   const [[row]] = await sequelize.query(
     `SELECT CASE WHEN CAST(:budget AS numeric) * CAST(:percent AS numeric) / 100 = 0 THEN NULL
        ELSE ROUND(CAST(:actual AS numeric)
@@ -55,6 +61,13 @@ async function forecastCost({ method, budget, actual, percent }, transaction) {
     { replacements: { budget, actual, percent }, transaction }
   );
   return row.forecast;
+}
+
+/** Margem projetada da obra (receita − forecast), 2 casas; nula sem forecast. */
+async function projectedMargin(revenue, forecast, transaction) {
+  if (forecast === null || forecast === undefined) return null;
+  const [[row]] = await sequelize.query('SELECT ROUND(CAST(:revenue AS numeric) - CAST(:forecast AS numeric), 2)::text AS margin', { replacements: { revenue, forecast }, transaction });
+  return row.margin;
 }
 
 async function recompute({ companyId, groupId, key, asOfDate, transaction }) {
@@ -67,7 +80,8 @@ async function recompute({ companyId, groupId, key, asOfDate, transaction }) {
   const budget = await readBudget(companyId, projectId, project && project.budget_amount !== null ? project.budget_amount : null, transaction);
   const sums = await readLedgerAndRevenue(companyId, projectId, dayEndIso(asOfDate), statuses, transaction);
   const forecast = await forecastCost({ method, budget, actual: sums.actual_cost, percent: progress.actual_percent }, transaction);
-  return { fields: { budget_cost: budget, actual_cost: sums.actual_cost, forecast_cost: forecast, contract_revenue: sums.contract_revenue } };
+  const margin = await projectedMargin(sums.contract_revenue, forecast, transaction);
+  return { fields: { budget_cost: budget, actual_cost: sums.actual_cost, forecast_cost: forecast, contract_revenue: sums.contract_revenue, projected_margin: margin } };
 }
 
 const def = registerReadModel({
