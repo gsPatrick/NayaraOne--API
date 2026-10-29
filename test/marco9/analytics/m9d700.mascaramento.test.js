@@ -101,3 +101,32 @@ test('m9d700 recorte por carteira: filtro SQL só existe para quem tem a carteir
   const teams = security.parseTeams('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb, lixo; nenhum');
   assert.deepEqual([...teams.get('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')], ['bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb']);
 });
+
+test('m9d700 variações comuns de nome de campo saem mascaradas e nomes livres continuam livres (reabertura)', () => {
+  const linha = {
+    phone_number: '11987654321', customer_phone_number: '11987654321', telefone_contato: '11987654321',
+    numeroConta: '123456', conta_corrente: '0012345', cpfCliente: '12345678909', cpf_titular: '12345678909',
+    cnpjEmpresa: '11222333000181', nome_da_parte: 'Ana Lima', cpfTitular: '12345678909', emailContato: 'ana@x.com',
+    nome: 'Ana', valor: 10, chave: 'k', party_id: 'abc', account_id: 'u1', document_type: 'RG',
+  };
+  const { data } = maskRestricted(linha);
+  for (const k of ['phone_number', 'customer_phone_number', 'telefone_contato']) assert.equal(data[k], '(11) *****-4321', k);
+  assert.equal(data.numeroConta, '****3456');
+  assert.equal(data.conta_corrente, '****2345');
+  assert.equal(data.cpfCliente, '***.456.789-**');
+  assert.equal(data.cpf_titular, '***.456.789-**');
+  assert.equal(data.cpfTitular, '***.456.789-**');
+  assert.equal(data.cnpjEmpresa, '**.***.***/0001-**');
+  assert.equal(data.nome_da_parte, 'A. L.');
+  assert.equal(data.emailContato, 'a***@x.com');
+  assert.deepEqual([data.nome, data.valor, data.chave, data.party_id, data.account_id, data.document_type], ['Ana', 10, 'k', 'abc', 'u1', 'RG']);
+});
+
+test('m9d700 CPF, CNPJ e telefone sem pontuação em texto livre são mascarados (só com dígito verificador válido)', () => {
+  const { data } = maskRestricted({
+    nota: '12345678909', obs: 'cnpj 11222333000181 e fone (11) 98765-4321 ou 11987654321', protocolo: 'pedido 12345678900',
+  });
+  assert.equal(data.nota, '***.456.789-**');
+  assert.ok(data.obs.includes('**.***.***/0001-**') && !/11222333|98765|987654321/.test(data.obs));
+  assert.equal(data.protocolo, 'pedido 12345678900', 'número de 11 dígitos sem dígito verificador válido não é CPF');
+});
