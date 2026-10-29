@@ -32,9 +32,16 @@ const closePatch = () => ({
  * Admissão no HALF_OPEN: até half_open_max_calls testes ao mesmo tempo. A vaga presa por um processo que caiu antes de devolver o
  * resultado é liberada passado o cooldown (senão o circuito nunca mais fecharia).
  */
-function admitHalfOpen(row, policy, now, base = {}) {
+function inflightNow(row, policy, now) {
   const preso = row.halfOpenInflight > 0 && ms(row.halfOpenInflightSince) !== null && now.getTime() - ms(row.halfOpenInflightSince) > cooldownMs(row, policy);
-  const emVoo = preso ? 0 : row.halfOpenInflight;
+  return { preso, emVoo: preso ? 0 : row.halfOpenInflight };
+}
+
+/** As vagas de teste do HALF_OPEN estão todas ocupadas? (leitura pura, para o health check respeitar o limite sem ocupar vaga) */
+const halfOpenFull = (row, policy, now) => row.circuitState === 'HALF_OPEN' && inflightNow(row, policy, now).emVoo >= policy.half_open_max_calls;
+
+function admitHalfOpen(row, policy, now, base = {}) {
+  const { preso, emVoo } = inflightNow(row, policy, now);
   if (emVoo < policy.half_open_max_calls) {
     return {
       decision: 'ALLOW', probe: true, state: 'HALF_OPEN',
@@ -96,4 +103,4 @@ function evaluateResult(row, policy, { ok = false, errorClass = null, probe = fa
   return { patch: probe && row.halfOpenInflight > 0 ? release(row) : {} };
 }
 
-module.exports = { evaluateAdmission, evaluateResult, countsAsFailure, cooldownEnd };
+module.exports = { evaluateAdmission, evaluateResult, countsAsFailure, cooldownEnd, halfOpenFull };

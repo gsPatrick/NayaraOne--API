@@ -35,6 +35,7 @@ const { startCorrespondentAppraisalWorkerJob } = require('./src/engines/jobs/cor
 const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspondentStatusPollJob');
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integrationHealthAggregateJob');
+const { startIntegrationHealthCheckJob } = require('./src/engines/jobs/integrationHealthCheckJob');
 const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
@@ -299,6 +300,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiRagJob();
   startAnalyticsReadModelRefreshJob();
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
+}
+
+// Marco 9, M9-D223 — teste de saúde ativo de cada fornecedor com connection ACTIVE, a cada integration.health.check_interval_s.
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_CHECK_JOB_DISABLED !== 'true') {
+  startIntegrationHealthCheckJob();
 }
 
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).

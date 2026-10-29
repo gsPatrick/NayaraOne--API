@@ -22,6 +22,8 @@ const HEALTH_SETTINGS_SCHEMA = Object.freeze({
   'integration.health.aggregate_interval_s': { type: 'integer', min: 10, max: 3600 },
   'integration.health.history_retention_days': { type: 'integer', min: 1, max: 3650 },
   'integration.health.down_after_failures': { type: 'integer', min: 1, max: 20 },
+  // M9-D223: de quantos em quantos segundos cada connection ACTIVE recebe o teste de saúde ativo (INT-P039).
+  'integration.health.check_interval_s': { type: 'integer', min: 5, max: 3600 },
   'integration.slo.CRITICAL': sloSpec,
   'integration.slo.HIGH': sloSpec,
   'integration.slo.MEDIUM': sloSpec,

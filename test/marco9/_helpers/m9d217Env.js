@@ -32,5 +32,5 @@ const errosCircuito = (tenant, id) => comTenant(tenant, async (t) => (await sequ
 const limparCircuito = (tenant) => limparConfig(tenant, CHAVES);
 
 module.exports = {
-  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparCircuito, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito, comConexao, breaker, health,
+  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparConfig, limparCircuito, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito, comConexao, breaker, health,
 };

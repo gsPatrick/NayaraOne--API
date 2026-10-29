@@ -10,6 +10,9 @@ const { registerHealthSampleSource, resetHealthSampleSources } = require('./samp
 const { readHealthParams } = require('./healthParams');
 const { admitCall, recordCallResult, assertCallAllowed } = require('./circuitBreaker');
 const { resolveCircuitPolicy } = require('./circuitPolicyReader');
+const { runConnectionHealthCheck, runHealthCheckCycle } = require('./healthCheck');
+const { assessProductionReadiness, registerReadinessCheck, clearReadinessChecks } = require('./productionReadiness');
+const { RUNBOOK_SECTIONS, runbookPathFor, validateRunbook, assertRunbook } = require('./runbooks');
 
 module.exports = {
   aggregateConnectionHealth,
@@ -27,4 +30,13 @@ module.exports = {
   recordCallResult,
   assertCallAllowed,
   resolveCircuitPolicy,
+  runConnectionHealthCheck,
+  runHealthCheckCycle,
+  assessProductionReadiness,
+  registerReadinessCheck,
+  clearReadinessChecks,
+  RUNBOOK_SECTIONS,
+  runbookPathFor,
+  validateRunbook,
+  assertRunbook,
 };
