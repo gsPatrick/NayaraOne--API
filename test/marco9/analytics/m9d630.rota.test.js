@@ -12,7 +12,7 @@ const { materializeCrmKpis } = require('../../../src/features/analytics/metrics/
 
 const NOW = new Date('2026-10-28T15:00:00Z');
 const AS_OF = '2026-10-28';
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'crm:opportunities:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 const at = (day, hh = 12, mm = 0) => new Date(Date.UTC(2026, 9, day, hh + 3, mm)).toISOString();
 const ids = [];
 let env;

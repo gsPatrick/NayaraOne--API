@@ -15,7 +15,7 @@ const { openDrilldown } = require('../../../src/features/analytics/metrics/drill
 const { materializeRentalDeadlineKpis } = require('../../../src/features/analytics/metrics/kpis');
 
 const { AS_OF, CODES, MODELS } = { ...kit };
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'legal:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 let env;
 let src;
 before(async () => {

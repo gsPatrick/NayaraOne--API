@@ -245,7 +245,7 @@ test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTT
     await snapshot(r1.definition, r2.version, '2026-11-01', '100000', [{ v: 100000 }], tx);
   }, { commit: true });
   const { createAnalyticsRouter } = require('../src/features/analytics');
-  const auth = (req, res, next) => { req.auth = { ...env.tenantA, permissions: ['analytics:read'] }; next(); };
+  const auth = (req, res, next) => { req.auth = { ...env.tenantA, permissions: ['analytics:read', 'finance:read'] }; next(); }; // M9-D702: a rota confere a permissão do domínio da métrica (fin = Financeiro)
   const app = express();
   app.use(correlationIdMiddleware);
   app.use('/v1', createAnalyticsRouter({ authChain: [auth, tenantMiddleware] }));

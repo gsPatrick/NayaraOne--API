@@ -67,7 +67,7 @@ test('m9d632 o detalhe de prop.without_sale_by_period tem os imóveis publicados
 });
 
 test('m9d632 sem a permissão do detalhe o número aparece e as linhas não', async () => {
-  const kpi = (await env.call(`/analytics/metrics/crm.proposals?asOf=${sc.TODAY}`, { perms: ['analytics:read'] })).body.data;
+  const kpi = (await env.call(`/analytics/metrics/crm.proposals?asOf=${sc.TODAY}`, { perms: ['analytics:read', 'crm:opportunities:read'] })).body.data;
   const ref = kpi.sourceRefs[0];
   assert.deepEqual([ref.restricted, ref.idsSample, ref.count], [true, [], 12]);
   const q = new URLSearchParams({ filter: JSON.stringify(ref.filter), filterHash: ref.filterHash, filterSignature: ref.filterSignature });

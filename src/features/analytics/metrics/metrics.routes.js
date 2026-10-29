@@ -1,41 +1,27 @@
 'use strict';
 
 const { Router } = require('express');
-const AppError = require('../../../utils/AppError');
-const { readMetricAsOf } = require('./registry.asOf');
-const { resolveAsOf } = require('./period');
-const { consolidateMetric } = require('./consolidation.service');
+const catchAsync = require('../../../utils/catchAsync');
+const { success } = require('../../../utils/httpResponse');
+const { P } = require('../security/permissionCatalog');
+const { requireAnalyticsPermission } = require('../security/permissionGuard');
+const { readMetricResponse } = require('./query.service');
 
 /**
- * GET /analytics/metrics/:code?asOf=AAAA-MM-DD (M9-D604, 3.4). Resolve a versão vigente na data e devolve o snapshot gravado dela,
- * lendo só metric_snapshots (sem cálculo). Escopo desta rota: a empresa do usuário (`companyId` informado de outra empresa é 404, nunca
- * 403). Os demais parâmetros (período, grupo, dimensão, comparação) e o contrato completo são da M9-D702, que estende este handler.
+ * GET /analytics/metrics/:code (M9-D702): valor pronto, qualidade, freshness e fonte de um indicador, por período (`period`, `month`, `quarter`, `year`,
+ * `from`/`to`), data-base (`asOf`, M9-D604), dimensão, comparação (`compareTo`, M9-D694) ou consolidado do grupo (`groupId`, M9-D625). O contrato, as
+ * validações e os erros estão em query.service.js; a rota só entrega o contexto do usuário.
  */
-async function getMetric(req, res, next) {
-  try {
-    const { companyId, groupId, permissions } = req.auth;
-    if (req.query.companyId && req.query.companyId !== companyId) {
-      throw AppError.notFound('Empresa não encontrada ou sem acesso.', 'ANALYTICS_SCOPE_NOT_FOUND');
-    }
-    const asOfDate = resolveAsOf(req.query.asOf); // M9-D606: data de calendário de SP; futuro é 400 ANALYTICS_AS_OF_FUTURE
-    if (req.query.groupId !== undefined) { // M9-D625: consolidado do grupo, calculado só na leitura (grupo alheio 404, sem analytics:read:group 403)
-      const data = await req.withTenantTransaction((transaction) => consolidateMetric(
-        { companyId, groupId, actorUserId: req.auth.userId, permissions }, { metricCode: req.params.code, groupId: req.query.groupId, asOfDate }, transaction
-      ));
-      return res.json({ data });
-    }
-    const data = await req.withTenantTransaction((transaction) => readMetricAsOf(
-      { companyId, groupId, permissions }, { metricCode: req.params.code, scopeType: 'COMPANY', scopeId: companyId, asOfDate }, transaction
-    ));
-    res.json({ data });
-  } catch (err) {
-    next(err);
-  }
-}
+const getMetric = catchAsync(async (req, res) => {
+  const { companyId, groupId, permissions, userId } = req.auth;
+  const ctx = { companyId, groupId, permissions, actorUserId: userId };
+  const data = await req.withTenantTransaction((transaction) => readMetricResponse(ctx, req.params.code, req.query, { ip: req.ip, route: 'GET /analytics/metrics/:code' }, transaction));
+  return success(res, { data });
+});
 
 function createMetricsRouter() {
   const router = Router();
-  router.get('/:code', getMetric);
+  router.get('/:code', requireAnalyticsPermission(P.READ), getMetric);
   return router;
 }
 

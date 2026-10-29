@@ -10,7 +10,7 @@ const oracle = require('../_helpers/m9d651Oracle');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 const clock = require('../../../src/features/analytics/metrics/clock');
 
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'construction:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 const UNITS = { 'obra.delays': 'COUNT', 'obra.measurements': 'BRL', 'obra.nonconformities': 'COUNT' };
 let env;
 let src;

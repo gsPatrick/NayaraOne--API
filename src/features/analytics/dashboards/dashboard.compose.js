@@ -12,6 +12,7 @@ const { loadOrderList } = require('./dashboard.order');
 const { readMetricView } = require('./dashboard.metricView');
 const { buildQualityBanner } = require('./dashboard.banner');
 const { evaluateBlock } = require('../quality/status.block');
+const { defaultPeriodOf } = require('../metrics/query.period');
 
 const METRIC_TYPES = new Set(['KPI_CARD', 'TREND', 'TABLE', 'BAR']);
 
@@ -33,11 +34,11 @@ async function composeMetricWidget(ctx, w, shared, transaction) {
 }
 
 /** widgets: linhas de dashboard_widgets na ordem; devolve { widgets, quality }. */
-async function composeWidgets(ctx, widgets, asOfDate, transaction) {
+async function composeWidgets(ctx, widgets, asOfDate, transaction, period = defaultPeriodOf(asOfDate)) {
   const codes = [...new Set(widgets.filter((w) => METRIC_TYPES.has(w.widget_type) && w.metric_code).map((w) => w.metric_code))];
   const metas = new Map((await store.listMetricMeta(codes, transaction)).map((m) => [m.metricCode, m]));
   const domainMap = await loadDomainMap(ctx, transaction);
-  const shared = { asOfDate, forMetric: (code) => ({ asOfDate, meta: metas.get(code), domainMap }) };
+  const shared = { asOfDate, forMetric: (code) => ({ asOfDate, period, meta: metas.get(code), domainMap }) };
   const composed = [];
   for (const w of widgets) {
     composed.push(METRIC_TYPES.has(w.widget_type) && w.metric_code ? await composeMetricWidget(ctx, w, shared, transaction) : toWidgetView(w));

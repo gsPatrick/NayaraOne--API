@@ -17,6 +17,7 @@ const { assertPermission, P, recordAccess, readParam, KEYS } = require('../secur
 const { cached } = require('./cache');
 const { composeWidgets, toWidgetView } = require('./dashboard.compose');
 const clock = require('../metrics/clock');
+const { defaultPeriodOf, periodView } = require('../metrics/query.period');
 
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');
 const CODE_RE = /^[a-z][a-z0-9_]*$/;
@@ -31,20 +32,20 @@ function toView(dash, widgets) {
 }
 
 /** Painel aberto: a definição mais os valores prontos de cada widget na data-base (M9-D634): widgets, resumo de qualidade e instante da composição. */
-async function toOpenView(ctx, dash, asOfDate, transaction) {
+async function toOpenView(ctx, dash, asOfDate, period, transaction) {
   const { widgets } = await store.getDashboardWithWidgets(dash.id, transaction);
-  const composed = await composeWidgets(ctx, widgets, asOfDate, transaction);
-  return { ...toView(dash, []), widgets: composed.widgets, asOfDate, generatedAt: clock.now().toISOString(), quality: composed.quality };
+  const composed = await composeWidgets(ctx, widgets, asOfDate, transaction, period);
+  return { ...toView(dash, []), widgets: composed.widgets, asOfDate, period: periodView(period, asOfDate), generatedAt: clock.now().toISOString(), quality: composed.quality };
 }
 
-async function openDashboard(ctx, code, { ip = null, route = null, asOfDate = clock.businessToday() } = {}, transaction) {
+async function openDashboard(ctx, code, { ip = null, route = null, asOfDate = clock.businessToday(), period = defaultPeriodOf(asOfDate) } = {}, transaction) {
   assertPermission(ctx, P.READ);
   if (typeof code !== 'string' || !CODE_RE.test(code)) throw notFound();
   const dash = await readStore.findPublishedDashboard({ code, companyId: ctx.companyId, groupId: ctx.groupId }, transaction);
   if (!dash) throw notFound();
   assertPermission(ctx, dash.required_permission);
   // Cache por permissão e escopo (M9-D698 3.3): a conferência de permissão acima e o log abaixo valem em TODA abertura, com ou sem cache.
-  const view = await cached(ctx, { dashboardCode: code, period: asOfDate, version: dash.version }, () => toOpenView(ctx, dash, asOfDate, transaction), { transaction });
+  const view = await cached(ctx, { dashboardCode: code, period: `${period.startDate}:${period.endDate}:${asOfDate}`, version: dash.version }, () => toOpenView(ctx, dash, asOfDate, period, transaction), { transaction });
   const mode = await readParam(KEYS.PANEL_OPEN_LOG, ctx, transaction);
   if (mode === 'TODOS' || await readStore.dashboardHasCriticalMetric(dash.id, transaction)) {
     await recordAccess(ctx, {

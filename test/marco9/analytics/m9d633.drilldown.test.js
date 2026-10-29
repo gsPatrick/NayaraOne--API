@@ -48,7 +48,7 @@ test('m9d633 o detalhe de radar.matches tem uma linha por cruzamento do período
 });
 
 test('m9d633 sem a permissão do detalhe o número aparece e as linhas não', async () => {
-  const kpi = (await env.call(`/analytics/metrics/radar.matches?asOf=${sc.TODAY}`, { perms: ['analytics:read'] })).body.data;
+  const kpi = (await env.call(`/analytics/metrics/radar.matches?asOf=${sc.TODAY}`, { perms: ['analytics:read', 'crm:opportunities:read'] })).body.data;
   const ref = kpi.sourceRefs[0];
   assert.deepEqual([ref.restricted, ref.idsSample, ref.count], [true, [], 12]);
   const q = new URLSearchParams({ filter: JSON.stringify(ref.filter), filterHash: ref.filterHash, filterSignature: ref.filterSignature });

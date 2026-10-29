@@ -10,7 +10,7 @@ const oracle = require('../_helpers/m9d650Oracle');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 const clock = require('../../../src/features/analytics/metrics/clock');
 
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'construction:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 const WANT = { 'obra.progress_vs_schedule': ['PERCENT', 'ACTUAL'], 'obra.baseline_actual_forecast': ['BRL', 'PROJECTED'], 'obra.projected_margin': ['BRL', 'PROJECTED'] };
 let env;
 let src;

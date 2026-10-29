@@ -15,7 +15,7 @@ const clock = require('../../../src/features/analytics/metrics/clock');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 
 const AS_OF = bi.AS_OF;
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'correspondent:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 const CODES = ['cor.cases_by_stage', 'cor.approval_rate_by_provider', 'cor.analysis_time', 'cor.commission'];
 const MODELS = ['rm_fin_cases_stage', 'rm_fin_provider_outcome', 'rm_fin_commission'];
 let env;

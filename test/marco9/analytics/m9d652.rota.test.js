@@ -11,7 +11,7 @@ const asserts = require('../_helpers/readModelAsserts');
 const oracle = require('../_helpers/m9d652Oracle');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'construction:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 const CODES = ['obra.waste', 'obra.postwork_cost', 'obra.recurrence'];
 let env;
 let srv;

@@ -29,7 +29,7 @@ async function startHttp(env) {
   env.server = http.createServer(app);
   await new Promise((resolve) => env.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${env.server.address().port}/v1`;
-  env.call = async (url, { perms = ['analytics:read'], tenant = 'A' } = {}) => {
+  env.call = async (url, { perms = ['analytics:read', 'crm:opportunities:read'], tenant = 'A' } = {}) => { // M9-D702: a rota de métrica confere também a permissão do domínio (Comercial/Imóveis)
     const res = await fetch(`${base}${url}`, { headers: { 'x-test-tenant': tenant, 'x-test-perms': perms.join(',') } });
     return { status: res.status, body: await res.json().catch(() => null) };
   };

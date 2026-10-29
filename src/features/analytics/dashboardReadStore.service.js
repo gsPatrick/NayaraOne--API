@@ -34,7 +34,7 @@ async function dashboardHasCriticalMetric(dashboardId, transaction) {
 async function listMetricMeta(codes, transaction) {
   if (!codes.length) return [];
   const [rows] = await sequelize.query(
-    `SELECT DISTINCT ON (d.metric_code) d.metric_code AS "metricCode", d.name, d.domain, d.criticality, d.drilldown_enabled AS "drilldownEnabled"
+    `SELECT DISTINCT ON (d.metric_code) d.metric_code AS "metricCode", d.name, d.domain, d.criticality, d.drilldown_enabled AS "drilldownEnabled", d.owner_role AS "ownerRole"
        FROM analytics.metric_definitions d WHERE d.metric_code IN (:codes) AND d.status = 'PUBLISHED'
       ORDER BY d.metric_code, (d.company_id IS NULL), (d.group_id IS NULL)`,
     { replacements: { codes }, transaction }

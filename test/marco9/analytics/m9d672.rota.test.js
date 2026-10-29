@@ -15,7 +15,7 @@ const { materializeSupportKpis } = require('../../../src/features/analytics/metr
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 
 const { AS_OF, CODES, MODELS } = { ...kit };
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'crm:feedback:read']; // M9-D702: a rota de métrica confere também a permissão do domínio (M9-D700)
 let env;
 let src;
 before(async () => {
