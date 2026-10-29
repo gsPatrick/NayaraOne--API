@@ -11,6 +11,7 @@ const BASE_CODES = Object.freeze({
   MFA_REQUIRED_NOT_ENABLED: { status: 403, message: 'Ative a verificação em duas etapas para continuar.', module: 'plataforma' },
   INTERNAL_ERROR: { status: 500, message: 'Erro interno.', module: 'plataforma' },
   VALIDATION_ERROR: { status: 400, message: 'Os dados enviados são inválidos.', module: 'plataforma' },
+  AUTH_VALIDATION: { status: 400, message: 'Os dados de acesso enviados são inválidos.', module: 'plataforma' },
   LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE: { status: 409, message: 'Esta vistoria já tem assinatura registrada e ficou imutável.', module: 'legal' },
 });
 

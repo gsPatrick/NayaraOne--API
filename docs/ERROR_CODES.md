@@ -6,6 +6,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 
 | Código | Status | Mensagem | Módulo | Desde | Descontinuado |
 |---|---|---|---|---|---|
+| `AUTH_VALIDATION` | 400 | Os dados de acesso enviados são inválidos. | plataforma | 1.1.0 | não |
 | `GOV_ANOMALY_INVALID_TRANSITION` | 409 | Esta anomalia não pode mudar para a situação pedida. | dlp | 1.0.0 | não |
 | `GOV_ANOMALY_REASON_REQUIRED` | 400 | Informe o motivo da revisão. | dlp | 1.0.0 | não |
 | `GOV_API_CONSUMER_EXISTS` | 409 | Já existe um consumidor com este nome ou esta credencial. | api-governance | 1.0.0 | não |
@@ -46,6 +47,9 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_COMMITMENT_INVALID` | 400 | O fim do compromisso deve ser após o início. | calendar | 1.0.0 | não |
 | `GOV_COMMITMENT_OWNER_ONLY` | 403 | Somente a pessoa responsável pelo compromisso ou um administrador pode fazer esta alteração. | calendar | 1.0.0 | não |
 | `GOV_COMMITMENT_TRANSITION_INVALID` | 409 | Esta mudança de situação do compromisso não é permitida. | calendar | 1.0.0 | não |
+| `GOV_CONTRACT_DB_NOT_DISPOSABLE` | 422 | O contract test só roda em banco descartável: <motivo>. | api-governance | 1.1.0 | não |
+| `GOV_CONTRACT_EXAMPLE_INVALID` | 422 | O exemplo do contract test é inválido: <motivo>. | api-governance | 1.1.0 | não |
+| `GOV_CONTRACT_EXAMPLE_MISSING` | 422 | Falta exemplo positivo ou negativo para <rota>. | api-governance | 1.1.0 | não |
 | `GOV_DLP_DENIED` | 403 | Esta ação não é permitida para dados desta classificação. | dlp | 1.0.0 | não |
 | `GOV_DLP_FLOOR_VIOLATION` | 422 | Esta classificação exige justificativa, verificação em duas etapas, auditoria e expiração. | dlp | 1.0.0 | não |
 | `GOV_DLP_IDEMPOTENCY_CONFLICT` | 409 | Esta chave de idempotência já foi usada em outro pedido. | dlp | 1.0.0 | não |
@@ -122,6 +126,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_QUEUE_DECISION_INVALID` | 400 | Decisão inválida para este item. | data-quality | 1.0.0 | não |
 | `GOV_QUEUE_ITEM_FINAL` | 409 | Este item já foi decidido. | data-quality | 1.0.0 | não |
 | `GOV_RATE_LIMITED` | 429 | Muitas requisições. Tente novamente em <N> segundos. | api-governance | 1.0.0 | não |
+| `GOV_RESPONSE_SCHEMA_MISMATCH` | 422 | A resposta de <método> <rota> não segue o contrato. | api-governance | 1.1.0 | não |
+| `GOV_STATUS_NOT_DOCUMENTED` | 422 | Status <N> não está no contrato de <rota>. | api-governance | 1.1.0 | não |
 | `GOV_VALIDATION_PAGINATION` | 400 | Parâmetros de paginação inválidos. | api-governance | 1.0.0 | não |
 | `INTERNAL_ERROR` | 500 | Erro interno. | plataforma | 1.0.0 | não |
 | `LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE` | 409 | Esta vistoria já tem assinatura registrada e ficou imutável. | legal | 1.0.0 | não |

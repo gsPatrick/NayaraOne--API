@@ -1,5 +1,12 @@
 {
   "codes": {
+    "AUTH_VALIDATION": {
+      "status": 400,
+      "message": "Os dados de acesso enviados são inválidos.",
+      "module": "plataforma",
+      "since": "1.1.0",
+      "deprecated": false
+    },
     "GOV_ANOMALY_INVALID_TRANSITION": {
       "status": 409,
       "message": "Esta anomalia não pode mudar para a situação pedida.",
@@ -278,6 +285,27 @@
       "message": "Esta mudança de situação do compromisso não é permitida.",
       "module": "calendar",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CONTRACT_DB_NOT_DISPOSABLE": {
+      "status": 422,
+      "message": "O contract test só roda em banco descartável: <motivo>.",
+      "module": "api-governance",
+      "since": "1.1.0",
+      "deprecated": false
+    },
+    "GOV_CONTRACT_EXAMPLE_INVALID": {
+      "status": 422,
+      "message": "O exemplo do contract test é inválido: <motivo>.",
+      "module": "api-governance",
+      "since": "1.1.0",
+      "deprecated": false
+    },
+    "GOV_CONTRACT_EXAMPLE_MISSING": {
+      "status": 422,
+      "message": "Falta exemplo positivo ou negativo para <rota>.",
+      "module": "api-governance",
+      "since": "1.1.0",
       "deprecated": false
     },
     "GOV_DLP_DENIED": {
@@ -810,6 +838,20 @@
       "message": "Muitas requisições. Tente novamente em <N> segundos.",
       "module": "api-governance",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_RESPONSE_SCHEMA_MISMATCH": {
+      "status": 422,
+      "message": "A resposta de <método> <rota> não segue o contrato.",
+      "module": "api-governance",
+      "since": "1.1.0",
+      "deprecated": false
+    },
+    "GOV_STATUS_NOT_DOCUMENTED": {
+      "status": 422,
+      "message": "Status <N> não está no contrato de <rota>.",
+      "module": "api-governance",
+      "since": "1.1.0",
       "deprecated": false
     },
     "GOV_VALIDATION_PAGINATION": {

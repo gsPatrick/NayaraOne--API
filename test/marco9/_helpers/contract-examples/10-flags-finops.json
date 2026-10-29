@@ -1,0 +1,11 @@
+{
+  "area": "flags-finops",
+  "examples": [
+    {"op": "GET /feature-flags", "kind": "positive", "name": "visão geral das chaves", "as": "gestor", "expect": 200},
+    {"op": "GET /feature-flags", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /feature-flags", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /finops/health", "kind": "positive", "name": "saúde de custo", "as": "gestor", "expect": 200},
+    {"op": "GET /finops/health", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /finops/health", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403}
+  ]
+}

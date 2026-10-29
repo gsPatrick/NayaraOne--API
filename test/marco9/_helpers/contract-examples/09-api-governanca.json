@@ -1,0 +1,16 @@
+{
+  "area": "api-governanca",
+  "examples": [
+    {"op": "GET /api-governance/consumers", "kind": "positive", "name": "catálogo de consumidores", "as": "gestor", "expect": 200},
+    {"op": "GET /api-governance/consumers", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /api-governance/consumers", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /api-governance/deprecations", "kind": "positive", "name": "anuncia a deprecação de uma rota", "as": "gestor", "expect": 201, "body": {"target": "ROUTE:GET /qa-m9/contrato", "ownerUserId": "${userId}", "sunsetAt": "${datetime:+60}"}, "capture": {"deprecationId": "body.data.id"}},
+    {"op": "POST /api-governance/deprecations", "kind": "negative", "name": "sem responsável", "as": "gestor", "expect": 422, "body": {"target": "ROUTE:GET /qa-m9/outra", "sunsetAt": "${datetime:+60}"}},
+    {"op": "POST /api-governance/deprecations", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /api-governance/deprecations", "kind": "positive", "name": "lista as deprecações", "as": "gestor", "expect": 200},
+    {"op": "GET /api-governance/deprecations", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /api-governance/deprecations/{id}/cancel", "kind": "positive", "name": "cancela a deprecação", "as": "gestor", "expect": 200, "params": {"id": "${deprecationId}"}},
+    {"op": "POST /api-governance/deprecations/{id}/cancel", "kind": "negative", "name": "cancelar de novo", "as": "gestor", "expect": 409, "params": {"id": "${deprecationId}"}},
+    {"op": "POST /api-governance/deprecations/{id}/cancel", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${deprecationId}"}}
+  ]
+}

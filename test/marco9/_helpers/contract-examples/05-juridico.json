@@ -1,0 +1,17 @@
+{
+  "area": "juridico",
+  "examples": [
+    {"op": "POST /legal/contracts", "kind": "positive", "name": "cria contrato de locação", "as": "gestor", "expect": 201, "body": {"contractType": "LEASE_RESIDENTIAL", "totalValue": 1000}, "capture": {"contractId": "body.data.id"}},
+    {"op": "POST /legal/contracts", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /legal/contracts", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /legal/contracts", "kind": "positive", "name": "lista os contratos", "as": "gestor", "expect": 200},
+    {"op": "GET /legal/contracts", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /legal/contracts", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /legal/contracts/{id}/timeline", "kind": "positive", "name": "linha do tempo do contrato criado", "as": "gestor", "expect": 200, "params": {"id": "${contractId}"}},
+    {"op": "GET /legal/contracts/{id}/timeline", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /legal/contracts/{id}/timeline", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${contractId}"}},
+    {"op": "POST /legal/inspections/items/{itemId}/media", "kind": "positive", "name": "anexa a foto ao item da vistoria", "as": "gestor", "expect": 201, "seed": "inspectionItem", "params": {"itemId": "${inspectionItemId}"}, "body": {"fileId": "${mediaFileId}", "mediaType": "PHOTO"}},
+    {"op": "POST /legal/inspections/items/{itemId}/media", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"itemId": "${inspectionItemId}"}},
+    {"op": "POST /legal/inspections/items/{itemId}/media", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"itemId": "${inspectionItemId}"}}
+  ]
+}

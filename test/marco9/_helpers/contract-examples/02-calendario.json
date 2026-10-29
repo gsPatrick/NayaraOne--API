@@ -1,0 +1,23 @@
+{
+  "area": "calendario",
+  "examples": [
+    {"op": "GET /calendar", "kind": "positive", "name": "lista o calendário da empresa", "as": "gestor", "expect": 200},
+    {"op": "GET /calendar", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /calendar", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /calendar/commitments", "kind": "positive", "name": "cria compromisso avulso", "as": "gestor", "expect": 201, "body": {"title": "${unique}", "startsAt": "${datetime:+3}", "ownerUserId": "${userId}"}, "capture": {"commitmentId": "body.data.id"}},
+    {"op": "POST /calendar/commitments", "kind": "negative", "name": "corpo sem título nem início", "as": "gestor", "expect": 400, "body": {}},
+    {"op": "POST /calendar/commitments", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /calendar/commitments/{id}", "kind": "positive", "name": "lê o compromisso criado", "as": "gestor", "expect": 200, "params": {"id": "${commitmentId}"}},
+    {"op": "GET /calendar/commitments/{id}", "kind": "negative", "name": "identificador que não é UUID", "as": "gestor", "expect": 404, "params": {"id": "nao-e-uuid"}},
+    {"op": "GET /calendar/commitments/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PATCH /calendar/commitments/{id}", "kind": "positive", "name": "altera o título", "as": "gestor", "expect": 200, "params": {"id": "${commitmentId}"}, "body": {"title": "${unique}"}},
+    {"op": "PATCH /calendar/commitments/{id}", "kind": "negative", "name": "nenhum campo para alterar", "as": "gestor", "expect": 400, "params": {"id": "${commitmentId}"}, "body": {}},
+    {"op": "PATCH /calendar/commitments/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PATCH /calendar/items/{id}", "kind": "negative", "name": "item derivado não é editável (404 padronizado)", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "PATCH /calendar/items/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PUT /calendar/items/{id}", "kind": "negative", "name": "item derivado não é editável (404 padronizado)", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "PUT /calendar/items/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "DELETE /calendar/items/{id}", "kind": "negative", "name": "item derivado não é editável (404 padronizado)", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "DELETE /calendar/items/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401}
+  ]
+}

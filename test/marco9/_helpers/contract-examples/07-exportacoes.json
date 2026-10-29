@@ -1,0 +1,18 @@
+{
+  "area": "exportacoes",
+  "examples": [
+    {"op": "GET /exports/catalog", "kind": "positive", "name": "catálogo de exportações", "as": "gestor", "expect": 200, "seed": "exportEntries"},
+    {"op": "GET /exports/catalog", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /exports/catalog", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /exports", "kind": "positive", "name": "pede a exportação financeira com MFA recente", "as": "gestor", "expect": 202, "mfa": true, "headers": {"Idempotency-Key": "${key}"}, "body": {"resourceType": "finance.entries", "filter": {"competenceMonth": "${exportMonth}"}, "format": "CSV", "purpose": "CONTABIL", "justification": "Cliente solicitou a copia do documento para analise do seu advogado."}, "capture": {"exportId": "body.data.exportJobId"}},
+    {"op": "POST /exports", "kind": "negative", "name": "pedido sem Idempotency-Key", "as": "gestor", "expect": 400, "mfa": true, "body": {"resourceType": "finance.entries", "filter": {"competenceMonth": "${exportMonth}"}, "format": "CSV", "purpose": "CONTABIL", "justification": "Cliente solicitou a copia do documento para analise do seu advogado."}},
+    {"op": "POST /exports", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /exports/{id}", "kind": "positive", "name": "estado do pedido pronto, com o endereço assinado", "as": "gestor", "expect": 200, "seed": "exportReady", "params": {"id": "${exportId}"}, "capture": {"dlExp": "body.data.downloadUrl#exp", "dlSig": "body.data.downloadUrl#sig"}},
+    {"op": "GET /exports/{id}", "kind": "negative", "name": "pedido que não existe", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "GET /exports/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${exportId}"}},
+    {"op": "GET /exports/{id}/download", "kind": "positive", "name": "baixa o arquivo pronto", "as": "gestor", "expect": 200, "params": {"id": "${exportId}"}, "query": {"exp": "${dlExp}", "sig": "${dlSig}"}},
+    {"op": "GET /exports/{id}/download", "kind": "negative", "name": "assinatura do endereço inválida", "as": "gestor", "expect": 403, "params": {"id": "${exportId}"}, "query": {"exp": "${dlExp}", "sig": "assinatura-adulterada"}},
+    {"op": "GET /exports/{id}/download", "kind": "negative", "name": "pedido que não existe", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "GET /exports/{id}/download", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${exportId}"}}
+  ]
+}

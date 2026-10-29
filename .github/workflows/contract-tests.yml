@@ -1,0 +1,42 @@
+name: Contract tests
+
+# M9-D842: a API real obedece ao OpenAPI. Em todo pull request (e a cada push nas branches de trabalho) sobe o cluster PostgreSQL DESCARTÁVEL
+# (scripts/withDisposableDb.js, nunca o banco compartilhado), semeia os dois tenants, chama cada operação do contrato (um exemplo positivo e um
+# negativo) e confere status, esquema, cabeçalhos, formato único de erro e código no catálogo. Relatório JSON e JUnit anexados ao run.
+# O CI não faz push nem deploy.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Contract tests (banco descartável)
+        run: npm run test:contract
+      - name: Anexar o relatório do contract test
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-report
+          path: |
+            docs/evidencias/ci/contract-report.json
+            docs/evidencias/ci/contract-report.junit.xml
+            docs/evidencias/ci/contract-tests.junit.xml
+          if-no-files-found: warn
+          retention-days: 90

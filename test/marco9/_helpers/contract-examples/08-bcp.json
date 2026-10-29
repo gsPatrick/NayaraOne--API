@@ -1,0 +1,30 @@
+{
+  "area": "bcp",
+  "examples": [
+    {"op": "GET /bcp", "kind": "positive", "name": "visão geral da continuidade", "as": "gestor", "expect": 200, "seed": "bcpPrepare"},
+    {"op": "GET /bcp", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /bcp", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /bcp/form-templates", "kind": "positive", "name": "modelos dos formulários do setor", "as": "gestor", "expect": 200},
+    {"op": "GET /bcp/form-templates", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /bcp/form-templates", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /bcp/form-templates/{sector}/{formType}/print", "kind": "positive", "name": "folha em branco do recebimento", "as": "gestor", "expect": 200, "params": {"sector": "FINANCEIRO", "formType": "RECEBIMENTO"}},
+    {"op": "GET /bcp/form-templates/{sector}/{formType}/print", "kind": "negative", "name": "modelo que não existe", "as": "gestor", "expect": 404, "params": {"sector": "FINANCEIRO", "formType": "INEXISTENTE"}},
+    {"op": "GET /bcp/form-templates/{sector}/{formType}/print", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"sector": "FINANCEIRO", "formType": "RECEBIMENTO"}},
+    {"op": "POST /bcp/manual-operations", "kind": "positive", "name": "registra o recebimento do papel", "as": "gestor", "expect": 201, "seed": "bcpEvidence", "body": {"sector": "FINANCEIRO", "manualReference": "${ref:FIN}", "occurredAt": "2026-10-20T09:30", "evidenceFileId": "${evidenceFileId}", "intendedAction": "RECEIVE_PAYMENT", "formType": "RECEBIMENTO", "payload": {"pagador": "Maria QA-M9", "documento": "12345678909", "valorCentavos": 125000, "forma": "PIX", "data": "2026-10-20", "referenciaParcela": "PARC-1", "comprovanteAnexado": "SIM"}}, "capture": {"bcpOpId": "body.data.id"}},
+    {"op": "POST /bcp/manual-operations", "kind": "negative", "name": "corpo vazio", "as": "gestor", "expect": 400, "body": {}},
+    {"op": "POST /bcp/manual-operations", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /bcp/manual-operations", "kind": "positive", "name": "lista as operações do setor", "as": "gestor", "expect": 200},
+    {"op": "GET /bcp/manual-operations", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PATCH /bcp/manual-operations/{id}", "kind": "positive", "name": "corrige o payload da operação registrada", "as": "gestor", "expect": 200, "params": {"id": "${bcpOpId}"}, "body": {"payload": {"pagador": "Maria QA-M9 Corrigida", "documento": "12345678909", "valorCentavos": 125000, "forma": "PIX", "data": "2026-10-20", "referenciaParcela": "PARC-1", "comprovanteAnexado": "SIM"}}},
+    {"op": "PATCH /bcp/manual-operations/{id}", "kind": "negative", "name": "operação que não existe", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}, "body": {"payload": {"pagador": "Maria QA-M9", "documento": "12345678909", "valorCentavos": 125000, "forma": "PIX", "data": "2026-10-20", "referenciaParcela": "PARC-1", "comprovanteAnexado": "SIM"}}},
+    {"op": "PATCH /bcp/manual-operations/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${bcpOpId}"}},
+    {"op": "POST /bcp/manual-operations/import", "kind": "positive", "name": "importa a operação registrada", "as": "gestor", "expect": 200, "seed": "bcpRecorded", "headers": {"Idempotency-Key": "${key}"}, "body": {"ids": ["${bcpImportOpId}"]}},
+    {"op": "POST /bcp/manual-operations/import", "kind": "negative", "name": "perfil sem a permissão de importar", "as": "maker", "expect": 403, "headers": {"Idempotency-Key": "${key}"}, "body": {"ids": ["${bcpImportOpId}"]}},
+    {"op": "POST /bcp/manual-operations/import", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /bcp/reconciliations", "kind": "positive", "name": "conferências pendentes", "as": "gestor", "expect": 200, "seed": "bcpDivergent"},
+    {"op": "GET /bcp/reconciliations", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /bcp/reconciliations/{id}/decide", "kind": "positive", "name": "aceita a divergência com nota", "as": "gestor", "expect": 200, "params": {"id": "${reconciliationId}"}, "body": {"decision": "ACCEPT", "note": "Conferido com o extrato."}},
+    {"op": "POST /bcp/reconciliations/{id}/decide", "kind": "negative", "name": "decidir de novo", "as": "gestor", "expect": 409, "params": {"id": "${reconciliationId}"}, "body": {"decision": "ACCEPT", "note": "Conferido com o extrato."}},
+    {"op": "POST /bcp/reconciliations/{id}/decide", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${reconciliationId}"}}
+  ]
+}

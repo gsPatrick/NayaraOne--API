@@ -1,0 +1,7 @@
+{
+  "area": "publico",
+  "examples": [
+    {"op": "POST /auth/login", "kind": "positive", "name": "login com e-mail e senha do perfil de leitura", "as": "anon", "expect": 200, "body": {"email": "${loginEmail}", "password": "${loginPassword}"}},
+    {"op": "POST /auth/login", "kind": "negative", "name": "corpo vazio", "as": "anon", "expect": 400, "body": {}}
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "area": "lineage",
+  "examples": [
+    {"op": "GET /data-lineage", "kind": "positive", "name": "visão geral e cobertura do grupo", "as": "gestor", "expect": 200},
+    {"op": "GET /data-lineage", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /data-lineage", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /data-lineage/nodes", "kind": "positive", "name": "cria o nó de origem", "as": "gestor", "expect": 201, "body": {"node_type": "SOURCE_FIELD", "code": "${code}", "description": "QA-M9 origem", "owner_domain": "FINANCEIRO", "area": "MONEY"}, "capture": {"srcCode": "body.data.code"}},
+    {"op": "POST /data-lineage/nodes", "kind": "positive", "name": "cria o nó de domínio", "as": "gestor", "expect": 201, "body": {"node_type": "DOMAIN_FIELD", "code": "${code}", "description": "QA-M9 domínio", "owner_domain": "FINANCEIRO", "area": "MONEY"}, "capture": {"dstCode": "body.data.code"}},
+    {"op": "POST /data-lineage/nodes", "kind": "negative", "name": "tipo de nó inválido", "as": "gestor", "expect": 400, "body": {"node_type": "COLUNA", "code": "${code}", "description": "x", "owner_domain": "FINANCEIRO", "area": "MONEY"}},
+    {"op": "POST /data-lineage/nodes", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PUT /data-lineage/nodes", "kind": "positive", "name": "grava o nó por tipo e código", "as": "gestor", "expect": 200, "body": {"node_type": "SOURCE_FIELD", "code": "${srcCode}", "description": "QA-M9 origem atualizada", "owner_domain": "FINANCEIRO", "area": "MONEY"}},
+    {"op": "PUT /data-lineage/nodes", "kind": "negative", "name": "tipo de nó inválido", "as": "gestor", "expect": 400, "body": {"node_type": "COLUNA", "code": "${code}", "description": "x", "owner_domain": "FINANCEIRO", "area": "MONEY"}},
+    {"op": "PUT /data-lineage/nodes", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /data-lineage/edges", "kind": "positive", "name": "liga origem e domínio", "as": "gestor", "expect": 201, "body": {"from_node": {"node_type": "SOURCE_FIELD", "code": "${srcCode}"}, "to_node": {"node_type": "DOMAIN_FIELD", "code": "${dstCode}"}, "transformation": "copia"}},
+    {"op": "POST /data-lineage/edges", "kind": "negative", "name": "corpo vazio", "as": "gestor", "expect": 400, "body": {}},
+    {"op": "POST /data-lineage/edges", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "PUT /data-lineage/edges", "kind": "positive", "name": "grava a ligação de novo com outra transformação", "as": "gestor", "expect": 200, "body": {"from_node": {"node_type": "SOURCE_FIELD", "code": "${srcCode}"}, "to_node": {"node_type": "DOMAIN_FIELD", "code": "${dstCode}"}, "transformation": "copia e normaliza"}},
+    {"op": "PUT /data-lineage/edges", "kind": "negative", "name": "corpo vazio", "as": "gestor", "expect": 400, "body": {}},
+    {"op": "PUT /data-lineage/edges", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401}
+  ]
+}
