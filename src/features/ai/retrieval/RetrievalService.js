@@ -11,6 +11,8 @@ const { allowedSources, sourceKey } = require('./doubleCheck');
 const { rerank, score } = require('./rerank');
 const { recordRetrieved } = require('./retrieval.sources');
 const { INSUFFICIENT_MESSAGE } = require('./retrieval.constants');
+const { factsOfChunks, conflictsOf } = require('./retrieval.conflicts');
+const { recordNotVigent } = require('./retrieval.notVigent');
 
 const QUERY_MAX = 2000;
 
@@ -34,6 +36,9 @@ async function queryVector(ctx, text, transaction) {
  * 1. empresa e estado ACTIVE, 2. permissão e classificação (os dois filtros no banco, ANTES de qualquer similaridade ou conteúdo; o que
  * falha aqui nem é candidato, não pesa na pontuação e não aparece em contagem), 3. similaridade + texto e rerank determinístico,
  * 4. somente vigentes (a vigência já filtra no banco e a origem é conferida de novo, dupla checagem), 5. registro em ai_sources.
+ * M9-D024: revogada, expirada, substituída e de início posterior nunca entram; as que casaram com a pergunta são registradas no run com
+ * `used_in_answer = false` e o estado delas. Fontes vigentes que declaram o mesmo fato com valores diferentes voltam em `conflicts`
+ * (e todas entram no resultado, sem escolher uma).
  * O RAG não concede permissão: o resultado é só texto marcado `untrusted`; nada aqui soma permissão ao ator, e a tool que um trecho
  * "sugerir" passa de novo pela allowlist, pelo schema e pela permissão do ator (M9-D017/D021).
  * `search(ctx, query, opts, transaction)`: ctx = { groupId, companyId, userId, permissions, runId? }. opts: companyId (se informado e
@@ -45,21 +50,31 @@ class RetrievalService {
     this.nome = 'RetrievalService';
   }
 
-  async search(ctx, query, opts = {}, transaction = opts.transaction) {
+  async search(ctx, query, optsIn = {}, transaction = optsIn.transaction) {
     V.ctxOk(ctx);
+    const opts = { ...optsIn, now: optsIn.now || new Date() };
     if (opts.companyId && opts.companyId !== ctx.companyId) throw E.crossCompany();
     const text = parseQuery(query);
     const params = await readRagParams(ctx, transaction);
-    const found = await this.candidates(ctx, text, opts, params, transaction);
-    const allowed = await allowedSources(ctx, found, allowedClassifications(ctx, opts), transaction);
+    const args = await this.searchArgs(ctx, text, opts, params, transaction);
+    const found = await searchCandidates(args, transaction);
+    const allowed = await allowedSources(ctx, found, allowedClassifications(ctx, opts), transaction, opts.now);
     const ranked = rerank(found.filter((c) => allowed.has(sourceKey(c.sourceType, c.sourceId))));
     const limit = Math.min(Number.isInteger(opts.limit) && opts.limit > 0 ? opts.limit : params.contextMaxChunks, params.contextMaxChunks);
-    const top = ranked.slice(0, limit);
-    const rows = top.length ? await chunks.findByIds(ctx, top.map((c) => c.id), transaction) : [];
+    const rows = ranked.length ? await chunks.findByIds(ctx, ranked.map((c) => c.id), transaction) : [];
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const items = top.filter((c) => byId.has(c.id)).map((c) => this.toItem(c, byId.get(c.id)));
-    if (opts.runId && items.length) await recordRetrieved({ ...ctx, runId: opts.runId }, items, transaction);
-    return items.length ? { items, insufficient: false } : { items: [], insufficient: true, message: INSUFFICIENT_MESSAGE };
+    const facts = await factsOfChunks(ctx, ranked.filter((c) => byId.has(c.id)), byId, params.factMarker, transaction);
+    const conflicts = conflictsOf(ranked, facts);
+    const inConflict = new Set(conflicts.flatMap((c) => c.versions.map((v) => sourceKey(v.sourceType, v.sourceRef))));
+    const top = new Set(ranked.slice(0, limit).map((c) => c.id));
+    const items = ranked.filter((c) => byId.has(c.id) && (top.has(c.id) || (facts.has(c.id) && inConflict.has(sourceKey(c.sourceType, c.sourceId)))))
+      .map((c) => ({ ...this.toItem(c, byId.get(c.id)), facts: facts.get(c.id) || [] }));
+    if (opts.runId) {
+      await recordRetrieved({ ...ctx, runId: opts.runId }, items, transaction);
+      await recordNotVigent(ctx, args, params.nonVigentMax, opts.runId, transaction);
+    }
+    if (!items.length) return { items: [], insufficient: true, message: INSUFFICIENT_MESSAGE };
+    return conflicts.length ? { items, insufficient: false, conflicts } : { items, insufficient: false }; // `conflicts` só existe quando há divergência (a forma da resposta não revela nada mais)
   }
 
   /** Candidatos (só metadados e pontuação) já filtrados pelo banco; também usado pela evidência de plano de execução. */
@@ -86,7 +101,7 @@ class RetrievalService {
     return {
       chunkId: row.id, sourceId: row.sourceId, sourceType: row.sourceType, sourceVersion: row.sourceVersion, chunkIndex: row.chunkIndex,
       content: row.contentRedacted, contentHash: row.contentHash, classification: row.classification, effectiveFrom: row.effectiveFrom,
-      effectiveUntil: row.effectiveUntil, relevanceScore: score(c.relevance), untrusted: true, origin: 'rag',
+      effectiveUntil: row.effectiveUntil, relevanceScore: score(c.relevance), untrusted: true, origin: 'rag', statusAtRetrieval: 'VIGENTE',
     };
   }
 

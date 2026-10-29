@@ -15,11 +15,12 @@ function parseDomains(raw) {
 
 /** Parâmetros do RAG da empresa; valor inválido volta ao padrão. A sobreposição nunca é maior que o chunk. */
 async function readRagParams(ctx, transaction) {
-  const [chunkTokens, chunkOverlap, topK, contextMaxChunks, reconcileMinutes, secretsRejectPercent, embeddingBatch, restricted, domains] = await Promise.all([
+  const [chunkTokens, chunkOverlap, topK, contextMaxChunks, reconcileMinutes, secretsRejectPercent, embeddingBatch, restricted, domains, marker, nonVigentMax, expiryHours] = await Promise.all([
     readInt(K.chunkTokens, ctx, transaction), readInt(K.chunkOverlap, ctx, transaction, 0), readInt(K.topK, ctx, transaction),
     readInt(K.contextMaxChunks, ctx, transaction), readInt(K.reconcileMinutes, ctx, transaction), readInt(K.secretsRejectPercent, ctx, transaction),
     readInt(K.embeddingBatch, ctx, transaction), getSetting(K.indexRestricted, ctx, transaction, D[K.indexRestricted]),
-    getSetting(K.allowedDomains, ctx, transaction, D[K.allowedDomains]),
+    getSetting(K.allowedDomains, ctx, transaction, D[K.allowedDomains]), getSetting(K.factMarker, ctx, transaction, D[K.factMarker]),
+    readInt(K.nonVigentMax, ctx, transaction, 0), readInt(K.expiryHours, ctx, transaction),
   ]);
   return {
     chunkTokens,
@@ -27,6 +28,8 @@ async function readRagParams(ctx, transaction) {
     topK, contextMaxChunks, reconcileMinutes, secretsRejectPercent, embeddingBatch,
     indexRestricted: restricted === true || restricted === 'true',
     allowedDomains: parseDomains(domains),
+    factMarker: typeof marker === 'string' && /^[\p{L}][\p{L}0-9 _-]{0,29}$/u.test(marker.trim()) ? marker.trim() : D[K.factMarker],
+    nonVigentMax, expiryHours,
   };
 }
 

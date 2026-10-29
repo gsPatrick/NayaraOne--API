@@ -44,7 +44,7 @@ async function retrieveFromIndex({ ctx, execCtx, execution, input, purpose, runI
   return found.items.map((i) => {
     const block = blocks.get(i.chunkId);
     return {
-      sourceType: i.sourceType === 'KNOWLEDGE_ENTRY' ? 'KNOWLEDGE_ENTRY' : 'DOCUMENT_CHUNK', sourceRef: i.sourceId, sourceVersion: String(i.sourceVersion), title: `${i.sourceType} ${i.sourceId}`,
+      sourceType: i.sourceType === 'KNOWLEDGE_ENTRY' ? 'KNOWLEDGE_ENTRY' : 'DOCUMENT_CHUNK', sourceRef: i.sourceId, sourceVersion: String(i.sourceVersion), title: (i.facts && i.facts.find((f) => f.title) || {}).title || `${i.sourceType} ${i.sourceId}`, facts: i.facts || [],
       text: block.text, classification: block.classification, origin: block.origin, effectiveFrom: i.effectiveFrom, effectiveUntil: i.effectiveUntil,
       relevanceScore: i.relevanceScore, statusAtRetrieval: 'VIGENTE', contentHash: i.contentHash, persisted: true,
     };

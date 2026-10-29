@@ -28,6 +28,7 @@ function normalizeSource(raw) {
     clause: raw.clause || null,
     text: String(raw.text ?? raw.excerpt ?? ''),
     values: Array.isArray(raw.values) ? raw.values.map(String) : [],
+    facts: Array.isArray(raw.facts) ? raw.facts : [],
     classification,
     effectiveFrom: raw.effectiveFrom || null,
     effectiveUntil: raw.effectiveUntil || null,

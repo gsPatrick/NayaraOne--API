@@ -5,6 +5,8 @@ const { enforceNumbers } = require('../numbers');
 const { sanitizeOutput } = require('../outputSanitizer');
 const { publishInjectionEvents } = require('../injectionEvents');
 const { citationOf } = require('../citationBuilder');
+const { detectConflicts } = require('../../retrieval/conflictDetector');
+const { withoutChosenSide } = require('../grounding/conflictAnswer');
 const runs = require('../runs');
 const { applyAgentOutputRules } = require('../../agents/scope');
 const E = require('./flow.errors');
@@ -36,9 +38,12 @@ async function groundAnswer(state, text) {
     const groundingStatus = state.sources.length ? 'GROUNDED' : 'NOT_APPLICABLE';
     return { answer: text, groundingStatus, sources: cited, confidence: '1.0000', snapshotAt: state.ruleSnapshotAt || null, requiresHumanConfirmation: false, recommendation: null, runFields: {} };
   }
-  return finalizeGrounding(state.ctx, {
-    answerText: text, taskType: state.parsed.taskType, critical: false, sources: forValidator(state), snapshotAt: state.parsed.snapshotAt, runId: state.runId, agentCode: state.agent.code,
+  // Fontes vigentes que declaram o mesmo fato com valores diferentes (M9-D024): o validador apresenta a divergência e a resposta não escolhe um lado.
+  const conflicts = detectConflicts(state.sources.map((s, i) => ({ ...s, ref: i + 1 })).filter((s) => s.usedInAnswer));
+  const grounded = await finalizeGrounding(state.ctx, {
+    answerText: text, taskType: state.parsed.taskType, critical: false, sources: forValidator(state), snapshotAt: state.parsed.snapshotAt, runId: state.runId, agentCode: state.agent.code, conflicts,
   }, state.transaction);
+  return grounded.groundingStatus === 'CONFLICTING_SOURCES' ? { ...grounded, answer: withoutChosenSide(grounded.answer, conflicts) } : grounded;
 }
 
 /** Defesa final da saída (D021): URL, e-mail e imagem com query que não estavam nas fontes autorizadas saem da resposta; vira evento. */

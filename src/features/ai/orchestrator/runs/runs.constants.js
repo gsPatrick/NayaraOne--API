@@ -11,7 +11,7 @@ const ROUTING_PATHS = Object.freeze(['RULE', 'SMALL_MODEL', 'ADVANCED_MODEL', 'C
 const GROUNDING = Object.freeze(['GROUNDED', 'INSUFFICIENT_SOURCES', 'NOT_APPLICABLE', 'CONFLICTING_SOURCES']);
 const SOURCE_TYPES = Object.freeze(['READ_MODEL', 'DOCUMENT_CHUNK', 'KNOWLEDGE_ENTRY', 'MEMORY', 'TOOL_RESULT']);
 const CLASSIFICATIONS = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
-const SOURCE_STATUSES = Object.freeze(['VIGENTE', 'REVOGADA', 'EXPIRADA']);
+const SOURCE_STATUSES = Object.freeze(['VIGENTE', 'REVOGADA', 'EXPIRADA', 'SUBSTITUIDA', 'NAO_INICIADA']);
 
 /** Estado final -> evento do livro (COMPLETED; FAILED e BLOCKED; os demais não emitem). A tabela vive em events/aiEvents.js (D029). */
 const { RUN_EVENT_BY_STATUS: EVENT_BY_STATUS } = require('../../events/aiEvents');

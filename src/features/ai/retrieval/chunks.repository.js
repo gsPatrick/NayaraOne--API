@@ -27,6 +27,15 @@ async function retractSource(ctx, sourceType, sourceId, status, transaction, { e
 
 const findByIds = (ctx, ids, transaction) => AiChunk.findAll({ where: { ...own(ctx), id: ids, status: 'ACTIVE' }, transaction });
 
+/** Chunks em qualquer estado (só para registrar a fonte não vigente que casou com a pergunta). */
+const findAnyByIds = (ctx, ids, transaction) => AiChunk.findAll({ where: { ...own(ctx), id: ids }, transaction });
+
+/** Passa para EXPIRED os chunks ACTIVE cuja vigência terminou em `now` (job diário, M9-D024). Devolve quantos. */
+async function expireEnded(ctx, now, transaction) {
+  const [n] = await AiChunk.update({ status: 'EXPIRED' }, { where: { ...own(ctx), status: 'ACTIVE', effectiveUntil: { [Op.lte]: now } }, transaction });
+  return n;
+}
+
 /** Fontes com chunk ACTIVE (para a reconciliação): [{ sourceType, sourceId }]. */
 async function activeSources(ctx, transaction) {
   const rows = await AiChunk.findAll({ attributes: ['sourceType', 'sourceId'], where: { ...own(ctx), status: 'ACTIVE' }, group: ['source_type', 'source_id'], raw: true, transaction });
@@ -42,4 +51,4 @@ async function updateMetadata(ctx, sourceType, sourceId, patch, transaction) {
   return n;
 }
 
-module.exports = { insertAll, supersedeOlder, retractSource, findByIds, activeSources, sampleActive, updateMetadata };
+module.exports = { insertAll, supersedeOlder, retractSource, findByIds, findAnyByIds, expireEnded, activeSources, sampleActive, updateMetadata };

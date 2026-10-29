@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const E = require('./knowledge.errors');
 const { CLASSIFICATIONS, FACT_KEY_RE, SUBJECT_TYPE_RE, STATUSES } = require('./knowledge.constants');
 const { containsSecret } = require('../guards/secretPatterns');
+const { bound } = require('../retrieval/vigencia');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v) => typeof v === 'string' && UUID_RE.test(v);
@@ -28,10 +29,11 @@ function computeContentHash(c) {
   return crypto.createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
-function date(value, nome) {
+/** Data da vigência: "AAAA-MM-DD" vale no dia de America/Sao_Paulo (início à 00:00; fim cobre o dia todo, M9-D024); data com hora vale como instante. */
+function date(value, nome, kind = 'FROM') {
   if (value === undefined) return undefined;
   if (value === null) return null;
-  const d = new Date(value);
+  const d = bound(value, kind) || new Date(value);
   if (Number.isNaN(d.getTime())) throw E.invalid(`${nome} deve ser uma data válida.`);
   return d;
 }
@@ -78,8 +80,8 @@ function parseContent(body, { partial = false } = {}) {
     const v = uuidOrNull(b[chave], nome);
     if (v !== undefined) out[chave] = v;
   }
-  for (const [chave, nome] of [['validFrom', 'validFrom'], ['validUntil', 'validUntil']]) {
-    const v = date(b[chave], nome);
+  for (const [chave, nome, kind] of [['validFrom', 'validFrom', 'FROM'], ['validUntil', 'validUntil', 'UNTIL']]) {
+    const v = date(b[chave], nome, kind);
     if (v !== undefined) out[chave] = v;
   }
   return out;

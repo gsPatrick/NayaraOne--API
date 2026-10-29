@@ -12,7 +12,7 @@ const PERMISSAO_JURIDICO = 'legal:read';
 
 /** Tipos de fonte calculados por read model ou tool: sem pontuação de relevância, valem como exatos. */
 const TIPOS_DETERMINISTICOS = Object.freeze(['READ_MODEL', 'TOOL_RESULT']);
-const STATUS_FONTE_INVALIDA = Object.freeze(['REVOGADA', 'EXPIRADA']);
+const STATUS_FONTE_INVALIDA = Object.freeze(['REVOGADA', 'EXPIRADA', 'SUBSTITUIDA', 'NAO_INICIADA']);
 
 module.exports = {
   MENSAGEM_INSUFICIENCIA, MENSAGEM_PRAZO_SEM_FONTE_EXATA, MENSAGEM_CONFIRMACAO_HUMANA, MENSAGEM_DIVERGENCIA, FUSO,

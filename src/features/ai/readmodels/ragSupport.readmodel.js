@@ -13,19 +13,19 @@ async function acquireIngestionLock(companyId, sourceKind, sourceId, transaction
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))', { replacements: { key: `ai.ingestion:${companyId}:${sourceKind}:${sourceId}` }, transaction });
 }
 
-const CANDIDATES_SQL = `
-SELECT c.id, c.source_id, c.source_type, c.source_version, c.chunk_index, c.classification, c.effective_from, c.effective_until, c.required_permission,
+/** Consulta de candidatos; `window` é a condição de estado e vigência (vigentes na busca, não vigentes no registro do run). */
+const candidatesSql = (window, limit) => `
+SELECT c.id, c.source_id, c.source_type, c.source_version, c.chunk_index, c.classification, c.effective_from, c.effective_until, c.required_permission, c.status,
        c.cosine, c.text_rank, GREATEST(c.cosine, c.text_rank) AS relevance
   FROM (
-    SELECT k.id, k.source_id, k.source_type, k.source_version, k.chunk_index, k.classification, k.effective_from, k.effective_until, k.required_permission,
+    SELECT k.id, k.source_id, k.source_type, k.source_version, k.chunk_index, k.classification, k.effective_from, k.effective_until, k.required_permission, k.status,
            CASE WHEN k.embedding_model = :model AND cardinality(k.embedding) = cardinality(CAST(:qvec AS float8[]))
                 THEN GREATEST(0, (SELECT COALESCE(sum(a * b), 0) FROM unnest(k.embedding, CAST(:qvec AS float8[])) AS t(a, b)) / (k.embedding_norm * :qnorm))
                 ELSE 0 END AS cosine,
            ts_rank_cd(to_tsvector('portuguese', k.content_redacted), plainto_tsquery('portuguese', :qtext), 32) AS text_rank
       FROM ai.chunks k
      WHERE k.company_id = :companyId
-       AND k.status = 'ACTIVE'
-       AND k.effective_from <= :now AND (k.effective_until IS NULL OR k.effective_until > :now)
+       AND ${window}
        AND k.required_permission IN (:permissions)
        AND k.classification IN (:classes)
        AND k.source_type IN (:sourceTypes)
@@ -33,7 +33,12 @@ SELECT c.id, c.source_id, c.source_type, c.source_version, c.chunk_index, c.clas
   ) c
  WHERE c.cosine > 0 OR c.text_rank > 0
  ORDER BY relevance DESC, c.id ASC
- LIMIT :topK`;
+ LIMIT ${limit}`;
+
+const VIGENT_WINDOW = "k.status = 'ACTIVE' AND k.effective_from <= :now AND (k.effective_until IS NULL OR k.effective_until > :now)";
+const NON_VIGENT_WINDOW = "NOT (k.status = 'ACTIVE' AND k.effective_from <= :now AND (k.effective_until IS NULL OR k.effective_until > :now))";
+const CANDIDATES_SQL = candidatesSql(VIGENT_WINDOW, ':topK');
+const NON_VIGENT_SQL = candidatesSql(NON_VIGENT_WINDOW, ':topK');
 
 function candidateArgs(a) {
   return {
@@ -47,14 +52,26 @@ function candidateArgs(a) {
  * [{ id, sourceId, sourceType, sourceVersion, chunkIndex, classification, effectiveFrom, effectiveUntil, requiredPermission, cosine, textRank, relevance }]
  * Lista vazia de permissões, de classes ou de tipos de fonte = nenhum candidato (nada é lido).
  */
+const toCandidate = (r) => ({
+  id: r.id, sourceId: r.source_id, sourceType: r.source_type, sourceVersion: r.source_version, chunkIndex: r.chunk_index,
+  classification: r.classification, effectiveFrom: r.effective_from, effectiveUntil: r.effective_until, requiredPermission: r.required_permission,
+  status: r.status, cosine: Number(r.cosine), textRank: Number(r.text_rank), relevance: Number(r.relevance),
+});
+
 async function searchCandidates(args, transaction) {
   if (!args.permissions.length || !args.classes.length || !args.sourceTypes.length) return [];
   const rows = await sequelize.query(CANDIDATES_SQL, { replacements: candidateArgs(args), type: QueryTypes.SELECT, transaction });
-  return rows.map((r) => ({
-    id: r.id, sourceId: r.source_id, sourceType: r.source_type, sourceVersion: r.source_version, chunkIndex: r.chunk_index,
-    classification: r.classification, effectiveFrom: r.effective_from, effectiveUntil: r.effective_until, requiredPermission: r.required_permission,
-    cosine: Number(r.cosine), textRank: Number(r.text_rank), relevance: Number(r.relevance),
-  }));
+  return rows.map(toCandidate);
+}
+
+/**
+ * Candidatos que casam com a consulta mas NÃO são vigentes em `now` (revogados, expirados, substituídos ou de início posterior), com os
+ * mesmos filtros de empresa, permissão, classificação e dono da busca (M9-D024). Servem só ao registro do run, com used_in_answer = false.
+ */
+async function searchNonVigent(args, limit, transaction) {
+  if (!limit || !args.permissions.length || !args.classes.length || !args.sourceTypes.length) return [];
+  const rows = await sequelize.query(NON_VIGENT_SQL, { replacements: { ...candidateArgs(args), topK: limit }, type: QueryTypes.SELECT, transaction });
+  return rows.map(toCandidate);
 }
 
 /** Plano de execução da mesma consulta (evidência de que empresa, estado e permissão filtram antes da similaridade). */
@@ -63,4 +80,4 @@ async function explainCandidates(args, transaction) {
   return rows.map((r) => r['QUERY PLAN']);
 }
 
-module.exports = { acquireIngestionLock, searchCandidates, explainCandidates };
+module.exports = { acquireIngestionLock, searchCandidates, searchNonVigent, explainCandidates };

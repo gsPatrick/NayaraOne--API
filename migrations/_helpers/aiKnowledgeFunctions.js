@@ -5,7 +5,7 @@
  * próprio conhecimento), AI024 (homologação sem homologador). A mensagem começa com o código estável da API.
  *
  * DRAFT é editável (e apagável). DRAFT -> HOMOLOGATED exige homologador diferente do autor (created_by). HOMOLOGATED ->
- * SUPERSEDED | REVOKED muda só o estado e os campos da própria transição. SUPERSEDED e REVOKED não mudam mais (REVOKED não reativa).
+ * SUPERSEDED | REVOKED | EXPIRED (M9-D024) muda só o estado e os campos da própria transição. SUPERSEDED, REVOKED e EXPIRED não mudam mais (REVOKED não reativa).
  */
 const IDENTIDADE = ['group_id', 'company_id', 'fact_key', 'version', 'created_by', 'created_at'];
 const mudou = (campos) => campos.map((c) => `NEW.${c} IS DISTINCT FROM OLD.${c}`).join(' OR ');
@@ -36,7 +36,7 @@ async function criarFuncaoConhecimento(q) {
         RETURN NEW;
       END IF;
       IF NOT ((OLD.status = 'DRAFT' AND NEW.status = 'HOMOLOGATED')
-           OR (OLD.status = 'HOMOLOGATED' AND NEW.status IN ('SUPERSEDED', 'REVOKED'))) THEN
+           OR (OLD.status = 'HOMOLOGATED' AND NEW.status IN ('SUPERSEDED', 'REVOKED', 'EXPIRED'))) THEN
         RAISE EXCEPTION 'AI_KNOWLEDGE_TRANSITION: de % para % não é permitido', OLD.status, NEW.status USING ERRCODE = 'AI022';
       END IF;
       IF NEW.status = 'HOMOLOGATED' THEN

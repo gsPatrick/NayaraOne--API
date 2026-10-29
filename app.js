@@ -47,6 +47,7 @@ const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
 const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob');
 const { startAiRagJob } = require('./src/engines/jobs/aiRagJob');
+const { startAiSourceExpiryJob } = require('./src/engines/jobs/aiSourceExpiryJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
 const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
 const { startAnalyticsSnapshotJob } = require('./src/engines/jobs/analyticsSnapshotJob');
@@ -336,6 +337,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiBudgetPeriodJob();
   startAiMemoryExpiryJob();
   startAiRagJob();
+  startAiSourceExpiryJob();
   startAnalyticsReadModelRefreshJob();
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
   startAnalyticsSnapshotJob(); // M9-D609: snapshot diário dos KPIs (D-1, 00:30 de São Paulo) com catch-up

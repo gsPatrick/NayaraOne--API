@@ -10,7 +10,7 @@ const { DEFAULT_PERMISSION, CLASSIFICATION_RANK } = require('./retrieval.constan
 /**
  * Reconciliação dos chunks com a origem (M9-D023): quando a permissão ou a classificação da origem muda, copia a mudança para os chunks
  * ACTIVE (`required_permission`, `classification`, `owner_scope`, `owner_user_id`) em até `ia.rag.reconciliar_minutos` (o job acorda de
- * minuto em minuto; quem decide a hora é o parâmetro da empresa). Origem apagada, conhecimento que deixou de ser homologado, ou
+ * minuto em minuto; quem decide a hora é o parâmetro da empresa; M9-D024: o fim da vigência do conhecimento também é copiado). Origem apagada, conhecimento que deixou de ser homologado, ou
  * classificação RESTRICTED com `ia.rag.indexar_restricted` Desligado: os chunks saem da busca (REVOKED). Até a reconciliação rodar, a
  * dupla checagem na leitura (doubleCheck) já impede o vazamento.
  */
@@ -32,10 +32,12 @@ async function currentFile(ctx, sourceId, transaction) {
 async function currentKnowledge(ctx, sourceId, transaction) {
   const entry = await KnowledgeEntry.findOne({ where: { id: sourceId, companyId: ctx.companyId }, transaction });
   if (!entry || entry.status !== 'HOMOLOGATED' || !entry.isActive) return null;
-  return { classification: entry.classification, requiredPermission: DEFAULT_PERMISSION, ownerScope: 'COMPANY', ownerUserId: null };
+  return { classification: entry.classification, requiredPermission: DEFAULT_PERMISSION, ownerScope: 'COMPANY', ownerUserId: null, effectiveUntil: entry.validUntil || null };
 }
 
-const differs = (chunk, now) => ['classification', 'requiredPermission', 'ownerScope', 'ownerUserId'].some((k) => (chunk[k] || null) !== (now[k] || null));
+const time = (v) => (v ? new Date(v).getTime() : null);
+const differs = (chunk, now) => ['classification', 'requiredPermission', 'ownerScope', 'ownerUserId'].some((k) => (chunk[k] || null) !== (now[k] || null))
+  || ('effectiveUntil' in now && time(chunk.effectiveUntil) !== time(now.effectiveUntil));
 
 async function reconcileSource(ctx, source, params, transaction) {
   if (source.sourceType === 'URL') return 'same';
