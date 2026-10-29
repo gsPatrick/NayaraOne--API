@@ -11,6 +11,7 @@ require('./metrics/kpis').installCrmKpis(); // liga os KPIs do funil comercial a
 require('./metrics/kpis').installLegalCorKpis(); // liga os KPIs do Jurídico e do Correspondente ao fim do refresh dos seus read models (M9-D660 e M9-D661)
 require('./metrics/kpis').installSupportKpis(); // liga os KPIs de Atendimento ao fim do refresh dos seus read models (M9-D672)
 require('./metrics/kpis').installRentalDeadlineKpis(); // liga os KPIs de prazos da Locação ao fim do refresh dos seus read models (M9-D641)
+require('./metrics/kpis').installTechKpis(); // liga os KPIs de Tecnologia ao fim do refresh dos seus read models (M9-D680)
 require('./metrics/kpis').installEstoqueKpis(); // liga os KPIs de Estoque e Patrimônio ao fim do refresh de rm_inventory_health e rm_tool_assets (M9-D653)
 require('./metrics/kpis').installObraPerdasKpis(); // liga os KPIs de desperdício, custo pós-obra e recorrência ao fim do refresh dos read models de Obras (M9-D652)
 

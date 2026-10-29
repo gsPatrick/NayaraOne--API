@@ -64,6 +64,7 @@ const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-m
 const { SUPPORT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/atendimentoKpi.settings');
 const { RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoPrazosKpi.settings');
 const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
+const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
 const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
@@ -293,6 +294,8 @@ const SETTINGS_SCHEMA = {
   ...RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D628 — read models de Tecnologia e IA: histórico em dias, sondas ligadas, intervalo das sondas e retenção dos sinais técnicos.
   ...TECH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.
+  ...TECH_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
