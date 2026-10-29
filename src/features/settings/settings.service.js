@@ -38,6 +38,7 @@ const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/me
 const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
 const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/rebuild.settings');
 const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/sourceRefs.settings');
+const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/drilldown.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
@@ -224,6 +225,7 @@ const SETTINGS_SCHEMA = {
   ...REBUILD_SETTINGS_SCHEMA,
   // Marco 9, M9-D611 — rastreio do número até a origem: quantos ids acompanham cada indicador.
   ...SOURCE_REFS_SETTINGS_SCHEMA,
+  ...DRILLDOWN_SETTINGS_SCHEMA, // M9-D690: tamanho de página do detalhe (drill-down)
   // Marco 9, M9-D615 — read model financeiro: janela, em dias, do vencido que entra na taxa de inadimplência.
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.

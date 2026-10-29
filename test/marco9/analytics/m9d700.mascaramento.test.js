@@ -72,8 +72,8 @@ test('m9d700 mapa domínio x permissão: padrão do livro, override do administr
   assert.equal(domainPermissionOf(padrao, 'FINANCE'), 'finance:read');
   assert.equal(domainPermissionOf(padrao, 'RENTAL'), 'legal:read');
   assert.equal(domainPermissionOf(padrao, 'LEGAL'), 'legal:read');
-  assert.equal(domainPermissionOf(padrao, 'MARKETING'), 'crm:opportunities:read');
-  assert.equal(domainPermissionOf(padrao, 'SUPPORT'), 'crm:opportunities:read');
+  assert.equal(domainPermissionOf(padrao, 'MARKETING'), 'marketing:attribution:read'); // M9-D690: o mapa de detalhe do livro
+  assert.equal(domainPermissionOf(padrao, 'SUPPORT'), 'crm:feedback:read'); // M9-D690: ocorrências e pesquisas vivem em crm.feedback_cases
   assert.equal(domainPermissionOf(padrao, 'TECH_AI'), 'analytics:read:tech');
   assert.equal(domainPermissionOf(padrao, 'GENERAL'), 'analytics:read');
   const custom = mergeDomainMap('Financeiro=finance:special; Obras=ISSO NAO E PERMISSAO; Locação=rental:read');

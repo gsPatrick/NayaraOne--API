@@ -19,7 +19,7 @@ const KEYS = Object.freeze({
 const NONE = 'nenhum';
 
 const SECURITY_SETTING_DEFAULTS = Object.freeze({
-  [KEYS.DOMAIN_MAP]: 'Financeiro=finance:read; Comercial/Imóveis e Marketing/Atendimento=crm:opportunities:read; Locação e Jurídico=legal:read; Obras=construction:read; Estoque=inventory:read; Correspondente=correspondent:read; Tecnologia=analytics:read:tech',
+  [KEYS.DOMAIN_MAP]: 'Financeiro=finance:read; Comercial/Imóveis=crm:opportunities:read; Marketing=marketing:attribution:read; Atendimento=crm:feedback:read; Locação e Jurídico=legal:read; Obras=construction:read; Estoque=inventory:read; Correspondente=correspondent:read; Tecnologia=analytics:read:tech',
   [KEYS.TEAMS]: NONE,
   [KEYS.EXTRA_MASKED_FIELDS]: NONE,
   [KEYS.PANEL_OPEN_LOG]: 'CRITICAL',
