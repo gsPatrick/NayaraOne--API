@@ -18,7 +18,11 @@ const latest = (items) => items.map((i) => i.asOf).filter(Boolean).sort().pop();
 
 async function readParams(tenant, transaction) {
   const out = {};
-  for (const [field, key] of Object.entries(PARAM_FIELDS)) out[field] = Number(await getSetting(key, tenant, transaction, D[key])) || D[key];
+  for (const [field, key] of Object.entries(PARAM_FIELDS)) {
+    const raw = await getSetting(key, tenant, transaction, D[key]);
+    const n = typeof raw === 'string' && raw.trim() === '' ? NaN : Number(raw);
+    out[field] = raw !== null && raw !== undefined && Number.isFinite(n) ? n : D[key]; // 0 é valor válido (limite de inadimplência), só ausente/não numérico volta ao padrão
+  }
   return out;
 }
 

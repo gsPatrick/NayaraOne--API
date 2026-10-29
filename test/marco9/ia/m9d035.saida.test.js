@@ -93,6 +93,19 @@ test('m9d035_severidade_e_ordem_vem_de_parametros_da_empresa', async () => {
   });
 });
 
+test('m9d035_limite_zero_de_inadimplencia_e_respeitado', async () => {
+  // Reabertura: 0 é valor válido do parâmetro e não pode virar o padrão (5%): com limite médio 0, qualquer inadimplência acima de 0% é "média".
+  await withRollbackTenantTransaction(tenantA, async (tx) => {
+    const c = await com(tx, { 'ia.diretoria.inadimplencia_media_pct': 0, 'ia.diretoria.inadimplencia_alta_pct': 100 });
+    await Dados.criarRecebiveis(tenantA, tx, [{ dias: 30, valor: 100000 }]); // dilui o índice abaixo do padrão de 5%, mas acima de 0%
+    const fin = await B.financeiro(tx);
+    const res = sem(await rodar(c, 'Quais são os riscos da empresa?', 'diretoria_riscos'));
+    const pct = Number(fin.delinquencyRatio) * 100;
+    assert.ok(pct > 0 && pct < 5, `índice entre 0% e o padrão de 5%: ${pct}`);
+    assert.match(res.answer, new RegExp(`Severidade ${pct >= 100 ? 'alta' : 'média'} \\| Inadimplência`), res.answer);
+  });
+});
+
 test('m9d035_prioridades_sugeridas_apenas_em_texto', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const c = await com(tx);
