@@ -7,12 +7,15 @@
 const { loadGroundingSettings } = require('./groundingSettings');
 const { validateGrounding } = require('../groundingValidator');
 const { createConfirmationRecommendation } = require('./confirmationRecommendation');
+const { getAgentHooks } = require('../../agents/agentHooks');
 
 async function finalizeGrounding(ctx, input, transaction) {
   const settings = await loadGroundingSettings(ctx, transaction);
   const result = validateGrounding(input, settings);
   let recommendation = null;
-  if (result.requiresHumanConfirmation && input.runId) {
+  // Agente somente leitura (ex.: NAY Correspondente, M9-D039): o aviso de confirmação humana fica no texto, mas nenhuma recomendação é criada.
+  const readOnly = Boolean((getAgentHooks(input.agentCode) || {}).readOnly);
+  if (result.requiresHumanConfirmation && input.runId && !readOnly) {
     recommendation = await createConfirmationRecommendation(ctx, {
       runId: input.runId, agentCode: input.agentCode, request: result.confirmationRequest, snapshotAt: result.snapshotAt, groundingStatus: result.groundingStatus,
     }, transaction);

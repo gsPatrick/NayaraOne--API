@@ -5,6 +5,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { DISPOSABLE, SKIP, grant, startHttpEnv } = require('../_helpers/aiHttpEnv');
+const { INITIAL_DEFINITIONS } = require('../../../src/features/ai/tools/definitions');
+const { AGENT_TOOL_DEFINITIONS } = require('../../../src/features/ai/tools/definitions/agentTools');
 
 let env;
 before(async () => {
@@ -33,7 +35,7 @@ test('m9d016_http_lista_tools_so_para_ai_admin', { skip: SKIP }, async () => {
   const ok = await env.call('GET', '/ai/tools', env.tokens['A:gestor']);
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const tools = ok.body.data;
-  assert.equal(tools.length, 13);
+  assert.equal(tools.length, INITIAL_DEFINITIONS.length + AGENT_TOOL_DEFINITIONS.length);
   const pagar = tools.find((t) => t.name === 'finance.proposePayment');
   assert.equal(pagar.riskLevel, 'CRITICAL');
   assert.equal(pagar.requiresHumanApproval, true);

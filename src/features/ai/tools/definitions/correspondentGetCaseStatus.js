@@ -19,6 +19,7 @@ module.exports = {
     properties: {
       id: { type: 'string' }, status: { type: 'string' }, product: nullable('string'), purpose: nullable('string'), providerCode: nullable('string'),
       propertyId: nullable('string'), applicantsCount: { type: 'integer' }, canceledReason: nullable('string'),
+      source: { type: 'string' }, updatedAt: nullable('string'), asOf: { type: 'string' },
     },
     required: ['id', 'status', 'applicantsCount'],
   },

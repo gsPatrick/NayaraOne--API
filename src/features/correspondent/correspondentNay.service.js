@@ -329,4 +329,4 @@ async function summarizeCase(financingCaseId, groupId, companyId, transaction, {
   };
 }
 
-module.exports = { checkStalledCases, compareSimulations, summarizeCase, STALLED_THRESHOLD_DAYS_DEFAULT };
+module.exports = { checkStalledCases, compareSimulations, summarizeCase, docLabel, STATUS_LABEL, STALLED_THRESHOLD_DAYS_DEFAULT };

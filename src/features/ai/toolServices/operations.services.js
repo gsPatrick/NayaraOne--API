@@ -2,8 +2,8 @@
 
 const { getProjectHealth } = require('../../construction/projectHealth.service');
 const contractsService = require('../../legal/contracts.service');
-const { getFinancingCase } = require('../../correspondent/cases/financingCases.service');
 const { toPlain } = require('./plain');
+const { correspondentReaders } = require('../agents/nay_correspondente/readers');
 
 function constructionProjects(transaction) {
   return {
@@ -38,13 +38,9 @@ function legalDrafts(transaction, { userId, groupId, companyId }) {
   };
 }
 
-function correspondentCases(transaction, { groupId, companyId }) {
-  return {
-    async getStatus(caseId) {
-      const c = toPlain(await getFinancingCase(caseId, groupId, companyId, transaction));
-      return { ...c, applicantsCount: Array.isArray(c.applicants) ? c.applicants.length : 0 };
-    },
-  };
+function correspondentCases(transaction, scope) {
+  // M9-D039: situação, casos parados, exigências abertas e simulações comparadas; as leituras do Correspondente moram com o agente.
+  return correspondentReaders(transaction, scope);
 }
 
 module.exports = { constructionProjects, legalContracts, legalDrafts, correspondentCases };

@@ -6,6 +6,7 @@
 const { ToolRegistry } = require('./ToolRegistry');
 const { loadPermissionCatalog } = require('../readmodels/permissionCatalog.readmodel');
 const { INITIAL_DEFINITIONS } = require('./definitions');
+const { AGENT_TOOL_DEFINITIONS } = require('./definitions/agentTools');
 
 let registro = null;
 
@@ -14,7 +15,7 @@ const loadPermissionCodes = async () => new Set(await loadPermissionCatalog());
 /** Registro novo com as tools iniciais; `permissionCodes` opcional (sem ele lê core.permissions). */
 async function buildDefaultRegistry(permissionCodes) {
   const registry = new ToolRegistry({ permissionCodes: permissionCodes || await loadPermissionCodes() });
-  registry.registerAll(INITIAL_DEFINITIONS);
+  registry.registerAll([...INITIAL_DEFINITIONS, ...AGENT_TOOL_DEFINITIONS]);
   return registry;
 }
 
