@@ -7,7 +7,9 @@
 const registry = require('../registry/adapterRegistry');
 const { FinancingSandboxContractAdapter, FinancingManualContractAdapter } = require('./legacy/financing.adapters');
 const { BankSandboxContractAdapter } = require('./legacy/bank.adapters');
-const { SignatureSandboxContractAdapter, SignatureClicksignContractAdapter } = require('./legacy/signature.adapters');
+const { SignatureClicksignContractAdapter, SignatureZapSignContractAdapter } = require('./legacy/signature.adapters');
+const { SignatureSandboxAdapter } = require('../providers/signature/sandbox/signature-sandbox.adapter');
+const { SignatureAltSandboxAdapter } = require('../providers/signature/sandbox/signature-alt-sandbox.adapter');
 const { InsuranceSandboxContractAdapter } = require('./legacy/insurance.adapters');
 const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
 const { registerAiAdapters } = require('../../ai/providers/builtIn');
@@ -17,11 +19,11 @@ const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/anal
 const { SocialSandboxAdapter } = require('../providers/social/sandbox/social-sandbox.adapter');
 const { installAnalytics } = require('../analytics');
 const { registerAiContingency } = require('../providers/ai/ai.degrade');
-
 const { installContingency } = require('../contingency');
+
 const BUILT_IN_ADAPTERS = Object.freeze([
-  FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxContractAdapter,
-  SignatureClicksignContractAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
+  FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxAdapter,
+  SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
   MessagingSandboxAdapter, PortalSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter,
 ]);
 
@@ -32,9 +34,8 @@ function registerBuiltInAdapters() {
   installAnalytics(); // descarte de métricas vencidas na rodada do worker (M9-D243)
   registerAiContingency(); // IA fora: modo determinístico (M9-D243)
   require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
-  return registry.list();
-  require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
   installContingency(); // contingência das famílias e passo da rodada do worker (M9-D226)
+  return registry.list();
 }
 
 module.exports = { registerBuiltInAdapters, BUILT_IN_ADAPTERS };

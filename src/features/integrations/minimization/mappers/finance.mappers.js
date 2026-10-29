@@ -30,6 +30,8 @@ module.exports = {
       purpose: 'DOCUMENT_SIGNATURE',
       fields: [
         { name: 'documentRef', classification: 'CONFIDENTIAL', required: true },
+        { name: 'documentSha256', classification: 'INTERNAL' },
+        { name: 'deadline', classification: 'INTERNAL' },
         { name: 'signers', classification: 'PERSONAL', required: true, items: [{ name: 'personId', classification: 'INTERNAL' }, { name: 'name', classification: 'PERSONAL' }, { name: 'email', classification: 'PERSONAL' }, { name: 'role', classification: 'INTERNAL' }] },
       ],
     }),

@@ -31,6 +31,7 @@ const { ALERT_SETTINGS_SCHEMA } = require('../integrations/health/alerts/alerts.
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
+const { SIGNATURE_SETTINGS_SCHEMA } = require('../legal/signature/signature.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
@@ -122,7 +123,7 @@ const SETTINGS_SCHEMA = {
   'billing.default_index_code': { type: 'string' },
   'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
   'mfa.required_for_sensitive_roles': { type: 'boolean' },
-  'legal.signature_provider': { type: 'string', enum: ['sandbox', 'clicksign', 'zapsign'] },
+  'legal.signature_provider': { type: 'string', enum: ['sandbox', 'sandbox-alt', 'clicksign', 'zapsign'] },
   // Campos abaixo são segredos de provedor externo — CRIPTOGRAFADOS em repouso (AES-256-GCM,
   // ver src/utils/mfaCrypto.js) seguindo o mesmo padrão já usado para o segredo TOTP
   // (src/features/users/mfa.service.js). `upsertSetting` criptografa antes de gravar;
@@ -248,6 +249,7 @@ const SETTINGS_SCHEMA = {
   ...INBOX_SETTINGS_SCHEMA,
   // Marco 9, M9-D211 — rota pública de webhooks: alias da raiz, limite por minuto (classe WEBHOOK) e tamanho do token do canal.
   ...WEBHOOK_SETTINGS_SCHEMA,
+  ...SIGNATURE_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).

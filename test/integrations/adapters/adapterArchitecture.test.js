@@ -84,7 +84,7 @@ test('adapters_existentes_estendem_base_sem_regressao', async () => {
   const manual = por('financing-manual');
   assert.equal((await invoke(manual, 'submitCase', { idempotencyKey: 'm-1' })).status, 'PENDING_MANUAL_ACTION');
   const env = await invoke(por('signature-sandbox'), 'createEnvelope', { documentRef: { id: 'd' }, signers: ['p1', 'p2'] });
-  assert.ok(env.externalResourceId.startsWith('sandbox-envelope-'));
+  assert.ok(env.externalResourceId.startsWith('sbx-env-'), 'M9-D236: o sandbox de assinatura é um adapter do port, com ids determinísticos');
   assert.equal((await invoke(por('signature-sandbox'), 'getEnvelope', { externalResourceId: env.externalResourceId })).status, 'PENDING');
   assert.equal((await invoke(por('insurance-sandbox'), 'quote', { estimatedValue: 1000 })).status, 'COMPLETED');
   assert.equal((await invoke(por('insurance-sandbox'), 'propose', { idempotencyKey: 'p-1' })).status, 'ACTIVE');

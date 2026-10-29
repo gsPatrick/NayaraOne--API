@@ -1,15 +1,17 @@
 'use strict';
 
 const crypto = require('crypto');
-const { Signature, ContractVersion, ContractParty, Person, File, SignatureProviderRouting } = require('../../models');
+const { Signature, SignatureEnvelope, ContractVersion, ContractParty, Person, File, SignatureProviderRouting } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishSignatureRequested, publishSignatureSigned } = require('./legalEvents.service');
+const { publishSignatureSigned } = require('./legalEvents.service');
 const { getContractVersion } = require('./contractVersions.service');
-const { getContract, transitionContractStatus, listContractParties, REQUIRED_ROLES_BY_TYPE } = require('./contracts.service');
+const { getContract, listContractParties } = require('./contracts.service');
 const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('./adapters/SignatureAdapter');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const diskStorage = require('../../utils/diskStorage');
+const signatureFlow = require('./signature');
+const { recordSimulatedEvidence } = require('./signature/signature.simulated');
 const { encryptFileBuffer } = require('../../utils/fileCrypto');
 
 /**
@@ -72,66 +74,9 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
     );
   }
 
-  const signatureAdapter = await resolveSignatureAdapter(
-    { groupId: contractVersion.groupId, companyId: contractVersion.companyId },
-    transaction
-  );
-  const { providerEnvelopeId, externalSignatureIdsByPerson } = await signatureAdapter.requestSignature(contractVersion, signerPersonIds, transaction);
-
-  const signatures = [];
-  for (const personId of signerPersonIds) {
-    const signature = await Signature.create(
-      {
-        groupId: contractVersion.groupId,
-        companyId: contractVersion.companyId,
-        contractVersionId: contractVersion.id,
-        personId,
-        status: 'PENDING',
-        // M45 (Caderno M5 §8/JUR-004): a assinatura guarda o hash da versão exata enviada.
-        contentHash: contractVersion.contentHash || null,
-        externalSignatureId: externalSignatureIdsByPerson[personId],
-        providerEnvelopeId: providerEnvelopeId || null,
-        createdBy: actorUserId || null,
-        updatedBy: actorUserId || null,
-      },
-      { transaction }
-    );
-
-    // Grava o mapeamento de roteamento (ver migration 20260101000172) na MESMA transação/
-    // tenant — é o único jeito do webhook público do provedor (sem JWT, sem tenant conhecido
-    // de antemão) descobrir group_id/company_id antes de aplicar RLS. Só grava quando existe
-    // externalSignatureId real (provedor real) — sandbox não recebe webhook de verdade.
-    if (signature.externalSignatureId) {
-      await SignatureProviderRouting.create(
-        {
-          externalSignatureId: signature.externalSignatureId,
-          providerEnvelopeId: providerEnvelopeId || null,
-          groupId: contractVersion.groupId,
-          companyId: contractVersion.companyId,
-        },
-        { transaction }
-      );
-    }
-
-    await publishSignatureRequested(signature, transaction);
-
-    await registrarAuditoria(
-      {
-        groupId: contractVersion.groupId,
-        companyId: contractVersion.companyId,
-        actorUserId,
-        action: 'legal.signature.request',
-        entityType: 'Signature',
-        entityId: signature.id,
-        afterJson: signature.toJSON(),
-        reason: `Assinatura solicitada (provider: ${signatureAdapter.constructor.name}) à pessoa ${personId} para a versão ${contractVersion.id} do contrato.`,
-      },
-      transaction
-    );
-
-    signatures.push(signature);
-  }
-
+  // M9-D236: o pedido ao fornecedor entra pelo Dispatch Service (conteúdo minimizado, hash e finalidade gravados em integration.dispatches) e o envelope fica registrado.
+  const ctx = { groupId: contractVersion.groupId, companyId: contractVersion.companyId, userId: actorUserId || null };
+  const { signatures } = await signatureFlow.requestEnvelope(ctx, { contractVersion, contract, signerPersonIds, actorUserId }, transaction);
   return signatures;
 }
 
@@ -183,6 +128,7 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
   signature.signedAt = (payload && payload.signedAt) || new Date();
   signature.updatedBy = null; // webhook é evento de sistema, sem actor humano
   await signature.save({ transaction });
+  await recordSimulatedEvidence(signature, payload, transaction); // M9-D236: evidência do sandbox (fora de produção); a do fornecedor real vem do evento assinado
 
   await publishSignatureSigned(signature, transaction);
 
@@ -221,41 +167,20 @@ async function handleSignatureWebhook(externalSignatureId, payload, transaction)
     transaction
   );
 
-  const allRequestedSigned = allSignatures.length > 0 && allSignatures.every((s) => s.status === 'SIGNED');
-
-  let contractTransitioned = false;
-  if (allRequestedSigned) {
-    const contractVersion = await ContractVersion.findByPk(signature.contractVersionId, { transaction });
-    const contract = await getContract(contractVersion.contractId, transaction);
-
-    // FIX (homologação 22/09/2026, M5-09 — achado real pela cliente): esta checagem só olhava
-    // se TODAS as Signature JÁ SOLICITADAS estavam SIGNED, nunca se TODAS AS PARTES
-    // OBRIGATÓRIAS do contrato (ex.: LANDLORD e TENANT numa locação) de fato tinham uma
-    // solicitação de assinatura registrada. Resultado real: um contrato com 2 partes formais
-    // virava "Assinado" tendo pedido (e recebido) assinatura de só 1 delas — a outra parte
-    // nunca foi nem convidada a assinar. Agora cruza contra `REQUIRED_ROLES_BY_TYPE` (o mesmo
-    // mapa já usado no gate de DRAFT->DOCUMENTS_PENDING): cada papel obrigatório do tipo de
-    // contrato precisa ter PELO MENOS UMA Signature SIGNED entre as pessoas que ocupam esse
-    // papel — não só "todas as que foram pedidas".
-    const requiredRoles = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
-    let allPartiesSigned = true;
-    if (requiredRoles.length > 0) {
-      const parties = await listContractParties(contract.id, transaction);
-      const signedPersonIds = new Set(allSignatures.filter((s) => s.status === 'SIGNED').map((s) => s.personId));
-      allPartiesSigned = requiredRoles.every((role) =>
-        parties.some((p) => p.partyRole === role && signedPersonIds.has(p.personId))
-      );
-    }
-
-    // Só tenta transicionar se o contrato ainda não estiver em SIGNED/ACTIVE — evita erro de
-    // transição inválida se o webhook do último signatário chegar duplicado numa corrida rara.
-    if (allPartiesSigned && contract.status === 'SIGNING') {
-      await transitionContractStatus(contract, 'SIGNED', null, transaction);
-      contractTransitioned = true;
-    }
-  }
+  // M9-D236: todas as partes obrigatórias assinaram E o portão da evidência passou (signature.complete.js)
+  const contractTransitioned = await signatureFlow.tryCompleteContract(signature.contractVersionId, transaction);
 
   return { signature, contractTransitioned, alreadyProcessed: false };
+}
+
+/**
+ * O envelope da assinatura (M9-D236): a linha de legal.signature_envelopes ou, para assinatura anterior ao registro de envelopes, um envelope descrito só pelo id do
+ * fornecedor (a connection atual da empresa atende).
+ */
+async function envelopeOf(signature, transaction) {
+  const envelope = signature.envelopeId ? await SignatureEnvelope.findByPk(signature.envelopeId, { transaction }) : null;
+  if (envelope) return envelope;
+  return { id: null, connectionId: null, externalEnvelopeId: signature.providerEnvelopeId, documentSha256: signature.contentHash, status: 'PENDING' };
 }
 
 /**
@@ -275,14 +200,11 @@ async function checkSignatureStatus(signatureId, transaction) {
     return { signature, providerStatus: null, reconciled: false };
   }
 
-  const adapter = await resolveSignatureAdapter(
-    { groupId: signature.groupId, companyId: signature.companyId },
-    transaction
-  );
-  const providerStatus = await adapter.getStatus(signature.providerEnvelopeId);
+  const ctx = { groupId: signature.groupId, companyId: signature.companyId, userId: null };
+  const envelope = await envelopeOf(signature, transaction);
+  const providerStatus = await signatureFlow.callEnvelope(ctx, envelope, 'getEnvelope', { externalResourceId: envelope.externalEnvelopeId }, transaction);
 
-  const providerSaysSigned = String(providerStatus.status).toLowerCase().includes('sign')
-    || String(providerStatus.status).toLowerCase().includes('closed');
+  const providerSaysSigned = providerStatus.status === 'COMPLETED';
   if (providerSaysSigned && signature.status !== 'SIGNED') {
     await handleSignatureWebhook(signature.externalSignatureId, {}, transaction);
     const refreshed = await Signature.findByPk(signatureId, { transaction });
@@ -309,12 +231,11 @@ async function cancelSignature(signatureId, actorUserId, transaction) {
     return { signature, alreadyCancelled: true };
   }
 
-  if (signature.providerEnvelopeId) {
-    const adapter = await resolveSignatureAdapter(
-      { groupId: signature.groupId, companyId: signature.companyId },
-      transaction
-    );
-    await adapter.cancel(signature.providerEnvelopeId);
+  if (signature.providerEnvelopeId || signature.envelopeId) {
+    const ctx = { groupId: signature.groupId, companyId: signature.companyId, userId: actorUserId || null };
+    const envelope = await envelopeOf(signature, transaction);
+    if (envelope.externalEnvelopeId) await signatureFlow.callEnvelope(ctx, envelope, 'cancelEnvelope', { externalResourceId: envelope.externalEnvelopeId }, transaction);
+    if (envelope.id && envelope.status === 'PENDING') await SignatureEnvelope.update({ status: 'CANCELLED' }, { where: { id: envelope.id }, transaction });
   }
 
   const beforeJson = signature.toJSON();
@@ -382,8 +303,8 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
     return { acknowledged: true, processed: false, reason: 'already_downloaded', fileId: contractVersion.signedDocumentFileId };
   }
 
-  const adapter = await resolveSignatureAdapter(tenant, transaction);
-  const downloaded = await adapter.downloadSignedDocument(providerEnvelopeId);
+  const envelope = await envelopeOf(signature, transaction);
+  const downloaded = await signatureFlow.downloadSigned({ ...tenant, userId: null }, envelope, transaction);
   if (!downloaded || !downloaded.buffer || downloaded.buffer.length === 0) {
     return { acknowledged: true, processed: false, reason: 'no_document_available' };
   }

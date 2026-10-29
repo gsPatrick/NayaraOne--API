@@ -4,11 +4,12 @@ const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
-const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
+const { getSetting } = require('../settings/settings.service');
 const { sequelize, SignatureProviderRouting } = require('../../models');
 const contractsService = require('./contracts.service');
 const contractVersionsService = require('./contractVersions.service');
 const signaturesService = require('./signatures.service');
+const signatureFlow = require('./signature');
 const guaranteesService = require('./guarantees.service');
 const inspectionsService = require('./inspections.service');
 const keyDeliveriesService = require('./keyDeliveries.service');
@@ -302,11 +303,6 @@ const WEBHOOK_HEADER_BY_PROVIDER = {
   zapsign: 'x-zapsign-signature',
 };
 
-const WEBHOOK_SECRET_SETTING_BY_PROVIDER = {
-  clicksign: 'legal.clicksign_webhook_secret',
-  zapsign: 'legal.zapsign_webhook_secret',
-};
-
 // CONFIRMADO contra webhooks reais do Clicksign (22/09/2026, via log de diagnóstico comparando
 // candidatos de fórmula): é HMAC-SHA256 de verdade (chave = secret), IGUAL ao ZapSign — a
 // documentação oficial ("Hash SHA256 da soma do Body com o Secret") sugeria concatenação, mas
@@ -377,8 +373,7 @@ const signatureWebhook = catchAsync(async (req, res) => {
     // rejeitar qualquer payload sem HMAC válido — nunca aplica o webhook "por confiança". O
     // sandbox (sem provedor real por trás) segue sem exigir HMAC.
     if (provider === 'clicksign' || provider === 'zapsign') {
-      const webhookSecretKey = WEBHOOK_SECRET_SETTING_BY_PROVIDER[provider];
-      const webhookSecret = await getDecryptedSetting(webhookSecretKey, tenant, t, null);
+      const { secret: webhookSecret } = await signatureFlow.resolveSignatureWebhookSecret({ providerKey: provider, tenant, transaction: t }); // M9-D236: cofre de segredos
       const rawBody = req.rawBody;
       const isValid = verifyProviderWebhookSignature(provider, rawBody, req.headers, webhookSecret);
       if (!isValid) {
@@ -462,7 +457,7 @@ const clicksignPublicWebhook = catchAsync(async (req, res) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction: t });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction: t });
 
-    const webhookSecret = await getDecryptedSetting('legal.clicksign_webhook_secret', tenant, t, null);
+    const { secret: webhookSecret } = await signatureFlow.resolveSignatureWebhookSecret({ providerKey: 'clicksign', tenant, transaction: t }); // M9-D236: cofre de segredos; o valor antigo migra sozinho
     const isValid = verifyProviderWebhookSignature('clicksign', rawBody, req.headers, webhookSecret);
     if (!isValid) {
       throw AppError.unauthorized(
@@ -470,6 +465,10 @@ const clicksignPublicWebhook = catchAsync(async (req, res) => {
         'LEGAL_WEBHOOK_HMAC_INVALID'
       );
     }
+
+    // M9-D236: assinatura com envelope registrado segue o mesmo caminho do webhook da rota única (signatário previsto, evidência, hash, portão do contrato).
+    const viaEnvelope = await signatureFlow.applyClicksignEvent(tenant, req.body, rawBody, t);
+    if (viaEnvelope) return viaEnvelope;
 
     if (eventName === 'sign' && signerKey) {
       const applied = await signaturesService.handleSignatureWebhook(signerKey, req.body, t);

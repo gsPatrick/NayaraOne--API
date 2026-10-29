@@ -64,6 +64,11 @@ module.exports = (sequelize) => {
       evidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_file_id' },
       collectedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'collected_by_user_id' },
       contentHash: { type: DataTypes.STRING(128), allowNull: true, field: 'content_hash' },
+      // M9-D236: envelope no fornecedor, e-mail previsto do signatário e a evidência da assinatura (imutável depois de gravada).
+      envelopeId: { type: DataTypes.UUID, allowNull: true, field: 'envelope_id' },
+      signerEmail: { type: DataTypes.STRING(254), allowNull: true, field: 'signer_email' },
+      evidenceJson: { type: DataTypes.JSONB, allowNull: true, field: 'evidence_json' },
+      evidenceComplete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'evidence_complete' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

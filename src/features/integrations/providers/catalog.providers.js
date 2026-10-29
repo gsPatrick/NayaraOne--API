@@ -16,7 +16,7 @@ const SANDBOX_PROVIDERS = Object.freeze([
   sandbox('EMAIL', 'email-sandbox', 'E-mail — sandbox', ['sendEmail', 'getDeliveryStatus', 'receiveInbound']),
   sandbox('SITE', 'site-sandbox', 'Site — sandbox', ['publishPage', 'unpublishPage', 'getPageStatus']),
   sandbox('PORTAL', 'portal-sandbox', 'Portais imobiliários — sandbox', ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']),
-  sandbox('SIGNATURE', 'signature-sandbox', 'Assinatura digital — sandbox', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook']),
+  sandbox('SIGNATURE', 'signature-sandbox', 'Assinatura digital — sandbox', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook']),
   sandbox('BANK', 'bank-sandbox', 'Bancos, extratos e pagamentos — sandbox', ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']),
   sandbox('INSURANCE', 'insurance-sandbox', 'Seguradoras e garantias — sandbox', ['quote', 'propose', 'getPolicy', 'getStatus']),
   // O sandbox de financiamento já verificava o webhook (assinatura HMAC) antes do catálogo: mantém verifyWebhook (DI-D201-3).
@@ -37,7 +37,16 @@ const EXISTING_PROVIDERS = Object.freeze([
   },
   {
     code: 'signature-clicksign', displayName: 'Assinatura digital — Clicksign', domain: 'SIGNATURE',
-    capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
+    capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
+  },
+  // M9-D236: ZapSign (adapter que já existia no Jurídico) entra no catálogo; e o segundo fornecedor de laboratório que prova a troca de provider (formato de webhook diferente).
+  {
+    code: 'signature-zapsign', displayName: 'Assinatura digital — ZapSign', domain: 'SIGNATURE',
+    capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
+  },
+  {
+    code: 'signature-alt-sandbox', displayName: 'Assinatura digital — sandbox alternativo (prova de troca de provider)', domain: 'SIGNATURE',
+    capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
   },
 ]);
 

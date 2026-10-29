@@ -100,7 +100,7 @@ test('test_connection_producao_exige_mfa', async () => {
 });
 
 test('test_connection_sem_segredo_na_resposta', async () => {
-  const Clicksign = programavel(SignatureAdapter, 'signature-clicksign', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook']);
+  const Clicksign = programavel(SignatureAdapter, 'signature-clicksign', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook']);
   Clicksign.prototype.healthCheck = async function saude() {
     const { value } = await this.ctx.secret('test-connection');
     return { ok: false, latencyMs: 4, detail: `Chave recusada: ${value.reveal()}` }; // o fornecedor ecoa a chave na mensagem

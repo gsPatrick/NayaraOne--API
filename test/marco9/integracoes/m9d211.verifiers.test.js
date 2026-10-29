@@ -54,8 +54,9 @@ test('verificador_hmac_hex_base64_e_com_horario', () => {
 
 test('verificador_registro_por_fornecedor', () => {
   registerBuiltInAdapters();
-  ['messaging-sandbox', 'portal-sandbox', 'social-sandbox'].forEach((p) => assert.equal(verifierFor(p).name, 'hmacWithTimestamp', p));
-  ['bank-sandbox', 'signature-sandbox', 'signature-clicksign', 'financing-sandbox'].forEach((p) => assert.equal(verifierFor(p).name, 'hmacSha256Hex', p));
+  ['messaging-sandbox', 'portal-sandbox', 'social-sandbox', 'signature-sandbox'].forEach((p) => assert.equal(verifierFor(p).name, 'hmacWithTimestamp', p));
+  assert.equal(verifierFor('signature-alt-sandbox').name, 'hmacSha256Base64', 'signature-alt-sandbox: o segundo formato de assinatura (M9-D236)');
+  ['bank-sandbox', 'signature-clicksign', 'signature-zapsign', 'financing-sandbox'].forEach((p) => assert.equal(verifierFor(p).name, 'hmacSha256Hex', p));
   const corpo = Buffer.from('{"event":{"name":"sign"}}');
   const clicksign = verifierFor('signature-clicksign').verify({ rawBody: corpo, headers: { 'content-hmac': `sha256=${hmac('k', corpo).toString('hex')}` }, secret: 'k' });
   assert.equal(clicksign.ok, true, 'o Clicksign assina no cabeçalho content-hmac');
