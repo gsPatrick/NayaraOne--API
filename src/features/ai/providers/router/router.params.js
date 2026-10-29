@@ -7,11 +7,11 @@ const { ROUTER_KEYS: K, ROUTER_SETTING_DEFAULTS: D } = require('./router.setting
 async function readRouterParams(tenant, transaction) {
   const scope = { groupId: tenant.groupId, companyId: tenant.companyId };
   const small = Number(await getSetting(K.smallMaxTokens, scope, transaction, D[K.smallMaxTokens]));
-  const confidence = Number(await getSetting(K.minConfidence, scope, transaction, D[K.minConfidence]));
+  const minScore = Number(await getSetting(K.minConfidence, scope, transaction, D[K.minConfidence]));
   const escalate = await getSetting(K.escalate, scope, transaction, D[K.escalate]);
   return {
     smallMaxTokens: Number.isInteger(small) && small >= 1 ? small : D[K.smallMaxTokens],
-    minConfidence: Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 ? confidence : D[K.minConfidence],
+    minConfidence: Number.isFinite(minScore) && minScore >= 0 && minScore <= 1 ? minScore : D[K.minConfidence],
     escalate: escalate !== false && escalate !== 'false',
   };
 }
