@@ -53,6 +53,12 @@ async function decide(input, ctx, transaction, { registry, resolvers, cache }) {
   if (!input || typeof input.taskType !== 'string' || !input.taskType.trim()) throw E.invalidInput('Informe o tipo da tarefa (taskType).');
   const params = await readRouterParams(ctx, transaction);
   // `skipShortCircuit`: a regra e o cache já foram tentados antes (passo 3 do orquestrador); o passo 6 só reescolhe o modelo com o tamanho real.
+  if (input.skipShortCircuit !== true && typeof resolvers.guards === 'function') {
+    for (const guard of resolvers.guards()) {
+      const refusal = await guard(input.ruleInput === undefined ? input : input.ruleInput, { tenant: tenantOf(ctx), transaction });
+      if (refusal !== null && refusal !== undefined) return { path: 'RULE', provider: null, model: null, reason: REASONS.RULE_RESOLVER, fallbackChain: [], escalated: false, ruleResult: refusal };
+    }
+  }
   const resolver = input.skipShortCircuit === true ? null : resolvers.get(input.taskType);
   const forced = input.skipShortCircuit === true ? null : forcedRoutingPath(input.taskType);
   if (resolver) {

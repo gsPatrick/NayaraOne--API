@@ -7,7 +7,15 @@
  * existe e responde, nenhum modelo é chamado e o custo é zero.
  */
 class RuleResolverRegistry {
-  constructor() { this.byTask = new Map(); }
+  constructor() { this.byTask = new Map(); this.guardList = []; }
+
+  /** Guarda de fronteira (M9-D037): roda antes do resolvedor da tarefa; devolve resultado de regra (recusa) ou null para seguir. */
+  registerGuard(guard) {
+    if (typeof guard !== 'function') throw new TypeError('o guarda precisa ser uma função');
+    if (!this.guardList.includes(guard)) this.guardList.push(guard);
+  }
+
+  guards() { return [...this.guardList]; }
 
   register(taskType, resolver) {
     if (typeof taskType !== 'string' || !taskType.trim()) throw new TypeError('taskType precisa de um nome');

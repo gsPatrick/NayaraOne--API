@@ -6,6 +6,7 @@
 const AppError = require('../../../../utils/AppError');
 const { financeHealth } = require('../../toolServices/finance.services');
 const { sumExact, fractionToPercent } = require('../../orchestrator/numbers/decimalText');
+const { hasNumberExtractor, extractNumbers } = require('./extractors');
 
 const SOURCE = 'finance.getWeeklyHealthReport';
 const PERMISSAO = 'finance:read';
@@ -54,6 +55,7 @@ function itemsFromDelinquency(out) {
 
 /** numbersPayload da saída (já validada pelo outputSchema) de uma tool financeira do ToolRegistry; outra tool não gera números. */
 function numbersFromToolOutput(toolName, output) {
+  if (hasNumberExtractor(toolName)) return extractNumbers(toolName, output);
   if (toolName === 'finance.getWeeklyHealth') return itemsFromReport(output);
   if (toolName === 'finance.getDelinquency') return itemsFromDelinquency(output);
   return [];

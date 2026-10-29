@@ -6,6 +6,7 @@ const { sanitizeOutput } = require('../outputSanitizer');
 const { publishInjectionEvents } = require('../injectionEvents');
 const { citationOf } = require('../citationBuilder');
 const runs = require('../runs');
+const { applyAgentOutputRules } = require('../../agents/scope');
 const E = require('./flow.errors');
 const { evaluateOutput, answerTextOf, numberOrUndefined } = require('./flow.output');
 const { usageFields } = require('./flow.progress');
@@ -33,7 +34,7 @@ async function groundAnswer(state, text) {
   if (state.decision.path === 'RULE') {
     const cited = forValidator(state).map((s, i) => citationOf({ ...s, sourceType: s.sourceType, excerpt: s.excerpt }, i + 1));
     const groundingStatus = state.sources.length ? 'GROUNDED' : 'NOT_APPLICABLE';
-    return { answer: text, groundingStatus, sources: cited, confidence: '1.0000', snapshotAt: null, requiresHumanConfirmation: false, recommendation: null, runFields: {} };
+    return { answer: text, groundingStatus, sources: cited, confidence: '1.0000', snapshotAt: state.ruleSnapshotAt || null, requiresHumanConfirmation: false, recommendation: null, runFields: {} };
   }
   return finalizeGrounding(state.ctx, {
     answerText: text, taskType: state.parsed.taskType, critical: false, sources: forValidator(state), snapshotAt: state.parsed.snapshotAt, runId: state.runId, agentCode: state.agent.code,
@@ -68,6 +69,7 @@ async function validateAndFinish(state, text, regenerate) {
   if (state.unmet.length && grounded.groundingStatus !== 'INSUFFICIENT_SOURCES') answer = `${answer}\n\n${state.unmet.map(unmetLine).join(' ')}`;
   if (state.notices.length) answer = `${answer}\n\n${state.notices.join(' ')}`;
   answer = state.redactor.rehydrate(answer);
+  answer = await applyAgentOutputRules(state.agent.code, { taskType: state.parsed.taskType, input: state.parsed.input, ctx: state.ctx, transaction: state.transaction }, answer); // marca obrigatória do agente (ex.: minuta jurídica)
   const groundingSignal = numberOrUndefined(grounded.confidence);
   const run = await runs.finishRun(state.ctx, state.runId, {
     status: 'COMPLETED', outputSummary: answer, groundingStatus: grounded.groundingStatus, confidence: groundingSignal, snapshotAt: grounded.snapshotAt || undefined, ...usageFields(state),

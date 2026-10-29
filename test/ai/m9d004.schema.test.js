@@ -155,9 +155,12 @@ test('m9d004_hash_do_seed_confere_com_o_calculo_da_aplicacao', async () => {
     const linhas = await q('SELECT * FROM ai.agents WHERE company_id IS NULL', {}, tx);
     assert.equal(linhas.length, 8);
     for (const l of linhas) {
+      // A allowlist do padrão do sistema entra no hash (agentes com conteúdo, M9-D037 em diante): lida da própria tabela.
+      const tools = (await q('SELECT tool_name, permission_code, risk_level, requires_human_approval, enabled FROM ai.agent_tools WHERE agent_id = :id', { id: l.id }, tx))
+        .map((t) => ({ toolName: t.tool_name, permissionCode: t.permission_code, riskLevel: t.risk_level, requiresHumanApproval: t.requires_human_approval, enabled: t.enabled }));
       const esperado = computeConfigHash({
         code: l.code, purpose: l.purpose, systemPolicy: l.system_policy, modelPolicy: l.model_policy, dataScopes: l.data_scopes,
-        limits: l.limits, criticality: l.criticality, tools: [],
+        limits: l.limits, criticality: l.criticality, tools,
       });
       assert.equal(l.config_hash, esperado, `hash do seed de ${l.code}`);
     }

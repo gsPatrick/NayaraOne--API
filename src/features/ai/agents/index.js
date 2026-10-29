@@ -19,3 +19,5 @@ module.exports = {
   RunRateLimiter,
   defaultRunRateLimiter,
 };
+
+require('./builtin'); // registra a fronteira, os resolvedores e os números dos agentes do livro (M9-D037 em diante)

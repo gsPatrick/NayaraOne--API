@@ -15,6 +15,8 @@ const INITIAL_DEFINITIONS = Object.freeze([
   require('./crmCreateFollowUpTask'),
   require('./financeProposePayment'),
   require('./legalDraftContract'),
+  // Tools de leitura que cada agente do livro acrescenta (uma definição por arquivo, em agents/<agente>/tools).
+  ...require('../../agents/nay_obras/tools'),
 ]);
 
 module.exports = { INITIAL_DEFINITIONS };
