@@ -21,8 +21,9 @@ after(async () => {
   setTimeout(() => process.exit(0), 300);
 });
 
+const ASSUNTO = `aurora-${Date.now()}`;
 const decisao = (sourceId, extra = {}) => ({
-  type: 'DECISION', scope: 'COMPANY', sourceType: 'KNOWLEDGE_ENTRY', sourceId, subjectType: 'Property', subjectId: 'aurora',
+  type: 'DECISION', scope: 'COMPANY', sourceType: 'KNOWLEDGE_ENTRY', sourceId, subjectType: 'Property', subjectId: ASSUNTO,
   value: { decision: 'prioridade: Aurora' }, ...extra,
 });
 
@@ -41,7 +42,7 @@ test('m9d009_http_ciclo_salvar_invalidar_corrigir_e_historico', { skip: SKIP }, 
   const m = criada.body.data;
   assert.equal(m.status, 'ACTIVE'); assert.equal(m.version, 1); assert.ok(m.expiresAt);
   assert.equal((await call('GET', `/ai/memories/${m.id}`, gestor)).body.data.value.decision, 'prioridade: Aurora');
-  assert.ok((await call('GET', '/ai/memories?subjectType=Property&subjectId=aurora', leitura)).body.data.some((x) => x.id === m.id));
+  assert.ok((await call('GET', `/ai/memories?subjectType=Property&subjectId=${ASSUNTO}`, leitura)).body.data.some((x) => x.id === m.id));
 
   // Recusas com código e mensagem em português.
   const livre = await call('POST', '/ai/memories', gestor, decisao(src, { value: { text: 'x'.repeat(4000) } }));
@@ -73,7 +74,7 @@ test('m9d009_http_ciclo_salvar_invalidar_corrigir_e_historico', { skip: SKIP }, 
   assert.equal((await call('POST', `/ai/memories/${v2}/invalidate`, gestor, {})).body.error.code, 'AI_MEMORY_INVALID');
   const inv = await call('POST', `/ai/memories/${v2}/invalidate`, gestor, { reason: 'Informação errada' });
   assert.equal(inv.status, 200, JSON.stringify(inv.body)); assert.equal(inv.body.data.status, 'INVALIDATED');
-  const vigentes = (await call('GET', '/ai/memories?subjectType=Property&subjectId=aurora', gestor)).body.data;
+  const vigentes = (await call('GET', `/ai/memories?subjectType=Property&subjectId=${ASSUNTO}`, gestor)).body.data;
   assert.ok(!vigentes.some((x) => x.id === v2 || x.id === m.id), 'invalidada e substituída não aparecem como vigentes');
   assert.ok((await call('GET', '/ai/memories?status=INVALIDATED', gestor)).body.data.some((x) => x.id === v2), 'continua no histórico');
 });

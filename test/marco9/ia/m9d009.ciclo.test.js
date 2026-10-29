@@ -36,7 +36,7 @@ test('m9d009_corrigir_gera_versao_e_preserva_historico', async () => {
     const hist = await linhas([v1.id, v2.id], tx);
     assert.deepEqual(hist.map((h) => [h.version, h.status]), [[1, 'SUPERSEDED'], [2, 'ACTIVE']]);
     // Só a vigente entra no contexto; a antiga continua no histórico.
-    const vistas = await memoria.recall(dono, { subject: { type: 'Property', id: 'aurora' } }, tx);
+    const vistas = await memoria.recall(dono, { subject: { type: 'Property', id: v1.subjectId } }, tx);
     assert.deepEqual(vistas.map((m) => m.id), [v2.id]);
     // Corrigir a já substituída é recusado.
     await rejeita(memoria.correct(dono, v1.id, { value: { decision: 'outra' } }, tx), 409, 'AI_MEMORY_NOT_ACTIVE');
@@ -48,8 +48,8 @@ test('m9d009_corrigir_gera_versao_e_preserva_historico', async () => {
   });
 });
 
-async function memoriaPorContexto(ctx, tx, extra = {}) {
-  const fontes = await memoria.recallAsSources(ctx, { subject: { type: 'Property', id: 'aurora' } }, tx);
+async function memoriaPorContexto(ctx, subjectId, tx, extra = {}) {
+  const fontes = await memoria.recallAsSources(ctx, { subject: { type: 'Property', id: subjectId } }, tx);
   const out = await buildContext(ctx, {
     runId: null, taskType: 'priorizar_imoveis', instruction: 'Qual imóvel priorizar?', purpose: 'planejamento', provider: createSandboxProvider().descriptor,
     sources: fontes, agentContext: { agentCode: 'NAY_COMERCIAL' }, ...extra,
@@ -62,7 +62,7 @@ test('adv_memoria_invalidada_nao_reaparece', async () => {
     const run = await origemRun(tenantA, tx);
     const dono = ana();
     const m = (await memoria.save(dono, dados(run, { value: { decision: 'prioridade: Aurora' } }), tx)).memory;
-    const antes = await memoriaPorContexto(dono, tx);
+    const antes = await memoriaPorContexto(dono, m.subjectId, tx);
     assert.equal(antes.fontes.length, 1);
     assert.match(antes.texto, /prioridade: Aurora/, 'vigente entra no contexto do run');
     assert.match(antes.texto, new RegExp(m.sourceId), 'com a origem para citação');
@@ -70,10 +70,10 @@ test('adv_memoria_invalidada_nao_reaparece', async () => {
     await rejeita(memoria.invalidate(dono, m.id, {}, tx), 400, 'AI_MEMORY_INVALID');
     const inv = await memoria.invalidate(dono, m.id, { reason: 'Informação errada: a diretoria mudou de ideia' }, tx);
     assert.equal(inv.memory.status, 'INVALIDATED'); assert.equal(inv.memory.invalidatedBy, dono.userId); assert.ok(inv.memory.invalidatedAt);
-    const depois = await memoriaPorContexto(dono, tx);
+    const depois = await memoriaPorContexto(dono, m.subjectId, tx);
     assert.equal(depois.fontes.length, 0);
     assert.ok(!depois.texto.includes('prioridade: Aurora'));
-    assert.deepEqual(await memoria.recall(dono, {}, tx), []);
+    assert.deepEqual(await memoria.recall(dono, { subject: { type: 'Property', id: m.subjectId } }, tx), []);
     // A linha continua no histórico, com quem invalidou e por quê.
     const [linha] = await linhas([m.id], tx);
     assert.equal(linha.status, 'INVALIDATED'); assert.match(linha.invalidation_reason, /diretoria mudou/);
@@ -92,7 +92,7 @@ test('m9d009_expirada_nao_e_recuperada', async () => {
     const t0 = new Date('2026-10-27T12:00:00Z');
     const curta = (await memoria.save(dono, dados(run, { expiresAt: new Date(t0.getTime() + DIA).toISOString() }), tx, { now: t0 })).memory;
     const longa = (await memoria.save(dono, dados(run, { subjectId: 'outra' }), tx, { now: t0 })).memory;
-    const aurora = { subject: { type: 'Property', id: 'aurora' } };
+    const aurora = { subject: { type: 'Property', id: curta.subjectId } };
     assert.equal((await memoria.recall(dono, aurora, tx, { now: t0 })).length, 1);
     // Depois do prazo, a leitura já ignora a vencida (mesmo antes do job).
     const t1 = new Date(t0.getTime() + 2 * DIA);
@@ -141,10 +141,12 @@ test('m9d009_escopo_user_so_do_dono', async () => {
   });
 });
 
+let idDaA;
 test('m9d009_empresa_b_nao_le', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const run = await origemRun(tenantA, tx);
     const m = (await memoria.save(ana(), dados(run), tx)).memory;
+    idDaA = m.id;
     const ctxB = comPerm({ groupId: tenantB.groupId, companyId: tenantB.companyId, userId: ctxDe(tenantA).userId }, 'ai:use', 'ai:admin', 'ai:audit');
     // Contexto de B apontando para a linha de A, na transação de A: o filtro por empresa esconde a linha.
     await rejeita(memoria.get(ctxB, m.id, tx), 404, 'AI_MEMORY_NOT_FOUND');
@@ -155,8 +157,8 @@ test('m9d009_empresa_b_nao_le', async () => {
     assert.equal(dentro[0].n, 1);
   });
   await withRollbackTenantTransaction(tenantB, async (tx) => {
-    const [{ n }] = await q('SELECT count(*)::int AS n FROM ai.memories', {}, tx);
-    assert.equal(n, 0, 'a empresa B não enxerga nenhuma memória da A');
+    const [{ n }] = await q('SELECT count(*)::int AS n FROM ai.memories WHERE id = :id', { id: idDaA }, tx);
+    assert.equal(n, 0, 'a empresa B não enxerga a memória da A');
   });
 });
 

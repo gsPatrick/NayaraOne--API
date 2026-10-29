@@ -14,7 +14,7 @@ const NAY = (ctx, ...permissions) => ({ ...ctx, userId: undefined, serviceIdenti
 
 /** Entrada de save com valores válidos (DECISION de escopo COMPANY); `extra` sobrescreve. */
 const dados = (sourceId, extra = {}) => ({
-  type: 'DECISION', scope: 'COMPANY', sourceType: 'RUN', sourceId, subjectType: 'Property', subjectId: 'aurora',
+  type: 'DECISION', scope: 'COMPANY', sourceType: 'RUN', sourceId, subjectType: 'Property', subjectId: `aurora-${uid().slice(0, 8)}`,
   value: { decision: 'Priorizar o Edifício Aurora', rationale: 'Decisão da diretoria' }, ...extra,
 });
 
