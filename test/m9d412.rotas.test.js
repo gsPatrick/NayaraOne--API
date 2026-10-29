@@ -183,7 +183,10 @@ test('rotas_de_campanha_exigem_permissao_agendam_e_isolam_empresas', { skip: !DI
     await adminQuery(`INSERT INTO marketing.attribution_events (group_id, company_id, person_id, campaign_id, event_type, touch_roles, evidence_json, valid, occurred_at)
       VALUES ($1, $2, $3, $4, 'VISIT', '{FIRST,LAST}', '{"fonte":"QA-M9 D412"}'::jsonb, true, $5)`, [camp.group_id, camp.company_id, ids.personA, id, new Date(new Date(camp.ends_at).getTime() - 3600e3)]);
   }
-  await adminQuery('UPDATE marketing.campaigns SET cost_actual = 9180 WHERE id = $1', [id]);
+  // o custo real vem do Financeiro (M9-D432): despesa paga de R$ 9.180,00 ligada à campanha pela referência de origem
+  const [cc] = (await adminQuery(`INSERT INTO finance.cost_centers (id, group_id, company_id, code, name) VALUES (gen_random_uuid(), $1, $2, $3, 'QA-M9 D412') RETURNING id`, [camp.group_id, camp.company_id, `QA-M9-${id.slice(0, 8)}`])).rows;
+  await adminQuery(`INSERT INTO finance.financial_entries (id, group_id, company_id, cost_center_id, entry_type, nature, amount, status, settled_at, competence_month, origin_ref)
+    VALUES (gen_random_uuid(), $1, $2, $3, 'DEBIT', 'PAYABLE', 9180, 'SETTLED', now(), '2031-12', $4)`, [camp.group_id, camp.company_id, cc.id, `campaign:${id}`]);
   const lifecycle = require('../src/features/marketing/campaigns').lifecycle;
   await sequelize.transaction(async (transaction) => {
     await sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true)", { replacements: { g: camp.group_id, c: camp.company_id }, transaction });

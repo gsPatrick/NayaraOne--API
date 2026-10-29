@@ -82,7 +82,8 @@ test('data_sem_fuso_usa_o_fuso_da_empresa_configurado', async () => {
 test('resultado_e_attainment_calculados', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
     const { campaign, personIds } = await scheduled(t, { objectiveMetric: 'VISITS', targetValue: 40, startsAt: '2031-12-01T09:00:00', endsAt: '2031-12-10T18:00:00' });
-    await q(t, 'UPDATE marketing.campaigns SET cost_actual = 9180 WHERE id = :id', { id: campaign.id });
+    // o custo real vem do Financeiro (M9-D432): despesa paga de R$ 9.180,00 ligada à campanha pela referência de origem
+    await require('./marco9/_helpers/m9d432Fixtures').expense(t, A, { amount: 9180, ref: `campaign:${campaign.id}` });
     const ins = (type, when, valid = true, camp = campaign.id) => q(t,
       `INSERT INTO marketing.attribution_events (group_id, company_id, person_id, campaign_id, event_type, touch_roles, evidence_json, valid, occurred_at)
        VALUES (:g, :c, :p, :camp, :ty, '{FIRST,LAST}', '{"fonte":"QA-M9"}'::jsonb, :v, :w) RETURNING id`,

@@ -617,6 +617,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
     resultCenterId,
     contractId,
     constructionProjectId,
+    originRef,
     entryType,
     nature,
     amount,
@@ -804,6 +805,8 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
       // M6-97 — dimensão de origem Obras: só preenchida quando o lançamento nasce de uma
       // medição/obra (ver stageMeasurements.service.js), permite relatório de margem por obra.
       constructionProjectId: constructionProjectId || null,
+      // M9-D432: referência de origem (`campaign:{id}`) lida pelo Marketing para o custo real da campanha.
+      originRef: originRef ? String(originRef).trim().slice(0, 120) : null,
       entryType: normalizedType,
       nature: normalizedNature,
       amount,

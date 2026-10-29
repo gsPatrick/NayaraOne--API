@@ -9,6 +9,7 @@ const { assertTransition } = require('./campaigns.stateMachine');
 const { countResult, computeAttainment } = require('./campaigns.result');
 const { run } = require('./campaigns.repository');
 const { dispatchDueSteps } = require('./stepDispatcher');
+const { recalculateCampaignCost, recalculateDueCosts } = require('./cost.service');
 
 const ENTITY = 'marketing.campaign';
 
@@ -58,6 +59,7 @@ async function endCampaign(id, tenant, now, transaction) {
   if (!row || row.status !== 'RUNNING' || new Date(row.ends_at) > now) return false;
   assertTransition(row.status, 'ENDED');
   const resultValue = await countResult(row, tenant, transaction);
+  await recalculateCampaignCost(id, tenant, transaction, { now }); // M9-D432: custo real final vindo do Financeiro
   const updated = await campaignRepo.update(id, { status: 'ENDED', resultValue }, null, transaction);
   const cancelled = await cancelPendingWork(row, tenant, transaction);
   const attainment = computeAttainment(resultValue, updated.target_value);
@@ -97,7 +99,8 @@ async function runLifecycleTick(tenant, transaction, now = new Date()) {
   const toEnd = await campaignRepo.dueToEnd(tenant, now, transaction);
   const ended = await each(toEnd, (id, inner) => endCampaign(id, tenant, now, inner), transaction, 'end');
   const dispatch = await dispatchDueSteps(tenant, transaction, now);
-  return { started: started.done, ended: ended.done, failed: [...started.failed, ...ended.failed], dispatch };
+  const costs = await recalculateDueCosts(tenant, transaction, now);
+  return { started: started.done, ended: ended.done, failed: [...started.failed, ...ended.failed], dispatch, costs };
 }
 
 module.exports = { startCampaign, endCampaign, runLifecycleTick };

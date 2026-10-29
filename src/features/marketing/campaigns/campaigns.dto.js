@@ -1,6 +1,7 @@
 'use strict';
 
 const { computeAttainment, formatAttainment, costPerResult } = require('./campaigns.result');
+const { costWarnings } = require('./cost.service');
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const iso = (v) => (v ? new Date(v).toISOString() : null);
@@ -32,6 +33,7 @@ function campaignDto(row, audiences, steps, audienceSize, reach = null) {
     resultValue, attainment, attainmentDisplay: formatAttainment(attainment), costPerResult: costPerResult(num(row.cost_actual), resultValue),
     audienceSize, reach, audiences: audiences.map(audienceDto), steps: steps.map(stepDto),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
+    costUpdatedAt: iso(row.cost_updated_at), warnings: costWarnings(row),
   };
 }
 

@@ -16,6 +16,7 @@ const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/p
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
+const { COST_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/cost.settings');
 const { SEGMENT_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/segment.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
@@ -136,6 +137,8 @@ const SETTINGS_SCHEMA = {
   ...TEMPLATE_SETTINGS_SCHEMA,
   // Marco 9, M9-D412 — destinatários processados por step a cada rodada do job de campanhas.
   ...CAMPAIGN_SETTINGS_SCHEMA,
+  // Marco 9, M9-D432 - custo real da campanha: fonte Financeiro ativa e intervalo de recalculo.
+  ...COST_SETTINGS_SCHEMA,
   // Marco 9, M9-D419 — campos proibidos como critério de segmentação (dado sensível).
   ...SEGMENT_SETTINGS_SCHEMA,
   // Marco 9, M9-D406 — antecedência mínima do agendamento de conteúdo do Marketing.

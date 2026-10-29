@@ -10,7 +10,7 @@ const run = (sql, replacements, transaction) => sequelize.query(sql, { replaceme
 const UPDATABLE = Object.freeze({
   name: 'name', objective: 'objective', objectiveMetric: 'objective_metric', targetValue: 'target_value', budgetAmount: 'budget_amount',
   budgetJustification: 'budget_justification', channels: 'channels', startsAt: 'starts_at', endsAt: 'ends_at', ownerUserId: 'owner_user_id',
-  status: 'status', resultValue: 'result_value',
+  status: 'status', resultValue: 'result_value', costActual: 'cost_actual', costUpdatedAt: 'cost_updated_at', costStale: 'cost_stale',
 });
 
 async function findById(id, tenant, transaction, { lock = false } = {}) {

@@ -64,6 +64,12 @@ module.exports = (sequelize) => {
         field: 'chart_of_account_version_id',
         comment: '§4: versão da conta vigente na data do fato (finance.chart_of_account_versions)',
       },
+      originRef: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: 'origin_ref',
+        comment: 'Referência de origem do lançamento (M9-D432): `campaign:{id}` liga o gasto a uma campanha de Marketing.',
+      },
       isThirdPartyFunds: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
