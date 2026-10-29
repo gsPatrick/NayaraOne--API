@@ -14,6 +14,7 @@ const { ARGS_SETTING_DEFAULTS, ARGS_SETTINGS_SCHEMA } = require('./tools/args.se
 const { INJECTION_SETTING_DEFAULTS, INJECTION_SETTINGS_SCHEMA } = require('./security/injection.settings');
 const { RETENTION_SETTING_DEFAULTS, RETENTION_SETTINGS_SCHEMA } = require('./retention/retention.settings');
 const { AUDIT_SETTING_DEFAULTS, AUDIT_SETTINGS_SCHEMA } = require('./audit/audit.settings');
+const { RECOMMENDATION_SETTING_DEFAULTS, RECOMMENDATION_SETTINGS_SCHEMA } = require('./recommendations/recommendation.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
@@ -34,6 +35,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...INJECTION_SETTING_DEFAULTS,
   ...RETENTION_SETTING_DEFAULTS,
   ...AUDIT_SETTING_DEFAULTS,
+  ...RECOMMENDATION_SETTING_DEFAULTS,
 });
 
 const AI_SETTINGS_SCHEMA = {
@@ -47,6 +49,7 @@ const AI_SETTINGS_SCHEMA = {
   ...INJECTION_SETTINGS_SCHEMA,
   ...RETENTION_SETTINGS_SCHEMA,
   ...AUDIT_SETTINGS_SCHEMA,
+  ...RECOMMENDATION_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {
