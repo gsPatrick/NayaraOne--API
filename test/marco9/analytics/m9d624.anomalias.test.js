@@ -51,8 +51,14 @@ test('m9d624 fin.anomalies_open fica DEGRADED com valor nulo quando a regra de q
   const degraded = await readKpi(t, CODE);
   assert.equal(degraded.status, 'DEGRADED');
   assert.equal(degraded.value, null, 'valor nulo');
-  assert.equal(await dim(t, 'risco:NAO_CLASSIFICADO'), '1', 'o caso sem nível é contado em NÃO CLASSIFICADO');
-  assert.equal(await dim(t, 'alto'), '2', 'o que foi classificado continua correto');
+  // M9-D697: a leitura nunca devolve valor de KPI DEGRADED (nem das dimensões); a contagem gravada fica no snapshot.
+  const stored = async (key) => String(Number((await env.admin.query(
+    `SELECT s.value_numeric FROM analytics.metric_snapshots s JOIN analytics.metric_definitions d ON d.id = s.metric_id
+      WHERE d.metric_code = :code AND d.company_id = :c AND s.dimension_key = :k AND s.as_of_date = :d ORDER BY s.revision_no DESC LIMIT 1`,
+    { replacements: { code: CODE, c: t.companyId, k: key, d: env624.AS_OF } }))[0][0].value_numeric));
+  assert.equal(await dim(t, 'risco:NAO_CLASSIFICADO'), '0', 'a leitura da dimensão de um KPI DEGRADED não traz valor');
+  assert.equal(await stored('risco:NAO_CLASSIFICADO'), '1', 'o caso sem nível é contado em NÃO CLASSIFICADO');
+  assert.equal(await stored('alto'), '2', 'o que foi classificado continua correto');
   assert.ok(degraded.revisionNo >= 2, 'a revisão anterior (OK) foi preservada');
 });
 
