@@ -21,7 +21,7 @@ before(async () => { ({ tenantA, tenantB } = await prepararTenants()); });
 after(async () => { await sequelize.close(); });
 
 const PERMS = ['ai:use', 'legal:read', 'legal:create'];
-const TOOLS = ['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'knowledge.search', 'legal.draftContract'];
+const TOOLS = ['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'knowledge.search', 'legal.draftContract'];
 
 test('m9d038_agente_cadastrado_com_proposito_tools_escopos_e_limites', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {

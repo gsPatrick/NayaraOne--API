@@ -20,7 +20,7 @@ const AGENTE = {
   limits: { max_tool_calls_por_run: 6 },
   criticality: 'CRITICAL',
   tools: [
-    tool('legal.getContractSummary', 'legal:read'), tool('legal.compareVersions', 'legal:read'), tool('legal.getRequirementsChecklist', 'legal:read'), tool('legal.getDeadlines', 'legal:read'),
+    tool('legal.getContractSummary', 'legal:read'), tool('legal.compareVersions', 'legal:read'), tool('legal.getRequirementsChecklist', 'legal:read'), tool('legal.getDeadlines', 'legal:read'), tool('legal.getExpiringContracts', 'legal:read'),
     tool('knowledge.search', 'ai:use'), tool('legal.draftContract', 'legal:create', 'HIGH', true),
   ],
 };

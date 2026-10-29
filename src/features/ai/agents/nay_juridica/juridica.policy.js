@@ -18,7 +18,7 @@ const MODEL_POLICY = Object.freeze({ maxOutputTokens: 2048 });
 const DATA_SCOPES = Object.freeze(['legal.contracts', 'legal.contract_versions', 'legal.requirements', 'legal.addenda', 'knowledge.homologated']);
 const LIMITS = Object.freeze({ max_tool_calls_por_run: 6 });
 
-const READ_TOOLS = Object.freeze(['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'knowledge.search']);
+const READ_TOOLS = Object.freeze(['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'knowledge.search']);
 const WRITE_TOOL = 'legal.draftContract';
 const TOOL_NAMES = Object.freeze([...READ_TOOLS, WRITE_TOOL]);
 const TOOLS = Object.freeze(TOOL_NAMES.map((toolName) => Object.freeze({
