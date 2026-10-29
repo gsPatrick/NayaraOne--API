@@ -9,6 +9,7 @@ Pipelines: `NayaraOne--API/.github/workflows/test.yml` e `NayaraOne--FRONT/.gith
 | migrations | `npm run migrate` em Postgres 16 efêmero | — |
 | unit/integration/RLS tests | suíte completa com a role sem BYPASSRLS | — |
 | security_scan | scanner de hard-code, SAST, `npm audit` | — |
+| lineage (M9-D811) | `npm run check:lineage` em todo push e pull request: KPI ou exportação crítica sem caminho completo de lineage reprova o build (sem lista de isenção); o arquivo `docs/governance/lineage-registry.json` só é gerado por `npm run sync:lineage` | — |
 | load_failure_tests | `loadTestInventoryProcurement.js --light` (gates) + `inventory.failureDrills.test.js` na suíte | — |
 | deploy_LAB | job `deploy-lab` (push em `marco-6-e-7-homologado-nayara`, environment `lab`) | idem |
 | production_approval | job `deploy-production` (environment `production` com required reviewers; push em `main` ou disparo manual) | idem |

@@ -162,6 +162,10 @@ jobs:
       - name: Guardas do Não improvisar (M9-D614)
         run: npm run guard:analytics-rules
 
+      # M9-D811: KPI crítico sem lineage completo (campo de origem -> campo de domínio -> evento -> read model -> métrica) reprova o build; sem lista de isenção.
+      - name: Portão de lineage (M9-D811)
+        run: npm run check:lineage
+
       - name: Testes de fórmula do BI (M9-D604)
         run: npm run guard:formula-tests
 

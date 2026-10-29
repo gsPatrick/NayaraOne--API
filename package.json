@@ -28,6 +28,7 @@
     "guard:integration-boundaries": "node scripts/checkIntegrationBoundaries.js",
     "guard:formula-tests": "node scripts/analytics/checkFormulaTests.js",
     "guard:analytics-rules": "node scripts/analytics/checkGuardrails.js",
+    "check:lineage": "node scripts/checkLineageCoverage.js",
     "sync:lineage": "node scripts/withDisposableDb.js -- node scripts/syncLineageRegistry.js",
     "scan:secrets": "node scripts/secretScan.js",
     "audit:dependencies": "node scripts/dependencyAudit.js",
