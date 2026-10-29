@@ -21,6 +21,7 @@ const { replayOutcome } = require('./toolCallReplay');
 const { auditToolCall, publishToolCallEvent } = require('./toolCallEvents');
 const { TOOL_RESULT_MAX_KEY, TOOLCALL_SETTING_DEFAULTS } = require('./toolCalls.settings');
 const support = require('../readmodels/toolCallSupport.readmodel');
+const { countBlocked } = require('./toolCallsBlockedCounter');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHAIN = ['REQUESTED', 'VALIDATED', 'EXECUTING'];
@@ -97,6 +98,7 @@ function createToolCallRecorder({ ctx, transaction, runId, clock = () => Date.no
         await current.update(set, { transaction });
       }
       await current.reload({ transaction });
+      if (target === 'BLOCKED') countBlocked(current.blockedReason); // M9-D681: o contador sai da mesma linha que o KPI ai.tool_calls_blocked soma
       await auditToolCall(ctx, 'ai.tool_call.state_changed', toToolCall(current), before, `Chamada de ferramenta da NAY: ${before.status} para ${current.status}.`, transaction);
       return toToolCall(current);
     });

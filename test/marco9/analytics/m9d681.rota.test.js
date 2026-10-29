@@ -113,16 +113,18 @@ test('m9d681 replay do mesmo evento não altera o valor (assertReplayIdempotent 
   assert.equal((await get('ai.cost_by_agent')).body.data.value, before);
 });
 
-test('m9d681 o contador nayaraone_api_ai_tool_calls_blocked_total da NAY Diretoria conta os mesmos motivos que o KPI separa', async () => {
+test('m9d681 o contador nayaraone_api_ai_tool_calls_blocked_total conta os mesmos motivos que o KPI separa', async () => {
+  // a prova de que cada recusa da NAY vira linha BLOCKED e sobe o contador e o KPI está em m9d681.recusasNay
   const { register } = require('../../../src/utils/metrics');
-  const { assertNayToolAllowed, countBlocked } = require('../../../src/features/analytics/briefs');
+  const { assertNayToolAllowed } = require('../../../src/features/analytics/briefs');
+  const { countBlocked } = require('../../../src/features/ai/tools/toolCallsBlockedCounter');
   const counter = register.getSingleMetric('nayaraone_api_ai_tool_calls_blocked_total');
   assert.ok(counter, 'o contador existe');
   const read = async (reason) => ((await counter.get()).values.find((v) => v.labels.reason === reason) || { value: 0 }).value;
-  const b0 = await read('NOT_ALLOWED');
+  const b0 = await read('PERMISSION');
   assert.throws(() => assertNayToolAllowed('tool.fora_do_catalogo'), (e) => e.code === 'ANALYTICS_AI_TOOL_NOT_ALLOWED');
   countBlocked('PERMISSION');
-  assert.equal(await read('NOT_ALLOWED'), b0 + 1);
+  assert.equal(await read('PERMISSION'), b0 + 1);
   const { IA_KPI_DEFAULTS, KEYS } = require('../../../src/features/analytics/read-models/iaKpi.settings');
   const known = IA_KPI_DEFAULTS[KEYS.knownBlockReasons].split(',');
   for (const reason of ['ALLOWLIST', 'PERMISSION', 'SCHEMA', 'INJECTION', 'CROSS_COMPANY', 'SECRET', 'BUDGET', 'POLICY', 'STALE']) assert.ok(known.includes(reason), `o KPI separa o motivo ${reason}`);

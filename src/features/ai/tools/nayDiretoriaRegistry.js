@@ -6,7 +6,7 @@
 const { ToolRegistry } = require('./ToolRegistry');
 const { loadPermissionCodes } = require('./bootRegistry');
 const { runToolCall } = require('../orchestrator/toolCallPipeline');
-const { NAY_TOOL_DEFINITIONS, NAY_TOOL_NAMES, assertNayToolAllowed, countBlocked } = require('../../analytics/briefs');
+const { NAY_TOOL_DEFINITIONS, NAY_TOOL_NAMES, assertNayToolAllowed } = require('../../analytics/briefs');
 
 const NAY_DIRETORIA_AGENT_CODE = 'NAY_DIRETORIA';
 
@@ -21,16 +21,19 @@ async function buildNayDiretoriaRegistry(permissionCodes) {
 const nayDiretoriaAllowlist = () => NAY_TOOL_NAMES.map((toolName) => ({ toolName, enabled: true }));
 
 /**
- * Chamada de ferramenta da NAY Diretoria. Ferramenta fora do catálogo: 403 ANALYTICS_AI_TOOL_NOT_ALLOWED antes de qualquer outra coisa
- * (e contada). Qualquer outra recusa de segurança do pipeline (permissão, empresa, argumento, segredo) também é contada.
+ * Chamada de ferramenta da NAY Diretoria. Toda recusa passa pelo pipeline e vira linha BLOCKED em ai.tool_calls (motivo ALLOWLIST,
+ * PERMISSION, CROSS_COMPANY, SCHEMA, SECRET...), que é o que o KPI ai.tool_calls_blocked soma e o que incrementa o contador. Ferramenta fora do
+ * catálogo também segue pelo pipeline (que a recusa na allowlist e grava a linha) e termina em 403 ANALYTICS_AI_TOOL_NOT_ALLOWED.
  */
 async function runNayDiretoriaToolCall(params) {
-  assertNayToolAllowed(params.toolName);
+  let fora = null;
+  try { assertNayToolAllowed(params.toolName); } catch (err) { fora = err; }
   try {
-    return await runToolCall({ ...params, registry: params.registry || await buildNayDiretoriaRegistry() });
+    const result = await runToolCall({ ...params, registry: params.registry || await buildNayDiretoriaRegistry() });
+    if (fora) throw fora;
+    return result;
   } catch (err) {
-    const reason = err && err.details && err.details.blockedReason;
-    if (reason || (err && (err.code === 'AI_CAPABILITY_FORBIDDEN' || err.code === 'AI_TOOL_NOT_ALLOWED'))) countBlocked(reason || err.code);
+    if (fora && err && err.code === 'AI_TOOL_NOT_ALLOWED') throw fora;
     throw err;
   }
 }

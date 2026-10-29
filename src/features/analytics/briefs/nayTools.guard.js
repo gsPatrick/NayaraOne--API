@@ -8,19 +8,14 @@
  *  - `assertNoFreeQuery(def)`: 422 ANALYTICS_AI_TOOL_FREE_QUERY_FORBIDDEN para ferramenta do BI (nome `analytics.*`) com parâmetro de consulta
  *    livre. Chamada pelo registro de ferramentas no cadastro. Parâmetro de texto só passa com enum, pattern ou format uuid; propriedade com
  *    nome de consulta (sql, query, expression, filter, table, where, script, code...) é recusada até com enum.
- *  - `assertNayToolAllowed(name)`: 403 ANALYTICS_AI_TOOL_NOT_ALLOWED para ferramenta fora do catálogo; o bloqueio é contado em
- *    ai.tool_calls_blocked (counter nayaraone_api_ai_tool_calls_blocked_total).
+ *  - `assertNayToolAllowed(name)`: 403 ANALYTICS_AI_TOOL_NOT_ALLOWED para ferramenta fora do catálogo. A contagem em ai.tool_calls_blocked
+ *    (counter nayaraone_api_ai_tool_calls_blocked_total) e a linha BLOCKED/ALLOWLIST em ai.tool_calls saem do pipeline (runNayDiretoriaToolCall).
  */
-const client = require('prom-client');
 const AppError = require('../../../utils/AppError');
-const { register } = require('../../../utils/metrics');
 const { NAY_TOOL_NAMES, BI_TOOL_PREFIX } = require('./nayTools.names');
 
 const FORBIDDEN_NAMES = /(?:^|[^a-z])(sql|query|queries|consulta|expression|expressao|expr|filter|filtro|where|having|table|tabela|schema|statement|script|code|codigo|command|comando|raw|eval|formula|join|select)(?:[^a-z]|$)/i;
 const STRING_TYPES = new Set(['string']);
-
-const blocked = register.getSingleMetric('nayaraone_api_ai_tool_calls_blocked_total')
-  || new client.Counter({ name: 'nayaraone_api_ai_tool_calls_blocked_total', help: 'Chamadas de ferramenta da NAY bloqueadas (ai.tool_calls_blocked)', labelNames: ['reason'], registers: [register] });
 
 const freeQuery = (tool, path, reason) => AppError.unprocessable('Ferramentas não podem aceitar consulta livre.', 'ANALYTICS_AI_TOOL_FREE_QUERY_FORBIDDEN', { tool: tool || null, path, reason });
 const notAllowed = (tool) => AppError.forbidden('Ferramenta não permitida para este agente.', 'ANALYTICS_AI_TOOL_NOT_ALLOWED', { tool: String(tool || '') });
@@ -46,13 +41,8 @@ function assertNoFreeQuery(def) {
   walk(def.inputSchema, '', def.name, null);
 }
 
-const countBlocked = (reason) => blocked.inc({ reason: String(reason || 'UNKNOWN') });
-
 function assertNayToolAllowed(name) {
-  if (!NAY_TOOL_NAMES.includes(name)) {
-    countBlocked('NOT_ALLOWED');
-    throw notAllowed(name);
-  }
+  if (!NAY_TOOL_NAMES.includes(name)) throw notAllowed(name);
 }
 
-module.exports = { assertNoFreeQuery, assertNayToolAllowed, countBlocked, freeQuery, notAllowed };
+module.exports = { assertNoFreeQuery, assertNayToolAllowed, freeQuery, notAllowed };

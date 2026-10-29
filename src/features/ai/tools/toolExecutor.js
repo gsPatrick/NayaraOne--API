@@ -105,6 +105,14 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
       const cap = (tentativas[0] && tentativas[0].capability) || (e.details && e.details.capability) || 'desconhecida';
       return bloquear(e && e.code === CODIGO_CAPACIDADE_NEGADA ? e : capacidadeNegada(cap, { path: tentativas[0] && tentativas[0].path }), cap);
     }
+    // M9-D681: a tool que recusa por segurança (ex.: permissão do BI) devolve o motivo em details.blockedReason: a chamada fica BLOCKED, não FAILED.
+    const motivo = e && e.details && typeof e.details.blockedReason === 'string' ? e.details.blockedReason : null;
+    if (motivo) {
+      const entrada = { ...base(), status: 'BLOCKED', blockedReason: motivo, reason: motivo.toLowerCase() };
+      await recorder.record(entrada);
+      if (typeof recorder.emit === 'function') await recorder.emit({ type: 'ai.tool_call.blocked', payload: entrada });
+      throw e;
+    }
     await recorder.record({ ...base(), status: 'FAILED', reason: e && e.code ? String(e.code) : 'erro_da_tool' });
     throw e;
   }

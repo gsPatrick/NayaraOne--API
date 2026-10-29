@@ -4,14 +4,13 @@
  * M9-D695 — acesso comum das ferramentas da NAY Diretoria. Cada ferramenta roda com as permissões do USUÁRIO que pediu (ou do papel do
  * destinatário do briefing) e passa pelo MESMO caminho de saída do BI (M9-D700): permissão do BI, permissão do domínio da métrica, escopo
  * da empresa (RLS), mascaramento de RESTRICTED e linha NAY_QUERY no log de acesso. Falta de permissão vira 403
- * ANALYTICS_DRILLDOWN_FORBIDDEN e conta em ai.tool_calls_blocked.
+ * ANALYTICS_DRILLDOWN_FORBIDDEN com blockedReason PERMISSION: o executor grava a chamada como BLOCKED e ela conta em ai.tool_calls_blocked.
  */
 const AppError = require('../../../utils/AppError');
 const { prepareSecureRows, assertPermission, assertDomainAccess, loadDomainMap, domainPermissionOf, has, P } = require('../security');
 const { resolveCompanyScope } = require('../security/scope');
-const { countBlocked } = require('./nayTools.guard');
 
-const forbidden = (permission) => AppError.forbidden('Você não tem permissão para ver este dado.', 'ANALYTICS_DRILLDOWN_FORBIDDEN', permission ? { permission } : undefined);
+const forbidden = (permission) => AppError.forbidden('Você não tem permissão para ver este dado.', 'ANALYTICS_DRILLDOWN_FORBIDDEN', { blockedReason: 'PERMISSION', ...(permission ? { permission } : {}) });
 
 /** Contexto do BI: empresa e grupo do servidor, permissões do usuário (todas as dele, não só as da tool) e o usuário no log. */
 function biContext(scope) {
@@ -26,7 +25,6 @@ async function guarded(fn) {
     return await fn();
   } catch (err) {
     if (err && err.code === 'PERMISSION_DENIED') {
-      countBlocked('PERMISSION');
       throw forbidden(err.details && err.details.permission);
     }
     throw err;

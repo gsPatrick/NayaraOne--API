@@ -11,6 +11,7 @@ const E = require('./toolCalls.errors');
 const C = require('./toolCalls.constants');
 const { toToolCall } = require('./toolCalls.mapper');
 const { auditToolCall, publishToolCallEvent } = require('./toolCallEvents');
+const { countBlocked } = require('./toolCallsBlockedCounter');
 
 async function settleProposedToolCall(ctx, { proposalId, recommendationStatus, errorCode } = {}, transaction) {
   if (!ctx || !ctx.groupId || !ctx.companyId) throw E.invalid('Contexto de empresa ausente.');
@@ -30,6 +31,7 @@ async function settleProposedToolCall(ctx, { proposalId, recommendationStatus, e
     await row.reload({ transaction });
     const call = toToolCall(row);
     await auditToolCall(ctx, 'ai.tool_call.state_changed', call, before, `Chamada de ferramenta da NAY: ${before.status} para ${call.status} pela decisão da recomendação.`, transaction);
+    if (call.status === 'BLOCKED') countBlocked(outcome.blockedReason);
     if (call.status === 'BLOCKED') await publishToolCallEvent(ctx, C.EVENT_BLOCKED, call, { capability: 'STALE' }, transaction);
     return call;
   } catch (err) {
