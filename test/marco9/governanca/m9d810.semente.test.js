@@ -53,7 +53,8 @@ test('m9d810 a semente é verdadeira: campos, tabelas e eventos existem no siste
     const { listReadModels } = require('../../../src/features/analytics/read-models/readModel.registry');
     require('../../../src/features/analytics');
     const eventsOf = new Map(listReadModels().map((m) => [`analytics.${m.name}`, new Set(m.eventTypes)]));
-    const auditSource = fs.readFileSync(path.join(__dirname, '../../../src/features/correspondent/fiscal/dimob.service.js'), 'utf8');
+    // onde o código grava a auditoria que cada evento de lineage nomeia: a DIMOB (lote) e o ciclo do arquivo das exportações (M9-D822)
+    const auditSource = ['features/correspondent/fiscal/dimob.service.js', 'features/core-governance/dlp/exports/export.audit.js'].map((f) => fs.readFileSync(path.join(__dirname, '../../../src', f), 'utf8')).join('\n');
     for (const e of edges.filter((x) => x.from.nodeType === 'EVENT')) {
       const known = eventsOf.get(e.to.code);
       if (known) assert.ok(known.has(e.from.code), `${e.from.code} não alimenta ${e.to.code}`);
