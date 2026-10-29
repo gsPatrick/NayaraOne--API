@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCase } = require('./legalCases.service');
 const { publishLegalDeadlineCreated } = require('./legalEvents.service');
 const { assertCriticalDeadlineAccountability, normalizeNote } = require('./legalDeadlineAccountability');
+const { normalizeOptionalText, requireText } = require('./legalText');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -24,18 +25,37 @@ function computeSeverity(deadline, now = new Date()) {
   return 'NORMAL';
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEADLINE_CRITICALITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+function assertValidDate(value, field) {
+  const t = value instanceof Date ? value.getTime() : typeof value === 'string' || typeof value === 'number' ? new Date(value).getTime() : NaN;
+  if (Number.isNaN(t)) {
+    throw AppError.badRequest(`O campo "${field}" deve ser uma data válida.`, 'LEGAL_DEADLINE_VALIDATION');
+  }
+}
 
 async function createLegalDeadline(legalCaseId, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  const { description, dueAt, sourceDocument, sourceEvent, responsibleUserId } = payload;
+  const { dueAt, responsibleUserId } = payload;
   // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): criticidade.
-  const criticality = payload.criticality ? String(payload.criticality).toUpperCase() : 'MEDIUM';
+  if (payload.criticality !== undefined && payload.criticality !== null && typeof payload.criticality !== 'string') {
+    throw AppError.badRequest('"criticality" deve ser um texto.', 'LEGAL_DEADLINE_VALIDATION');
+  }
+  const criticality = normalizeOptionalText(payload.criticality, 'criticality')?.toUpperCase() || 'MEDIUM';
   if (!DEADLINE_CRITICALITIES.includes(criticality)) {
     throw AppError.badRequest(`"criticality" deve ser um de: ${DEADLINE_CRITICALITIES.join(', ')}.`, 'LEGAL_DEADLINE_VALIDATION');
   }
-  if (!description || !dueAt) {
+  if (!payload.description || !dueAt) {
     throw AppError.badRequest('Os campos "description" e "dueAt" são obrigatórios.', 'LEGAL_DEADLINE_VALIDATION');
+  }
+  // Texto obrigatorio: sem espacos/invisiveis so, so texto, dentro do tamanho da coluna.
+  const description = requireText(payload.description, 'description', { max: 255 });
+  assertValidDate(dueAt, 'dueAt');
+  const sourceDocument = normalizeOptionalText(payload.sourceDocument, 'sourceDocument');
+  const sourceEvent = normalizeOptionalText(payload.sourceEvent, 'sourceEvent');
+  if ((sourceDocument && sourceDocument.length > 255) || (sourceEvent && sourceEvent.length > 255)) {
+    throw AppError.badRequest('"sourceDocument" e "sourceEvent" aceitam no máximo 255 caracteres.', 'LEGAL_DEADLINE_VALIDATION');
   }
   // Caderno §15: "Prazo sempre tem source_document/source_event" — exige pelo menos um dos
   // dois (não os dois obrigatoriamente, já que um prazo pode nascer de um documento OU de um
@@ -129,7 +149,13 @@ async function getLegalDeadline(id, transaction) {
 async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   const deadline = await getLegalDeadline(id, transaction);
   const beforeJson = deadline.toJSON();
-  const { status, description, dueAt, conclusionEvidenceFileId, conclusionNote, changeReason } = payload;
+  const { status, dueAt, conclusionEvidenceFileId, conclusionNote } = payload;
+  const description = payload.description !== undefined ? requireText(payload.description, 'description', { max: 255 }) : undefined;
+  if (dueAt !== undefined) assertValidDate(dueAt, 'dueAt');
+  if (conclusionEvidenceFileId !== undefined && conclusionEvidenceFileId !== null && !UUID_RE.test(String(conclusionEvidenceFileId))) {
+    throw AppError.badRequest('"conclusionEvidenceFileId" deve ser o identificador (UUID) de um arquivo.', 'LEGAL_DEADLINE_VALIDATION');
+  }
+  const changeReason = normalizeOptionalText(payload.changeReason, 'changeReason');
 
   // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
   // DONE) era aceito sem nenhuma evidência nem nota documentando o que foi feito — "{status:
@@ -167,7 +193,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // registrava um motivo genérico ("Prazo atualizado"), nunca a justificativa real. Fail closed:
   // mudar dueAt exige "changeReason" preenchido pelo usuário, usado como motivo real na auditoria.
   const dueAtChanged = dueAt !== undefined && new Date(dueAt).getTime() !== new Date(deadline.dueAt).getTime();
-  if (dueAtChanged && (!changeReason || !String(changeReason).trim())) {
+  if (dueAtChanged && !changeReason) {
     throw AppError.badRequest(
       'Mudar o vencimento de um prazo exige informar o motivo da mudança.',
       'LEGAL_DEADLINE_CHANGE_REASON_REQUIRED'
@@ -216,7 +242,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
       entityId: deadline.id,
       beforeJson,
       afterJson: deadline.toJSON(),
-      reason: dueAtChanged ? String(changeReason).trim() : `Prazo ${deadline.id} atualizado.`,
+      reason: dueAtChanged ? changeReason : `Prazo ${deadline.id} atualizado.`,
     },
     transaction
   );

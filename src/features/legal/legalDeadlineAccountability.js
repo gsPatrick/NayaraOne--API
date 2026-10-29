@@ -2,6 +2,7 @@
 
 const { LegalDeadline } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { normalizeOptionalText } = require('./legalText');
 
 /**
  * Regra do alerta (engines/jobs/legalDeadlineAlertJob.js): quem recebe o aviso e
@@ -37,11 +38,9 @@ async function assertCaseKeepsCriticalAccountability(legalCase, transaction) {
   for (const deadline of pending) assertCriticalDeadlineAccountability(deadline, legalCase);
 }
 
-/** Normaliza texto livre: tira espacos nas pontas; vazio vira null. */
+/** Normaliza a nota: tira espacos e caracteres invisiveis; vazio vira null; nao-texto e recusado (400). */
 function normalizeNote(value) {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  return trimmed || null;
+  return normalizeOptionalText(value, 'conclusionNote');
 }
 
 module.exports = { assertCriticalDeadlineAccountability, assertCaseKeepsCriticalAccountability, normalizeNote };
