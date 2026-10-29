@@ -139,7 +139,7 @@ test('m9d005_ciclo_via_servico_estados_eventos_e_mensagem_de_bloqueio', async ()
     const barrado = (await runs.startRun(ctx, novo(ctx), tx)).run;
     const b = await runs.finishRun(ctx, barrado.id, { status: 'BLOCKED', blockedReason: 'TOOL_LIMIT' }, tx);
     assert.match(b.message, /^A NAY não pôde concluir: /);
-    assert.deepEqual(await eventos(barrado.id), [], 'BLOCKED não emite evento');
+    assert.deepEqual(await eventos(barrado.id), ['ai.run.failed'], 'BLOCKED emite ai.run.failed (M9-D029)');
     await rejeita(runs.finishRun(ctx, (await runs.startRun(ctx, novo(ctx), tx)).run.id, { status: 'BLOCKED' }, tx), 400, 'AI_RUN_INVALID');
 
     const espera = (await runs.startRun(ctx, novo(ctx), tx)).run;

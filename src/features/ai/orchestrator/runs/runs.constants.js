@@ -13,8 +13,8 @@ const SOURCE_TYPES = Object.freeze(['READ_MODEL', 'DOCUMENT_CHUNK', 'KNOWLEDGE_E
 const CLASSIFICATIONS = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 const SOURCE_STATUSES = Object.freeze(['VIGENTE', 'REVOGADA', 'EXPIRADA']);
 
-/** Estado final -> evento do livro (só COMPLETED e FAILED emitem; D029). */
-const EVENT_BY_STATUS = Object.freeze({ COMPLETED: 'ai.run.completed', FAILED: 'ai.run.failed' });
+/** Estado final -> evento do livro (COMPLETED; FAILED e BLOCKED; os demais não emitem). A tabela vive em events/aiEvents.js (D029). */
+const { RUN_EVENT_BY_STATUS: EVENT_BY_STATUS } = require('../../events/aiEvents');
 
 /** Motivo de bloqueio -> frase em português para "A NAY não pôde concluir: <motivo>". Motivo desconhecido usa a frase genérica. */
 const BLOCKED_MESSAGES = Object.freeze({

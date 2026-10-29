@@ -60,7 +60,7 @@ test('m9d017_tentativa_bloqueada_gera_auditoria_e_evento', async () => {
     assert.ok(!JSON.stringify(linhas[1].after_json).includes(LONGO.slice(0, 300)), 'o pedido inteiro não é gravado');
 
     // Evento na mesma transação (outbox).
-    const eventos = await q(`SELECT event_type, payload_json FROM integration.outbox_events WHERE event_type = 'ai.tool_call.blocked' AND payload_json->>'runId' = 'run-aud-1' AND payload_json->>'correlationId' = 'corr-aud-1'`, {}, tx);
+    const eventos = await q(`SELECT event_type, payload_json FROM integration.outbox_events WHERE event_type = 'ai.tool_call.blocked' AND payload_json->>'runId' = 'run-aud-1'`, {}, tx);
     assert.equal(eventos.length, 2);
     assert.ok(eventos.every((e) => !JSON.stringify(e.payload_json).includes('123.456.789-09')));
   });

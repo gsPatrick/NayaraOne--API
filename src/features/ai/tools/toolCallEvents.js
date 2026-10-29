@@ -1,6 +1,6 @@
 'use strict';
 
-const { publishDomainEvent } = require('../../../engines/events/outbox');
+const { publishToolCallBlocked } = require('../events');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { auditSnapshot } = require('./toolCalls.mapper');
 
@@ -19,20 +19,9 @@ async function auditToolCall(ctx, action, call, before, reason, transaction) {
   }, transaction);
 }
 
-/** Evento do livro (ai.tool_call.blocked) no outbox, na mesma transação. O payload é montado aqui: nunca leva argumento nem resultado. */
+/** Evento do livro (ai.tool_call.blocked) no outbox, na mesma transação (events/, M9-D029): só ids, nome da tool e o código do motivo. */
 async function publishToolCallEvent(ctx, type, call, extra, transaction) {
-  return publishDomainEvent({
-    groupId: ctx.groupId,
-    companyId: ctx.companyId,
-    aggregateType: 'AiToolCall',
-    aggregateId: call.id,
-    eventType: type,
-    payload: {
-      toolCallId: call.id, runId: call.runId, seq: call.seq, toolName: call.toolName, status: call.status,
-      blockedReason: call.blockedReason, capability: (extra && extra.capability) || null, correlationId: (extra && extra.correlationId) || null,
-    },
-    idempotencyKey: `${type}:${call.id}`,
-  }, transaction);
+  return publishToolCallBlocked(ctx, { toolCallId: call.id, runId: call.runId, toolName: call.toolName, reason: call.blockedReason }, transaction);
 }
 
 module.exports = { auditToolCall, publishToolCallEvent };

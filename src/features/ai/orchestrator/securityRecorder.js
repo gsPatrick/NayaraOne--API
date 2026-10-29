@@ -6,7 +6,7 @@
 
 const crypto = require('node:crypto');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const { publishDomainEvent } = require('../../../engines/events/outbox');
+const { publishToolCallBlocked } = require('../events');
 const { maskSecrets } = require('../guards/secretPatterns');
 const { loadSecuritySettings } = require('./securitySettings');
 
@@ -49,22 +49,15 @@ function createSecurityRecorder({ execCtx, agentCode, requestText, transaction, 
       if (toolCallStore) await toolCallStore.record(linha, transaction);
       if (linha.status === 'BLOCKED') await auditarBloqueio(linha);
     },
-    async emit({ type, payload }) {
+    async emit({ payload }) {
       const callId = (payload && payload.callId) || ultimaChamada || crypto.randomUUID();
-      await publishDomainEvent({
-        groupId: tenant.groupId,
-        companyId: tenant.companyId,
-        aggregateType: 'AiToolCall',
-        aggregateId: callId,
-        eventType: type,
-        payload: {
-          callId, toolName: payload.toolName || null, agentCode: agentCode || null, runId: execCtx.runId || null, correlationId: execCtx.correlationId || null,
-          blockedReason: payload.blockedReason || null, reason: payload.reason || null, capability: payload.capability || null,
-        },
-        idempotencyKey: `${type}:${callId}`,
+      await publishToolCallBlocked(tenant, {
+        toolCallId: callId, runId: execCtx.runId || null, toolName: payload.toolName || 'desconhecida',
+        reason: payload.blockedReason || payload.reason || payload.capability || 'bloqueada',
+      }, transaction, {
         // a coluna do outbox é uuid: só o correlation id no formato do sistema vai; senão vale o da requisição em curso
         correlationId: UUID.test(String(execCtx.correlationId)) ? execCtx.correlationId : undefined,
-      }, transaction);
+      });
     },
   };
 }

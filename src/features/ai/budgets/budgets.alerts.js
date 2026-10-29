@@ -3,7 +3,7 @@
 const { Notification } = require('../../../models');
 const repo = require('../readmodels/budgetSupport.readmodel');
 const { reaches, pctOf } = require('./budgets.money');
-const { publishThresholdReached } = require('./budgets.events');
+const { publishBudgetThreshold } = require('../events');
 const { PERMISSIONS } = require('./budgets.constants');
 
 const brl = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,7 +43,7 @@ async function raiseAlerts(ctx, budget, paramThresholds, transaction) {
     if (!reaches(budget.consumedAmount, budget.limitAmount, threshold)) continue;
     const pct = pctOf(budget.consumedAmount, budget.limitAmount);
     if (!(await repo.insertAlert(budget, threshold, pct, transaction))) continue;
-    await publishThresholdReached(budget, threshold, pct, transaction);
+    await publishBudgetThreshold(budget, threshold, pct, transaction);
     await notifyBudgetOwners(ctx, budget, threshold, transaction);
     raised.push(threshold);
   }
