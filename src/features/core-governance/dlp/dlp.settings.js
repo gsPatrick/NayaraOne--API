@@ -1,6 +1,8 @@
 'use strict';
 
 const { CLASSES } = require('./dlp.constants');
+const { ANOMALY_SETTING_DEFAULTS, ANOMALY_SETTINGS_SCHEMA } = require('./anomaly.settings');
+const { VIEW_SETTING_DEFAULTS, VIEW_SETTINGS_SCHEMA } = require('./view.settings');
 
 /**
  * Parâmetros do DLP (aba Governança em /painel/configuracoes; catálogo em Maturacao/demandas/parametros.csv).
@@ -28,6 +30,8 @@ const DLP_SETTING_DEFAULTS = Object.freeze({
   [VOLUME_KEY]: 'LOW 100000; MEDIUM 50000; HIGH 10000; RESTRICTED 1000',
   [EXPIRY_KEY]: 'LOW 168; MEDIUM 72; HIGH 48; RESTRICTED 24',
   [WATERMARK_KEY]: 'LOW desligado; MEDIUM desligado; HIGH desligado; RESTRICTED desligado',
+  ...ANOMALY_SETTING_DEFAULTS,
+  ...VIEW_SETTING_DEFAULTS,
 });
 
 /** "LOW 10; MEDIUM 5" -> { LOW: '10', MEDIUM: '5' }; null se algum par estiver fora do formato. */
@@ -73,6 +77,8 @@ const DLP_SETTINGS_SCHEMA = {
   [VOLUME_KEY]: { type: 'string', validate: classMapValidator(positiveInt) },
   [EXPIRY_KEY]: { type: 'string', validate: classMapValidator((v) => positiveInt(v) && Number(v) <= 8760) },
   [WATERMARK_KEY]: { type: 'string', validate: classMapValidator(onOff) },
+  ...ANOMALY_SETTINGS_SCHEMA,
+  ...VIEW_SETTINGS_SCHEMA,
 };
 
 /** Mapa por classe já convertido; valor ausente ou inválido cai no padrão do catálogo daquela classe. */

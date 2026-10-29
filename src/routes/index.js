@@ -38,7 +38,7 @@ const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
-const { router: governanceRouter } = require('../features/core-governance');
+const { router: governanceRouter, viewPolicyRouter } = require('../features/core-governance');
 const { router: aiModuleRouter } = require('../features/ai');
 const { router: marketingModuleRouter, publicRouter: marketingPublicRouter } = require('../features/marketing');
 const { router: analyticsModuleRouter } = require('../features/analytics');
@@ -86,6 +86,8 @@ router.use(marketingPublicRouter);
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);
+// Marco 9 (M9-D825) — política de DLP para VIEW: envolve a resposta JSON das rotas de pessoas, imóveis, fornecedores, contratos, financeiro e arquivos (caminho por escopo).
+router.use('/v1', viewPolicyRouter);
 // Marco 9 — governança (src/features/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
 // autenticação valem só nos prefixos do bloco (nenhum router.use sem caminho), então as demais rotas de /v1 não são afetadas.
 router.use('/v1', governanceRouter);

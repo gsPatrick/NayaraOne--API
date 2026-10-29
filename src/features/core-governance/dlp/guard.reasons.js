@@ -8,7 +8,7 @@ const { govError } = require('../governance.errors');
  */
 const REASONS = Object.freeze({
   POLICY: { httpStatus: 403, errorCode: 'GOV_DLP_DENIED', message: 'Esta ação não é permitida para dados desta classificação.' },
-  SUSPENDED: { httpStatus: 403, errorCode: 'GOV_DLP_USER_SUSPENDED', message: 'Seu acesso a exportações está suspenso temporariamente por uso fora do padrão.' },
+  SUSPENDED: { httpStatus: 403, errorCode: 'GOV_DLP_USER_SUSPENDED', message: 'Suas exportações estão suspensas para revisão de segurança.' },
   PERMISSION: { httpStatus: 403, errorCode: 'GOV_DLP_PERMISSION', message: 'Você não tem permissão para esta exportação.' },
   PURPOSE: { httpStatus: 422, errorCode: 'GOV_DLP_PURPOSE_REQUIRED', message: null },
   MFA: { httpStatus: 403, errorCode: 'MFA_STEP_UP_REQUIRED', message: 'Confirme o código de verificação para continuar.' },

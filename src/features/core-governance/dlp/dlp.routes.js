@@ -5,6 +5,8 @@ const { GOVERNANCE_MODULES } = require('../governance.settings');
 const { EXPORT_PERMISSION, ADMIN_PERMISSION } = require('./dlp.constants');
 const controller = require('./dlp.controller');
 const policyController = require('./policy.controller');
+const anomalyController = require('./anomaly.controller');
+const copyController = require('./copy.controller');
 
 const MODULE = GOVERNANCE_MODULES.find((item) => item.code === 'dlp');
 
@@ -13,6 +15,11 @@ const router = buildModuleRouter(MODULE, [
   { method: 'get', path: '/dlp', permission: ADMIN_PERMISSION, handler: controller.getOverview },
   { method: 'get', path: '/dlp/policies', permission: [EXPORT_PERMISSION, ADMIN_PERMISSION], handler: policyController.listPolicies },
   { method: 'put', path: '/dlp/policies/:classification/:action', permission: ADMIN_PERMISSION, handler: policyController.putPolicy },
+  // Anomalia de acesso em massa (M9-D824): lista para a revisão e decisão humana com motivo (CONFIRMED ou FALSE_POSITIVE).
+  { method: 'get', path: '/dlp/anomalies', permission: ADMIN_PERMISSION, handler: anomalyController.list },
+  { method: 'post', path: '/dlp/anomalies/:id/review', permission: ADMIN_PERMISSION, handler: anomalyController.reviewOne },
+  // Registro de cópia vinda da tela (M9-D825 §3.2b): exige apenas login, porque registra a ação do próprio usuário; o servidor reavalia a política.
+  { method: 'post', path: '/dlp/copy-events', permission: null, handler: copyController.createCopyEvent },
 ]);
 
 module.exports = router;

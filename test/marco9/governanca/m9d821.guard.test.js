@@ -128,7 +128,7 @@ test('m9d821 cada motivo de bloqueio vira o erro HTTP do livro, com a mensagem e
   const make = (blockReason) => blockedError({ blockReason, job: { id: 'j1' } }, 20);
   const expected = {
     POLICY: [403, 'GOV_DLP_DENIED', 'Esta ação não é permitida para dados desta classificação.'],
-    SUSPENDED: [403, 'GOV_DLP_USER_SUSPENDED', 'Seu acesso a exportações está suspenso temporariamente por uso fora do padrão.'],
+    SUSPENDED: [403, 'GOV_DLP_USER_SUSPENDED', 'Suas exportações estão suspensas para revisão de segurança.'],
     PERMISSION: [403, 'GOV_DLP_PERMISSION', 'Você não tem permissão para esta exportação.'],
     PURPOSE: [422, 'GOV_DLP_PURPOSE_REQUIRED', 'Informe a finalidade e uma justificativa com pelo menos 20 caracteres.'],
     MFA: [403, 'MFA_STEP_UP_REQUIRED', 'Confirme o código de verificação para continuar.'],

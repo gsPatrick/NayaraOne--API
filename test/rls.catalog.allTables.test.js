@@ -633,3 +633,17 @@ test('M9-D821: export_jobs tem RLS, FORCE RLS e a política tenant_isolation por
   const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.export_jobs', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
   if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao role de runtime');
 });
+
+// M9-D824: sinais de acesso, anomalias de acesso em massa e o estado de DLP do usuário (governance.*) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
+test('M9-D824: access_signals, access_anomalies e user_dlp_state têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
+  const tables = ['access_anomalies', 'access_signals', 'user_dlp_state'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const table of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});

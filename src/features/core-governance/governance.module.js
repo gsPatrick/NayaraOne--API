@@ -36,8 +36,9 @@ function buildModuleRouter(mod, routeDefs) {
   const router = Router();
   router.use(mod.prefix, authMiddleware, tenantMiddleware);
   for (const def of routeDefs) {
-    const gate = Array.isArray(def.permission) ? requireAnyPermission(def.permission) : requirePermission(def.permission);
-    router[def.method](def.path, ...(def.before || []), gate, requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
+    // `permission: null` = rota que exige apenas login (a ação é do próprio usuário, ex.: POST /dlp/copy-events); o módulo ligado continua valendo.
+    const gate = def.permission === null ? [] : [Array.isArray(def.permission) ? requireAnyPermission(def.permission) : requirePermission(def.permission)];
+    router[def.method](def.path, ...(def.before || []), ...gate, requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
   }
   return router;
 }

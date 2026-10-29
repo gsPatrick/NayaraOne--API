@@ -26,4 +26,7 @@ router.use(GOVERNANCE_PREFIXES, errorEnvelope);
 for (const mod of GOVERNANCE_MODULES) router.use(modules[mod.code].router);
 router.use(permissionsRouter);
 
-module.exports = { router, modules, GOVERNANCE_PREFIXES };
+// M9-D825: política de VIEW aplicada na resposta das rotas de pessoas, imóveis, fornecedores, contratos, financeiro e arquivos (montada em src/routes/index.js).
+const { viewPolicyRouter } = require('./dlp/view.routes');
+
+module.exports = { router, modules, GOVERNANCE_PREFIXES, viewPolicyRouter };

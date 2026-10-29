@@ -10,6 +10,7 @@ const { withOwnTenantTransaction } = require('./guard.tx');
 const { emitSignal } = require('./signals.sink');
 const { idempotencyConflict } = require('./dlp.errors');
 const jobs = require('./exportJob.repository');
+const viewAudit = require('./view.audit');
 
 const jobView = (row) => (row ? {
   id: row.id, kind: row.kind, action: row.action, resourceType: row.resourceType, classification: row.classification, purpose: row.purpose, justification: row.justification,
@@ -33,6 +34,7 @@ async function audit(tenant, req, result, entityId, transaction) {
 /** Sinal de acesso (M9-D824) de uma decisão do guard, leve ou completa. */
 const signalOf = (req, result, occurredAt) => ({
   actorUserId: req.actorUserId, action: req.action, classification: result.classification, decision: result.decision, blockReason: result.blockReason, resourceType: req.resourceType, occurredAt,
+  count: Array.isArray(req.resourceIds) && req.resourceIds.length ? req.resourceIds.length : 1,
 });
 
 /** Resposta quando a Idempotency-Key já existe: o mesmo pedido (a chave com outro corpo é 409). */
@@ -80,9 +82,14 @@ async function decideLight(tenant, req) {
   return withOwnTenantTransaction(tenant, req.actorUserId, async (transaction) => {
     const context = await buildContext(tenant, req, transaction);
     const result = evaluate(req, context);
-    if (result.decision === 'DENY' || context.policy.requireAudit) await audit(tenant, req, result, null, transaction);
+    let auditId = null;
+    if (req.action === 'VIEW') {
+      if (result.decision === 'DENY' || context.policy.requireAudit) await viewAudit.recordView(tenant, req, result, transaction);
+    } else if (result.decision === 'DENY' || context.policy.requireAudit) {
+      auditId = (await audit(tenant, req, result, null, transaction)).id;
+    }
     await emitSignal(tenant, signalOf(req, result, context.now), transaction);
-    return { ...result, job: null, justificationMin: context.justificationMin };
+    return { ...result, job: null, auditId, justificationMin: context.justificationMin };
   });
 }
 

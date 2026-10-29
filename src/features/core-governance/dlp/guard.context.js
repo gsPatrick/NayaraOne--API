@@ -4,6 +4,7 @@ const { getSetting } = require('../../settings/settings.service');
 const { getEffectiveAccess } = require('../../memberships/effectivePermissions.service');
 const settings = require('./dlp.settings');
 const { resolveClassification } = require('./classification.resolver');
+const { highestClass } = require('./dlp.constants');
 const { readSuspension } = require('./suspension.reader');
 const policyService = require('./policy.service');
 
@@ -15,7 +16,8 @@ const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, 
  * catálogo de finalidades e o mínimo da justificativa (parâmetros governanca.dlp.*).
  */
 async function buildContext(tenant, req, transaction) {
-  const classification = await resolveClassification(tenant, req.resources, transaction);
+  const resolved = await resolveClassification(tenant, req.resources, transaction);
+  const classification = highestClass([resolved, req.minClassification]);
   const policy = await policyService.getPolicy(tenant, classification, req.action, transaction);
   const permissions = req.permissions || (await getEffectiveAccess(req.actorUserId, tenant.companyId, transaction)).permissions;
   const suspendable = ['EXPORT', 'SHARE', 'PRINT'].includes(req.action);

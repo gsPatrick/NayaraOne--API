@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { ACTIONS } = require('./dlp.constants');
+const { ACTIONS, CLASSES } = require('./dlp.constants');
 const { requestInvalid } = require('./dlp.errors');
 const { isLight } = require('./dlp.guard');
 
@@ -17,6 +17,7 @@ function resourcesOf(raw, resourceType) {
 }
 
 /**
+ * `minClassification` (M9-D825): classe mínima que o chamador já conhece (a do campo no registro); a classe decidida é a MAIS ALTA entre ela e a do resolvedor.
  * Valida e normaliza o pedido do guard (400 GOV_DLP_REQUEST_INVALID antes de gravar qualquer coisa). Exportação exige `estimatedRows` inteiro; compartilhar e
  * imprimir assumem 0 quando não informado.
  */
@@ -44,7 +45,7 @@ function normalize(raw, tenant) {
     justification: typeof raw.justification === 'string' ? raw.justification : null, estimatedRows, watermarkRequested: raw.watermarkRequested === true,
   };
   return {
-    ...body, actorUserId, mfaOk: raw.mfaOk === true, aiAllowed: raw.aiAllowed, originPermission: text(raw.originPermission, 100),
+    ...body, actorUserId, minClassification: CLASSES.includes(raw.minClassification) ? raw.minClassification : null, ip: text(raw.ip, 64), mfaOk: raw.mfaOk === true, aiAllowed: raw.aiAllowed, originPermission: text(raw.originPermission, 100),
     permissions: Array.isArray(raw.permissions) ? raw.permissions : null, idempotencyKey: text(raw.idempotencyKey, 128) || null, correlationId: text(raw.correlationId, 100),
     resources: resourcesOf(raw, resourceType), requestHash: crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex'),
   };
