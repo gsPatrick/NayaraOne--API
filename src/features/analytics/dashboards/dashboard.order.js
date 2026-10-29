@@ -16,6 +16,8 @@ const LISTS = Object.freeze({
 const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const lead = (id) => { const m = /^\d+/.exec(id); return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER; };
 const first = (item) => (item.value !== null && item.value !== undefined ? item.value : (item.cells || []).map((c) => c.value).find((v) => v !== null && v !== undefined));
+/** Faixas de valor: "ate_2000" primeiro, as faixas "2001-5000" pelo número que as abre e "acima_10000" por último (os limites vêm do parâmetro do administrador). */
+const bandRank = (id) => (id.startsWith('ate_') ? -1 : id.startsWith('acima_') ? Number.MAX_SAFE_INTEGER : lead(id));
 const num = (item) => Number(first(item) === undefined ? 0 : first(item));
 
 /** Lista de códigos do parâmetro para o modo pedido, ou null quando o modo não usa lista. */
@@ -32,6 +34,7 @@ function sortItems(items, mode, list) {
     return rows.sort((a, b) => rank(a.id) - rank(b.id) || byText(a.id, b.id));
   }
   if (mode === 'ID') return rows.sort((a, b) => byText(a.id, b.id)); // M9-D682: pelo código da linha (sondas, quadro de integrações)
+  if (mode === 'BANDS') return rows.sort((a, b) => bandRank(a.id) - bandRank(b.id) || byText(a.id, b.id)); // M9-D643
   if (mode === 'NUMERIC') return rows.sort((a, b) => lead(a.id) - lead(b.id) || byText(a.id, b.id));
   return rows.sort((a, b) => num(b) - num(a) || byText(a.id, b.id));
 }
