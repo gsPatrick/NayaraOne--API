@@ -21,7 +21,7 @@ const stepDto = (row) => ({
 });
 
 /** Campanha completa para a resposta de POST e GET /marketing/campaigns: objetivo, público (contagem), custo e resultado. */
-function campaignDto(row, audiences, steps, audienceSize) {
+function campaignDto(row, audiences, steps, audienceSize, reach = null) {
   const resultValue = num(row.result_value);
   const attainment = computeAttainment(resultValue, row.target_value);
   return {
@@ -30,7 +30,7 @@ function campaignDto(row, audiences, steps, audienceSize) {
     costActual: num(row.cost_actual), channels: row.channels || [], startsAt: iso(row.starts_at), endsAt: iso(row.ends_at),
     ownerUserId: row.owner_user_id, killSwitchActive: row.kill_switch_active,
     resultValue, attainment, attainmentDisplay: formatAttainment(attainment), costPerResult: costPerResult(num(row.cost_actual), resultValue),
-    audienceSize, audiences: audiences.map(audienceDto), steps: steps.map(stepDto),
+    audienceSize, reach, audiences: audiences.map(audienceDto), steps: steps.map(stepDto),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
 }

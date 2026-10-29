@@ -15,6 +15,7 @@ const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/p
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
+const { SEGMENT_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/segment.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
@@ -134,6 +135,8 @@ const SETTINGS_SCHEMA = {
   ...TEMPLATE_SETTINGS_SCHEMA,
   // Marco 9, M9-D412 — destinatários processados por step a cada rodada do job de campanhas.
   ...CAMPAIGN_SETTINGS_SCHEMA,
+  // Marco 9, M9-D419 — campos proibidos como critério de segmentação (dado sensível).
+  ...SEGMENT_SETTINGS_SCHEMA,
   // Marco 9, M9-D406 — antecedência mínima do agendamento de conteúdo do Marketing.
   ...PIPELINE_SETTINGS_SCHEMA,
   // Marco 9, M9-D409 — tipos de conteúdo: hora do aniversário, casas do percentual, fotos mínimas, tipos com rascunho automático, finalidade do pós-venda e varredura de obras.

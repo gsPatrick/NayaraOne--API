@@ -13,6 +13,8 @@ const { parseBody, isUuid } = require('./campaigns.validation');
 const { parseInstant } = require('./campaigns.time');
 const { carriesNoData, matchesStored } = require('./campaigns.replay');
 const { campaignDto } = require('./campaigns.dto');
+const { campaignReach } = require('./campaigns.reach');
+const { assertSegmentsNotSensitive } = require('./segment.guard');
 const { campaignNotFound, codeDuplicate, validation, ownerInvalid, campaignIncomplete, campaignNotEditable } = require('./campaigns.errors');
 
 const ENTITY = 'marketing.campaign';
@@ -23,7 +25,8 @@ async function loadDto(id, tenant, transaction) {
   if (!row) throw campaignNotFound();
   const [audiences, steps] = await Promise.all([audienceRepo.listAudiences(id, tenant, transaction), stepsRepo.listSteps(id, tenant, transaction)]);
   const size = row.status === 'DRAFT' ? null : await audienceRepo.countDistinctMembers(id, tenant, transaction);
-  return campaignDto(row, audiences, steps, size);
+  const reach = row.status === 'DRAFT' ? null : await campaignReach({ id, channels: row.channels }, tenant, transaction);
+  return campaignDto(row, audiences, steps, size, reach);
 }
 
 /** Consulta de MKT-009 (GET /marketing/campaigns/:id): objetivo, público (só a contagem), custo e resultado. */
@@ -151,6 +154,7 @@ async function completeExisting(input, ctx, transaction) {
  * Devolve { created, replay, campaign }.
  */
 async function saveCampaign(tenant, actor, rawBody, { permissions = [] } = {}, transaction, { now = new Date() } = {}) {
+  await assertSegmentsNotSensitive(rawBody && rawBody.audiences, tenant, transaction); // M9-D419: dado sensível nunca segmenta
   const input = parseBody(rawBody);
   const ctx = { tenant, actor, permissions, now };
   return sequelize.transaction({ transaction }, async (inner) => (input.campaignId ? completeExisting(input, ctx, inner) : createDraft(input, ctx, inner)));

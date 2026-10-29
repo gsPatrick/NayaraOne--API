@@ -251,6 +251,6 @@ test('publico_segment_e_radar_so_da_propria_empresa', async () => {
     assert.deepEqual(byOpp, [quente]);
     const radar = await run({ kind: 'RADAR_MATCH', purpose: 'R', filter: { propertyType: 'RESIDENTIAL', city: 'São Paulo' } });
     assert.deepEqual(radar, [comRadar], 'só radar ACTIVE da própria empresa');
-    await rejectsWith(assert, save(t, completeBody({ templateId, personIds: [], audiences: [{ kind: 'SEGMENT', purpose: 'S', filter: { cpf: '1' } }], schedule: true })), 400, 'MKT_CAMPAIGN_VALIDATION');
+    await rejectsWith(assert, save(t, completeBody({ templateId, personIds: [], audiences: [{ kind: 'SEGMENT', purpose: 'S', filter: { cpf: '1' } }], schedule: true })), 422, 'MKT_SEGMENT_SENSITIVE_FIELD'); // M9-D419: dado sensível, lista fechada
   });
 });

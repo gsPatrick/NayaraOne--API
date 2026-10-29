@@ -13,11 +13,22 @@ async function assertPersonExists(personId, transaction) {
 }
 
 /**
+ * Porta do opt-out (M9-D419): quem trata a saída da pessoa (Marketing: supressão, cancelamento do agendado e o evento
+ * customer.opted_out) se registra aqui. Pessoas não conhece o Marketing; sem ninguém registrado, o OPT_OUT só fica gravado.
+ */
+let optOutHandler = null;
+
+function registerOptOutHandler(fn) {
+  if (fn !== null && typeof fn !== 'function') throw new TypeError('O tratador de opt-out deve ser uma função.');
+  optOutHandler = fn;
+}
+
+/**
  * recordConsent — registra um novo estado de opt-in/opt-out (CRMX-008: "Comunicação respeita
  * opt-in/opt-out e finalidade"). Cada chamada cria um novo registro (histórico append-only) em
  * vez de sobrescrever o anterior, para preservar a trilha de consentimento ao longo do tempo.
  */
-async function recordConsent(personId, payload, actorUserId, transaction) {
+async function recordConsent(personId, payload, actorUserId, transaction, options = {}) {
   const person = await assertPersonExists(personId, transaction);
   const { channel, purpose, status } = payload;
   const normalizedChannel = String(channel || '').toUpperCase();
@@ -32,7 +43,7 @@ async function recordConsent(personId, payload, actorUserId, transaction) {
     throw AppError.badRequest(`O campo "status" deve ser um de: ${VALID_STATUSES.join(', ')}.`, 'PERSON_CONSENT_VALIDATION');
   }
 
-  return CommunicationConsent.create(
+  const consent = await CommunicationConsent.create(
     {
       groupId: person.groupId,
       companyId: person.companyId,
@@ -46,6 +57,12 @@ async function recordConsent(personId, payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  // OPT_OUT (M9-D419): na MESMA transação, o Marketing cria a supressão, cancela o agendado e emite customer.opted_out. Quem já é o
+  // serviço do opt-out (a supressão do Marketing) registra o consentimento com skipOptOutHandler para não entrar em laço.
+  if (normalizedStatus === 'OPT_OUT' && optOutHandler && !options.skipOptOutHandler) {
+    await optOutHandler({ person, consent, actorUserId: actorUserId || null }, transaction);
+  }
+  return consent;
 }
 
 async function listConsents(personId, transaction) {
@@ -130,6 +147,7 @@ async function canContact(person, channel, purpose, transaction) {
 
 module.exports = {
   recordConsent,
+  registerOptOutHandler,
   listConsents,
   resolveConsent,
   canContact,

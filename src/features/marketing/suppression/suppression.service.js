@@ -36,15 +36,18 @@ async function addressesToSuppress({ personId, channel, address }, tenant, trans
 
 async function recordOptOutConsent({ personId, channel, purpose, actor }, transaction) {
   if (!personId || !CONSENT_CHANNELS.includes(channel)) return null;
-  return recordConsent(personId, { channel, purpose: purpose || ALL_PURPOSES, status: 'OPT_OUT' }, actor, transaction);
+  // skipOptOutHandler: esta função JÁ é o serviço do opt-out (M9-D419); o tratador de Pessoas não pode chamá-la de volta.
+  return recordConsent(personId, { channel, purpose: purpose || ALL_PURPOSES, status: 'OPT_OUT' }, actor, transaction, { skipOptOutHandler: true });
 }
 
 /**
  * Cria a supressão (M9-D418). Serviço do sistema: automática (SAIR, PARAR..., descadastro, bounce permanente, reclamação, número
  * inválido) ou manual. O endereço nunca é guardado em claro (sha256 do normalizado). Na MESMA transação: toma a trava de pessoa +
  * canal + finalidade (a mesma do canSend), grava (duplicada devolve a existente), audita, registra o OPT_OUT no consentimento da
- * pessoa, cancela o que está agendado (SKIPPED/SUPPRESSED, run BLOCKED) e emite customer.opted_out. Automação nunca reverte.
- * input: { personId?, channel, address?, purpose?, reason, source, expiresAt?, actor? } (precisa de personId ou address).
+ * pessoa, cancela o que está agendado (SKIPPED/SUPPRESSED, run BLOCKED) e, SÓ quando o motivo é OPT_OUT, emite customer.opted_out
+ * (uma vez; BOUNCE, COMPLAINT, LEGAL e MANUAL não emitem, M9-D419). Automação nunca reverte.
+ * input: { personId?, channel, address?, purpose?, reason, source, expiresAt?, actor?, consentRecorded?, occurredAt? } (precisa de
+ * personId ou address; consentRecorded: o OPT_OUT já foi gravado em Pessoas pelo chamador, então não se grava de novo).
  */
 async function suppress(input, tenant, transaction) {
   const channel = String(input.channel || '').toUpperCase();
@@ -71,13 +74,16 @@ async function suppress(input, tenant, transaction) {
     }, transaction);
   }
   const persons = input.personId ? [input.personId] : await personsOfAddressHash(hashes[0], channel, tenant, transaction);
-  if (['OPT_OUT', 'COMPLAINT'].includes(input.reason)) await recordOptOutConsent({ personId: input.personId, channel, purpose, actor: input.actor }, transaction);
+  if (['OPT_OUT', 'COMPLAINT'].includes(input.reason) && !input.consentRecorded) await recordOptOutConsent({ personId: input.personId, channel, purpose, actor: input.actor }, transaction);
   base.blockedRuns = await cancelPendingForSuppression({ personIds: persons, channel, purpose }, tenant, transaction);
-  for (const personId of persons) {
-    await publishMarketingEvent({
-      type: 'customer.opted_out', payload: { personId, channel, purpose: purpose || ALL_PURPOSES, source: String(input.source).slice(0, 60) }, tenant,
-      idempotencyKey: `customer.opted_out:${created[0].row.id}:${personId}`,
-    }, transaction);
+  if (input.reason === 'OPT_OUT') {
+    const occurredAt = input.occurredAt || new Date().toISOString();
+    for (const personId of persons) {
+      await publishMarketingEvent({
+        type: 'customer.opted_out', payload: { personId, channel, purpose: purpose || ALL_PURPOSES, source: String(input.source).slice(0, 60), occurredAt }, tenant,
+        idempotencyKey: `customer.opted_out:${created[0].row.id}:${personId}`,
+      }, transaction);
+    }
   }
   return base;
 }

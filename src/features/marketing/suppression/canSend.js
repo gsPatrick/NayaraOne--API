@@ -68,4 +68,4 @@ async function canSend(personId, channel, purpose, atInstant = new Date(), optio
   return { allowed: true, reason: null, nextEligibleAt: null, count: frequency.count, limit: frequency.limit };
 }
 
-module.exports = { canSend };
+module.exports = { canSend, effectiveConsent };
