@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * M9-D653 — KPI inv.losses (Perdas de estoque no período), versão 1. Σ do valor das perdas decididas como perda (casos APPROVED) nos últimos 30 dias
- * até a data-base (calendário de São Paulo), pelo custo do movimento de baixa ou, se a baixa não tem custo, o estimado do caso; arredondado uma só vez,
+ * M9-D653 — KPI inv.losses (Perdas de estoque no período), versão 1. Σ do valor das perdas decididas como perda (casos APPROVED) nos dias da janela do
+ * parâmetro analytics.estoque.janela_perdas_dias (padrão 30) até a data-base (calendário de São Paulo), pelo custo do movimento de baixa ou, se a baixa não tem custo, o estimado do caso; arredondado uma só vez,
  * 2 casas. A quantidade de perdas e os casos ainda abertos (sem decisão) ficam em separado. Posição, natureza ACTUAL. Entrada (rm_inventory_health):
  * { value, count, open, withoutValue }. Regra de qualidade: perda decidida sem valor nenhum -> DEGRADED, sem valor. Por tipo de perda e por obra: o read
  * model guarda um total por empresa (DI-D653-2).

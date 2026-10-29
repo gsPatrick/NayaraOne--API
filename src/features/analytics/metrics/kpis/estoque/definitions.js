@@ -23,8 +23,8 @@ const TEXT = {
     qualityRule: { requiredFields: ['items_below_min', 'items_without_min'], allowNull: false, degradedWhen: 'item ativo sem estoque mínimo' },
   },
   'inv.losses': {
-    description: 'Quanto se perdeu em estoque: valor das perdas decididas como perda nos últimos 30 dias, com a quantidade de perdas e os casos ainda abertos.',
-    formulaSemantic: 'Σ valor dos casos de perda decididos como perda (APPROVED) nos 30 dias até a data-base, pelo custo do movimento de baixa ou o estimado; casos abertos e quantidade de perdas em separado; perda decidida sem valor → DEGRADED.',
+    description: 'Quanto se perdeu em estoque: valor das perdas decididas como perda na janela de dias definida pelo administrador (padrão 30), com a quantidade de perdas e os casos ainda abertos.',
+    formulaSemantic: 'Σ valor dos casos de perda decididos como perda (APPROVED) nos dias da janela (padrão 30) até a data-base, pelo custo do movimento de baixa ou o estimado; casos abertos e quantidade de perdas em separado; perda decidida sem valor → DEGRADED.',
     qualityRule: { requiredFields: ['losses_30d', 'losses_without_value'], allowNull: false, degradedWhen: 'perda decidida sem valor' },
   },
   'inv.tools_overdue': {

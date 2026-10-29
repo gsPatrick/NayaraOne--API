@@ -11,10 +11,10 @@ async function stock(env, t) {
   return { value: value.v, ...counts };
 }
 
-async function losses(env, t, asOf) {
+async function losses(env, t, asOf, days = 30) {
   const r = await one(env, `WITH d AS (SELECT COALESCE(mv.total_cost, lc.estimated_cost) AS v FROM inventory.loss_cases lc LEFT JOIN inventory.inventory_movements mv ON mv.id = lc.resulting_movement_id
-      WHERE lc.company_id = :c AND lc.status = 'APPROVED' AND (lc.decided_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN CAST(:d AS date) - 29 AND CAST(:d AS date))
-    SELECT COALESCE(SUM(v), 0)::text AS total, count(*)::int AS n, count(*) FILTER (WHERE v IS NULL)::int AS "noValue", (SELECT count(*)::int FROM inventory.loss_cases WHERE company_id = :c AND status = 'OPEN') AS open FROM d`, { c: t.companyId, d: asOf });
+      WHERE lc.company_id = :c AND lc.status = 'APPROVED' AND (lc.decided_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN CAST(:d AS date) - (:days - 1) AND CAST(:d AS date))
+    SELECT COALESCE(SUM(v), 0)::text AS total, count(*)::int AS n, count(*) FILTER (WHERE v IS NULL)::int AS "noValue", (SELECT count(*)::int FROM inventory.loss_cases WHERE company_id = :c AND status = 'OPEN') AS open FROM d`, { c: t.companyId, d: asOf, days });
   return { total: r.total, n: r.n, noValue: r.noValue, open: r.open };
 }
 

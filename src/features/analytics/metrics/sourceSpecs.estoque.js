@@ -4,7 +4,7 @@
  * M9-D653 / M9-D611 — origem dos números dos KPIs de Estoque e Patrimônio: quais registros do Estoque reproduzem cada KPI.
  *  inv.stock_value     saldos dos itens ativos dos tipos do parâmetro analytics.estoque.tipos_item (flag stockTypes); a soma é saldo × custo médio;
  *  inv.below_minimum   itens ativos desses tipos com estoque mínimo definido e saldo total abaixo dele;
- *  inv.losses          casos de perda decididos como perda (APPROVED) na janela de 30 dias; vale o custo do movimento de baixa, ou o estimado sem ele;
+ *  inv.losses          casos de perda decididos como perda (APPROVED) na janela de dias do parâmetro analytics.estoque.janela_perdas_dias (padrão 30); vale o custo do movimento de baixa, ou o estimado sem ele;
  *  inv.tools_overdue   empréstimos abertos (OPEN ou OVERDUE) com devolução prevista anterior à data-base.
  * O detalhe (drill-down, M9-D690) abre essas linhas; só quem tem analytics:drilldown e a leitura do estoque chega nelas.
  */

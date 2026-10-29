@@ -2,7 +2,7 @@
 
 /**
  * M9-D618 — read model rm_inventory_health (schema analytics): uma linha por empresa e data-base com o valor em estoque (Σ saldo × custo médio),
- * os itens abaixo do mínimo, as rupturas e as perdas dos últimos 30 dias, mais os itens sem mínimo e sem custo médio (o KPI marca DEGRADED, M9-D653).
+ * os itens abaixo do mínimo, as rupturas e as perdas da janela de dias do parâmetro analytics.estoque.janela_perdas_dias (padrão 30), mais os itens sem mínimo e sem custo médio (o KPI marca DEGRADED, M9-D653).
  * Entram os itens ativos dos tipos do parâmetro analytics.estoque.tipos_item (padrão CONSUMABLE; ferramentas e patrimônio estão em rm_tool_assets).
  * Abaixo do mínimo = saldo total < mínimo; ruptura = item com mínimo definido e saldo <= 0. Perda = caso de perda decidido como perda (APPROVED) na
  * janela de 30 dias (data-base inclusive, SP), pelo custo do movimento de baixa, ou o estimado se a baixa não tem custo; também guarda quantas foram
@@ -11,12 +11,13 @@
 const { sequelize } = require('../../../models');
 const { registerReadModel } = require('./readModel.registry');
 const { STOCK_EVENTS } = require('./obra.events');
-const { readItemTypes } = require('./obra.settings');
+const { readItemTypes, readLossWindowDays } = require('./obra.settings');
 const { asOfAggregateKey, asOfScheduledKeys } = require('./asOf.keys');
 const { BUSINESS_TIMEZONE } = require('../../../utils/businessDate');
 
 async function recompute({ companyId, groupId, asOfDate, transaction }) {
   const types = await readItemTypes({ companyId, groupId }, transaction);
+  const windowDays = await readLossWindowDays({ companyId, groupId }, transaction);
   const [[stock]] = await sequelize.query(
     `WITH it AS (
        SELECT i.minimum_quantity AS min_qty, i.average_cost AS cost,
@@ -36,13 +37,13 @@ async function recompute({ companyId, groupId, asOfDate, transaction }) {
        SELECT COALESCE(mv.total_cost, lc.estimated_cost) AS value
          FROM inventory.loss_cases lc LEFT JOIN inventory.inventory_movements mv ON mv.id = lc.resulting_movement_id AND mv.company_id = :companyId
         WHERE lc.company_id = :companyId AND lc.status = 'APPROVED' AND lc.decided_at IS NOT NULL
-          AND (lc.decided_at AT TIME ZONE :tz)::date BETWEEN CAST(:asOf AS date) - 29 AND CAST(:asOf AS date))
+          AND (lc.decided_at AT TIME ZONE :tz)::date BETWEEN CAST(:asOf AS date) - (CAST(:windowDays AS integer) - 1) AND CAST(:asOf AS date))
      SELECT ROUND(COALESCE(SUM(value), 0), 2)::text AS losses_30d, (count(*))::int AS losses_30d_count, (count(*) FILTER (WHERE value IS NULL))::int AS losses_without_value,
             (SELECT count(*)::int FROM inventory.loss_cases WHERE company_id = :companyId AND status = 'OPEN') AS losses_open
        FROM decided`,
-    { replacements: { companyId, asOf: asOfDate, tz: BUSINESS_TIMEZONE }, transaction }
+    { replacements: { companyId, asOf: asOfDate, tz: BUSINESS_TIMEZONE, windowDays }, transaction }
   );
-  return { fields: { ...stock, ...loss } };
+  return { fields: { ...stock, ...loss, losses_window_days: windowDays } };
 }
 
 const def = registerReadModel({

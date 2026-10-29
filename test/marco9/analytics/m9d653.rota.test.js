@@ -10,7 +10,7 @@ const httpEnv = require('../_helpers/m9d652Http');
 const asserts = require('../_helpers/readModelAsserts');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'inventory:read'];
 const CODES = ['inv.stock_value', 'inv.below_minimum', 'inv.losses', 'inv.tools_overdue'];
 let env;
 let srv;
