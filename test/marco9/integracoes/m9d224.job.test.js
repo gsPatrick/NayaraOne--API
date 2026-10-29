@@ -4,16 +4,18 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, comTenant, carregarTenants, tenantCI, conexaoAtiva, limparCircuito, ciclo, alertas, notificacoes, config, limparConfig, mudarConexao, limparAlertas,
+  sequelize, comTenant, carregarTenants, tenantCI, conexaoAtiva, limparCircuito, ciclo, alertas, notificacoes, config, limparConfig, mudarConexao, limparAlertas, desativarConexoesDeTeste,
 } = require('../_helpers/m9d224Env');
 const { runIntegrationAlertJob, resetAlertSchedule } = require('../../../src/engines/jobs/integrationAlertJob');
+const health = require('../../../src/features/integrations/health');
+const { alertsConfigured } = require('../../../src/features/integrations/health/alerts');
 
 const CHAVES = ['integration.alert.repeat_min', 'integration.alert.circuit_open_min', 'integration.alert.notify_roles', 'integration.alert.evaluate_interval_s'];
 let tenant;
 
 before(async () => { ({ tenant } = await carregarTenants()); });
 beforeEach(async () => { resetAlertSchedule(); await limparConfig(tenant, CHAVES); await limparCircuito(tenant); await limparAlertas(tenant); });
-after(async () => { await limparConfig(tenant, CHAVES); resetAlertSchedule(); await sequelize.close(); });
+after(async () => { await limparAlertas(tenant); await desativarConexoesDeTeste(tenant); await desativarConexoesDeTeste(await tenantCI('A')); await limparConfig(tenant, CHAVES); resetAlertSchedule(); await sequelize.close(); });
 
 test('alerta_job_respeita_intervalo_e_parametros_validados', async () => {
   const c = await conexaoAtiva(tenant, 'MESSAGING');
@@ -71,4 +73,19 @@ test('alerta_tabela_isolada_por_empresa', async () => {
     /row-level security|violates/i,
     'não se grava alerta de outra empresa',
   );
+});
+
+test('alerta_liberacao_em_producao_exige_alertas_configurados', async () => {
+  const ctx = { groupId: tenant.groupId, companyId: tenant.companyId };
+  const verifica = () => comTenant(tenant, (t) => alertsConfigured('messaging-sandbox', ctx, t));
+  assert.equal((await verifica()).ok, true, 'padrão ADMIN: a empresa tem administrador ativo');
+  await config(tenant, 'integration.alert.notify_roles', 'PAPEL-QUE-NAO-EXISTE');
+  const r = await verifica();
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /nenhuma pessoa ativa/);
+  health.clearReadinessChecks();
+  health.registerReadinessCheck('alerts', alertsConfigured);
+  const geral = await comTenant(tenant, (t) => health.assessProductionReadiness('messaging-sandbox', ctx, t));
+  assert.equal(geral.items.alerts.ok, false, 'a completude usa a mesma verificação');
+  assert.ok(geral.missing.includes('alerts'));
 });

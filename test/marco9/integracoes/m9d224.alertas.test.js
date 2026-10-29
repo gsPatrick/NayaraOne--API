@@ -5,7 +5,7 @@ const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparCircuito, envios, tentativas, ciclo, alertas, notificacoes, mudarConexao, forcarCircuito, mensagemComSaude,
-  instalar, config, limparConfig, linha, limparAlertas,
+  instalar, config, limparConfig, linha, limparAlertas, desativarConexoesDeTeste,
 } = require('../_helpers/m9d224Env');
 const { restaurar } = require('../_helpers/m9d214Env');
 const { registerHealthSampleSource, resetHealthSampleSources } = require('../../../src/features/integrations/health/sampleSources');
@@ -30,7 +30,7 @@ before(async () => {
   instalar(mensagemComSaude());
 });
 beforeEach(async () => { await limparConfig(tenant, CHAVES); await limparCircuito(tenant); await limparAlertas(tenant); c = await conexaoAtiva(tenant, 'MESSAGING'); });
-after(async () => { resetHealthSampleSources(); restaurar(); await limparConfig(tenant, CHAVES); await sequelize.close(); });
+after(async () => { resetHealthSampleSources(); restaurar(); await limparAlertas(tenant); await desativarConexoesDeTeste(tenant); await limparConfig(tenant, CHAVES); await sequelize.close(); });
 
 const falhasDeSaude = async (id, n) => { for (let i = 0; i < n; i += 1) await comTenant(tenant, (t) => recordHealthCheck(id, { ok: false, latencyMs: 10 }, t)); };
 const abertos = async (id, tipo) => (await alertas(tenant, id, tipo)).filter((a) => a.status === 'OPEN');
@@ -47,8 +47,9 @@ test('alerta_provider_down', async () => {
   assert.equal(a.details.reason, 'HEALTH_CHECK');
   const avisos = await notificacoes(tenant, desde, 'docs/runbooks/integrations/messaging-sandbox.md');
   assert.ok(avisos.length >= 1, 'a notificação real leva o link do runbook');
-  assert.match(avisos[0].title, /fora do ar/i);
-  assert.equal(avisos[0].channel, 'IN_APP');
+  const foraDoAr = avisos.find((x) => /fora do ar/i.test(x.title));
+  assert.ok(foraDoAr, 'o aviso de fornecedor fora do ar leva o link do runbook');
+  assert.equal(foraDoAr.channel, 'IN_APP');
   // criticidade CRITICAL sobe a severidade
   const banco = await conexaoAtiva(tenant, 'BANK');
   await falhasDeSaude(banco.id, 3);

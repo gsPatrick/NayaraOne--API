@@ -4,7 +4,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, comTenant, carregarTenants, tenantCI, conexaoAtiva, limparCircuito, envios, tentativas, inbox, forcarCircuito,
+  sequelize, comTenant, carregarTenants, tenantCI, conexaoAtiva, limparCircuito, desativarConexoesDeTeste, envios, tentativas, inbox, forcarCircuito,
 } = require('../_helpers/m9d224Env');
 const { DISPOSABLE, SKIP, grant, startHttpEnv } = require('../_helpers/aiHttpEnv');
 const { IntegrationConnection } = require('../../../src/models');
@@ -29,7 +29,12 @@ before(async () => {
 after(async () => {
   resetHealthSampleSources();
   await limparCircuito(tenant);
-  if (env) setTimeout(() => process.exit(0), 300); else await sequelize.close();
+  await desativarConexoesDeTeste(tenant);
+  if (env) {
+    await desativarConexoesDeTeste(await tenantCI('A'));
+    await desativarConexoesDeTeste(await tenantCI('B'));
+    setTimeout(() => process.exit(0), 300);
+  } else await sequelize.close();
 });
 
 const carregar = (id) => comTenant(tenant, (t) => IntegrationConnection.findByPk(id, { transaction: t }));
