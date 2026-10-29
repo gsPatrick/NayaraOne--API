@@ -20,6 +20,8 @@ before(async () => {
 });
 after(async () => {
   if (!env) return;
+  const { tenantCI, desativarConexoesDeTeste } = require('../_helpers/m9d223Env');
+  await desativarConexoesDeTeste(await tenantCI('A'));
   setTimeout(() => process.exit(0), 300);
 });
 

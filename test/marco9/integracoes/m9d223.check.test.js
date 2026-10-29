@@ -4,7 +4,7 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, carregarTenants, ctxDe, conexaoAtiva, limparCircuito, linha, forcarCircuito, mensagemComSaude, instalar, errosDe, config, limparConfig,
+  sequelize, carregarTenants, ctxDe, conexaoAtiva, limparCircuito, desativarConexoesDeTeste, linha, forcarCircuito, mensagemComSaude, instalar, errosDe, config, limparConfig,
 } = require('../_helpers/m9d223Env');
 const { restaurar } = require('../_helpers/m9d214Env');
 const { runConnectionHealthCheck, runHealthCheckCycle } = require('../../../src/features/integrations/health/healthCheck');
@@ -23,7 +23,7 @@ beforeEach(async () => {
   await limparConfig(tenant, ['integration.health.down_after_failures', 'integration.health.check_interval_s']);
   c = await conexaoAtiva(tenant, 'MESSAGING');
 });
-after(async () => { restaurar(); await limparCircuito(tenant); await limparConfig(tenant, ['integration.health.down_after_failures', 'integration.health.check_interval_s']); await sequelize.close(); });
+after(async () => { restaurar(); await desativarConexoesDeTeste(tenant); await limparCircuito(tenant); await limparConfig(tenant, ['integration.health.down_after_failures', 'integration.health.check_interval_s']); await sequelize.close(); });
 
 test('health_check_atualiza_provider_health', async () => {
   Msg.H.passo = { ok: true, latencyMs: 37 };

@@ -4,7 +4,7 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparCircuito, linha, mensagemComSaude, instalar, config, limparConfig,
+  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparCircuito, desativarConexoesDeTeste, linha, mensagemComSaude, instalar, config, limparConfig,
 } = require('../_helpers/m9d223Env');
 const { restaurar } = require('../_helpers/m9d214Env');
 const { runIntegrationHealthCheckJob, resetHealthCheckSchedule } = require('../../../src/engines/jobs/integrationHealthCheckJob');
@@ -24,7 +24,7 @@ beforeEach(async () => {
   await limparConfig(tenant, ['integration.health.check_interval_s']);
   c = await conexaoAtiva(tenant, 'MESSAGING');
 });
-after(async () => { restaurar(); health.clearReadinessChecks(); resetHealthCheckSchedule(); await limparConfig(tenant, ['integration.health.check_interval_s']); await sequelize.close(); });
+after(async () => { restaurar(); await desativarConexoesDeTeste(tenant); health.clearReadinessChecks(); resetHealthCheckSchedule(); await limparConfig(tenant, ['integration.health.check_interval_s']); await sequelize.close(); });
 
 test('health_job_respeita_o_intervalo_do_parametro_da_empresa', async () => {
   const t0 = new Date();
