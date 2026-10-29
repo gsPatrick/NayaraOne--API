@@ -4,6 +4,7 @@
 // SEM ação proposta, dirigida a quem tem legal:read. A pessoa a aceita como "vista" com ai:read; nenhuma tarefa é criada e a NAY
 // não decide nada. A duplicidade (mesmo agente, contrato, tipo e dia, ainda pendente) devolve a mesma recomendação.
 
+const recommendations = require('../../recommendations');
 const { listUsersWithPermission } = require('../../readmodels/legalReaders.readmodel');
 const C = require('./grounding.constants');
 
@@ -18,9 +19,6 @@ async function resolveTarget(ctx, transaction) {
 }
 
 async function createConfirmationRecommendation(ctx, { runId, agentCode, request, snapshotAt, groundingStatus }, transaction) {
-  // Carga tardia: o serviço de recomendação (M9-D007) só é necessário quando há prazo/contrato crítico; assim a validação pura
-  // do grounding não depende do carregamento dele.
-  const recommendations = require('../../recommendations');
   const target = await resolveTarget(ctx, transaction);
   const byContract = UUID.test(String(request.contractRef || ''));
   const { recommendation, replayed } = await recommendations.createRecommendation(ctx, {
