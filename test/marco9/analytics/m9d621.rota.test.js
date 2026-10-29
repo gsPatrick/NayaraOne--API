@@ -9,15 +9,18 @@ const scenario = require('../_helpers/m9d621Scenario');
 const { windowFromSource } = require('../_helpers/m9d621Oracle');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 const readModels = require('../../../src/features/analytics/read-models');
+const registry = require('../_helpers/finRegistryRestore');
 const { materializeFinanceKpis } = require('../../../src/features/analytics/metrics/kpis');
 
 const NOW = new Date('2026-10-28T15:00:00Z');
 const AS_OF = '2026-10-28';
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'finance:read'];
 let env;
 let src;
+let registryBefore;
 before(async () => {
   env = await http.setup();
+  registryBefore = await registry.captureRegistry(env.admin, env.tenantA.companyId);
   src = { admin: env.admin, created: [] };
   const t = env.tenantA;
   await scenario.seed(src, t);
@@ -30,10 +33,7 @@ after(async () => {
   await env.admin.transaction(async (transaction) => {
     await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
     await env.admin.query('DELETE FROM finance.financial_entries WHERE id IN (:list)', { replacements: { list: src.created.map((r) => r.id) }, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id = :c AND metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_versions WHERE metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('UPDATE analytics.metric_definitions SET current_version_id = NULL WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
+    await registry.restoreRegistry(env.admin, transaction, env.tenantA.companyId, registryBefore);
     await env.admin.query("DELETE FROM analytics.rm_finance_health WHERE company_id = :c AND as_of_date = '2026-10-28'", { replacements: ids, transaction });
   });
   await http.teardown(env);

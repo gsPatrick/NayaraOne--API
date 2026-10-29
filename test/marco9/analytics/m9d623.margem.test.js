@@ -7,12 +7,14 @@ const assert = require('node:assert/strict');
 const envK = require('../_helpers/finKpiEnv');
 const sc = require('../_helpers/m9d623Scenario');
 const { marginFromSource } = require('../_helpers/m9d623Oracle');
+const { storedDimension } = require('../_helpers/m9d623Stored');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 require('../../../src/features/analytics');
 
 const { kpis, readKpi, setSetting } = envK;
 const CODE = 'fin.sector_margin';
 const dim = async (t, key) => (await readKpi(t, CODE, { dimensionKey: key })).value;
+const stored = (t, key) => storedDimension(env, t, CODE, key);
 const same = (a, b, msg) => assert.equal(money.cmp(a, b), 0, `${msg}: ${a} x ${b}`);
 let env;
 before(async () => { env = await envK.setup(); });
@@ -55,7 +57,7 @@ test('m9d623 fin.sector_margin fica DEGRADED com valor nulo quando a regra de qu
   const bad = await readKpi(t, CODE);
   assert.equal(bad.status, 'DEGRADED');
   assert.equal(bad.value, null, 'valor nulo, nunca número enganoso');
-  same(await dim(t, 'setor:sem_setor:custo_brl'), '2000.00', 'o que foi classificado e o "Sem setor" continuam visíveis');
+  same(await stored(t, 'setor:sem_setor:custo_brl'), '2000.00', 'o que foi classificado e o "Sem setor" continuam visíveis');
   // o limite é parâmetro do administrador: 5% volta a aceitar
   await setSetting(env, t, 'analytics.qualidade.max_sem_setor_pct', 5);
   await sc.refreshMargin(t, [null]);

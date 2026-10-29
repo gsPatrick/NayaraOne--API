@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const envK = require('../_helpers/finKpiEnv');
 const sc = require('../_helpers/m9d623Scenario');
 const { commissionsFromSource } = require('../_helpers/m9d623Oracle');
+const { storedDimension } = require('../_helpers/m9d623Stored');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 require('../../../src/features/analytics');
 
@@ -44,9 +45,9 @@ test('m9d623 fin.commissions_provisioned fica DEGRADED com valor nulo quando a r
   const bad = await readKpi(t, 'fin.commissions_provisioned');
   assert.equal(bad.status, 'DEGRADED');
   assert.equal(bad.value, null, 'valor nulo, nunca número enganoso');
-  same((await readKpi(t, 'fin.commissions_provisioned', { dimensionKey: 'sem_corretor_brl' })).value, '1000.00', 'a parcela sem corretor é contada em "Sem corretor"');
-  same((await readKpi(t, 'fin.commissions_provisioned', { dimensionKey: `corretor:${brokerA}` })).value, '21000.00', 'o que tem corretor continua visível');
-  assert.equal(Number((await readKpi(t, 'fin.commissions_provisioned', { dimensionKey: 'sem_corretor_qtd' })).value), 1);
+  same(await storedDimension(env, t, 'fin.commissions_provisioned', 'sem_corretor_brl'), '1000.00', 'a parcela sem corretor é contada em "Sem corretor"');
+  same(await storedDimension(env, t, 'fin.commissions_provisioned', `corretor:${brokerA}`), '21000.00', 'o que tem corretor continua visível');
+  assert.equal(Number(await storedDimension(env, t, 'fin.commissions_provisioned', 'sem_corretor_qtd')), 1);
 });
 
 test('m9d623 reproduz fin.commissions_paid a partir dos registros-fonte', async () => {
@@ -69,7 +70,7 @@ test('m9d623 fin.commissions_paid fica DEGRADED com valor nulo quando a regra de
   const bad = await readKpi(t, 'fin.commissions_paid');
   assert.equal(bad.status, 'DEGRADED');
   assert.equal(bad.value, null);
-  assert.equal(Number((await readKpi(t, 'fin.commissions_paid', { dimensionKey: 'sem_lancamento_qtd' })).value), 1, 'a parcela paga sem lançamento é contada');
+  assert.equal(Number(await storedDimension(env, t, 'fin.commissions_paid', 'sem_lancamento_qtd')), 1, 'a parcela paga sem lançamento é contada');
 });
 
 test('m9d623 timezone: lançamento às 23:30 de São Paulo cai no dia certo', async () => {

@@ -9,17 +9,20 @@ const sc = require('../_helpers/m9d623Scenario');
 const oracle = require('../_helpers/m9d623Oracle');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 const readModels = require('../../../src/features/analytics/read-models');
+const registry = require('../_helpers/finRegistryRestore');
 const { materializeFinanceKpis } = require('../../../src/features/analytics/metrics/kpis');
 
 const NOW = new Date('2026-10-28T15:00:00Z');
 const AS_OF = '2026-10-28';
-const READ = ['analytics:read'];
+const READ = ['analytics:read', 'finance:read'];
 const CODES = ['fin.sector_margin', 'fin.commissions_provisioned', 'fin.commissions_paid', 'fin.owner_repasses_pending'];
 const same = (a, b) => assert.equal(money.cmp(a, b), 0, `${a} x ${b}`);
 let env;
 let src;
+let registryBefore;
 before(async () => {
   env = await http.setup();
+  registryBefore = await registry.captureRegistry(env.admin, env.tenantA.companyId);
   src = { admin: env.admin, created: [] };
   const t = env.tenantA;
   const [[{ id: broker }]] = await env.admin.query("SELECT id FROM core.users WHERE status = 'ACTIVE' AND deleted_at IS NULL ORDER BY created_at LIMIT 1");
@@ -40,10 +43,7 @@ after(async () => {
       const list = src.created.filter((r) => r.table === table).map((r) => r.id);
       if (list.length) await env.admin.query(`DELETE FROM finance.${table} WHERE id IN (:list)`, { replacements: { list }, transaction });
     }
-    await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id = :c AND metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_versions WHERE metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('UPDATE analytics.metric_definitions SET current_version_id = NULL WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
+    await registry.restoreRegistry(env.admin, transaction, env.tenantA.companyId, registryBefore);
     await env.admin.query("DELETE FROM analytics.rm_finance_health WHERE company_id = :c AND as_of_date = '2026-10-28'", { replacements: ids, transaction });
     await env.admin.query('DELETE FROM analytics.rm_finance_sector_margin WHERE company_id = :c', { replacements: ids, transaction });
   });
