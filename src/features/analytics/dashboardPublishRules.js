@@ -4,7 +4,7 @@
  * M9-D687 (3.2) — regras da PUBLICAÇÃO de um painel, conferidas depois de travar a linha DRAFT:
  *  - nenhum widget com fórmula/SQL (422 ANALYTICS_WIDGET_FORMULA_FORBIDDEN; o gatilho do banco já barra na gravação);
  *  - o primeiro widget é a faixa de qualidade (422 ANALYTICS_DASHBOARD_NO_QUALITY_BANNER, BI-015);
- *  - a meta p95 está definida (422 ANALYTICS_DASHBOARD_NO_P95_TARGET);
+ *  - a meta p95 está definida (422 ANALYTICS_DASHBOARD_NO_P95);
  *  - a `required_permission` existe no catálogo de permissões (422 ANALYTICS_DASHBOARD_PERMISSION_UNKNOWN).
  * A regra "métrica PUBLISHED" fica em dashboardStore.service (findUnpublishedMetrics).
  */
@@ -27,7 +27,7 @@ async function assertPublishable(dash, transaction) {
     throw AppError.unprocessable('O primeiro bloco do painel deve ser a faixa de qualidade.', 'ANALYTICS_DASHBOARD_NO_QUALITY_BANNER');
   }
   if (!dash.p95_target_ms) {
-    throw AppError.unprocessable('Defina a meta de desempenho (p95) do painel antes de publicar.', 'ANALYTICS_DASHBOARD_NO_P95_TARGET');
+    throw AppError.unprocessable('Defina a meta de tempo (p95) do painel.', 'ANALYTICS_DASHBOARD_NO_P95');
   }
   const [perm] = await sequelize.query('SELECT 1 FROM core.permissions WHERE code = :code', { replacements: { code: dash.required_permission }, transaction });
   if (!perm.length) {

@@ -40,6 +40,7 @@ const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
 const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
+const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
@@ -289,6 +290,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiBudgetPeriodJob();
   startAiMemoryExpiryJob();
   startAnalyticsReadModelRefreshJob();
+  startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
 }
 
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).

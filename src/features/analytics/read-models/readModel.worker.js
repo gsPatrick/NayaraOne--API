@@ -6,6 +6,7 @@
  * (2) trava o agregado; (3) recalcula o ESTADO a partir da fonte, restrito à linha do agregado e ao teto de linhas; (4) UPSERT com
  * source_snapshot_at = max(...), refreshed_at e version. Falha em qualquer passo desfaz tudo, inclusive o registro do evento.
  * Evento desconhecido ou de empresa que não existe mais é ignorado com log, sem derrubar o worker.
+ * M9-D698 (3.4): o passo todo roda com statement_timeout e lock_timeout locais (readModel.protect).
  */
 const { sequelize } = require('../../../models');
 const logger = require('../../../utils/logger');
@@ -16,17 +17,8 @@ const { modelsFor } = require('./readModel.registry');
 const { lockAggregate, upsertAggregate, markStale, clearStale, keyText } = require('./readModel.upsert');
 const { readRefreshParams } = require('./readModel.settings');
 const { recordUpsert } = require('./readModel.batch');
+const { withOltpGuards } = require('./readModel.protect');
 const { replayIgnored, staleDeferred } = require('./readModel.metrics');
-
-async function withTimeout(transaction, ms, fn) {
-  const [[prev]] = await sequelize.query("SELECT current_setting('statement_timeout') AS v", { transaction });
-  await sequelize.query("SELECT set_config('statement_timeout', :v, true)", { replacements: { v: String(ms) }, transaction });
-  try {
-    return await fn();
-  } finally {
-    await sequelize.query("SELECT set_config('statement_timeout', :v, true)", { replacements: { v: prev.v }, transaction });
-  }
-}
 
 async function applyToModel(def, event, scope, params, transaction, now) {
   const key = await def.aggregateKey(event, { now, transaction }); // pode ser async (resolve a obra pelo registro do evento)
@@ -42,9 +34,7 @@ async function applyToModel(def, event, scope, params, transaction, now) {
     return { replayIgnored: 1 };
   }
   await lockAggregate(def, scope.companyId, key, transaction);
-  const result = await withTimeout(transaction, params.timeoutMs, () => def.recompute({
-    ...scope, key, limit: params.maxAggregateRows, asOfDate: businessDateKey(now), now, event, transaction,
-  }));
+  const result = await def.recompute({ ...scope, key, limit: params.maxAggregateRows, asOfDate: businessDateKey(now), now, event, transaction });
   if (result && result.truncated) {
     await markStale(def, { ...scope, key }, transaction);
     staleDeferred.inc({ read_model: def.name });
@@ -79,11 +69,13 @@ async function applyEvent(event, transaction, options = {}) {
     }
     const params = options.params || await readRefreshParams(scope, savepoint);
     const done = [];
-    for (const def of defs) {
-      const r = await applyToModel(def, event, scope, { ...params, ...(options.maxAggregateRows ? { maxAggregateRows: options.maxAggregateRows } : {}) }, savepoint, now);
-      for (const k of ['upserted', 'replayIgnored', 'stale', 'skipped']) out[k] += r[k] || 0;
-      if (r.upserted) done.push(r);
-    }
+    await withOltpGuards(savepoint, params, async () => { // statement_timeout e lock_timeout (M9-D698 3.4)
+      for (const def of defs) {
+        const r = await applyToModel(def, event, scope, { ...params, ...(options.maxAggregateRows ? { maxAggregateRows: options.maxAggregateRows } : {}) }, savepoint, now);
+        for (const k of ['upserted', 'replayIgnored', 'stale', 'skipped']) out[k] += r[k] || 0;
+        if (r.upserted) done.push(r);
+      }
+    });
     return done;
   });
   if (upserts === null) return { ignored: 'ORPHAN_COMPANY' };

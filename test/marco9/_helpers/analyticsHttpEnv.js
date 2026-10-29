@@ -79,7 +79,7 @@ const ctxOf = (t, permissions = []) => ({ groupId: t.groupId, companyId: t.compa
 const BANNER = { widgetType: 'QUALITY_BANNER', title: 'Qualidade dos dados' };
 const ALERTS = { widgetType: 'LIST_ALERTS', title: 'Alertas' };
 const panelBody = (extra = {}) => ({
-  dashboardCode: `m9d687_${sfx()}`, name: 'Painel de teste', domain: 'FINANCE', requiredPermission: 'finance:read', widgets: [BANNER, ALERTS], ...extra,
+  dashboardCode: `m9d687_${sfx()}`, name: 'Painel de teste', domain: 'FINANCE', requiredPermission: 'finance:read', widgets: [BANNER, ALERTS], p95TargetMs: 1500, ...extra, // a meta p95 é obrigatória (M9-D698)
 });
 
 /** Publica (commit) uma métrica de teste do domínio indicado pelo prefixo do código e devolve { metricCode, cleanup }. */

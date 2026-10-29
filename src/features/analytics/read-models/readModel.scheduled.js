@@ -15,6 +15,8 @@ const { startRefresh, finishRefresh } = require('../readModelRefreshStore.servic
 const { listReadModels } = require('./readModel.registry');
 const { lockAggregate, upsertAggregate, clearStale, listStale, keyText } = require('./readModel.upsert');
 const { notifyBatchListeners } = require('./readModel.batch');
+const { withOltpGuards } = require('./readModel.protect');
+const { emitRefreshed } = require('./readModel.refreshed');
 
 async function keysOf(def, scope, params, now, transaction) {
   const scheduled = def.scheduled ? await def.scheduled.keys({ ...scope, limit: params.batchRows, now, transaction }) : [];
@@ -32,7 +34,7 @@ async function refreshModel(def, scope, params, now, transaction) {
   let rows = 0;
   let lastSnapshot = null;
   try {
-    await sequelize.transaction({ transaction }, async (savepoint) => {
+    await sequelize.transaction({ transaction }, (savepoint) => withOltpGuards(savepoint, params, async () => { // statement_timeout e lock_timeout (M9-D698 3.4)
       for (const key of keys) {
         await lockAggregate(def, scope.companyId, key, savepoint);
         const result = await def.recompute({ ...scope, key, limit: null, asOfDate: businessDateKey(now), now, event: null, transaction: savepoint });
@@ -42,13 +44,14 @@ async function refreshModel(def, scope, params, now, transaction) {
         rows += 1;
         lastSnapshot = snapshotAt;
       }
-    });
+    }));
   } catch (err) {
     logger.error({ event: 'analytics.read_model.scheduled_failed', readModel: def.name, companyId: scope.companyId, err }, '[analytics] refresh agendado falhou');
     await finishRefresh(row.id, { status: 'FAILED', errorCode: String(err.code || 'READ_MODEL_REFRESH_FAILED').slice(0, 80), errorMessage: err.message }, ctx, transaction);
     return { readModel: def.name, failed: true };
   }
   const done = await finishRefresh(row.id, { status: 'SUCCEEDED', rowsUpserted: rows, sourceSnapshotAt: lastSnapshot }, ctx, transaction);
+  emitRefreshed(transaction, { readModel: def.name, companyId: scope.companyId, groupId: scope.groupId, refreshId: done.id });
   await notifyBatchListeners({ ...ctx, readModel: def.name, rows, sourceSnapshotAt: lastSnapshot, lastEventId: null }, done.id, params, now, transaction);
   return { readModel: def.name, rows, refreshId: done.id };
 }

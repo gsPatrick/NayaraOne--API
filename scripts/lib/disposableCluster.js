@@ -18,6 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync, spawnSync } = require('child_process');
 const { revokeDeleteSql } = require('./runtimeNoDelete');
+const { revokeMatviewSql } = require('./runtimeNoMatview');
 
 const API_ROOT = path.join(__dirname, '..', '..');
 const SUPER = 'drill_super';
@@ -99,6 +100,8 @@ function grantRuntime(port, db) {
   }
   // M9-D206: tabelas cuja retenção é por função SECURITY DEFINER ficam sem DELETE para o runtime, como em produção.
   for (const sql of revokeDeleteSql(APP_ROLE)) psql(port, db, sql);
+  // M9-D698: materialized view do BI não tem RLS; o runtime só a lê pelas funções SECURITY DEFINER.
+  for (const sql of revokeMatviewSql()) psql(port, db, sql);
   return schemas.length;
 }
 

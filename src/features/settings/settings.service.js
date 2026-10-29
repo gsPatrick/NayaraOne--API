@@ -44,6 +44,8 @@ const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-model
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
+const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
+const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
 const { NAY_TOOLS_SETTINGS_SCHEMA } = require('../../features/analytics/nayToolsSettings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
@@ -234,6 +236,9 @@ const SETTINGS_SCHEMA = {
   ...JURIDICO_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
+  ...CACHE_SETTINGS_SCHEMA,
+  ...MV_SETTINGS_SCHEMA,
   // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
   ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,
   // Marco 9, M9-D695 — ferramentas da NAY Diretoria no BI: tamanho máximo das listas devolvidas.

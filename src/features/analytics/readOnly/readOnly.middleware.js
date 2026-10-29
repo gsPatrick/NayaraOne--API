@@ -3,11 +3,14 @@
 const { sequelize } = require('../../../config/database');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
-const { writeBlockedError } = require('./readOnly.errors');
+const { writeBlockedError, queryTimeoutError } = require('./readOnly.errors');
+const { getSetting } = require('../../../features/settings/settings.service');
+const { QUERY_TIMEOUT_SETTING_KEY, READ_ONLY_SETTING_DEFAULTS } = require('./readOnly.settings');
 const { shouldUseReaderRole, assumeReaderRole } = require('./readOnly.readerRole');
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
 const PG_READ_ONLY_VIOLATION = '25006';
+const PG_QUERY_CANCELED = '57014';
 
 function pgCode(err) {
   return err?.parent?.code || err?.original?.code || err?.code || err?.cause?.parent?.code || err?.cause?.code;
@@ -16,7 +19,19 @@ function pgCode(err) {
 /** Primeira coisa da transação de um GET de BI: READ ONLY (livro BI-001) e, se disponível e ligado, o role sem escrita. */
 async function applyReadOnly(transaction, tenant) {
   await sequelize.query('SET TRANSACTION READ ONLY', { transaction });
+  // Tempo máximo das consultas do GET (M9-D698 3.4): parâmetro da empresa, aplicado à transação inteira.
+  const timeoutMs = await getSetting(QUERY_TIMEOUT_SETTING_KEY, tenant, transaction, READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY]);
+  const ms = Number.isInteger(timeoutMs) && timeoutMs >= 100 ? timeoutMs : READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY];
+  await sequelize.query("SELECT set_config('statement_timeout', :ms, true)", { replacements: { ms: String(ms) }, transaction });
   if (await shouldUseReaderRole(tenant, transaction)) await assumeReaderRole(transaction);
+}
+
+/** Consulta cancelada pelo statement_timeout do GET: 504 ANALYTICS_QUERY_TIMEOUT, sem texto do driver. */
+function translateQueryTimeout(err) {
+  if (pgCode(err) !== PG_QUERY_CANCELED) return err;
+  const timeout = queryTimeoutError();
+  timeout.cause = err;
+  return timeout;
 }
 
 /** Escrita recusada pelo banco dentro de um GET: incidente de segurança (log) e 500 ANALYTICS_WRITE_BLOCKED. */
@@ -50,7 +65,7 @@ function analyticsReadOnlyTransaction(req, res, next) {
         return fn(transaction);
       });
     } catch (err) {
-      throw translateWriteBlocked(err, req);
+      throw translateQueryTimeout(translateWriteBlocked(err, req));
     }
   };
   return next();

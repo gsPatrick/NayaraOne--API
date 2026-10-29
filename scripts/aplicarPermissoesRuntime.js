@@ -19,6 +19,7 @@ require('dotenv').config({ path: '.env.migration.local' });
 const { Client } = require('pg');
 
 const { revokeDeleteSql } = require('./lib/runtimeNoDelete');
+const { revokeMatviewSql } = require('./lib/runtimeNoMatview');
 
 const ROLE = 'nayara_runtime';
 const SIMULAR = process.argv.includes('--simular');
@@ -67,6 +68,8 @@ const REVOKES = [
       comandos.push(`GRANT SELECT ON ALL TABLES IN SCHEMA "${s}" TO nayara_analytics_reader`);
     }
   }
+  // M9-D698: a materialized view do BI não tem RLS; o runtime só a lê pelas funções SECURITY DEFINER (sem acesso direto).
+  for (const r of revokeMatviewSql()) comandos.push(r);
 
   if (SIMULAR) {
     console.log(`[simulação] ${comandos.length} comandos em ${schemas.length} schemas:\n${comandos.join('\n')}`);

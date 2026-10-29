@@ -12,10 +12,16 @@ const { readAggregate, assertReadModelTable } = require('./readModel.read');
 const { rebuildReadModel } = require('./rebuild.service');
 const { onRebuildChecks } = require('./rebuild.checks');
 const { readRebuildParams } = require('./rebuild.settings');
+const matviews = require('./matview.registry');
+const { refreshMaterializedView } = require('./matview.refresh');
+const { readMaterializedView } = require('./matview.read');
+const { MV_DEFAULTS, parseMvSchedule, readMvParams } = require('./matview.settings');
+const { onRefreshed } = require('./readModel.refreshed');
 
 consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
 require('./financeiro-finance-health.readmodel'); // M9-D615: saúde financeira por empresa e data-base
 require('./financeiro-finance-sector-margin.readmodel'); // M9-D615: margem por setor
+require('./matview.finance'); // M9-D698: série mensal do caixa (materialized view)
 require('./comercial-imoveis.readmodel'); // M9-D616: Comercial/CRM e Imóveis
 require('./locacao.readmodel'); // M9-D617: Locação
 require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Estoque/Patrimônio e Pós-obra
@@ -39,4 +45,13 @@ module.exports = {
   rebuildReadModel,
   onRebuildChecks,
   readRebuildParams,
+  registerMaterializedView: matviews.registerMaterializedView,
+  unregisterMaterializedView: matviews.unregisterMaterializedView,
+  listMaterializedViews: matviews.listMaterializedViews,
+  refreshMaterializedView,
+  readMaterializedView,
+  MV_DEFAULTS,
+  parseMvSchedule,
+  readMvParams,
+  onRefreshed,
 };

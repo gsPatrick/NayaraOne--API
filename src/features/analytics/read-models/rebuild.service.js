@@ -31,6 +31,7 @@ const { runRebuildChecks } = require('./rebuild.checks');
 const { swapShadow } = require('./rebuild.swap');
 const { applyCorrections } = require('./rebuild.snapshots');
 const { openRebuild, closeRebuild } = require('./rebuild.journal');
+const { emitRefreshed } = require('./readModel.refreshed');
 
 const EVENT_TYPE = 'analytics.read_model.rebuilt';
 const READ_COMMITTED = { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED };
@@ -103,6 +104,7 @@ async function phaseTwo(def, scope, ctx, refreshId, built, params) {
       payload: { ...eventPayload(def, scope, refreshId, built, swap, snapshots, ctx.reason), durationMs: done ? done.duration_ms : null },
       idempotencyKey: `${EVENT_TYPE}:${refreshId}`,
     }, transaction);
+    emitRefreshed(transaction, { readModel: def.name, companyId: scope.companyId, groupId: scope.groupId, refreshId }); // o cache dos painéis descarta a empresa (M9-D698)
     return { swap, snapshots, durationMs: done ? done.duration_ms : null };
   });
 }

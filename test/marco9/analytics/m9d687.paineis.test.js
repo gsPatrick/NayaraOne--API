@@ -89,7 +89,7 @@ test('m9d687 publicação exige meta p95 e permissão existente (serviço)', asy
     const base = { scopeLevel: 'COMPANY', groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, name: 'X', domain: 'FINANCE' };
     const semP95 = await dashboards.createDashboardDefinition({ ...base, dashboardCode: `m9d687_${sup.sfx()}`, requiredPermission: 'finance:read' }, ctx, tx);
     await dashboards.addDashboardWidget(semP95.id, { ...BANNER, position: 0 }, ctx, tx);
-    await assert.rejects(dashboards.publishDashboard(semP95.id, ctx, tx), (e) => e.statusCode === 422 && e.code === 'ANALYTICS_DASHBOARD_NO_P95_TARGET');
+    await assert.rejects(dashboards.publishDashboard(semP95.id, ctx, tx), (e) => e.statusCode === 422 && e.code === 'ANALYTICS_DASHBOARD_NO_P95');
     const semPerm = await dashboards.createDashboardDefinition({ ...base, dashboardCode: `m9d687_${sup.sfx()}`, requiredPermission: 'nao:existe', p95TargetMs: 1500 }, ctx, tx);
     await dashboards.addDashboardWidget(semPerm.id, { ...BANNER, position: 0 }, ctx, tx);
     await assert.rejects(dashboards.publishDashboard(semPerm.id, ctx, tx), (e) => e.statusCode === 422 && e.code === 'ANALYTICS_DASHBOARD_PERMISSION_UNKNOWN');
@@ -152,7 +152,7 @@ test('m9d687 nova versão de painel fecha a anterior e a auditoria traz a difere
   assert.equal(aud.after_json.diferencaWidgets.added[0].title, 'Mais alertas');
 });
 
-test('m9d687 publicar exige analytics:manage, escopo de empresa ou grupo e usa o p95 padrão do parâmetro', async () => {
+test('m9d687 publicar exige analytics:manage, escopo de empresa ou grupo e a meta p95 informada', async () => {
   const semManage = await env.call('POST', '/analytics/dashboards', { perms: ['analytics:read'], body: panelBody() });
   assert.equal(semManage.status, 403);
   assert.equal(semManage.body.error.details.required, 'analytics:manage');
@@ -162,7 +162,7 @@ test('m9d687 publicar exige analytics:manage, escopo de empresa ou grupo e usa o
   assert.equal(semWidgets.status, 400);
   const ok = await env.call('POST', '/analytics/dashboards', { perms: ADMIN, body: panelBody() });
   assert.equal(ok.status, 201);
-  assert.equal(ok.body.data.p95TargetMs, 3000, 'sem meta informada vale analytics.painel.p95_ms_padrao');
+  assert.equal(ok.body.data.p95TargetMs, 1500, 'vale a meta informada (a M9-D698 não aceita publicar sem ela)');
   const grupo = await env.call('POST', '/analytics/dashboards', { perms: ADMIN, body: panelBody({ scopeLevel: 'GROUP' }) });
   assert.equal(grupo.status, 403, 'painel de grupo exige analytics:read:group');
   await sequelize.query('SELECT 1');

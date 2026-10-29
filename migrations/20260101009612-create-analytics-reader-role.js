@@ -30,6 +30,10 @@ module.exports = {
             EXECUTE format('GRANT USAGE ON SCHEMA %I TO ${ROLE}', s);
             EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO ${ROLE}', s);
           END LOOP;
+          -- M9-D698: a materialized view do BI (analytics.mv_*) não tem RLS; o leitor só a alcança pelas funções SECURITY DEFINER dela.
+          FOR s IN SELECT matviewname FROM pg_matviews WHERE schemaname = 'analytics' AND matviewname LIKE 'mv\\_%' LOOP
+            EXECUTE format('REVOKE ALL ON analytics.%I FROM ${ROLE}', s);
+          END LOOP;
           ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO ${ROLE};
           ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO ${ROLE};
           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') THEN

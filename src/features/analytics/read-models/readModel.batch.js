@@ -11,6 +11,7 @@ const clock = require('../metrics/clock');
 const { enableAnalyticsWriter } = require('../metricStore.service');
 const { startRefresh, finishRefresh } = require('../readModelRefreshStore.service');
 const { readRefreshParams } = require('./readModel.settings');
+const { emitRefreshed } = require('./readModel.refreshed');
 const { getReadModel } = require('./readModel.registry');
 
 const pending = new WeakMap(); // transação raiz -> Map("empresa|modelo" -> acúmulo)
@@ -67,6 +68,7 @@ async function flushBatch(transaction, { now = clock.now() } = {}) {
     const row = await startRefresh({ groupId: entry.groupId, companyId: entry.companyId, readModel: entry.readModel, trigger: 'EVENT', version: def ? def.version : 1 }, ctx, transaction);
     const done = await finishRefresh(row.id, { status: 'SUCCEEDED', rowsUpserted: entry.rows, lastSourceEventId: entry.lastEventId, sourceSnapshotAt: entry.sourceSnapshotAt }, ctx, transaction);
     written.push(done);
+    emitRefreshed(transaction, { readModel: entry.readModel, companyId: entry.companyId, groupId: entry.groupId, refreshId: done.id });
     await runListeners(entry, done.id, await readRefreshParams(ctx, transaction), now, transaction);
   }
   return written;

@@ -9,7 +9,8 @@
  *  analytics.refresh.lote_segundos        intervalo mínimo entre os "fins de lote" que disparam os checks de qualidade (M9-D696)
  *  analytics.refresh.lote_linhas          agregados recalculados por transação no job agendado
  *  analytics.refresh.schedule             "a cada N min e às HH:MM Fuso" — recálculo por passagem do tempo
- *  analytics.refresh.timeout_ms           tempo máximo de cada consulta do refresh
+ *  analytics.refresh.timeout_ms           tempo máximo de cada consulta do refresh (statement_timeout)
+ *  analytics.refresh.lock_timeout_ms      tempo máximo esperando uma trava (lock_timeout): o refresh nunca segura nem espera trava que atrase o usuário (M9-D698)
  */
 const AppError = require('../../../utils/AppError');
 
@@ -19,6 +20,7 @@ const KEYS = Object.freeze({
   batchRows: 'analytics.refresh.lote_linhas',
   schedule: 'analytics.refresh.schedule',
   timeoutMs: 'analytics.refresh.timeout_ms',
+  lockTimeoutMs: 'analytics.refresh.lock_timeout_ms',
 });
 
 // Padrões do livro/demanda (M9-D607 3.2 e 3.3; parametros.csv PD-137 a PD-140 e PD-169).
@@ -28,6 +30,7 @@ const REFRESH_DEFAULTS = Object.freeze({
   [KEYS.batchRows]: 5000,
   [KEYS.schedule]: 'a cada 15 min e às 00:05 America/Sao_Paulo',
   [KEYS.timeoutMs]: 30000,
+  [KEYS.lockTimeoutMs]: 2000, // livro (M9-D698 3.4): SET LOCAL lock_timeout = '2s'
 });
 
 const SCHEDULE_RE = /^a cada (\d{1,4}) min e às (\d{2}):(\d{2}) ([A-Za-z_]+\/[A-Za-z_]+)$/;
@@ -60,6 +63,7 @@ const READ_MODEL_SETTINGS_SCHEMA = {
   [KEYS.batchRows]: { type: 'integer', min: 1, max: 100000 },
   [KEYS.schedule]: { type: 'string', validate: validateSchedule },
   [KEYS.timeoutMs]: { type: 'integer', min: 100, max: 600000 },
+  [KEYS.lockTimeoutMs]: { type: 'integer', min: 50, max: 600000 },
 };
 
 const positiveInt = (v, fallback) => (Number.isInteger(v) && v >= 1 ? v : fallback);
@@ -68,8 +72,8 @@ const positiveInt = (v, fallback) => (Number.isInteger(v) && v >= 1 ? v : fallba
 async function readRefreshParams(ctx, transaction) {
   const { getSetting } = require('../../../features/settings/settings.service'); // import tardio: settings.service importa este arquivo
   const get = (key) => getSetting(key, ctx, transaction, REFRESH_DEFAULTS[key]);
-  const [rows, seconds, batch, schedule, timeout] = await Promise.all([
-    get(KEYS.maxAggregateRows), get(KEYS.batchSeconds), get(KEYS.batchRows), get(KEYS.schedule), get(KEYS.timeoutMs),
+  const [rows, seconds, batch, schedule, timeout, lockTimeout] = await Promise.all([
+    get(KEYS.maxAggregateRows), get(KEYS.batchSeconds), get(KEYS.batchRows), get(KEYS.schedule), get(KEYS.timeoutMs), get(KEYS.lockTimeoutMs),
   ]);
   return {
     maxAggregateRows: positiveInt(rows, REFRESH_DEFAULTS[KEYS.maxAggregateRows]),
@@ -77,6 +81,7 @@ async function readRefreshParams(ctx, transaction) {
     batchRows: positiveInt(batch, REFRESH_DEFAULTS[KEYS.batchRows]),
     schedule: parseSchedule(schedule) || parseSchedule(REFRESH_DEFAULTS[KEYS.schedule]),
     timeoutMs: positiveInt(timeout, REFRESH_DEFAULTS[KEYS.timeoutMs]),
+    lockTimeoutMs: positiveInt(lockTimeout, REFRESH_DEFAULTS[KEYS.lockTimeoutMs]),
   };
 }
 

@@ -4,5 +4,6 @@
 const catalog = require('./dashboard.catalog');
 const service = require('./dashboard.service');
 const routes = require('./dashboard.routes');
+const cache = require('./cache');
 
-module.exports = { camada: 'dashboards', ...catalog, ...service, ...routes };
+module.exports = { camada: 'dashboards', ...catalog, ...service, ...routes, ...cache };

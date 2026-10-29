@@ -11,6 +11,7 @@ module.exports = {
   ...require('./cacheKey'),
   ...require('./secureOutput'),
   ...require('./security.settings'),
+  ...require('./cache.settings'),
   ...require('./securityParams'),
   ...require('./accessLog.routes'),
 };
