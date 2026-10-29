@@ -37,7 +37,8 @@ async function recompute({ companyId, key, transaction }) {
      SELECT fc.provider_code AS provider, fc.product,
             (count(*) FILTER (WHERE d.outcome = 'APPROVED'))::int AS approved, (count(*) FILTER (WHERE d.outcome = 'REJECTED'))::int AS rejected,
             ROUND(COALESCE(SUM(EXTRACT(EPOCH FROM GREATEST(d.decided_at - s.sent_at, interval '0')) / 3600) FILTER (WHERE s.sent_at IS NOT NULL), 0)::numeric, 2)::text AS analysis_hours_sum,
-            (count(*) FILTER (WHERE s.sent_at IS NOT NULL))::int AS analysis_count
+            (count(*) FILTER (WHERE s.sent_at IS NOT NULL))::int AS analysis_count,
+            (COALESCE(SUM(GREATEST(0, (d.decided_at AT TIME ZONE :tz)::date - (s.sent_at AT TIME ZONE :tz)::date)) FILTER (WHERE s.sent_at IS NOT NULL), 0))::int AS analysis_days_sum
        FROM d JOIN correspondent.financing_cases fc ON fc.id = d.financing_case_id AND fc.company_id = :companyId LEFT JOIN s ON s.financing_case_id = d.financing_case_id
       WHERE to_char((d.decided_at AT TIME ZONE :tz)::date, 'YYYY-MM') = :month GROUP BY 1, 2 ORDER BY 1, 2`,
     { replacements: { companyId, month: key.period_month, tz: BUSINESS_TIMEZONE }, transaction }

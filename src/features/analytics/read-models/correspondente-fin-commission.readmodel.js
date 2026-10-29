@@ -16,8 +16,10 @@ async function recompute({ companyId, transaction }) {
     `SELECT provider_code AS provider,
             COALESCE(SUM(amount) FILTER (WHERE status = 'EXPECTED'), 0)::text AS expected,
             COALESCE(SUM(amount) FILTER (WHERE status IN ('CONFIRMED', 'RECEIVABLE', 'RECEIVED')), 0)::text AS confirmed,
-            COALESCE(SUM(amount) FILTER (WHERE status = 'RECEIVED'), 0)::text AS received
-       FROM correspondent.commission_entitlements WHERE company_id = :companyId AND status <> 'ADJUSTED' GROUP BY provider_code ORDER BY 1`,
+            COALESCE(SUM(amount) FILTER (WHERE status = 'RECEIVED'), 0)::text AS received,
+            (count(*) FILTER (WHERE status = 'RECEIVED' AND (NOT EXISTS (SELECT 1 FROM correspondent.financing_cases fc WHERE fc.id = ce.financing_case_id AND fc.company_id = :companyId)
+              OR NOT EXISTS (SELECT 1 FROM finance.financial_entries fe WHERE fe.id = ce.financial_entry_id AND fe.company_id = :companyId AND fe.status = 'SETTLED'))))::int AS received_unlinked
+       FROM correspondent.commission_entitlements ce WHERE company_id = :companyId AND status <> 'ADJUSTED' GROUP BY provider_code ORDER BY 1`,
     { replacements: { companyId }, transaction }
   );
   return { rows: rows.map(({ provider, ...fields }) => ({ key: { provider }, fields })) };

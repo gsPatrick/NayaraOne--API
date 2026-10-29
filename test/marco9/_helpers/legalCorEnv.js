@@ -1,6 +1,6 @@
 'use strict';
 
-// Apoio dos testes dos KPIs do Jurídico no BI (M9-D660): duas empresas NOVAS no grupo do seed (contagens independentes
+// Apoio dos testes dos KPIs do Jurídico e do Correspondente no BI (M9-D660, M9-D661): duas empresas NOVAS no grupo do seed (contagens independentes
 // do que outros testes gravaram), relógio fixo em 28/10/2026 12:00 de São Paulo, fontes por superusuário (biObrasJuridicoEnv), refresh dos sete read
 // models, cálculo dos snapshots e leitura como a API lê. Banco descartável (127.0.0.1). Tudo o que o teste grava é apagado em `teardown`.
 const bi = require('./biObrasJuridicoEnv');
@@ -60,9 +60,10 @@ async function refreshAll(t, decided = []) {
   for (const id of decided) await bi.apply(t, bi.makeEvent(t, 'financing.approved', { id }));
 }
 
-/** Calcula e grava os snapshots dos KPIs da empresa. */
+/** Calcula e grava os snapshots dos oito KPIs da empresa. */
 const kpis = (t, asOf = AS_OF) => sup.inTx(t, { commit: true }, async (tx) => ({
   legal: await kpisApi.materializeLegalKpis({ companyId: t.companyId, groupId: t.groupId }, asOf, tx),
+  cor: await kpisApi.materializeCorrespondentKpis({ companyId: t.companyId, groupId: t.groupId }, asOf, tx),
 }));
 
 const ctxOf = (t, permissions = ['analytics:read']) => ({ groupId: t.groupId, companyId: t.companyId, actorUserId: t.userId, permissions });

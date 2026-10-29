@@ -272,7 +272,7 @@ const SETTINGS_SCHEMA = {
   ...OBRA_OPERACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D619 — read models do Jurídico: status que tiram o processo de "ativo".
   ...JURIDICO_SETTINGS_SCHEMA,
-  // Marco 9, M9-D660 — KPIs do Jurídico: owner de cada um e limites de qualidade (processos sem risco e exigências sem prazo).
+  // Marco 9, M9-D660 / M9-D661 — KPIs do Jurídico e do Correspondente: owner de cada um, limites de qualidade e estágios do caso.
   ...JUR_COR_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
