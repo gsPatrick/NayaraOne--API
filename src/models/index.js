@@ -211,6 +211,7 @@ const modelDefiners = {
   AiRun: require('./AiRun'),
   AiAgent: require('./AiAgent'),
   AiAgentTool: require('./AiAgentTool'),
+  AiServiceIdentity: require('./AiServiceIdentity'),
   AiSource: require('./AiSource'),
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),

@@ -8,6 +8,7 @@
  */
 const { AGENT_SETTING_DEFAULTS, AGENT_SETTINGS_SCHEMA } = require('./agents/agents.settings');
 const { RUN_SETTING_DEFAULTS, RUN_SETTINGS_SCHEMA } = require('./orchestrator/runs/runs.settings');
+const { SECURITY_SETTING_DEFAULTS, SECURITY_SETTINGS_SCHEMA } = require('./orchestrator/security.settings');
 const { GROUNDING_SETTING_DEFAULTS, GROUNDING_SETTINGS_SCHEMA } = require('./orchestrator/grounding/grounding.settings');
 const { PRIVACY_SETTING_DEFAULTS, PRIVACY_SETTINGS_SCHEMA } = require('./security/privacy.settings');
 const { ARGS_SETTING_DEFAULTS, ARGS_SETTINGS_SCHEMA } = require('./tools/args.settings');
@@ -29,6 +30,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   [AI_AGENTS_ENABLED_KEY]: '*',
   ...AGENT_SETTING_DEFAULTS,
   ...RUN_SETTING_DEFAULTS,
+  ...SECURITY_SETTING_DEFAULTS,
   ...GROUNDING_SETTING_DEFAULTS,
   ...PRIVACY_SETTING_DEFAULTS,
   ...ARGS_SETTING_DEFAULTS,
@@ -43,6 +45,7 @@ const AI_SETTINGS_SCHEMA = {
   [AI_AGENTS_ENABLED_KEY]: { type: 'string' },
   ...AGENT_SETTINGS_SCHEMA,
   ...RUN_SETTINGS_SCHEMA,
+  ...SECURITY_SETTINGS_SCHEMA,
   ...GROUNDING_SETTINGS_SCHEMA,
   ...PRIVACY_SETTINGS_SCHEMA,
   ...ARGS_SETTINGS_SCHEMA,

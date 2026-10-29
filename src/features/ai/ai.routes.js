@@ -12,6 +12,7 @@ const { registerAgentRoutes } = require('./agents/agents.routes');
 const { registerRunRoutes } = require('./orchestrator/runs/runs.routes');
 const { registerKnowledgeRoutes } = require('./knowledge/knowledge.routes');
 const { registerToolRoutes } = require('./tools/tools.routes');
+const { registerServiceIdentityRoutes } = require('./serviceIdentities/serviceIdentities.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -38,6 +39,8 @@ registerRunRoutes(router);
 registerKnowledgeRoutes(router);
 // Catálogo das tools registradas no servidor (M9-D016): GET /ai/tools.
 registerToolRoutes(router);
+// Identidades de serviço da NAY, só leitura (M9-D017): /ai/service-identities.
+registerServiceIdentityRoutes(router);
 
 router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
 router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));

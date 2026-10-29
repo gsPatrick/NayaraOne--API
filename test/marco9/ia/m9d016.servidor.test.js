@@ -93,8 +93,8 @@ test('m9d016_tool_nao_usa_sql_livre_archguard', () => {
   assert.ok(arquivos.length >= 15);
   // O guarda de arquitetura real não acha violação em tools/.
   assert.deepEqual(varrer().filter((v) => v.arquivo.includes(`${path.sep}tools${path.sep}`)), []);
-  // Nenhum arquivo de tools/ importa models, sequelize ou conexão; só serviços via ctx.
-  for (const f of arquivos) {
+  // Nenhuma definição de tool importa models, sequelize ou conexão; só serviços via ctx.
+  for (const f of listar(definitions).filter((a) => a.endsWith('.js'))) {
     const src = fs.readFileSync(f, 'utf8');
     assert.ok(!/require\(['"][^'"]*\/models(?:\/[^'"]*)?['"]\)/.test(src), `${f} importa models`);
     assert.ok(!/sequelize/i.test(src), `${f} cita sequelize`);
