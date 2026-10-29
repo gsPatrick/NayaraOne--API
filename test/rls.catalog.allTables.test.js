@@ -634,6 +634,20 @@ test('M9-D821: export_jobs tem RLS, FORCE RLS e a política tenant_isolation por
   if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao role de runtime');
 });
 
+// M9-D823: os links externos (governance.share_links) são da EMPRESA: RLS + FORCE RLS, a política tenant_isolation e a de leitura por token (só a linha do hash da transação); o contador
+// de acessos públicos (governance.public_access_counters) não tem empresa (visitante anônimo): RLS + FORCE RLS com a política que só abre para o limitador. GRANT ao role de runtime.
+test('M9-D823: share_links e public_access_counters têm RLS, FORCE RLS e as políticas esperadas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname IN ('tenant_isolation', 'share_token_lookup', 'public_counter_writer')) AS named
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN ('share_links', 'public_access_counters') ORDER BY 1`);
+  assert.equal(rows.length, 2, 'as duas tabelas existem');
+  assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies, r.named]), [['public_access_counters', true, true, 1, 1], ['share_links', true, true, 2, 2]]);
+  for (const table of ['share_links', 'public_access_counters']) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});
+
 // M9-D824: sinais de acesso, anomalias de acesso em massa e o estado de DLP do usuário (governance.*) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
 test('M9-D824: access_signals, access_anomalies e user_dlp_state têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
   const tables = ['access_anomalies', 'access_signals', 'user_dlp_state'];

@@ -5,6 +5,7 @@ const { GOVERNANCE_MODULES } = require('../governance.settings');
 const { EXPORT_PERMISSION, ADMIN_PERMISSION } = require('./dlp.constants');
 const controller = require('./dlp.controller');
 const policyController = require('./policy.controller');
+const { SHARE_ROUTES } = require('./share/share.routes');
 const anomalyController = require('./anomaly.controller');
 const copyController = require('./copy.controller');
 
@@ -20,6 +21,7 @@ const router = buildModuleRouter(MODULE, [
   { method: 'post', path: '/dlp/anomalies/:id/review', permission: ADMIN_PERMISSION, handler: anomalyController.reviewOne },
   // Registro de cópia vinda da tela (M9-D825 §3.2b): exige apenas login, porque registra a ação do próprio usuário; o servidor reavalia a política.
   { method: 'post', path: '/dlp/copy-events', permission: null, handler: copyController.createCopyEvent },
+  ...SHARE_ROUTES,
 ]);
 
 module.exports = router;

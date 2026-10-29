@@ -20,6 +20,7 @@ const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQu
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
+const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -205,6 +206,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.DLP_EXPORT_GENERATION_JOB_DIS
 }
 if (process.env.NODE_ENV !== 'test' && process.env.DLP_EXPORT_EXPIRY_JOB_DISABLED !== 'true') {
   startExportExpiryJob();
+}
+
+// Links externos do DLP (M9-D823): marca como vencidos os links e os pedidos SHARE e limpa o contador de acessos públicos (a cada 5 minutos por padrão).
+if (process.env.NODE_ENV !== 'test' && process.env.DLP_SHARE_EXPIRY_JOB_DISABLED !== 'true') {
+  startShareLinkExpiryJob();
 }
 
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.

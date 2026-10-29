@@ -14,6 +14,8 @@ const SOURCES = Object.freeze({
   connectionPassword: '([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
   assignment: '\\b(api[_-]?key|x-api-key|client[_-]?secret|webhook[_-]?secret|secret|(?:access|refresh|id)[_-]?token|token|password|passwd|senha|private[_-]?key)(["\']?\\s*[:=]\\s*["\']?)([^\\s"\',;&]+)',
   keywordValue: '\\b(token|secret|segredo|password|senha|apikey|credential|credencial)(\\s+)([^\\s"\',;]{8,})',
+  // Token na própria URL das rotas públicas por link (M9-D823: /public/share/<token>): o log de requisição não pode gravá-lo em claro.
+  publicToken: '(\\/public\\/share\\/)[A-Za-z0-9_-]{20,}',
   awsKey: '\\bAKIA[0-9A-Z]{16}\\b',
   providerKey: '\\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]+',
   slackToken: '\\bxox[baprs]-[A-Za-z0-9-]+',

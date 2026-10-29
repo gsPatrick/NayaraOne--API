@@ -35,6 +35,10 @@ module.exports = [
     reason: 'Lista de tipos aceitos no upload; não gera arquivo.', sourceFiles: ['features/files/files.service.js'],
   },
   {
+    code: 'governance.share_file_mark', label: 'Marca d\'água do arquivo avulso em link externo', mode: 'NON_GENERATING', onDemand: false,
+    reason: 'O link externo de arquivo avulso (M9-D823) só acrescenta a linha final da marca a texto/CSV já existente; não gera arquivo novo.', sourceFiles: ['features/core-governance/dlp/share/resources/file.js'],
+  },
+  {
     code: 'governance.exports_engine', label: 'Motor do POST /exports', mode: 'NON_GENERATING', onDemand: false,
     reason: 'Os formatos CSV, XLSX e PDF do próprio POST /exports: é o endpoint, não uma exportação fora dele.', sourceFiles: ['features/core-governance/dlp/exports/'],
   },

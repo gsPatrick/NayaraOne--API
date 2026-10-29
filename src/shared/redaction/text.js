@@ -36,6 +36,7 @@ const SECRET_RULES = [
   () => [rx('assignment', 'gi'), null, (m, k, sep) => `${k}${sep}${REDACTED}`],
   // "token SECRET-CANARY-7f3a": palavra de credencial seguida de valor com cara de segredo (dígito, hífen ou sublinhado).
   () => [rx('keywordValue', 'gi'), (m) => /[\d_-]/.test(m.replace(/^\S+\s+/, '')), (m, k, sep) => `${k}${sep}${REDACTED}`],
+  () => [rx('publicToken'), null, (m, prefix) => `${prefix}${REDACTED}`],
   () => [rx('awsKey'), null, REDACTED],
   () => [rx('providerKey'), null, REDACTED],
   () => [rx('slackToken'), null, REDACTED],

@@ -197,6 +197,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/crm/proposals/:id` | `crm:proposals:read` | não |
 | `GET` | `/api/v1/crm/proposals` | `crm:proposals:read` | não |
 | `POST` | `/api/v1/crm/proposals` | `crm:proposals:create` | não |
+| `POST` | `/api/v1/dlp/share-links/:id/revoke` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/dlp/share-links` | `governance:dlp:export` | não |
+| `POST` | `/api/v1/dlp/share-links` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/:id/download` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/:id` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/catalog` | `governance:dlp:export` | não |
@@ -672,6 +675,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/webhooks/clicksign` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/v1/ping` | público (saúde do serviço) | não |
 | `POST` | `/api/v1/procurement/webhooks/insurance` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/v1/public/share/:token` | só login | não |
 | `POST` | `/api/v1/users/me/mfa/confirm` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/disable` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |

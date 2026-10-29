@@ -4,6 +4,7 @@ const { CLASSES } = require('./dlp.constants');
 const { ANOMALY_SETTING_DEFAULTS, ANOMALY_SETTINGS_SCHEMA } = require('./anomaly.settings');
 const { VIEW_SETTING_DEFAULTS, VIEW_SETTINGS_SCHEMA } = require('./view.settings');
 const { EXPORT_SETTING_DEFAULTS, EXPORT_SETTINGS_SCHEMA } = require('./exports/export.settings');
+const { SHARE_SETTING_DEFAULTS, SHARE_SETTINGS_SCHEMA } = require('./share/share.settings');
 
 /**
  * Parâmetros do DLP (aba Governança em /painel/configuracoes; catálogo em Maturacao/demandas/parametros.csv).
@@ -34,6 +35,7 @@ const DLP_SETTING_DEFAULTS = Object.freeze({
   ...ANOMALY_SETTING_DEFAULTS,
   ...VIEW_SETTING_DEFAULTS,
   ...EXPORT_SETTING_DEFAULTS,
+  ...SHARE_SETTING_DEFAULTS,
 });
 
 /** "LOW 10; MEDIUM 5" -> { LOW: '10', MEDIUM: '5' }; null se algum par estiver fora do formato. */
@@ -82,6 +84,7 @@ const DLP_SETTINGS_SCHEMA = {
   ...ANOMALY_SETTINGS_SCHEMA,
   ...VIEW_SETTINGS_SCHEMA,
   ...EXPORT_SETTINGS_SCHEMA,
+  ...SHARE_SETTINGS_SCHEMA,
 };
 
 /** Mapa por classe já convertido; valor ausente ou inválido cai no padrão do catálogo daquela classe. */
