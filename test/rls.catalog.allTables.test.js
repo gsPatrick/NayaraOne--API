@@ -532,6 +532,14 @@ test('M9-D806: quality_rules, quality_scores e quality_issues têm RLS, FORCE RL
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as três tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+// M9-D708: analytics.metric_acceptance (reconciliação e aceite dos KPIs pelo owner) com RLS, FORCE RLS e 3 políticas (leitura, inclusão e atualização; sem DELETE).
+test('M9-D708: metric_acceptance tem RLS, FORCE RLS e 3 políticas (sem DELETE)', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'metric_acceptance'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 3]);
+});
+
 });
 
 // M9-D808: governance.bulk_changes e bulk_change_items (alteração em massa de dados mestres) com RLS + FORCE RLS e a política tenant_isolation.

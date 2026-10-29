@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { runSettingGuard } = require('./settingGuards');
+require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../features/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
@@ -39,6 +40,7 @@ const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.
 const { TRANSPORT_SETTINGS_SCHEMA } = require('../integrations/http/transport.settings');
 const { RETENTION_SETTINGS_SCHEMA } = require('../integrations/retention/retention.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
+const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/acceptance.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
 const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
 const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/rebuild.settings');
@@ -331,6 +333,8 @@ const SETTINGS_SCHEMA = {
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
   ...CACHE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D708 — ambiente do BI (LAB ou PRODUCAO, com a trava do aceite dos owners) e tolerância da diferença no aceite.
+  ...ACCEPTANCE_SETTINGS_SCHEMA,
   ...MV_SETTINGS_SCHEMA,
   // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
   ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,

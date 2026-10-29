@@ -25,6 +25,7 @@ const { findVisibleDefinitionForUpdate } = require('./registry.scope');
 const { assertReadModelExists, checkFormula } = require('./registry.checks');
 const { VERSIONED_FIELDS, versionFields, diffFields } = require('./registry.diff');
 const { readReasonMinChars } = require('./metrics.settings');
+const acceptanceStore = require('./acceptance.store');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EVENT_TYPE = 'analytics.metric.version_published';
@@ -106,6 +107,7 @@ async function publishInside(code, input, ctx, savepoint, options) {
     afterJson: { metricCode: def.metric_code, versao: version.version, validFrom: input.validFrom, changes },
     reason: input.changeReason.trim(),
   }, savepoint);
+  await acceptanceStore.insertPending(ctx, def.metric_code, version.version, savepoint); // M9-D708: nova versão invalida o aceite (a linha da versão nova nasce PENDING)
   const publish = options.publishEvent || publishDomainEvent;
   await publish({
     groupId: ctx.groupId, companyId: ctx.companyId, aggregateType: 'analytics.metric', aggregateId: def.id, eventType: EVENT_TYPE,
