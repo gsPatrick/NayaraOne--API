@@ -9,7 +9,9 @@ const { buildToolServices } = require('../toolServices');
 const { assertRuntimeConnection } = require('./runtimeConnection');
 const { loadSecuritySettings } = require('./securitySettings');
 const { createSecurityRecorder } = require('./securityRecorder');
+const { createToolCallStore } = require('../tools/toolCallStore');
 const { authorizeToolCall } = require('./toolAuthorizer');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * @param {object} p execCtx (executionContext), agent (resolveActiveAgent), registry (ToolRegistry), toolName, args (do modelo),
@@ -19,7 +21,9 @@ const { authorizeToolCall } = require('./toolAuthorizer');
 async function runToolCall({ execCtx, agent, registry, toolName, args, requestText, source = 'USER', transaction, recorder, toolCallStore, proposeAction, argsLimits, services, executorOptions }) {
   await assertRuntimeConnection(transaction);
   const settings = await loadSecuritySettings(execCtx, transaction);
-  const gravador = recorder || createSecurityRecorder({ execCtx, agentCode: agent && agent.code, requestText, transaction, toolCallStore });
+  // M9-D006: com um run real (uuid) a porta é ai.tool_calls; o orquestrador (M9-D020) pode passar a sua.
+  const store = toolCallStore || (UUID.test(String(execCtx.runId)) ? createToolCallStore({ execCtx, registry }) : undefined);
+  const gravador = recorder || createSecurityRecorder({ execCtx, agentCode: agent && agent.code, requestText, transaction, toolCallStore: store, args });
   const autorizada = await authorizeToolCall({ execCtx, agent, registry, toolName, args, requestText, source, transaction, recorder: gravador, argsLimits, settings });
 
   const userId = execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;

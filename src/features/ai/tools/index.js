@@ -5,10 +5,11 @@ const { initToolRegistry, getToolRegistry, buildDefaultRegistry, loadPermissionC
 const { sanitizeModelToolCall } = require('./modelToolCall');
 const { pruneOutput } = require('./outputSchema');
 const { createToolCallRecorder } = require('./toolCallRecorder');
+const { createToolCallStore } = require('./toolCallStore');
 const { settleProposedToolCall } = require('./toolCallProposals');
 const { listToolCallsByRun } = require('./toolCallReader');
 
 module.exports = {
   ToolRegistry, initToolRegistry, getToolRegistry, buildDefaultRegistry, loadPermissionCodes, sanitizeModelToolCall, pruneOutput,
-  createToolCallRecorder, settleProposedToolCall, listToolCallsByRun,
+  createToolCallRecorder, createToolCallStore, settleProposedToolCall, listToolCallsByRun,
 };

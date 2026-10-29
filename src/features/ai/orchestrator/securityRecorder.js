@@ -16,7 +16,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Pedido redigido (segredo e dado pessoal viram máscara) e cortado no limite do administrador; nunca o pedido inteiro. */
 const excerpt = (texto, max) => (texto ? maskSecrets(texto).slice(0, max) : null);
 
-function createSecurityRecorder({ execCtx, agentCode, requestText, transaction, toolCallStore }) {
+function createSecurityRecorder({ execCtx, agentCode, requestText, transaction, toolCallStore, args }) {
   let ultimaChamada = null;
   const tenant = { groupId: execCtx.groupId, companyId: execCtx.companyId };
   const userId = execCtx.actor && execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;
@@ -45,7 +45,7 @@ function createSecurityRecorder({ execCtx, agentCode, requestText, transaction, 
     async record(entrada) {
       const callId = entrada.callId || crypto.randomUUID();
       ultimaChamada = callId;
-      const linha = { ...entrada, callId, agentCode: agentCode || null, runId: execCtx.runId || null, actor: execCtx.actor };
+      const linha = { ...entrada, callId, agentCode: agentCode || null, runId: execCtx.runId || null, actor: execCtx.actor, args };
       if (toolCallStore) await toolCallStore.record(linha, transaction);
       if (linha.status === 'BLOCKED') await auditarBloqueio(linha);
     },
