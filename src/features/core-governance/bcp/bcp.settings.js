@@ -11,12 +11,14 @@ const { SECTOR_CODES } = require('./bcp.constants');
  *  - governanca.bcp.impressao_max_folhas (M9-D834 §3.3): máximo de folhas numeradas por impressão de formulário (padrão 500).
  *  - governanca.bcp.importacao_lote_max (M9-D832): máximo de operações por pedido de importação (padrão 200).
  *  - governanca.bcp.importacao_lead_prazo_horas (M9-D832): prazo, em horas, do próximo contato de um lead importado do papel (padrão 24).
+ *  - governanca.bcp.conciliar_pagamento_dias (M9-D833): prazo, em dias úteis a contar da data da operação, para o pagamento emergencial estar casado com o extrato (padrão 3).
  */
 const SECTOR_ROLES_KEY = 'governanca.bcp.setor_por_papel';
 const LIST_LIMIT_KEY = 'governanca.bcp.listagem_limite';
 const PRINT_MAX_KEY = 'governanca.bcp.impressao_max_folhas';
 const IMPORT_BATCH_MAX_KEY = 'governanca.bcp.importacao_lote_max';
 const IMPORT_LEAD_HOURS_KEY = 'governanca.bcp.importacao_lead_prazo_horas';
+const RECONCILE_DAYS_KEY = 'governanca.bcp.conciliar_pagamento_dias';
 
 const DEFAULT_SECTOR_ROLES = Object.freeze({
   ATENDIMENTO: ['ATENDIMENTO', 'ATENDENTE', 'CORRETOR', 'RECEPCAO'],
@@ -33,6 +35,7 @@ const BCP_SETTING_DEFAULTS = Object.freeze({
   [PRINT_MAX_KEY]: 500,
   [IMPORT_BATCH_MAX_KEY]: 200,
   [IMPORT_LEAD_HOURS_KEY]: 24,
+  [RECONCILE_DAYS_KEY]: 3,
 });
 
 /** Texto JSON -> { SETOR: [NOME MAIÚSCULO] } ou null se estiver fora do formato (chaves só entre os seis setores; valores listas de textos não vazios). */
@@ -61,6 +64,7 @@ const BCP_SETTINGS_SCHEMA = {
   [PRINT_MAX_KEY]: { type: 'integer', min: 1, max: 5000 },
   [IMPORT_BATCH_MAX_KEY]: { type: 'integer', min: 1, max: 1000 },
   [IMPORT_LEAD_HOURS_KEY]: { type: 'integer', min: 1, max: 720 },
+  [RECONCILE_DAYS_KEY]: { type: 'integer', min: 1, max: 60 },
 };
 
-module.exports = { SECTOR_ROLES_KEY, LIST_LIMIT_KEY, PRINT_MAX_KEY, IMPORT_BATCH_MAX_KEY, IMPORT_LEAD_HOURS_KEY, DEFAULT_SECTOR_ROLES, BCP_SETTING_DEFAULTS, BCP_SETTINGS_SCHEMA, parseSectorRoles };
+module.exports = { SECTOR_ROLES_KEY, LIST_LIMIT_KEY, PRINT_MAX_KEY, IMPORT_BATCH_MAX_KEY, IMPORT_LEAD_HOURS_KEY, RECONCILE_DAYS_KEY, DEFAULT_SECTOR_ROLES, BCP_SETTING_DEFAULTS, BCP_SETTINGS_SCHEMA, parseSectorRoles };

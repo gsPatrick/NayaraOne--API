@@ -4,6 +4,8 @@ const { FinancialEntry } = require('../../../../../models');
 const { createFinancialEntry, cancelPendingFinancialEntry } = require('../../../../finance/financialEntries.service');
 const { resolveRef } = require('../refs');
 const normalize = require('../normalize');
+const { openPending } = require('../../payment/payment.pending');
+const { cancelByOperation } = require('../../payment/pending.repository');
 
 /** Chave de idempotência do lançamento: `bcp:<empresa>:<número>` (a empresa entra porque a chave do lançamento é única na plataforma e o número do papel só na empresa; DI-D832-3). */
 const keyOf = (tenant, reference) => `bcp:${tenant.companyId}:${reference}`;
@@ -23,6 +25,7 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
     description: describe(operation, payload), dueAt: operation.occurredAt, idempotencyKey: keyOf(tenant, operation.manualReference), originRef: `bcp:${operation.manualReference}`,
   }, actorUserId, transaction);
   const saved = await FinancialEntry.findByPk(entry.id, { transaction });
+  await openPending({ tenant, actorUserId, operation, amountCents: payload.valorCentavos, transaction }); // a conciliação com o extrato passa a ser cobrada (M9-D833)
   return {
     commandRef: `FinancialEntry:${saved.id}`,
     undo: { entryId: saved.id },
@@ -37,6 +40,7 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
 /** Estorno: o lançamento ainda não liquidado é cancelado pelo serviço normal (motivo registrado); se já foi pago, o serviço recusa e a recusa (422) segue como está. */
 async function reverse({ actorUserId, effect, operation, transaction }) {
   await cancelPendingFinancialEntry(effect.entryId, `Estorno da operação manual ${operation.manualReference} (BCP)`, actorUserId, transaction);
+  await cancelByOperation(operation.companyId, operation.id, transaction);
 }
 
 module.exports = { action: 'EMERGENCY_PAYMENT', execute, reverse, keyOf };

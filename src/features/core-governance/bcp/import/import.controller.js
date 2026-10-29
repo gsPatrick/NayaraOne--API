@@ -4,11 +4,14 @@ const { success } = require('../../../../utils/httpResponse');
 const { tenantFromAuth } = require('../../governance.module');
 const { importBatch } = require('./import.batch');
 const decideService = require('./decide.service');
+const { singleRefusal } = require('../payment');
 
 const actor = (req) => ({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId });
 
 async function importOperations(req, res) {
   const data = await req.withTenantTransaction((transaction) => importBatch({ ...actor(req), body: req.body, transaction }));
+  const refusal = singleRefusal(data);
+  if (refusal) throw refusal;
   return success(res, { data });
 }
 

@@ -59,11 +59,11 @@ function listReconciliations(companyId, { sectors, result, pending, limit, offse
 
 /** Operações do pedido: por ids ou por correlation_ref, ordenadas por registro. */
 function operationsByIds(companyId, ids, transaction) {
-  return select('SELECT id, sector, manual_reference AS "manualReference" FROM governance.manual_operations WHERE company_id = :companyId AND id IN (:ids) ORDER BY recorded_at, manual_reference',
+  return select('SELECT id, sector, manual_reference AS "manualReference", intended_action AS "intendedAction" FROM governance.manual_operations WHERE company_id = :companyId AND id IN (:ids) ORDER BY recorded_at, manual_reference',
     { companyId, ids }, transaction);
 }
 function operationsByCorrelation(companyId, correlationRef, transaction) {
-  return select('SELECT id, sector, manual_reference AS "manualReference" FROM governance.manual_operations WHERE company_id = :companyId AND correlation_ref = :correlationRef ORDER BY recorded_at, manual_reference',
+  return select('SELECT id, sector, manual_reference AS "manualReference", intended_action AS "intendedAction" FROM governance.manual_operations WHERE company_id = :companyId AND correlation_ref = :correlationRef ORDER BY recorded_at, manual_reference',
     { companyId, correlationRef }, transaction);
 }
 

@@ -96,7 +96,7 @@ test('m9d832 HTTP: permissões, corpo, limite do pedido e setor', { skip: skip()
   assert.deepEqual([tooMany.status, tooMany.body.error.code], [400, 'VALIDATION_ERROR']);
   assert.match(tooMany.body.error.message, /mais de 2 operações/);
   await env.setSectorRoles(A, { ATENDIMENTO: ['CI GESTOR'], FINANCEIRO: ['CI GESTOR'], OBRAS: ['CI GESTOR', 'CI MAKER'] });
-  const fin = await env.recordAction(A, 'EMERGENCY_PAYMENT', ctx);
+  const fin = await env.recordAction(A, 'EMERGENCY_PAYMENT', ctx, {}, { actorUserId: A.userId });
   const forbidden = await importHttp('makerA', { ids: [fin.id] });
   assert.deepEqual([forbidden.status, forbidden.body.error.code, forbidden.body.error.message], [403, 'GOV_BCP_SECTOR_FORBIDDEN', 'Você não pode importar operações deste setor.']);
   assert.equal((await env.opRow(fin.id)).status, 'RECORDED');

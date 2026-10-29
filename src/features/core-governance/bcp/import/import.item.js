@@ -12,6 +12,7 @@ const repository = require('./import.repository');
 const { compareFields } = require('./compare');
 const { adapterFor } = require('./adapters');
 const { runGuards } = require('./guards');
+require('../payment/payment.guard'); // registra a guarda da dupla checagem do pagamento emergencial (M9-D833)
 const { toBcpError } = require('./import.errors');
 
 const EVENT_IMPORTED = 'bcp.manual_operation.imported';

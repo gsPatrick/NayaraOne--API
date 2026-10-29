@@ -7,6 +7,8 @@ const { userSectors } = require('../bcp.sectors');
 const E = require('../bcp.errors');
 const { UUID } = require('./refs');
 const repository = require('./import.repository');
+const { assertApprover } = require('../payment/payment.guard');
+const { ACTION: PAYMENT_ACTION } = require('../payment/payment.constants');
 const { importOperation } = require('./import.item');
 
 const bad = (message, field) => govError(400, 'VALIDATION_ERROR', message, { field });
@@ -44,6 +46,8 @@ async function importBatch({ tenant, actorUserId, body, transaction }) {
   if (found.length > max) throw bad(`O lote tem mais de ${max} operações (limite configurado); importe por ids.`, 'correlationRef');
   const mine = await userSectors(actorUserId, tenant, transaction);
   if (found.some((op) => !mine.includes(op.sector))) throw E.sectorForbidden('importar operações');
+  // Pagamento emergencial: quem importa é o checker_2 e precisa de governance:bcp:approve; sem ela o pedido inteiro é recusado antes de executar qualquer coisa (M9-D833).
+  if (found.some((op) => op.intendedAction === PAYMENT_ACTION)) await assertApprover(tenant, actorUserId, transaction);
   const order = selection.ids ? [...found, ...selection.ids.filter((id) => !found.some((op) => op.id === id)).map((id) => ({ id }))] : found;
   const items = [];
   for (const op of order) items.push(await importOperation({ tenant, actorUserId, id: op.id, transaction }));

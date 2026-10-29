@@ -121,7 +121,7 @@ test('m9d832 MATCHED leva a RECONCILED na mesma transação, com a conferência 
 test('m9d832 usuário de outro setor recebe 403 GOV_BCP_SECTOR_FORBIDDEN e nada é executado', { skip: skip() }, async () => {
   const maker = await env.otherUserId();
   await env.setSectorRoles(A, { FINANCEIRO: ['CI GESTOR'], OBRAS: ['CI GESTOR', 'CI MAKER'], ATENDIMENTO: ['CI GESTOR'] });
-  const fin = await env.recordAction(A, 'EMERGENCY_PAYMENT', ctx);
+  const fin = await env.recordAction(A, 'EMERGENCY_PAYMENT', ctx, {}, { actorUserId: A.userId });
   const obra = await env.recordAction(A, 'MATERIAL_REQUEST', ctx);
   const err = await env.failure(env.importIds(A, [fin.id, obra.id], maker));
   assert.deepEqual([err.status, err.code, err.message], [403, 'GOV_BCP_SECTOR_FORBIDDEN', 'Você não pode importar operações deste setor.']);

@@ -21,6 +21,7 @@ const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJ
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
+const { startBcpPaymentReconciliationJob } = require('./src/engines/jobs/bcpPaymentReconciliationJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -181,6 +182,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.MARKETING_CONTENT_TYPES_JOB_D
 // Varredura diária do Calendário nas fontes de obras e garantias (M9-D803), na hora configurada (padrão 06:00 de Brasília).
 if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_BACKFILL_JOB_DISABLED !== 'true') {
   startCalendarBackfillJob();
+}
+
+// Conciliação do pagamento emergencial do BCP com o extrato (M9-D833): casa as linhas e alerta o prazo vencido (a cada 30 minutos por padrão).
+if (process.env.NODE_ENV !== 'test' && process.env.BCP_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
+  startBcpPaymentReconciliationJob();
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
