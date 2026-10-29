@@ -16,7 +16,7 @@ const OUTPUT_SCHEMA = Object.freeze({
 
 /**
  * definePort — cria a classe do port de um domínio. `operations`: nome da capability -> lista de campos obrigatórios do
- * pedido (ou { required, properties } para um JSON Schema mais rico). As operações PRECISAM ser capabilities do domínio
+ * pedido (ou { required, properties, outputMapper } para um JSON Schema mais rico e o mapper de saída da M9-D219). As operações PRECISAM ser capabilities do domínio
  * (aqui) e cobri-las todas (o teste de consistência confere). Cada port é versionado (`portVersion`).
  */
 function definePort(className, domain, operations, portVersion = '1') {
@@ -30,6 +30,8 @@ function definePort(className, domain, operations, portVersion = '1') {
     ops[nome] = Object.freeze({
       inputSchema: Object.freeze({ type: 'object', required: def.required || [], properties: def.properties || {} }),
       outputSchema: OUTPUT_SCHEMA,
+      // M9-D219: mapper de saída da operação (allowlist + classificação). Operação sem dado de domínio no pedido não declara.
+      outputMapper: def.outputMapper || null,
     });
   });
   const Port = class extends IntegrationAdapter {};

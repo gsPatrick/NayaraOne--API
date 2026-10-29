@@ -27,6 +27,7 @@ const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settin
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
+const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
@@ -187,6 +188,8 @@ const SETTINGS_SCHEMA = {
   ...INBOX_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).
+  ...MINIMIZATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).

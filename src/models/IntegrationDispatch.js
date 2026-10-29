@@ -35,6 +35,8 @@ module.exports = (sequelize) => sequelize.define(
     unknownSince: { type: DataTypes.DATE, allowNull: true, field: 'unknown_since' },
     reconcileAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'reconcile_attempts' },
     correlationId: { type: DataTypes.UUID, allowNull: true, field: 'correlation_id' },
+    purpose: { type: DataTypes.STRING(48), allowNull: true },
+    fieldsDropped: { type: DataTypes.INTEGER, allowNull: true, field: 'fields_dropped' },
     createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
   },
   { schema: 'integration', tableName: 'dispatches', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at', underscored: true }

@@ -14,9 +14,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const INSERT_SQL = `
 INSERT INTO "integration"."dispatches"
   (group_id, company_id, connection_id, provider_code, operation, outbox_event_id, aggregate_type, aggregate_id, criticality_op,
-   payload_snapshot, payload_hash, idempotency_key, max_attempts, next_attempt_at, correlation_id, created_by)
+   payload_snapshot, payload_hash, idempotency_key, max_attempts, next_attempt_at, correlation_id, created_by, purpose, fields_dropped)
 VALUES (:groupId, :companyId, :connectionId, :providerCode, :operation, :outboxEventId, :aggregateType, :aggregateId, :criticalityOp,
-        CAST(:snapshot AS jsonb), :hash, :key, :maxAttempts, now(), :correlationId, :createdBy)
+        CAST(:snapshot AS jsonb), :hash, :key, :maxAttempts, now(), :correlationId, :createdBy, :purpose, :fieldsDropped)
 ON CONFLICT (connection_id, operation, idempotency_key) DO NOTHING
 RETURNING id`;
 
@@ -24,7 +24,8 @@ RETURNING id`;
  * createDispatch — registra a intenção local de uma chamada externa ANTES de ela sair (estado PENDING), com o conteúdo
  * aprovado (`snapshot`, já minimizado), o hash do JSON canônico e a chave de idempotência. Repetir o pedido com a mesma
  * (conexão, operação, chave) não grava de novo e devolve o envio existente (`created:false`).
- * `d`: connectionId, operation, idempotencyKey, snapshot, criticalityOp (padrão DANGEROUS), outboxEventId, aggregateType, aggregateId.
+ * `d`: connectionId, operation, idempotencyKey, snapshot, criticalityOp (padrão DANGEROUS), outboxEventId, aggregateType, aggregateId,
+ * purpose e fieldsDropped (M9-D219: quem minimiza informa; envio com mapper sai por createMinimizedDispatch).
  */
 async function createDispatch(ctx, d, transaction) {
   if (!ctx || !ctx.companyId || !ctx.groupId) throw AppError.badRequest('Envio exige a empresa e o grupo.', 'VALIDATION_ERROR');
@@ -50,6 +51,7 @@ async function createDispatch(ctx, d, transaction) {
       outboxEventId: d.outboxEventId || null, aggregateType: d.aggregateType ? String(d.aggregateType).slice(0, 128) : null, aggregateId: d.aggregateId || null,
       criticalityOp, snapshot: JSON.stringify(d.snapshot), hash, key, maxAttempts: params.maxAttempts,
       correlationId: correlation && UUID_RE.test(correlation) ? correlation : null, createdBy: ctx.userId || null,
+      purpose: d.purpose || null, fieldsDropped: Number.isInteger(d.fieldsDropped) ? d.fieldsDropped : null,
     },
     transaction,
   });
