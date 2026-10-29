@@ -363,4 +363,6 @@ module.exports = {
   suggestDeadlines,
   organizeDossier,
   AGENT_NAME,
+  contentLines, // M9-D038: a NAY Jurídica da camada de IA compara as versões com a mesma regra
+  multisetDiff,
 };

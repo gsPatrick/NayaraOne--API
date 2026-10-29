@@ -4,6 +4,7 @@
 // Carregado pelo índice de agentes, de modo que qualquer caminho que use o orquestrador já os tem registrados.
 const { wireScopeGuard } = require('./scope');
 const { registerNayObras } = require('./nay_obras');
+const { registerNayJuridica } = require('./nay_juridica');
 const { registerNayCorrespondente } = require('./nay_correspondente');
 const { registerNayDiretoria } = require('./nay_diretoria');
 const { registerNayFinanceira } = require('./nay_financeira');
@@ -15,6 +16,7 @@ function registerBuiltInAgents() {
   done = true;
   wireScopeGuard();
   registerNayObras();
+  registerNayJuridica();
   registerNayCorrespondente();
   registerNayDiretoria();
   registerNayFinanceira();

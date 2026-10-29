@@ -29,6 +29,7 @@ const { CACHE_SETTING_DEFAULTS, CACHE_SETTINGS_SCHEMA } = require('./budgets/cac
 const { FLOW_SETTING_DEFAULTS, FLOW_SETTINGS_SCHEMA } = require('./orchestrator/flow/flow.settings');
 const { RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA } = require('./retrieval/retrieval.settings');
 const { OBRAS_SETTING_DEFAULTS, OBRAS_SETTINGS_SCHEMA } = require('./agents/nay_obras/obras.settings');
+const { JURIDICA_SETTING_DEFAULTS, JURIDICA_SETTINGS_SCHEMA } = require('./agents/nay_juridica/juridica.settings');
 const { ATENDIMENTO_SETTING_DEFAULTS, ATENDIMENTO_SETTINGS_SCHEMA } = require('./agents/nay_atendimento/atendimento.settings');
 const { CORRESPONDENTE_SETTING_DEFAULTS, CORRESPONDENTE_SETTINGS_SCHEMA } = require('./agents/nay_correspondente/correspondente.settings');
 const { RUN_API_SETTING_DEFAULTS, RUN_API_SETTINGS_SCHEMA } = require('./runApi/runApi.settings');
@@ -70,6 +71,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...FLOW_SETTING_DEFAULTS,
   ...RAG_SETTING_DEFAULTS,
   ...OBRAS_SETTING_DEFAULTS,
+  ...JURIDICA_SETTING_DEFAULTS,
   ...ATENDIMENTO_SETTING_DEFAULTS,
   ...CORRESPONDENTE_SETTING_DEFAULTS,
   ...RUN_API_SETTING_DEFAULTS,
@@ -104,6 +106,7 @@ const AI_SETTINGS_SCHEMA = {
   ...FLOW_SETTINGS_SCHEMA,
   ...RAG_SETTINGS_SCHEMA,
   ...OBRAS_SETTINGS_SCHEMA,
+  ...JURIDICA_SETTINGS_SCHEMA,
   ...ATENDIMENTO_SETTINGS_SCHEMA,
   ...CORRESPONDENTE_SETTINGS_SCHEMA,
   ...RUN_API_SETTINGS_SCHEMA,

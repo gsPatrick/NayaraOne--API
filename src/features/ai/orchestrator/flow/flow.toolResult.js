@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { numbersFromToolOutput } = require('../../tools/numbers/financeNumbers');
+const { groundingSourcesOf } = require('../../tools/groundingSources');
 const { detectInjection } = require('../injectionDetector');
 const { publishInjectionEvents } = require('../injectionEvents');
 const E = require('./flow.errors');
@@ -22,7 +23,9 @@ async function absorbToolOutput(state, toolName, output) {
     await publishInjectionEvents(state.ctx, state.runId, [{ sourceId, origin: 'TOOL_RESULT', ...det, action: det.action === 'QUARANTINE' ? 'QUARANTINED' : 'SUSPICIOUS' }], state.transaction);
     if (det.action === 'QUARANTINE') throw E.injectionInContent();
   }
-  state.sources.push({
+  const exact = groundingSourcesOf(toolName, output, new Date(state.clock()));
+  if (exact.length) state.sources.push(...exact);
+  else state.sources.push({
     sourceType: 'TOOL_RESULT', sourceRef: toolName, sourceVersion: null, title: toolName, clause: null, text, values: [], classification: 'INTERNAL',
     effectiveFrom: null, effectiveUntil: null, relevanceScore: null, statusAtRetrieval: 'VIGENTE', contentHash: sha(text), longDocument: false,
     retrievedAt: new Date(state.clock()), usedInAnswer: true,
