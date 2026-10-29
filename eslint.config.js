@@ -42,4 +42,13 @@ module.exports = [
     plugins: { nayara: nayaraPlugin },
     rules: { 'nayara/no-float-money': 'error' },
   },
+  {
+    // M9-D704: a suíte adversarial do BI e os testes nomeados das donas não podem ser desativados (sem skip, only nem todo).
+    files: ['test/marco9/analytics/m9d704.*.js'],
+    rules: {
+      'no-restricted-syntax': ['error',
+        { selector: "CallExpression[callee.property.name=/^(skip|only|todo)$/]", message: 'M9-D704: teste adversarial não pode ser desativado (skip/only/todo proibidos).' },
+        { selector: "Property[key.name=/^(skip|only|todo)$/]", message: 'M9-D704: teste adversarial não pode ser desativado (skip/only/todo proibidos).' }],
+    },
+  },
 ];

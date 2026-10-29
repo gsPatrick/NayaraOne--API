@@ -1,0 +1,105 @@
+{
+  "gerado": "2026-10-29T12:52:09.240Z",
+  "donas": {
+    "M9-D620": {
+      "commitAnterior": "649e76c",
+      "commitCodigo": "e0c8875",
+      "testes": [
+        "m9d620 freeCash exclui caução e fundos de terceiros"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d620 reproduz fin.free_cash a partir dos registros-fonte |   name: 'AppError' |     AppError.notFound (<arvore-anterior>/src/utils/AppError.js:32:12)"
+    },
+    "M9-D625": {
+      "commitAnterior": "71fa427",
+      "commitCodigo": "28e85ce",
+      "testes": [
+        "m9d625 intercompany não duplica o consolidado (receita e custo)"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "# Error: Cannot find module '../../../src/features/analytics/metrics/consolidation/rules' | not ok 1 - test/marco9/analytics/m9d625.eliminacao.test.js"
+    },
+    "M9-D607": {
+      "commitAnterior": "4d2fe2a",
+      "commitCodigo": "cacd8f5",
+      "testes": [
+        "m9d607 read model duplicado por evento replay é idempotente"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d607 read model duplicado por evento replay é idempotente |   name: 'TypeError' | not ok 2 - m9d607 replay concorrente em 2 conexões aplica uma vez"
+    },
+    "M9-D609": {
+      "commitAnterior": "5b89366",
+      "commitCodigo": "e7c1467",
+      "testes": [
+        "m9d609 freshness correta: FRESH, STALE e EXPIRED nos limites exatos"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d609 freshness correta: FRESH, STALE e EXPIRED nos limites exatos |   name: 'TypeError' | not ok 2 - m9d609 STALE mostra o selo \"Desatualizado há 3 h\" e o status STALE, sem esconder o valor"
+    },
+    "M9-D604": {
+      "commitAnterior": "7b1bbc0",
+      "commitCodigo": "ca7740c",
+      "testes": [
+        "m9d604 versão histórica reproduz o snapshot (mesmo valor e calc_hash)"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "# Error: Cannot find module '../src/modules/analytics/metrics/calcHash' | not ok 1 - test/analytics.m9d604.test.js"
+    },
+    "M9-D690": {
+      "commitAnterior": "9603f7d",
+      "commitCodigo": "eaa7011",
+      "testes": [
+        "m9d690 cross-company detail é bloqueado com 404",
+        "m9d690 drill-down sem permissão é bloqueado e devolve só o agregado"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "# SyntaxError: Rest parameter must be last formal parameter | not ok 1 - test/marco9/analytics/m9d690.escopo.test.js"
+    },
+    "M9-D696": {
+      "commitAnterior": "49149b6",
+      "commitCodigo": "d972f66",
+      "testes": [
+        "m9d696 data quality falha e marca o dataset DEGRADED"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d696 data quality falha e marca o dataset DEGRADED |   name: 'TypeError' | not ok 2 - m9d696 reconciliação detecta divergência de R$ 0,01"
+    },
+    "M9-D697": {
+      "commitAnterior": "ad2be7a",
+      "commitCodigo": "4b85068",
+      "testes": [
+        "m9d697 data quality falha e o KPI fica DEGRADED sem valor"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d697 data quality falha e o KPI fica DEGRADED sem valor |   name: 'AssertionError' | not ok 2 - m9d697 check de aviso (WARN) e check que passa não degradam"
+    },
+    "M9-D691": {
+      "commitAnterior": "038b687",
+      "commitCodigo": "899d196",
+      "testes": [
+        "m9d691 alerta repetido respeita cooldown e não duplica"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d691 condição repetida com instância OPEN só incrementa ocorrências |   name: 'TypeError' | not ok 2 - m9d691 alerta repetido respeita cooldown e não duplica"
+    },
+    "M9-D701": {
+      "commitAnterior": "7415395",
+      "commitCodigo": "d20f06d",
+      "testes": [
+        "m9d701 export auditado (pedido, geração, download)"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "not ok 1 - m9d701 export auditado (pedido, geração, download) | not ok 2 - m9d701 cabeçalho do arquivo traz versão, período e freshness | not ok 3 - m9d701 RESTRICTED sempre mascarado (nenhuma permissão desliga)"
+    },
+    "M9-D694": {
+      "commitAnterior": "fa6118d",
+      "commitCodigo": "594a2bc",
+      "testes": [
+        "m9d694 NAY não inventa causa quando não há registro (diz causa não identificada)"
+      ],
+      "vermelho": true,
+      "saidaVermelha": "# Error: Cannot find module '../core-governance/data-quality/evidence' | not ok 1 - test/marco9/analytics/m9d694.bloqueio.test.js"
+    }
+  }
+}

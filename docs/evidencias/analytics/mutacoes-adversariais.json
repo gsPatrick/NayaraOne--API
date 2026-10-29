@@ -1,0 +1,140 @@
+{
+  "gerado": "2026-10-29T12:59:53.082Z",
+  "resultados": [
+    {
+      "adv": 1,
+      "arquivo": "src/features/analytics/metrics/formulas/finFreeCash.js",
+      "protecao": "o caixa livre subtrai o dinheiro de terceiros retido (caução)",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d620 reproduz fin.free_cash a partir dos registros-fonte"
+    },
+    {
+      "adv": 2,
+      "arquivo": "src/features/analytics/security/scope.js",
+      "protecao": "empresa inexistente ou de outro grupo é invisível: 404 sem revelar existência",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d690 cross-company detail é bloqueado com 404"
+    },
+    {
+      "adv": 3,
+      "arquivo": "src/features/analytics/metrics/freshness.signal.js",
+      "protecao": "métrica crítica com dado STALE ou EXPIRED é sinalizada ao alert engine",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d609 snapshot antigo exibido como atual dispara alerta de freshness"
+    },
+    {
+      "adv": 4,
+      "arquivo": "src/features/analytics/metrics/registry.update.js",
+      "protecao": "alterar fórmula ou criticidade exige publicar uma nova versão",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 5 - m9d604 edição direta de campo numérico é recusada"
+    },
+    {
+      "adv": 5,
+      "arquivo": "src/features/analytics/read-models/readModel.worker.js",
+      "protecao": "o evento já aplicado é ignorado (rm_applied_events com PK)",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d607 read model duplicado por evento replay é idempotente"
+    },
+    {
+      "adv": 6,
+      "arquivo": "src/features/analytics/alerts/engine.state.js",
+      "protecao": "condição repetida dentro do cooldown é suprimida, sem nova instância",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 2 - m9d691 alerta repetido respeita cooldown e não duplica"
+    },
+    {
+      "adv": 7,
+      "arquivo": "src/features/analytics/metrics/sourceRefs.detail.js",
+      "protecao": "detalhe de linha exige a permissão do domínio",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 2 - m9d690 drill-down sem permissão é bloqueado e devolve só o agregado"
+    },
+    {
+      "adv": 8,
+      "arquivo": "src/features/analytics/exports/export.request.js",
+      "protecao": "exportação HIGH exige MFA recente (step-up)",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 2 - m9d701 export massivo exige MFA e gera auditoria"
+    },
+    {
+      "adv": 9,
+      "arquivo": "src/features/analytics/briefs/groundingValidator.js",
+      "protecao": "afirmação de causa sem registro de causa é bloqueada",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d694 NAY inventa causa e o grounding bloqueia"
+    },
+    {
+      "adv": 10,
+      "arquivo": "src/features/analytics/quality/status.priority.js",
+      "protecao": "KPI DEGRADED nunca devolve valor (nulo, não zero)",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d697 data quality falha e o KPI fica DEGRADED sem valor"
+    },
+    {
+      "adv": 11,
+      "arquivo": "src/features/analytics/metrics/consolidation/compute.js",
+      "protecao": "o consolidado subtrai as eliminações do intercompany na leitura",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d625 consolidado soma intercompany duas vezes é corrigido pela eliminação na leitura"
+    },
+    {
+      "adv": 12,
+      "arquivo": "scripts/analytics/load/verdict.js",
+      "protecao": "o limite de degradação do OLTP (percentual ou piso) reprova o BI que degrada o fluxo operacional",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d699 dashboard pesado não degrada OLTP em teste de carga"
+    },
+    {
+      "adv": 13,
+      "arquivo": "src/features/analytics/read-models/rebuild.swap.js",
+      "protecao": "o rebuild troca a tabela atual pelo conteúdo reconstruído da fonte (sombra)",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d608 rebuild read model reproduz resultado do incremental"
+    },
+    {
+      "adv": 14,
+      "arquivo": "src/features/analytics/metrics/period.js",
+      "protecao": "o dia do período começa à 00:00 de São Paulo, não de UTC",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d606 timezone de período correto: 23:30 SP de 30/09 pertence a setembro"
+    },
+    {
+      "adv": 15,
+      "arquivo": "src/features/analytics/metrics/formulas/money.js",
+      "protecao": "arredondamento meio para cima, único para todo o BI",
+      "falhou": true,
+      "originalIntacto": true,
+      "commit": "06466e8",
+      "evidencia": "not ok 1 - m9d605 arredondamento financeiro consistente (tabela de 20 casos, positivos, negativos, half-up)"
+    }
+  ]
+}
