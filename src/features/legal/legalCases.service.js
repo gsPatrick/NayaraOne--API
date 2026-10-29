@@ -4,6 +4,7 @@ const { LegalCase, LegalCaseParty, Person, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishLegalCaseCreated } = require('./legalEvents.service');
+const { assertCaseKeepsCriticalAccountability } = require('./legalDeadlineAccountability');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -194,6 +195,15 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
     phaseChanging: phase !== undefined && phase !== legalCase.phase,
   });
   const previousPhase = legalCase.phase;
+  const nextResponsible = responsibleUserId !== undefined ? responsibleUserId : legalCase.responsibleUserId;
+  const nextEscalation = escalationUserId !== undefined ? escalationUserId : legalCase.escalationUserId;
+  if (nextResponsible !== legalCase.responsibleUserId || nextEscalation !== legalCase.escalationUserId) {
+    // Prazo CRITICAL pendente depende do responsavel/escalonamento do processo (auditoria Marco 5).
+    await assertCaseKeepsCriticalAccountability(
+      { id: legalCase.id, responsibleUserId: nextResponsible || null, escalationUserId: nextEscalation || null },
+      transaction
+    );
+  }
   if (status !== undefined) legalCase.status = status;
   if (summary !== undefined) legalCase.summary = summary;
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;

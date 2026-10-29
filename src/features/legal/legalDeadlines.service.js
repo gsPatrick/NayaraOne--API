@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCase } = require('./legalCases.service');
 const { publishLegalDeadlineCreated } = require('./legalEvents.service');
+const { assertCriticalDeadlineAccountability, normalizeNote } = require('./legalDeadlineAccountability');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -58,6 +59,10 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
       'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
     );
   }
+
+  // Auditoria da cliente (Marco 5): prazo CRITICAL exige responsavel efetivo e destino de
+  // escalonamento desde a criacao, nao so quando ja esta vencido.
+  if (criticality === 'CRITICAL') assertCriticalDeadlineAccountability({ responsibleUserId }, legalCase);
 
   const deadline = await LegalDeadline.create(
     {
@@ -129,13 +134,20 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
   // DONE) era aceito sem nenhuma evidência nem nota documentando o que foi feito — "{status:
   // 'DONE'}" sozinho bastava. Fail closed: concluir exige pelo menos evidência OU nota.
-  const concluding = status !== undefined && status === 'DONE' && deadline.status !== 'DONE';
-  if (concluding) {
-    const evidenceId = conclusionEvidenceFileId || deadline.conclusionEvidenceFileId;
-    const note = conclusionNote !== undefined ? conclusionNote : deadline.conclusionNote;
-    if (!evidenceId && !note) {
-      throw AppError.badRequest(
-        'Concluir um prazo exige uma evidência anexada ou uma nota explicando o que foi feito.',
+  // Auditoria da cliente (Marco 5): a nota e normalizada (trim) e uma nota so de espacos nao
+  // conta como evidencia. A prova e reavaliada sempre que o prazo termina DONE e a conclusao
+  // esta sendo feita agora ou a nota/evidencia esta sendo alterada (prazo concluido nao pode
+  // perder a prova); prazo ja concluido sem mexer na prova nao e reavaliado.
+  const noteProvided = conclusionNote !== undefined;
+  const newNote = noteProvided ? normalizeNote(conclusionNote) : normalizeNote(deadline.conclusionNote);
+  const finalStatus = status !== undefined ? status : deadline.status;
+  const concluding = finalStatus === 'DONE' && deadline.status !== 'DONE';
+  const touchingProof = finalStatus === 'DONE' && (noteProvided || conclusionEvidenceFileId !== undefined);
+  if (concluding || touchingProof) {
+    const evidenceId = conclusionEvidenceFileId !== undefined ? conclusionEvidenceFileId : deadline.conclusionEvidenceFileId;
+    if (!evidenceId && !newNote) {
+      throw AppError.unprocessable(
+        'Concluir um prazo exige uma evidência anexada ou uma nota (com texto) explicando o que foi feito.',
         'LEGAL_DEADLINE_CONCLUSION_PROOF_REQUIRED'
       );
     }
@@ -183,7 +195,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   if (description !== undefined) deadline.description = description;
   if (dueAt !== undefined) deadline.dueAt = dueAt;
   if (conclusionEvidenceFileId !== undefined) deadline.conclusionEvidenceFileId = conclusionEvidenceFileId;
-  if (conclusionNote !== undefined) deadline.conclusionNote = conclusionNote;
+  if (noteProvided) deadline.conclusionNote = newNote;
   deadline.updatedBy = actorUserId || null;
   await deadline.save({ transaction });
 

@@ -306,7 +306,7 @@ test('M45-M5-08 §14: processo guarda órgão, classe, valor ESTIMADO e risco; r
 
 test('M45-M5-09 §15: prazo CRITICAL vencido abre UMA ocorrência CRITICAL e publica legal.deadline.overdue; prazo MEDIUM vencido não abre ocorrência', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const legalCase = await createCase(transaction);
+    const legalCase = await createCase(transaction, { escalationUserId: tenant.userId });
     const past = new Date(Date.now() - 3 * 86400000);
     await assert.rejects(
       () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'x', dueAt: past, sourceEvent: 'm45', responsibleUserId: tenant.userId, criticality: 'URGENTE' }, tenant.userId, transaction),
