@@ -49,6 +49,7 @@ const { CRM_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/crmKpi.set
 const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/financeResults.settings');
 const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
+const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/imoveisKpi.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
@@ -253,6 +254,7 @@ const SETTINGS_SCHEMA = {
   ...LOAD_SETTINGS_SCHEMA,
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
   ...COMERCIAL_SETTINGS_SCHEMA,
+  ...IMOVEIS_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D617 — read models de Locação: tipos de contrato, prazo do repasse e nota de cada tipo de registro de atendimento (a janela da inadimplência é a da D615).
   ...LOCACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.

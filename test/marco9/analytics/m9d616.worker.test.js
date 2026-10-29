@@ -96,7 +96,7 @@ test('m9d616 agenda recalcula o que depende do relógio', async () => {
   assert.match(await bucket(), /ATE_30/);
   await runSchedule(env.cX, new Date('2026-12-10T15:00:00Z')); // só o tempo passou
   assert.equal((await stage()).stalled_count, 1, 'sem nenhum evento a oportunidade passou a parada');
-  assert.match(await bucket(), /31_A_60/, 'a faixa de dias sem venda andou com o relógio');
+  assert.match(await bucket(), /31_A_90/, 'a faixa de dias sem venda andou com o relógio');
   const [refresh] = (await env.admin.query("SELECT \"trigger\", status FROM analytics.read_model_refreshes WHERE read_model = 'rm_crm_opportunity_stage' AND company_id = :c ORDER BY started_at DESC LIMIT 1", { replacements: { c: env.cX.companyId } }))[0];
   assert.deepEqual([refresh.trigger, refresh.status], ['SCHEDULE', 'SUCCEEDED']);
 });

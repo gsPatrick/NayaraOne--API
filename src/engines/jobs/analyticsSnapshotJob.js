@@ -5,6 +5,7 @@ const logger = require('../../utils/logger');
 const clock = require('../../features/analytics/metrics/clock');
 const { runDailySnapshots } = require('../../features/analytics/metrics/snapshots.service');
 require('../../features/analytics/metrics/kpis'); // registra os provedores de snapshot dos KPIs (finance-kpis)
+require('../../features/analytics/metrics/kpis/commercial'); // provedor de snapshot dos KPIs de Comercial e Imóveis (commercial-kpis, M9-D632 e M9-D633)
 
 /**
  * analyticsSnapshotJob (Marco 9, M9-D609 3.3): todo dia, a partir de `analytics.snapshot.hora_execucao` (padrão 00:30 de São Paulo), fotografa os

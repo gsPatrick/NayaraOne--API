@@ -7,7 +7,7 @@
  *                                                 agendadas não geram evento no momento do agendamento)
  *   analytics.comercial.primeira_resposta_inclui_nay   a resposta da NAY conta como primeira resposta do lead (padrão Desligado: a resposta
  *                                                      automática não conta, M9-D630; era Ligado na M9-D616)
- *   analytics.imoveis.faixas_sem_venda_dias       limites, em dias, das faixas de "imóvel sem venda" (ex.: 30,60,90,180)
+ *   analytics.imoveis.faixas_sem_venda_dias       limites, em dias, das faixas de "imóvel sem venda" (padrão do livro: 30,90,180 = 0-30, 31-90, 91-180 e 181+)
  * Arquivo sem dependência de settings.service no topo (evita ciclo; a leitura usa import tardio).
  */
 const AppError = require('../../../utils/AppError');
@@ -23,7 +23,7 @@ const COMERCIAL_DEFAULTS = Object.freeze({
   [KEYS.stalledDays]: 7,
   [KEYS.recalcDays]: 7,
   [KEYS.includeNay]: false,
-  [KEYS.noSaleBands]: '30,60,90,180',
+  [KEYS.noSaleBands]: '30,90,180', // M9-D632: as faixas do livro (0-30, 31-90, 91-180 e 181+)
 });
 
 /** "30,60,90,180" -> [30, 60, 90, 180] (inteiros positivos em ordem estritamente crescente, até 10) ou null. */

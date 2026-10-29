@@ -1,52 +1,52 @@
 'use strict';
 
 /**
- * M9-D616 — rm_crm_visits_proposals: por dia (SP), visitas agendadas (fora as canceladas) e realizadas, propostas enviadas (pelo dia do
- * envio) e propostas aceitas (pelo dia da decisão). O agregado é o DIA. A visita agendada não publica evento na criação: a agenda
- * recalcula os últimos analytics.comercial.janela_recalculo_dias dias.
+ * M9-D616 / M9-D632 — rm_crm_visits_proposals: por dia (SP), visitas agendadas (fora as canceladas) e realizadas, propostas enviadas (pelo dia do
+ * envio) e propostas aceitas (pelo dia da decisão). Para o KPI do BI (M9-D632) o mesmo dia traz também: visitas sem corretor e por corretor; as
+ * propostas ENVIADAS no dia (coorte do dia do envio) por desfecho de hoje (aceita, recusada, expirada, em aberto), o valor proposto, as sem valor
+ * e as por corretor da oportunidade. A coorte muda quando a proposta é decidida em outro dia, por isso o agregado é a EMPRESA inteira (poucas
+ * linhas: um dia por linha); qualquer evento recalcula todos os dias e a agenda reconfere sem janela de dias. A visita agendada não publica
+ * evento na criação: a agenda a recalcula.
  */
 const { defineAggregateModel } = require('../aggregateModel');
 const { sqlDay } = require('../aggregateModel.sql');
-const { params, oneRow } = require('./support');
+const { params } = require('./support');
 
 const NAME = 'rm_crm_visits_proposals';
 const EVENTS = ['crm.visit.completed', 'crm.proposal.created', 'crm.proposal.status_changed'];
 
-const slice = ({ where }) => {
-  const f = (col) => where({ day: sqlDay(col) });
-  return `
-  SELECT day, SUM(vs)::int AS visits_scheduled, SUM(vd)::int AS visits_done, SUM(ps)::int AS proposals_sent, SUM(pa)::int AS proposals_accepted FROM (
-    SELECT ${sqlDay('scheduled_at')}::text AS day, COUNT(*) FILTER (WHERE status <> 'CANCELED') AS vs, COUNT(*) FILTER (WHERE status = 'DONE') AS vd, 0 AS ps, 0 AS pa
-      FROM crm.visits WHERE company_id = :companyId AND deleted_at IS NULL${f('scheduled_at')} GROUP BY 1
-    UNION ALL
-    SELECT ${sqlDay('sent_at')}::text, 0, 0, COUNT(*), 0
-      FROM crm.proposals WHERE company_id = :companyId AND deleted_at IS NULL AND sent_at IS NOT NULL${f('sent_at')} GROUP BY 1
-    UNION ALL
-    SELECT ${sqlDay('decided_at')}::text, 0, 0, 0, COUNT(*)
-      FROM crm.proposals WHERE company_id = :companyId AND deleted_at IS NULL AND status = 'ACCEPTED' AND decided_at IS NOT NULL${f('decided_at')} GROUP BY 1
-  ) x GROUP BY 1`;
-};
-
-async function dayOf(table, column, id, companyId, transaction) {
-  const row = await oneRow(`SELECT ${sqlDay(column)}::text AS day FROM ${table} WHERE id = :id AND company_id = :companyId AND ${column} IS NOT NULL`, { id, companyId }, transaction);
-  return row ? row.day : null;
-}
-
-async function keyOf(event, { transaction }) {
-  const p = event.payloadJson || event.payload || {};
-  if (!p.id) return null;
-  let day = null;
-  if (event.eventType === 'crm.visit.completed') day = await dayOf('crm.visits', 'scheduled_at', p.id, event.companyId, transaction);
-  else if (p.toStatus === 'ACCEPTED') day = await dayOf('crm.proposals', 'decided_at', p.id, event.companyId, transaction);
-  else day = await dayOf('crm.proposals', 'sent_at', p.id, event.companyId, transaction);
-  return day ? { day } : null;
-}
-
-const keysSql = () => `SELECT DISTINCT day FROM (
-  SELECT ${sqlDay('scheduled_at')}::text AS day FROM crm.visits WHERE company_id = :companyId AND deleted_at IS NULL
-  UNION SELECT ${sqlDay('sent_at')}::text FROM crm.proposals WHERE company_id = :companyId AND deleted_at IS NULL AND sent_at IS NOT NULL
-  UNION SELECT ${sqlDay('decided_at')}::text FROM crm.proposals WHERE company_id = :companyId AND deleted_at IS NULL AND status = 'ACCEPTED' AND decided_at IS NOT NULL) d`;
+const slice = () => `
+  WITH vb AS (
+    SELECT ${sqlDay('v.scheduled_at')} AS day, COALESCE(v.agent_user_id::text, CAST(:noBroker AS text)) AS b,
+           COUNT(*) FILTER (WHERE v.status <> 'CANCELED') AS s, COUNT(*) FILTER (WHERE v.status = 'DONE') AS d
+      FROM crm.visits v WHERE v.company_id = :companyId AND v.deleted_at IS NULL GROUP BY 1, 2),
+  vt AS (
+    SELECT day, SUM(s) AS s, SUM(d) AS d, COALESCE(SUM(s) FILTER (WHERE b = CAST(:noBroker AS text)), 0) AS nb,
+           COALESCE(jsonb_object_agg(b, jsonb_build_object('s', s, 'd', d)) FILTER (WHERE s > 0), '{}'::jsonb) AS by_broker
+      FROM vb GROUP BY 1),
+  px AS (
+    SELECT pr.id, pr.status, pr.value, pr.decided_at, ${sqlDay('pr.sent_at')} AS day, COALESCE(o.owner_user_id::text, CAST(:noBroker AS text)) AS b
+      FROM crm.proposals pr LEFT JOIN crm.opportunities o ON o.id = pr.opportunity_id AND o.company_id = pr.company_id
+     WHERE pr.company_id = :companyId AND pr.deleted_at IS NULL AND pr.sent_at IS NOT NULL),
+  pbk AS (SELECT day, b, COUNT(*) AS n FROM px GROUP BY 1, 2),
+  pt AS (
+    SELECT day, COUNT(*) AS sent, COUNT(*) FILTER (WHERE status = 'ACCEPTED') AS acc, COUNT(*) FILTER (WHERE status = 'REJECTED') AS rej,
+           COUNT(*) FILTER (WHERE status = 'EXPIRED') AS exp, COUNT(*) FILTER (WHERE status IN ('SENT', 'UNDER_NEGOTIATION')) AS opn,
+           COALESCE(SUM(value), 0) AS val, COUNT(*) FILTER (WHERE value IS NULL OR value <= 0) AS nov
+      FROM px GROUP BY 1),
+  pbj AS (SELECT day, jsonb_object_agg(b, n) AS by_broker FROM pbk GROUP BY 1),
+  pa AS (
+    SELECT ${sqlDay('decided_at')} AS day, COUNT(*) AS acc FROM crm.proposals
+     WHERE company_id = :companyId AND deleted_at IS NULL AND status = 'ACCEPTED' AND decided_at IS NOT NULL GROUP BY 1),
+  days AS (SELECT day FROM vt UNION SELECT day FROM pt UNION SELECT day FROM pa)
+  SELECT days.day::text AS day,
+         COALESCE(vt.s, 0)::int AS visits_scheduled, COALESCE(vt.d, 0)::int AS visits_done, COALESCE(pt.sent, 0)::int AS proposals_sent,
+         COALESCE(pa.acc, 0)::int AS proposals_accepted, COALESCE(vt.nb, 0)::int AS visits_no_broker, COALESCE(vt.by_broker, '{}'::jsonb) AS visits_by_broker,
+         COALESCE(pt.acc, 0)::int AS proposals_sent_accepted, COALESCE(pt.rej, 0)::int AS proposals_sent_rejected, COALESCE(pt.exp, 0)::int AS proposals_sent_expired,
+         COALESCE(pt.opn, 0)::int AS proposals_sent_open, COALESCE(pt.val, 0) AS proposals_sent_value, COALESCE(pt.nov, 0)::int AS proposals_sent_no_value,
+         COALESCE(pbj.by_broker, '{}'::jsonb) AS proposals_by_broker
+    FROM days LEFT JOIN vt ON vt.day = days.day LEFT JOIN pt ON pt.day = days.day LEFT JOIN pa ON pa.day = days.day LEFT JOIN pbj ON pbj.day = days.day`;
 
 module.exports = defineAggregateModel({
-  name: NAME, keyColumns: ['day'], eventTypes: EVENTS, keyOf, params, slice, keysSql, schedule: { kind: 'recent_days', column: 'day' },
+  name: NAME, keyColumns: ['day'], aggregateColumns: [], eventTypes: EVENTS, keyOf: () => ({}), params, slice, schedule: { kind: 'keys' },
 });
