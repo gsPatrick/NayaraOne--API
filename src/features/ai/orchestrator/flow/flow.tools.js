@@ -47,7 +47,7 @@ async function runOneTool(state, raw) {
   try {
     const res = await state.trace.span(7, 'validar_tool', () => runToolCall({
       execCtx: state.execCtx, agent: state.agent, registry: state.toolRegistry, toolName: call.name, args: call.arguments, requestText: state.parsed.input, source: 'USER',
-      transaction: state.transaction, recorder,
+      transaction: state.transaction, recorder, execution: state.execution,
       executorOptions: { seq, untrustedTexts: state.untrustedTexts, actorTexts: state.actorTexts, injectionLimits: state.injectionLimits },
     }));
     if (res.status === 'PROPOSED') state.trace.mark(8, 'criar_proposta'); else state.trace.mark(9, 'executar_tool');

@@ -17,10 +17,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * @param {object} p execCtx (executionContext), agent (resolveActiveAgent), registry (ToolRegistry), toolName, args (do modelo),
  *   requestText (pedido do usuário), source ('USER' | 'RETRIEVED'), transaction (do tenant), recorder (opcional), toolCallStore
- *   (porta de ai.tool_calls), proposeAction (M9-D019, opcional: sem ele e com `execCtx.runId` uuid, a política de escrita monta o da NAY), argsLimits e
+ *   (porta de ai.tool_calls), proposeAction (M9-D019, opcional: sem ele e com `execCtx.runId` uuid, a política de escrita monta o da NAY), execution
+ *   (teto do agente na busca do RAG, M9-D023: { allowsConfidential, allowsRestricted, sourceTypes }), argsLimits e
  *   executorOptions (repassados ao executor).
  */
-async function runToolCall({ execCtx, agent, registry, toolName, args, requestText, source = 'USER', transaction, recorder, toolCallStore, proposeAction, argsLimits, services, executorOptions }) {
+async function runToolCall({ execCtx, agent, registry, toolName, args, requestText, source = 'USER', transaction, recorder, toolCallStore, proposeAction, argsLimits, services, executorOptions, execution }) {
   await assertRuntimeConnection(transaction);
   const settings = await loadSecuritySettings(execCtx, transaction);
   // M9-D006: com um run real (uuid) a porta é ai.tool_calls; o orquestrador (M9-D020) pode passar a sua.
@@ -30,7 +31,7 @@ async function runToolCall({ execCtx, agent, registry, toolName, args, requestTe
 
   const userId = execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;
   // M9-D695: `userPermissions` são as do ator inteiro; o BI confere nelas a permissão do domínio da métrica (a efetiva só traz os códigos das tools).
-  const escopo = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId, permissions: autorizada.effective, userPermissions: [...execCtx.permissions] };
+  const escopo = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId, permissions: autorizada.effective, userPermissions: [...execCtx.permissions], execution };
   const politica = await createWritePolicy({ registry, execCtx, agent, runId: UUID.test(String(execCtx.runId)) ? execCtx.runId : null, transaction });
   const montados = services || buildToolServices(transaction, escopo, { includeWrite: politica.directWriteEnabled });
   return executeTool({

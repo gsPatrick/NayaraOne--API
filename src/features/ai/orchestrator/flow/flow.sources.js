@@ -5,6 +5,7 @@ const { loadInjectionLimits } = require('../injectionDetector');
 const { loadGroundingSettings } = require('../grounding');
 const { semAcento } = require('../numbers/decimalText');
 const runs = require('../runs');
+const { executionCeiling } = require('./flow.retrieve');
 
 const AVISO_RESTRITO = 'Parte do conteúdo restrito não foi usada.';
 const CLASSES = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
@@ -33,6 +34,8 @@ function normalizeSource(raw) {
     statusAtRetrieval: raw.statusAtRetrieval || raw.status || 'VIGENTE',
     contentHash: raw.contentHash || null,
     longDocument: raw.longDocument === true,
+    origin: raw.origin || null,
+    persisted: raw.persisted === true,
     retrievedAt: raw.retrievedAt || new Date(),
     usedInAnswer: true,
   };
@@ -41,15 +44,17 @@ function normalizeSource(raw) {
 /**
  * Passo 4: triagem da entrada do usuário (D021: antes de qualquer busca; override ou exfiltração é 422 AI_INJECTION_BLOCKED e o run
  * fica BLOCKED) e busca das fontes AUTORIZADAS (D023, só o que o ator pode ver, vigente, D024). O retriever é injetado
- * (`deps.retrieve`); sem ele a tarefa segue só com o que as ferramentas devolverem. Conteúdo RESTRICTED sem `ai:restricted` não entra.
+ * (`deps.retrieve`, padrão: o índice do RAG por `RetrievalService.search`, M9-D023); sem ele a tarefa segue só com o que as ferramentas devolverem. Conteúdo RESTRICTED sem `ai:restricted` não entra.
  */
 async function fetchSources(state) {
   const limits = await loadInjectionLimits(state.ctx, state.transaction);
   state.injectionLimits = limits;
   await screenUserInput(state.parsed.input, { limits, ctx: state.ctx, runId: state.runId, transaction: state.transaction });
+  state.execution = await executionCeiling({ registry: state.deps.registry, ctx: state.ctx, agent: state.agent, decision: state.decision, transaction: state.transaction });
   if (!(await needsSources(state)) || typeof state.deps.retrieve !== 'function') return [];
   const found = await state.deps.retrieve({
-    ctx: state.ctx, execCtx: state.execCtx, agent: state.agent, taskType: state.parsed.taskType, input: state.parsed.input, purpose: state.parsed.purpose, transaction: state.transaction,
+    ctx: state.ctx, execCtx: state.execCtx, agent: state.agent, taskType: state.parsed.taskType, input: state.parsed.input, purpose: state.parsed.purpose,
+    runId: state.runId, execution: state.execution, decision: state.decision, transaction: state.transaction,
   });
   const canSeeRestricted = (state.ctx.permissions || []).includes('ai:restricted');
   const all = (found || []).map(normalizeSource);

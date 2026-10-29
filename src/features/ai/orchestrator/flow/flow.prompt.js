@@ -10,7 +10,7 @@ const CITATION_RULE = 'Cite cada afirmação sobre dados da empresa com o númer
 function blockOf(source, index, redactor) {
   return {
     id: `fonte-${index + 1}`,
-    origin: source.sourceType === 'TOOL_RESULT' ? 'TOOL_RESULT' : 'RETRIEVED',
+    origin: source.origin || (source.sourceType === 'TOOL_RESULT' ? 'TOOL_RESULT' : 'RETRIEVED'),
     classification: source.classification,
     text: redactor.text(source.text),
   };

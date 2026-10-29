@@ -33,7 +33,7 @@ function newState({ ctx, auth, parsed, agent, guard, run, deps, transaction, tra
     ctx, execCtx, transaction, deps, agent, guard, parsed, params, requestHash, runId: run.id, clock: deps.clock, startedAtMs, deadline: startedAtMs + params.totalTimeoutMs,
     toolRegistry: deps.toolRegistry, trace, redactor: createPiiRedactor(), sources: [], numbersPayload: [], notices: [], proposals: [], unmet: [], unavailable: new Set(),
     blockedTools: [], toolNotes: [], publishedDetections: new Set(), usage: { tokensIn: 0, tokensOut: 0, costMicro: 0n }, modelCalls: 0, seq: 0, escalated: false,
-    fallbackTrail: [], alerts: [], decision: null, routerInput: null, latestResponse: null, routingPath: null, prompt: null, untrustedTexts: [], actorTexts: [], injectionLimits: null,
+    fallbackTrail: [], alerts: [], execution: null, decision: null, routerInput: null, latestResponse: null, routingPath: null, prompt: null, untrustedTexts: [], actorTexts: [], injectionLimits: null,
   };
 }
 
