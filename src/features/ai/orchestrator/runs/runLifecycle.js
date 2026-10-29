@@ -48,7 +48,7 @@ async function startRun(ctx, data, transaction) {
     const row = await AiRun.create({
       groupId: ctx.groupId, companyId: ctx.companyId, userId: ctx.userId || null, agentName: d.agentName, agentId: d.agentId,
       agentVersion: d.agentVersion, purpose: d.purpose, inputSummary: d.inputSummary, status: 'RUNNING', routingPath: d.routingPath,
-      idempotencyKey: d.idempotencyKey, requestHash: d.requestHash, parentRunId: d.parentRunId, snapshotAt: d.snapshotAt,
+      idempotencyKey: d.idempotencyKey, requestHash: d.requestHash, parentRunId: d.parentRunId, conversationId: d.conversationId, snapshotAt: d.snapshotAt,
       correlationId: d.correlationId, startedAt: new Date(), createdBy: ctx.userId || null, updatedBy: ctx.userId || null,
     }, { transaction });
     const run = toRun(row);

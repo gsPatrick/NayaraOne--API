@@ -38,6 +38,7 @@ function toRun(model) {
     inputSummary: r.inputSummary,
     outputSummary: r.outputSummary,
     parentRunId: r.parentRunId,
+    conversationId: r.conversationId,
     idempotencyKey: r.idempotencyKey,
     fallbackTrail: r.fallbackTrail || [],
     escalated: r.escalated,

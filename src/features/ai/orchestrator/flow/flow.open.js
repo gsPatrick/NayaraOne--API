@@ -28,7 +28,7 @@ async function resolveAgent(parsed, ctx, transaction) {
 }
 
 async function openRun(parsed, agent, guard, ctx, transaction) {
-  if (agent) guard.assertRateCount(await countRecentRuns(ctx.companyId, ctx.userId, WINDOW_MS / 1000, transaction));
+  if (agent) guard.assertRateCount(await countRecentRuns(ctx.companyId, ctx.userId, WINDOW_MS / 1000, transaction, agent.code));
   return runs.startRun(ctx, {
     stamp: agent ? agents.runStamp(agent) : { agentCode: parsed.agentCode.toUpperCase().slice(0, 60) || 'DESCONHECIDO' },
     purpose: parsed.purpose,
@@ -36,6 +36,7 @@ async function openRun(parsed, agent, guard, ctx, transaction) {
     idempotencyKey: parsed.idempotencyKey,
     requestHash: requestHashOf(parsed),
     correlationId: parsed.correlationId,
+    conversationId: parsed.conversationId,
     snapshotAt: parsed.snapshotAt,
   }, transaction);
 }

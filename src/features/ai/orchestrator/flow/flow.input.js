@@ -20,6 +20,8 @@ function parseRunInput(raw) {
     taskType: typeof data.taskType === 'string' && data.taskType.trim() ? data.taskType.trim() : DEFAULT_TASK,
     idempotencyKey: typeof data.idempotencyKey === 'string' && data.idempotencyKey.trim() ? data.idempotencyKey.trim() : null,
     correlationId: data.correlationId || null,
+    conversationId: typeof data.conversationId === 'string' && data.conversationId ? data.conversationId : null,
+    history: Array.isArray(data.history) ? data.history.filter((h) => h && typeof h.content === 'string' && h.content).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })) : [],
     requiredCapabilities: Array.isArray(data.requiredCapabilities) ? data.requiredCapabilities.filter((c) => typeof c === 'string') : [],
     snapshotAt: data.snapshotAt || null,
     subject: data.subject && typeof data.subject === 'object' && typeof data.subject.type === 'string' && data.subject.id !== undefined ? { type: data.subject.type, id: String(data.subject.id) } : undefined,

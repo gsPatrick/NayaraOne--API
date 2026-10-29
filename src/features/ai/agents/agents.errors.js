@@ -16,7 +16,7 @@ const versionConflict = () => new AppError('Outra pessoa alterou este agente ao 
 const toolNotAllowed = (toolName) => new AppError('Este agente não pode usar esta ferramenta.', 403, 'AI_TOOL_NOT_ALLOWED', { tool: String(toolName || '') });
 const toolLimit = () => new AppError('A NAY atingiu o limite de ferramentas por consulta.', 422, 'AI_TOOL_LIMIT_EXCEEDED', { runStatus: 'BLOCKED', blockedReason: 'TOOL_LIMIT' });
 const tokenLimit = () => new AppError('A NAY atingiu o limite de processamento desta consulta.', 422, 'AI_TOKEN_LIMIT_EXCEEDED', { runStatus: 'FAILED', blockedReason: 'TOKEN_LIMIT' });
-const rateLimited = () => new AppError('Muitas consultas à NAY em pouco tempo; aguarde um instante.', 429, 'AI_RATE_LIMITED');
+const rateLimited = () => new AppError('Muitas consultas em pouco tempo. Aguarde um instante.', 429, 'AI_RATE_LIMITED');
 
 /** Traduz a recusa do banco (gatilhos AI001-AI004 e unicidade) para o erro estável da API; devolve null se não for dele. */
 function fromDbError(err) {

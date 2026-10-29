@@ -16,6 +16,11 @@ function blockOf(source, index, redactor) {
   };
 }
 
+/** Histórico do chat (M9-D030): só entrada do run, redigido, antes das fontes; a origem `CONVERSATION` o separa de fonte e de tool. */
+const historyBlocks = (history, redactor) => (history || []).map((h, i) => ({
+  id: `historico-${i + 1}`, origin: 'CONVERSATION', classification: 'INTERNAL', text: `${h.role === 'assistant' ? 'NAY' : 'Usuário'}: ${redactor.text(h.content)}`,
+}));
+
 /**
  * Passo 5: monta o prompt. `system` (política do agente, regra fixa de segurança, regra de citação e a lista das tools da allowlist)
  * fica separado dos blocos `untrusted` (cada fonte e a entrada do usuário rotulados e delimitados, D021). Antes, redaction/
@@ -26,7 +31,7 @@ async function assemblePrompt(state) {
   const { agent, toolRegistry, redactor } = state;
   const allowed = (agent.tools || []).filter((t) => t.enabled).map((t) => t.toolName);
   const tools = toolRegistry.promptViewFor(allowed);
-  const untrusted = state.sources.map((s, i) => blockOf(s, i, redactor));
+  const untrusted = [...historyBlocks(state.parsed.history, redactor), ...state.sources.map((s, i) => blockOf(s, i, redactor))];
   const built = buildPrompt({
     policy: `${agent.systemPolicy || ''}\n\n${CITATION_RULE}`.trim(), tools, untrusted, userInput: redactor.text(state.parsed.input), limits: state.injectionLimits,
   });

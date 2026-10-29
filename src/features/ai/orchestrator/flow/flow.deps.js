@@ -14,6 +14,8 @@ let sharedRouter = null;
  *    índice do RAG (`RetrievalService.search`, D023) com o teto do agente em `execution`; `null` desliga a busca;
  *  - `aiAccess` (guarda de campos da IA, M9-D915): sem ele o ContextBuilder da D027 não monta contexto e nenhuma memória entra no run;
  *  - `fallbackSelector({ decision, error, attempt, ctx, transaction })` -> próxima decisão equivalente ou 503 AI_FALLBACK_UNSAFE (D013);
+ *  - `openTransaction(fn)` (M9-D030): abre o run numa transação própria, confirmada na hora, para o run longo (resposta 202) já ser visível a
+ *    quem o consulta; sem ele o run nasce na transação do chamador;
  *  - `clock()` em ms (prazo total do run) e `onSpan(evento)` (trilha dos 12 passos).
  */
 function resolveDeps(deps = {}) {
@@ -25,6 +27,7 @@ function resolveDeps(deps = {}) {
     retrieve: deps.retrieve === undefined ? retrieveFromIndex : deps.retrieve,
     fallbackSelector: deps.fallbackSelector || null,
     aiAccess: deps.aiAccess || null,
+    openTransaction: deps.openTransaction || null,
     clock: deps.clock || Date.now,
     onSpan: deps.onSpan || null,
   };

@@ -7,9 +7,9 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { getSetting } = require('../../features/settings/settings.service');
 const { aiGate } = require('./aiGate.middleware');
-const { aiNotAvailable } = require('./ai.errors');
 const { registerAgentRoutes } = require('./agents/agents.routes');
 const { registerRunRoutes } = require('./orchestrator/runs/runs.routes');
+const { registerRunApiRoutes } = require('./runApi');
 const { registerKnowledgeRoutes } = require('./knowledge/knowledge.routes');
 const { registerToolRoutes } = require('./tools/tools.routes');
 const { registerServiceIdentityRoutes } = require('./serviceIdentities/serviceIdentities.routes');
@@ -24,7 +24,6 @@ const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('
 /**
  * Rotas da NAY, montadas em /v1/ai/*. Ordem em toda rota: authMiddleware -> tenantMiddleware -> requirePermission -> aiGate -> handler.
  * Auth e tenant valem só sob /ai (nunca router.use sem caminho, que interceptaria o resto de /v1).
- * O conteúdo de runs e chat é de M9-D004 em diante: até lá os handlers respondem 501 AI_NOT_AVAILABLE (depois do gate).
  */
 const router = Router();
 router.use('/ai', authMiddleware, tenantMiddleware);
@@ -60,7 +59,7 @@ registerMemoryRoutes(router);
 // Ingestão segura de arquivos, URLs e conhecimento no índice do RAG (M9-D022): POST/GET /ai/ingestions e PUT /ai/files/:fileId/classification.
 registerIngestionRoutes(router);
 
-router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
-router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));
+// Execução (M9-D030): POST /ai/runs e POST /ai/agents/:code/chat pelo AiOrchestrator.
+registerRunApiRoutes(router);
 
 module.exports = router;

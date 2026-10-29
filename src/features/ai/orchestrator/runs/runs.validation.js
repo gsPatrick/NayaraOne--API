@@ -77,6 +77,7 @@ function parseStart(data = {}) {
     idempotencyKey: text(data.idempotencyKey, 'A chave de idempotência', 200),
     requestHash: hash(data.requestHash, 'requestHash'),
     parentRunId: data.parentRunId === undefined ? null : data.parentRunId,
+    conversationId: data.conversationId === undefined ? null : data.conversationId,
     snapshotAt: date(data.snapshotAt, 'snapshotAt') || null,
     correlationId: data.correlationId || null,
     routingPath: oneOf(data.routingPath, C.ROUTING_PATHS, 'O caminho de roteamento', { fallback: 'RULE' }),

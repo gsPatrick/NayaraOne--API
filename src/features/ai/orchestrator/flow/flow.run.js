@@ -131,7 +131,8 @@ async function executeRun(rawInput, auth, transaction, rawDeps) {
     const opened = await trace.span(2, 'resolver_agente', async () => {
       const resolved = await resolveAgent(parsed, ctx, transaction);
       const guard = resolved.agent ? await AgentRunGuard.create(resolved.agent, ctx, transaction) : null;
-      return { ...resolved, guard, ...(await openRun(parsed, resolved.agent, guard, ctx, transaction)) };
+      const open = (t) => openRun(parsed, resolved.agent, guard, ctx, t);
+      return { ...resolved, guard, ...(await (deps.openTransaction ? deps.openTransaction(open) : open(transaction))) };
     });
     trace.setRunId(opened.run.id);
     if (opened.replay) return replayOutcome(ctx, opened.run, transaction, trace.spans);

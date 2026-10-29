@@ -86,6 +86,7 @@ module.exports = (sequelize) => {
       errorCode: { type: DataTypes.STRING(80), allowNull: true, field: 'error_code' },
       idempotencyKey: { type: DataTypes.STRING(200), allowNull: true, field: 'idempotency_key' },
       parentRunId: { type: DataTypes.UUID, allowNull: true, field: 'parent_run_id' },
+      conversationId: { type: DataTypes.UUID, allowNull: true, field: 'conversation_id', comment: 'agrupador de runs do chat (M9-D030); não é memória' },
       startedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'started_at' },
       finishedAt: { type: DataTypes.DATE, allowNull: true, field: 'finished_at' },
       snapshotAt: { type: DataTypes.DATE, allowNull: true, field: 'snapshot_at', comment: 'instante do dado usado' },
