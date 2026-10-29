@@ -36,6 +36,7 @@ const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integ
 const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
+const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -273,6 +274,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiRetentionJob();
   startAiEvaluationJob();
   startAiBudgetPeriodJob();
+  startAnalyticsReadModelRefreshJob();
 }
 
 module.exports = app;

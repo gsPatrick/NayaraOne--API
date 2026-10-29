@@ -11,7 +11,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const RM = /\banalytics\.rm_[a-z0-9_]+/;
+// As tabelas de controle do worker (M9-D607) não guardam número de negócio: não são read models.
+const RM = /\banalytics\.rm_(?!applied_events\b|stale_aggregates\b)[a-z0-9_]+/;
 const SQL_ANALYTICS = /\b(?:FROM|JOIN|UPDATE|INTO)\s+"?analytics"?\./i;
 const posix = (p) => p.split(path.sep).join('/');
 

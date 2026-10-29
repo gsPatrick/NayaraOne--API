@@ -30,6 +30,7 @@ const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
+const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 
 /**
@@ -191,6 +192,8 @@ const SETTINGS_SCHEMA = {
   ...READ_ONLY_SETTINGS_SCHEMA,
   // Marco 9, M9-D604 — versionamento de métricas do BI: mínimo de caracteres do motivo da mudança de fórmula.
   ...METRICS_SETTINGS_SCHEMA,
+  // Marco 9, M9-D607 — atualização dos read models do BI: teto de linhas por evento, intervalo do lote, lote e agenda do job, tempo máximo da consulta.
+  ...READ_MODEL_SETTINGS_SCHEMA,
   // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
   ...SECURITY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).

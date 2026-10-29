@@ -2,6 +2,7 @@
 
 const { createAnalyticsRouter, router } = require('./routes');
 const readOnly = require('./readOnly');
+const readModels = require('./read-models'); // liga o worker de eventos dos read models ao outbox (M9-D607)
 
 /**
  * src/features/analytics — camada de leitura gerencial do Marco 9 (BI e Centro de Comando). Esta entrada exporta o router de
@@ -9,4 +10,4 @@ const readOnly = require('./readOnly');
  */
 const CAMADAS = ['metrics', 'read-models', 'dashboards', 'alerts', 'quality', 'exports', 'briefs'];
 
-module.exports = { router, createAnalyticsRouter, camadas: CAMADAS, ...readOnly };
+module.exports = { router, createAnalyticsRouter, camadas: CAMADAS, readModels, ...readOnly };

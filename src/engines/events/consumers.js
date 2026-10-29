@@ -24,4 +24,26 @@ async function runEventConsumers(event, transaction) {
   return ran;
 }
 
-module.exports = { registerEventConsumer, runEventConsumers };
+/**
+ * Fim de lote (M9-D607): quem precisa fechar algo POR LOTE (e não por evento) registra aqui. O dispatcher chama runBatchEnd ao terminar
+ * os eventos de uma empresa, ainda na transação do lote; cada handler roda num savepoint e a falha dele é só registrada (nunca desfaz
+ * o despacho dos eventos).
+ */
+const batchEndHandlers = new Map();
+
+function registerBatchEndHandler(name, fn) {
+  if (!batchEndHandlers.has(name)) batchEndHandlers.set(name, fn);
+}
+
+async function runBatchEnd(transaction) {
+  for (const [name, fn] of batchEndHandlers) {
+    try {
+      await sequelize.transaction({ transaction }, async (savepoint) => fn(savepoint));
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[EventsEngine] Falha no fim de lote "${name}": ${err.message}`);
+    }
+  }
+}
+
+module.exports = { registerEventConsumer, runEventConsumers, registerBatchEndHandler, runBatchEnd };

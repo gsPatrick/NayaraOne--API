@@ -164,6 +164,24 @@ test('M9-D700: analytics.access_log tem RLS, FORCE RLS e só as políticas de SE
   assert.deepEqual(rows[0].cmds, ['a', 'r'], 'políticas: INSERT (a) e SELECT (r), nenhuma de UPDATE/DELETE');
 });
 
+// M9-D607: controle do worker de read models (eventos aplicados e agregados adiados) com RLS + FORCE RLS.
+test('M9-D607: analytics.rm_applied_events (sem UPDATE) e rm_stale_aggregates têm RLS e FORCE RLS', async () => {
+  const esperado = { rm_applied_events: ['a', 'd', 'r'], rm_stale_aggregates: ['a', 'd', 'r', 'w'] };
+  for (const [table, cmds] of Object.entries(esperado)) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT array_agg(p.polcmd::text ORDER BY p.polcmd::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS cmds
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.deepEqual(rows[0].cmds, cmds, `analytics.${table}: políticas`);
+  }
+});
+
 // M9-D602: alertas, qualidade e diário de refresh do BI (schema analytics) com RLS + FORCE RLS e 4 políticas.
 test('M9-D602: analytics.alert_definitions, alert_instances, data_quality_checks e read_model_refreshes têm RLS, FORCE RLS e 4 políticas', async () => {
   for (const table of ['alert_definitions', 'alert_instances', 'data_quality_checks', 'read_model_refreshes']) {

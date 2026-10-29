@@ -1,4 +1,29 @@
 'use strict';
 
-// M9-D613 — API pública da camada read-models do BI. As demandas do Marco 9 acrescentam aqui o que a camada expõe.
-module.exports = { camada: 'read-models' };
+// M9-D613 — API pública da camada read-models do BI. M9-D607 acrescenta o registro dos read models, o worker de eventos e o refresh agendado.
+const registry = require('./readModel.registry');
+const consumer = require('./readModel.consumer');
+const { applyEvent } = require('./readModel.worker');
+const { refreshCompanyScheduled } = require('./readModel.scheduled');
+const { readRefreshParams } = require('./readModel.settings');
+const { scheduleDue, afterRun } = require('./readModel.schedule');
+const { onBatchFlushed } = require('./readModel.batch');
+const { readAggregate, assertReadModelTable } = require('./readModel.read');
+
+consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
+
+module.exports = {
+  camada: 'read-models',
+  registerReadModel: registry.registerReadModel,
+  unregisterReadModel: registry.unregisterReadModel,
+  getReadModel: registry.getReadModel,
+  listReadModels: registry.listReadModels,
+  applyEvent,
+  refreshCompanyScheduled,
+  readRefreshParams,
+  scheduleDue,
+  afterRun,
+  onBatchFlushed,
+  readAggregate,
+  assertReadModelTable,
+};
