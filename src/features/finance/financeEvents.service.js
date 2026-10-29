@@ -45,7 +45,7 @@ function publishFinancialEntryCreated(entry, transaction) {
       aggregateType: 'FinancialEntry',
       aggregateId: entry.id,
       eventType: 'finance.entry.created',
-      payload: { id: entry.id, nature: entry.nature, entryType: entry.entryType, amount: entry.amount, status: entry.status },
+      payload: { id: entry.id, nature: entry.nature, entryType: entry.entryType, amount: entry.amount, status: entry.status, resultCenterId: entry.resultCenterId || null, competenceMonth: entry.competenceMonth || null },
       idempotencyKey: `finance.entry.created:${entry.id}`,
     },
     transaction
@@ -63,7 +63,7 @@ async function publishFinancialEntrySettled(entry, transaction) {
       aggregateType: 'FinancialEntry',
       aggregateId: entry.id,
       eventType: 'finance.entry.settled',
-      payload: { id: entry.id, amount: entry.amount, settledAt: entry.settledAt },
+      payload: { id: entry.id, amount: entry.amount, settledAt: entry.settledAt, resultCenterId: entry.resultCenterId || null, competenceMonth: entry.competenceMonth || null },
       idempotencyKey: `finance.entry.settled:${entry.id}`,
     },
     transaction
@@ -80,7 +80,7 @@ async function publishFinancialEntryReversed(originalEntry, reversalEntry, trans
       aggregateType: 'FinancialEntry',
       aggregateId: originalEntry.id,
       eventType: 'finance.entry.reversed',
-      payload: { originalEntryId: originalEntry.id, reversalEntryId: reversalEntry.id, amount: reversalEntry.amount },
+      payload: { originalEntryId: originalEntry.id, reversalEntryId: reversalEntry.id, amount: reversalEntry.amount, resultCenterId: originalEntry.resultCenterId || null, competenceMonth: originalEntry.competenceMonth || null },
       idempotencyKey: `finance.entry.reversed:${originalEntry.id}`,
     },
     transaction

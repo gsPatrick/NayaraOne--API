@@ -331,3 +331,20 @@ test('M9-D009: ai.memories tem RLS, FORCE RLS, tenant_isolation e os gatilhos de
   assert.deepEqual(rows[0].policies, ['tenant_isolation']);
   assert.deepEqual(rows[0].gatilhos, ['memories_guard', 'memories_no_truncate']);
 });
+
+// M9-D615: read models do Financeiro no BI (saúde por empresa e margem por setor) com RLS + FORCE RLS e 4 políticas.
+test('M9-D615: analytics.rm_finance_health e rm_finance_sector_margin têm RLS, FORCE RLS e 4 políticas', async () => {
+  for (const table of ['rm_finance_health', 'rm_finance_sector_margin']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
+  }
+});

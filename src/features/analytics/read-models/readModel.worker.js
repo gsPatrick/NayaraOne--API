@@ -29,7 +29,7 @@ async function withTimeout(transaction, ms, fn) {
 }
 
 async function applyToModel(def, event, scope, params, transaction, now) {
-  const key = def.aggregateKey(event);
+  const key = def.aggregateKey(event, { now });
   if (!key) return { skipped: 1 };
   const [claimed] = await sequelize.query(
     `INSERT INTO analytics.rm_applied_events (read_model, source_event_id, company_id, group_id, aggregate_id)

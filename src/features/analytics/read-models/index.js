@@ -11,6 +11,8 @@ const { onBatchFlushed } = require('./readModel.batch');
 const { readAggregate, assertReadModelTable } = require('./readModel.read');
 
 consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
+require('./financeiro-finance-health.readmodel'); // M9-D615: saúde financeira por empresa e data-base
+require('./financeiro-finance-sector-margin.readmodel'); // M9-D615: margem por setor
 
 module.exports = {
   camada: 'read-models',

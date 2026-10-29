@@ -10,3 +10,5 @@ module.exports = {
   ...require('./sourceRefs.detail'),
   ...require('./sourceRefs.settings'),
 };
+require('./sourceSpecs.finance'); // origem dos componentes do read model financeiro (M9-D615)
+
