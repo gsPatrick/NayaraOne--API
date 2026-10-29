@@ -26,6 +26,7 @@ const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.sett
 const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
 const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
 const { CIRCUIT_SETTINGS_SCHEMA } = require('../integrations/health/circuit.settings');
+const { ALERT_SETTINGS_SCHEMA } = require('../integrations/health/alerts/alerts.settings');
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
@@ -204,6 +205,8 @@ const SETTINGS_SCHEMA = {
   ...HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D217 — circuit breaker: falhas seguidas até abrir, cooldown, chamadas de teste em HALF_OPEN, sucessos para fechar e espera de quem não coube.
   ...CIRCUIT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D224 — alertas das integrações: repetição (antiflap), papéis avisados, minutos de circuito aberto até alertar e intervalo da avaliação.
+  ...ALERT_SETTINGS_SCHEMA,
   // Marco 9, M9-D208 — sincronização retomável: página, lease, sobreposição, falhas até parar e limite de sync parado por criticidade.
   ...SYNC_SETTINGS_SCHEMA,
   // Marco 9, M9-D203 — caixa de entrada de webhooks: tentativas, retenção do corpo e da linha, espera entre tentativas, tamanho e cabeçalhos guardados.

@@ -6,6 +6,7 @@ const { parseListQuery, parseHealthQuery } = require('./admin.query');
 const { listIntegrations } = require('./admin.list');
 const { getProviderHealth } = require('./admin.health');
 const { getDispatchDetail } = require('./admin.dispatch');
+const { listAlerts } = require('../health/alerts');
 
 const ctxDe = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId });
 
@@ -26,4 +27,10 @@ const dispatchDetail = catchAsync(async (req, res) => {
   return success(res, { data });
 });
 
-module.exports = { list, health, dispatchDetail };
+/** GET /admin/integrations/alerts (M9-D224): os alertas operacionais da empresa. */
+const alerts = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => listAlerts(ctxDe(req), req.query, t));
+  return success(res, { data });
+});
+
+module.exports = { list, health, dispatchDetail, alerts };

@@ -449,6 +449,16 @@ test('M9-D804: data_domains e data_domain_assignments têm RLS, FORCE RLS e a po
 });
 
 
+// M9-D224: integration.alerts (alertas operacionais das integrações) com RLS + FORCE RLS, a política tenant_isolation e sem DELETE para o runtime.
+test('M9-D224: integration.alerts tem RLS, FORCE RLS, a política tenant_isolation e o índice único dos abertos', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies,
+      (SELECT count(*)::int FROM pg_indexes i WHERE i.schemaname = 'integration' AND i.tablename = 'alerts' AND i.indexname = 'alerts_open_unique') AS indice
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'integration' AND c.relname = 'alerts'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies, rows[0].indice], [true, true, 1, 1]);
+});
+
 // M9-D214: integration.dispatch_attempts (uma linha por tentativa de chamada a fornecedor) com RLS + FORCE RLS e a política tenant_isolation.
 test('M9-D214: integration.dispatch_attempts tem RLS, FORCE RLS e a política tenant_isolation', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,

@@ -11,6 +11,7 @@ const adminRouter = Router();
 adminRouter.use(authMiddleware, tenantMiddleware);
 
 adminRouter.get('/admin/integrations', requirePermission('integration:read'), controller.list);
+adminRouter.get('/admin/integrations/alerts', requirePermission('integration:read'), controller.alerts);
 adminRouter.get('/admin/integrations/dispatches/:id', requirePermission('integration:read'), controller.dispatchDetail);
 adminRouter.get('/admin/integrations/:provider/health', requirePermission('integration:read'), controller.health);
 

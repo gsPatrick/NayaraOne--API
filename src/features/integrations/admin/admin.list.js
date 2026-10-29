@@ -1,28 +1,30 @@
 'use strict';
 
-const { IntegrationConnection, IntegrationProvider } = require('../../../models');
+const { Op } = require('sequelize');
+const { IntegrationConnection, IntegrationProvider, IntegrationSyncCursor } = require('../../../models');
 const { effectiveCriticality } = require('../providers/catalog.service');
 const { hasContingencyHandler } = require('../providers/contingency.registry');
 const { getCurrentHealth } = require('../health/healthQuery');
-const { collectSample } = require('../health/sampleSources');
-const { aggregateSamples } = require('../health/aggregateSamples');
-const { metricsFromAggregate } = require('./admin.metrics');
+const { getWindowMetrics } = require('../health/metrics');
+const { listOpenAlertsByConnection } = require('../health/alerts');
 const { maskSecretRef, daysUntil, brtDeep } = require('./admin.format');
 
-const HOUR_MS = 3600000;
-
 /** As métricas da última hora corrida (janela deslizante, como a linha atual da saúde), em 9 valores. */
-async function lastHourMetrics(connection, now, transaction) {
-  const sample = await collectSample({ connection, from: new Date(now.getTime() - HOUR_MS), to: now, windowMinutes: 60 }, transaction);
-  return metricsFromAggregate(aggregateSamples(sample), sample.quota);
+const lastHourMetrics = (connection, now, transaction) => getWindowMetrics(connection, '1h', now, transaction);
+
+/** Última sincronização bem-sucedida de qualquer fluxo da connection (null se nunca sincronizou). */
+async function lastSyncAt(connectionId, transaction) {
+  const cursor = await IntegrationSyncCursor.findOne({ where: { connectionId, lastSuccessAt: { [Op.ne]: null } }, order: [['last_success_at', 'DESC']], attributes: ['lastSuccessAt'], transaction });
+  return cursor ? cursor.lastSuccessAt : null;
 }
 
-async function describeConnection(c, domainOf, ctx, now, transaction) {
+async function describeConnection(c, domainOf, openAlerts, ctx, now, transaction) {
   const domain = domainOf.get(c.providerCode) || null;
-  const [health, criticality, metrics] = await Promise.all([
+  const [health, criticality, metrics, sync] = await Promise.all([
     getCurrentHealth(c.id, ctx, transaction, { now }),
     domain ? effectiveCriticality(domain, ctx, transaction) : null,
     lastHourMetrics(c, now, transaction),
+    lastSyncAt(c.id, transaction),
   ]);
   const down = health.circuitState === 'OPEN' || health.healthStatus === 'DOWN';
   return {
@@ -36,6 +38,8 @@ async function describeConnection(c, domainOf, ctx, now, transaction) {
     circuitState: health.circuitState,
     healthStatus: health.healthStatus,
     metrics,
+    lastSyncAt: sync,
+    openAlerts: openAlerts.get(c.id) || [],
     secretRef: maskSecretRef(c.secretRef),
     secretExpiresInDays: daysUntil(c.secretExpiresAt, now),
     productionReleased: Boolean(c.productionReleasedAt),
@@ -58,10 +62,11 @@ async function listIntegrations(ctx, filters, transaction, { now = new Date() } 
     IntegrationProvider.findAll({ attributes: ['code', 'domain'], transaction }),
   ]);
   const domainOf = new Map(providers.map((p) => [p.code, p.domain]));
+  const openAlerts = await listOpenAlertsByConnection(ctx, transaction);
   const itens = [];
   for (const c of connections) {
     if (filters.domain && domainOf.get(c.providerCode) !== filters.domain) continue;
-    itens.push(await describeConnection(c, domainOf, ctx, now, transaction));
+    itens.push(await describeConnection(c, domainOf, openAlerts, ctx, now, transaction));
   }
   return brtDeep({ items: itens });
 }

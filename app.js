@@ -36,6 +36,7 @@ const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspo
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integrationHealthAggregateJob');
 const { startIntegrationHealthCheckJob } = require('./src/engines/jobs/integrationHealthCheckJob');
+const { startIntegrationAlertJob } = require('./src/engines/jobs/integrationAlertJob');
 const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
@@ -125,6 +126,8 @@ if (process.env.NODE_ENV !== 'test') {
 // M9-D214: o Dispatch Service é quem recebe do outbox os eventos com destino externo (1 evento = 1 envio PENDING, na transação do despacho).
 // M9-D218: as tentativas de envio alimentam a saúde dos fornecedores (chamadas, latência, limite, credencial, fila morta e cota).
 require('./src/features/integrations/dispatch').registerDispatchHealthSource();
+// M9-D224: a caixa de entrada de webhooks completa a saúde (fila de eventos e fila morta).
+require('./src/features/integrations/health/inboxSample').registerInboxHealthSource();
 require('./src/features/integrations/dispatch').installOutboxEnqueuer();
 
   runMigrationsOnBoot();
@@ -305,6 +308,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
 // Marco 9, M9-D223 — teste de saúde ativo de cada fornecedor com connection ACTIVE, a cada integration.health.check_interval_s.
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_CHECK_JOB_DISABLED !== 'true') {
   startIntegrationHealthCheckJob();
+}
+
+// Marco 9, M9-D224 — alertas das integrações (fora do ar, aumento de erro, credencial, sync parado e cota), a cada integration.alert.evaluate_interval_s.
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_ALERT_JOB_DISABLED !== 'true') {
+  startIntegrationAlertJob();
 }
 
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).

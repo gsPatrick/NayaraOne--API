@@ -13,7 +13,7 @@ const sources = [];
 
 function registerHealthSampleSource(fn) {
   if (typeof fn !== 'function') throw new TypeError('A fonte de amostras deve ser uma função.');
-  sources.push(fn);
+  if (!sources.includes(fn)) sources.push(fn); // registrar duas vezes a mesma fonte contaria tudo em dobro
 }
 
 function resetHealthSampleSources() {
