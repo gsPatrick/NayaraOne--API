@@ -1,6 +1,7 @@
 'use strict';
 
 const { CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA } = require('./calendar/calendar.settings');
+const { DATA_QUALITY_SETTING_DEFAULTS, DATA_QUALITY_SETTINGS_SCHEMA } = require('./data-quality/data-quality.settings');
 
 /**
  * Parâmetros do bloco de governança que o administrador configura na tela /painel/configuracoes (aba Governança).
@@ -31,6 +32,7 @@ const PROFILES_FINANCE_KEY = 'governanca.permissoes.perfis_financeiro';
 
 const GOVERNANCE_SETTING_DEFAULTS = {
   ...CALENDAR_SETTING_DEFAULTS,
+  ...DATA_QUALITY_SETTING_DEFAULTS,
   [ERRORS_EXCEPTIONS_KEY]: 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR',
   [PROFILES_MANAGEMENT_KEY]: 'GESTAO, GESTÃO, DIRETOR, GERENTE, GESTOR',
   [PROFILES_FINANCE_KEY]: 'FINANCEIRO',
@@ -39,6 +41,7 @@ for (const mod of GOVERNANCE_MODULES) GOVERNANCE_SETTING_DEFAULTS[moduleSettingK
 
 const GOVERNANCE_SETTINGS_SCHEMA = {
   ...CALENDAR_SETTINGS_SCHEMA,
+  ...DATA_QUALITY_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

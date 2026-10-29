@@ -76,6 +76,12 @@ async function revokeMembership(id, actorUserId, transaction) {
   membership.status = 'REVOKED';
   membership.updatedBy = actorUserId || null;
   await membership.save({ transaction });
+  // M9-D804: sem nenhum vínculo ativo na empresa, a pessoa perde as designações de owner/steward de dados dessa empresa.
+  const { findCompanyUser } = require('../core-governance/governance.users');
+  const tenant = { groupId: membership.groupId, companyId: membership.companyId };
+  if (!(await findCompanyUser(membership.userId, tenant, transaction)).active) {
+    await require('../core-governance/data-quality/stewardship.lifecycle').closeAssignmentsOfUser(tenant, membership.userId, 'vínculo com a empresa revogado', transaction);
+  }
   return membership;
 }
 

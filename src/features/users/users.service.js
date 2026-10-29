@@ -146,6 +146,8 @@ async function updateUser(id, payload, actorUserId, actorContext = {}) {
   let revokedSessions = 0;
   if (statusChanged && status !== 'ACTIVE' && actorContext.groupId && actorContext.companyId) {
     revokedSessions = await revokeAllSessionsForUser(user.id, actorContext);
+    // M9-D804: quem deixa de estar ativo perde as designações de owner/steward de dados e o administrador é avisado.
+    await require('../core-governance/data-quality/stewardship.lifecycle').closeAssignmentsOfUserInGroup(actorContext.groupId, user.id, `usuário passou a ${status}`);
   }
 
   if (actorContext.groupId && actorContext.companyId) {

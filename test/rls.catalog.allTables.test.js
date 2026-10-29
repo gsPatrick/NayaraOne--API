@@ -410,4 +410,15 @@ test('M9-D619: os 7 read models de Jurídico e Correspondente têm RLS, FORCE RL
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as sete tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+
+// M9-D804: domínios de dados e designações de owner/steward com RLS + FORCE RLS e a política tenant_isolation.
+test('M9-D804: data_domains e data_domain_assignments têm RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const tables = ['data_domain_assignments', 'data_domains'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+});
+
 });
