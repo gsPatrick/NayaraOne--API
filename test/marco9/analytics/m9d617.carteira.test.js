@@ -90,8 +90,8 @@ test('m9d617 garantias vencendo em 30 e 60 dias e vencidas, só de contratos em 
 });
 
 test('m9d617 obrigações pendentes e vencidas por tipo', async () => {
-  const active = await src.contract(env, env.cX, { status: 'ACTIVE' });
-  const signed = await src.contract(env, env.cX, { status: 'SIGNED' });
+  const active = await src.contract(env, env.cX, { status: 'ACTIVE', startsAt: '2026-10-01T15:00:00Z' }); // o prazo da obrigação é o início do contrato (M9-D641)
+  const signed = await src.contract(env, env.cX, { status: 'SIGNED' }); // sem início: a obrigação não tem prazo, não vence
   const ended = await src.contract(env, env.cX, { status: 'TERMINATED' });
   await src.requirement(env, env.cX, { contract: active });
   await src.requirement(env, env.cX, { contract: active });
@@ -102,5 +102,5 @@ test('m9d617 obrigações pendentes e vencidas por tipo', async () => {
   await src.utility(env, env.cX, { contract: active, evidence: src.uuid() });
   await apply(env.cX, statusEvent(active));
   const list = await rows(env, 'rm_rental_obligations', env.cX);
-  assert.deepEqual(list.map((r) => [r.kind, r.pending, r.overdue]), [['REQUIREMENT', 3, 2], ['UTILITY', 1, 1]]);
+  assert.deepEqual(list.map((r) => [r.kind, r.pending, r.overdue, r.without_deadline]), [['REQUIREMENT', 3, 2, 1], ['UTILITY', 1, 1, 0]]);
 });

@@ -20,3 +20,4 @@ require('./sourceSpecs.correspondent'); // origem dos KPIs do Correspondente Ban
 require('./sourceSpecs.estoque'); // origem dos KPIs de Estoque e Patrimônio (M9-D653)
 require('./sourceSpecs.obraCustos'); // origem do desperdício, custo pós-obra e recorrência (M9-D652)
 require('./sourceSpecs.support'); // origem dos KPIs de Atendimento (M9-D672)
+require('./sourceSpecs.rentalDeadlines'); // origem dos KPIs de prazos da Locação (M9-D641)
