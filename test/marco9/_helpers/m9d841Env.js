@@ -31,6 +31,8 @@ const notesOf = async (tenant, like) => (await env.adminQuery('SELECT user_id AS
 
 /** Apaga o que os testes criaram (o consumidor semeado do front web, com app_key, fica). */
 async function cleanApi() {
+  await env.adminQuery("DELETE FROM core.notifications WHERE title LIKE '%/qa-m9/%'");
+  await env.adminQuery("DELETE FROM integration.outbox_events WHERE event_type = 'api.consumer.deprecation_due' AND payload_json->>'target' LIKE '%/qa-m9/%'");
   await env.adminQuery('DELETE FROM governance.api_consumer_usage');
   await env.adminQuery('DELETE FROM governance.api_deprecations');
   await env.adminQuery('DELETE FROM governance.api_consumers WHERE app_key IS NULL');
