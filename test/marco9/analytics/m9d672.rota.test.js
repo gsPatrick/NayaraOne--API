@@ -32,14 +32,15 @@ before(async () => {
 });
 after(async () => {
   clock.resetClock();
-  const ids = { c: env.tenantA.companyId, codes: CODES };
+  const ids = { c: env.tenantA.companyId };
+  // o refresh da agenda liga os KPIs de todos os domínios: apaga o que eles publicaram para a empresa (definições, versões e snapshots)
   await env.admin.transaction(async (transaction) => {
     await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
     for (const { table, id } of [...src.created].reverse()) await env.admin.query(`DELETE FROM ${table} WHERE id = :id`, { replacements: { id }, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id = :c AND metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_versions WHERE metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes))', { replacements: ids, transaction });
-    await env.admin.query('UPDATE analytics.metric_definitions SET current_version_id = NULL WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
-    await env.admin.query('DELETE FROM analytics.metric_definitions WHERE company_id = :c AND metric_code IN (:codes)', { replacements: ids, transaction });
+    await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id = :c', { replacements: ids, transaction });
+    await env.admin.query('DELETE FROM analytics.metric_versions WHERE metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id = :c)', { replacements: ids, transaction });
+    await env.admin.query('UPDATE analytics.metric_definitions SET current_version_id = NULL WHERE company_id = :c', { replacements: ids, transaction });
+    await env.admin.query('DELETE FROM analytics.metric_definitions WHERE company_id = :c', { replacements: ids, transaction });
     for (const m of MODELS) await env.admin.query(`DELETE FROM analytics.${m} WHERE company_id = :c`, { replacements: ids, transaction });
     await env.admin.query("DELETE FROM core.tenant_settings WHERE company_id = :c AND key = 'analytics.marketing_atendimento.janela_reconferencia_dias'", { replacements: ids, transaction });
     for (const t of ['rm_applied_events', 'rm_stale_aggregates', 'read_model_refreshes', 'data_quality_checks']) await env.admin.query(`DELETE FROM analytics.${t} WHERE company_id = :c`, { replacements: ids, transaction });
