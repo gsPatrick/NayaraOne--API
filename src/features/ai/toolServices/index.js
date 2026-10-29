@@ -9,6 +9,8 @@ const { constructionProjects, legalContracts, legalDrafts, correspondentCases } 
 const { knowledge } = require('./knowledge.services');
 const { analyticsBi } = require('./analytics.services');
 const { contactStatus, publicListings, handoff } = require('./atendimento.services');
+const { crmPipeline, constructionPortfolio, inventoryRisks } = require('./aggregates.services');
+const { legalExpiring, withStalledScope } = require('./scoped.services');
 
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
@@ -18,11 +20,15 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     financeHealth: financeHealth(transaction),
     constructionProjects: constructionProjects(transaction),
     legalContracts: legalContracts(transaction),
-    correspondentCases: correspondentCases(transaction, scope),
+    correspondentCases: withStalledScope(correspondentCases(transaction, scope), transaction, scope), // M9-D035: a Diretoria recebe só o agregado
     knowledge: knowledge(transaction, scope),
     atendimentoContact: contactStatus(transaction, scope), // M9-D041: NAY Atendimento (contato do contexto, anúncios públicos, encaminhamento)
     atendimentoListings: publicListings(transaction, scope),
     atendimentoHandoff: handoff(transaction, scope),
+    crmPipeline: crmPipeline(transaction), // M9-D035: leituras agregadas da NAY Diretoria
+    constructionPortfolio: constructionPortfolio(transaction, scope),
+    inventoryRisks: inventoryRisks(transaction, scope),
+    legalExpiring: legalExpiring(transaction, scope),
     analyticsBi: analyticsBi(transaction, scope), // M9-D695: leitura do BI pela NAY Diretoria (catálogo fechado, sem SQL)
   };
   if (includeWrite) {
