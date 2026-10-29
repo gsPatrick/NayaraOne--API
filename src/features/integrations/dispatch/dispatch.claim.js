@@ -15,7 +15,8 @@ async function claimDue(ctx, limit, transaction) {
       companyId: ctx.companyId, status: { [Op.in]: ['PENDING', 'RETRY_WAIT'] },
       [Op.or]: [{ nextAttemptAt: null }, { nextAttemptAt: { [Op.lte]: sequelize.literal('now()') } }],
     },
-    order: [['next_attempt_at', 'ASC'], ['id', 'ASC']],
+    // Sob fila longa saem primeiro os essenciais e os perigosos (M9-D218 3.2); dentro de cada grupo, o mais antigo.
+    order: [['essential', 'DESC'], ['criticality_op', 'ASC'], ['next_attempt_at', 'ASC'], ['id', 'ASC']],
     limit: Math.max(1, Math.min(Number(limit) || 10, 500)),
     transaction, lock: transaction.LOCK.UPDATE, skipLocked: true,
   });

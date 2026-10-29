@@ -122,6 +122,8 @@ logger.info({ adapters: registeredAdapters }, `Adapters de integração registra
 
 if (process.env.NODE_ENV !== 'test') {
 // M9-D214: o Dispatch Service é quem recebe do outbox os eventos com destino externo (1 evento = 1 envio PENDING, na transação do despacho).
+// M9-D218: as tentativas de envio alimentam a saúde dos fornecedores (chamadas, latência, limite, credencial, fila morta e cota).
+require('./src/features/integrations/dispatch').registerDispatchHealthSource();
 require('./src/features/integrations/dispatch').installOutboxEnqueuer();
 
   runMigrationsOnBoot();

@@ -11,6 +11,7 @@ const { recordError } = require('../errors');
  * conseguiu mapear (502 INTEGRATION_STATUS_UNMAPPED) vira erro de integração da empresa quando `opts.tenant` é informado, gravado
  * na transação de quem chama (que precisa capturar a recusa e comitar para a linha ficar).
  * `opts.meta` (M9-D214): { dispatchId, attempt, idempotencyKey } entregue como 3º argumento da operação.
+ * `opts.onResponse` (M9-D218): recebe a resposta bruta do adapter (com cabeçalhos) para quem lê a cota; ela não sai do módulo de integrações.
  */
 async function invoke(adapter, operation, request, opts = {}) {
   const Port = adapter.constructor;
@@ -32,6 +33,7 @@ async function invoke(adapter, operation, request, opts = {}) {
     }
     throw err;
   }
+  if (typeof opts.onResponse === 'function') opts.onResponse(resposta);
   const normalizada = { externalRequestId: resposta?.externalRequestId ?? null, externalResourceId: resposta?.externalResourceId ?? null, status: resposta?.status };
   const saida = validar(def.outputSchema, normalizada);
   if (saida.length) throw responseInvalid(operation, saida);

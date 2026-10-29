@@ -19,9 +19,10 @@ const { deriveIdempotencyKey } = require('./enqueue/idempotencyKey');
 const { EVENTS } = require('./dispatch.events');
 const worker = require('./worker');
 const retry = require('./retry');
+const quota = require('./quota');
 
 module.exports = {
   createDispatch, transitionDispatch, retryDispatchManually, claimDue, recoverStaleSending, purgeDispatches,
   TRANSITIONS, refusalReason, canonicalize, hashPayload, readDispatchParams, PADROES, translateDispatchDbError, STATUSES,
-  enqueue, installOutboxEnqueuer, normalizeSnapshot, deriveIdempotencyKey, EVENTS, ...worker, ...retry,
+  enqueue, installOutboxEnqueuer, normalizeSnapshot, deriveIdempotencyKey, EVENTS, ...worker, ...retry, ...quota,
 };

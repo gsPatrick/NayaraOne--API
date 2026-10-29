@@ -56,15 +56,16 @@ async function phaseB(ctx, id, attemptId, now) {
     }
     const meta = { dispatchId: dispatch.id, attempt: dispatch.attempts, idempotencyKey: adapter.supportsIdempotency(dispatch.operation) ? dispatch.idempotencyKey : undefined };
     let normalized;
+    let bruta = null;
     try {
-      normalized = await invoke(adapter, dispatch.operation, dispatch.payloadSnapshot, { tenant: ctx, transaction, meta });
+      normalized = await invoke(adapter, dispatch.operation, dispatch.payloadSnapshot, { tenant: ctx, transaction, meta, onResponse: (r) => { bruta = r; } });
     } catch (error) {
       const latencyMs = Date.now() - inicio;
       await observe({ ctx, dispatch, connection, adapter, error, attemptId, now, transaction });
       await handleFailure({ ctx, dispatch, def, adapter, error, attemptId, latencyMs, now, transaction });
       return { failed: true };
     }
-    await observe({ ctx, dispatch, connection, adapter, response: normalized, attemptId, now, transaction });
+    await observe({ ctx, dispatch, connection, adapter, response: bruta || normalized, attemptId, now, transaction });
     await handleSuccess({ ctx, dispatch, def, normalized, attemptId, latencyMs: Date.now() - inicio, transaction });
     return { ok: true };
   });

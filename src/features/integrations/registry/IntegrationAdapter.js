@@ -47,6 +47,14 @@ class IntegrationAdapter {
    */
   supportsIdempotency(_operation) { return false; }
 
+  /**
+   * Cota informada pelo fornecedor numa resposta ou erro (M9-D218 3.1): { limit, remaining, resetsAt } ou null. O padrão lê os cabeçalhos
+   * X-RateLimit-Limit, -Remaining e -Reset (e Retry-After); o adapter sobrescreve quando a cota vem em outro lugar (campo do corpo).
+   */
+  extractQuota(responseOrError, now = new Date()) {
+    return require('../dispatch/quota/quota.extract').extractQuotaFromHeaders(responseOrError && (responseOrError.headers ? responseOrError : responseOrError.raw), now);
+  }
+
   /** Cópia sem segredo nem dado pessoal, para log e erro. */
   redact(obj) {
     if (obj === null || obj === undefined) return obj;

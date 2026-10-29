@@ -36,6 +36,8 @@ function programavel(Port, code, capabilities, { idempotente = false, renovavel 
 
     supportsIdempotency() { return idempotente; }
 
+    extractQuota(resposta, now) { return S.quota ? S.quota() : super.extractQuota(resposta, now); }
+
     async executar(op, request, meta) {
       S.chamadas.push({ op, request, meta, em: Date.now() });
       if (S.aoChamar) await S.aoChamar(op, request, meta);

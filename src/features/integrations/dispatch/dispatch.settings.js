@@ -18,6 +18,10 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   'integration.retry.jitter_pct': { type: 'integer', min: 0, max: 50 },
   'integration.retry.rate_limit_max_wait_s': { type: 'integer', min: 1, max: 86400 },
   'integration.retry.rate_limit_max_deferrals': { type: 'integer', min: 1, max: 10000 },
+  // M9-D218 3.2 e 3.4: abaixo desta porcentagem da cota do fornecedor só operação essencial ou perigosa sai (INT-P023); sem data de renovação
+  // da cota, a operação que espera volta a ser conferida depois deste tempo.
+  'integration.rate_limit.reserve_pct': { type: 'integer', min: 0, max: 100 },
+  'integration.rate_limit.fallback_wait_s': { type: 'integer', min: 1, max: 86400 },
   // M9-D214 3.2: de quantos em quantos segundos o worker de envios roda, quantos envios pega por rodada e quanto espera antes de
   // reconferir uma conexão parada (PAUSED, DISABLED, AUTH_FAILED ou sem adaptador) sem gastar tentativa.
   'integration.dispatch.worker_interval_s': { type: 'integer', min: 1, max: 3600 },
