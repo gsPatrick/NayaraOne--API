@@ -20,7 +20,8 @@ const FINISH_REASONS = Object.freeze(['stop', 'length', 'tool_calls', 'safety'])
  * fornecedor sai como AiProviderError (`failure()`); nada de HTTP fora do `ctx.http` (IntegrationHttpClient).
  */
 class AIProviderAdapter extends AiAdapter {
-  generate() { throw capabilityUnsupported('generate'); }
+  /** @param {ProviderGenerateRequest} _request */
+  generate(_request) { throw capabilityUnsupported('generate'); }
 
   embed() { throw capabilityUnsupported('embed'); }
 
@@ -29,6 +30,7 @@ class AIProviderAdapter extends AiAdapter {
   analyzeImage() { throw capabilityUnsupported('analyzeImage'); }
 
   /** Catálogo de modelos: [{ model, classe, generate, embed, transcribe, vision, maxInputTokens, ... safetyTier }]. */
+  /** @returns {ModelCatalogEntry[]} */
   models() { return []; }
 
   supportedVersions() { return ['v1']; }
@@ -46,9 +48,11 @@ class AIProviderAdapter extends AiAdapter {
   }
 
   /** Erro normalizado de qualquer falha do fornecedor. */
+  /** @this {any} */
   failure(err) { return normalizeProviderError(err, { providerCode: this.providerCode(), classify: (e) => this.classifyError(e) }); }
 
   /** Linha do catálogo do modelo pedido; modelo desconhecido é VALIDATION (nunca cai num modelo "parecido"). */
+  /** @this {any} @param {string} name @param {string} [operation] @returns {ModelCatalogEntry} */
   modelEntry(name, operation) {
     const entry = this.models().find((m) => m.model === name);
     if (!entry) throw new AiProviderError('VALIDATION', { providerCode: this.providerCode(), upstreamCode: 'MODEL_UNKNOWN' });
@@ -62,6 +66,7 @@ class AIProviderAdapter extends AiAdapter {
   }
 
   /** Credencial no instante da chamada (SecretStore, D202): nunca guardada no adapter nem copiada para o request. */
+  /** @this {any} @param {string} [purpose] @returns {Promise<string>} */
   async apiKey(purpose = 'dispatch') {
     try {
       return (await this.ctx.secret(purpose)).value.reveal();

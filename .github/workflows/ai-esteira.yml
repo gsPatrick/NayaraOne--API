@@ -1,0 +1,56 @@
+name: Esteira da NAY
+
+# M9-D044 (Guia seção 15): lint, typecheck, migrations, tool schema, permissões, isolamento do RAG, injeção + adversarial, grounding, alucinação,
+# orçamento/roteador, contrato de provider e privacidade, nesta ordem, parando no primeiro vermelho. A esteira roda a cada commit que toque a
+# NAY (src/features/ai, testes, migrations, package.json). Os portões DEV, LAB, red-team e production approval (estágios 13 a 16) só conferem o
+# registro humano em ai.release_gates: rodam sob demanda, com o segredo AI_CI_RELEASE_DATABASE_URL (leitura do ambiente de liberação).
+# O CI não faz push nem deploy.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+    paths: ['src/features/ai/**', 'test/ai/**', 'test/marco9/ia/**', 'migrations/**', 'scripts/ai-ci/**', 'scripts/ci-estagios-ai.sh', 'package.json']
+  pull_request:
+    paths: ['src/features/ai/**', 'test/ai/**', 'test/marco9/ia/**', 'migrations/**', 'scripts/ai-ci/**', 'scripts/ci-estagios-ai.sh', 'package.json']
+  workflow_dispatch:
+    inputs:
+      portoes:
+        description: 'Conferir também os portões de ambiente (estágios 13 a 16) no ambiente de liberação'
+        type: boolean
+        default: false
+
+jobs:
+  esteira-ai:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Estágios 1 a 12 (param no primeiro vermelho)
+        run: bash scripts/ci-estagios-ai.sh docs/evidencias/ci/esteira-ai.log --ate 12
+      - name: Estágios 13 a 16 (portões de ambiente: registro humano em ai.release_gates)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.portoes }}
+        env:
+          AI_CI_RELEASE_DATABASE_URL: ${{ secrets.AI_CI_RELEASE_DATABASE_URL }}
+        run: bash scripts/ci-estagios-ai.sh docs/evidencias/ci/esteira-ai-portoes.log --de 13
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-ai-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-ai*.log
+            docs/evidencias/ci/esteira-ai*.json
+            docs/evidencias/ci/adversarial-report*.json
+          if-no-files-found: warn
+          retention-days: 90

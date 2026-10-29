@@ -37,8 +37,10 @@
     "audit:dependencies": "node scripts/dependencyAudit.js",
     "syntax-check": "find app.js src scripts migrations test -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 -P 4 node --check",
     "backup:scheduled": "node scripts/scheduledBackup.js",
+    "typecheck:ai": "tsc --noEmit --allowJs --checkJs -p src/features/ai/tsconfig.json",
+    "ci:ai": "bash scripts/ci-estagios-ai.sh",
     "test:ai:adversarial": "node scripts/withDisposableDb.js -- env LOG_LEVEL=info CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c \"node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/ai-adversarial-report.js\"",
-    "test": "node --test test/*.test.js test/marco8/*.test.js test/integrations/*.test.js \"test/marco9/**/*.test.js\" \"test/analytics/**/*.test.js\""
+    "test": "node --test test/*.test.js test/ai/invariantes.test.js test/ai/archGuard.test.js test/marco8/*.test.js test/integrations/*.test.js \"test/marco9/**/*.test.js\" \"test/analytics/**/*.test.js\""
   },
   "dependencies": {
     "ajv": "^6.12.6",
@@ -62,7 +64,8 @@
     "@eslint/js": "^9.39.1",
     "eslint": "^9.39.1",
     "globals": "^15.15.0",
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "typescript": "5.6.3"
   },
   "engines": {
     "node": ">=20.0.0"

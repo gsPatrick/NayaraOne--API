@@ -79,6 +79,7 @@ function deepFreeze(valor) {
 }
 
 /** Valida e devolve uma cópia congelada da definição (mudar o objeto original depois não altera o registro). */
+/** @param {ToolDefinition} def @param {Set<string>} permissionCodes */
 function validateDefinition(def, permissionCodes) {
   if (!isObject(def)) throw invalid(null, 'definition', 'definicao_nao_e_objeto');
   checkShape(def);

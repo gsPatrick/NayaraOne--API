@@ -12,6 +12,7 @@ const { promptView } = require('./toolPromptView');
 
 class ToolRegistry {
   /** `permissionCodes`: catálogo de core.permissions (lista ou Set). Sem ele o catálogo é vazio e nenhuma tool é aceita: falha fechada. */
+  /** @param {{ permissionCodes?: Iterable<string> | null }} [opcoes] */
   constructor({ permissionCodes } = {}) {
     if (permissionCodes !== undefined && (permissionCodes === null || typeof permissionCodes[Symbol.iterator] !== 'function')) {
       throw invalid(null, 'permissionCodes', 'catalogo_de_permissoes_invalido');
@@ -21,6 +22,7 @@ class ToolRegistry {
     this.byName = new Map(); // nome -> Map(versão -> definição congelada)
   }
 
+  /** @param {ToolDefinition} def */
   register(def) {
     const valida = validateDefinition(def, this.permissionCodes);
     const versoes = this.byName.get(valida.name) || new Map();
@@ -60,6 +62,7 @@ class ToolRegistry {
    * Mapa nome -> tool pronto para o executor (M9-D002/D018): execute com saída podada pelo outputSchema e, por padrão, toda
    * escrita marcada para aprovação (vira proposta). `allowDirectWrite(def)` é a decisão de M9-D019 para escrita de baixo risco.
    */
+  /** @param {{ allowDirectWrite?: (def: ToolDefinition) => boolean }} [opcoes] */
   executorMap({ allowDirectWrite } = {}) {
     const mapa = Object.create(null);
     for (const def of this.list()) {

@@ -18,6 +18,7 @@ class AiOrchestrator {
     this.deps = deps;
   }
 
+  /** @param {RunInput} input @param {RunAuth} auth @param {any} transaction */
   run(input, auth, transaction) {
     return executeRun(input, auth, transaction, this.deps);
   }
