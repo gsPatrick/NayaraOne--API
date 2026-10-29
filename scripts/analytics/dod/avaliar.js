@@ -5,7 +5,7 @@
  * (verificador independente); (2) os testes dele rodam verdes (exit 0, nenhum pulado, nomes exigidos verdes); (3) as etapas da esteira exigidas
  * estão APROVADAS; (4) os scripts sem banco saem com 0. O executor de comandos e o verificador de demanda são injetados.
  */
-const { nomeVerde, adversariaisVerdes, resumoDaSaida, problemasEstaticos } = require('./testes');
+const { nomeVerde, adversariaisVerdes, resumoDaSaida, problemasEstaticos, expandir } = require('./testes');
 const { avaliarEsteira } = require('../sprints/esteira');
 
 async function provaDasDemandas(item, demandas, verificar) {
@@ -26,17 +26,27 @@ function primeiroVermelho(saida) {
   return m ? ` — primeiro vermelho: ${m[1].slice(0, 140)}` : '';
 }
 
-async function provaDosTestes(item, executar) {
+/**
+ * Cada arquivo de teste roda em processo e banco descartável PRÓPRIOS (`isolado: true`): a ordem dos arquivos e o estado que um deixa para o
+ * outro (linhas de read model, outbox) nunca mudam o resultado do item (reabertura da M9-D707: m9d615 falhava depois de m9d607.*).
+ */
+async function provaDosTestes(item, executar, raiz) {
   const motivos = [];
   for (const g of item.testes) {
-    const r = await executar({ cmd: 'node', args: ['--test', '--test-concurrency=1', ...g.arquivos], banco: true });
-    const resumo = resumoDaSaida(r.output);
-    if (r.code !== 0 || resumo.falhos > 0) motivos.push(`teste vermelho em ${g.arquivos.join(', ')}${primeiroVermelho(r.output)}`);
-    else if (resumo.pulados > 0) motivos.push(`${resumo.pulados} teste(s) pulado(s) em ${g.arquivos.join(', ')}`);
-    else if (!resumo.passou) motivos.push(`nenhum teste rodou em ${g.arquivos.join(', ')}`);
-    for (const nome of g.nomes || []) if (r.code === 0 && !nomeVerde(r.output, nome)) motivos.push(`o teste "${nome}" não aparece verde`);
-    if (item.quinze && r.code === 0) {
-      const verdes = adversariaisVerdes(r.output);
+    const arquivos = [...new Set(g.arquivos.flatMap((a) => expandir(raiz, a)))];
+    let saidaDoGrupo = '';
+    let todosSairam0 = true;
+    for (const arquivo of arquivos) {
+      const r = await executar({ cmd: 'node', args: ['--test', '--test-concurrency=1', arquivo], banco: true, isolado: true });
+      const resumo = resumoDaSaida(r.output);
+      saidaDoGrupo += `\n${r.output}`;
+      if (r.code !== 0 || resumo.falhos > 0) { todosSairam0 = false; motivos.push(`teste vermelho em ${arquivo}${primeiroVermelho(r.output)}`); }
+      else if (resumo.pulados > 0) motivos.push(`${resumo.pulados} teste(s) pulado(s) em ${arquivo}`);
+      else if (!resumo.passou) motivos.push(`nenhum teste rodou em ${arquivo}`);
+    }
+    for (const nome of g.nomes || []) if (todosSairam0 && !nomeVerde(saidaDoGrupo, nome)) motivos.push(`o teste "${nome}" não aparece verde`);
+    if (item.quinze && todosSairam0) {
+      const verdes = adversariaisVerdes(saidaDoGrupo);
       if (verdes.length !== 15) motivos.push(`os 15 testes adversariais: ${verdes.length} verdes (${verdes.join(',') || 'nenhum'})`);
     }
   }
@@ -58,7 +68,7 @@ async function avaliarItem(item, { demandas, verificar, executar, esteira, raiz 
     const r = avaliarEsteira({ ...esteira, etapas: item.etapasCi });
     motivos.push(...r.motivos);
   }
-  if (!motivos.length) motivos.push(...(await provaDosTestes(item, executar)), ...(await provaDosComandos(item, executar)));
+  if (!motivos.length) motivos.push(...(await provaDosTestes(item, executar, raiz)), ...(await provaDosComandos(item, executar)));
   return { n: item.n, chave: item.chave, livro: item.livro, ok: motivos.length === 0, motivos };
 }
 

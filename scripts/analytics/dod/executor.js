@@ -3,7 +3,7 @@
 /** M9-D707 — executa os comandos do DoD (spawn, sem shell); comando com `banco: true` só roda em banco descartável em 127.0.0.1. */
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { bancoDescartavelAtivo } = require('../ci/ambiente');
+const { bancoDescartavelAtivo, portaAleatoria } = require('../ci/ambiente');
 
 const API_ROOT = path.join(__dirname, '..', '..', '..');
 
@@ -18,11 +18,18 @@ function spawnar(comando, env) {
   });
 }
 
+/** Comando `isolado`: banco descartável novo (e semeado) só para esse comando, via `withDisposableDb.js` + `rodarIsolado.js`. */
+const comandoIsolado = (comando) => ({
+  cmd: 'node',
+  args: [path.join('scripts', 'withDisposableDb.js'), '--port', String(portaAleatoria()), '--', process.execPath, path.join('scripts', 'analytics', 'dod', 'rodarIsolado.js'), ...comando.args],
+});
+
 function criarExecutor(env) {
   let semeado = false;
   return async (comando) => {
     if (comando.banco) {
       if (!bancoDescartavelAtivo(env)) return { code: 1, output: 'Comando recusado: o banco não é descartável em 127.0.0.1.' };
+      if (comando.isolado) return spawnar(comandoIsolado(comando), env);
       if (!semeado) {
         semeado = true;
         const seed = await spawnar({ cmd: 'node', args: ['scripts/seed-ci-two-tenants.js'] }, env);

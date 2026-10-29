@@ -12,6 +12,7 @@ const { formatarMatriz, resumoDeReprovacao } = require('../../../scripts/analyti
 const { carregarDemandas } = require('../../../scripts/analytics/sprints/demandasMd');
 const { montarFonte } = require('../_helpers/sprintsFonte');
 const { montarEsteira } = require('../_helpers/esteiraFonte');
+const { criarExecutor } = require('../../../scripts/analytics/dod/executor');
 const { executorFalso, verificarVerde, saidaVerde, RESUMO, QUINZE } = require('../_helpers/dodFalso');
 
 const RAIZ = path.join(__dirname, '..', '..', '..');
@@ -99,4 +100,30 @@ test('m9d707 o script reprova com exit 1 e mensagem quando a ferramenta de verif
     assert.equal(r.status, 1);
     assert.match(r.stderr, /ferramenta de verificação não encontrada/);
   } finally { fonte.limpar(); }
+});
+
+test('m9d707 cada arquivo de teste do item roda isolado, uma vez, e a ordem não muda o resultado', async () => {
+  const exec = executorFalso();
+  const r = await rodar({ executor: exec });
+  assert.equal(r.itens[1].ok, true);
+  const arquivos = exec.chamadas.filter((c) => c.banco).map((c) => c.args.filter((a) => a.endsWith('.test.js')));
+  assert.ok(arquivos.every((a) => a.length === 1), 'um arquivo por processo: nada herda estado de outro');
+  assert.ok(exec.chamadas.filter((c) => c.banco).every((c) => c.isolado === true), 'cada processo ganha banco descartável próprio');
+  const dosItem2 = arquivos.flat().filter((f) => /m9d607|m9d615/.test(f));
+  assert.deepEqual(dosItem2.filter((f) => f.includes('m9d607')).length, 3);
+  assert.ok(dosItem2.some((f) => f.includes('m9d615.worker')));
+  const invertida = ITENS.map((i) => (i.n === 2 ? { ...i, testes: [{ arquivos: [...i.testes[0].arquivos].reverse() }] } : i));
+  const fonte = montarFonte({ sprints: { B1: TODAS }, status: verificadas() });
+  const ev = montarEsteira({});
+  try {
+    const r2 = await avaliarDod(invertida, { demandas: carregarDemandas(fonte.dir), raiz: RAIZ, verificar: verificarVerde, executar: executorFalso().executar, esteira: { dir: ev.dir } });
+    assert.equal(r2.itens[1].ok, r.itens[1].ok, 'a ordem dos arquivos não muda o item 2');
+  } finally { fonte.limpar(); ev.limpar(); }
+});
+
+test('m9d707 o executor recusa comando com banco fora do descartável em 127.0.0.1', async () => {
+  const exec = criarExecutor({ DATABASE_URL: 'postgres://u:p@db.exemplo.invalid:5432/x', DISPOSABLE_DB: '1' });
+  const r = await exec({ cmd: 'node', args: ['--test', 'x.test.js'], banco: true, isolado: true });
+  assert.equal(r.code, 1);
+  assert.match(r.output, /não é descartável/);
 });

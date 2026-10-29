@@ -8,14 +8,15 @@ const asserts = require('../_helpers/readModelAsserts');
 const readModels = require('../../../src/features/analytics/read-models');
 const { expectedFromLedger } = require('../_helpers/m9d615Oracle');
 
-const { ledger, makeEvent, apply, healthRow, inTx, NOW } = env615;
+const { ledger, makeEvent, apply, healthRow, inTx, NOW, AS_OF } = env615;
 let env;
 before(async () => { env = await env615.setup(); });
 after(() => env615.teardown(env));
 
 const iso = (offsetDays, hour = 15) => new Date(Date.UTC(2026, 9, 28 + offsetDays, hour)).toISOString();
 const settledEvent = (tenant, id) => makeEvent(tenant, 'finance.entry.settled', { id, resultCenterId: null, competenceMonth: '2026-10' });
-const rowsOf = async (tenant) => (await env.admin.query('SELECT * FROM analytics.rm_finance_health WHERE company_id = :c', { replacements: { c: tenant.companyId } }))[0];
+// só a data-base do teste: linhas de outras datas deixadas por outros arquivos no mesmo banco (ex.: m9d607.*) não entram na conta
+const rowsOf = async (tenant) => (await env.admin.query('SELECT * FROM analytics.rm_finance_health WHERE company_id = :c AND as_of_date = :d', { replacements: { c: tenant.companyId, d: AS_OF } }))[0];
 
 test('m9d615 replay do mesmo evento não duplica', async () => {
   const id = await ledger.entry(env, env.tenantA, { nature: 'RECEIVABLE', amount: '120000.00', status: 'SETTLED', settled: iso(-2), month: '2026-10' });
@@ -34,7 +35,7 @@ test('m9d615 rebuild reproduz o incremental', async () => {
   const hash = await asserts.assertRebuildEqualsIncremental({
     buildIncremental: async () => { for (const id of ids) await apply(env.tenantB, settledEvent(env.tenantB, id)); },
     readRows: read,
-    wipe: () => env.admin.query('DELETE FROM analytics.rm_finance_health WHERE company_id = :c', { replacements: { c: env.tenantB.companyId } }),
+    wipe: () => env.admin.query('DELETE FROM analytics.rm_finance_health WHERE company_id = :c AND as_of_date = :d', { replacements: { c: env.tenantB.companyId, d: AS_OF } }),
     // rebuild a partir das tabelas de origem: a passada da agenda recalcula o estado de cada chave (sem nenhum evento)
     rebuild: () => inTx(env.tenantB, { commit: true }, async (tx) => {
       await readModels.refreshCompanyScheduled({ companyId: env.tenantB.companyId, groupId: env.tenantB.groupId }, await readModels.readRefreshParams(env.tenantB, tx), tx, { now: NOW });
