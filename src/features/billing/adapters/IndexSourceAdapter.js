@@ -4,7 +4,8 @@ const { getDecryptedSetting } = require('../../settings/settings.service');
 const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
 
 // M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient.
-const httpClient = new IntegrationHttpClient({ providerCode: 'billing-index' });
+// M9-D244: as duas fontes de índice são URLs fixas deste adaptador; só esses hosts podem ser chamados.
+const httpClient = new IntegrationHttpClient({ providerCode: 'billing-index', allowedHosts: ['servicodados.ibge.gov.br', 'api.fgvdados.fgv.br'] });
 
 /**
  * IndexSourceAdapter — interface simples para consultar o valor bruto de um índice de reajuste

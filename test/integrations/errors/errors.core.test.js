@@ -225,7 +225,8 @@ test('errors_resolver_concorrente', async () => {
       const auditorias = await emTransacaoCommitada(tenant, (t) => AuditLog.count({ where: { entityId: id, action: 'integration.error.resolved' }, transaction: t }));
       assert.equal(auditorias, 1, 'uma única auditoria');
     } finally {
-      if (id) await emTransacaoCommitada(tenant, (t) => sequelize.query('DELETE FROM integration.integration_errors WHERE id = :id', { replacements: { id }, transaction: t }));
+      // M9-D244: o runtime não apaga erros de integração (só integration.purge_expired()); a linha de teste fica no banco descartável.
+      if (id) await emTransacaoCommitada(tenant, (t) => sequelize.query("UPDATE integration.integration_errors SET status = 'IGNORED' WHERE id = :id AND status = 'OPEN'", { replacements: { id }, transaction: t }));
     }
   }
 });
@@ -252,7 +253,8 @@ test('errors_rls_isolamento', async () => {
     const listaA = await emTransacaoCommitada(tenant, (t) => errors.listErrors(ctx, {}, t));
     assert.ok(listaA.items.some((i) => i.id === idA));
   } finally {
-    if (idA) await emTransacaoCommitada(tenant, (t) => sequelize.query('DELETE FROM integration.integration_errors WHERE id = :id', { replacements: { id: idA }, transaction: t }));
+    // M9-D244: sem DELETE para o runtime; a linha de teste é encerrada em vez de apagada.
+    if (idA) await emTransacaoCommitada(tenant, (t) => sequelize.query("UPDATE integration.integration_errors SET status = 'IGNORED' WHERE id = :id AND status = 'OPEN'", { replacements: { id: idA }, transaction: t }));
   }
 });
 

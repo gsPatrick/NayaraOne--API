@@ -38,6 +38,9 @@ class IntegrationAdapter {
   /** Status do fornecedor -> status interno normalizado; desconhecido devolve null (nunca presume). */
   mapStatus(_externalStatus) { throw new Error('mapStatus() não implementado'); }
 
+  /** Hosts que o fornecedor pode receber (M9-D244 3.2): 'api.exemplo.com.br' ou '*.exemplo.com.br'. Vazio = nenhuma saída. */
+  allowedHosts() { return []; }
+
   /** Cópia sem segredo nem dado pessoal, para log e erro. */
   redact(obj) {
     if (obj === null || obj === undefined) return obj;

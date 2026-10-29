@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { Person } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
+const { hostOf } = require('../../integrations/http/egressPolicy');
 const { generateContractPdf } = require('../contractPdf.service');
 
 // M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient.
@@ -122,12 +123,13 @@ class ClicksignSignatureAdapter {
     }
     this.apiToken = apiToken;
     this.baseUrl = baseUrl;
+    this._http = httpClient.scoped([hostOf(baseUrl)]); // M9-D244: só o host da URL base configurada
   }
 
   // Centraliza a chamada HTTP — isola a camada de transporte para facilitar ajuste futuro
   // (retry, logging, mudança de endpoint) sem tocar na lógica de negócio do adapter.
   async _request(method, path, body) {
-    const response = await httpClient.fetch(`${this.baseUrl}${path}`, {
+    const response = await this._http.fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         Accept: 'application/vnd.api+json',
@@ -353,10 +355,11 @@ class ZapSignSignatureAdapter {
     }
     this.apiToken = apiToken;
     this.baseUrl = baseUrl;
+    this._http = httpClient.scoped([hostOf(baseUrl)]); // M9-D244: só o host da URL base configurada
   }
 
   async _request(method, path, body) {
-    const response = await httpClient.fetch(`${this.baseUrl}${path}`, {
+    const response = await this._http.fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',

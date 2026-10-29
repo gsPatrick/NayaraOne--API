@@ -243,6 +243,10 @@ jobs:
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"
           done
+          # M9-D244: o GRANT em massa acima concede DELETE. As tabelas de integração com retenção por função SECURITY DEFINER
+          # voltam a ficar sem ele (como em produção) e o app só executa integration.purge_expired().
+          node -e "require('./scripts/lib/runtimeNoDelete').revokeDeleteSql('nayara_ci_app').forEach((s) => console.log(s + ';'))" | psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1
+          psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT EXECUTE ON FUNCTION \"integration\".purge_expired(jsonb) TO nayara_ci_app;"
 
       # Mesmo pedido acima: grava a saída completa (nome + resultado de cada teste do reporter
       # "spec" do Node, mais o resumo "# pass"/"# fail" com contagem exata) em arquivo, e sobe

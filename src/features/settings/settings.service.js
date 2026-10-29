@@ -31,6 +31,8 @@ const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/m
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
+const { TRANSPORT_SETTINGS_SCHEMA } = require('../integrations/http/transport.settings');
+const { RETENTION_SETTINGS_SCHEMA } = require('../integrations/retention/retention.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
 const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
@@ -205,6 +207,9 @@ const SETTINGS_SCHEMA = {
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.
   ...DEPAUDIT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
+  ...TRANSPORT_SETTINGS_SCHEMA,
+  ...RETENTION_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
   // Marco 9, M9-D604 — versionamento de métricas do BI: mínimo de caracteres do motivo da mudança de fórmula.
@@ -413,7 +418,8 @@ async function getSettingRow(key, tenant, transaction) {
 const INTEGRATION_STATUS_TIMEOUT_MS = 5000;
 
 // Painel de status das integrações (M9-D210): a chamada de teste também passa pelo cliente HTTP único.
-const statusHttp = new IntegrationHttpClient({ providerCode: 'integration-status' });
+// M9-D244: só os hosts desses testes de conexão podem ser chamados.
+const statusHttp = new IntegrationHttpClient({ providerCode: 'integration-status', allowedHosts: ['sandbox.clicksign.com', 'app.clicksign.com', 'api.zapsign.com.br', 'api.fgvdados.fgv.br'] });
 
 /**
  * pingProvider — executa `fn(signal)` (uma chamada HTTP real e barata ao provedor) sob um

@@ -1,12 +1,12 @@
 'use strict';
 
 const { sequelize, Group, Company } = require('../../models');
-const { runCompanyAggregation, purgeExpiredHealth, readHealthParams } = require('../../features/integrations/health');
+const { runCompanyAggregation, readHealthParams } = require('../../features/integrations/health');
 
 /**
  * integrationHealthAggregateJob (Marco 9, M9-D206): a cada `integration.health.aggregate_interval_s` (padrão 60 s,
- * por empresa) grava as janelas de saúde e a linha atual de cada connection ACTIVE e expurga as janelas vencidas
- * pela função de banco (o runtime não tem DELETE). Falha de uma empresa ou connection não derruba as demais.
+ * por empresa) grava as janelas de saúde e a linha atual de cada connection ACTIVE. O expurgo das janelas vencidas é do
+ * integrationRetentionJob, que chama integration.purge_expired() (M9-D244: o runtime não tem DELETE). Falha de uma empresa ou connection não derruba as demais.
  * O relógio interno acorda de TICK_MS em TICK_MS; quem decide se a empresa está na hora é o parâmetro dela.
  */
 const TICK_MS = 15000;
@@ -29,15 +29,12 @@ async function runCompany(group, company, now) {
   });
   if (!due) return null;
   lastRun.set(company.id, now.getTime());
-  const result = await tenantTx(group, company, (transaction) => runCompanyAggregation(ctx, { now }, transaction));
-  // O expurgo roda em transação própria: se falhar, as janelas já gravadas ficam.
-  const purged = await tenantTx(group, company, (transaction) => purgeExpiredHealth(ctx, transaction));
-  return { ...result, purged };
+  return tenantTx(group, company, (transaction) => runCompanyAggregation(ctx, { now }, transaction));
 }
 
 async function runIntegrationHealthAggregateJob({ now = new Date() } = {}) {
   const groups = await Group.findAll();
-  const summary = { companies: 0, processed: 0, failed: 0, purged: 0, errors: 0 };
+  const summary = { companies: 0, processed: 0, failed: 0, errors: 0 };
   for (const group of groups) {
     const companies = await sequelize.transaction(async (transaction) => {
       await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
@@ -50,7 +47,6 @@ async function runIntegrationHealthAggregateJob({ now = new Date() } = {}) {
           summary.companies += 1;
           summary.processed += r.processed;
           summary.failed += r.failed;
-          summary.purged += r.purged;
         }
       } catch (err) {
         summary.errors += 1;

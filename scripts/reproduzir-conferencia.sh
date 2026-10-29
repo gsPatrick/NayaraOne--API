@@ -128,6 +128,9 @@ echo "[reproduzir] role $APP NOSUPERUSER NOBYPASSRLS + GRANT por schema…"
 for schema in $("${PSQL[@]}" -t -A -c "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'"); do
   "${PSQL[@]}" -q -c "GRANT USAGE ON SCHEMA \"$schema\" TO $APP; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO $APP; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO $APP;" >/dev/null
 done
+# M9-D244: tabelas de integração com retenção por função SECURITY DEFINER ficam sem DELETE para o app, que só executa integration.purge_expired().
+node -e "require('./scripts/lib/runtimeNoDelete').revokeDeleteSql(process.argv[1]).forEach((s) => console.log(s + ';'))" "$APP" | "${PSQL[@]}" -q >/dev/null
+"${PSQL[@]}" -q -c "GRANT EXECUTE ON FUNCTION \"integration\".purge_expired(jsonb) TO $APP" >/dev/null
 
 export DATABASE_URL="postgres://$APP:$APP_PW@127.0.0.1:$PGP/$DB" DB_USER=$APP DB_PASSWORD=$APP_PW NODE_ENV=test CI=true PORT=3011  # CI=true: o GitHub Actions sempre define
 COMMIT="$(git rev-parse HEAD 2>/dev/null || echo desconhecido)"

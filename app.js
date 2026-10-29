@@ -41,6 +41,7 @@ const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob
 const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
+const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -293,6 +294,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DEPENDENCY_AUDIT_JOB_DISABLED !== 'true') {
   startDependencyAuditJob();
+}
+
+// Marco 9, M9-D244 — retenção das tabelas de integração por integration.purge_expired() (o runtime não tem DELETE).
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RETENTION_JOB_DISABLED !== 'true') {
+  startIntegrationRetentionJob();
 }
 
 module.exports = app;

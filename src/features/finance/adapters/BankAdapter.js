@@ -2,10 +2,10 @@
 
 const AppError = require('../../../utils/AppError');
 const { IntegrationHttpClient, createMtlsAgent } = require('../../integrations/http/IntegrationHttpClient');
+const { hostOf } = require('../../integrations/http/egressPolicy');
 
 // M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient (o transporte https com mTLS mora em integrations/http).
 const httpClient = new IntegrationHttpClient({ providerCode: 'bank-santander' });
-const httpsRequestJson = (opts) => httpClient.httpsJson(opts);
 
 // Interface comum (duck-typed, mesmo estilo de legal/adapters/SignatureAdapter.js):
 //   async submitPayment(req) -> { externalId, status, raw }
@@ -50,6 +50,7 @@ class SantanderBankAdapter {
     this.workspaceId = workspaceId;
     this.baseUrl = baseUrl || 'https://trust-sandbox.api.santander.com.br';
     this._httpsAgent = createMtlsAgent({ cert: certPem, key: keyPem });
+    this._http = httpClient.scoped([hostOf(this.baseUrl)]); // M9-D244: só o host da URL base configurada
     this._accessToken = null;
     this._tokenExpiresAt = 0;
   }
@@ -61,7 +62,7 @@ class SantanderBankAdapter {
       client_id: this.clientId,
       client_secret: this.clientSecret,
     }).toString();
-    const { statusCode, body } = await httpsRequestJson({
+    const { statusCode, body } = await this._http.httpsJson({
       method: 'POST',
       url: `${this.baseUrl}/auth/oauth/v2/token`,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(bodyStr) },
@@ -79,7 +80,7 @@ class SantanderBankAdapter {
   async _request(method, path, payload, extraHeaders = {}) {
     const token = await this._getAccessToken();
     const bodyStr = payload ? JSON.stringify(payload) : undefined;
-    const { statusCode, body } = await httpsRequestJson({
+    const { statusCode, body } = await this._http.httpsJson({
       method,
       url: `${this.baseUrl}${path}`,
       headers: {

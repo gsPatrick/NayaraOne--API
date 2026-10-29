@@ -3,14 +3,20 @@
 const { IntegrationHttpClient } = require('../http/IntegrationHttpClient');
 const { readConnectionSecret } = require('../secrets');
 const { readAdapterParams } = require('./adapters.params');
+const { readEgressParams } = require('../http/egress.params');
+const { makeEgressRecorder } = require('../http/egress.record');
 
 /**
  * Monta o `ctx` que o adapter recebe (M9-D209 3.3): conexão SEM segredo e SEM empresa, política, tempos, cliente HTTP
  * único e um leitor de segredo preguiçoso (SecretStore, com a finalidade e a auditoria da D202). O adapter não conhece
  * empresa, usuário nem banco. Vale dentro da transação em que foi montado.
  */
-async function buildAdapterCtx(connection, tenant, transaction) {
+/** Hosts que a conexão pode chamar: os que o adapter declara + `policy.egressHosts` da conexão (config validada; URL de terceiro nunca entra, M9-D245). */
+const egressHostsOf = (connection, adapterHosts) => [...new Set([...(adapterHosts || []), ...((connection.policyJson || {}).egressHosts || [])].map(String))];
+
+async function buildAdapterCtx(connection, tenant, transaction, { adapterHosts = [] } = {}) {
   const params = await readAdapterParams(tenant, transaction);
+  const egress = await readEgressParams(tenant, transaction);
   const timeouts = { readMs: params.readTimeoutMs, writeMs: params.writeTimeoutMs };
   return Object.freeze({
     connection: Object.freeze({
@@ -20,9 +26,12 @@ async function buildAdapterCtx(connection, tenant, transaction) {
     policy: connection.policyJson || {},
     timeouts,
     healthCheckTimeoutMs: params.healthCheckTimeoutMs,
-    http: new IntegrationHttpClient({ providerCode: connection.providerCode, connectionId: connection.id, timeouts }),
+    http: new IntegrationHttpClient({
+      providerCode: connection.providerCode, connectionId: connection.id, timeouts, allowedHosts: egressHostsOf(connection, adapterHosts),
+      environment: connection.environment, egressMode: egress.mode, onEgress: makeEgressRecorder(tenant, connection, transaction),
+    }),
     secret: (purpose = 'dispatch', opts = {}) => readConnectionSecret(connection, tenant, { purpose, transaction, ...opts }),
   });
 }
 
-module.exports = { buildAdapterCtx };
+module.exports = { buildAdapterCtx, egressHostsOf };

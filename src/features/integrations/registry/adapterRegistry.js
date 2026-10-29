@@ -21,6 +21,11 @@ function register(AdapterClass) {
   return info;
 }
 
+/** Hosts que o adapter declara para a saída (M9-D244 3.2): método opcional `allowedHosts()`; sem ele, nenhum. */
+function declaredHosts(AdapterClass) {
+  try { return new AdapterClass(null).allowedHosts(); } catch { return []; }
+}
+
 const has = (providerCode) => registered.has(String(providerCode));
 const list = () => [...registered.values()].map(({ info }) => ({ providerCode: info.code, domain: info.domain, capabilities: info.capabilities, versions: info.versions }));
 const unregister = (providerCode) => registered.delete(String(providerCode));
@@ -44,7 +49,7 @@ async function resolve(connection, tenant, transaction) {
     if (problemas.length) throw contractInvalid(problemas, info.code);
   }
   if (connection.apiVersion && !info.versions.includes(connection.apiVersion)) throw versionUnsupported(connection.apiVersion, info.versions);
-  return new AdapterClass(await buildAdapterCtx(connection, tenant, transaction));
+  return new AdapterClass(await buildAdapterCtx(connection, tenant, transaction, { adapterHosts: declaredHosts(AdapterClass) }));
 }
 
 module.exports = { register, resolve, has, list, unregister };

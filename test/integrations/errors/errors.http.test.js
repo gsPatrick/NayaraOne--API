@@ -48,7 +48,8 @@ before(async () => {
 });
 
 after(async () => {
-  await comoTenant((t) => sequelize.query('DELETE FROM integration.integration_errors WHERE id IN (:ids)', { replacements: { ids: ids.length ? ids : ['00000000-0000-0000-0000-000000000000'] }, transaction: t }));
+  // M9-D244: o runtime não apaga erros de integração (só integration.purge_expired()); as linhas de teste são encerradas em vez de apagadas.
+  await comoTenant((t) => sequelize.query("UPDATE integration.integration_errors SET status = 'IGNORED' WHERE id IN (:ids) AND status = 'OPEN'", { replacements: { ids: ids.length ? ids : ['00000000-0000-0000-0000-000000000000'] }, transaction: t }));
   await sequelize.close();
   process.exit(0);
 });
