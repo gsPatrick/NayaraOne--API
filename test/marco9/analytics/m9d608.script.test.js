@@ -58,7 +58,7 @@ test('m9d608 comando reconstrói e imprime hash antes e depois', async (t) => {
   t.diagnostic(`saída do comando: ${r.out}`);
   assert.equal(r.code, 0, r.err);
   const refresh = await lastRefresh(env, env.tenantA);
-  assert.match(r.out, new RegExp(`hash antes ${refresh.rebuild_diff.before.hash}; hash depois ${refresh.rebuild_diff.after.hash}`));
+  assert.match(r.out, new RegExp(`hash antes ${refresh.rebuild_diff.before.hash}; hash após ${refresh.rebuild_diff.after.hash}`));
   assert.match(r.out, /1 -> 1 linhas/);
   const byEmail = await cli([`--model=${env.model}`, `--company=${env.tenantA.companyId}`, '--user=admin@nayaraone.dev']);
   assert.equal(byEmail.code, 0, byEmail.err);

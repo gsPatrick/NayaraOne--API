@@ -48,7 +48,7 @@ async function permissionsOf(user, target) {
 }
 
 function describe(r) {
-  return `OK ${r.readModel} empresa ${r.companyId}: ${r.before.rows} -> ${r.after.rows} linhas; hash antes ${r.before.hash}; hash depois ${r.after.hash}; `
+  return `OK ${r.readModel} empresa ${r.companyId}: ${r.before.rows} -> ${r.after.rows} linhas; hash antes ${r.before.hash}; hash após ${r.after.hash}; `
     + `acrescentadas ${r.added}, removidas ${r.removed}, alteradas ${r.changed}; reaplicados ${r.reapplied}; snapshots revisados ${r.snapshotsRevised}; ${r.durationMs} ms`;
 }
 
