@@ -8,7 +8,7 @@
  */
 const { createToolCallRecorder } = require('./toolCallRecorder');
 
-function createToolCallStore({ execCtx, registry }) {
+function createToolCallStore({ execCtx, registry, seq }) {
   let recorder = null;
   let replayed = false;
 
@@ -20,7 +20,7 @@ function createToolCallStore({ execCtx, registry }) {
       const ctx = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId };
       recorder = createToolCallRecorder({ ctx, transaction, runId: execCtx.runId });
       const tool = registry && typeof registry.get === 'function' ? registry.get(linha.toolName) : null;
-      const claim = await recorder.claim({ toolName: linha.toolName, tool: tool || undefined, args: linha.args || {} });
+      const claim = await recorder.claim({ toolName: linha.toolName, tool: tool || undefined, args: linha.args || {}, seq });
       if (claim.replayed) {
         replayed = true;
         return null;
@@ -29,7 +29,20 @@ function createToolCallStore({ execCtx, registry }) {
     return recorder.record(linha);
   }
 
-  return { record, get current() { return recorder ? recorder.current : null; } };
+  /** O executor (D002) reivindica a chamada antes de executar: `seq` fixo da D020; replay devolve o resultado anterior sem executar. */
+  async function claim(params, transaction) {
+    if (recorder) return { replayed: false };
+    const userId = execCtx.actor && execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;
+    recorder = createToolCallRecorder({ ctx: { groupId: execCtx.groupId, companyId: execCtx.companyId, userId }, transaction, runId: execCtx.runId });
+    const result = await recorder.claim({ ...params, seq: params.seq === undefined ? seq : params.seq });
+    if (result.replayed) {
+      replayed = true;
+      recorder = null;
+    }
+    return result;
+  }
+
+  return { record, claim, get current() { return recorder ? recorder.current : null; } };
 }
 
 module.exports = { createToolCallStore };

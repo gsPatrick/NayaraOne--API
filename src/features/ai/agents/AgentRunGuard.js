@@ -32,6 +32,11 @@ class AgentRunGuard {
     limiter.assertAllowed({ key: `${this.ctx.companyId}:${this.ctx.userId}`, limit: this.limits.maxRunsPorMinutoUsuario, now });
   }
 
+  /** Taxa por pessoa em contador de banco (DI-D004-7): `recent` é quantos runs da pessoa começaram no último minuto (ai.ai_runs). */
+  assertRateCount(recent) {
+    if (Number.isInteger(recent) && recent >= this.limits.maxRunsPorMinutoUsuario) throw E.rateLimited();
+  }
+
   beforeToolCall(toolName) {
     const tool = assertToolAllowed(this.agent, toolName);
     if (this.toolCalls + 1 > this.limits.maxToolCallsPorRun) throw E.toolLimit();

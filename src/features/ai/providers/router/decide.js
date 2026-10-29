@@ -52,8 +52,9 @@ function modelDecision(path, reason, lista, extra = {}) {
 async function decide(input, ctx, transaction, { registry, resolvers, cache }) {
   if (!input || typeof input.taskType !== 'string' || !input.taskType.trim()) throw E.invalidInput('Informe o tipo da tarefa (taskType).');
   const params = await readRouterParams(ctx, transaction);
-  const resolver = resolvers.get(input.taskType);
-  const forced = forcedRoutingPath(input.taskType);
+  // `skipShortCircuit`: a regra e o cache já foram tentados antes (passo 3 do orquestrador); o passo 6 só reescolhe o modelo com o tamanho real.
+  const resolver = input.skipShortCircuit === true ? null : resolvers.get(input.taskType);
+  const forced = input.skipShortCircuit === true ? null : forcedRoutingPath(input.taskType);
   if (resolver) {
     const result = await resolver(input.ruleInput === undefined ? input : input.ruleInput, { tenant: tenantOf(ctx), transaction });
     if (result !== null && result !== undefined) {
@@ -62,7 +63,7 @@ async function decide(input, ctx, transaction, { registry, resolvers, cache }) {
   }
   if (forced === 'RULE') return { path: 'RULE', provider: null, model: null, reason: REASONS.RULE_FORCED, fallbackChain: [], escalated: false, ruleResult: null };
 
-  const hit = await cache.lookup(input, { tenant: tenantOf(ctx), transaction });
+  const hit = input.skipShortCircuit === true ? null : await cache.lookup(input, { tenant: tenantOf(ctx), transaction });
   if (hit) return { path: 'CACHE', provider: null, model: null, reason: REASONS.CACHE_HIT, fallbackChain: [], escalated: false, cacheResult: hit.result, cacheKey: hit.key || null };
 
   const wanted = classOfTask(input, params);
