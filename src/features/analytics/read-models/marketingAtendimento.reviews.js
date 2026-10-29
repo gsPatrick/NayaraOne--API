@@ -6,23 +6,25 @@
  *  rm_support_satisfaction  por mês: respostas de satisfação (satisfaction_score preenchido) e a soma das notas
  * O mês é o da conclusão (completed_at; sem ela, a última alteração). O catálogo do Marketing não tem evento de conclusão: a avaliação
  * concluída e a nota entram pela agenda; review.requested (e o caso de atendimento aberto, para a satisfação) abrem o mês no read model.
+ * M9-D672: rm_mkt_reviews guarda também a contagem por nota (rating_1 a rating_5) e rm_support_satisfaction as respostas com nota 4 ou 5 (positive).
  * Pedido ainda sem plataforma fica na plataforma "SEM_PLATAFORMA". Nenhuma pessoa entra aqui, só contagem e soma.
  */
 const { sqlMonth, TZ, monthKey, rows } = require('./marketingAtendimento.time');
 
 const NO_PLATFORM = 'SEM_PLATAFORMA';
+const RATINGS = [1, 2, 3, 4, 5]; // M9-D672: contagem por nota (rating_1 a rating_5)
 const DONE = `COALESCE(completed_at, updated_at)`;
 
 const reviewsKey = (event) => ({ month: monthKey(event.occurredAt), platform: NO_PLATFORM });
 
 async function reviewsRecompute({ companyId, key, transaction }) {
   const [r] = await rows(
-    `SELECT count(*)::int AS reviews, COALESCE(sum(public_rating), 0)::int AS rating_sum FROM marketing.review_requests
+    `SELECT count(*)::int AS reviews, COALESCE(sum(public_rating), 0)::int AS rating_sum, ${RATINGS.map((n) => `count(*) FILTER (WHERE public_rating = ${n})::int AS rating_${n}`).join(', ')} FROM marketing.review_requests
       WHERE company_id = :companyId AND deleted_at IS NULL AND status = 'COMPLETED' AND public_rating IS NOT NULL
         AND COALESCE(platform, :none) = :platform AND ${sqlMonth(DONE)} = :month`,
     { ...TZ, companyId, platform: key.platform, month: key.month, none: NO_PLATFORM }, transaction
   );
-  return { fields: { reviews: r.reviews, rating_sum: r.rating_sum } };
+  return { fields: { reviews: r.reviews, rating_sum: r.rating_sum, ...Object.fromEntries(RATINGS.map((n) => [`rating_${n}`, r[`rating_${n}`]])) } };
 }
 
 const reviewsKeysSql = (filter) => `
@@ -40,11 +42,11 @@ const satisfactionKey = (event) => ({ month: monthKey(event.occurredAt) });
 
 async function satisfactionRecompute({ companyId, key, transaction }) {
   const [r] = await rows(
-    `SELECT count(*)::int AS responses, COALESCE(sum(satisfaction_score), 0)::int AS score_sum FROM marketing.review_requests
+    `SELECT count(*)::int AS responses, COALESCE(sum(satisfaction_score), 0)::int AS score_sum, count(*) FILTER (WHERE satisfaction_score >= 4)::int AS positive FROM marketing.review_requests
       WHERE company_id = :companyId AND deleted_at IS NULL AND satisfaction_score IS NOT NULL AND ${sqlMonth(DONE)} = :month`,
     { ...TZ, companyId, month: key.month }, transaction
   );
-  return { fields: { responses: r.responses, score_sum: r.score_sum } };
+  return { fields: { responses: r.responses, score_sum: r.score_sum, positive: r.positive } };
 }
 
 const satisfactionKeysSql = (filter) => `

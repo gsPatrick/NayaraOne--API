@@ -60,6 +60,7 @@ const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-mode
 const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraOperacaoKpi.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridicoCorrespondenteKpi.settings');
+const { SUPPORT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/atendimentoKpi.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
 const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
@@ -280,6 +281,8 @@ const SETTINGS_SCHEMA = {
   ...JURIDICO_SETTINGS_SCHEMA,
   // Marco 9, M9-D660 / M9-D661 — KPIs do Jurídico e do Correspondente: owner de cada um, limites de qualidade e estágios do caso.
   ...JUR_COR_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D672 — KPIs de Atendimento: owner de cada um, horas e severidades do SLA por prioridade e limite de reclamações sem motivo.
+  ...SUPPORT_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).

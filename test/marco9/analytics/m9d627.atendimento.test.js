@@ -44,10 +44,10 @@ test('m9d627 SLA de resolução: resolvidos, dentro do prazo e vencidos em abert
   await src.feedbackCase(env, t, { status: 'RESOLVED', at: created, slaDueAt: at('2026-08-06'), resolvedAt: at('2026-08-05') }); // no prazo
   await src.feedbackCase(env, t, { status: 'RESOLVED', type: 'CONFLICT', at: created, slaDueAt: at('2026-08-06'), resolvedAt: at('2026-08-06') }); // no limite: no prazo
   await src.feedbackCase(env, t, { status: 'RESOLVED', at: created, slaDueAt: at('2026-08-06'), resolvedAt: at('2026-08-20') }); // fora do prazo
-  await src.feedbackCase(env, t, { status: 'OPEN', at: created, slaDueAt: at('2026-08-10') }); // aberto e vencido (agosto)
+  await src.feedbackCase(env, t, { status: 'OPEN', at: created, slaDueAt: at('2026-08-10') }); // aberto e vencido (agosto): o prazo é a abertura mais as horas da prioridade (M9-D672)
   await src.feedbackCase(env, t, { status: 'ESCALATED', at: created, slaDueAt: at('2026-08-12') }); // escalado e vencido
   await src.feedbackCase(env, t, { status: 'IN_PROGRESS', at: created, slaDueAt: at('2026-08-28') }); // aberto, vencido antes de 28/10: conta
-  await src.feedbackCase(env, t, { status: 'OPEN', at: created, slaDueAt: at('2026-11-02') }); // prazo futuro: não vence
+  await src.feedbackCase(env, t, { status: 'OPEN', at: at('2026-10-27'), slaDueAt: at('2026-11-02') }); // aberto há 1 dia: o prazo de 72 h (prioridade média, M9-D672) ainda não venceu
   await apply(t, makeEvent(t, 'crm.feedback_case.resolved', { id: src.uuid(), resolvedAt: at('2026-08-20').toISOString(), withinSla: false }, at('2026-08-20')));
   const row = await rowOf(env, 'rm_support_sla', t, { month: '2026-08' });
   assert.deepEqual([row.resolved, row.within_sla, row.open_overdue], [3, 2, 3]);

@@ -91,18 +91,20 @@ test('m9d627 erro no meio desfaz a atualização', async () => {
 test('m9d627 agenda recalcula o que depende do relógio', async () => {
   const t = env.tenantA;
   const messageId = await src.message(env, t, { channel: 'SMS', status: 'SENT', at: at('2026-10-27') });
-  const caseId = await src.feedbackCase(env, t, { status: 'OPEN', at: at('2026-10-27'), slaDueAt: at('2026-12-03') });
+  const caseId = await src.feedbackCase(env, t, { status: 'OPEN', at: at('2026-10-27'), slaDueAt: at('2026-12-03') }); // prazo = abertura + 72 h (prioridade média, M9-D672) = 30/10 12:00 SP
+  const overdue = async () => (await rowOf(env, 'rm_support_sla', t, { month: '2026-10' }) || { open_overdue: 0 }).open_overdue;
   await schedule(t, NOW);
-  assert.deepEqual([(await rowOf(env, 'rm_mkt_delivery', t, { day: '2026-10-27', channel: 'SMS' })).delivered, (await rowOf(env, 'rm_support_sla', t, { month: '2026-12' })).open_overdue], [0, 0]);
+  const base = await overdue();
+  assert.equal((await rowOf(env, 'rm_mkt_delivery', t, { day: '2026-10-27', channel: 'SMS' })).delivered, 0);
   await src.update(env, 'crm.messages', messageId, { status: 'DELIVERED' }); // o status de entrega chega sem evento
   await schedule(t, new Date('2026-12-05T15:00:00Z')); // e o prazo do caso passa
   assert.equal((await rowOf(env, 'rm_mkt_delivery', t, { day: '2026-10-27', channel: 'SMS' })).delivered, 0, 'fora da janela de 7 dias a agenda não reconfere o dia antigo');
-  assert.equal((await rowOf(env, 'rm_support_sla', t, { month: '2026-12' })).open_overdue, 1, 'o caso em aberto que passou do prazo entra como vencido, sem evento');
+  assert.equal(await overdue(), base + 1, 'o caso em aberto que passou do prazo entra como vencido, sem evento');
   await schedule(t, new Date('2026-10-30T15:00:00Z'));
   assert.equal((await rowOf(env, 'rm_mkt_delivery', t, { day: '2026-10-27', channel: 'SMS' })).delivered, 1, 'dentro da janela, a agenda reconfere o dia e vê o status de entrega');
   await src.update(env, 'crm.feedback_cases', caseId, { status: 'RESOLVED', resolved_at: new Date('2026-12-06T12:00:00Z') });
   await schedule(t, new Date('2026-12-07T15:00:00Z'));
-  assert.equal((await rowOf(env, 'rm_support_sla', t, { month: '2026-12' })).open_overdue, 0, 'resolvido sai dos vencidos');
+  assert.equal(await overdue(), base, 'resolvido sai dos vencidos');
   const [[refresh]] = await env.admin.query("SELECT \"trigger\", status FROM analytics.read_model_refreshes WHERE read_model = 'rm_support_sla' AND company_id = :c ORDER BY started_at DESC LIMIT 1", { replacements: { c: t.companyId } });
   assert.deepEqual([refresh.trigger, refresh.status], ['SCHEDULE', 'SUCCEEDED']);
 });
