@@ -17,6 +17,7 @@ const { registerEvaluationRoutes } = require('./evaluations/evaluations.routes')
 const { registerRecommendationRoutes } = require('./recommendations/recommendations.routes');
 const { registerApprovalRoutes } = require('./approval/approval.routes');
 const { registerBudgetRoutes } = require('./budgets/budgets.routes');
+const { registerMemoryRoutes } = require('./memory/memory.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -53,6 +54,8 @@ registerRecommendationRoutes(router);
 registerApprovalRoutes(router);
 // Orçamento de uso da NAY (M9-D014): GET/POST /ai/budgets e PUT /ai/budgets/:id.
 registerBudgetRoutes(router);
+// Memória empresarial estruturada (M9-D009): /ai/memories, invalidate e correct.
+registerMemoryRoutes(router);
 
 router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
 router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));

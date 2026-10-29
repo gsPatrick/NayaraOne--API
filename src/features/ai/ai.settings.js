@@ -20,6 +20,7 @@ const { RECOMMENDATION_SETTING_DEFAULTS, RECOMMENDATION_SETTINGS_SCHEMA } = requ
 const { EVALUATION_SETTING_DEFAULTS, EVALUATION_SETTINGS_SCHEMA } = require('./evaluations/evaluations.settings');
 const { BUDGET_SETTING_DEFAULTS, BUDGET_SETTINGS_SCHEMA } = require('./budgets/budgets.settings');
 const { APPROVAL_SETTING_DEFAULTS, APPROVAL_SETTINGS_SCHEMA } = require('./approval/approval.settings');
+const { MEMORY_SETTING_DEFAULTS, MEMORY_SETTINGS_SCHEMA } = require('./memory/memory.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
@@ -46,6 +47,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...EVALUATION_SETTING_DEFAULTS,
   ...BUDGET_SETTING_DEFAULTS,
   ...APPROVAL_SETTING_DEFAULTS,
+  ...MEMORY_SETTING_DEFAULTS,
 });
 
 const AI_SETTINGS_SCHEMA = {
@@ -65,6 +67,7 @@ const AI_SETTINGS_SCHEMA = {
   ...EVALUATION_SETTINGS_SCHEMA,
   ...BUDGET_SETTINGS_SCHEMA,
   ...APPROVAL_SETTINGS_SCHEMA,
+  ...MEMORY_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {

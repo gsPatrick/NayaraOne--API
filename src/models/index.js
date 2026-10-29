@@ -220,6 +220,7 @@ const modelDefiners = {
   AiGoldenCandidate: require('./AiGoldenCandidate'),
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),
+  AiMemory: require('./AiMemory'),
   AuditLog: require('./AuditLog'),
   BillingSchedule: require('./BillingSchedule'),
   BillingScheduleItem: require('./BillingScheduleItem'),
