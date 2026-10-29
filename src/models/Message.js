@@ -83,6 +83,12 @@ module.exports = (sequelize) => {
         field: 'action_key',
         comment: "M9-D415: chave de idempotência da ação de automação que gerou o registro (UNIQUE por empresa)",
       },
+      purpose: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: 'purpose',
+        comment: "M9-D416: finalidade da mensagem automática (conta no frequency cap por pessoa, canal e finalidade); nulo = não automática",
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
