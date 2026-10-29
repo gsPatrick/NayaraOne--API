@@ -1,9 +1,12 @@
 'use strict';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL = /[^\s@]+@[^\s@]+/;
-const CPF_FORMATADO = /\d{3}\.\d{3}\.\d{3}-\d{2}/;
-const CNPJ_FORMATADO = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/;
+// M9-D246: a detecção de e-mail, CPF e CNPJ vem da biblioteca única de redaction (nenhuma regex própria aqui).
+const { rx } = require('../../../shared/redaction');
+
+const EMAIL = rx('emailLoose', '');
+const CPF_FORMATADO = rx('cpfFormatted', '');
+const CNPJ_FORMATADO = rx('cnpjFormatted', '');
 const SO_DIGITOS_DE_DOCUMENTO = /^(\d{11}|\d{14})$/;
 const AMOUNT = /^-?\d+(\.\d{1,6})?$/;
 const PCT = /^\d+(\.\d{1,2})?$/;
@@ -18,8 +21,8 @@ const MISSING = Symbol('missing');
 const looksPersonal = (text) => EMAIL.test(text) || CPF_FORMATADO.test(text) || CNPJ_FORMATADO.test(text) || SO_DIGITOS_DE_DOCUMENTO.test(text);
 
 /** Trecho curto já redigido pela M9-D021: por garantia, o que ainda parecer dado pessoal vira máscara (não derruba a operação). */
-const maskPersonal = (text) => text.replace(/[^\s@]+@[^\s@]+/g, '[REDIGIDO]').replace(/\d{3}\.\d{3}\.\d{3}-\d{2}/g, '[REDIGIDO]')
-  .replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, '[REDIGIDO]').replace(/\d{11,}/g, '[REDIGIDO]');
+const maskPersonal = (text) => text.replace(rx('emailLoose', 'g'), '[REDIGIDO]').replace(rx('cpfFormatted', 'g'), '[REDIGIDO]')
+  .replace(rx('cnpjFormatted', 'g'), '[REDIGIDO]').replace(/\d{11,}/g, '[REDIGIDO]');
 
 /** Código curto: troca o que não é letra, número ou _.:-/ por "_" e limita a 128. Texto com cara de dado pessoal é recusado antes. */
 function toCode(raw) {

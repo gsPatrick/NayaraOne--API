@@ -8,12 +8,13 @@ const crypto = require('node:crypto');
 const { maskSecrets } = require('../guards/secretPatterns');
 const { normalizeText } = require('../security/textNormalizer');
 const { EXCERPT_MAX } = require('./injectionDetector');
+const { rx } = require('../../../shared/redaction');
 
 const ORIGEM_SAIDA = 'MODEL_OUTPUT';
 const ID_SAIDA = 'model-output';
 const IMAGEM_COM_QUERY = /!\[[^\]]*\]\(\s*[^)\s]*\?[^)]*\)|<img\b[^>]*\bsrc\s*=\s*["']?[^"'>\s]*\?[^>]*>/gi;
 const URL = /\bhttps?:\/\/[^\s<>()[\]"'`]+|\bwww\.[^\s<>()[\]"'`]+/gi;
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+const EMAIL = rx('email', 'g'); // M9-D246: e-mail pela biblioteca única de redaction
 const PONTUACAO_FINAL = /[.,;:!?]+$/;
 const TROCAS = Object.freeze({ IMAGE_QUERY: '[imagem removida]', URL: '[link removido]', EMAIL: '[e-mail removido]' });
 const PADRAO_POR_TIPO = Object.freeze({ IMAGE_QUERY: 'SAIDA_IMAGEM_COM_QUERY', URL: 'SAIDA_URL_NAO_AUTORIZADA', EMAIL: 'SAIDA_EMAIL_NAO_AUTORIZADO' });
