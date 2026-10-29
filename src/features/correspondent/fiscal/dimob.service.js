@@ -215,27 +215,38 @@ async function exportDimobFile(dimobBatchId, actorUserId, groupId, companyId, tr
     ? snapshot.map((p) => p.taxId || 'SEM DOCUMENTO')
     : (ids || []).map((id) => onlyDigits(personById.get(id)?.taxIdNormalized) || 'SEM DOCUMENTO')).join(' / ');
 
-  // O arquivo usa SEMPRE o modelo gravado no lote. Lote antigo (sem modelo): congela o modelo vigente agora.
-  let model = batch.fileModelJson;
-  if (!model) {
-    model = buildFileModel(await getFiscalSettings(groupId, companyId, actorUserId, transaction), batch.layoutVersion);
-    await DimobBatch.sequelize.query(
-      'UPDATE "correspondent"."dimob_batches" SET file_model_json = :json, file_model_hash = :hash WHERE id = :id AND file_model_json IS NULL',
-      { replacements: { json: JSON.stringify(model), hash: hashFileModel(model), id: batch.id }, transaction }
-    );
-    batch.fileModelJson = model;
-    batch.fileModelHash = hashFileModel(model);
-    await registrarAuditoria(
-      {
-        groupId, companyId, actorUserId,
-        action: 'correspondent.dimob.file_model_frozen',
-        entityType: 'DimobBatch',
-        entityId: batch.id,
-        reason: `Lote DIMOB ${batch.referenceYear} v${batch.version} era anterior ao registro do modelo: o modelo vigente foi congelado na primeira exportação (modelo ${batch.fileModelHash}).`,
-      },
-      transaction
-    );
+  // O arquivo usa SEMPRE o modelo efetivamente gravado no lote. Lote antigo (sem modelo): o congelamento é
+  // serializado por trava de linha (FOR UPDATE) e o lote é relido depois da trava; se outra transação já
+  // congelou, usa-se o modelo dela e nada é registrado; só quem de fato grava registra a auditoria.
+  if (!batch.fileModelJson) {
+    const locked = await DimobBatch.findOne({ where: { id: batch.id, groupId, companyId }, lock: transaction.LOCK.UPDATE, transaction });
+    if (locked.fileModelJson) {
+      batch.fileModelJson = locked.fileModelJson;
+      batch.fileModelHash = locked.fileModelHash;
+    } else {
+      const candidate = buildFileModel(await getFiscalSettings(groupId, companyId, actorUserId, transaction), batch.layoutVersion);
+      const [written] = await DimobBatch.sequelize.query(
+        'UPDATE "correspondent"."dimob_batches" SET file_model_json = :json, file_model_hash = :hash WHERE id = :id AND file_model_json IS NULL AND file_model_hash IS NULL RETURNING file_model_json, file_model_hash',
+        { replacements: { json: JSON.stringify(candidate), hash: hashFileModel(candidate), id: batch.id }, transaction }
+      );
+      if (!written.length) {
+        throw AppError.conflict('Não foi possível congelar o modelo do arquivo deste lote DIMOB; tente novamente.', 'DIMOB_MODEL_FREEZE_FAILED');
+      }
+      batch.fileModelJson = written[0].file_model_json;
+      batch.fileModelHash = written[0].file_model_hash;
+      await registrarAuditoria(
+        {
+          groupId, companyId, actorUserId,
+          action: 'correspondent.dimob.file_model_frozen',
+          entityType: 'DimobBatch',
+          entityId: batch.id,
+          reason: `Lote DIMOB ${batch.referenceYear} v${batch.version} era anterior ao registro do modelo: o modelo vigente foi congelado na primeira exportação (modelo ${batch.fileModelHash}).`,
+        },
+        transaction
+      );
+    }
   }
+  const model = batch.fileModelJson;
   const sep = model.delimiter;
   const money = (v) => Number(v).toFixed(2).replace('.', ',');
   // Cada coluna do arquivo sabe tirar o seu valor do registro; a empresa escolhe quais entram e em que ordem.
