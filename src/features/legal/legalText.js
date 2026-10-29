@@ -17,7 +17,7 @@ const AppError = require('../../utils/AppError');
 /* eslint-disable no-misleading-character-class -- a lista de combinantes/invisiveis e proposital */
 const INVISIBLE_CLASS =
   '[\\p{Cc}\\p{Cf}\\p{Z}\\p{Variation_Selector}\\p{Default_Ignorable_Code_Point}' +
-  '\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u2800\\u3164\\uFFA0\\u{1D159}\\u{1D173}-\\u{1D17A}]';
+  '\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u2800\\u3164\\uFFA0\\u{1D159}\\u{1D173}-\\u{1D17A}\\u{16FE4}\\u{13441}\\u{13442}]';
 const INVISIBLE_ALL = new RegExp(INVISIBLE_CLASS, 'gu');
 const INVISIBLE_EDGES = new RegExp(`^${INVISIBLE_CLASS}+|${INVISIBLE_CLASS}+$`, 'gu');
 /* eslint-enable no-misleading-character-class */

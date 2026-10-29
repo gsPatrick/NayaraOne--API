@@ -125,7 +125,7 @@ test('Mesma classe nos vizinhos: descricao, origem e motivo so com invisivel/nao
 // Auditoria: caracteres que renderizam em branco mas nao sao Cc/Cf/Z (Braille em branco, fillers etc.).
 const EM_BRANCO_FORA_DE_CCCFZ = [
   '⠀', 'ᅟ', 'ᅠ', 'ㅤ', 'ﾠ', '឴', '឵', '͏', '؜',
-  '\u{1D159}', '᠋', '᠌', '᠍', '᠏', '\u{E0020}', '\u{E0100}', '\u{E0001}', '️',
+  '\u{1D159}', '\u{16FE4}', '\u{13441}', '\u{13442}', '᠋', '᠌', '᠍', '᠏', '\u{E0020}', '\u{E0100}', '\u{E0001}', '️',
 ];
 
 test('Nota feita so de caractere em branco fora de Cc/Cf/Z (U+2800, fillers Hangul/Khmer, U+034F, U+061C, U+1D159...): recusada (422)', async () => {
