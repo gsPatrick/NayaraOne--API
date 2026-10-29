@@ -4,6 +4,7 @@ const { PersonDocument, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { onlyDigits, isValidTaxIdDigits } = require('./personDocumentFormat.service');
+const { replaceDocumentFile } = require('./personDocumentReplacement.service');
 
 // Enum FECHADO confirmado pelo Caderno para person_documents.verification_status.
 const VALID_VERIFICATION_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'];
@@ -152,10 +153,14 @@ async function getDocument(personId, documentId, transaction) {
 
 async function updateDocument(personId, documentId, payload, actorUserId, transaction) {
   const document = await getDocument(personId, documentId, transaction);
+  // Trocar o arquivo nunca altera o documento existente: o original e preservado e nasce uma nova
+  // versao pendente (leitura e confirmacao ligadas ao arquivo novo).
+  if (payload.fileId !== undefined && payload.fileId !== document.fileId) {
+    return replaceDocumentFile(document, payload, actorUserId, transaction);
+  }
   const beforeJson = document.toJSON();
-  const { documentType, fileId, issuedAt, expiresAt, verificationStatus, verifiedBy, extractedDataJson } = payload;
+  const { documentType, issuedAt, expiresAt, verificationStatus, verifiedBy, extractedDataJson } = payload;
   if (documentType !== undefined) document.documentType = String(documentType).toUpperCase();
-  if (fileId !== undefined) document.fileId = fileId;
   if (issuedAt !== undefined) document.issuedAt = issuedAt;
   if (expiresAt !== undefined) document.expiresAt = expiresAt;
   let manualEntries = [];
