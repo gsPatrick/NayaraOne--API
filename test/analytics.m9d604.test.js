@@ -23,13 +23,31 @@ const V2_FORMULA = `module.exports = { id: 'fin.m9d604_soma_sem_hoje', version: 
   testCases: [{ name: 'ignora hoje', input: [{ v: 1 }, { v: 2, today: true }], expected: { value: '1' } }] };`;
 let env;
 let catalog;
+const committedCodes = new Set(); // métricas gravadas com commit definitivo: removidas no after (senão quebram a consistência da M9-D603 em reexecução)
+
+/** Remove, como superusuário do banco descartável, tudo o que os testes com commit deixaram (o gatilho de imutabilidade é contornado só aqui). */
+async function purgeCommitted() {
+  if (!committedCodes.size) return;
+  const codes = [...committedCodes];
+  await env.admin.transaction(async (transaction) => {
+    await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
+    const ids = '(SELECT id FROM analytics.metric_definitions WHERE metric_code IN (:codes))';
+    await env.admin.query(`DELETE FROM analytics.metric_snapshots WHERE metric_id IN ${ids}`, { replacements: { codes }, transaction });
+    await env.admin.query(`DELETE FROM analytics.metric_versions WHERE metric_id IN ${ids}`, { replacements: { codes }, transaction });
+    await env.admin.query('DELETE FROM analytics.metric_definitions WHERE metric_code IN (:codes)', { replacements: { codes }, transaction });
+  });
+  committedCodes.clear();
+}
 
 before(async () => {
   env = await sup.setup();
   fs.writeFileSync(path.join(env.formulaDir, 'soma_sem_hoje.js'), V2_FORMULA);
   catalog = registry.createFormulaCatalog(env.formulaDir);
 });
-after(() => sup.teardown(env));
+after(async () => {
+  await purgeCommitted();
+  await sup.teardown(env);
+});
 
 const inA = (fn, opts) => inTx(env.tenantA, opts || {}, fn);
 const ctx = (perms) => ctxOf(env.tenantA, perms);
@@ -175,6 +193,7 @@ test('m9d604 versão com início no passado é recusada', async () => {
 
 test('m9d604 duas versões simultâneas em 2 conexões', async () => {
   const { definition } = await inA((tx) => publishV1(tx), { commit: true });
+  committedCodes.add(definition.metric_code);
   const attempt = () => inA((tx) => publishV2(definition.metric_code, tx), { commit: true });
   const results = await Promise.allSettled([attempt(), attempt()]);
   const ok = results.filter((r) => r.status === 'fulfilled');
@@ -216,6 +235,7 @@ test('m9d604 asOf sem snapshot devolve 404 sem calcular', async () => {
 
 test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTTP)', async () => {
   const code = metricInput(env).metricCode;
+  committedCodes.add(code);
   await inA(async (tx) => {
     const r1 = await registry.publishMetric(metricInput(env, { metricCode: code }), ctx(), tx, { catalog });
     const r2 = await publishV2(code, tx);
