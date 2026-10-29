@@ -10,6 +10,7 @@ const { readObraOwner } = require('../../../read-models/obraKpi.settings');
 
 const KPI_DEFINITIONS = Object.freeze([
   ...require('./definitions.custo').DEFINITIONS, // M9-D650
+  ...require('./definitions.operacao').DEFINITIONS, // M9-D651
 ]);
 
 /** Entrada completa de `publishMetric` (escopo da empresa, para o owner seguir o parâmetro de cada empresa). */

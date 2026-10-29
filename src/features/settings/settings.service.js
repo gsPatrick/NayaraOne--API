@@ -54,6 +54,7 @@ const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-m
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
+const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraOperacaoKpi.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
@@ -264,6 +265,8 @@ const SETTINGS_SCHEMA = {
   ...OBRA_SETTINGS_SCHEMA,
   // Marco 9, M9-D650 — KPIs de Obras no BI (avanço, custo e margem): owner de cada indicador.
   ...OBRA_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D651 — KPIs de Obras no BI (atrasos, medições e não conformidades): owner de cada indicador e limite de não conformidade sem causa.
+  ...OBRA_OPERACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D619 — read models do Jurídico: status que tiram o processo de "ativo".
   ...JURIDICO_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.

@@ -11,6 +11,7 @@
  *     columns: { period: 'settled_at', status: 'status', nature: 'nature', equals: { thirdParty: 'is_third_party_funds' } },
  *     valueColumn: 'amount', valueSign: { column: 'nature', negative: ['PAYABLE'] },   // modo SUM
  *     unlinked: { table: 'finance.reconciliations', column: 'bank_transaction_id' },     // só linhas SEM nenhuma linha apontando para elas (M9-D624)
+ *     predicates: [(filter) => ({ sql: '(t."stage" NOT IN (:x))', replacements: { x: [...] } })],  // condições FIXAS do código (M9-D631), em AND com o filtro; a tabela é `t`; valores por parâmetro
  *     addends: [(filter) => ({ sql: 'SELECT ... AS total', replacements: {} })],        // parcelas fora da tabela (ex.: saldo de abertura, M9-D620) somadas no modo SUM; sql FIXO do código, valores por parâmetro (:companyId já vem)
  *     flags: ['includeOpening'],                                                       // nomes de `equals` que não são coluna: só ligam/desligam uma parcela
  *     formulaId: '...', rowColumns: ['...'], formulaParams: {},                       // modo RECOMPUTE
@@ -46,6 +47,7 @@ function assertLeaf(spec) {
   if (spec.unlinked !== undefined && !(TABLE.test((spec.unlinked || {}).table || '') && IDENT.test((spec.unlinked || {}).column || ''))) fail(spec, 'unlinked exige table (schema.tabela) e column.');
   if (spec.addends !== undefined && !(Array.isArray(spec.addends) && spec.addends.every((a) => typeof a === 'function'))) fail(spec, 'addends deve listar funções (filtro) => { sql, replacements } | null.');
   if (spec.flags !== undefined && !(Array.isArray(spec.flags) && spec.flags.every((f) => FILTER_NAME.test(f)))) fail(spec, 'flags inválido.');
+  if (spec.predicates !== undefined && !(Array.isArray(spec.predicates) && spec.predicates.every((p) => typeof p === 'function'))) fail(spec, 'predicates deve listar funções (filtro) => { sql, replacements }.');
   if (spec.rowColumns !== undefined && !(Array.isArray(spec.rowColumns) && spec.rowColumns.every((c) => IDENT.test(c)))) fail(spec, 'rowColumns inválido.');
   if (spec.reconcileMode !== undefined && !MODES.includes(spec.reconcileMode)) fail(spec, 'reconcileMode inválido.');
   if (typeof spec.describe !== 'function') fail(spec, 'informe describe(filter) em linguagem de negócio.');

@@ -11,6 +11,7 @@ const { MODELS } = require('./models');
 
 const QUERIES = Object.freeze({
   ...require('./inputs.custo').QUERIES, // M9-D650
+  ...require('./inputs.operacao').QUERIES, // M9-D651
 });
 
 const T = (model) => `analytics.${model}`;

@@ -14,6 +14,7 @@ const { loadObraInput } = require('./inputs');
 const { sourceFilter } = require('./filters');
 const { publishedVersion, snapshotInputs } = require('./snapshotInputs');
 require('../../sourceSpecs.obras.custo'); // M9-D650
+require('../../sourceSpecs.obras.operacao'); // M9-D651
 
 /** Devolve [{ code, result, inputs }] (um por KPI publicado com base no read model). */
 async function buildObraKpiEntries(scope, asOfDate, transaction) {

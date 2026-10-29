@@ -16,6 +16,11 @@ function buildWhere(spec, filter) {
     const [schema, table] = spec.unlinked.table.split('.');
     parts.push(`NOT EXISTS (SELECT 1 FROM "${schema}"."${table}" u WHERE u."${spec.unlinked.column}" = ${col(spec.idColumn)})`);
   }
+  for (const predicate of spec.predicates || []) { // parte FIXA da origem em código (M9-D631): condição própria do KPI, com valores por parâmetro
+    const p = predicate(filter);
+    parts.push(p.sql);
+    Object.assign(replacements, p.replacements);
+  }
   const c = spec.columns || {};
   if (filter.period) {
     if (!c.period) throw new Error(`Origem ${spec.metricCode}: não declara coluna de período.`);
