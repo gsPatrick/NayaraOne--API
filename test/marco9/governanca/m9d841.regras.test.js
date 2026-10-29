@@ -85,3 +85,22 @@ test('m9d841 isolamento entre empresas', { skip: skip() }, async () => {
   const rows = (await env.adminQuery("SELECT count(*)::int AS n FROM governance.api_consumers WHERE company_id = $1 AND id = $2", [B.companyId, mine.id])).rows[0].n;
   assert.equal(rows, 0);
 });
+
+test('m9d841 semente do front web por empresa', { skip: skip() }, async () => {
+  const { Sequelize } = require('sequelize');
+  const migration = require('../../../migrations/20260101000844-seed-governance-web-api-consumer');
+  const admin = new Sequelize(process.env.DATABASE_ADMIN_URL, { logging: false });
+  try {
+    await env.adminQuery("DELETE FROM governance.api_consumers WHERE app_key = 'nayara-web'");
+    await migration.up({ sequelize: admin });
+    await migration.up({ sequelize: admin }); // idempotente
+    for (const tenant of [A, B]) {
+      const rows = (await env.adminQuery("SELECT * FROM governance.api_consumers WHERE company_id = $1 AND app_key = 'nayara-web'", [tenant.companyId])).rows;
+      assert.equal(rows.length, 1, 'uma linha por empresa');
+      const oldest = (await env.adminQuery("SELECT user_id FROM core.user_memberships WHERE company_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL ORDER BY created_at, id LIMIT 1", [tenant.companyId])).rows[0].user_id;
+      assert.deepEqual([rows[0].kind, rows[0].status, rows[0].api_version_used, rows[0].owner_user_id], ['APP', 'ACTIVE', 1, oldest]);
+    }
+    const forced = (await env.adminQuery("SELECT relname, relforcerowsecurity FROM pg_class WHERE relname IN ('companies', 'user_memberships') AND relnamespace = 'core'::regnamespace ORDER BY 1")).rows;
+    assert.ok(forced.every((row) => row.relforcerowsecurity), 'o FORCE RLS volta ao estado anterior depois da semente');
+  } finally { await admin.close(); }
+});
