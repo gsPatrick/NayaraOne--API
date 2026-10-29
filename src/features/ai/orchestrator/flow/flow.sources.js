@@ -5,7 +5,8 @@ const { loadInjectionLimits } = require('../injectionDetector');
 const { loadGroundingSettings } = require('../grounding');
 const { semAcento } = require('../numbers/decimalText');
 const runs = require('../runs');
-const { executionCeiling } = require('./flow.retrieve');
+const { executionCeiling, providerPolicy } = require('./flow.retrieve');
+const { memorySources } = require('./flow.memory');
 
 const AVISO_RESTRITO = 'Parte do conteúdo restrito não foi usada.';
 const CLASSES = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
@@ -51,7 +52,9 @@ async function fetchSources(state) {
   state.injectionLimits = limits;
   await screenUserInput(state.parsed.input, { limits, ctx: state.ctx, runId: state.runId, transaction: state.transaction });
   state.execution = await executionCeiling({ registry: state.deps.registry, ctx: state.ctx, agent: state.agent, decision: state.decision, transaction: state.transaction });
-  if (!(await needsSources(state)) || typeof state.deps.retrieve !== 'function') return [];
+  const policy = await providerPolicy(state.deps.registry, state.ctx, state.decision && state.decision.provider, state.transaction);
+  state.sources.push(...(await memorySources(state, policy)));
+  if (!(await needsSources(state)) || typeof state.deps.retrieve !== 'function') return state.sources;
   const found = await state.deps.retrieve({
     ctx: state.ctx, execCtx: state.execCtx, agent: state.agent, taskType: state.parsed.taskType, input: state.parsed.input, purpose: state.parsed.purpose,
     runId: state.runId, execution: state.execution, decision: state.decision, transaction: state.transaction,

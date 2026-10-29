@@ -22,6 +22,7 @@ function parseRunInput(raw) {
     correlationId: data.correlationId || null,
     requiredCapabilities: Array.isArray(data.requiredCapabilities) ? data.requiredCapabilities.filter((c) => typeof c === 'string') : [],
     snapshotAt: data.snapshotAt || null,
+    subject: data.subject && typeof data.subject === 'object' && typeof data.subject.type === 'string' && data.subject.id !== undefined ? { type: data.subject.type, id: String(data.subject.id) } : undefined,
   };
 }
 

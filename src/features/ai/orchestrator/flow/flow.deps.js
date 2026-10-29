@@ -12,6 +12,7 @@ let sharedRouter = null;
  *  - `router` (D012) e `registry` (D011, ProviderRegistry); `toolRegistry` (D016);
  *  - `retrieve({ ctx, execCtx, agent, taskType, input, purpose, runId, execution, decision, transaction })` -> fontes autorizadas; o padrão busca no
  *    índice do RAG (`RetrievalService.search`, D023) com o teto do agente em `execution`; `null` desliga a busca;
+ *  - `aiAccess` (guarda de campos da IA, M9-D915): sem ele o ContextBuilder da D027 não monta contexto e nenhuma memória entra no run;
  *  - `fallbackSelector({ decision, error, attempt, ctx, transaction })` -> próxima decisão equivalente ou 503 AI_FALLBACK_UNSAFE (D013);
  *  - `clock()` em ms (prazo total do run) e `onSpan(evento)` (trilha dos 12 passos).
  */
@@ -23,6 +24,7 @@ function resolveDeps(deps = {}) {
     toolRegistry: deps.toolRegistry || getToolRegistry(),
     retrieve: deps.retrieve === undefined ? retrieveFromIndex : deps.retrieve,
     fallbackSelector: deps.fallbackSelector || null,
+    aiAccess: deps.aiAccess || null,
     clock: deps.clock || Date.now,
     onSpan: deps.onSpan || null,
   };

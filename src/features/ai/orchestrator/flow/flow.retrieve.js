@@ -48,4 +48,4 @@ async function retrieveFromIndex({ ctx, execution, input, purpose, runId, transa
   });
 }
 
-module.exports = { retrieveFromIndex, executionCeiling, sourceTypesOf };
+module.exports = { retrieveFromIndex, executionCeiling, providerPolicy, sourceTypesOf };
