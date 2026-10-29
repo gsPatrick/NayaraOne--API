@@ -110,9 +110,9 @@ test('adv_nay_tenta_pagar_ou_alterar_banco_vira_proposta_ou_nega', async () => {
 
 test('m9d019_alterar_conta_bancaria_sem_tool_de_escrita_403', async () => {
   const { buildDefaultRegistry } = require('../../../src/features/ai/tools');
-  const registry = await buildDefaultRegistry(['crm:opportunities:read', 'people:read', 'radar:read', 'finance:read', 'construction:read', 'legal:read', 'correspondent:read', 'ai:use', 'crm:tasks:create', 'finance:create', 'legal:create', 'inventory:read']);
+  const registry = await buildDefaultRegistry(['crm:opportunities:read', 'people:read', 'radar:read', 'finance:read', 'construction:read', 'legal:read', 'correspondent:read', 'ai:use', 'crm:tasks:create', 'finance:create', 'legal:create', 'inventory:read', 'properties:read']);
   const escritas = registry.list().filter((d) => d.category === 'WRITE');
-  assert.deepEqual(escritas.map((d) => d.name).sort(), ['crm.createFollowUpTask', 'finance.proposePayment', 'legal.draftContract']);
+  assert.deepEqual(escritas.map((d) => d.name).sort(), ['crm.createFollowUpTask', 'crm.createHandoffTask', 'finance.proposePayment', 'legal.draftContract']);
   assert.equal(escritas.some((d) => d.domain === 'BANKING'), false);
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const { executeTool } = require('../../../src/features/ai/tools/toolExecutor');
