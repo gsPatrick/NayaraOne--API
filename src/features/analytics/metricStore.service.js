@@ -205,9 +205,9 @@ async function publishMetricVersion(input, ctx, transaction) {
     const [[version]] = await sequelize.query(
       `INSERT INTO analytics.metric_versions
          (company_id, group_id, metric_id, version, formula_id, formula_semantic, source_read_model, dimensions, filters, unit,
-          refresh_policy, quality_rule, value_nature, formula_test_hash, valid_from, published_by, change_reason, formula_params)
+          refresh_policy, quality_rule, value_nature, formula_test_hash, formula_code_hash, valid_from, published_by, change_reason, formula_params)
        VALUES (:companyId, :groupId, :metricId, :version, :formulaId, :formulaSemantic, :sourceReadModel, CAST(:dimensions AS jsonb),
-          CAST(:filters AS jsonb), :unit, CAST(:refreshPolicy AS jsonb), CAST(:qualityRule AS jsonb), :valueNature, :formulaTestHash,
+          CAST(:filters AS jsonb), :unit, CAST(:refreshPolicy AS jsonb), CAST(:qualityRule AS jsonb), :valueNature, :formulaTestHash, :formulaCodeHash,
           :validFrom, :actor, :changeReason, CAST(:formulaParams AS jsonb))
        RETURNING *`,
       {
@@ -217,7 +217,7 @@ async function publishMetricVersion(input, ctx, transaction) {
           dimensions: JSON.stringify(input.dimensions || []), filters: JSON.stringify(input.filters || {}),
           unit: input.unit, refreshPolicy: JSON.stringify(input.refreshPolicy),
           qualityRule: input.qualityRule == null ? null : JSON.stringify(input.qualityRule),
-          valueNature: input.valueNature, formulaTestHash: input.formulaTestHash || null, validFrom: input.validFrom,
+          valueNature: input.valueNature, formulaTestHash: input.formulaTestHash || null, formulaCodeHash: input.formulaCodeHash || null, validFrom: input.validFrom,
           actor: ctx?.actorUserId || null, changeReason: input.changeReason || null,
           formulaParams: JSON.stringify(input.formulaParams || {}),
         },

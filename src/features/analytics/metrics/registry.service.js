@@ -59,7 +59,7 @@ async function publishMetric(input, ctx, transaction, options = {}) {
     definitionId: definition.id, formulaId: input.formulaId, formulaSemantic: input.formulaSemantic,
     sourceReadModel: input.sourceReadModel, dimensions: input.dimensions, filters: input.filters, unit: input.unit,
     refreshPolicy: input.refreshPolicy, qualityRule: input.qualityRule, valueNature: input.valueNature,
-    formulaTestHash, formulaParams: input.formulaParams, validFrom: input.validFrom, expectedVersion: input.version - 1, changeReason: input.changeReason,
+    formulaTestHash, formulaCodeHash: (options.catalog || getFormulaCatalog()).codeHash(input.formulaId), formulaParams: input.formulaParams, validFrom: input.validFrom, expectedVersion: input.version - 1, changeReason: input.changeReason,
   }, ctx, transaction);
   return { definition: { ...definition, status: 'PUBLISHED', current_version_id: version.id }, version };
 }

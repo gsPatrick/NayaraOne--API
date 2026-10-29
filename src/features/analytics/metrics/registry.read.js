@@ -9,6 +9,8 @@ const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { getLatestSnapshot } = require('../metricStore.service');
 const { assertCanRead } = require('./registry.permission');
+const { natureLabel } = require('./registry.natures');
+const { buildFreshness } = require('./freshness');
 const { assertDomainAccess, loadDomainMap, domainPermissionOf, has } = require('../security');
 
 const ORDER_SCOPE = 'ORDER BY (d.company_id IS NULL), (d.group_id IS NULL)';
@@ -69,11 +71,13 @@ async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, 
     status: snapshot.status,
     version: version.version,
     valueNature: version.value_nature,
+    valueNatureLabel: natureLabel(version.value_nature),
     asOfDate,
     revisionNo: snapshot.revision_no,
     sourceSnapshotAt: snapshot.source_snapshot_at,
     refreshedAt: snapshot.refreshed_at,
     sourceRefs: snapshot.source_refs,
+    freshness: buildFreshness(asOfDate, snapshot), // M9-D614 regra 5
   };
 }
 

@@ -13,6 +13,7 @@ const { findDefinition } = require('./registry.read');
 const { getFormulaCatalog } = require('./formulaCatalog');
 const { recalculate } = require('./reproduction');
 const { natureLabel } = require('./registry.natures');
+const { buildFreshness } = require('./freshness');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 
@@ -44,6 +45,7 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
     sourceSnapshotAt: snapshot.source_snapshot_at,
     refreshedAt: snapshot.refreshed_at,
     sourceRefs: snapshot.source_refs,
+    freshness: buildFreshness(asOfDate, snapshot), // M9-D614 regra 5: toda resposta de métrica traz freshness
   };
 }
 

@@ -30,7 +30,7 @@ function isFormulaFile(name) {
   return name.endsWith('.js') && !name.endsWith('.test.js') && !name.startsWith('_') && !SKIP.has(name);
 }
 
-function loadFormulas(dir) {
+function loadFormulas(dir, codeHashes) {
   const byId = new Map();
   if (!fs.existsSync(dir)) return byId;
   for (const name of fs.readdirSync(dir).filter(isFormulaFile).sort()) {
@@ -40,13 +40,16 @@ function loadFormulas(dir) {
     }
     if (byId.has(f.id)) throw new Error(`Fórmula duplicada no código: ${f.id}.`);
     byId.set(f.id, f);
+    codeHashes.set(f.id, createHash('sha256').update(fs.readFileSync(path.join(dir, name))).digest('hex'));
   }
   return byId;
 }
 
 function createFormulaCatalog(dir = DEFAULT_DIR) {
-  const byId = loadFormulas(dir);
+  const codeHashes = new Map(); // M9-D614 regra 4: SHA-256 do ARQUIVO da fórmula, guardado na versão publicada (formula_code_hash)
+  const byId = loadFormulas(dir, codeHashes);
   return {
+    codeHash: (id) => codeHashes.get(id) || null,
     has: (id) => byId.has(id),
     get: (id) => byId.get(id) || null,
     ids: () => [...byId.keys()],

@@ -89,7 +89,7 @@ async function publishInside(code, input, ctx, savepoint, options) {
   const formulaTestHash = checkFormula(merged, options.catalog || getFormulaCatalog());
   const version = await store.publishMetricVersion({
     definitionId: def.id, ...after,
-    formulaTestHash, validFrom: input.validFrom, expectedVersion: previous.version, changeReason: input.changeReason.trim(),
+    formulaTestHash, formulaCodeHash: (options.catalog || getFormulaCatalog()).codeHash(merged.formulaId), validFrom: input.validFrom, expectedVersion: previous.version, changeReason: input.changeReason.trim(),
   }, ctx, savepoint);
   await registrarAuditoria({
     groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: ctx.actorUserId, action: 'analytics.metric.version_published',
