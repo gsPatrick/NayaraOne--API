@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const catchAsync = require('../../utils/catchAsync');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { requireAnyPermission } = require('./governance.anyPermission');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { getSetting } = require('../../features/settings/settings.service');
 const { govModuleDisabled } = require('./governance.errors');
@@ -35,7 +36,8 @@ function buildModuleRouter(mod, routeDefs) {
   const router = Router();
   router.use(mod.prefix, authMiddleware, tenantMiddleware);
   for (const def of routeDefs) {
-    router[def.method](def.path, ...(def.before || []), requirePermission(def.permission), requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
+    const gate = Array.isArray(def.permission) ? requireAnyPermission(def.permission) : requirePermission(def.permission);
+    router[def.method](def.path, ...(def.before || []), gate, requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
   }
   return router;
 }
