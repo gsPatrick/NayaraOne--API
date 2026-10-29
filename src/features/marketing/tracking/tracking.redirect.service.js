@@ -8,6 +8,7 @@ const signing = require('./tracking.signing');
 const { recordEvent } = require('./tracking.events.service');
 const { withUtms } = require('./tracking.url');
 const { linkNotFound } = require('./tracking.errors');
+const trackingConsent = require('../suppression/trackingConsent');
 
 const SHORT_CODE_RE = /^[A-Za-z0-9_-]{4,64}$/;
 const MINUTE_MS = 60000;
@@ -38,8 +39,9 @@ async function identifyClick(routing, link, token, transaction) {
   if (!messageId) return null;
   const message = await eventsRepo.findMessage(messageId, transaction);
   if (!message || !message.person_id) return null;
-  const { canContact } = require('../../../features/people/personConsents.service');
-  if (!(await canContact({ id: message.person_id }, message.channel, 'MARKETING', transaction))) return null;
+  const tenant = { groupId: routing.group_id, companyId: routing.company_id };
+  const decision = await trackingConsent.mayIdentify(message.person_id, message.channel, tenant, transaction);
+  if (!decision.identify) return null; // supressão ativa, OPT_OUT ou sem OPT_IN: clique anônimo (M9-D419 regra 4)
   return { personId: message.person_id, messageId };
 }
 
