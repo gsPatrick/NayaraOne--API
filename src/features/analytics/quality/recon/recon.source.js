@@ -83,7 +83,9 @@ async function reconcileRows(ctx) {
 }
 
 /** Linha com algum número diferente de zero (agregado de empresa vazia devolve uma linha de zeros: não é fonte populada). */
-const hasData = (fields) => Object.values(fields).some((v) => typeof v !== 'object' && v !== null && v !== '' && Number(v) !== 0 && !Number.isNaN(Number(v)));
+/** Campo que só repete um parâmetro do administrador (janela em dias, ex.: `losses_window_days`) não é dado da fonte. */
+const PARAMETER_FIELD = /_window_days$/;
+const hasData = (fields) => Object.entries(fields).some(([name, v]) => !PARAMETER_FIELD.test(name) && typeof v !== 'object' && v !== null && v !== '' && Number(v) !== 0 && !Number.isNaN(Number(v)));
 
 /** Quantas linhas com dados a fonte tem hoje (para a regra "zero linhas com a fonte cheia"): recalcula as chaves da fonte (as mais novas, limitadas). */
 async function sourceRowCount(ctx) {
