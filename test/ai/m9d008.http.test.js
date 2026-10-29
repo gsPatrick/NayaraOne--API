@@ -77,7 +77,8 @@ after(async () => {
   setTimeout(() => process.exit(0), 300);
 });
 
-const FK = 'politica.desconto.http';
+// factKey único por execução: o teste grava com commit (HTTP real) e precisa ser repetível no mesmo banco.
+const FK = `politica.desconto.http.${require('node:crypto').randomUUID().slice(0, 8)}`;
 const NOVA = { factKey: FK, subjectType: 'politica', title: 'Desconto máximo', value: { percentual: 5 }, classification: 'INTERNAL' };
 
 test('m9d008_http_ciclo_cadastrar_homologar_versionar_revogar', { skip: SKIP }, async () => {
