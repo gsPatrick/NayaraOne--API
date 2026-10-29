@@ -3,6 +3,7 @@
 const { createAnalyticsRouter, router } = require('./routes');
 const readOnly = require('./readOnly');
 const readModels = require('./read-models'); // liga o worker de eventos dos read models ao outbox (M9-D607)
+require('./quality'); // liga os checks de qualidade ao fim de cada refresh e ao rebuild (M9-D696)
 
 /**
  * src/features/analytics — camada de leitura gerencial do Marco 9 (BI e Centro de Comando). Esta entrada exporta o router de
