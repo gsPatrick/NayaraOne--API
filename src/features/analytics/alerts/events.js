@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * M9-D691 (5) — eventos `analytics.alert.opened`, `analytics.alert.acknowledged` e `analytics.alert.resolved`. O aviso só sai DEPOIS do commit da
+ * M9-D691 (5) — eventos `analytics.alert.opened`, `analytics.alert.acknowledged`, `analytics.alert.resolved` e `analytics.alert.owner_fallback` (M9-D692). O aviso só sai DEPOIS do commit da
  * transação que gravou a mudança (transação desfeita = nenhum aviso). Quem notifica o owner e abre a tarefa (M9-D692) assina com `onAlertEvent`.
  * O payload traz o código da métrica e os ids, nunca o valor: alerta de métrica restrita não vaza número pela notificação.
  */
 const logger = require('../../../utils/logger');
 
 const listeners = [];
-const TYPES = Object.freeze({ OPENED: 'analytics.alert.opened', ACKNOWLEDGED: 'analytics.alert.acknowledged', RESOLVED: 'analytics.alert.resolved' });
+const TYPES = Object.freeze({ OPENED: 'analytics.alert.opened', ACKNOWLEDGED: 'analytics.alert.acknowledged', RESOLVED: 'analytics.alert.resolved', OWNER_FALLBACK: 'analytics.alert.owner_fallback' });
 
 /** fn(payload). Devolve a função que cancela a assinatura. */
 function onAlertEvent(fn) {

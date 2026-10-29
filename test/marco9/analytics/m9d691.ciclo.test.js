@@ -39,7 +39,7 @@ test('m9d691 condição repetida com instância OPEN só incrementa ocorrências
   assert.equal(rows[0].opened_at.toISOString(), at('10:00'));
   assert.equal(rows[0].last_evaluated_at.toISOString(), at('10:30'));
   assert.equal(env.events.filter((x) => x.type === 'analytics.alert.opened' && x.alertCode === def.alert_code).length, 1, 'avisa o owner uma vez só (dedupe)');
-  assert.equal(env.events.find((x) => x.alertCode === def.alert_code).ownerRole, 'CFO');
+  assert.equal(env.events.find((x) => x.alertCode === def.alert_code && x.type === 'analytics.alert.opened').ownerRole, 'CFO');
 });
 
 test('m9d691 alerta repetido respeita cooldown e não duplica', async () => {

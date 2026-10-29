@@ -8,6 +8,8 @@
  *  analytics.alert.avaliacoes_para_resolver    avaliações normais seguidas para resolver (a política da definição prevalece)
  *  analytics.alert.intervalo_avaliacao_min     de quantos em quantos minutos o job reavalia cada empresa
  *  analytics.alert.owner_reserva               papel que recebe o alerta semente quando a métrica não tem owner (e o reserva do owner removido, M9-D692)
+ *  analytics.alert.prazo_tarefa_horas          prazo (horas) da tarefa que o alerta CRITICAL com tarefa cria (M9-D692)
+ *  analytics.alert.link_painel                 caminho do painel para onde o aviso e a tarefa apontam (M9-D692)
  *  analytics.alerta_semente.<chave>            limiar, severidade e tarefa de cada alerta semente (ver seed.catalog.js)
  */
 const AppError = require('../../../utils/AppError');
@@ -19,11 +21,13 @@ const KEYS = Object.freeze({
   toResolve: 'analytics.alert.avaliacoes_para_resolver',
   interval: 'analytics.alert.intervalo_avaliacao_min',
   ownerFallback: 'analytics.alert.owner_reserva',
+  taskHours: 'analytics.alert.prazo_tarefa_horas',
+  panelLink: 'analytics.alert.link_painel',
 });
 const SEVERITY_LEVELS = Object.freeze(['INFO', 'WARNING', 'CRITICAL']);
 const DEFAULT_COOLDOWNS = Object.freeze({ INFO: 240, WARNING: 120, CRITICAL: 60 });
 const DEFAULTS = Object.freeze({
-  [KEYS.cooldown]: 'INFO 240; WARNING 120; CRITICAL 60', [KEYS.toResolve]: 2, [KEYS.interval]: 5, [KEYS.ownerFallback]: 'Diretoria',
+  [KEYS.cooldown]: 'INFO 240; WARNING 120; CRITICAL 60', [KEYS.toResolve]: 2, [KEYS.interval]: 5, [KEYS.ownerFallback]: 'Diretoria', [KEYS.taskHours]: 24, [KEYS.panelLink]: '/painel/centro-de-comando',
   ...Object.fromEntries(SEEDS.map((s) => [settingKey(s), s.default])),
 });
 
@@ -47,11 +51,15 @@ const validateFreshnessSeed = (key, value) => {
   if (!parseSeedText(value) || parseSeedText(value).kind !== 'FRESHNESS') throw bad(key, 'não segue o formato: métrica CRITICAL em STALE, <INFO|WARNING|CRITICAL>[ com tarefa].');
 };
 
+const validatePanelLink = (key, value) => { if (!/^\/[A-Za-z0-9/_-]*$/.test(String(value ?? ''))) throw bad(key, 'deve ser um caminho do painel começando por "/", por exemplo: /painel/centro-de-comando.'); };
+
 const BI_ALERT_SETTINGS_SCHEMA = {
   [KEYS.cooldown]: { type: 'string', validate: validateCooldowns },
   [KEYS.toResolve]: { type: 'integer', min: 1, max: 100 },
   [KEYS.interval]: { type: 'integer', min: 1, max: 1440 },
   [KEYS.ownerFallback]: { type: 'string' },
+  [KEYS.taskHours]: { type: 'integer', min: 1, max: 720 },
+  [KEYS.panelLink]: { type: 'string', validate: validatePanelLink },
   ...Object.fromEntries(SEEDS.map((s) => [settingKey(s), { type: 'string', validate: s.kind === 'FRESHNESS' ? validateFreshnessSeed : validateSeed }])),
 };
 
@@ -69,6 +77,8 @@ async function readAlertParams(scope, transaction) {
     toResolve: positiveInt(get(KEYS.toResolve), DEFAULTS[KEYS.toResolve]),
     intervalMinutes: positiveInt(get(KEYS.interval), DEFAULTS[KEYS.interval]),
     ownerFallback: owner || DEFAULTS[KEYS.ownerFallback],
+    taskHours: positiveInt(get(KEYS.taskHours), DEFAULTS[KEYS.taskHours]),
+    panelLink: /^\/[A-Za-z0-9/_-]*$/.test(String(get(KEYS.panelLink) ?? '')) ? get(KEYS.panelLink) : DEFAULTS[KEYS.panelLink],
     seeds: Object.fromEntries(SEEDS.map((s) => [s.key, parseSeedText(get(settingKey(s))) || parseSeedText(s.default)])),
   };
 }

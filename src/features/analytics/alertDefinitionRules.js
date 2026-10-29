@@ -46,6 +46,11 @@ function assertOwner(input) {
   if (!input.ownerUserId && !hasRole) throw AppError.unprocessable(MSG.OWNER_REQUIRED, 'ANALYTICS_ALERT_OWNER_REQUIRED');
 }
 
+/** M9-D692: tarefa/ocorrência é só de alerta CRITICAL (o banco repete a regra no CHECK alert_definitions_task_only_critical). */
+function assertTaskOnlyCritical(input) {
+  if (input.createTask === true && input.severity !== 'CRITICAL') throw AppError.unprocessable(MSG.TASK_ONLY_CRITICAL, 'ANALYTICS_ALERT_TASK_ONLY_CRITICAL');
+}
+
 function assertCondition(input) {
   requireOneOf(input.conditionType, CONDITION_TYPES, 'Tipo de condição', CODE);
   const hasThreshold = input.threshold !== undefined && input.threshold !== null;
@@ -71,6 +76,7 @@ function validateAlertDefinition(input) {
   assertNoPaymentAction(input);
   assertOwner(input);
   assertCondition(input);
+  assertTaskOnlyCritical(input);
   if (typeof input.alertCode !== 'string' || !ALERT_CODE_RE.test(input.alertCode)) {
     throw invalid(CODE, 'O código do alerta deve usar minúsculas, números e "_", começando por letra.');
   }

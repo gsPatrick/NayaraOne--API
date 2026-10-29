@@ -13,6 +13,7 @@ const MSG = {
   CONDITION_INVALID: 'Informe um limite simples OU uma regra do Motor de Regras.',
   RULE_NOT_PUBLISHED: 'A regra escolhida não está publicada.',
   ACTION_FORBIDDEN: 'Alerta não pode disparar pagamento.',
+  TASK_ONLY_CRITICAL: 'Somente alertas críticos podem criar tarefa ou ocorrência.',
   INSTANCE_ACTIVE: 'Já existe um alerta ativo para esta condição (mesmo fingerprint).',
   INSTANCE_TRANSITION: 'Esta mudança de estado do alerta não é permitida.',
   DEFINITION_CONFLICT: 'Já existe uma definição de alerta com este código e versão (ou outra já publicada).',
@@ -24,6 +25,7 @@ function mapAlertDbError(err) {
   if (code === 'ANA11') return AppError.conflict(MSG.INSTANCE_TRANSITION, 'ANALYTICS_ALERT_INSTANCE_TRANSITION_INVALID');
   if (code === 'ANA12') return AppError.unprocessable(MSG.ACTION_FORBIDDEN, 'ANALYTICS_ALERT_ACTION_FORBIDDEN');
   if (code === 'ANA13') return AppError.unprocessable(MSG.RULE_NOT_PUBLISHED, 'ANALYTICS_ALERT_RULE_NOT_PUBLISHED');
+  if (code === '23514' && /alert_definitions_task_only_critical/.test(constraint)) return AppError.unprocessable(MSG.TASK_ONLY_CRITICAL, 'ANALYTICS_ALERT_TASK_ONLY_CRITICAL');
   if (code === '23514' && /alert_definitions_owner_required/.test(constraint)) return AppError.unprocessable(MSG.OWNER_REQUIRED, 'ANALYTICS_ALERT_OWNER_REQUIRED');
   if (code === '23514' && /alert_definitions_(condition_valid|threshold_shape)/.test(constraint)) {
     return AppError.unprocessable(MSG.CONDITION_INVALID, 'ANALYTICS_ALERT_CONDITION_INVALID');

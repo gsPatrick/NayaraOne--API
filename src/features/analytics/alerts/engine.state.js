@@ -13,6 +13,7 @@ const { sequelize } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const instances = require('./engine.instances');
 const { emitAlertEvent, TYPES } = require('./events');
+const { applyOpenEffects } = require('./open.effects');
 
 const addMinutes = (date, minutes) => new Date(new Date(date).getTime() + minutes * 60000);
 
@@ -30,7 +31,7 @@ function evaluationsToResolve(def, params) {
 function eventBase(def, row, scope) {
   return {
     instanceId: row.id, alertDefinitionId: def.id, alertCode: def.alert_code, metricCode: row.metric_code, severity: row.severity, companyId: scope.companyId, groupId: scope.groupId,
-    ownerUserId: def.owner_user_id || null, ownerRole: def.owner_role || null, createTask: def.create_task === true, fingerprint: row.fingerprint,
+    ownerUserId: def.owner_user_id || null, ownerRole: def.owner_role || null, createTask: def.create_task === true, taskId: row.task_id || null, fingerprint: row.fingerprint,
   };
 }
 
@@ -42,7 +43,11 @@ async function repeat(active, input, transaction) {
 async function open(ctx, input, transaction) {
   const { def, scope, fingerprint, metricCode } = ctx;
   try {
-    const row = await sequelize.transaction({ transaction }, (savepoint) => instances.insertOpen({ def, scope, fingerprint, metricCode, ...input }, savepoint));
+    // M9-D692: tarefa, aviso e reserva do owner na mesma transação da abertura; qualquer falha desfaz a instância inteira
+    const row = await sequelize.transaction({ transaction }, async (savepoint) => {
+      const inserted = await instances.insertOpen({ def, scope, fingerprint, metricCode, ...input }, savepoint);
+      return applyOpenEffects({ def, scope, params: ctx.params, now: input.now }, inserted, savepoint);
+    });
     emitAlertEvent(transaction, { type: TYPES.OPENED, ...eventBase(def, row, scope), openedAt: row.opened_at });
     return { action: 'OPENED', instance: row };
   } catch (err) {

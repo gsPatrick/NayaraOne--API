@@ -8,6 +8,8 @@ const transitions = require('./transitions');
 const { fingerprintOf } = require('./fingerprint');
 const { compareThreshold } = require('./decimal');
 const settings = require('./engine.settings');
+const ownerChange = require('./owner.change');
+const { buildNotification } = require('./notify.service');
 
 module.exports = {
   camada: 'alerts',
@@ -22,4 +24,6 @@ module.exports = {
   fingerprintOf,
   compareThreshold,
   readAlertParams: settings.readAlertParams,
+  changeAlertOwner: ownerChange.changeAlertOwner,
+  buildNotification,
 };

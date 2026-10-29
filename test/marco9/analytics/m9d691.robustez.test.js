@@ -72,7 +72,7 @@ test('m9d691 abertura e resolução emitem os eventos depois do commit', async (
   const def = await e.defineAlert(tenant, metric, { severity: 'CRITICAL', createTask: true, ownerRole: 'juridico-gestor' });
   await e.put(tenant, metric, { value: '1000', at: at('13:00') });
   await e.evaluate(tenant, at('13:00'));
-  const opened = env.events.filter((x) => x.alertCode === def.alert_code);
+  const opened = env.events.filter((x) => x.alertCode === def.alert_code && x.type !== 'analytics.alert.owner_fallback'); // o reserva do owner é da M9-D692
   assert.equal(opened.length, 1);
   assert.deepEqual([opened[0].type, opened[0].severity, opened[0].createTask, opened[0].ownerRole, opened[0].metricCode], ['analytics.alert.opened', 'CRITICAL', true, 'juridico-gestor', metric.code]);
   assert.ok(opened[0].instanceId && opened[0].companyId === tenant.companyId);
@@ -81,7 +81,7 @@ test('m9d691 abertura e resolução emitem os eventos depois do commit', async (
   await e.evaluate(tenant, at('13:05'));
   await e.put(tenant, metric, { value: '90000', at: at('13:10') });
   await e.evaluate(tenant, at('13:10'));
-  const types = env.events.filter((x) => x.alertCode === def.alert_code).map((x) => x.type);
+  const types = env.events.filter((x) => x.alertCode === def.alert_code && x.type !== 'analytics.alert.owner_fallback').map((x) => x.type);
   assert.deepEqual(types, ['analytics.alert.opened', 'analytics.alert.resolved']);
 });
 
