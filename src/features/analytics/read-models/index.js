@@ -9,6 +9,9 @@ const { readRefreshParams } = require('./readModel.settings');
 const { scheduleDue, afterRun } = require('./readModel.schedule');
 const { onBatchFlushed } = require('./readModel.batch');
 const { readAggregate, assertReadModelTable } = require('./readModel.read');
+const { rebuildReadModel } = require('./rebuild.service');
+const { onRebuildChecks } = require('./rebuild.checks');
+const { readRebuildParams } = require('./rebuild.settings');
 
 consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
 require('./financeiro-finance-health.readmodel'); // M9-D615: saúde financeira por empresa e data-base
@@ -28,4 +31,7 @@ module.exports = {
   onBatchFlushed,
   readAggregate,
   assertReadModelTable,
+  rebuildReadModel,
+  onRebuildChecks,
+  readRebuildParams,
 };

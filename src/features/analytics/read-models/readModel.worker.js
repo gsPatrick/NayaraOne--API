@@ -32,9 +32,9 @@ async function applyToModel(def, event, scope, params, transaction, now) {
   const key = def.aggregateKey(event, { now });
   if (!key) return { skipped: 1 };
   const [claimed] = await sequelize.query(
-    `INSERT INTO analytics.rm_applied_events (read_model, source_event_id, company_id, group_id, aggregate_id)
-     VALUES (:model, :eventId, :companyId, :groupId, :aggregateId) ON CONFLICT DO NOTHING RETURNING source_event_id`,
-    { replacements: { model: def.name, eventId: String(event.id), companyId: scope.companyId, groupId: scope.groupId, aggregateId: String(event.aggregateId || keyText(def, key)) }, transaction }
+    `INSERT INTO analytics.rm_applied_events (read_model, source_event_id, company_id, group_id, aggregate_id, aggregate_key)
+     VALUES (:model, :eventId, :companyId, :groupId, :aggregateId, :aggregateKey) ON CONFLICT DO NOTHING RETURNING source_event_id`,
+    { replacements: { model: def.name, eventId: String(event.id), companyId: scope.companyId, groupId: scope.groupId, aggregateId: String(event.aggregateId || keyText(def, key)), aggregateKey: keyText(def, key) }, transaction }
   );
   if (!claimed.length) {
     replayIgnored.inc({ read_model: def.name });

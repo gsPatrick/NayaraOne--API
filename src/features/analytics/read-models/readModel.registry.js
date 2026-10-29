@@ -12,6 +12,8 @@
  *     recompute: async ({ companyId, groupId, key, limit, asOfDate, now, event, transaction }) =>
  *       ({ fields: { balance: '120000.00' }, sourceSnapshotAt, truncated }),    // lê o ESTADO atual da fonte, nunca soma delta
  *     scheduled: { keys: async ({ companyId, groupId, limit, transaction }) => [{ account_id }] },   // só para quem depende do relógio
+ *     rebuild: { keys: async ({ companyId, groupId, transaction }) => [{ account_id }],   // M9-D608: TODOS os agregados da fonte da empresa
+ *               corrections: async ({ companyId, groupId, snapshotAt, transaction }) => [snapshotInput] },   // opcional: valores do passado a corrigir
  *   })
  *
  * `recompute` lê a fonte restrita ao agregado, com no máximo `limit` linhas (parâmetro analytics.refresh.max_linhas_agregado);
@@ -33,6 +35,9 @@ function assertDefinition(def) {
   if (!Array.isArray(def.eventTypes) || !def.eventTypes.every((t) => typeof t === 'string' && t)) throw new Error(`Read model ${def.name}: eventTypes inválido.`);
   if (typeof def.aggregateKey !== 'function' || typeof def.recompute !== 'function') throw new Error(`Read model ${def.name}: informe aggregateKey e recompute.`);
   if (def.scheduled && typeof def.scheduled.keys !== 'function') throw new Error(`Read model ${def.name}: scheduled.keys deve ser função.`);
+  if (def.rebuild && (typeof def.rebuild.keys !== 'function' || (def.rebuild.corrections && typeof def.rebuild.corrections !== 'function'))) {
+    throw new Error(`Read model ${def.name}: rebuild.keys (e rebuild.corrections, se houver) devem ser funções.`);
+  }
 }
 
 /** Liga o worker ao despacho de eventos (injetado por consumer.js para o registro não depender do outbox no carregamento). */

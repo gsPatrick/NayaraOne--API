@@ -153,7 +153,7 @@ test('m9d606 relógio injetável e nenhum KPI usa Date local do servidor', () =>
     const full = path.join(dir, e.name);
     if (e.isDirectory()) return walk(full);
     if (!e.name.endsWith('.js') || e.name === 'clock.js' || e.name === 'readOnly.readerRole.js') return null; // clock.js é o único relógio; o sonda do role usa TTL de cache, não data de KPI
-    const text = fs.readFileSync(full, 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    const text = fs.readFileSync(full, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n'); // sem comentários
     if (/new Date\(\s*\)|Date\.now\(|\.get(Month|Date|FullYear|Day|Hours|Minutes|Seconds|TimezoneOffset)\(/.test(text)) offenders.push(path.relative(root, full));
     return null;
   });

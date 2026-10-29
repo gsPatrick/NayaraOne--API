@@ -22,7 +22,7 @@ async function lockAggregate(def, companyId, key, transaction) {
 
 const keyText = (def, key) => JSON.stringify(def.keyColumns.map((c) => String(key[c])));
 
-async function upsertAggregate(def, { companyId, groupId, key, fields, sourceSnapshotAt }, transaction) {
+async function upsertAggregate(def, { companyId, groupId, key, fields, sourceSnapshotAt }, transaction, table = def.name) {
   for (const c of def.keyColumns) if (key[c] === undefined || key[c] === null) throw new Error(`Read model ${def.name}: chave sem ${c}.`);
   const fieldNames = Object.keys(fields || {});
   if (!fieldNames.every((f) => IDENT.test(f))) throw new Error(`Read model ${def.name}: nome de coluna inválido em fields.`);
@@ -37,7 +37,7 @@ async function upsertAggregate(def, { companyId, groupId, key, fields, sourceSna
   const updates = fieldNames.map((f) => `"${f}" = EXCLUDED."${f}"`);
   updates.push('source_snapshot_at = GREATEST(t.source_snapshot_at, EXCLUDED.source_snapshot_at)', 'refreshed_at = EXCLUDED.refreshed_at', 'version = EXCLUDED.version', 'group_id = EXCLUDED.group_id');
   await sequelize.query(
-    `INSERT INTO ${T(def.name)} AS t (${columns.map((c) => `"${c}"`).join(', ')}, source_snapshot_at, refreshed_at, version)
+    `INSERT INTO ${T(table)} AS t (${columns.map((c) => `"${c}"`).join(', ')}, source_snapshot_at, refreshed_at, version)
      VALUES (${values.join(', ')}, :snapshotAt, now(), :version)
      ON CONFLICT (company_id, ${def.keyColumns.map((c) => `"${c}"`).join(', ')}) DO UPDATE SET ${updates.join(', ')}`,
     { replacements, transaction }
