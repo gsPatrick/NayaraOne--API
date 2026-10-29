@@ -31,6 +31,7 @@ const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
+const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
@@ -245,6 +246,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
   // Marco 9, M9-D226 — contingência das integrações: testes de saúde para encerrar, prazo da fila por modo (e do banco), papéis avisados e responsável da tarefa manual.
   ...CONTINGENCY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D250 — ações do operador: tempo do teste de conexão, tentativas extras do retry humano e MFA na rotação de credencial.
+  ...ACTIONS_SETTINGS_SCHEMA,
   ...PUBLICATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,

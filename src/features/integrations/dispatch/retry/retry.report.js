@@ -18,7 +18,7 @@ const MENSAGENS = Object.freeze({
 /** Erro de integração do envio (alerta): só classe, código, status e contadores; sem conteúdo do envio e sem texto do fornecedor. */
 async function reportDispatchError(ctx, dispatch, { errorClass, errorCode, severity, message, httpStatus }, transaction) {
   return recordError(ctx, {
-    providerCode: dispatch.providerCode, connectionId: dispatch.connectionId, source: 'DISPATCH', errorClass, errorCode: errorCode || 'INTEGRATION_FAILED',
+    providerCode: dispatch.providerCode, connectionId: dispatch.connectionId, source: 'DISPATCH', sourceRefId: dispatch.id, errorClass, errorCode: errorCode || 'INTEGRATION_FAILED',
     message, operation: dispatch.operation, severity, httpStatus: Number.isInteger(httpStatus) ? httpStatus : undefined, attempts: Math.max(1, dispatch.attempts),
     dangerous: dispatch.criticalityOp === 'DANGEROUS', correlationId: dispatch.correlationId || undefined,
   }, transaction);

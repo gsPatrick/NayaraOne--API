@@ -9,6 +9,7 @@
  * `reconcileStrategy` (M9-D215, só em operação DANGEROUS): como o motor descobre, depois de um timeout, se o fornecedor executou a operação. Três
  *  consultas, nesta ordem: `key` (método do adapter que devolve o recurso criado com a chave de idempotência), `status` (operação de consulta do
  *  próprio port, chamada com o id externo) e `reference` (método que busca pela referência de negócio). Webhook que chega resolve por fora.
+ * `safeProbe` (M9-D250): consulta inócua, sem campo obrigatório, que o teste de conexão pode executar; nenhuma operação mutável carrega a marca.
  * `essential` (M9-D217): a operação atravessa o circuito aberto. Operação nova de um domínio sem linha aqui derruba o carregamento do port: a classe nunca fica implícita.
  */
 const op = (opClass, confirmation = 'ON_RESPONSE', finalStatuses = null, essential = false, reconcileStrategy = null) => Object.freeze({
@@ -18,6 +19,8 @@ const GENERICA = Object.freeze({ key: 'findByIdempotencyKey', reference: 'findBy
 /** Operação perigosa confirmada por status final, com as consultas de reconciliação (a de status é a operação de consulta do port). */
 const perigosa = (statusOp, extra = {}) => op('DANGEROUS', 'ON_STATUS', null, false, { ...GENERICA, status: statusOp, ...extra });
 const SAFE = op('SAFE');
+// Consulta SEM nenhum campo obrigatório e sem efeito (M9-D250): o teste de conexão pode chamá-la de verdade, com pedido vazio, para provar que a credencial abre a porta.
+const LEITURA_INOCUA = Object.freeze({ ...SAFE, safeProbe: true });
 // Essencial (M9-D217 3.3): confirmação e consulta de pagamento e de assinatura em andamento atravessam o circuito aberto; marketing, sincronização de listagem e métricas esperam.
 const ESSENCIAL = op('SAFE', 'ON_RESPONSE', null, true);
 // Envio de mensagem é SAFE no livro ("envio de mensagem de status"); só vira CONFIRMED com status final e recurso externo, senão fica SUBMITTED.
@@ -37,9 +40,9 @@ const OPERATION_POLICY = Object.freeze({
   FISCAL: Object.freeze({ issueNfse: perigosa('getNfseStatus'), getNfseStatus: SAFE, cancelNfse: SAFE }),
   SOCIAL: Object.freeze({ publishPost: perigosa('getPostStatus', { key: 'findPostByKey' }), getPostStatus: SAFE, deletePost: perigosa('getPostStatus', { key: null, reference: null }), findPostByKey: SAFE }),
   STORAGE: Object.freeze({ putObject: SAFE, getObject: SAFE, deleteObject: SAFE, headObject: SAFE, getSignedUrl: SAFE }),
-  IDENTITY: Object.freeze({ verifyToken: SAFE, getUserInfo: SAFE, revokeSession: SAFE, listJwks: SAFE }),
+  IDENTITY: Object.freeze({ verifyToken: SAFE, getUserInfo: SAFE, revokeSession: SAFE, listJwks: LEITURA_INOCUA }),
   AI: Object.freeze({ generate: SAFE, embed: SAFE, transcribe: SAFE, analyzeImage: SAFE }),
-  ANALYTICS: Object.freeze({ emitMetric: SAFE, emitEvent: SAFE, queryHealth: SAFE }),
+  ANALYTICS: Object.freeze({ emitMetric: SAFE, emitEvent: SAFE, queryHealth: LEITURA_INOCUA }),
 });
 
 module.exports = { OPERATION_POLICY };

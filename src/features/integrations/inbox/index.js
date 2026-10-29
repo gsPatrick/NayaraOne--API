@@ -4,11 +4,12 @@
 const { receiveEvent } = require('./inbox.receive');
 const { claimBatch, markProcessed, markFailed, rejectInvalid } = require('./inbox.worker');
 const { purgeWebhookInbox } = require('./inbox.retention');
+const { requeueDeadLetter } = require('./inbox.requeue');
 const { assertTransition } = require('./inbox.stateMachine');
 const { readInboxParams, PADROES } = require('./inbox.params');
 const { duplicatesCount } = require('./inbox.metrics');
 const { STATUSES, TRANSITIONS } = require('./inbox.constants');
 
 module.exports = {
-  receiveEvent, claimBatch, markProcessed, markFailed, rejectInvalid, purgeWebhookInbox, assertTransition, readInboxParams, PADROES, duplicatesCount, STATUSES, TRANSITIONS,
+  receiveEvent, claimBatch, markProcessed, markFailed, rejectInvalid, requeueDeadLetter, purgeWebhookInbox, assertTransition, readInboxParams, PADROES, duplicatesCount, STATUSES, TRANSITIONS,
 };

@@ -101,4 +101,4 @@ async function reconcileDue(ctx, { now = new Date(), limit = 50 } = {}) {
   return summary;
 }
 
-module.exports = { reconcileDispatch, reconcileDue, isDue, lockRow };
+module.exports = { reconcileDispatch, reconcileDue, isDue, lockRow, resolveTools };

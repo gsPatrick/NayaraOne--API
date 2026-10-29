@@ -40,6 +40,8 @@ function definePort(className, domain, operations, portVersion = '1') {
       confirmation: politica.confirmation,
       finalStatuses: politica.finalStatuses,
       essential: politica.essential === true,
+      // M9-D250: o teste de conexão só chama operação marcada como consulta inócua (e sem campo obrigatório).
+      safeProbe: politica.safeProbe === true && (def.required || []).length === 0,
       // M9-D215: consultas que decidem, depois de um timeout, se a operação perigosa aconteceu; sem elas o envio incerto vai a revisão humana.
       reconcileStrategy: politica.reconcileStrategy || null,
     });

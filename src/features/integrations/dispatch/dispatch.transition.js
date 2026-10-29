@@ -6,6 +6,7 @@ const { refusalReason } = require('./dispatchStateMachine');
 const { invalidTransition, translateDispatchDbError } = require('./dispatch.errors');
 const { auditarMudanca, visao } = require('./dispatch.audit');
 const { ERROR_CLASSES, HUMAN_RETRY_EXTRA_ATTEMPTS } = require('./dispatch.constants');
+const { settleRetryingErrors } = require('../errors/errors.settle');
 
 /** Campos que quem transiciona pode informar (o conteúdo aprovado nunca está aqui). */
 const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus', 'authRenewals', 'deadLetterReason'];
@@ -32,7 +33,7 @@ function sideEffects(row, to, opts) {
   if (to === 'UNKNOWN') { efeitos.unknownSince = agora; efeitos.nextAttemptAt = null; }
   if (row.status === 'UNKNOWN' && to !== 'UNKNOWN') efeitos.unknownSince = null;
   if (row.status === 'DEAD_LETTER' && to !== 'DEAD_LETTER') efeitos.deadLetterReason = null;
-  if (row.status === 'DEAD_LETTER' && to === 'RETRY_WAIT' && opts.humanRetry) efeitos.maxAttempts = row.maxAttempts + HUMAN_RETRY_EXTRA_ATTEMPTS;
+  if (row.status === 'DEAD_LETTER' && to === 'RETRY_WAIT' && opts.humanRetry) efeitos.maxAttempts = row.maxAttempts + (Number.isInteger(opts.extraAttempts) && opts.extraAttempts >= 0 ? opts.extraAttempts : HUMAN_RETRY_EXTRA_ATTEMPTS);
   return efeitos;
 }
 
@@ -57,6 +58,9 @@ async function applyTransition(ctx, row, to, patch, opts, transaction) {
     throw translateDispatchDbError(err);
   }
   await auditarMudanca(ctx, antes, row, opts.motivo || `Envio: ${antes.status} -> ${to}.`, transaction);
+  // M9-D250: o erro que foi a RETRYING no retry humano fecha com o desfecho do envio (confirmou: resolve; voltou a falhar: reabre).
+  if (to === 'CONFIRMED') await settleRetryingErrors(ctx, row.id, 'RESOLVED', transaction, 'O envio repetido foi confirmado pelo fornecedor.');
+  else if (['FAILED', 'DEAD_LETTER', 'UNKNOWN'].includes(to)) await settleRetryingErrors(ctx, row.id, 'OPEN', transaction);
   return row;
 }
 

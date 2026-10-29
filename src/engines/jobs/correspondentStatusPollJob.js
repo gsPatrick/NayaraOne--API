@@ -9,7 +9,8 @@ const { peekEligibilityConfig } = require('../../features/correspondent/eligibil
 const { applyPolledStatus } = require('../../features/correspondent/webhooks.service');
 const { withTimeout, finalizeAcceptedSubmission } = require('../../features/correspondent/cases/submissions.service');
 const { recordIntegrationError, resolveIntegrationError } = require('../../features/correspondent/integrationErrors.service');
-const { sweepCaseStatusStream } = require('../../features/correspondent/dispatch/statusStream');
+const { sweepCaseStatusStream, STREAM: CASE_STATUS_STREAM } = require('../../features/correspondent/dispatch/statusStream');
+const { registerSyncRunner, SYNC_ORIGINS } = require('../../features/integrations/sync');
 
 /**
  * correspondentStatusPollJob (Marco 8): "getCaseStatus()" do contrato do adapter. Para provider sem
@@ -109,10 +110,11 @@ async function recoverStaleUnknownSubmissions(group, company, waitMinutes) {
   }
 }
 
-async function pollCompany(group, company) {
+/** `retry` (M9-D250, retry humano de um fluxo parado): roda só o ciclo do fluxo da connection do erro, com a origem HUMAN_RETRY, mesmo com a consulta agendada desligada. */
+async function pollCompany(group, company, retry = null) {
   const config = await tenantTx(group, company, async (transaction) => peekEligibilityConfig(group.id, company.id, transaction));
-  if (config.statusPollingEnabled !== true) return { candidates: 0, applied: 0 };
-  await recoverStaleUnknownSubmissions(group, company, Number.isInteger(config.unknownReleaseMinutes) ? config.unknownReleaseMinutes : 2);
+  if (!retry && config.statusPollingEnabled !== true) return { candidates: 0, applied: 0 };
+  if (!retry) await recoverStaleUnknownSubmissions(group, company, Number.isInteger(config.unknownReleaseMinutes) ? config.unknownReleaseMinutes : 2);
 
   // Os casos em andamento são varridos pelo stream de sincronização `financing.case_status` (cursor retomável e lease, M9-D240); cada caso segue a regra de sempre.
   const pollCaseSafely = async (id) => {
@@ -138,7 +140,9 @@ async function pollCompany(group, company) {
       return false;
     }
   };
-  return sweepCaseStatusStream({ group, company, polledStatuses: POLLED_STATUSES, pollCase: pollCaseSafely });
+  return sweepCaseStatusStream({
+    group, company, polledStatuses: POLLED_STATUSES, pollCase: pollCaseSafely, ...(retry ? { origin: SYNC_ORIGINS.HUMAN_RETRY, onlyConnectionId: retry.connectionId } : {}),
+  });
 }
 
 async function runCorrespondentStatusPollJob() {
@@ -165,6 +169,12 @@ async function runCorrespondentStatusPollJob() {
   }
   return summary;
 }
+
+// M9-D250: o retry humano do erro do fluxo `financing.case_status` roda um ciclo dele (origem HUMAN_RETRY, a única saída de um fluxo parado).
+registerSyncRunner(CASE_STATUS_STREAM, async ({ ctx, connection }) => {
+  const r = await pollCompany({ id: ctx.groupId }, { id: ctx.companyId }, { connectionId: connection.id });
+  return { status: 'IDLE', candidates: r.candidates, applied: r.applied };
+});
 
 const DEFAULT_INTERVAL_MS = Number(process.env.CORRESPONDENT_STATUS_POLL_INTERVAL_MS || 60000);
 

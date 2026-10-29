@@ -39,7 +39,7 @@ function sourceFor({ ctx, providerCode, polledStatuses, pollCase, totals }) {
 }
 
 /** Varre os casos em andamento de cada provider da empresa pelo stream. Devolve { candidates, applied }. */
-async function sweepCaseStatusStream({ group, company, polledStatuses, pollCase }) {
+async function sweepCaseStatusStream({ group, company, polledStatuses, pollCase, origin, onlyConnectionId }) {
   const ctx = { groupId: group.id, companyId: company.id, userId: null };
   const provedores = (await tenantTx(ctx, (transaction) => FinancingCase.findAll({
     where: { status: { [Op.in]: polledStatuses }, providerCode: { [Op.ne]: 'manual' } }, attributes: ['providerCode'], group: ['provider_code'], transaction,
@@ -49,8 +49,9 @@ async function sweepCaseStatusStream({ group, company, polledStatuses, pollCase 
     try {
       // eslint-disable-next-line no-await-in-loop
       const connection = await tenantTx(ctx, (transaction) => ensureFinancingConnection(ctx, providerCode, transaction));
+      if (onlyConnectionId && connection.id !== onlyConnectionId) continue; // retry humano (M9-D250): só o fluxo da connection do erro
       // eslint-disable-next-line no-await-in-loop
-      await runSyncCycle({ connectionId: connection.id, stream: STREAM, cursorKind: 'TOKEN', workerId: `correspondent-poll-${crypto.randomUUID()}` }, ctx, sourceFor({ ctx, providerCode, polledStatuses, pollCase, totals }));
+      await runSyncCycle({ connectionId: connection.id, stream: STREAM, cursorKind: 'TOKEN', workerId: `correspondent-poll-${crypto.randomUUID()}`, ...(origin ? { origin } : {}) }, ctx, sourceFor({ ctx, providerCode, polledStatuses, pollCase, totals }));
     } catch (err) {
       logger.warn({ providerCode, err: err.message, code: err.code }, 'Correspondente: a varredura de status do provider não pôde rodar.');
     }

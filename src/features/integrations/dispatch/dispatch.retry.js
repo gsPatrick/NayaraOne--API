@@ -15,15 +15,17 @@ const temPermissao = (ctx) => {
 /**
  * retryDispatchManually — retry HUMANO de um envio FAILED ou DEAD_LETTER (executor com `integration:retry`). Reabre o mesmo
  * envio (sem nova chave nem novo hash) em RETRY_WAIT; de DEAD_LETTER soma 3 em max_attempts e mantém attempts.
- * A rota e o motivo obrigatório são da M9-D250.
+ * A rota e o motivo obrigatório são da M9-D250: `opts.reason` entra no texto da auditoria, `opts.extraAttempts` é o parâmetro
+ * integration.retry.human_extra_attempts e `opts.reconciled` marca o envio incerto que passou pela reconciliação (D215) e pela aprovação humana.
  */
-async function retryDispatchManually(ctx, id, transaction) {
+async function retryDispatchManually(ctx, id, transaction, opts = {}) {
   if (!temPermissao(ctx)) throw AppError.forbidden('Você não tem permissão para repetir envios.', 'PERMISSION_DENIED', { required: RETRY_PERMISSION });
   // Erro de VALIDATION é permanente (M9-D216): repetir o mesmo conteúdo dá o mesmo erro; a correção nasce como outro envio.
   const atual = await IntegrationDispatch.findOne({ where: { id, companyId: ctx.companyId }, attributes: ['status', 'lastErrorClass'], transaction });
   if (atual && atual.status === 'CONFIRMED') throw alreadyConfirmed(); // M9-D215: o fornecedor já executou; repetir duplicaria a operação
   if (atual && atual.status === 'FAILED' && atual.lastErrorClass === 'VALIDATION') throw retryNotAllowed();
-  return transitionDispatch(ctx, id, 'RETRY_WAIT', { nextAttemptAt: new Date() }, { humanRetry: true, motivo: 'Retry humano autorizado.' }, transaction);
+  const motivo = opts.reason ? `Retry humano autorizado: ${String(opts.reason).slice(0, 300)}` : 'Retry humano autorizado.';
+  return transitionDispatch(ctx, id, 'RETRY_WAIT', { nextAttemptAt: new Date() }, { humanRetry: true, reconciled: opts.reconciled === true, extraAttempts: opts.extraAttempts, motivo }, transaction);
 }
 
 module.exports = { retryDispatchManually };
