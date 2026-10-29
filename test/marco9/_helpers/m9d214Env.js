@@ -21,12 +21,22 @@ async function conexaoAtiva(tenant, domain) {
   return c;
 }
 
-/** Cancela o que outros testes deixaram vencido, para a rodada do worker só pegar os envios do teste. */
+/**
+ * Cancela o que outros testes deixaram vencido, para a rodada do worker só pegar os envios do teste, e fecha os circuitos que as falhas
+ * de um teste abriram (M9-D217: cinco falhas seguidas na mesma connection abrem o circuito e o teste seguinte esperaria o cooldown).
+ */
 async function limparPendentes(tenant) {
-  await comTenant(tenant, (t) => sequelize.query(
-    `UPDATE integration.dispatches SET status = 'CANCELLED' WHERE company_id = :c AND status IN ('PENDING', 'RETRY_WAIT', 'SENDING')`,
-    { replacements: { c: tenant.companyId }, transaction: t },
-  ));
+  await comTenant(tenant, async (t) => {
+    await sequelize.query(
+      `UPDATE integration.dispatches SET status = 'CANCELLED' WHERE company_id = :c AND status IN ('PENDING', 'RETRY_WAIT', 'SENDING')`,
+      { replacements: { c: tenant.companyId }, transaction: t },
+    );
+    await sequelize.query(
+      `UPDATE integration.provider_health SET circuit_state = 'CLOSED', circuit_opened_at = NULL, circuit_cooldown_s = NULL, consecutive_failures = 0,
+         half_open_successes = 0, half_open_inflight = 0, half_open_inflight_since = NULL WHERE company_id = :c AND window_minutes = 0 AND circuit_state <> 'CLOSED'`,
+      { replacements: { c: tenant.companyId }, transaction: t },
+    );
+  });
 }
 
 /** Enfileira (commit) e devolve o recibo. */

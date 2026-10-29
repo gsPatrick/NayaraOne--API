@@ -39,6 +39,7 @@ function definePort(className, domain, operations, portVersion = '1') {
       opClass: politica.opClass,
       confirmation: politica.confirmation,
       finalStatuses: politica.finalStatuses,
+      essential: politica.essential === true,
     });
   });
   const Port = class extends IntegrationAdapter {};

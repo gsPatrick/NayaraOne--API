@@ -13,56 +13,31 @@
 // BankAdapter.js/SignatureAdapter.js têm a mesma lacuna mas pertencem a outros módulos, fora do
 // escopo desta auditoria.
 //
-// Contrato não especifica números — valores abaixo são decisão de engenharia documentada:
+// Contrato não especifica números de timeout/retry — valores abaixo são decisão de engenharia documentada:
 // timeout 20s (padrão de mercado para API B2B de seguradora, entre o "rápido" de leitura
 // simples e o limite de 30s de gateway/load balancer); 3 tentativas totais com backoff
 // exponencial + jitter, só para TIMEOUT/erro de rede/429/5xx (nunca para 4xx de
-// validação/autenticação — exatamente a proibição de INT-006); circuit breaker abre depois de
-// 5 falhas consecutivas por chave de provider, com cool-down de 2 minutos antes de permitir uma
-// chamada de teste (half-open).
+// validação/autenticação — exatamente a proibição de INT-006).
+//
+// Circuit breaker (INT-007): desde a M9-D217 este arquivo NÃO tem mais limiar, cooldown nem estado de circuito próprios. Ele delega
+// à máquina de estados única (src/features/integrations/health/circuitGate.js) cuja política (falhas seguidas, cooldown, chamadas de
+// teste em HALF_OPEN) vem de health/circuitPolicy.js. Quem chama com connection (adapters via IntegrationHttpClient) passa
+// `circuitManaged: true`: o circuito dessas é o persistido por connection, decidido pelo Dispatch Service, e aqui nada é contado.
+
+const { admit, record } = require('../features/integrations/health/circuitGate');
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_BASE_DELAY_MS = 500;
-const CIRCUIT_FAILURE_THRESHOLD = 5;
-const CIRCUIT_COOLDOWN_MS = 2 * 60 * 1000;
 
 const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
 
-// Estado do circuit breaker em memória do processo, por chave de provider (ex. "insurance:portoseguro").
-// Suficiente para um único processo API; se o projeto evoluir para múltiplas instâncias sem
-// afinidade de sessão, isso precisaria migrar para um store compartilhado (Redis) — fora do
-// escopo desta correção pontual.
-const circuitState = new Map();
-
-function getCircuit(key) {
-  if (!circuitState.has(key)) {
-    circuitState.set(key, { consecutiveFailures: 0, openedAt: null });
-  }
-  return circuitState.get(key);
-}
-
-function assertCircuitClosed(key) {
-  const circuit = getCircuit(key);
-  if (circuit.openedAt && Date.now() - circuit.openedAt < CIRCUIT_COOLDOWN_MS) {
-    const error = new Error(`Circuito aberto para "${key}" — fornecedor indisponível recentemente (INT-007), aguardando cool-down.`);
-    error.code = 'CIRCUIT_OPEN';
-    throw error;
-  }
-}
-
-function recordSuccess(key) {
-  const circuit = getCircuit(key);
-  circuit.consecutiveFailures = 0;
-  circuit.openedAt = null;
-}
-
-function recordFailure(key) {
-  const circuit = getCircuit(key);
-  circuit.consecutiveFailures += 1;
-  if (circuit.consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
-    circuit.openedAt = Date.now();
-  }
+/** Classe de erro de uma resposta final: só 5xx (e rede/timeout, tratados no catch) conta como falha do fornecedor. */
+function classOfStatus(status) {
+  if (status === 429) return 'RATE_LIMIT';
+  if (status === 401 || status === 403) return 'AUTH';
+  if (status >= 500) return 'TRANSIENT';
+  return 'VALIDATION';
 }
 
 function sleep(ms) {
@@ -82,8 +57,9 @@ function isRetryableError(err) {
  * (INT-007). Uso: await resilientFetch({ circuitKey: 'insurance:portoseguro', url, method,
  * headers, body, timeoutMs, maxAttempts }).
  */
-async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, timeoutMs = DEFAULT_TIMEOUT_MS, maxAttempts = DEFAULT_MAX_ATTEMPTS }) {
-  assertCircuitClosed(circuitKey);
+async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, timeoutMs = DEFAULT_TIMEOUT_MS, maxAttempts = DEFAULT_MAX_ATTEMPTS, circuitManaged = false }) {
+  const gate = circuitManaged ? null : admit(circuitKey);
+  const registrar = (outcome) => { if (gate) record(circuitKey, { ...outcome, probe: gate.probe }); };
 
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -92,7 +68,7 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
     try {
       const response = await fetch(url, { method, headers, body, signal: controller.signal });
       if (response.status >= 200 && response.status < 300) {
-        recordSuccess(circuitKey);
+        registrar({ ok: true });
         return response;
       }
       if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxAttempts) {
@@ -105,7 +81,7 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
       // devolve a resposta pro chamador decidir a mensagem de negócio (ex. AppError.internal com
       // o body), mas conta como falha pro circuit breaker — um provider que só devolve 5xx não
       // pode "passar" no circuito só porque não lançou exceção.
-      recordFailure(circuitKey);
+      registrar({ ok: false, errorClass: classOfStatus(response.status) });
       return response;
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -123,7 +99,7 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
     }
   }
 
-  recordFailure(circuitKey);
+  registrar({ ok: false, errorClass: 'TRANSIENT' });
   throw lastError;
 }
 

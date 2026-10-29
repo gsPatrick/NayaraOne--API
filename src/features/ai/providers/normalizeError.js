@@ -16,7 +16,7 @@ function normalizeProviderError(errOrResponse, { providerCode, classify = classi
   const e = errOrResponse || {};
   const code = String(e.code || '').toUpperCase();
   const upstreamStatus = Number(e.status ?? e.statusCode) || undefined;
-  if (code === 'CIRCUIT_OPEN') return new AiProviderError('UNAVAILABLE', { providerCode, upstreamCode: 'CIRCUIT_OPEN' });
+  if (code === 'CIRCUIT_OPEN' || code === 'INTEGRATION_CIRCUIT_OPEN') return new AiProviderError('UNAVAILABLE', { providerCode, upstreamCode: 'CIRCUIT_OPEN' });
   if (TIMEOUT_CODES.has(code) || e.name === 'AbortError') return new AiProviderError('TIMEOUT', { providerCode, upstreamCode: 'TIMEOUT' });
   const c = classify(e) || { class: 'UNKNOWN' };
   const kind = CLASS_TO_KIND[c.class] || 'UNKNOWN';

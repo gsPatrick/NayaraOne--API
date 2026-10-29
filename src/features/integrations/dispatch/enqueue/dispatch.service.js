@@ -53,7 +53,7 @@ async function enqueue(args) {
   const policy = await resolveEffectivePolicy(ctx, connection, a.transaction);
   const { dispatch, created } = await createDispatch(ctx, {
     connectionId: connection.id, operation, idempotencyKey: key, snapshot, criticalityOp: opClass, outboxEventId: a.outboxEventId,
-    aggregateType: a.aggregateType, aggregateId: a.aggregateId, purpose, fieldsDropped, confirmationMode: def.confirmation, correlationId: a.correlationId, essential: a.essential === true, maxAttempts: policy.retry.max_attempts,
+    aggregateType: a.aggregateType, aggregateId: a.aggregateId, purpose, fieldsDropped, confirmationMode: def.confirmation, correlationId: a.correlationId, essential: a.essential === true || def.essential === true, maxAttempts: policy.retry.max_attempts,
   }, a.transaction);
   if (!created && dispatch.payloadHash !== payloadHash) throw conflict();
   return { dispatchId: dispatch.id, status: dispatch.status, created, dispatch };

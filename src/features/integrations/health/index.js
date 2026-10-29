@@ -8,6 +8,8 @@ const { getCurrentHealth } = require('./healthQuery');
 const { purgeExpiredHealth } = require('./healthRetention');
 const { registerHealthSampleSource, resetHealthSampleSources } = require('./sampleSources');
 const { readHealthParams } = require('./healthParams');
+const { admitCall, recordCallResult, assertCallAllowed } = require('./circuitBreaker');
+const { resolveCircuitPolicy } = require('./circuitPolicyReader');
 
 module.exports = {
   aggregateConnectionHealth,
@@ -21,4 +23,8 @@ module.exports = {
   registerHealthSampleSource,
   resetHealthSampleSources,
   readHealthParams,
+  admitCall,
+  recordCallResult,
+  assertCallAllowed,
+  resolveCircuitPolicy,
 };

@@ -78,7 +78,10 @@ class IntegrationHttpClient {
   /** Chamada com timeout, tentativas só para erro transitório e circuit breaker (resilientFetch). */
   async request({ method = 'GET', url, headers, body, timeoutMs, maxAttempts, circuitKey, allowedHosts }) {
     await this.guard(url, method, allowedHosts);
-    return resilientFetch({ circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: maxAttempts ?? this.defaultMaxAttempts });
+    // Com connection, o circuito é o persistido (decidido pelo Dispatch Service, M9-D217): aqui nada é contado em memória.
+    return resilientFetch({
+      circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: maxAttempts ?? this.defaultMaxAttempts, circuitManaged: Boolean(this.connectionId),
+    });
   }
 
   /** Passagem ao fetch global (o mesmo contrato dele), com tempo máximo quando o chamador não trouxe um sinal. `opts.allowedHosts` soma hosts da chamada. */

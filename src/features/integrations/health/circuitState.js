@@ -7,13 +7,15 @@ const { findCurrentRow, ensureCurrentRow, writeStatus, q, SELECT } = require('./
 /**
  * Estado do circuit breaker persistido em provider_health (M9-D206 regra 3.2.2): sobrevive a reinício e vale para
  * todas as instâncias. A lógica das transições é da M9-D217; aqui só se lê (com cache de memória de 2 s) e se grava
- * de forma atômica (`UPDATE ... WHERE connection_id`, incrementos no próprio SQL).
+ * de forma atômica (`UPDATE ... WHERE connection_id`, incrementos no próprio SQL). As transições ficam em circuitMachine.js e são aplicadas
+ * por circuitBreaker.js sob o bloqueio da linha (FOR UPDATE).
  */
 const CACHE_TTL_MS = 2000;
 const STATES = ['CLOSED', 'OPEN', 'HALF_OPEN'];
 const FIELDS = {
   circuitState: 'circuit_state', circuitOpenedAt: 'circuit_opened_at', circuitCooldownS: 'circuit_cooldown_s',
   consecutiveFailures: 'consecutive_failures', halfOpenSuccesses: 'half_open_successes',
+  halfOpenInflight: 'half_open_inflight', halfOpenInflightSince: 'half_open_inflight_since',
 };
 const cache = new Map();
 
@@ -25,6 +27,8 @@ const toView = (row) => ({
   circuitCooldownS: row ? row.circuit_cooldown_s : null,
   consecutiveFailures: row ? row.consecutive_failures : 0,
   halfOpenSuccesses: row ? row.half_open_successes : 0,
+  halfOpenInflight: row ? row.half_open_inflight : 0,
+  halfOpenInflightSince: row ? row.half_open_inflight_since : null,
 });
 
 /** Lê o circuito. Sem linha atual o circuito é CLOSED (connection inexistente ou de outra empresa: 404). */
@@ -50,7 +54,7 @@ function buildSet(patch) {
     }
     if (valor && typeof valor === 'object' && !(valor instanceof Date)) {
       const inc = Number(valor.inc);
-      if (!Number.isInteger(inc) || campo === 'circuitState' || campo === 'circuitOpenedAt') {
+      if (!Number.isInteger(inc) || campo === 'circuitState' || campo === 'circuitOpenedAt' || campo === 'halfOpenInflightSince') {
         throw AppError.badRequest(`Incremento inválido para ${campo}.`, 'INTEGRATION_CIRCUIT_FIELD_INVALID');
       }
       sets.push(`${coluna} = GREATEST(${coluna} + :v${i}, 0)`);
@@ -85,4 +89,4 @@ async function updateCircuitState(connectionId, patch, transaction, { now = new 
   return view;
 }
 
-module.exports = { readCircuitState, updateCircuitState, clearCircuitCache, CACHE_TTL_MS };
+module.exports = { readCircuitState, updateCircuitState, clearCircuitCache, toView, CACHE_TTL_MS };

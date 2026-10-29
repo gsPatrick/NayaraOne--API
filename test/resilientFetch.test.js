@@ -87,7 +87,7 @@ test('resilientFetch: circuit breaker abre após falhas consecutivas e bloqueia 
     }
     await assert.rejects(
       () => resilientFetch({ circuitKey, url: serverUrl(server), maxAttempts: 1 }),
-      (err) => err.code === 'CIRCUIT_OPEN'
+      (err) => err.code === 'INTEGRATION_CIRCUIT_OPEN' && err.statusCode === 503
     );
   } finally {
     server.close();

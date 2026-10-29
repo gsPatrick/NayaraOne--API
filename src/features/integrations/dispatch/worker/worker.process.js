@@ -12,6 +12,7 @@ const { startAttempt } = require('./worker.attempts');
 const { handleSuccess } = require('./worker.success');
 const { handleFailure } = require('./worker.failure');
 const { getCallObservers } = require('./worker.hooks');
+const { admitCall, recordCallResult } = require('../../health/circuitBreaker');
 
 const lockSending = (ctx, id, transaction) => IntegrationDispatch.findOne({ where: { id, companyId: ctx.companyId, status: 'SENDING' }, transaction, lock: transaction.LOCK.UPDATE });
 
@@ -27,7 +28,13 @@ async function phaseA(ctx, id, now) {
       await deferDispatch(ctx, dispatch, verdict.until, verdict.reason, transaction);
       return { deferred: verdict.reason };
     }
-    return { attemptId: await startAttempt(ctx, dispatch, now, transaction) };
+    // Circuito (M9-D217): por último, porque admitir um teste do HALF_OPEN ocupa uma vaga. Essencial = marcado no envio (definido pela operação do port).
+    const circuito = await admitCall(connection, ctx, transaction, { essential: dispatch.essential === true, now });
+    if (!circuito.allowed) {
+      await deferDispatch(ctx, dispatch, circuito.until, circuito.reason, transaction);
+      return { deferred: circuito.reason };
+    }
+    return { attemptId: await startAttempt(ctx, dispatch, now, transaction), probe: circuito.probe };
   });
 }
 
@@ -39,7 +46,7 @@ async function observe(args) {
 }
 
 /** Fase B (tx da chamada): resolve o adapter, chama pelo contrato, e grava sucesso ou falha. O commit de SENDING já aconteceu. */
-async function phaseB(ctx, id, attemptId, now) {
+async function phaseB(ctx, id, attemptId, now, probe = false) {
   return tenantTx(ctx, async (transaction) => {
     const dispatch = await lockSending(ctx, id, transaction);
     if (!dispatch) return { skipped: true };
@@ -51,7 +58,7 @@ async function phaseB(ctx, id, attemptId, now) {
       adapter = await adapterRegistry.resolve(connection, ctx, transaction);
     } catch (error) {
       const classification = { class: 'VALIDATION', code: error.code || 'INTEGRATION_ADAPTER_UNAVAILABLE' };
-      await handleFailure({ ctx, dispatch, def, adapter, error, classification, attemptId, latencyMs: 0, now, transaction });
+      await handleFailure({ ctx, dispatch, connection, probe, def, adapter, error, classification, attemptId, latencyMs: 0, now, transaction });
       return { failed: classification };
     }
     const meta = { dispatchId: dispatch.id, attempt: dispatch.attempts, idempotencyKey: adapter.supportsIdempotency(dispatch.operation) ? dispatch.idempotencyKey : undefined };
@@ -62,11 +69,12 @@ async function phaseB(ctx, id, attemptId, now) {
     } catch (error) {
       const latencyMs = Date.now() - inicio;
       await observe({ ctx, dispatch, connection, adapter, error, attemptId, now, transaction });
-      await handleFailure({ ctx, dispatch, def, adapter, error, attemptId, latencyMs, now, transaction });
+      await handleFailure({ ctx, dispatch, connection, probe, def, adapter, error, attemptId, latencyMs, now, transaction });
       return { failed: true };
     }
     await observe({ ctx, dispatch, connection, adapter, response: bruta || normalized, attemptId, now, transaction });
     await handleSuccess({ ctx, dispatch, def, normalized, attemptId, latencyMs: Date.now() - inicio, transaction });
+    await recordCallResult(connection, ctx, transaction, { ok: true, probe, now });
     return { ok: true };
   });
 }
@@ -75,7 +83,7 @@ async function phaseB(ctx, id, attemptId, now) {
 async function processClaimed(ctx, id, { now = new Date() } = {}) {
   const a = await phaseA(ctx, id, now);
   if (a.skipped || a.deferred) return a;
-  return phaseB(ctx, id, a.attemptId, now);
+  return phaseB(ctx, id, a.attemptId, now, a.probe);
 }
 
 module.exports = { processClaimed };

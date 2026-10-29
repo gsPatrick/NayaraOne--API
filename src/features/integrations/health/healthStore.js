@@ -14,6 +14,12 @@ async function findCurrentRow(connectionId, transaction) {
   return rows[0] || null;
 }
 
+/** Linha atual travada para escrita (FOR UPDATE): quem decide o circuito lê e grava sem corrida entre instâncias. */
+async function lockCurrentRow(connectionId, transaction) {
+  const rows = await q('SELECT * FROM "integration"."provider_health" WHERE connection_id = :id AND window_minutes = 0 FOR UPDATE', { id: connectionId }, transaction, SELECT);
+  return rows[0] || null;
+}
+
 /** Cria a linha ATUAL se ainda não existir (idempotente, sem corrida: o índice parcial é a trava). */
 async function ensureCurrentRow(connection, now, transaction) {
   await q(
@@ -82,4 +88,4 @@ async function writeStatus(connectionId, healthStatus, now, transaction) {
   return rows[0];
 }
 
-module.exports = { findCurrentRow, ensureCurrentRow, upsertWindow, writeCurrentMetrics, writeStatus, q, SELECT };
+module.exports = { findCurrentRow, lockCurrentRow, ensureCurrentRow, upsertWindow, writeCurrentMetrics, writeStatus, q, SELECT };
