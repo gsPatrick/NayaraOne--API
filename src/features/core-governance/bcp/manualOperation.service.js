@@ -9,6 +9,7 @@ const { LIST_LIMIT_KEY, BCP_SETTING_DEFAULTS } = require('./bcp.settings');
 const { assertUserSector, userSectors } = require('./bcp.sectors');
 const { validatePayload } = require('./bcp.payload');
 const repository = require('./manualOperation.repository');
+const templates = require('./formTemplates.repository');
 const input = require('./manualOperation.input');
 const E = require('./bcp.errors');
 
@@ -27,14 +28,14 @@ async function recordOperation({ tenant, actorUserId, body, transaction }) {
     throw E.evidenceRequired();
   }
   const occurredAt = input.checkOccurredAt(body.occurredAt);
-  const form = input.checkFormAndAction(sector, body.formType, body.intendedAction);
+  const form = await input.checkFormAndAction(sector, body.formType, body.intendedAction, transaction);
   const correlationRef = input.checkCorrelation(body.correlationRef);
   const payload = body.payload === undefined ? {} : body.payload;
-  const validationErrors = validatePayload(form.formType, payload);
+  const validationErrors = validatePayload(form, payload);
 
   const operation = await repository.insertOperation({
     groupId: tenant.groupId, companyId: tenant.companyId, manualReference, sector, occurredAt, actorUserId, evidenceFileId: body.evidenceFileId,
-    intendedAction: form.action, formType: form.formType, payload, correlationRef, validationErrors,
+    intendedAction: form.intendedAction, formType: form.formType, payload, correlationRef, validationErrors,
   }, transaction);
   if (!operation) throw E.referenceDuplicate();
 
@@ -42,7 +43,7 @@ async function recordOperation({ tenant, actorUserId, body, transaction }) {
     groupId: tenant.groupId, companyId: tenant.companyId, aggregateType: 'BcpManualOperation', aggregateId: operation.id, eventType: EVENT_RECORDED,
     // A chave do outbox é única na plataforma toda; o número do papel só é único por empresa, então a empresa entra na chave.
     idempotencyKey: `${EVENT_RECORDED}:${tenant.companyId}:${manualReference}`,
-    payload: { manualReference, sector, formType: form.formType, intendedAction: form.action, correlationRef, occurredAt: occurredAt.toISOString(), actorUserId, valid: validationErrors.length === 0 },
+    payload: { manualReference, sector, formType: form.formType, intendedAction: form.intendedAction, correlationRef, occurredAt: occurredAt.toISOString(), actorUserId, valid: validationErrors.length === 0 },
   }, transaction);
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId, action: EVENT_RECORDED, entityType: 'ManualOperation', entityId: operation.id,
@@ -59,7 +60,7 @@ async function updatePayload({ tenant, actorUserId, id, body, transaction }) {
   await assertUserSector(actorUserId, tenant, current.sector, transaction);
   if (current.status !== STATUS.RECORDED) throw E.notEditable();
   if (!body || typeof body !== 'object' || Array.isArray(body) || body.payload === undefined) throw govError(400, 'VALIDATION_ERROR', 'Envie o campo "payload".', { field: 'payload' });
-  const errors = validatePayload(current.formType, body.payload);
+  const errors = validatePayload(await templates.findByFormType(current.formType, transaction), body.payload);
   if (errors.length) throw E.payloadInvalid(errors);
   const updated = await repository.updatePayload(tenant.companyId, id, body.payload, [], transaction);
   await registrarAuditoria({

@@ -3,9 +3,9 @@
 const crypto = require('node:crypto');
 const { govError } = require('../governance.errors');
 const { SECTOR_CODES, REFERENCE_PATTERN, prefixOf } = require('./bcp.constants');
-const { findForm } = require('./bcp.forms.constants');
 const { parseOccurredAt } = require('./bcp.time');
 const E = require('./bcp.errors');
+const templates = require('./formTemplates.repository');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const bad = (message, details) => govError(400, 'VALIDATION_ERROR', message, details);
@@ -32,11 +32,11 @@ function checkOccurredAt(value, now = new Date()) {
   return date;
 }
 
-/** form_type compatível com o setor e com a intended_action (422 GOV_BCP_ACTION_INVALID). */
-function checkFormAndAction(sector, formType, intendedAction) {
-  const form = findForm(formType);
-  if (!form || form.sector !== sector || form.action !== intendedAction) throw E.actionInvalid();
-  return form;
+/** form_type compatível com o setor e com a intended_action do modelo semeado (422 GOV_BCP_ACTION_INVALID). Devolve o modelo. */
+async function checkFormAndAction(sector, formType, intendedAction, transaction) {
+  const template = await templates.findByFormType(formType, transaction);
+  if (!template || template.sector !== sector || template.intendedAction !== intendedAction) throw E.actionInvalid();
+  return template;
 }
 
 function checkCorrelation(value) {

@@ -11,5 +11,7 @@ const notEditable = () => govError(409, 'GOV_BCP_NOT_EDITABLE', 'Esta operação
 const sectorForbidden = () => govError(403, 'GOV_BCP_SECTOR_FORBIDDEN', 'Você não pode registrar operações deste setor.');
 const dateInvalid = () => govError(422, 'GOV_BCP_DATE_INVALID', 'A data da operação é inválida.');
 const payloadInvalid = (errors) => govError(422, 'GOV_BCP_PAYLOAD_INVALID', 'Os dados do formulário não passam nas regras do sistema.', { errors });
+const formNotFound = () => govError(404, 'GOV_BCP_FORM_NOT_FOUND', 'Formulário não encontrado para este setor.');
+const rangeInvalid = (max) => govError(400, 'GOV_BCP_RANGE_INVALID', `A faixa de folhas é inválida (máximo de ${max}).`);
 
-module.exports = { referenceDuplicate, referenceInvalid, evidenceRequired, actionInvalid, notEditable, sectorForbidden, dateInvalid, payloadInvalid };
+module.exports = { formNotFound, rangeInvalid, referenceDuplicate, referenceInvalid, evidenceRequired, actionInvalid, notEditable, sectorForbidden, dateInvalid, payloadInvalid };

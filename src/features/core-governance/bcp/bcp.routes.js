@@ -4,6 +4,7 @@ const { buildModuleRouter } = require('../governance.module');
 const { GOVERNANCE_MODULES } = require('../governance.settings');
 const controller = require('./bcp.controller');
 const operations = require('./manualOperation.controller');
+const formTemplates = require('./formTemplates.controller');
 const { RECORD_PERMISSION, IMPORT_PERMISSION } = require('./bcp.constants');
 
 const MODULE = GOVERNANCE_MODULES.find((item) => item.code === 'bcp');
@@ -15,6 +16,9 @@ const router = buildModuleRouter(MODULE, [
   { method: 'post', path: '/bcp/manual-operations', permission: RECORD_PERMISSION, handler: operations.create },
   { method: 'get', path: '/bcp/manual-operations', permission: [RECORD_PERMISSION, IMPORT_PERMISSION], handler: operations.list },
   { method: 'patch', path: '/bcp/manual-operations/:id', permission: RECORD_PERMISSION, handler: operations.update },
+  // Modelos dos formulários contingenciais e sua versão imprimível (M9-D834): leitura de quem registra ou importa e é do setor do modelo.
+  { method: 'get', path: '/bcp/form-templates', permission: [RECORD_PERMISSION, IMPORT_PERMISSION], handler: formTemplates.list },
+  { method: 'get', path: '/bcp/form-templates/:sector/:formType/print', permission: [RECORD_PERMISSION, IMPORT_PERMISSION], handler: formTemplates.print },
 ]);
 
 module.exports = router;

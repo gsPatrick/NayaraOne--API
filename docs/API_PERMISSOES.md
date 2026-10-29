@@ -102,6 +102,12 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/billing/utility-obligations` | `billing:create` | não |
 | `PATCH` | `/api/v1/carts/:cartId/items` | `crm:opportunities:update` | não |
 | `POST` | `/api/v1/carts/:cartId/share-link` | `crm:opportunities:update` | não |
+| `GET` | `/api/v1/bcp/form-templates/:sector/:formType/print` | `governance:bcp:record` | não |
+| `GET` | `/api/v1/bcp/form-templates` | `governance:bcp:record` | não |
+| `PATCH` | `/api/v1/bcp/manual-operations/:id` | `governance:bcp:record` | não |
+| `GET` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
+| `GET` | `/api/v1/bcp` | `governance:bcp:record` | não |
 | `DELETE` | `/api/v1/companies/:id` | `companies:delete` | não |
 | `GET` | `/api/v1/companies/:id` | `companies:read` | não |
 | `PATCH` | `/api/v1/companies/:id` | `companies:update` | não |
@@ -684,3 +690,31 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/version` | público (saúde do serviço) | não |
 | `governance:data-quality:read` | LOW | `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality` |
 | `governance:data-quality:manage` | MEDIUM | `POST /api/v1/data-quality/queue/:id/decision`, `PUT /api/v1/data-quality/domains/:code/assignments` |
+## Catálogo de permissões de governança (governance:*)
+
+Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda não foi ligada por uma demanda do bloco.
+
+| Permissão | Risco | Rotas que a exigem |
+|---|---|---|
+| `governance:calendar:read` | LOW | `GET /api/v1/calendar/commitments/:id`, `PATCH /api/v1/calendar/commitments/:id`, `POST /api/v1/calendar/commitments`, `DELETE /api/v1/calendar/items/:id`, `PATCH /api/v1/calendar/items/:id`, `PUT /api/v1/calendar/items/:id`, `GET /api/v1/calendar` |
+| `governance:data-quality:read` | LOW | `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
+| `governance:data-quality:manage` | MEDIUM | `PUT /api/v1/data-quality/domains/:code/assignments`, `POST /api/v1/data-quality/queue/:id/decision` |
+| `governance:data-quality:bulk` | CRITICAL | `GET /api/v1/data-quality/bulk-changes/:id`, `POST /api/v1/data-quality/bulk-changes/impact`, `GET /api/v1/data-quality/bulk-changes`, `POST /api/v1/data-quality/bulk-changes` |
+| `governance:lineage:manage` | HIGH | `POST /api/v1/data-lineage/edges`, `PUT /api/v1/data-lineage/edges`, `POST /api/v1/data-lineage/nodes`, `PUT /api/v1/data-lineage/nodes`, `GET /api/v1/data-lineage` |
+| `governance:dlp:export` | MEDIUM | `GET /api/v1/dlp/policies`, `POST /api/v1/dlp/share-links/:id/revoke`, `GET /api/v1/dlp/share-links`, `POST /api/v1/dlp/share-links`, `GET /api/v1/exports/:id/download`, `GET /api/v1/exports/:id`, `GET /api/v1/exports/catalog`, `POST /api/v1/exports` |
+| `governance:dlp:admin` | CRITICAL | `POST /api/v1/dlp/anomalies/:id/review`, `GET /api/v1/dlp/anomalies`, `PUT /api/v1/dlp/policies/:classification/:action`, `GET /api/v1/dlp` |
+| `governance:dlp:view-restricted` | CRITICAL | nenhuma ainda |
+| `governance:bcp:record` | MEDIUM | `GET /api/v1/bcp/form-templates/:sector/:formType/print`, `GET /api/v1/bcp/form-templates`, `PATCH /api/v1/bcp/manual-operations/:id`, `GET /api/v1/bcp/manual-operations`, `POST /api/v1/bcp/manual-operations`, `GET /api/v1/bcp` |
+| `governance:bcp:import` | HIGH | nenhuma ainda |
+| `governance:bcp:approve` | CRITICAL | nenhuma ainda |
+| `governance:api:read` | LOW | `GET /api/v1/api-governance/consumers` |
+| `governance:api:manage` | HIGH | nenhuma ainda |
+| `governance:finops:read` | LOW | `GET /api/v1/finops/health` |
+| `governance:finops:manage` | HIGH | nenhuma ainda |
+| `governance:flags:manage` | CRITICAL | `GET /api/v1/feature-flags` |
+| `governance:migration:run` | CRITICAL | nenhuma ainda |
+| `governance:migration:admin` | CRITICAL | nenhuma ainda |
+| `governance:classification:manage` | HIGH | nenhuma ainda |
+| `governance:retention:manage` | HIGH | nenhuma ainda |
+| `governance:legal-hold:manage` | CRITICAL | nenhuma ainda |
+

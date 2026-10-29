@@ -3,7 +3,8 @@
 /**
  * Os 11 formulários contingenciais dos seis setores (M9-D834 §3.2): setor, tipo, ação pretendida (fixa pelo tipo) e os campos próprios. Campo = [chave, tipo, obrigatório]. Tipos:
  * TEXT, INTEGER, CENTS (inteiro em centavos), DATE (AAAA-MM-DD), DATETIME (ISO), ENUM, PERSON_DOC (CPF/CNPJ), PHONE, REF. O cabeçalho do papel (número, setor, tipo, data e hora,
- * nome de quem preencheu, assinatura) é do papel e do registro, não do payload. M9-D831 valida o payload por este catálogo; M9-D834 publica o mesmo conteúdo como modelo imprimível.
+ * nome de quem preencheu, assinatura) é do papel e do registro, não do payload. Esta lista é só a ORIGEM DA SEMENTE da migration 833; em tempo de execução o formulário, o
+ * esquema e a validação vêm da tabela governance.bcp_form_templates (M9-D834, DI-D831-1): ver formTemplates.repository.js.
  */
 const CANAL = ['DINHEIRO', 'PIX', 'TRANSFERENCIA', 'CHEQUE'];
 const SIM_NAO = ['SIM', 'NAO'];
@@ -42,7 +43,6 @@ const FORMS = Object.freeze([
     ['conferidoPor', 'TEXT', true]] },
 ]);
 
-const findForm = (formType) => FORMS.find((form) => form.formType === formType) || null;
 const ACTIONS = Object.freeze([...new Set(FORMS.map((form) => form.action))]);
 
-module.exports = { FORMS, ACTIONS, findForm };
+module.exports = { FORMS, ACTIONS };
