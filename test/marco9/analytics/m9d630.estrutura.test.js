@@ -68,7 +68,7 @@ test('m9d630 os parâmetros existem no SETTINGS_SCHEMA e rejeitam valor inválid
   assert.deepEqual([CRM_KPI_DEFAULTS['analytics.qualidade.max_origem_vazia_pct'], CRM_KPI_DEFAULTS['analytics.qualidade.min_amostra']], [5, 5], 'padrões do livro da demanda');
 });
 
-test('m9d630 replay do mesmo evento não altera o valor (helper compartilhado assertReplayIdempotent)', async () => {
+test('m9d630 replay do mesmo evento não altera o valor', async () => { // helper compartilhado assertReplayIdempotent (M9-D607)
   const t = env.cX;
   const id = await src.opportunity(env, t, { owner: src.uuid(), source: 'PORTAL', created: at(6) });
   const event = kit.created(t, id);

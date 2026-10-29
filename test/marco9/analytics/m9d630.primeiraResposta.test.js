@@ -48,7 +48,7 @@ test('m9d630 reproduz crm.first_response_time a partir dos registros-fonte', asy
   assert.equal(kpi.sourceRefs[0].count, Number(want.leads), 'o detalhe abre os leads do período');
 });
 
-test('m9d630 crm.first_response_time fica INCOMPLETE com valor nulo quando a regra de qualidade falha e o lead de 23:30 conta no dia de São Paulo', async () => {
+test('m9d630 crm.first_response_time fica DEGRADED com valor nulo quando a regra de qualidade falha', async () => { // amostra curta: INCOMPLETE; o lead de 23:30 conta no dia de São Paulo
   const t = env.cY;
   const first = '2026-10-29T02:30:00Z'; // 23:30 de 28/10 em SP, já 29/10 em UTC
   const ids = [];

@@ -74,7 +74,7 @@ test('m9d630 GET /analytics/metrics/crm.first_response_time devolve valor, unida
   assert.equal(d.sourceRefs[0].table, 'crm.opportunities');
 });
 
-test('m9d630 isolamento entre empresas: empresa de outro grupo ou sem vínculo responde 404 ANALYTICS_SCOPE_NOT_FOUND e o valor de A nunca aparece', async () => {
+test('m9d630 isolamento entre empresas no KPI', async () => { // 404 ANALYTICS_SCOPE_NOT_FOUND e o valor de A nunca aparece
   const res = await get('crm.leads_by_origin', { query: `asOf=${AS_OF}&companyId=${env.tenantB.companyId}` });
   assert.equal(res.status, 404);
   assert.equal(res.body.code || res.body.error?.code, 'ANALYTICS_SCOPE_NOT_FOUND');
