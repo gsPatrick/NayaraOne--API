@@ -14,6 +14,7 @@ const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/t
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
+const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
 const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
 const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
@@ -136,6 +137,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // Marco 9, M9-D417 — cadência, quiet hours e frequency cap do Marketing (lidos por getMarketingParam; escrita exige marketing:automation:manage).
   ...CADENCE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D418 — listas de finalidade do consentimento, palavras de opt-out e janela de atendimento do canSend.
+  ...SUPPRESSION_SETTINGS_SCHEMA,
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
   'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },

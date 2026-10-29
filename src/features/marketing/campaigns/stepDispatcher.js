@@ -52,7 +52,7 @@ const recordDelivery = (tenant, campaignId, stepId, personId, actionKey, status,
 async function processRecipient(port, ctx, transaction) {
   const { tenant, campaign, step, personId, now } = ctx;
   const actionKey = actionKeyOf(campaign.id, step.id, personId);
-  const portCtx = { tenant, campaign: { id: campaign.id, code: campaign.code, channels: campaign.channels }, step: { id: step.id, stepNo: step.step_no, channel: step.channel, templateId: step.template_id, contentItemId: step.content_item_id }, personId, actionKey, now };
+  const portCtx = { tenant, campaign: { id: campaign.id, code: campaign.code, channels: campaign.channels }, step: { id: step.id, stepNo: step.step_no, channel: step.channel, templateId: step.template_id, contentItemId: step.content_item_id }, personId, actionKey, now, transaction };
   let decision;
   try { decision = await port.canSend(portCtx); } catch (err) { logger.error({ err: err.message, stepId: step.id }, 'marketing.campaign.cansend.failed'); decision = { allowed: false, reason: 'CANSEND_ERROR' }; }
   if (!decision || decision.allowed !== true) {
