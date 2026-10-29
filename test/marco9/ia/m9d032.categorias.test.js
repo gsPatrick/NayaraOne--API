@@ -52,7 +52,9 @@ test('m9d032_categoria_falha_reprova_e_agente_sem_tool_nao_mede_tool', async () 
     const { code } = await H.criarAgente(tenantA, tx, { tools: [] });
     const ev = await H.avaliar(svc, ctx, tx, { agentCode: code, suite: 'all' });
     assert.equal(ev.status, 'PASSED', JSON.stringify(ev.metrics));
-    assert.deepEqual(ev.metrics.notApplicable, ['TOOL_SELECTION', 'PERMISSIONS']);
+    // Sem tool não há o que selecionar; PERMISSIONS continua medida pelas sondas da suíte adversarial (M9-D042), que valem para qualquer agente.
+    assert.deepEqual(ev.metrics.notApplicable, ['TOOL_SELECTION']);
+    assert.equal(ev.metrics.PERMISSIONS.ok, true);
     // caso de HALLUCINATION que reprova: a fonte sustenta o dado, então a resposta NÃO é insuficiência
     const sai = registerCaseSource(() => [{ id: 'HALLUCINATION:ruim', category: 'HALLUCINATION', suite: 'GOLDEN', input: '[[ECO]] O saldo é R$ 10,00 [1].', sources: [{ sourceType: 'READ_MODEL', title: 'Saldo', excerpt: 'Saldo R$ 10,00.', relevanceScore: 1 }] }]);
     try {

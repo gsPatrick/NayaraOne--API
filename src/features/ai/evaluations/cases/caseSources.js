@@ -2,14 +2,13 @@
 
 const baselineGrounding = require('./baseline.grounding');
 const baselineTools = require('./baseline.tools');
-const baselineInjection = require('./baseline.injection');
 
 /**
  * Fontes de casos da avaliação. Cada fonte é `suite -> (agent) -> casos[]`. De fábrica vão os casos de base da engenharia (um
- * conjunto mínimo que mede as sete categorias); os golden datasets (M9-D033) e a suíte adversarial (M9-D042) entram por
- * `registerCaseSource`. Caso: { id, category, suite: GOLDEN|ADVERSARIAL, input, ...campos da categoria }.
+ * conjunto mínimo que mede as categorias de grounding e de tools); os golden datasets (M9-D033) e a suíte adversarial de 15 testes
+ * (M9-D042, que substituiu os casos de base de INJECTION) entram por `registerCaseSource`. Caso: { id, category, suite: GOLDEN|ADVERSARIAL, input, ...campos da categoria }.
  */
-const sources = [baselineGrounding.cases, baselineTools.cases, baselineInjection.cases];
+const sources = [baselineGrounding.cases, baselineTools.cases];
 
 const registerCaseSource = (fn) => { sources.push(fn); return () => { const i = sources.indexOf(fn); if (i >= 0) sources.splice(i, 1); }; };
 

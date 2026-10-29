@@ -18,8 +18,10 @@ const { sha256, makeItem } = require('./categoryEvaluators/common');
 const { evalToolRegistry } = require('./evalRegistry');
 const { attachGoldenCases, registerGoldenSource, applyGoldenChecks } = require('./golden');
 const { computeGlobalHash } = require('../regression/globalHash');
+const { registerAdversarialSource } = require('./adversarial');
 
 registerGoldenSource();
+registerAdversarialSource();
 
 const enabledToolCount = (agent) => (agent.tools || []).filter((t) => t.enabled !== false).length;
 
@@ -74,9 +76,11 @@ async function executeEvaluation(baseCtx, row, transaction) {
     injectionLimits: await loadInjectionLimits(ctx, transaction),
   };
   const noTools = enabledToolCount(agent) === 0;
-  const notApplicable = noTools ? ['TOOL_SELECTION', 'PERMISSIONS'] : [];
+  const loaded = loadCases(row.suite, agent, registry);
+  // Agente sem tool não tem o que selecionar nem permitir, salvo nas sondas da suíte adversarial (M9-D042), que valem para qualquer agente.
+  const notApplicable = noTools ? ['TOOL_SELECTION', 'PERMISSIONS'].filter((c) => !loaded.some((l) => l.probe && l.category === c)) : [];
   const required = C.SUITE_CATEGORIES[row.suite].filter((c) => !notApplicable.includes(c));
-  const cases = loadCases(row.suite, agent, registry).filter((c) => required.includes(c.category) && EVALUATORS[c.category]);
+  const cases = loaded.filter((c) => required.includes(c.category) && EVALUATORS[c.category]);
   const items = [];
   for (const c of cases) items.push(await runCase(c, env));
   for (const item of items) await repo.insertItem(ctx, row.id, item, transaction);

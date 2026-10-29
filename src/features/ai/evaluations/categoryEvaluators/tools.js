@@ -22,6 +22,7 @@ async function evaluateToolSelection(caseDef, env) {
  * permissão, fora da allowlist ou inexistente precisa ficar bloqueada.
  */
 function evaluatePermissions(caseDef, env) {
+  if (caseDef.probe) return require('../adversarial').runProbeCase(caseDef, env); // suíte adversarial (M9-D042)
   const def = env.registry.get(caseDef.toolName);
   const effective = effectivePermissions({ permissions: caseDef.actorPermissions || [] }, env.agent, env.registry);
   const usable = Boolean(def) && allowlist(env.agent).has(caseDef.toolName) && effective.includes(def.permissionCode);

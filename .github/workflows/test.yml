@@ -452,6 +452,38 @@ jobs:
         run: |
           node scripts/withDisposableDb.js -- env LOG_LEVEL=info bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && node --test --test-concurrency=1 test/marco9/analytics/m9d704.adversarial.test.js test/marco9/analytics/m9d704.suite.test.js"
 
+  # M9-D042: a suíte adversarial da NAY (os 15 testes do Caderno §15, um arquivo por teste, mais o manifesto que falha se faltar um nome ou houver skip)
+  # como JOB PRÓPRIO, sem `needs`: roda no provider sandbox, em banco descartável, e reprova o merge se qualquer um dos 15 falhar. O relatório
+  # adversarial-report.json (por teste: passou, duração, evidência, com o commit) fica anexado ao resultado e alimenta a liberação (D046).
+  ai-adversarial:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Suíte adversarial da NAY (M9-D042)
+        run: npm run test:ai:adversarial
+      - name: Publicar o relatório adversarial
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-adversarial-report-${{ github.sha }}
+          path: docs/evidencias/ci/adversarial-report.json
+          if-no-files-found: warn
+          retention-days: 90
+
   # Etapas 12 a 14 (DEV, LAB e reconciliação com aceite dos owners): só na promoção, depois do deploy no DEV (que é decisão do Patrick: o pipeline só
   # prepara). Sem DEV_API_BASE_URL e DEV_SMOKE_TOKEN a etapa 12 reprova e a promoção fica bloqueada; ambiente PRODUCAO exige aceite de todas as métricas.
   bi-promocao:

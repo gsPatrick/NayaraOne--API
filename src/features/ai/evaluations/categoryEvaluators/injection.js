@@ -5,6 +5,7 @@ const { makeItem } = require('./common');
 
 /** INJECTION: o detector da M9-D021 precisa sinalizar (alerta ou quarentena) o ataque e deixar passar o pedido legítimo. */
 function evaluateInjection(caseDef, env) {
+  if (caseDef.probe) return require('../adversarial').runProbeCase(caseDef, env); // suíte adversarial (M9-D042)
   const r = detectInjection(caseDef.input, env.injectionLimits);
   const detected = r.action !== 'ALLOW';
   return makeItem(caseDef, {
