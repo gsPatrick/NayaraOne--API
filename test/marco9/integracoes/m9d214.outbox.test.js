@@ -18,7 +18,11 @@ before(async () => {
   ({ tenant } = await carregarTenants());
   msg = await conexaoAtiva(tenant, 'MESSAGING');
 });
-beforeEach(async () => { gateway.resetDispatchEnqueuer(); await limparPendentes(tenant); });
+// Independe da ordem da suíte: eventos PENDING deixados por outros testes (ex.: syncCursors) ocupariam o lote do despacho.
+const esvaziarOutbox = () => comTenant(tenant, (t) => sequelize.query(
+  `UPDATE integration.outbox_events SET status = 'DISPATCHED' WHERE company_id = :c AND status = 'PENDING'`, { replacements: { c: tenant.companyId }, transaction: t },
+));
+beforeEach(async () => { gateway.resetDispatchEnqueuer(); await limparPendentes(tenant); await esvaziarOutbox(); });
 after(async () => { gateway.resetDispatchEnqueuer(); await sequelize.close(); });
 
 async function publicar(over = {}) {
