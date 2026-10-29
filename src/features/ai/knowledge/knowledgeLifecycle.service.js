@@ -6,6 +6,7 @@ const repo = require('./knowledge.repository');
 const { toEntry } = require('./knowledge.mapper');
 const { auditKnowledge } = require('./knowledge.audit');
 const { guarded } = require('./knowledgeRegistry.service');
+const { enqueueKnowledge, retractKnowledge } = require('../retrieval/ingestion.knowledge');
 
 /**
  * Homologa um DRAFT: o homologador precisa ser diferente de quem escreveu (403 AI_KNOWLEDGE_SELF_HOMOLOGATION). A versão
@@ -32,10 +33,12 @@ async function homologate(ctx, id, transaction) {
       const prior = toEntry(current);
       await current.update({ status: 'SUPERSEDED', isActive: false, updatedBy: ctx.userId, lockVersion: current.lockVersion + 1 }, { transaction });
       await auditKnowledge(ctx, 'ai.knowledge.superseded', toEntry(current), prior, `Substituída pela versão ${row.version}.`, transaction);
+      await retractKnowledge(ctx, current.id, 'SUPERSEDED', transaction);
     }
     await row.update({ status: 'HOMOLOGATED', homologatedBy: ctx.userId, homologatedAt: now, isActive: true, updatedBy: ctx.userId, lockVersion: row.lockVersion + 1 }, { transaction });
     const entry = toEntry(row);
     await auditKnowledge(ctx, 'ai.knowledge.homologated', entry, before, `Conhecimento homologado (versão ${entry.version}).`, transaction);
+    await enqueueKnowledge(ctx, row, transaction); // ingestão automática no RAG (M9-D022), na mesma transação
     return entry;
   });
 }
@@ -56,6 +59,7 @@ async function revoke(ctx, id, body, transaction) {
     await row.update({ status: 'REVOKED', revokedBy: ctx.userId, revokedAt: new Date(), revokeReason: reason, isActive: false, updatedBy: ctx.userId, lockVersion: row.lockVersion + 1 }, { transaction });
     const entry = toEntry(row);
     await auditKnowledge(ctx, 'ai.knowledge.revoked', entry, before, `Conhecimento revogado: ${reason}`, transaction);
+    await retractKnowledge(ctx, row.id, 'REVOKED', transaction); // o RAG deixa de recuperar os chunks (M9-D022/D023)
     return entry;
   });
 }

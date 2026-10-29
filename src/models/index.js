@@ -222,6 +222,8 @@ const modelDefiners = {
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),
   AiMemory: require('./AiMemory'),
+  AiIngestion: require('./AiIngestion'),
+  AiChunk: require('./AiChunk'),
   AuditLog: require('./AuditLog'),
   BillingSchedule: require('./BillingSchedule'),
   BillingScheduleItem: require('./BillingScheduleItem'),

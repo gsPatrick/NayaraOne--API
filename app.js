@@ -39,6 +39,7 @@ const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
 const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob');
+const { startAiRagJob } = require('./src/engines/jobs/aiRagJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
 const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
@@ -293,6 +294,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiEvaluationJob();
   startAiBudgetPeriodJob();
   startAiMemoryExpiryJob();
+  startAiRagJob();
   startAnalyticsReadModelRefreshJob();
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
 }

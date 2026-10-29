@@ -445,3 +445,19 @@ test('M9-D214: integration.dispatch_attempts tem RLS, FORCE RLS e a política te
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
 });
+
+// M9-D022: ai.ingestions e ai.chunks (RAG da NAY) com RLS, FORCE RLS, a política tenant_isolation e os gatilhos que impedem apagar.
+test('M9-D022: ai.ingestions e ai.chunks têm RLS, FORCE RLS, tenant_isolation e gatilho de não apagar', async () => {
+  const gatilhos = { ingestions: 'ingestions_guard', chunks: 'chunks_guard' };
+  for (const [tabela, gatilho] of Object.entries(gatilhos)) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+              (SELECT count(*)::int FROM pg_trigger g WHERE g.tgrelid = c.oid AND g.tgname = :gatilho) AS gatilho
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'ai' AND c.relname = :tabela`,
+      { replacements: { tabela, gatilho } }
+    );
+    assert.equal(rows.length, 1, `ai.${tabela} não existe`);
+    assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies, rows[0].gatilho], [true, true, ['tenant_isolation'], 1], `ai.${tabela}`);
+  }
+});

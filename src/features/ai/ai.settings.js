@@ -24,6 +24,7 @@ const { PROVIDER_SETTING_DEFAULTS, PROVIDER_SETTINGS_SCHEMA } = require('./provi
 const { MEMORY_SETTING_DEFAULTS, MEMORY_SETTINGS_SCHEMA } = require('./memory/memory.settings');
 const { REGRESSION_SETTING_DEFAULTS, REGRESSION_SETTINGS_SCHEMA } = require('./regression/regression.settings');
 const { ROUTER_SETTING_DEFAULTS, ROUTER_SETTINGS_SCHEMA } = require('./providers/router/router.settings');
+const { RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA } = require('./retrieval/retrieval.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
@@ -53,6 +54,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...PROVIDER_SETTING_DEFAULTS,
   ...MEMORY_SETTING_DEFAULTS,
   ...ROUTER_SETTING_DEFAULTS,
+  ...RAG_SETTING_DEFAULTS,
 });
   ...REGRESSION_SETTING_DEFAULTS,
 
@@ -76,6 +78,7 @@ const AI_SETTINGS_SCHEMA = {
   ...PROVIDER_SETTINGS_SCHEMA,
   ...MEMORY_SETTINGS_SCHEMA,
   ...ROUTER_SETTINGS_SCHEMA,
+  ...RAG_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {

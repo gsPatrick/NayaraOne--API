@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 583. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 586. Rotas só com login ou públicas: 22.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -35,6 +35,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PUT` | `/api/v1/ai/budgets/:id` | `ai:budget` | não |
 | `GET` | `/api/v1/ai/budgets` | `ai:audit|ai:budget` | não |
 | `POST` | `/api/v1/ai/budgets` | `ai:budget` | não |
+| `PUT` | `/api/v1/ai/files/:fileId/classification` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/ingestions/:id` | `ai:use|ai:audit|ai:admin` | não |
+| `POST` | `/api/v1/ai/ingestions` | `ai:use|ai:admin` | não |
 | `GET` | `/api/v1/ai/runs/:id` | `ai:read|ai:audit` | não |
 | `POST` | `/api/v1/ai/runs` | `ai:use` | não |
 | `GET` | `/api/v1/ai/status` | `ai:read` | não |

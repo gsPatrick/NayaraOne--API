@@ -18,6 +18,7 @@ const { registerRecommendationRoutes } = require('./recommendations/recommendati
 const { registerApprovalRoutes } = require('./approval/approval.routes');
 const { registerBudgetRoutes } = require('./budgets/budgets.routes');
 const { registerMemoryRoutes } = require('./memory/memory.routes');
+const { registerIngestionRoutes } = require('./retrieval/ingestion.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -56,6 +57,8 @@ registerApprovalRoutes(router);
 registerBudgetRoutes(router);
 // Memória empresarial estruturada (M9-D009): /ai/memories, invalidate e correct.
 registerMemoryRoutes(router);
+// Ingestão segura de arquivos, URLs e conhecimento no índice do RAG (M9-D022): POST/GET /ai/ingestions e PUT /ai/files/:fileId/classification.
+registerIngestionRoutes(router);
 
 router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
 router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));

@@ -64,6 +64,7 @@ module.exports = (sequelize) => {
       },
       // Resultado do antivírus no envio (CLEAN) e quando rodou (migration 642).
       scanStatus: { type: DataTypes.STRING(16), allowNull: true, field: 'scan_status' },
+      classification: { type: DataTypes.STRING(12), allowNull: true, field: 'classification' },
       scannedAt: { type: DataTypes.DATE, allowNull: true, field: 'scanned_at' },
       // STOPGAP (ver migration 20260101000173) — binário guardado direto no Postgres enquanto
       // não existe storage de objetos real. Nunca incluído em queries por padrão
