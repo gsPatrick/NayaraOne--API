@@ -9,6 +9,9 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `AUTH_VALIDATION` | 400 | Os dados de acesso enviados são inválidos. | plataforma | 1.1.0 | não |
 | `GOV_ANOMALY_INVALID_TRANSITION` | 409 | Esta anomalia não pode mudar para a situação pedida. | dlp | 1.0.0 | não |
 | `GOV_ANOMALY_REASON_REQUIRED` | 400 | Informe o motivo da revisão. | dlp | 1.0.0 | não |
+| `GOV_API_CLIENT_INVALID` | 422 | Dados da credencial inválidos. | api-governance | 1.0.0 | não |
+| `GOV_API_CLIENT_NOT_FOUND` | 404 | Credencial não encontrada. | api-governance | 1.0.0 | não |
+| `GOV_API_CLIENT_REVOKED` | 409 | Esta credencial já foi revogada. | api-governance | 1.0.0 | não |
 | `GOV_API_CONSUMER_EXISTS` | 409 | Já existe um consumidor com este nome ou esta credencial. | api-governance | 1.0.0 | não |
 | `GOV_API_CONSUMER_INVALID` | 422 | Dados do consumidor inválidos. | api-governance | 1.0.0 | não |
 | `GOV_API_DATE_INVALID` | 422 | Informe uma data válida (AAAA-MM-DD ou data e hora ISO). | api-governance | 1.0.0 | não |
@@ -22,6 +25,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_API_TARGET_INVALID` | 422 | Informe o alvo como "ROUTE:MÉTODO /caminho" ou "MAJOR:n". | api-governance | 1.0.0 | não |
 | `GOV_API_VERSION_SUNSET` | 410 | Esta versão da API foi desativada. | api-governance | 1.0.0 | não |
 | `GOV_ASSIGNEE_INACTIVE` | 422 | Só usuário ativo da empresa pode ser designado. | data-quality | 1.0.0 | não |
+| `GOV_AUTH_INVALID_TOKEN_TYPE` | 401 | Tipo de credencial não aceito aqui. | api-governance | 1.0.0 | não |
 | `GOV_BCP_ACTION_INVALID` | 422 | Esta ação não existe para o setor. | bcp | 1.0.0 | não |
 | `GOV_BCP_ALREADY_FINAL` | 409 | Esta operação já foi concluída. | bcp | 1.0.0 | não |
 | `GOV_BCP_COMMAND_REJECTED` | 422 | O sistema recusou a operação: <valor>. | bcp | 1.0.0 | não |
@@ -43,6 +47,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_CALENDAR_RANGE_INVALID` | 400 | A data inicial deve ser anterior à final. | calendar | 1.0.0 | não |
 | `GOV_CALENDAR_SOURCE_INVALID` | 400 | Tipo de origem inválido. | calendar | 1.0.0 | não |
 | `GOV_CALENDAR_TENANT_MISMATCH` | 403 | O evento pertence a outra empresa e foi descartado. | calendar | 1.0.0 | não |
+| `GOV_CLIENT_DISABLED` | 401 | Esta credencial está desativada. | api-governance | 1.0.0 | não |
 | `GOV_CODIGO_FORA_DO_PADRAO` | 500 | Código de erro fora do padrão GOV_ (o código original vai em details.codigoOriginal). | core-governance | 1.0.0 | não |
 | `GOV_COMMITMENT_INVALID` | 400 | O fim do compromisso deve ser após o início. | calendar | 1.0.0 | não |
 | `GOV_COMMITMENT_OWNER_ONLY` | 403 | Somente a pessoa responsável pelo compromisso ou um administrador pode fazer esta alteração. | calendar | 1.0.0 | não |
@@ -85,10 +90,16 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_EXPORT_REQUEST_INVALID` | 400 | Os dados do pedido de exportação são inválidos. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_RESOURCE_INVALID` | 400 | Tipo de exportação inválido. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_TIMEOUT` | 500 | A geração da exportação passou do tempo máximo. | core-governance | 1.0.0 | não |
+| `GOV_EXTERNAL_LEAD_DUPLICATE` | 409 | Já existe um cadastro com este documento ou contato. | api-governance | 1.0.0 | não |
+| `GOV_EXTERNAL_LEAD_INVALID` | 422 | Dados do lead inválidos. | api-governance | 1.0.0 | não |
+| `GOV_EXTERNAL_ROUTE_WITHOUT_SCOPE` | 500 | Rota externa sem scope declarado. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_INVALID` | 400 | A chave de idempotência deve ter de 8 a 128 caracteres. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REQUIRED` | 400 | Envie o cabeçalho Idempotency-Key. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REUSED` | 422 | Esta chave de idempotência já foi usada com outra requisição. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_RESPONSE_PENDING` | 409 | A requisição original ainda está em andamento ou não guardou a resposta. Tente de novo em instantes. | api-governance | 1.0.0 | não |
+| `GOV_INSUFFICIENT_SCOPE` | 403 | A credencial não tem permissão para esta operação. | api-governance | 1.0.0 | não |
+| `GOV_INVALID_CLIENT` | 401 | Credenciais inválidas. | api-governance | 1.0.0 | não |
+| `GOV_INVALID_SCOPE` | 400 | Nenhum dos scopes pedidos é permitido para esta credencial. | api-governance | 1.0.0 | não |
 | `GOV_LINEAGE_AREA_INVALID` | 400 | Área de lineage inválida. | lineage | 1.0.0 | não |
 | `GOV_LINEAGE_AREA_MISSING` | 422 | Área sem lineage cadastrado. | core-governance | 1.0.0 | não |
 | `GOV_LINEAGE_AREA_REQUIRED` | 422 | Informe a área do nó de lineage. | lineage | 1.0.0 | não |
@@ -128,6 +139,9 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_RATE_LIMITED` | 429 | Muitas requisições. Tente novamente em <N> segundos. | api-governance | 1.0.0 | não |
 | `GOV_RESPONSE_SCHEMA_MISMATCH` | 422 | A resposta de <método> <rota> não segue o contrato. | api-governance | 1.1.0 | não |
 | `GOV_STATUS_NOT_DOCUMENTED` | 422 | Status <N> não está no contrato de <rota>. | api-governance | 1.1.0 | não |
+| `GOV_TOKEN_EXPIRED` | 401 | O token expirou. Obtenha um novo token. | api-governance | 1.0.0 | não |
+| `GOV_TOKEN_INVALID` | 401 | Token de acesso inválido. | api-governance | 1.0.0 | não |
+| `GOV_UNSUPPORTED_GRANT_TYPE` | 400 | Informe grant_type=client_credentials. | api-governance | 1.0.0 | não |
 | `GOV_VALIDATION_PAGINATION` | 400 | Parâmetros de paginação inválidos. | api-governance | 1.0.0 | não |
 | `INTERNAL_ERROR` | 500 | Erro interno. | plataforma | 1.0.0 | não |
 | `LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE` | 409 | Esta vistoria já tem assinatura registrada e ficou imutável. | legal | 1.0.0 | não |

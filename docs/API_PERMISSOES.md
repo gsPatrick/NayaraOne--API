@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 590. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 593. Rotas só com login ou públicas: 26.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -54,6 +54,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/analytics/exports/:id/download` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/exports/:id/file` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/metrics/:code/drilldown` | `analytics:read` | não |
+| `POST` | `/api/v1/api-governance/clients/:id/revoke` | `governance:api:manage` | não |
+| `GET` | `/api/v1/api-governance/clients` | `governance:api:read` | não |
+| `POST` | `/api/v1/api-governance/clients` | `governance:api:manage` | não |
 | `GET` | `/api/v1/api-governance/consumers` | `governance:api:read` | não |
 | `POST` | `/api/v1/api-governance/deprecations/:id/cancel` | `governance:api:manage` | não |
 | `GET` | `/api/v1/api-governance/deprecations` | `governance:api:read` | não |
@@ -672,6 +675,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | Método | Caminho | Permissão exigida | MFA recente |
 |---|---|---|---|
 | `GET` | `/api/health` | público (saúde do serviço) | não |
+| `GET` | `/api/v1/api-external/contracts` | token de cliente com o scope `contracts:read` | não |
+| `POST` | `/api/v1/api-external/leads` | token de cliente com o scope `leads:write` | não |
+| `POST` | `/api/v1/api-external/oauth/token` | público (troca client id e segredo por token de cliente) | não |
+| `GET` | `/api/v1/api-external/properties` | token de cliente com o scope `properties:read` | não |
 | `GET` | `/api/v1/auth/companies` | só login | não |
 | `POST` | `/api/v1/auth/login` | público (obtém ou renova o token) | não |
 | `POST` | `/api/v1/auth/logout` | só login | não |
@@ -713,8 +720,8 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:bcp:record` | MEDIUM | `GET /api/v1/bcp/form-templates/:sector/:formType/print`, `GET /api/v1/bcp/form-templates`, `PATCH /api/v1/bcp/manual-operations/:id`, `GET /api/v1/bcp/manual-operations`, `POST /api/v1/bcp/manual-operations`, `GET /api/v1/bcp` |
 | `governance:bcp:import` | HIGH | `POST /api/v1/bcp/manual-operations/import`, `GET /api/v1/bcp/reconciliations` |
 | `governance:bcp:approve` | CRITICAL | `POST /api/v1/bcp/reconciliations/:id/decide` |
-| `governance:api:read` | LOW | `GET /api/v1/api-governance/consumers`, `GET /api/v1/api-governance/deprecations` |
-| `governance:api:manage` | HIGH | `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
+| `governance:api:read` | LOW | `GET /api/v1/api-governance/clients`, `GET /api/v1/api-governance/consumers`, `GET /api/v1/api-governance/deprecations` |
+| `governance:api:manage` | HIGH | `POST /api/v1/api-governance/clients/:id/revoke`, `POST /api/v1/api-governance/clients`, `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
 | `governance:finops:read` | LOW | `GET /api/v1/finops/health` |
 | `governance:finops:manage` | HIGH | nenhuma ainda |
 | `governance:flags:manage` | CRITICAL | `GET /api/v1/feature-flags` |

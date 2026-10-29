@@ -751,3 +751,25 @@ test('M9-D046: ai.release_gates tem RLS, FORCE RLS e a política tenant_isolatio
   assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS em ai.release_gates');
   assert.deepEqual(rows[0].policies, ['tenant_isolation']);
 });
+
+// M9-D844: as credenciais da API externa são da EMPRESA (tenant_isolation); a consulta por client_id tem política própria, só de leitura. O catálogo de scopes é do sistema: leitura aberta e escrita só pela migration.
+test('M9-D844: api_clients tem RLS, FORCE RLS, tenant_isolation e a consulta por client_id; api_scopes é catálogo de leitura aberta', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS tenant_policies,
+      (SELECT string_agg(p.polname, ',' ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS names
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN ('api_clients', 'api_scopes') ORDER BY 1`);
+  assert.equal(rows.length, 2, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity], [true, true], `RLS e FORCE em governance.${r.relname}`);
+  const clients = rows.find((r) => r.relname === 'api_clients');
+  assert.deepEqual([clients.tenant_policies, clients.names], [1, 'api_client_lookup,tenant_isolation']);
+  assert.equal(rows.find((r) => r.relname === 'api_scopes').names, 'api_scopes_catalog_write,api_scopes_read');
+  const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.api_clients', 'INSERT') AS clients_ins,
+      has_table_privilege('nayara_runtime', 'governance.api_scopes', 'SELECT') AS scopes_sel
+    WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grants.length) assert.deepEqual([grants[0].clients_ins, grants[0].scopes_sel], [true, true], 'GRANT ao role de runtime');
+  // Escrita no catálogo de scopes: nenhuma política a permite sem a chave que só a migration liga (a aplicação nunca a liga).
+  const [writes] = await sequelize.query("SELECT pg_get_expr(p.polwithcheck, p.polrelid) AS chk FROM pg_policy p WHERE p.polrelid = 'governance.api_scopes'::regclass AND p.polcmd IN ('a', '*')");
+  assert.ok(writes.length === 1 && /app\.api_scope_catalog/.test(writes[0].chk), 'só a chave da migration libera escrita em api_scopes');
+  const [seeded] = await sequelize.query("SELECT code FROM governance.api_scopes ORDER BY code");
+  assert.deepEqual(seeded.map((r) => r.code), ['contracts:read', 'leads:write', 'properties:read']);
+});

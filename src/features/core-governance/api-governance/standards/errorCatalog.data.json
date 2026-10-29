@@ -21,6 +21,27 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_API_CLIENT_INVALID": {
+      "status": 422,
+      "message": "Dados da credencial inválidos.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_CLIENT_NOT_FOUND": {
+      "status": 404,
+      "message": "Credencial não encontrada.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_API_CLIENT_REVOKED": {
+      "status": 409,
+      "message": "Esta credencial já foi revogada.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
     "GOV_API_CONSUMER_EXISTS": {
       "status": 409,
       "message": "Já existe um consumidor com este nome ou esta credencial.",
@@ -109,6 +130,13 @@
       "status": 422,
       "message": "Só usuário ativo da empresa pode ser designado.",
       "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_AUTH_INVALID_TOKEN_TYPE": {
+      "status": 401,
+      "message": "Tipo de credencial não aceito aqui.",
+      "module": "api-governance",
       "since": "1.0.0",
       "deprecated": false
     },
@@ -256,6 +284,13 @@
       "status": 403,
       "message": "O evento pertence a outra empresa e foi descartado.",
       "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CLIENT_DISABLED": {
+      "status": 401,
+      "message": "Esta credencial está desativada.",
+      "module": "api-governance",
       "since": "1.0.0",
       "deprecated": false
     },
@@ -553,6 +588,27 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_EXTERNAL_LEAD_DUPLICATE": {
+      "status": 409,
+      "message": "Já existe um cadastro com este documento ou contato.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXTERNAL_LEAD_INVALID": {
+      "status": 422,
+      "message": "Dados do lead inválidos.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXTERNAL_ROUTE_WITHOUT_SCOPE": {
+      "status": 500,
+      "message": "Rota externa sem scope declarado.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
     "GOV_IDEMPOTENCY_KEY_INVALID": {
       "status": 400,
       "message": "A chave de idempotência deve ter de 8 a 128 caracteres.",
@@ -577,6 +633,27 @@
     "GOV_IDEMPOTENCY_RESPONSE_PENDING": {
       "status": 409,
       "message": "A requisição original ainda está em andamento ou não guardou a resposta. Tente de novo em instantes.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_INSUFFICIENT_SCOPE": {
+      "status": 403,
+      "message": "A credencial não tem permissão para esta operação.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_INVALID_CLIENT": {
+      "status": 401,
+      "message": "Credenciais inválidas.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_INVALID_SCOPE": {
+      "status": 400,
+      "message": "Nenhum dos scopes pedidos é permitido para esta credencial.",
       "module": "api-governance",
       "since": "1.0.0",
       "deprecated": false
@@ -852,6 +929,27 @@
       "message": "Status <N> não está no contrato de <rota>.",
       "module": "api-governance",
       "since": "1.1.0",
+      "deprecated": false
+    },
+    "GOV_TOKEN_EXPIRED": {
+      "status": 401,
+      "message": "O token expirou. Obtenha um novo token.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_TOKEN_INVALID": {
+      "status": 401,
+      "message": "Token de acesso inválido.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_UNSUPPORTED_GRANT_TYPE": {
+      "status": 400,
+      "message": "Informe grant_type=client_credentials.",
+      "module": "api-governance",
+      "since": "1.0.0",
       "deprecated": false
     },
     "GOV_VALIDATION_PAGINATION": {

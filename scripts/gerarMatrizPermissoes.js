@@ -22,8 +22,9 @@ function walk(stack, prefix, out) {
       const handlers = layer.route.stack.map((l) => l.handle);
       const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
       const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
+      const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
       for (const method of Object.keys(layer.route.methods)) {
-        out.push({ method: method.toUpperCase(), path: prefix + layer.route.path, permissions, mfaRecente: mfa });
+        out.push({ method: method.toUpperCase(), path: prefix + layer.route.path, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}) });
       }
     } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
       walk(layer.handle.stack, prefix + prefixFrom(layer), out);
@@ -59,6 +60,8 @@ if (require.main === module) {
     const publicas = rotas.filter((r) => r.permissions.length === 0);
     const protegidas = rotas.filter((r) => r.permissions.length > 0);
     const categoria = (r) => {
+      if (r.scope) return `token de cliente com o scope \`${r.scope}\``;
+      if (/\/api-external\/oauth\/token$/.test(r.path)) return 'público (troca client id e segredo por token de cliente)';
       if (/\/webhooks\//.test(r.path)) return 'público; autenticidade pela assinatura do provider';
       if (/\/carts\/public\//.test(r.path)) return 'público; acesso pelo token do link';
       if (/\/(health|ping|version)(\/|$)/.test(r.path)) return 'público (saúde do serviço)';

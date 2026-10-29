@@ -61,7 +61,9 @@ function idempotency({ required = false } = {}) {
       const json = res.json.bind(res);
       res.json = (body) => {
         if (!state.won || res.statusCode >= 400) return json(body);
-        repository.storeResponse({ companyId: tenant.companyId, scope: state.scope, key, status: res.statusCode, body })
+        // `res.locals.idempotencyStoredBody`: o handler pode guardar uma versão da resposta sem dado de exibição única (ex.: segredo de credencial); a repetição devolve essa versão.
+        const stored = res.locals.idempotencyStoredBody === undefined ? body : res.locals.idempotencyStoredBody;
+        repository.storeResponse({ companyId: tenant.companyId, scope: state.scope, key, status: res.statusCode, body: stored })
           .catch((err) => logger.error({ err: err.message }, 'idempotency.store.failed'))
           .finally(() => json(body));
         return res;

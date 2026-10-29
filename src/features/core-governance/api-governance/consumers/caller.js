@@ -5,6 +5,7 @@ const consumersRepo = require('./consumers.repository');
 const { ensureWebConsumer } = require('./consumers.service');
 const { inTenantTx } = require('./tenantTx');
 const { contextFor } = require('./context');
+const { peekClientClaims } = require('../clients/token');
 
 /**
  * Quem chama (M9-D841 §3.1), para os cabeçalhos de deprecação e para o rastro de uso. Usuário logado (JWT válido) = a empresa do token; credencial externa (/api-external com X-Client-Id)
@@ -13,18 +14,28 @@ const { contextFor } = require('./context');
  */
 async function resolveCaller(req) {
   const identity = identify(req);
-  if (identity.kind === 'internal') {
+  if (!isExternal(req) && identity.kind === 'internal') {
     const ctx = await contextFor(identity.tenant);
     return { tenant: identity.tenant, ctx, consumer: await webConsumerOf(req, ctx) };
   }
-  const clientId = req.get('x-client-id');
-  if (identity.kind === 'external' && isExternal(req) && clientId) {
+  const clientId = isExternal(req) ? externalClientId(req) : null;
+  if (clientId) {
     const consumer = await consumersRepo.findByClientId(clientId);
     if (!consumer) return null;
     const tenant = { groupId: consumer.groupId, companyId: consumer.companyId };
     return { tenant, ctx: await contextFor(tenant), consumer };
   }
   return null;
+}
+
+/** A credencial de quem chama /api-external: o client_id do token de cliente válido; sem ele, o cabeçalho X-Client-Id; na emissão do token, o client_id do corpo (só conta se a resposta for < 400). */
+function externalClientId(req) {
+  const claims = peekClientClaims(req);
+  if (claims) return claims.client_id;
+  const header = req.get('x-client-id');
+  if (header) return header;
+  const body = req.body && typeof req.body === 'object' ? req.body.client_id : null;
+  return /\/api-external\/oauth\/token\/?$/.test(req.originalUrl || '') && typeof body === 'string' ? body : null;
 }
 
 async function webConsumerOf(req, ctx) {

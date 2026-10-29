@@ -28,7 +28,21 @@ async function startContractApi(doc, port) {
   const makerId = (await env.adminQuery("SELECT id FROM core.users WHERE email = 'ci-a-maker@ci.nayaraone.test'")).rows[0].id;
   const { emailFor } = require('../../../scripts/seed-ci-two-tenants');
   const vars = { loginEmail: emailFor('A', 'leitura'), loginPassword: process.env.CI_TENANT_USERS_PASSWORD, userId: A.userId, companyId: A.companyId, groupId: A.groupId, makerUserId: makerId, userIdB: B.userId, companyIdB: B.companyId };
-  return { http, tokens: { gestor: http.tokens.gestor, maker: http.tokens.maker, gestorB: http.tokens.gestorB }, vars, restore, tenants: http.tenants };
+  const external = await externalClients(http, vars);
+  return { http, tokens: { gestor: http.tokens.gestor, maker: http.tokens.maker, gestorB: http.tokens.gestorB, ...external.tokens }, vars: { ...vars, ...external.vars }, restore, tenants: http.tenants };
+}
+
+/** Duas credenciais de API externa criadas pela rota (M9-D844): a completa (três scopes) e a limitada (properties:read), com o token de cada uma. */
+async function externalClients(http, vars) {
+  const issue = async (name, scopes) => {
+    const created = await http.call('gestor', 'POST', '/api-governance/clients', { name, kind: 'PARTNER', ownerUserId: vars.userId, scopes });
+    const { clientId, clientSecret } = created.body.data;
+    const token = await fetch(`${http.baseUrl}/api-external/oauth/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }) });
+    return { clientId, clientSecret, accessToken: (await token.json()).access_token };
+  };
+  const full = await issue('QA-M9 contrato completo', ['properties:read', 'leads:write', 'contracts:read']);
+  const limited = await issue('QA-M9 contrato limitado', ['properties:read']);
+  return { tokens: { client: full.accessToken, clientLimited: limited.accessToken }, vars: { clientId: full.clientId, clientSecret: full.clientSecret } };
 }
 
 /** MFA recente para o ator do exemplo (inserção no cluster descartável, nunca por HTTP). */

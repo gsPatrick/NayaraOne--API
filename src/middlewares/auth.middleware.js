@@ -64,6 +64,11 @@ async function authMiddleware(req, res, next) {
     return next(err);
   }
 
+  // M9-D844: token de credencial de API externa (typ = 'client', sem usuário) não vale nas rotas internas.
+  if (payload.typ === 'client') {
+    return next(AppError.unauthorized('Tipo de credencial não aceito aqui.', 'GOV_AUTH_INVALID_TOKEN_TYPE'));
+  }
+
   if (!payload.sub || !payload.group_id || !payload.company_id) {
     return next(
       AppError.unauthorized('Token de acesso não carrega contexto de tenant completo.', 'INVALID_ACCESS_TOKEN_CLAIMS')

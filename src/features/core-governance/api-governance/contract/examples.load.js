@@ -5,7 +5,8 @@ const path = require('node:path');
 const { exampleInvalid } = require('./contract.errors');
 
 const KINDS = ['positive', 'negative'];
-const ACTORS = ['gestor', 'maker', 'anon', 'gestorB'];
+// client e clientLimited são tokens de credencial de API externa (M9-D844): o primeiro com os três scopes, o segundo só com properties:read.
+const ACTORS = ['gestor', 'maker', 'anon', 'gestorB', 'client', 'clientLimited'];
 
 /** Confere a forma de um exemplo; devolve o motivo ou null. */
 function shapeProblem(example) {

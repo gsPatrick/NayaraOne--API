@@ -26,4 +26,22 @@ async function cancelDeprecation(req, res) {
   return success(res, { data });
 }
 
-module.exports = { listConsumers, createDeprecation, listDeprecations, cancelDeprecation };
+async function createClient(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.createClient({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId, body: req.body, transaction }));
+  // O segredo aparece uma vez: a resposta guardada para repetição da Idempotency-Key leva o segredo omitido (nunca fica em claro no banco).
+  const { clientSecret, ...rest } = data;
+  res.locals.idempotencyStoredBody = { success: true, data: { ...rest, clientSecret: null, secretShown: false } };
+  return success(res, { statusCode: 201, data: { ...rest, clientSecret, secretShown: true } });
+}
+
+async function listClients(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.listClients({ tenant: tenantFromAuth(req), query: req.query, transaction }));
+  return success(res, { data: data.items, pagination: data.pagination });
+}
+
+async function revokeClient(req, res) {
+  const data = await req.withTenantTransaction((transaction) => service.revokeClient({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId, id: req.params.id, transaction }));
+  return success(res, { data });
+}
+
+module.exports = { listConsumers, createDeprecation, listDeprecations, cancelDeprecation, createClient, listClients, revokeClient };

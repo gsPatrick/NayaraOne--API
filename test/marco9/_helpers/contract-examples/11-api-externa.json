@@ -1,0 +1,33 @@
+{
+  "area": "api-externa",
+  "examples": [
+    {"op": "POST /api-governance/clients", "kind": "positive", "name": "cria a credencial de um parceiro", "as": "gestor", "expect": 201, "body": {"name": "QA-M9 parceiro do contrato", "kind": "PARTNER", "ownerUserId": "${userId}", "scopes": ["properties:read"]}, "capture": {"newClientDbId": "body.data.id"}},
+    {"op": "POST /api-governance/clients", "kind": "negative", "name": "scope fora do catálogo", "as": "gestor", "expect": 422, "body": {"name": "QA-M9 invalido", "kind": "PARTNER", "ownerUserId": "${userId}", "scopes": ["properties:write"]}},
+    {"op": "POST /api-governance/clients", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /api-governance/clients", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /api-governance/clients", "kind": "positive", "name": "lista as credenciais", "as": "gestor", "expect": 200},
+    {"op": "GET /api-governance/clients", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /api-governance/clients", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /api-governance/clients/{id}/revoke", "kind": "positive", "name": "revoga a credencial", "as": "gestor", "expect": 200, "params": {"id": "${newClientDbId}"}},
+    {"op": "POST /api-governance/clients/{id}/revoke", "kind": "negative", "name": "revogar de novo", "as": "gestor", "expect": 409, "params": {"id": "${newClientDbId}"}},
+    {"op": "POST /api-governance/clients/{id}/revoke", "kind": "negative", "name": "credencial inexistente", "as": "gestor", "expect": 404, "params": {"id": "00000000-0000-4000-8000-000000000000"}},
+    {"op": "POST /api-governance/clients/{id}/revoke", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${newClientDbId}"}},
+    {"op": "POST /api-governance/clients/{id}/revoke", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${newClientDbId}"}},
+    {"op": "POST /api-external/oauth/token", "kind": "positive", "name": "token por client credentials", "as": "anon", "expect": 200, "body": {"grant_type": "client_credentials", "client_id": "${clientId}", "client_secret": "${clientSecret}"}},
+    {"op": "POST /api-external/oauth/token", "kind": "negative", "name": "segredo errado", "as": "anon", "expect": 401, "body": {"grant_type": "client_credentials", "client_id": "${clientId}", "client_secret": "segredo-errado"}},
+    {"op": "POST /api-external/oauth/token", "kind": "negative", "name": "grant_type não suportado", "as": "anon", "expect": 400, "body": {"grant_type": "password", "client_id": "${clientId}", "client_secret": "${clientSecret}"}},
+    {"op": "GET /api-external/properties", "kind": "positive", "name": "imóveis publicados", "as": "client", "expect": 200},
+    {"op": "GET /api-external/properties", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /api-external/properties", "kind": "negative", "name": "pageSize acima do teto", "as": "client", "expect": 400, "query": {"pageSize": "201"}},
+    {"op": "GET /api-external/properties", "kind": "negative", "name": "token de usuário", "as": "gestor", "expect": 401},
+    {"op": "GET /api-external/contracts", "kind": "positive", "name": "contratos resumidos", "as": "client", "expect": 200},
+    {"op": "GET /api-external/contracts", "kind": "negative", "name": "credencial sem o scope", "as": "clientLimited", "expect": 403},
+    {"op": "GET /api-external/contracts", "kind": "negative", "name": "pageSize inválido", "as": "client", "expect": 400, "query": {"pageSize": "0"}},
+    {"op": "GET /api-external/contracts", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "POST /api-external/leads", "kind": "positive", "name": "envia um lead", "as": "client", "expect": 201, "body": {"name": "QA-M9 Lead do contrato", "email": "qa-m9-contrato@exemplo.com"}},
+    {"op": "POST /api-external/leads", "kind": "negative", "name": "mesmo contato de novo", "as": "client", "expect": 409, "body": {"name": "QA-M9 Lead do contrato", "email": "qa-m9-contrato@exemplo.com"}},
+    {"op": "POST /api-external/leads", "kind": "negative", "name": "corpo sem contato", "as": "client", "expect": 422, "body": {"name": "QA-M9 Sem contato"}},
+    {"op": "POST /api-external/leads", "kind": "negative", "name": "credencial sem o scope", "as": "clientLimited", "expect": 403, "body": {"name": "QA-M9 Sem scope", "email": "qa-m9-sem-scope@exemplo.com"}},
+    {"op": "POST /api-external/leads", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401}
+  ]
+}
