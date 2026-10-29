@@ -7,7 +7,7 @@ const { portOperation } = require('../enqueue/resolveTarget');
 const { readWorkerParams } = require('./worker.params');
 const { tenantTx } = require('./tenantTx');
 const { runPreflight } = require('./worker.preflight');
-const { deferDispatch } = require('./worker.defer');
+const { applyVerdict } = require('./worker.verdict');
 const { startAttempt } = require('./worker.attempts');
 const { handleSuccess } = require('./worker.success');
 const { handleFailure } = require('./worker.failure');
@@ -24,15 +24,11 @@ async function phaseA(ctx, id, now) {
     const connection = await IntegrationConnection.findOne({ where: { id: dispatch.connectionId, companyId: ctx.companyId }, transaction });
     const params = await readWorkerParams(ctx, transaction);
     const verdict = await runPreflight({ ctx, dispatch, connection, now, params, transaction });
-    if (verdict) {
-      await deferDispatch(ctx, dispatch, verdict.until, verdict.reason, transaction);
-      return { deferred: verdict.reason };
-    }
+    if (verdict) return applyVerdict(ctx, dispatch, verdict, transaction);
     // Circuito (M9-D217): por último, porque admitir um teste do HALF_OPEN ocupa uma vaga. Essencial = marcado no envio (definido pela operação do port).
     const circuito = await admitCall(connection, ctx, transaction, { essential: dispatch.essential === true, now });
     if (!circuito.allowed) {
-      await deferDispatch(ctx, dispatch, circuito.until, circuito.reason, transaction);
-      return { deferred: circuito.reason };
+      return applyVerdict(ctx, dispatch, circuito, transaction);
     }
     return { attemptId: await startAttempt(ctx, dispatch, now, transaction), probe: circuito.probe };
   });
@@ -82,7 +78,7 @@ async function phaseB(ctx, id, attemptId, now, probe = false) {
 /** Processa UM envio já pego (SENDING): fase A e, se liberado, fase B. */
 async function processClaimed(ctx, id, { now = new Date() } = {}) {
   const a = await phaseA(ctx, id, now);
-  if (a.skipped || a.deferred) return a;
+  if (a.skipped || a.deferred || a.failed) return a;
   return phaseB(ctx, id, a.attemptId, now, a.probe);
 }
 

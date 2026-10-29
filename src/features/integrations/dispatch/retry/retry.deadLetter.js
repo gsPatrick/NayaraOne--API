@@ -9,8 +9,9 @@ const { reportDispatchError, publishFailed, MENSAGENS } = require('./retry.repor
  */
 async function sendToDeadLetter(ctx, dispatch, cls, httpStatus, transaction) {
   const patch = { lastErrorClass: cls.class, lastErrorCode: cls.code, lastHttpStatus: Number.isInteger(httpStatus) ? httpStatus : undefined };
+  const motivo = 'ATTEMPTS_EXHAUSTED'; // M9-D215: o motivo fica no envio; UNKNOWN_UNRESOLVED é da reconciliação (reconcile.deadLetter.js)
   if (dispatch.status === 'SENDING') await applyTransition(ctx, dispatch, 'RETRY_WAIT', patch, { motivo: `Tentativas esgotadas (${dispatch.attempts} de ${dispatch.maxAttempts}).` }, transaction);
-  await applyTransition(ctx, dispatch, 'DEAD_LETTER', patch, { motivo: 'Tentativas esgotadas: fila morta.' }, transaction);
+  await applyTransition(ctx, dispatch, 'DEAD_LETTER', { ...patch, deadLetterReason: motivo }, { motivo: 'Tentativas esgotadas: fila morta.' }, transaction);
   await reportDispatchError(ctx, dispatch, { errorClass: cls.class, errorCode: cls.code, severity: 'HIGH', message: MENSAGENS.DEAD_LETTER, httpStatus }, transaction);
   await publishFailed(ctx, dispatch, { errorClass: cls.class, errorCode: cls.code, status: 'DEAD_LETTER' }, transaction);
   return dispatch;

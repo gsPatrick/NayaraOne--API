@@ -10,6 +10,8 @@ const MENSAGENS = Object.freeze({
   AUTH: authFailed().message,
   DEAD_LETTER: 'O envio esgotou as tentativas e foi para a fila morta.',
   UNKNOWN: 'Não foi possível confirmar se o fornecedor recebeu o envio: ele aguarda conferência.',
+  EXTERNAL_FAILED: 'O fornecedor informou que a operação não foi concluída: confira o resultado e envie novamente se for o caso.',
+  UNKNOWN_UNRESOLVED: 'Não foi possível descobrir se o fornecedor executou a operação depois de várias consultas: confira no extrato ou no painel do fornecedor antes de repetir.',
   RATE_LIMIT_CAP: 'O fornecedor pediu uma espera maior que o limite configurado: o envio espera o limite e a integração merece atenção.',
 });
 

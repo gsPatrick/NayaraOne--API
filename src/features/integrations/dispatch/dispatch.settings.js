@@ -1,5 +1,7 @@
 'use strict';
 
+const { RECONCILE_SETTINGS_SCHEMA } = require('./reconcile/reconcile.settings');
+
 /** Parâmetros dos envios (M9-D205): só o dicionário de SETTINGS_SCHEMA; a leitura está em dispatch.params.js. */
 const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   // INT-P011: segundos em SENDING sem resposta até o recuperador mandar o envio para UNKNOWN.
@@ -29,6 +31,8 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   'integration.dispatch.blocked_recheck_s': { type: 'integer', min: 5, max: 86400 },
   // M9-D243 3.1 (INT-P090): segundos que uma métrica ou evento de analytics espera para sair; passado o prazo é descartado, sem afetar o negócio.
   'integration.analytics.drop_after_s': { type: 'integer', min: 1, max: 86400 },
+  // M9-D215: reconciliação do envio incerto (consultas, esperas, job) e recuperador de envios presos em SENDING.
+  ...RECONCILE_SETTINGS_SCHEMA,
 });
 
 module.exports = { DISPATCH_SETTINGS_SCHEMA };

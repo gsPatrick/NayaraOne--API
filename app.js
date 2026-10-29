@@ -51,6 +51,8 @@ const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJ
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 const { startIntegrationDispatchWorkerJob } = require('./src/engines/jobs/integrationDispatchWorkerJob');
+const { startIntegrationReconcileJob } = require('./src/engines/jobs/integrationReconcileJob');
+const { startIntegrationDispatchOrphanJob } = require('./src/engines/jobs/integrationDispatchOrphanJob');
 
 const app = express();
 
@@ -327,6 +329,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_ALERT_JOB_DISABLE
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DEPENDENCY_AUDIT_JOB_DISABLED !== 'true') {
   startDependencyAuditJob();
+}
+
+// Marco 9, M9-D215 — reconciliação dos envios incertos (UNKNOWN) por consulta ao fornecedor e recuperador de envios presos em SENDING (a cada 60 s).
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RECONCILE_JOB_DISABLED !== 'true') {
+  startIntegrationReconcileJob();
+  startIntegrationDispatchOrphanJob();
 }
 
 // Marco 9, M9-D244 — retenção das tabelas de integração por integration.purge_expired() (o runtime não tem DELETE).

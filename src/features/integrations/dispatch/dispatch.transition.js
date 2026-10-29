@@ -8,7 +8,7 @@ const { auditarMudanca, visao } = require('./dispatch.audit');
 const { ERROR_CLASSES, HUMAN_RETRY_EXTRA_ATTEMPTS } = require('./dispatch.constants');
 
 /** Campos que quem transiciona pode informar (o conteúdo aprovado nunca está aqui). */
-const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus', 'authRenewals'];
+const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus', 'authRenewals', 'deadLetterReason'];
 
 function pickPatch(patch) {
   const out = {};
@@ -28,8 +28,10 @@ function sideEffects(row, to, opts) {
   // Devolução sem tentativa gasta (circuito, cota, conexão parada, AUTH ou 429): o contador volta ao que era antes do SENDING.
   if (opts.refundAttempt && row.attempts > 0) efeitos.attempts = row.attempts - 1;
   if (to === 'CONFIRMED') efeitos.confirmedAt = agora;
-  if (to === 'UNKNOWN') efeitos.unknownSince = agora;
+  // Em UNKNOWN a data da próxima consulta nasce vazia (vale unknown_since + a 1ª espera, M9-D215): a do último envio não vale mais.
+  if (to === 'UNKNOWN') { efeitos.unknownSince = agora; efeitos.nextAttemptAt = null; }
   if (row.status === 'UNKNOWN' && to !== 'UNKNOWN') efeitos.unknownSince = null;
+  if (row.status === 'DEAD_LETTER' && to !== 'DEAD_LETTER') efeitos.deadLetterReason = null;
   if (row.status === 'DEAD_LETTER' && to === 'RETRY_WAIT' && opts.humanRetry) efeitos.maxAttempts = row.maxAttempts + HUMAN_RETRY_EXTRA_ATTEMPTS;
   return efeitos;
 }

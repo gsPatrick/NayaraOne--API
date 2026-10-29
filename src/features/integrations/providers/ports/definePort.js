@@ -40,6 +40,8 @@ function definePort(className, domain, operations, portVersion = '1') {
       confirmation: politica.confirmation,
       finalStatuses: politica.finalStatuses,
       essential: politica.essential === true,
+      // M9-D215: consultas que decidem, depois de um timeout, se a operação perigosa aconteceu; sem elas o envio incerto vai a revisão humana.
+      reconcileStrategy: politica.reconcileStrategy || null,
     });
   });
   const Port = class extends IntegrationAdapter {};

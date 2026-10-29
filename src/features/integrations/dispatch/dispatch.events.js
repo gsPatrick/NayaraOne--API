@@ -2,7 +2,9 @@
 
 const { publishDomainEvent } = require('../../../engines/events/outbox');
 
-const EVENTS = Object.freeze({ CONFIRMED: 'integration.dispatch.confirmed', FAILED: 'integration.dispatch.failed' });
+const EVENTS = Object.freeze({
+  CONFIRMED: 'integration.dispatch.confirmed', FAILED: 'integration.dispatch.failed', NEEDS_MANUAL_REVIEW: 'integration.dispatch.needs_manual_review',
+});
 
 /**
  * Publica um evento interno do envio no outbox, na MESMA transação da mudança de estado, uma vez só (chave = tipo + id do envio).
