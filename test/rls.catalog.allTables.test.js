@@ -473,3 +473,12 @@ test('M9-D022: ai.ingestions e ai.chunks têm RLS, FORCE RLS, tenant_isolation e
     assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies, rows[0].gatilho], [true, true, ['tenant_isolation'], 1], `ai.${tabela}`);
   }
 });
+
+// M9-D807: governance.field_change_evidence (origem e comprovante de alteração de campo crítico) com RLS + FORCE RLS e a política tenant_isolation.
+test('M9-D807: field_change_evidence tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'field_change_evidence'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
+});

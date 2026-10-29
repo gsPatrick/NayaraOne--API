@@ -4,6 +4,7 @@ const { BankAccount } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBankAccountCreated, publishBankAccountSensitiveDataChanged } = require('./financeEvents.service');
+const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, bankAccountEntity } = require('../core-governance/data-quality/evidence');
 
 const BANK_ACCOUNT_COOLDOWN_HOURS = Number(process.env.FINANCE_BANK_ACCOUNT_COOLDOWN_HOURS) || 48;
 
@@ -97,6 +98,12 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
   const beforeJson = bankAccount.toJSON();
   const { ownerPersonId, bankCode, agency, accountNumber, pixKey, status } = payload;
 
+  // M9-D807: dados bancários e PIX só mudam com origem e comprovante (recusa antes de qualquer gravação).
+  const patch = {};
+  SENSITIVE_FIELDS.forEach((field) => { if (payload[field] !== undefined) patch[field] = field === 'ownerPersonId' ? payload[field] || null : payload[field]; });
+  const entity = await bankAccountEntity(bankAccount, beforeJson, transaction);
+  const assertion = await assertEvidenceForCriticalChange(entity, patch, payload.changeEvidence, { transaction, actorUserId });
+
   let sensitiveChanged = false;
   if (bankCode !== undefined && bankCode !== bankAccount.bankCode) { bankAccount.bankCode = bankCode; sensitiveChanged = true; }
   if (agency !== undefined && agency !== bankAccount.agency) { bankAccount.agency = agency; sensitiveChanged = true; }
@@ -157,6 +164,7 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
 
   bankAccount.updatedBy = actorUserId || null;
   await bankAccount.save({ transaction });
+  await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
 
   if (sensitiveChanged) {
     await publishBankAccountSensitiveDataChanged(bankAccount, transaction);

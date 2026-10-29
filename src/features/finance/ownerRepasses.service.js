@@ -7,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertBankAccountEligibleForPayment, assertNoDuplicatePayment } = require('./financeAntifraud.service');
 const { publishOwnerRepasseCreated, publishOwnerRepassCompleted } = require('./financeEvents.service');
+const { resolveRepasseDestination } = require('./ownerRepasseDestination.service');
 
 // Carregado sob demanda: financialEntries.service importa módulos que importam este arquivo.
 function entriesService() {
@@ -433,7 +434,7 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
   if (!repasse.referenceMonth) {
     throw AppError.conflict('Repasse sem período definido não pode ser aprovado.', 'FINANCE_OWNER_REPASSE_PERIOD_REQUIRED');
   }
-  const bankAccountId = repasse.bankAccountId || (payload && payload.bankAccountId);
+  const { bankAccountId, record: recordDestination } = await resolveRepasseDestination(repasse, payload, actorUserId, transaction);
   if (!bankAccountId) {
     throw AppError.badRequest('Informe a conta bancária de saída do repasse.', 'FINANCE_OWNER_REPASSE_BANK_ACCOUNT_REQUIRED');
   }
@@ -478,6 +479,7 @@ async function approveOwnerRepasse(id, payload, actorUserId, transaction) {
   repasse.approvedAt = new Date();
   repasse.updatedBy = actorUserId;
   await repasse.save({ transaction });
+  await recordDestination();
 
   await registrarAuditoria(
     {

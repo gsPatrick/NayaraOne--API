@@ -2,6 +2,7 @@
 
 const { PropertyOwner, Property, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyOwnerEntity } = require('../core-governance/data-quality/evidence');
 
 const ROLE_CODES = ['OWNER', 'USUFRUCTUARY'];
 
@@ -52,8 +53,12 @@ async function getOwner(propertyId, ownerId, transaction) {
   return owner;
 }
 
+/** Estado do vínculo de proprietário comparado pela evidência de campo crítico (M9-D807): quem é, quanto e por quanto tempo. */
+const ownerState = (owner) => ({ personId: owner.personId, ownershipPercent: owner.ownershipPercent === null || owner.ownershipPercent === undefined ? null : Number(owner.ownershipPercent), roleCode: owner.roleCode, validFrom: owner.validFrom, validUntil: owner.validUntil });
+
 async function updateOwner(propertyId, ownerId, payload, actorUserId, transaction) {
   const owner = await getOwner(propertyId, ownerId, transaction);
+  const current = { owner: ownerState(owner) };
   const { ownershipPercent, roleCode, validFrom, validUntil } = payload;
   if (ownershipPercent !== undefined) owner.ownershipPercent = ownershipPercent;
   if (roleCode !== undefined) {
@@ -65,13 +70,19 @@ async function updateOwner(propertyId, ownerId, payload, actorUserId, transactio
   }
   if (validFrom !== undefined) owner.validFrom = validFrom;
   if (validUntil !== undefined) owner.validUntil = validUntil;
+  const entity = propertyOwnerEntity(owner, current);
+  const assertion = await assertEvidenceForCriticalChange(entity, { owner: ownerState(owner) }, payload.changeEvidence, { transaction, actorUserId });
   owner.updatedBy = actorUserId || null;
   await owner.save({ transaction });
+  await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
   return owner;
 }
 
-async function deleteOwner(propertyId, ownerId, actorUserId, transaction) {
+async function deleteOwner(propertyId, ownerId, actorUserId, transaction, changeEvidence) {
   const owner = await getOwner(propertyId, ownerId, transaction);
+  const entity = propertyOwnerEntity(owner, { owner: ownerState(owner) });
+  const assertion = await assertEvidenceForCriticalChange(entity, { owner: null }, changeEvidence, { transaction, actorUserId });
+  await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
   owner.deletedBy = actorUserId || null;
   await owner.save({ transaction });
   await owner.destroy({ transaction });

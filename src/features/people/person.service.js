@@ -7,6 +7,7 @@ const { findPotentialDuplicate } = require('./personDedup.service');
 const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
 const { VALID_ROLES } = require('./personRoles.service');
 const { scorePersonDataQuality } = require('./personDataQuality.service');
+const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, personEntity } = require('../core-governance/data-quality/evidence');
 
 // Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
 // payload de criação da pessoa (fonte única da lista: VALID_ROLES).
@@ -248,6 +249,7 @@ async function updatePerson(id, payload, actorUserId, transaction) {
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
 
+  const currentCritical = { legalName: person.legalName, taxIdNormalized: person.taxIdNormalized, birthOrFoundationDate: person.birthOrFoundationDate };
   const { legalName, preferredName, taxIdNormalized, birthOrFoundationDate, status, personType, riskFlagsJson } = payload;
   if (legalName !== undefined) person.legalName = legalName;
   if (preferredName !== undefined) person.preferredName = preferredName;
@@ -267,8 +269,14 @@ async function updatePerson(id, payload, actorUserId, transaction) {
   if (birthOrFoundationDate !== undefined) person.birthOrFoundationDate = birthOrFoundationDate;
   if (status !== undefined) person.status = status;
   if (riskFlagsJson !== undefined) person.riskFlagsJson = riskFlagsJson;
+  // M9-D807: campo crítico (CPF/CNPJ, nome, nascimento) só muda com origem e comprovante, gravados na mesma transação.
+  const patch = {};
+  ['legalName', 'taxIdNormalized', 'birthOrFoundationDate'].forEach((field) => { if (payload[field] !== undefined) patch[field] = person[field]; });
+  const entity = await personEntity(person, currentCritical, transaction);
+  const assertion = await assertEvidenceForCriticalChange(entity, patch, payload.changeEvidence, { transaction, actorUserId });
   person.updatedBy = actorUserId || null;
   await person.save({ transaction });
+  await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
   await publishPersonUpdated(person, transaction);
   return getPerson(id, transaction);
 }

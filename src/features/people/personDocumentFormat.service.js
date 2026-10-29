@@ -48,6 +48,11 @@ function validateDocumentFormat(documentType, documentNumber) {
  * tax_id_normalized_hash e permitir busca exata sem expor o documento em claro. Retorna
  * `null` quando não há valor a normalizar.
  */
+/** hashPiiValue — HMAC-SHA256 de um texto qualquer com o mesmo segredo do CPF/CNPJ (M9-D807: prova de valor sem guardar o claro). */
+function hashPiiValue(text) {
+  return crypto.createHmac('sha256', requirePiiHashSecret()).update(String(text)).digest('hex');
+}
+
 function hashTaxId(taxIdDigits) {
   if (!taxIdDigits) return null;
   return crypto.createHmac('sha256', requirePiiHashSecret()).update(taxIdDigits).digest('hex');
@@ -74,4 +79,4 @@ function isValidTaxIdDigits(digits) {
   return false;
 }
 
-module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId, isValidTaxIdDigits };
+module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId, hashPiiValue, isValidTaxIdDigits };

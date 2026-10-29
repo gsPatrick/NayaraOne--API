@@ -29,6 +29,9 @@ const antifraudService = require('../src/features/finance/financeAntifraud.servi
 const approvalsService = require('../src/features/finance/approvals.service');
 const { BankAccount, FinancialEntry, User } = require('../src/models');
 
+// M9-D807: dado bancário e PIX só mudam com origem informada.
+const EVIDENCE = { source: 'PERSON_STATEMENT', note: 'Fornecedor avisou a troca de banco por e-mail.' };
+
 // FIX FIN-004 (ver financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE com
 // bankAccountId agora exige aprovação prévia. Estes testes são sobre COOLDOWN de conta
 // bancária, não sobre o fluxo de aprovação — aprova o pagamento antes de cada tentativa de
@@ -152,7 +155,7 @@ test('Banco fornecedor alterado: troca de PIX do fornecedor reabre o cooldown e 
     // O fornecedor "avisa" que trocou de banco — alteração feita pelo caminho guardado do Financeiro.
     const changed = await bankAccountsService.updateBankAccount(
       account.id,
-      { pixKey: `pix-novo-${suffix}@fornecedor.dev` },
+      { pixKey: `pix-novo-${suffix}@fornecedor.dev`, changeEvidence: EVIDENCE },
       tenant.userId,
       transaction
     );
@@ -184,7 +187,7 @@ test('Banco fornecedor alterado: reatribuir ao fornecedor uma conta já ACTIVE d
     // Conta de OUTRO titular, que já passou pelo resfriamento há muito tempo.
     const foreignAccount = await createVerifiedAccount(transaction, otherHolder.id, `${suffix}-mule`);
 
-    const reassigned = await bankAccountsService.updateBankAccount(foreignAccount.id, { ownerPersonId: supplier.id }, tenant.userId, transaction);
+    const reassigned = await bankAccountsService.updateBankAccount(foreignAccount.id, { ownerPersonId: supplier.id, changeEvidence: EVIDENCE }, tenant.userId, transaction);
     assert.equal(reassigned.ownerPersonId, supplier.id);
     assert.equal(reassigned.status, 'PENDING_COOLDOWN', 'conta "nova" para este fornecedor precisa passar pelo resfriamento');
 
@@ -207,7 +210,7 @@ test('Banco fornecedor alterado: trocar o PIX com a conta BLOQUEADA e depois des
     await bankAccountsService.blockBankAccount(account.id, 'suspeita de fraude', tenant.userId, transaction);
     const changedWhileBlocked = await bankAccountsService.updateBankAccount(
       account.id,
-      { pixKey: `pix-trocado-no-bloqueio-${suffix}@fornecedor.dev` },
+      { pixKey: `pix-trocado-no-bloqueio-${suffix}@fornecedor.dev`, changeEvidence: EVIDENCE },
       tenant.userId,
       transaction
     );

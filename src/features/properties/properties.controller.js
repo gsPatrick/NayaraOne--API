@@ -88,7 +88,7 @@ const updateOwner = catchAsync(async (req, res) => {
 
 const removeOwner = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((transaction) =>
-    ownersService.deleteOwner(req.params.id, req.params.ownerId, req.auth.userId, transaction)
+    ownersService.deleteOwner(req.params.id, req.params.ownerId, req.auth.userId, transaction, req.body && req.body.changeEvidence)
   );
   return success(res, { data: result });
 });

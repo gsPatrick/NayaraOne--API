@@ -7,6 +7,7 @@ const { publishPropertyCreated, publishPropertyUpdated, publishPropertyPublished
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { ADDRESS_VISIBILITIES } = require('./publicReadModel/constants');
+const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyEntity } = require('../core-governance/data-quality/evidence');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 // M9-D403: política de endereço em conteúdo público de Marketing (padrão do banco: SO_BAIRRO).
@@ -357,8 +358,12 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     property.addressId = await createOrReuseAddress(address, transaction);
   }
 
+  // M9-D807: a matrícula (campo crítico) só muda com origem e comprovante, gravados na mesma transação.
+  const entity = propertyEntity(property, beforeJson);
+  const assertion = await assertEvidenceForCriticalChange(entity, registryNumber === undefined ? {} : { registryNumber }, payload.changeEvidence, { transaction, actorUserId });
   property.updatedBy = actorUserId || null;
   await property.save({ transaction });
+  await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
   await publishPropertyUpdated(property, transaction);
   // M9-D409: as transições que geram rascunho de Marketing (publicado, vendido, alugado) saem como evento próprio.
   if (property.publicationStatus === 'PUBLISHED' && beforeJson.publicationStatus !== 'PUBLISHED') await publishPropertyPublished(property, transaction);
