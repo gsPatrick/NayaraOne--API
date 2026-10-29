@@ -51,6 +51,7 @@ const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/fin
 const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/imoveisKpi.settings');
+const { CORRETORES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/corretoresKpi.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
@@ -259,6 +260,7 @@ const SETTINGS_SCHEMA = {
   ...CASH_SETTINGS_SCHEMA,
   ...COMERCIAL_SETTINGS_SCHEMA,
   ...IMOVEIS_KPI_SETTINGS_SCHEMA,
+  ...CORRETORES_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D617 — read models de Locação: tipos de contrato, prazo do repasse e nota de cada tipo de registro de atendimento (a janela da inadimplência é a da D615).
   ...LOCACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.
