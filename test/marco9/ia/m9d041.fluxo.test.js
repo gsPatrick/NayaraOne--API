@@ -29,7 +29,7 @@ test('m9d041_responde_com_fontes_e_snapshot', async () => {
     assert.equal(res.status, 'COMPLETED');
     assert.equal(res.groundingStatus, 'GROUNDED');
     assert.equal(res.routingPath, 'SMALL_MODEL', 'a dúvida simples vai ao modelo pequeno');
-    assert.equal(res.sources.length, 1, 'a fonte é a política homologada');
+    assert.ok(res.sources.length >= 1, 'a política homologada é fonte (outros conhecimentos da empresa, se houver, também podem ser)');
     assert.match(res.answer, /9h às 18h/);
     const run = await H.lerRun(res.runId, tx);
     assert.equal(run.agent_name, 'NAY_ATENDIMENTO');
@@ -37,9 +37,9 @@ test('m9d041_responde_com_fontes_e_snapshot', async () => {
     assert.equal(run.user_id, null, 'o chamador é a identidade de serviço do canal, não uma pessoa');
     assert.ok(run.snapshot_at, 'o run guarda o retrato (snapshot) das fontes');
     const fontes = await H.q('SELECT source_ref, source_type, classification FROM ai.ai_sources WHERE ai_run_id = :r', { r: res.runId }, tx);
-    assert.equal(fontes.length, 1);
-    assert.equal(fontes[0].source_ref, politica.id);
-    assert.ok(['PUBLIC', 'INTERNAL'].includes(fontes[0].classification));
+    const daPolitica = fontes.filter((f) => f.source_ref === politica.id);
+    assert.equal(daPolitica.length, 1, 'a política criada aqui é fonte uma vez');
+    assert.ok(fontes.every((f) => ['PUBLIC', 'INTERNAL'].includes(f.classification)));
     assert.deepEqual((await H.chamadas(res.runId, tx)).length, 0, 'a dúvida simples não precisa de tool');
   });
 });
@@ -118,12 +118,15 @@ test('m9d041_empresa_b_nao_aparece', async () => {
 test('m9d041_nao_usa_confidential', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const c = await H.cenario(tenantA, tx);
-    await H.politicaHomologada(c, 'Regra confidencial da carteira de clientes premium do trimestre.', { classification: 'CONFIDENTIAL' });
-    await H.politicaHomologada(c, 'Regra restrita da carteira de clientes premium do trimestre, uso interno.', { classification: 'RESTRICTED' });
+    const confidencial = await H.politicaHomologada(c, 'Regra confidencial da carteira de clientes premium do trimestre.', { classification: 'CONFIDENTIAL' });
+    const restrita = await H.politicaHomologada(c, 'Regra restrita da carteira de clientes premium do trimestre, uso interno.', { classification: 'RESTRICTED' });
     const res = await H.conversar(c, 'o que vale para a carteira premium do trimestre? [[RESPOSTA:A regra da carteira premium é especial [1].]]');
     assert.equal(res.ok, true, JSON.stringify(res.error));
-    assert.equal(res.groundingStatus, 'INSUFFICIENT_SOURCES', 'confidencial e restrito nem são candidatos');
-    assert.equal((await H.q('SELECT count(*)::int AS n FROM ai.ai_sources WHERE ai_run_id = :r', { r: res.runId }, tx))[0].n, 0);
+    // Independe do que outros arquivos deixaram no banco (conhecimento INTERNAL da empresa pode vir como fonte): o que se prova é que as
+    // entradas CONFIDENTIAL e RESTRICTED criadas aqui nunca são fonte do run, e que nenhuma fonte tem essas classes.
+    const fontes = await H.q('SELECT source_ref, classification FROM ai.ai_sources WHERE ai_run_id = :r', { r: res.runId }, tx);
+    const proibidas = fontes.filter((f) => ['CONFIDENTIAL', 'RESTRICTED'].includes(f.classification) || [confidencial.id, restrita.id].some((id) => String(f.source_ref).includes(id)));
+    assert.deepEqual(proibidas, [], 'confidencial e restrito nem são candidatos');
     // O teto é do próprio agente: mesmo um provedor que aceitasse as duas classes não as libera para a NAY Atendimento.
     const provedorLiberal = { entries: async () => [{ providerCode: 'liberal', policy: { allowsConfidential: true, allowsRestricted: true } }] };
     const teto = await executionCeiling({ registry: provedorLiberal, ctx: c.ctx, agent: c.agente, decision: { provider: 'liberal' }, transaction: tx });
