@@ -26,4 +26,13 @@ async function cleanDlp() {
   await adminQuery('DELETE FROM governance.dlp_policies');
 }
 
-module.exports = { ...base, actorOf, codeOf, rows, auditRows, setRolePermission, cleanDlp, adminQuery, sequelize };
+/** Eventos do outbox de um pedido (leitura do superusuário do cluster descartável). */
+const outboxOf = async (jobId, eventType = 'dlp.export.blocked') => (await adminQuery('SELECT * FROM integration.outbox_events WHERE aggregate_id = $1 AND event_type = $2', [jobId, eventType])).rows;
+const jobRow = async (id) => (await adminQuery('SELECT * FROM governance.export_jobs WHERE id = $1', [id])).rows[0] || null;
+/** Apaga os pedidos e as políticas criados por commit real nos testes (as duas empresas). */
+async function cleanJobs() {
+  await adminQuery('DELETE FROM governance.export_jobs');
+  await adminQuery('DELETE FROM governance.dlp_policies');
+}
+
+module.exports = { ...base, outboxOf, jobRow, cleanJobs, actorOf, codeOf, rows, auditRows, setRolePermission, cleanDlp, adminQuery, sequelize };

@@ -17,6 +17,10 @@ const EXPORT_PERMISSION = 'governance:dlp:export';
 const FLOOR_CLASSES = Object.freeze(['HIGH', 'RESTRICTED']);
 const FLOOR_ACTION = 'EXPORT';
 
+/** Valores do rastro das etapas do guard (M9-D821): checagem que falhou na etapa e resultado possível de uma etapa. */
+const CHECKS = Object.freeze({ PURPOSE_CATALOG: 'PURPOSE_CATALOG', JUSTIFICATION_MIN: 'JUSTIFICATION_MIN' });
+const NOT_APPLICABLE = 'NOT_APPLICABLE';
+
 /** Posição da classe na ordem de sensibilidade (LOW = 0). -1 se desconhecida. */
 const classRank = (value) => CLASSES.indexOf(value);
 
@@ -28,5 +32,5 @@ function highestClass(values) {
 }
 
 module.exports = {
-  CLASSES, ACTIONS, KINDS, VIEW_RESTRICTED_PERMISSION, ADMIN_PERMISSION, EXPORT_PERMISSION, FLOOR_CLASSES, FLOOR_ACTION, classRank, highestClass,
+  CLASSES, ACTIONS, KINDS, VIEW_RESTRICTED_PERMISSION, ADMIN_PERMISSION, EXPORT_PERMISSION, FLOOR_CLASSES, FLOOR_ACTION, CHECKS, NOT_APPLICABLE, classRank, highestClass,
 };
