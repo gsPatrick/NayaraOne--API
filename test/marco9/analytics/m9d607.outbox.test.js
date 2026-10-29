@@ -18,14 +18,14 @@ const publish = (account, n) => inTx(env.tenantA, { commit: true }, (tx) => publ
   groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, aggregateType: 'M9D607', aggregateId: crypto.randomUUID(), eventType: env.settledType,
   payload: { accountId: account }, idempotencyKey: `${env.settledType}:${account}:${n}`,
 }, tx));
-const dispatch = () => dispatchPendingEventsForCompany({ id: env.tenantA.groupId }, { id: env.tenantA.companyId }, { limit: 100 });
+const dispatch = () => dispatchPendingEventsForCompany({ id: env.tenantA.groupId }, { id: env.tenantA.companyId }, { limit: 1000 });
 
 test('m9d607 um lote de 100 eventos grava uma única linha em read_model_refreshes', async () => {
   const accounts = Array.from({ length: 10 }, (_, i) => `lote-${env607.sfx()}-${i}`);
   for (const acc of accounts) await addSource(env, env.tenantA, acc, '5.00');
   for (let n = 0; n < 10; n += 1) for (const acc of accounts) await publish(acc, n);
   const result = await dispatch();
-  assert.equal(result.dispatched, 100);
+  assert.ok(result.dispatched >= 100, 'os 100 eventos do teste (mais algum pendente de outros testes) saíram no mesmo lote');
   const [rows] = await env.admin.query(`SELECT "trigger", status, rows_upserted FROM analytics.read_model_refreshes WHERE read_model = :m`, { replacements: { m: env.model } });
   assert.equal(rows.length, 1, 'uma linha por lote, não uma por evento');
   assert.deepEqual([rows[0].trigger, rows[0].status, rows[0].rows_upserted], ['EVENT', 'SUCCEEDED', 100]);
