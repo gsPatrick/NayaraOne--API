@@ -83,7 +83,7 @@ test('m9d615 erro no meio desfaz a atualização', async () => {
   assert.deepEqual(await healthRow(env, env.tenantA), before, 'a saúde financeira, aplicada antes da falha, também foi desfeita');
   const [[reg]] = await env.admin.query("SELECT count(*)::int AS n FROM analytics.rm_applied_events WHERE source_event_id = :e", { replacements: { e: String(event.id) } });
   assert.equal(reg.n, 0, 'o evento não ficou marcado como aplicado');
-  assert.equal((await apply(env.tenantA, event)).upserted, 2, 'sem a falha o mesmo evento é aplicado normalmente');
+  assert.ok((await apply(env.tenantA, event)).upserted >= 2, 'sem a falha o mesmo evento é aplicado normalmente (nos dois read models do Financeiro e em quem mais consome o lançamento)');
 });
 
 test('m9d615 agenda recalcula o que depende do relógio', async () => {

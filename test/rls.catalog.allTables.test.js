@@ -383,3 +383,12 @@ test('M9-D616: os 9 read models de Comercial/CRM e Imóveis têm RLS, FORCE RLS 
   assert.equal(rows.length, tables.length, 'as nove tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
 });
+
+// M9-D617: read models de Locação (9) no BI com RLS + FORCE RLS e 4 políticas.
+test('M9-D617: os 9 read models de Locação têm RLS, FORCE RLS e 4 políticas', async () => {
+  const tables = ['rm_rental_contracts', 'rm_rental_vacancy', 'rm_rental_arrears', 'rm_rental_guarantees', 'rm_rental_obligations', 'rm_rental_inspections_keys', 'rm_rental_tickets', 'rm_rental_satisfaction', 'rm_rental_repasses'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as nove tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+});
