@@ -6,7 +6,7 @@ const repo = require('./agents.repository');
 const { auditAgent } = require('./agentAudit');
 const { requireOwn } = require('./agentAccess');
 const { normalizeCode } = require('./agents.validation');
-const { assertGreenEvaluation } = require('./evaluationGate');
+const { assertGreenEvaluation, assertHumanHomologatedEvaluation } = require('./evaluationGate');
 
 const SEGREGATION_KEY = 'ia.agente.segregacao_funcoes';
 
@@ -53,6 +53,7 @@ async function activate(ctx, rawCode, rawVersion, transaction) {
   if ((await segregationOn(ctx, transaction)) && current.homologatedBy === ctx.userId) {
     throw E.segregation('Quem homologou a versão não pode ativá-la; peça a outra pessoa com permissão de administração.');
   }
+  await assertHumanHomologatedEvaluation(ctx, current, transaction);
   for (const id of await repo.activeOwnRowIds(ctx, current.code, transaction)) {
     const before = await repo.findOwnById(ctx, id, transaction);
     await repo.markRetired(ctx, id, transaction);

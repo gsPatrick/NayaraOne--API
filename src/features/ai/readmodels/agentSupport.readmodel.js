@@ -24,4 +24,13 @@ async function passedEvaluationSuites(companyId, code, version, transaction) {
   return new Set(rows.map((r) => r.suite));
 }
 
-module.exports = { acquireCodeLock, evaluationsTableExists, passedEvaluationSuites };
+/** Suítes PASSED da versão cuja avaliação já foi homologada por uma pessoa (M9-D032, AI-015). */
+async function homologatedEvaluationSuites(companyId, code, version, transaction) {
+  const rows = await sequelize.query(
+    "SELECT DISTINCT suite FROM ai.evaluations WHERE company_id = :companyId AND agent_code = :code AND agent_version = :version AND status = 'PASSED' AND homologated_by IS NOT NULL",
+    { replacements: { companyId, code, version }, transaction, type: QueryTypes.SELECT }
+  );
+  return new Set(rows.map((r) => r.suite));
+}
+
+module.exports = { acquireCodeLock, evaluationsTableExists, passedEvaluationSuites, homologatedEvaluationSuites };

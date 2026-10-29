@@ -277,3 +277,23 @@ test('M9-D014: ai.budgets e ai.budget_alerts têm RLS, FORCE RLS e a política t
     assert.deepEqual(rows[0].policies, ['tenant_isolation']);
   }
 });
+
+// M9-D032: ai.evaluations, evaluation_items, feedback e golden_candidates (avaliação da NAY) com RLS, FORCE RLS, a política tenant_isolation e o gatilho de proteção.
+test('M9-D032: ai.evaluations, ai.evaluation_items, ai.feedback e ai.golden_candidates têm RLS, FORCE RLS, tenant_isolation e gatilho de imutabilidade', async () => {
+  const gatilhos = { evaluations: 'evaluations_guard', evaluation_items: 'evaluation_items_guard', feedback: null, golden_candidates: 'golden_candidates_guard' };
+  for (const [tabela, gatilho] of Object.entries(gatilhos)) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+              (SELECT count(*)::int FROM pg_trigger g WHERE g.tgrelid = c.oid AND g.tgname = :gatilho) AS gatilho
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'ai' AND c.relname = :tabela`,
+      { replacements: { tabela, gatilho: gatilho || '' } }
+    );
+    assert.equal(rows.length, 1, `ai.${tabela} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `RLS em ai.${tabela}`);
+    assert.equal(rows[0].relforcerowsecurity, true, `FORCE RLS em ai.${tabela}`);
+    assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+    if (gatilho) assert.equal(rows[0].gatilho, 1, `gatilho ${gatilho}`);
+  }
+});
