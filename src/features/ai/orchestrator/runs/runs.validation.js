@@ -61,7 +61,7 @@ function trail(value) {
   if (!Array.isArray(value) || value.some((s) => !isObject(s) || typeof s.from !== 'string' || typeof s.to !== 'string' || typeof s.reason !== 'string')) {
     throw E.invalid('fallbackTrail deve ser uma lista de saltos {from, to, reason}.');
   }
-  return value.map((s) => ({ from: s.from, to: s.to, reason: s.reason }));
+  return value.map((s) => (Number.isFinite(s.ms) && s.ms >= 0 ? { from: s.from, to: s.to, reason: s.reason, ms: Math.round(s.ms) } : { from: s.from, to: s.to, reason: s.reason }));
 }
 
 /** Entrada de startRun: normalizada, sem aceitar campo fora da lista. */

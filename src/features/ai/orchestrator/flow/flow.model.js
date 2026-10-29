@@ -26,13 +26,15 @@ function addUsage(state, usage, cost) {
 }
 
 /** Cadeia de fallback (D013): o seletor injetado devolve a próxima decisão equivalente ou lança 503 AI_FALLBACK_UNSAFE; sem seletor, falha com o erro do provedor. */
-async function nextOnFailure(state, err, attempt) {
+async function nextOnFailure(state, err, attempt, startedMs) {
   const selector = state.deps.fallbackSelector;
   if (!selector || !RETRYABLE.includes(err.kind) || attempt >= MAX_ATTEMPTS) throw mapProviderError(err);
   const from = state.decision;
-  const next = await selector({ decision: from, error: { kind: err.kind, providerCode: from.provider }, attempt, ctx: state.ctx, transaction: state.transaction });
+  const usage = { structuredOutput: Boolean(state.agent.modelPolicy && state.agent.modelPolicy.outputSchema), toolUse: (state.agent.tools || []).some((t) => t.enabled) };
+  const next = await selector({ decision: from, error: { kind: err.kind, providerCode: from.provider }, attempt, ctx: state.ctx, transaction: state.transaction, input: state.routerInput, usage })
+    .catch((failure) => { throw failure && failure.code === 'AI_PROVIDER_UNAVAILABLE' ? mapProviderError(err) : failure; }); // sem substituto: o erro do provedor (tempo estourado segue 504)
   if (!next) throw E.providerUnavailable({ providerKind: err.kind });
-  state.fallbackTrail.push({ from: `${from.provider}/${from.model}`, to: `${next.provider}/${next.model}`, reason: err.kind });
+  state.fallbackTrail.push({ from: `${from.provider}/${from.model}`, to: `${next.provider}/${next.model}`, reason: err.kind, ms: Math.max(0, state.clock() - startedMs) });
   state.decision = next;
   return next;
 }
@@ -73,6 +75,7 @@ async function generateOnce(state, { system, messages, tools, hint }) {
   if (policy.outputSchema) base.responseSchema = policy.outputSchema;
   for (let attempt = 1; ; attempt += 1) {
     state.modelCalls += 1;
+    const startedMs = state.clock();
     try {
       const response = await callOnce(state, { ...base, idempotencyKey: `${state.runId}:${state.modelCalls}` });
       addUsage(state, response.usage || {}, response.costAmount);
@@ -80,7 +83,7 @@ async function generateOnce(state, { system, messages, tools, hint }) {
       return response;
     } catch (err) {
       if (err && err.name !== 'AiProviderError') throw err;
-      await nextOnFailure(state, err, attempt);
+      await nextOnFailure(state, err, attempt, startedMs);
     }
   }
 }

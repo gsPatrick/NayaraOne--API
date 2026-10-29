@@ -45,7 +45,7 @@ test('m9d020_fallback_seguro_registra_o_salto_no_run', async () => {
     assert.equal(res.ok, true, JSON.stringify(res.error));
     assert.equal(pedidos.length, 2, 'a segunda tentativa aconteceu');
     const run = await H.lerRun(res.runId, tx);
-    assert.deepEqual(run.fallback_trail, [{ from: 'ai-sandbox/sandbox-1', to: 'ai-sandbox/sandbox-1', reason: 'UNAVAILABLE' }]);
+    assert.deepEqual(run.fallback_trail, [{ from: 'ai-sandbox/sandbox-1', to: 'ai-sandbox/sandbox-1', reason: 'UNAVAILABLE', ms: 0 }]);
   });
 });
 

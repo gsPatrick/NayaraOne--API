@@ -3,6 +3,8 @@
 const runs = require('../runs');
 const { finalStateOf, failureOutcome } = require('./flow.outcome');
 const { usageFields } = require('./flow.progress');
+const { describeAvailable } = require('../failClosed');
+const CLOSED_CODES = ['AI_FALLBACK_UNSAFE', 'AI_PROVIDER_UNAVAILABLE'];
 
 /**
  * Qualquer erro depois do passo 1 finaliza o run (FAILED ou BLOCKED, com `finished_at`), com o custo já gasto. A reserva de orçamento
@@ -20,7 +22,8 @@ async function finalizeFailure(state, err) {
     if (err && err.isOperational) throw closeErr;
   }
   if (!err || !err.isOperational) throw err;
-  return failureOutcome(state.runId, err, final, { trace: state.trace.spans, notices: state.notices });
+  const available = CLOSED_CODES.includes(err.code) ? describeAvailable(state) : null;
+  return failureOutcome(state.runId, err, final, { trace: state.trace.spans, notices: state.notices, ...(available ? { available } : {}) });
 }
 
 module.exports = { finalizeFailure };

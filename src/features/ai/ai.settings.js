@@ -24,6 +24,7 @@ const { PROVIDER_SETTING_DEFAULTS, PROVIDER_SETTINGS_SCHEMA } = require('./provi
 const { MEMORY_SETTING_DEFAULTS, MEMORY_SETTINGS_SCHEMA } = require('./memory/memory.settings');
 const { REGRESSION_SETTING_DEFAULTS, REGRESSION_SETTINGS_SCHEMA } = require('./regression/regression.settings');
 const { ROUTER_SETTING_DEFAULTS, ROUTER_SETTINGS_SCHEMA } = require('./providers/router/router.settings');
+const { FALLBACK_SETTING_DEFAULTS, FALLBACK_SETTINGS_SCHEMA } = require('./providers/fallback/fallback.settings');
 const { FLOW_SETTING_DEFAULTS, FLOW_SETTINGS_SCHEMA } = require('./orchestrator/flow/flow.settings');
 const { RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA } = require('./retrieval/retrieval.settings');
 const { RUN_API_SETTING_DEFAULTS, RUN_API_SETTINGS_SCHEMA } = require('./runApi/runApi.settings');
@@ -56,6 +57,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...PROVIDER_SETTING_DEFAULTS,
   ...MEMORY_SETTING_DEFAULTS,
   ...ROUTER_SETTING_DEFAULTS,
+  ...FALLBACK_SETTING_DEFAULTS,
   ...FLOW_SETTING_DEFAULTS,
   ...RAG_SETTING_DEFAULTS,
   ...RUN_API_SETTING_DEFAULTS,
@@ -82,6 +84,7 @@ const AI_SETTINGS_SCHEMA = {
   ...PROVIDER_SETTINGS_SCHEMA,
   ...MEMORY_SETTINGS_SCHEMA,
   ...ROUTER_SETTINGS_SCHEMA,
+  ...FALLBACK_SETTINGS_SCHEMA,
   ...FLOW_SETTINGS_SCHEMA,
   ...RAG_SETTINGS_SCHEMA,
   ...RUN_API_SETTINGS_SCHEMA,

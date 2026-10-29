@@ -68,4 +68,4 @@ function rankCandidates(entries, { capabilities, criticidade, politica = {}, req
   return lista.sort((a, b) => a.estimatedCostMicros - b.estimatedCostMicros || a.p95LatencyMs - b.p95LatencyMs || a.providerCode.localeCompare(b.providerCode) || a.model.localeCompare(b.model));
 }
 
-module.exports = { rankCandidates, passesPolicy, acceptsClassification };
+module.exports = { rankCandidates, passesPolicy, acceptsClassification, hasCapability };
