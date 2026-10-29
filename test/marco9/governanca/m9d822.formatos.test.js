@@ -78,7 +78,7 @@ test('m9d822 arquivo pronto (DIMOB) só ganha a linha final da marca', async () 
   assert.equal(plain.buffer.toString('utf8'), ready.text);
 });
 
-env.useMonth('1999-02');
+env.useMonth(env.uniqueMonth());
 let A;
 let restore;
 before(async () => {

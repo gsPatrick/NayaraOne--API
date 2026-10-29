@@ -11,7 +11,7 @@ const { startHttp, stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/exportsEnv');
 
 let http;
-env.useMonth('1999-03');
+env.useMonth(env.uniqueMonth());
 let A;
 let restore;
 const skip = () => (http && http.skip) || (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);

@@ -13,6 +13,11 @@ const { withOwnTenantTransaction } = require('../../../src/features/core-governa
 /** Lançamentos de teste não se apagam (a tabela é só de acréscimo): cada arquivo de teste usa a sua competência. */
 const state = { month: '1999-01' };
 const useMonth = (month) => { state.month = month; };
+/**
+ * Competência nova a cada execução (ano entre 1000 e 8999, mês de 01 a 12): as fixturas de lançamentos ficam no banco entre execuções e o teste conta linhas da sua
+ * competência, então reaproveitar uma competência fixa faria a contagem crescer a cada repetição no mesmo banco.
+ */
+const uniqueMonth = () => `${1000 + Math.floor(Math.random() * 8000)}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}`;
 const JUSTIFICATION = 'Fechamento contábil do trimestre, pedido pelo contador.';
 
 /** Pedido válido de exportação financeira da competência de teste (HIGH, justificativa e finalidade presentes). */
@@ -123,4 +128,4 @@ function pdfText(buffer) {
   return parts.join('\n');
 }
 
-module.exports = { ...env, withRolePermissions, uniqueCpf, otherUserId, useMonth, state, JUSTIFICATION, body, ask, askAndGenerate, grantMfa, revokeMfa, seedEntries, jobOf, fileRow, onDisk, auditOf, cleanExports, pdfText, nextKey, inBusinessTx, fs };
+module.exports = { ...env, withRolePermissions, uniqueCpf, otherUserId, useMonth, uniqueMonth, state, JUSTIFICATION, body, ask, askAndGenerate, grantMfa, revokeMfa, seedEntries, jobOf, fileRow, onDisk, auditOf, cleanExports, pdfText, nextKey, inBusinessTx, fs };

@@ -14,7 +14,7 @@ const { expireCompany, removeFromDisk } = require('../../../src/features/core-go
 const { signDownloadUrl } = require('../../../src/features/core-governance/dlp/exports/export.url');
 const policyService = require('../../../src/features/core-governance/dlp/policy.service');
 
-env.useMonth('1999-01');
+env.useMonth(env.uniqueMonth());
 let A;
 let tenantRef;
 let restore;
