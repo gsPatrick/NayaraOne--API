@@ -76,6 +76,8 @@ async function snapshot(def, version, asOfDate, value, rows, tx) {
   return sup.metrics.recordSnapshot({
     groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, metricId: def.id, metricVersionId: version.id, scopeType: 'COMPANY',
     scopeId: env.tenantA.companyId, periodStart: '2026-10-01', periodEnd: '2026-10-31', asOfDate, valueNumeric: value, status: 'OK',
+    sourceSnapshotAt: `${asOfDate}T10:00:00Z`, // M9-D609: snapshot sem instante da fonte é INCOMPLETE e sem valor
+
     calcHash: calcHash({ metricCode: def.metric_code, version: version.version, inputs: rows, params: {} }),
   }, tx);
 }

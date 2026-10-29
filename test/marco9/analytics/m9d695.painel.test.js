@@ -19,7 +19,7 @@ let env;
 before(async () => { env = await env695.setup(); clock.setClock(() => new Date('2026-10-28T15:00:00Z')); });
 after(async () => { clock.resetClock(); await env695.teardown(env); });
 
-const BASE = { periodStart: '2026-10-01', periodEnd: '2026-10-31', asOfDate: '2026-10-28', value: '10.00' };
+const BASE = { periodStart: '2026-10-01', periodEnd: '2026-10-31', asOfDate: '2026-10-28', value: '10.00', sourceSnapshotAt: '2026-10-28T14:55:00Z' }; // M9-D609: a fonte tem instante, senão o número sai INCOMPLETE
 const scopeOf = (tenant, permissions) => ({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId, permissions: ['analytics:read'], userPermissions: permissions });
 const fingerprint = () => crypto.createHash('sha256').update(crypto.randomUUID()).digest('hex');
 

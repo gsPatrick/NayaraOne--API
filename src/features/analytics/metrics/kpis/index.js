@@ -5,5 +5,8 @@ const { KPI_DEFINITIONS } = require('./finance.definitions');
 const { ensureFinanceKpisPublished } = require('./finance.register');
 const { materializeFinanceKpis, financeKpiCorrections } = require('./finance.materialize');
 const listener = require('./finance.listener');
+const snapshotProvider = require('./finance.snapshotProvider');
+
+snapshotProvider.register(); // M9-D609: o snapshot diário calcula estes KPIs pelo mesmo caminho do refresh
 
 module.exports = { KPI_DEFINITIONS, ensureFinanceKpisPublished, materializeFinanceKpis, financeKpiCorrections, installFinanceKpis: listener.install };

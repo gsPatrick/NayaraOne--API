@@ -10,7 +10,7 @@ const AppError = require('../../../utils/AppError');
 const { getLatestSnapshot } = require('../metricStore.service');
 const { assertCanRead } = require('./registry.permission');
 const { natureLabel } = require('./registry.natures');
-const { buildFreshness } = require('./freshness');
+const { presentSnapshot } = require('./freshness.present');
 const { assertDomainAccess, loadDomainMap, domainPermissionOf, has } = require('../security');
 
 const ORDER_SCOPE = 'ORDER BY (d.company_id IS NULL), (d.group_id IS NULL)';
@@ -61,14 +61,16 @@ async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, 
   await assertDomainAccess(ctx, definition.domain, transaction);
   const snapshot = await getLatestSnapshot({ metricId: definition.id, scopeType, scopeId, asOfDate, dimensionKey }, transaction);
   if (!snapshot) throw AppError.notFound('Não há valor calculado para esta data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
-  const [[version]] = await sequelize.query('SELECT version, unit, value_nature FROM analytics.metric_versions WHERE id = :id', {
+  const [[version]] = await sequelize.query('SELECT version, unit, value_nature, refresh_policy FROM analytics.metric_versions WHERE id = :id', {
     replacements: { id: snapshot.metric_version_id }, transaction,
   });
+  const rawValue = snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text;
+  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId }, transaction }); // M9-D609: freshness no servidor
   return {
     metricCode: definition.metric_code,
-    value: snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text,
+    value: shown.value,
     unit: version.unit,
-    status: snapshot.status,
+    status: shown.status,
     version: version.version,
     valueNature: version.value_nature,
     valueNatureLabel: natureLabel(version.value_nature),
@@ -77,7 +79,7 @@ async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, 
     sourceSnapshotAt: snapshot.source_snapshot_at,
     refreshedAt: snapshot.refreshed_at,
     sourceRefs: snapshot.source_refs,
-    freshness: buildFreshness(asOfDate, snapshot), // M9-D614 regra 5
+    freshness: shown.freshness, // M9-D614 regra 5; classificada pela M9-D609
   };
 }
 

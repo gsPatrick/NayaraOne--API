@@ -17,6 +17,10 @@ const period = require('./period');
 const periodCompare = require('./period.compare');
 const periodCalendar = require('./period.calendar');
 const clock = require('./clock');
+const snapshots = require('./snapshots.service');
+const snapshotProviders = require('./snapshots.providers');
+const freshness = require('./freshness');
+const freshnessSignal = require('./freshness.signal');
 
 // M9-D613: `camada` identifica a camada (contrato do teste de estrutura); M9-D603 acrescenta o registry. Nenhuma demanda pode substituir este export.
-module.exports = { camada: 'metrics', ...registry, ...read, ...consistency, publishVersion: version.publishVersion, updateDefinition: update.updateDefinition, readMetricAsOf: asOf.readMetricAsOf, recalculateHistorical: asOf.recalculateHistorical, recalculate, calcHash, listPublishedVersionHashes, buildSeriesByNature, clock, resolvePeriod: period.resolvePeriod, resolveAsOf: period.resolveAsOf, previousPeriod: periodCompare.previousPeriod, competenceMonthsOf: periodCompare.competenceMonthsOf, periodCalendar, VALUE_NATURES: natures.VALUE_NATURES, NATURE_LABELS: natures.NATURE_LABELS, createFormulaCatalog: catalog.createFormulaCatalog, getFormulaCatalog: catalog.getFormulaCatalog, ...sourceRefs };
+module.exports = { camada: 'metrics', ...registry, ...read, ...consistency, publishVersion: version.publishVersion, updateDefinition: update.updateDefinition, readMetricAsOf: asOf.readMetricAsOf, recalculateHistorical: asOf.recalculateHistorical, recalculate, calcHash, listPublishedVersionHashes, buildSeriesByNature, clock, resolvePeriod: period.resolvePeriod, resolveAsOf: period.resolveAsOf, previousPeriod: periodCompare.previousPeriod, competenceMonthsOf: periodCompare.competenceMonthsOf, periodCalendar, VALUE_NATURES: natures.VALUE_NATURES, NATURE_LABELS: natures.NATURE_LABELS, createFormulaCatalog: catalog.createFormulaCatalog, getFormulaCatalog: catalog.getFormulaCatalog, ...sourceRefs, runDailySnapshots: snapshots.runDailySnapshots, registerSnapshotProvider: snapshotProviders.registerSnapshotProvider, computeFreshness: freshness.computeFreshness, FRESHNESS_STATES: freshness.STATES, collectCriticalStaleness: freshnessSignal.collectCriticalStaleness, signalCriticalStaleness: freshnessSignal.signalCriticalStaleness, onFreshnessStale: freshnessSignal.onFreshnessStale };

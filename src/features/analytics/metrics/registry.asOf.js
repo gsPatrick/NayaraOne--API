@@ -13,7 +13,8 @@ const { findDefinition } = require('./registry.read');
 const { getFormulaCatalog } = require('./formulaCatalog');
 const { recalculate } = require('./reproduction');
 const { natureLabel } = require('./registry.natures');
-const { buildFreshness } = require('./freshness');
+const { presentSnapshot } = require('./freshness.present');
+const clock = require('./clock');
 const { dimensionUnit } = require('./dimensionUnit');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
@@ -31,11 +32,13 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
   const revisions = await store.listSnapshotRevisions({ metricId: definition.id, metricVersionId: version.id, scopeType, scopeId, asOfDate, dimensionKey }, transaction);
   const snapshot = revisions[revisions.length - 1];
   if (!snapshot) throw notAvailable();
+  const rawValue = snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text;
+  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId }, transaction }); // M9-D609: freshness no servidor
   return {
     metricCode: definition.metric_code,
-    value: snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text,
+    value: shown.value,
     unit: dimensionUnit(dimensionKey, version.unit),
-    status: snapshot.status,
+    status: shown.status,
     version: version.version,
     formulaId: version.formula_id,
     valueNature: version.value_nature,
@@ -46,7 +49,8 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
     sourceSnapshotAt: snapshot.source_snapshot_at,
     refreshedAt: snapshot.refreshed_at,
     sourceRefs: snapshot.source_refs,
-    freshness: buildFreshness(asOfDate, snapshot), // M9-D614 regra 5: toda resposta de métrica traz freshness
+    historical: asOfDate < clock.businessToday(), // M9-D609 3.4: verdadeiro quando a data-base é anterior a hoje (campo da resposta, não coluna)
+    freshness: shown.freshness, // M9-D614 regra 5: toda resposta de métrica traz freshness (classificada pela M9-D609)
   };
 }
 

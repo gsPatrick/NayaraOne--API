@@ -44,6 +44,7 @@ const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob
 const { startAiRagJob } = require('./src/engines/jobs/aiRagJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
 const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
+const { startAnalyticsSnapshotJob } = require('./src/engines/jobs/analyticsSnapshotJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
@@ -303,6 +304,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiRagJob();
   startAnalyticsReadModelRefreshJob();
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
+  startAnalyticsSnapshotJob(); // M9-D609: snapshot diário dos KPIs (D-1, 00:30 de São Paulo) com catch-up
 }
 
 // Marco 9, M9-D223 — teste de saúde ativo de cada fornecedor com connection ACTIVE, a cada integration.health.check_interval_s.
