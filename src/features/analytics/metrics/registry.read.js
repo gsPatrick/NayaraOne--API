@@ -19,7 +19,7 @@ const ORDER_SCOPE = 'ORDER BY (d.company_id IS NULL), (d.group_id IS NULL)';
 async function listRegistry(ctx, { domain = null, status = null, includeRetired = false } = {}, transaction) {
   assertCanRead(ctx);
   const [rows] = await sequelize.query(
-    `SELECT d.metric_code AS "metricCode", d.name, d.domain, d.status, d.criticality, d.owner_role AS "ownerRole",
+    `SELECT d.metric_code AS "metricCode", d.name, d.domain, d.status, d.criticality, d.drilldown_enabled AS "drilldownEnabled", d.owner_role AS "ownerRole",
             v.unit, v.version, v.value_nature AS "valueNature", d.current_version_id AS "currentVersionId"
        FROM analytics.metric_definitions d LEFT JOIN analytics.metric_versions v ON v.id = d.current_version_id
       WHERE (:includeRetired OR d.status <> 'RETIRED')

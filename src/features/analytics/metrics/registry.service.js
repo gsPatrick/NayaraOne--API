@@ -18,13 +18,14 @@ const { assertComplete, validateShape } = require('./registry.fields');
 const { getFormulaCatalog } = require('./formulaCatalog');
 const { resolveScope, findDefinitionForUpdate } = require('./registry.scope');
 const { assertReadModelExists, checkFormula } = require('./registry.checks');
+const { assertInCriticalityTable } = require('./seed/criticality.table');
 
 async function prepareDefinition(input, domain, scope, ctx, transaction) {
   const existing = await findDefinitionForUpdate(input.metricCode, scope, transaction);
   if (!existing) {
     return store.createMetricDefinition({
       ...scope, metricCode: input.metricCode, name: input.name, description: input.description, domain,
-      criticality: input.criticality, ownerRole: input.ownerRole,
+      criticality: input.criticality, ownerRole: input.ownerRole, drilldownEnabled: input.drilldownEnabled === true,
     }, ctx, transaction);
   }
   if (existing.status === 'RETIRED') {
@@ -35,7 +36,7 @@ async function prepareDefinition(input, domain, scope, ctx, transaction) {
   }
   await sequelize.query(
     `UPDATE analytics.metric_definitions SET name = :name, description = :description, domain = :domain, criticality = :criticality,
-        owner_role = :ownerRole, updated_by = :actor, updated_at = now() WHERE id = :id`,
+        drilldown_enabled = (drilldown_enabled OR :criticality = 'CRITICAL'), owner_role = :ownerRole, updated_by = :actor, updated_at = now() WHERE id = :id`,
     { replacements: { name: input.name.trim(), description: input.description, domain, criticality: input.criticality, ownerRole: input.ownerRole, actor: ctx.actorUserId || null, id: existing.id }, transaction }
   );
   return existing;
@@ -49,6 +50,7 @@ async function publishMetric(input, ctx, transaction, options = {}) {
   assertCanManage(ctx);
   assertComplete(input);
   const domain = validateShape(input);
+  if ((input.scopeLevel || 'GLOBAL') === 'GLOBAL') assertInCriticalityTable(input.metricCode); // M9-D712 3.4: métrica global só publica com linha na tabela
   await assertReadModelExists(input.sourceReadModel, transaction);
   const formulaTestHash = checkFormula(input, options.catalog || getFormulaCatalog());
 

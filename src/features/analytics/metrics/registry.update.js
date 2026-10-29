@@ -15,9 +15,10 @@ const { VERSIONED_FIELDS, versionFields, diffFields } = require('./registry.diff
 
 const TEXT_FIELDS = ['name', 'description'];
 const SCOPE_KEYS = ['scopeLevel', 'groupId', 'companyId'];
+const CLASSIFICATION_KEYS = ['criticality']; // M9-D712: reclassificar a métrica publicada exige nova versão (publishVersion)
 
 function assertKnownKeys(patch) {
-  const allowed = new Set([...TEXT_FIELDS, ...Object.keys(VERSIONED_FIELDS), ...SCOPE_KEYS, 'validFrom']);
+  const allowed = new Set([...TEXT_FIELDS, ...Object.keys(VERSIONED_FIELDS), ...SCOPE_KEYS, ...CLASSIFICATION_KEYS, 'validFrom']);
   const unknown = Object.keys(patch).filter((k) => !allowed.has(k));
   if (unknown.length) throw AppError.badRequest(`Campos não editáveis: ${unknown.join(', ')}.`, 'ANALYTICS_METRIC_INVALID', { campos: unknown });
 }
@@ -38,19 +39,23 @@ async function updateDefinition(code, patch, ctx, transaction) {
       const asked = Object.fromEntries(Object.keys(VERSIONED_FIELDS).filter((k) => patch[k] !== undefined).map((k) => [k, patch[k]]));
       const changed = Object.keys(diffFields(Object.fromEntries(Object.keys(asked).map((k) => [k, now[k]])), asked));
       if (patch.validFrom !== undefined) changed.push('validFrom');
+      if (patch.criticality !== undefined && patch.criticality !== def.criticality) changed.push('criticality');
       if (changed.length) {
-        throw AppError.conflict('Alterar a fórmula exige publicar uma nova versão.', 'ANALYTICS_METRIC_REQUIRES_NEW_VERSION', { campos: changed });
+        throw AppError.conflict('Alterar a fórmula ou a criticidade exige publicar uma nova versão.', 'ANALYTICS_METRIC_REQUIRES_NEW_VERSION', { campos: changed });
       }
     }
+    if (patch.criticality !== undefined && !['CRITICAL', 'NORMAL'].includes(patch.criticality)) throw AppError.badRequest('Criticidade inválida. Informe CRITICAL ou NORMAL.', 'ANALYTICS_METRIC_INVALID');
     const next = {};
     for (const key of TEXT_FIELDS) if (patch[key] !== undefined && patch[key] !== def[key]) next[key] = patch[key];
     if (next.name !== undefined && (typeof next.name !== 'string' || !next.name.trim())) throw AppError.badRequest('O nome da métrica é obrigatório.', 'ANALYTICS_METRIC_INVALID');
+    if (!current && patch.criticality !== undefined && patch.criticality !== def.criticality) next.criticality = patch.criticality; // sem versão ainda: classificação direta
     if (!Object.keys(next).length) return { definition: def, version: current, changed: false };
     const name = next.name !== undefined ? next.name.trim() : def.name;
     const description = next.description !== undefined ? next.description : def.description;
     await sequelize.query(
-      'UPDATE analytics.metric_definitions SET name = :name, description = :description, updated_by = :actor, updated_at = now() WHERE id = :id',
-      { replacements: { name, description, actor: ctx.actorUserId || null, id: def.id }, transaction: savepoint }
+      `UPDATE analytics.metric_definitions SET name = :name, description = :description, criticality = :criticality,
+          drilldown_enabled = (drilldown_enabled OR :criticality = 'CRITICAL'), updated_by = :actor, updated_at = now() WHERE id = :id`,
+      { replacements: { name, description, criticality: next.criticality || def.criticality, actor: ctx.actorUserId || null, id: def.id }, transaction: savepoint }
     );
     if (current) await sequelize.query('UPDATE analytics.metric_versions SET revision = revision + 1, updated_at = now() WHERE id = :id', { replacements: { id: current.id }, transaction: savepoint });
     await registrarAuditoria({

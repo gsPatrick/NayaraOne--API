@@ -75,7 +75,7 @@ async function expectCode(tx, fn, status, code) {
 
 async function publishedMetric(tx, tenant, metricCode) {
   const def = await metrics.createMetricDefinition(
-    { scopeLevel: 'COMPANY', groupId: tenant.groupId, companyId: tenant.companyId, metricCode, name: 'Caixa', domain: 'FINANCE' }, ctxOf(tenant), tx);
+    { scopeLevel: 'COMPANY', groupId: tenant.groupId, companyId: tenant.companyId, metricCode, name: 'Caixa', domain: 'FINANCE', criticality: 'NORMAL' }, ctxOf(tenant), tx);
   await metrics.publishMetricVersion({
     definitionId: def.id, expectedVersion: 0, formulaId: 'x.v1', formulaSemantic: 'Soma.', unit: 'BRL', valueNature: 'ACTUAL',
     refreshPolicy: { mode: 'EVENT' }, validFrom: '2026-01-01',
@@ -109,7 +109,7 @@ test('m9d601 widget com métrica inexistente é recusado', async () => {
   // métrica existente mas só DRAFT também não vale
   await inTx(tenantA, { writer: true }, async (tx) => {
     const code = `fin.rascunho_${sfx()}`;
-    await metrics.createMetricDefinition({ scopeLevel: 'COMPANY', groupId: tenantA.groupId, companyId: tenantA.companyId, metricCode: code, name: 'R', domain: 'FINANCE' }, ctxOf(tenantA), tx);
+    await metrics.createMetricDefinition({ scopeLevel: 'COMPANY', groupId: tenantA.groupId, companyId: tenantA.companyId, metricCode: code, name: 'R', domain: 'FINANCE', criticality: 'NORMAL' }, ctxOf(tenantA), tx);
     const d = await dashboards.createDashboardDefinition(dashInput(tenantA), ctxOf(tenantA), tx);
     await dashboards.addDashboardWidget(d.id, { widgetType: 'TREND', metricCode: code, title: 'T', position: 1 }, ctxOf(tenantA), tx);
     await expectCode(tx, () => dashboards.publishDashboard(d.id, ctxOf(tenantA), tx), 422, 'ANALYTICS_DASHBOARD_INVALID_METRIC');

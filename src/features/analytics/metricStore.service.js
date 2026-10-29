@@ -108,7 +108,7 @@ async function createMetricDefinition(input, ctx, transaction) {
   await assertWriter(transaction);
   const {
     scopeLevel = 'COMPANY', groupId = null, companyId = null, metricCode, name, description = null, domain,
-    criticality = 'NORMAL', ownerRole = null,
+    criticality, ownerRole = null, drilldownEnabled = false,
   } = input;
   requireOneOf(scopeLevel, SCOPE_LEVELS, 'Escopo');
   if (typeof metricCode !== 'string' || !METRIC_CODE_RE.test(metricCode)) {
@@ -116,7 +116,7 @@ async function createMetricDefinition(input, ctx, transaction) {
   }
   requireText(name, 'O nome da métrica');
   requireOneOf(domain, DOMAINS, 'Domínio');
-  requireOneOf(criticality, CRITICALITIES, 'Criticidade');
+  requireOneOf(criticality, CRITICALITIES, 'Criticidade'); // M9-D712: sem valor padrão, a classificação é explícita
   if (scopeLevel === 'COMPANY' && (!companyId || !groupId)) throw invalid('Métrica de empresa exige empresa e grupo.');
   if (scopeLevel === 'GROUP' && (!groupId || companyId)) throw invalid('Métrica de grupo exige o grupo e não pode ter empresa.');
   if (scopeLevel === 'GLOBAL' && (groupId || companyId)) throw invalid('Métrica de catálogo global não tem empresa nem grupo.');
@@ -124,14 +124,15 @@ async function createMetricDefinition(input, ctx, transaction) {
   return run(transaction, async () => {
     const [[row]] = await sequelize.query(
       `INSERT INTO analytics.metric_definitions
-         (company_id, group_id, metric_code, name, description, domain, status, criticality, owner_role, group_scoped, created_by, updated_by)
-       VALUES (:companyId, :groupId, :metricCode, :name, :description, :domain, 'DRAFT', :criticality, :ownerRole, :groupScoped, :actor, :actor)
+         (company_id, group_id, metric_code, name, description, domain, status, criticality, drilldown_enabled, owner_role, group_scoped, created_by, updated_by)
+       VALUES (:companyId, :groupId, :metricCode, :name, :description, :domain, 'DRAFT', :criticality, :drilldown, :ownerRole, :groupScoped, :actor, :actor)
        RETURNING *`,
       {
         replacements: {
           companyId: scopeLevel === 'GLOBAL' ? null : companyId,
           groupId: scopeLevel === 'GLOBAL' ? null : groupId,
           metricCode, name: name.trim(), description, domain, criticality, ownerRole,
+          drilldown: criticality === 'CRITICAL' || drilldownEnabled === true, // CRITICAL liga o drill-down (M9-D712 3.2)
           groupScoped: scopeLevel === 'GROUP',
           actor: ctx?.actorUserId || null,
         },
@@ -228,7 +229,8 @@ async function publishMetricVersion(input, ctx, transaction) {
       `UPDATE analytics.metric_definitions SET current_version_id = :v, status = 'PUBLISHED', updated_by = :actor, updated_at = now() WHERE id = :id`,
       { replacements: { v: version.id, actor: ctx?.actorUserId || null, id: def.id }, transaction }
     );
-    await registrarAuditoria(
+    // A semente do catálogo global (M9-D712) roda sem empresa nem grupo: não há tenant para a trilha de auditoria; o registro da versão (published_by, valid_from) é o rastro.
+    if (ctx && ctx.groupId && ctx.companyId) await registrarAuditoria(
       {
         groupId: ctx.groupId,
         companyId: ctx.companyId,

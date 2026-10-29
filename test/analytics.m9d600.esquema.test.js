@@ -101,7 +101,7 @@ test('m9d600 GRANTs: nayara_runtime acessa as 3 tabelas e o schema existe só co
 const scopeErr = (e) => e.statusCode === 404 && e.code === 'ANALYTICS_SCOPE_NOT_FOUND' && e.message === 'Empresa não encontrada ou sem acesso.';
 
 test('m9d600 empresa de outro grupo ou sem vínculo responde 404 (definição)', async () => {
-  const base = { scopeLevel: 'COMPANY', name: 'Caixa livre', domain: 'FINANCE' };
+  const base = { scopeLevel: 'COMPANY', name: 'Caixa livre', domain: 'FINANCE', criticality: 'NORMAL' };
   await inTx(tenantA, { writer: true }, async (tx) => {
     // (1) empresa de outro grupo, informando o grupo dela
     await tx.sequelize.query('SAVEPOINT s1', { transaction: tx });
@@ -127,7 +127,7 @@ test('m9d600 empresa de outro grupo ou sem vínculo responde 404 (definição)',
     // (4) métrica de grupo de outro grupo
     await tx.sequelize.query('SAVEPOINT s4', { transaction: tx });
     await assert.rejects(
-      store.createMetricDefinition({ scopeLevel: 'GROUP', name: 'Consolidado', domain: 'FINANCE', groupId: tenantB.groupId, metricCode: code() }, ctxOf(tenantA), tx),
+      store.createMetricDefinition({ scopeLevel: 'GROUP', name: 'Consolidado', domain: 'FINANCE', criticality: 'NORMAL', groupId: tenantB.groupId, metricCode: code() }, ctxOf(tenantA), tx),
       scopeErr
     );
     await tx.sequelize.query('ROLLBACK TO SAVEPOINT s4', { transaction: tx });
@@ -186,15 +186,15 @@ test('m9d600 banco recusa empresa fora do grupo nas 3 tabelas, mesmo sem passar 
         await admin.query('ROLLBACK TO SAVEPOINT x', { transaction: t });
       }
     };
-    const defSql = `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, group_scoped)
-                    VALUES (:c, :g, :code, 'x', 'FINANCE', false)`;
+    const defSql = `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, criticality, group_scoped)
+                    VALUES (:c, :g, :code, 'x', 'FINANCE', 'NORMAL', false)`;
     assert.equal(await ins(defSql, { c: tenantA.companyId, g: tenantB.groupId, code: code() }), 'ANA05');
     assert.equal(await ins(defSql, { c: tenantA.companyId, g: null, code: code() }), 'ANA05');
     assert.equal(await ins(defSql, { c: tenantA.companyId, g: tenantA.groupId, code: code() }), null);
 
     const [[def]] = await admin.query(
-      `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, group_scoped)
-       VALUES (:c, :g, :code, 'x', 'FINANCE', false) RETURNING id`,
+      `INSERT INTO analytics.metric_definitions (company_id, group_id, metric_code, name, domain, criticality, group_scoped)
+       VALUES (:c, :g, :code, 'x', 'FINANCE', 'NORMAL', false) RETURNING id`,
       { replacements: { c: tenantA.companyId, g: tenantA.groupId, code: code() }, transaction: t }
     );
     const verSql = `INSERT INTO analytics.metric_versions (company_id, group_id, metric_id, version, formula_id, formula_semantic, unit, refresh_policy, value_nature, valid_from)

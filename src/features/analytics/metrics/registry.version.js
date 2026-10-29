@@ -62,7 +62,7 @@ function mergeNext(input, def, previous, fields) {
   for (const key of Object.keys(VERSIONED_FIELDS)) if (input[key] !== undefined) next[key] = input[key];
   return {
     ...next, metricCode: def.metric_code, name: def.name, description: def.description || def.name, ownerRole: def.owner_role || 'n/d',
-    criticality: def.criticality, version: previous.version + 1, validFrom: input.validFrom, changeReason: input.changeReason,
+    criticality: input.criticality !== undefined ? input.criticality : def.criticality, version: previous.version + 1, validFrom: input.validFrom, changeReason: input.changeReason,
   };
 }
 
@@ -83,6 +83,7 @@ async function publishInside(code, input, ctx, savepoint, options) {
   validateShape(merged);
   const after = Object.fromEntries(Object.keys(VERSIONED_FIELDS).map((k) => [k, merged[k]]));
   const changes = diffFields(before, after);
+  if (merged.criticality !== def.criticality) changes.criticality = { before: def.criticality, after: merged.criticality }; // M9-D712: reclassificar é versão nova
   if (!Object.keys(changes).length) {
     throw AppError.unprocessable('Nada mudou na definição do indicador; não há o que versionar.', 'ANALYTICS_VERSION_NO_CHANGES');
   }
@@ -92,6 +93,12 @@ async function publishInside(code, input, ctx, savepoint, options) {
     definitionId: def.id, ...after,
     formulaTestHash, formulaCodeHash: (options.catalog || getFormulaCatalog()).codeHash(merged.formulaId), validFrom: input.validFrom, expectedVersion: previous.version, changeReason: input.changeReason.trim(),
   }, ctx, savepoint);
+  if (changes.criticality) {
+    await sequelize.query(
+      `UPDATE analytics.metric_definitions SET criticality = :criticality, drilldown_enabled = (drilldown_enabled OR :criticality = 'CRITICAL'), updated_at = now() WHERE id = :id`,
+      { replacements: { criticality: merged.criticality, id: def.id }, transaction: savepoint }
+    );
+  }
   await registrarAuditoria({
     groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: ctx.actorUserId, action: 'analytics.metric.version_published',
     entityType: 'analytics.metric_version', entityId: version.id,
