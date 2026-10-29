@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 586. Rotas só com login ou públicas: 22.
+Rotas com permissão exigida: 590. Rotas só com login ou públicas: 22.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -237,9 +237,16 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/cost-centers` | `finance:create` | não |
 | `POST` | `/api/v1/finance/entries/:id/clear-manual-review` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
+| `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/domains` | `governance:data-quality:read` | não |
 | `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
 | `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
 | `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality` | `governance:data-quality:read` | não |
 | `POST` | `/api/v1/finance/entries/:id/settle-partial` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence/detach` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence` | `finance:settle` | não |

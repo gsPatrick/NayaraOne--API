@@ -29,13 +29,13 @@ function requireModuleEnabled(code) {
 
 /**
  * Monta o router de um módulo de governança. Autenticação e tenant valem SÓ sob o prefixo do módulo (router.use sem caminho
- * interceptaria qualquer requisição de /v1; ver comentário em src/routes/index.js). Cada rota: permissão -> módulo ligado -> handler.
+ * interceptaria qualquer requisição de /v1; ver comentário em src/routes/index.js). Cada rota: permissão -> módulo ligado -> handler (`before` roda antes da permissão, ex.: auditar a tentativa negada; `after` entre o módulo ligado e o handler, ex.: Idempotency-Key e MFA).
  */
 function buildModuleRouter(mod, routeDefs) {
   const router = Router();
   router.use(mod.prefix, authMiddleware, tenantMiddleware);
   for (const def of routeDefs) {
-    router[def.method](def.path, requirePermission(def.permission), requireModuleEnabled(mod.code), catchAsync(def.handler));
+    router[def.method](def.path, ...(def.before || []), requirePermission(def.permission), requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
   }
   return router;
 }
