@@ -27,6 +27,8 @@ const NULL_FIELDS = Object.freeze({
   availability_status: 1, broker_id: 1, cause_code: 1, channel: 1, closed_at: 1, contract_id: 1, created_by: 1, due_date: 1, ends_at: 1, estimated_amount: 1, feedback_type: 1, item_cost: 1, lead_source: 1, next_action: 1, old_price: 1, person_id: 1, planned_end_date: 1, platform: 1, property_id: 1, provider_code: 1, reference_month: 1, requirement_type: 1, risk_level: 1, root_cause_code: 1, satisfaction_score: 1, scheduled_at: 1, sla_due_at: 1, started_at: 1, total_cost: 1,
   // M9-D628: campos essenciais da fonte dos read models de Tecnologia e IA
   probe: 1, event_type: 1, family: 1, last_snapshot_at: 1, reason: 1, kind: 1, cost_amount: 1, grounding_status: 1, status: 1,
+  // M9-D710: data do fato do Centro de Comando (assinatura, fechamento, liquidação); sem ela o KPI sai INCOMPLETE, então 0%
+  occurred_at: 0,
 });
 
 const SEVERITY_KEYS = Object.freeze(['FRESHNESS_STALE', 'FRESHNESS_EXPIRED', 'DUPLICATION', 'ROW_COUNT_RANGE', 'RECONCILIATION', 'INVARIANT', 'CONSISTENCY', 'COMPLETENESS', 'COMPLETENESS_BLOCK']);

@@ -29,6 +29,7 @@ require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Est
 require('./juridico-correspondente.readmodel'); // M9-D619: Jurídico e Correspondente Bancário
 require('./marketing-atendimento.readmodel'); // M9-D627: Marketing e Atendimento/Satisfação
 require('./tecnologia-seguranca-ia.readmodel'); // M9-D628: Tecnologia, Integrações, Segurança e IA
+require('./command-events.readmodel'); // M9-D710: fatos do dia do Centro de Comando (contratos assinados, oportunidades ganhas, pagamentos liquidados)
 
 module.exports = {
   camada: 'read-models',

@@ -63,6 +63,7 @@ const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-mode
 const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridicoCorrespondenteKpi.settings');
 const { SUPPORT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/atendimentoKpi.settings');
 const { RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoPrazosKpi.settings');
+const { COMMAND_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/commandEvents.settings');
 const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
 const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
@@ -293,6 +294,8 @@ const SETTINGS_SCHEMA = {
   ...SUPPORT_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D641 — KPIs de prazos da Locação: owner de cada um e tipos de garantia que não têm vencimento.
   ...RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D710 — fatos do dia do Centro de Comando: janela em horas, valor relevante de pagamento e owner dos três indicadores.
+  ...COMMAND_SETTINGS_SCHEMA,
   // Marco 9, M9-D628 — read models de Tecnologia e IA: histórico em dias, sondas ligadas, intervalo das sondas e retenção dos sinais técnicos.
   ...TECH_SETTINGS_SCHEMA,
   // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.

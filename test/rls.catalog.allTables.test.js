@@ -560,3 +560,11 @@ test('M9-D628: rm_tech_* e rm_ai_* têm RLS, FORCE RLS e 4 políticas; tech_sign
   assert.equal(rows.length, tables.length, 'as dez tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, r.relname === 'tech_signal_log' ? 3 : 4], r.relname);
 });
+
+// M9-D710: fatos do dia do Centro de Comando (contrato assinado, oportunidade ganha, pagamento liquidado) com RLS + FORCE RLS, 4 políticas e escrita só do worker.
+test('M9-D710: rm_command_events tem RLS, FORCE RLS e 4 políticas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_command_events'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
+});
