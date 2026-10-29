@@ -2,6 +2,7 @@
 
 const { CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA } = require('./calendar/calendar.settings');
 const { DATA_QUALITY_SETTING_DEFAULTS, DATA_QUALITY_SETTINGS_SCHEMA } = require('./data-quality/data-quality.settings');
+const { LINEAGE_SETTING_DEFAULTS, LINEAGE_SETTINGS_SCHEMA } = require('./lineage/lineage.settings');
 
 /**
  * Parâmetros do bloco de governança que o administrador configura na tela /painel/configuracoes (aba Governança).
@@ -14,7 +15,7 @@ const { DATA_QUALITY_SETTING_DEFAULTS, DATA_QUALITY_SETTINGS_SCHEMA } = require(
 const GOVERNANCE_MODULES = Object.freeze([
   { code: 'calendar', prefix: '/calendar', label: 'Calendário unificado' },
   { code: 'data-quality', prefix: '/data-quality', label: 'Dados mestres e qualidade' },
-  { code: 'lineage', prefix: '/lineage', label: 'Linhagem de dados' },
+  { code: 'lineage', prefix: '/data-lineage', label: 'Linhagem de dados' },
   { code: 'dlp', prefix: '/dlp', label: 'Proteção contra vazamento (DLP)' },
   { code: 'bcp', prefix: '/bcp', label: 'Continuidade operacional (BCP)' },
   { code: 'api-governance', prefix: '/api-governance', label: 'Governança de API' },
@@ -33,6 +34,7 @@ const PROFILES_FINANCE_KEY = 'governanca.permissoes.perfis_financeiro';
 const GOVERNANCE_SETTING_DEFAULTS = {
   ...CALENDAR_SETTING_DEFAULTS,
   ...DATA_QUALITY_SETTING_DEFAULTS,
+  ...LINEAGE_SETTING_DEFAULTS,
   [ERRORS_EXCEPTIONS_KEY]: 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR',
   [PROFILES_MANAGEMENT_KEY]: 'GESTAO, GESTÃO, DIRETOR, GERENTE, GESTOR',
   [PROFILES_FINANCE_KEY]: 'FINANCEIRO',
@@ -42,6 +44,7 @@ for (const mod of GOVERNANCE_MODULES) GOVERNANCE_SETTING_DEFAULTS[moduleSettingK
 const GOVERNANCE_SETTINGS_SCHEMA = {
   ...CALENDAR_SETTINGS_SCHEMA,
   ...DATA_QUALITY_SETTINGS_SCHEMA,
+  ...LINEAGE_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

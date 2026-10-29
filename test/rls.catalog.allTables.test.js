@@ -593,3 +593,13 @@ test('M9-D709: rm_decision_queue tem RLS, FORCE RLS e 4 políticas', async () =>
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });
+
+// M9-D810: o registro de lineage (nós, arestas e estado da semente) é do GRUPO: RLS + FORCE RLS e a política tenant_isolation por group_id.
+test('M9-D810: lineage_nodes, lineage_edges e lineage_seed_state têm RLS, FORCE RLS e a política tenant_isolation por grupo', async () => {
+  const tables = ['lineage_nodes', 'lineage_edges', 'lineage_seed_state'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.group_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+});

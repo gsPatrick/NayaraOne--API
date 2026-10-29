@@ -58,7 +58,7 @@ test('m9d800 rota sem permissão devolve 403 (e 401 sem login, 200 com a permiss
   const finops = await call('A:gestor', 'GET', '/finops/health');
   assert.equal(finops.status, 200);
   // As 8 rotas do esqueleto existem sob os prefixos do livro.
-  for (const route of ['/data-quality', '/lineage', '/dlp', '/bcp', '/api-governance/consumers', '/feature-flags']) {
+  for (const route of ['/data-quality', '/data-lineage', '/dlp', '/bcp', '/api-governance/consumers', '/feature-flags']) {
     const r = await call('A:leitura', 'GET', route);
     assert.equal(r.status, 403, `${route} deve exigir permissão`);
     assert.equal(r.body.error.traceId, r.correlation);
