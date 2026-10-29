@@ -13,8 +13,9 @@ const ruleUnresolved = () => new AppError('Não há resultado calculado disponí
 const reentrant = () => new AppError('Uma ferramenta da NAY não pode iniciar outra consulta da NAY.', 409, 'AI_ORCHESTRATOR_REENTRANT');
 const inProgress = () => new AppError('Esta consulta ainda está em andamento.', 409, 'AI_TOOL_CALL_IN_PROGRESS');
 const providerUnavailable = (details) => new AppError('O provedor de IA está indisponível no momento.', 503, 'AI_PROVIDER_UNAVAILABLE', details);
+const serverToolFailed = (tool) => new AppError('Não foi possível registrar o encaminhamento agora. Tente novamente em instantes.', 503, 'AI_SERVER_TOOL_FAILED', { tool });
 const injectionInContent = () => new AppError('O conteúdo consultado tentou dar instruções à NAY e foi bloqueado.', 422, 'AI_INJECTION_BLOCKED');
 
 module.exports = {
-  purposeRequired, inputRequired, agentNotFound, maxTurns, runTimeout, outputInvalid, ruleUnresolved, reentrant, inProgress, providerUnavailable, injectionInContent,
+  purposeRequired, inputRequired, agentNotFound, maxTurns, runTimeout, outputInvalid, ruleUnresolved, reentrant, inProgress, providerUnavailable, injectionInContent, serverToolFailed,
 };

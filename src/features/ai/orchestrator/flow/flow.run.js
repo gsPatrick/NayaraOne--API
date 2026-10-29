@@ -2,7 +2,7 @@
 
 const { AgentRunGuard } = require('../../agents');
 const runs = require('../runs');
-const { buildUserContext } = require('../executionContext');
+const { buildUserContext, withRun } = require('../executionContext');
 const { createPiiRedactor } = require('../../security/piiRedactor');
 const { assertNotInsideRun, runGuarded } = require('./flow.reentrancy');
 const { parseRunInput, requestHashOf } = require('./flow.input');
@@ -21,6 +21,7 @@ const { presetAnswer } = require('./flow.preset');
 const { recordProgress } = require('./flow.progress');
 const { validateAndFinish } = require('./flow.finalize');
 const { finalizeFailure } = require('./flow.fail');
+const { runServerTools } = require('./flow.serverTools');
 const { cacheAnswer } = require('./flow.cache');
 const E = require('./flow.errors');
 
@@ -29,7 +30,11 @@ const UNAVAILABLE_NOTE = 'Ferramenta indisponível:';
 
 function newState({ ctx, auth, parsed, agent, guard, run, deps, transaction, trace, params, requestHash }) {
   const startedAtMs = deps.clock();
-  const execCtx = buildUserContext({ ...auth, userId: ctx.userId, groupId: ctx.groupId, companyId: ctx.companyId }, { correlationId: parsed.correlationId || run.correlationId, runId: run.id });
+  const runInfo = { correlationId: parsed.correlationId || run.correlationId, runId: run.id };
+  // Conversa de canal externo (M9-D041): o contexto é da identidade de serviço montada pelo servidor (loadChannelContext), nunca de uma pessoa.
+  const execCtx = auth.serviceContext
+    ? withRun(auth.serviceContext, runInfo)
+    : buildUserContext({ ...auth, userId: ctx.userId, groupId: ctx.groupId, companyId: ctx.companyId }, runInfo);
   return {
     ctx, execCtx, transaction, deps, agent, guard, parsed, params, requestHash, runId: run.id, clock: deps.clock, startedAtMs, deadline: startedAtMs + params.totalTimeoutMs,
     toolRegistry: deps.toolRegistry, trace, redactor: createPiiRedactor(), sources: [], numbersPayload: [], notices: [], proposals: [], unmet: [], unavailable: new Set(),
@@ -103,6 +108,8 @@ async function finishAwaiting(state) {
 async function pipeline(state) {
   const { trace } = state;
   const decision = await trace.span(3, 'resolver_modelo_orcamento', () => resolveRoute(state));
+  // Tools que o agente manda o servidor chamar antes da geração (M9-D041): o mesmo pipeline de segurança; proposta para o run.
+  if ((await runServerTools(state)) === 'AWAITING') return finishAwaiting(state);
   if (decision.path === 'RULE' || decision.path === 'CACHE') {
     const text = await trace.span(4, 'buscar_fontes', async () => presetAnswer(state, decision));
     return finish(state, text);

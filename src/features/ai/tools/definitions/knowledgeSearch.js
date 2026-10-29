@@ -7,6 +7,7 @@ module.exports = {
   version: 1,
   description: 'Busca na base de conhecimento homologada da empresa (políticas e regras vigentes).',
   permissionCode: 'ai:use',
+  servicePermissionCode: 'ai:read', // M9-D041: a identidade de serviço de um canal é só de leitura e lê o conhecimento com ai:read
   riskLevel: 'LOW',
   category: 'READ',
   domain: 'OTHER',

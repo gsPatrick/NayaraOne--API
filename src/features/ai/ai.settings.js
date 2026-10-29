@@ -28,6 +28,7 @@ const { FALLBACK_SETTING_DEFAULTS, FALLBACK_SETTINGS_SCHEMA } = require('./provi
 const { CACHE_SETTING_DEFAULTS, CACHE_SETTINGS_SCHEMA } = require('./budgets/cache.settings');
 const { FLOW_SETTING_DEFAULTS, FLOW_SETTINGS_SCHEMA } = require('./orchestrator/flow/flow.settings');
 const { RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA } = require('./retrieval/retrieval.settings');
+const { ATENDIMENTO_SETTING_DEFAULTS, ATENDIMENTO_SETTINGS_SCHEMA } = require('./agents/nay_atendimento/atendimento.settings');
 const { CORRESPONDENTE_SETTING_DEFAULTS, CORRESPONDENTE_SETTINGS_SCHEMA } = require('./agents/nay_correspondente/correspondente.settings');
 const { RUN_API_SETTING_DEFAULTS, RUN_API_SETTINGS_SCHEMA } = require('./runApi/runApi.settings');
 
@@ -63,6 +64,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...CACHE_SETTING_DEFAULTS,
   ...FLOW_SETTING_DEFAULTS,
   ...RAG_SETTING_DEFAULTS,
+  ...ATENDIMENTO_SETTING_DEFAULTS,
   ...CORRESPONDENTE_SETTING_DEFAULTS,
   ...RUN_API_SETTING_DEFAULTS,
 });
@@ -92,6 +94,7 @@ const AI_SETTINGS_SCHEMA = {
   ...CACHE_SETTINGS_SCHEMA,
   ...FLOW_SETTINGS_SCHEMA,
   ...RAG_SETTINGS_SCHEMA,
+  ...ATENDIMENTO_SETTINGS_SCHEMA,
   ...CORRESPONDENTE_SETTINGS_SCHEMA,
   ...RUN_API_SETTINGS_SCHEMA,
 };

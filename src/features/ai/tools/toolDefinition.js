@@ -6,6 +6,7 @@
 const AppError = require('../../../utils/AppError');
 const { RISK_LEVELS, HIGH_RISK, TOOL_NAME_RE } = require('../agents/agents.constants');
 const { schemaWellFormed } = require('./outputSchema');
+const { isReadOnlyPermission } = require('../serviceIdentities/serviceIdentities.constants');
 const { assertNoFreeQuery } = require('../../analytics/briefs/nayTools.guard');
 
 const CATEGORIES = Object.freeze(['READ', 'WRITE']);
@@ -45,10 +46,22 @@ function checkShape(def) {
   }
 }
 
+/** `servicePermissionCode` precisa ser de leitura (a identidade de serviço nunca recebe escrita; a existência no catálogo é conferida ao criar a identidade); `servicePath` só vale em escrita de risco baixo ou médio. */
+function checkServiceFields(def) {
+  if (def.servicePermissionCode !== undefined) {
+    if (!isReadOnlyPermission(def.servicePermissionCode)) throw invalid(def.name, 'servicePermissionCode', 'permissao_de_servico_nao_e_leitura', 'A permissão de serviço da ferramenta precisa ser de leitura.');
+  }
+  if (def.servicePath !== undefined) {
+    if (def.servicePath !== 'INFORMATIVE') throw invalid(def.name, 'servicePath', 'caminho_de_servico_invalido');
+    if (def.category !== 'WRITE' || HIGH_RISK.includes(def.riskLevel) || def.domain !== 'OTHER') throw invalid(def.name, 'servicePath', 'caminho_informativo_so_em_escrita_leve');
+  }
+}
+
 function checkPolicy(def, permissionCodes) {
   if (!permissionCodes.has(def.permissionCode)) {
     throw invalid(def.name, 'permissionCode', 'permissao_inexistente', 'A permissão da ferramenta não existe no catálogo de permissões.');
   }
+  checkServiceFields(def);
   if (HIGH_RISK.includes(def.riskLevel) && !def.requiresHumanApproval) {
     throw invalid(def.name, 'requiresHumanApproval', 'ai007_risco_alto', MENSAGEM_AI007);
   }
@@ -75,6 +88,9 @@ function validateDefinition(def, permissionCodes) {
   for (const field of REQUIRED_FIELDS) {
     copia[field] = typeof def[field] === 'object' ? JSON.parse(JSON.stringify(def[field])) : def[field];
   }
+  // Opcionais da identidade de serviço (M9-D041): permissão de leitura equivalente e caminho informativo da escrita.
+  if (def.servicePermissionCode !== undefined) copia.servicePermissionCode = def.servicePermissionCode;
+  if (def.servicePath !== undefined) copia.servicePath = def.servicePath;
   copia.entityRefs = Array.isArray(def.entityRefs) ? def.entityRefs.map((r) => ({ arg: String(r.arg), entity: String(r.entity) })) : [];
   return deepFreeze(copia);
 }

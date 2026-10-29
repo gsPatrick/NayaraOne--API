@@ -77,7 +77,9 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
   const marca = derivedFromUntrusted ? { derivedFromUntrusted: true } : {};
   const alteraOuEnvia = tool.category === 'WRITE' || tool.externalSend === true;
 
-  if (exigeWorkflow(tool) || (derivedFromUntrusted && alteraOuEnvia)) {
+  // M9-D041: a escrita de caminho informativo (`servicePath`), chamada pela identidade de serviço, só deixa um registro informativo; não há ação a aprovar.
+  const informativa = tool.servicePath === 'INFORMATIVE' && Boolean(ctx.auth.serviceIdentityId);
+  if (!informativa && (exigeWorkflow(tool) || (derivedFromUntrusted && alteraOuEnvia))) {
     if (typeof proposeAction !== 'function') {
       return bloquear(capacidadeNegada('acao_critica_sem_workflow', { tool: toolName, reason: 'acao_critica_sem_workflow' }), 'acao_critica_sem_workflow');
     }

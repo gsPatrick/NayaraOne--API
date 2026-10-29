@@ -41,6 +41,9 @@ function validateModelPolicy(value) {
     && !(Array.isArray(value.cacheableTaskTypes) && value.cacheableTaskTypes.every((t) => typeof t === 'string' && t.trim()))) {
     throw E.invalid('cacheableTaskTypes da política de modelo deve ser uma lista de textos.');
   }
+  if (value.maxDataClassification !== undefined && !['PUBLIC', 'INTERNAL'].includes(value.maxDataClassification)) {
+    throw E.invalid('maxDataClassification da política de modelo deve ser PUBLIC ou INTERNAL.');
+  }
   for (const field of ['provider', 'model']) {
     if (value[field] !== undefined && !(typeof value[field] === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(value[field]))) {
       throw E.invalid(`${field} da política de modelo deve ser o código do ${field === 'provider' ? 'provedor' : 'modelo'}.`);

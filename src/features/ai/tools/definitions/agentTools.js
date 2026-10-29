@@ -6,6 +6,9 @@ const AGENT_TOOL_DEFINITIONS = Object.freeze([
   require('./correspondentGetStalledCases'),
   require('./correspondentGetPendingRequirements'),
   require('./correspondentCompareSimulations'),
+  require('./crmGetCustomerContactStatus'),
+  require('./radarListPublicListings'),
+  require('./crmCreateHandoffTask'),
 ]);
 
 module.exports = { AGENT_TOOL_DEFINITIONS };

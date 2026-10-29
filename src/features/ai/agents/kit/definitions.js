@@ -5,6 +5,7 @@ const SYSTEM_AGENT_DEFINITIONS = Object.freeze([
   require('../nay_correspondente').DEFINITION,
   require('../nay_diretoria').DEFINITION,
   require('../nay_financeira').DEFINITION,
+  require('../nay_atendimento').DEFINITION,
 ]);
 
 module.exports = { SYSTEM_AGENT_DEFINITIONS };

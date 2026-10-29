@@ -1,6 +1,7 @@
 'use strict';
 
 const { RetrievalService } = require('../../retrieval/RetrievalService');
+const { ragPermissions } = require('../../retrieval/retrieval.actor');
 
 const service = new RetrievalService();
 
@@ -24,7 +25,9 @@ async function providerPolicy(registry, ctx, providerCode, transaction) {
  */
 async function executionCeiling({ registry, ctx, agent, decision, transaction }) {
   const policy = await providerPolicy(registry, ctx, decision && decision.provider, transaction);
-  return { allowsConfidential: policy.allowsConfidential === true, allowsRestricted: policy.allowsRestricted === true, sourceTypes: sourceTypesOf(agent && agent.dataScopes) };
+  // Teto de classificação do próprio agente (M9-D041): `modelPolicy.maxDataClassification` PUBLIC ou INTERNAL nunca deixa entrar CONFIDENTIAL nem RESTRICTED.
+  const capped = ['PUBLIC', 'INTERNAL'].includes(agent && agent.modelPolicy && agent.modelPolicy.maxDataClassification);
+  return { allowsConfidential: !capped && policy.allowsConfidential === true, allowsRestricted: !capped && policy.allowsRestricted === true, sourceTypes: sourceTypesOf(agent && agent.dataScopes) };
 }
 
 /**
@@ -32,9 +35,9 @@ async function executionCeiling({ registry, ctx, agent, decision, transaction })
  * teto do agente em `opts.execution`. Os trechos voltam como blocos `untrusted` (`toUntrusted`) e `insufficient: true` é falta de fonte
  * (nenhuma fonte, e o grounding responde a insuficiência). Sem tipo de fonte liberado ao agente não há o que buscar.
  */
-async function retrieveFromIndex({ ctx, execution, input, purpose, runId, transaction }) {
+async function retrieveFromIndex({ ctx, execCtx, execution, input, purpose, runId, transaction }) {
   if (!execution || !execution.sourceTypes.length) return [];
-  const actor = { groupId: ctx.groupId, companyId: ctx.companyId, userId: ctx.userId, permissions: ctx.permissions || [] };
+  const actor = { groupId: ctx.groupId, companyId: ctx.companyId, userId: ctx.userId, permissions: ragPermissions(ctx.permissions, execCtx && execCtx.actor && execCtx.actor.type) };
   const found = await service.search(actor, input, { runId, purpose, execution }, transaction);
   if (found.insufficient) return [];
   const blocks = new Map(service.toUntrusted(found.items).map((b) => [b.id, b]));

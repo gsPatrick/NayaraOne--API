@@ -31,7 +31,8 @@ async function runToolCall({ execCtx, agent, registry, toolName, args, requestTe
 
   const userId = execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;
   // M9-D695: `userPermissions` são as do ator inteiro; o BI confere nelas a permissão do domínio da métrica (a efetiva só traz os códigos das tools).
-  const escopo = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId, permissions: autorizada.effective, userPermissions: [...execCtx.permissions], execution };
+  const escopo = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId, permissions: autorizada.effective, userPermissions: [...execCtx.permissions], execution,
+    runId: UUID.test(String(execCtx.runId)) ? execCtx.runId : null, actorType: execCtx.actor.type, externalContactId: execCtx.externalContactId || null };
   const politica = await createWritePolicy({ registry, execCtx, agent, runId: UUID.test(String(execCtx.runId)) ? execCtx.runId : null, transaction });
   const montados = services || buildToolServices(transaction, escopo, { includeWrite: politica.directWriteEnabled });
   return executeTool({

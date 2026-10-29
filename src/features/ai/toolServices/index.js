@@ -8,6 +8,7 @@ const { financeHealth, financePayments } = require('./finance.services');
 const { constructionProjects, legalContracts, legalDrafts, correspondentCases } = require('./operations.services');
 const { knowledge } = require('./knowledge.services');
 const { analyticsBi } = require('./analytics.services');
+const { contactStatus, publicListings, handoff } = require('./atendimento.services');
 
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
@@ -19,6 +20,9 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     legalContracts: legalContracts(transaction),
     correspondentCases: correspondentCases(transaction, scope),
     knowledge: knowledge(transaction, scope),
+    atendimentoContact: contactStatus(transaction, scope), // M9-D041: NAY Atendimento (contato do contexto, anúncios públicos, encaminhamento)
+    atendimentoListings: publicListings(transaction, scope),
+    atendimentoHandoff: handoff(transaction, scope),
     analyticsBi: analyticsBi(transaction, scope), // M9-D695: leitura do BI pela NAY Diretoria (catálogo fechado, sem SQL)
   };
   if (includeWrite) {

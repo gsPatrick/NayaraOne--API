@@ -10,7 +10,7 @@ const { validateToolArgs, BLOCKED_REASON: SCHEMA_REASON } = require('../tools/ar
 const { loadArgsLimits } = require('../tools/argsSettings');
 const { findEntityCompany } = require('../readmodels/entityOwnership.readmodel');
 const { detectSecretRequest } = require('../guards/secretRequest');
-const { effectivePermissions } = require('./executionContext');
+const { effectivePermissions, requiredPermission } = require('./executionContext');
 const { permissionDenied, crossCompanyBlocked, secretRequestBlocked } = require('./toolSecurity.errors');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,7 +41,7 @@ async function authorizeToolCall({ execCtx, agent, registry, toolName, args, req
 
   // (2) permissão efetiva
   const efetivas = effectivePermissions(execCtx, agent, registry);
-  if (!efetivas.includes(def.permissionCode)) await bloquear(permissionDenied(), 'PERMISSION');
+  if (!efetivas.includes(requiredPermission(def, execCtx))) await bloquear(permissionDenied(), 'PERMISSION');
 
   // (3) entidade de outra empresa (ou inexistente: mesma resposta)
   for (const ref of def.entityRefs || []) {

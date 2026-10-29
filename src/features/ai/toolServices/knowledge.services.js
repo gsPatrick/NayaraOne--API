@@ -5,6 +5,7 @@
 // curto e sem segredo; quem o usa o trata como `untrusted`.
 const { RetrievalService } = require('../retrieval/RetrievalService');
 const { maskSecrets } = require('../guards/secretPatterns');
+const { ragPermissions } = require('../retrieval/retrieval.actor');
 
 const LIMITE_PADRAO = 5;
 const RESUMO_MAX = 300;
@@ -17,7 +18,7 @@ function knowledge(transaction, scope) {
     async search(query, limit) {
       // A permissão do ator inteiro decide o que ele pode ver; a efetiva da NAY (só a das tools) não limita o RAG, e o teto do agente sim.
       const actor = {
-        groupId: scope.groupId, companyId: scope.companyId, userId: scope.userId, permissions: scope.userPermissions || scope.permissions || [],
+        groupId: scope.groupId, companyId: scope.companyId, userId: scope.userId, permissions: ragPermissions(scope.userPermissions || scope.permissions || [], scope.actorType),
       };
       const found = await service.search(actor, query, { limit: limit || LIMITE_PADRAO, execution: scope.execution }, transaction);
       return {
