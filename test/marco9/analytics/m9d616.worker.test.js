@@ -40,7 +40,7 @@ test('m9d616 rebuild reproduz o incremental', async () => {
   }
 });
 
-test('m9d616 source_snapshot_at, refreshed_at e version gravados', async () => {
+test('m9d616 source_snapshot_at e refreshed_at gravados', async () => {
   for (const model of MODELS) {
     const list = await rows(env, model, env.cX);
     assert.ok(list.length > 0, model);
