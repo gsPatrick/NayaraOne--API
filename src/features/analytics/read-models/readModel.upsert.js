@@ -16,13 +16,28 @@ function jsonOrValue(v) {
 
 /** Serializa dois workers no mesmo agregado (mesmo que a linha ainda não exista): trava de transação por hash de (modelo, empresa, chave). */
 async function lockAggregate(def, companyId, key, transaction) {
-  const text = `${def.name}|${companyId}|${JSON.stringify(def.keyColumns.map((c) => key[c]))}`;
+  const text = `${def.name}|${companyId}|${JSON.stringify(aggregateColumnsOf(def).map((c) => key[c]))}`;
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:t, 0))', { replacements: { t: text }, transaction });
 }
 
-const keyText = (def, key) => JSON.stringify(def.keyColumns.map((c) => String(key[c])));
+/** Colunas que identificam o agregado (M9-D618): keyColumns, ou o subconjunto declarado quando o agregado tem várias linhas por dimensão. */
+const aggregateColumnsOf = (def) => def.aggregateColumns || def.keyColumns;
+const keyText = (def, key) => JSON.stringify(aggregateColumnsOf(def).map((c) => String(key[c])));
 
-async function upsertAggregate(def, { companyId, groupId, key, fields, sourceSnapshotAt }, transaction, table = def.name) {
+/**
+ * Grava o ESTADO do agregado. Com `rows` (agregado de várias linhas, M9-D618), substitui todas as linhas da empresa que têm a chave do
+ * agregado pelas linhas novas (cada uma com a sua dimensão em `key` e os campos em `fields`).
+ */
+async function upsertAggregate(def, { companyId, groupId, key, fields, rows, sourceSnapshotAt }, transaction, table = def.name) {
+  if (Array.isArray(rows)) {
+    const agg = aggregateColumnsOf(def);
+    const where = agg.map((c) => `"${c}" = :k_${c}`).join(' AND ');
+    await sequelize.query(`DELETE FROM ${T(table)} WHERE company_id = :companyId${where ? ` AND ${where}` : ''}`, {
+      replacements: { companyId, ...Object.fromEntries(agg.map((c) => [`k_${c}`, key[c]])) }, transaction,
+    });
+    for (const row of rows) await upsertAggregate(def, { companyId, groupId, key: { ...key, ...row.key }, fields: row.fields, sourceSnapshotAt }, transaction, table);
+    return;
+  }
   for (const c of def.keyColumns) if (key[c] === undefined || key[c] === null) throw new Error(`Read model ${def.name}: chave sem ${c}.`);
   const fieldNames = Object.keys(fields || {});
   if (!fieldNames.every((f) => IDENT.test(f))) throw new Error(`Read model ${def.name}: nome de coluna inválido em fields.`);
@@ -65,7 +80,7 @@ async function listStale(def, companyId, limit, transaction) {
     'SELECT aggregate_key FROM analytics.rm_stale_aggregates WHERE read_model = :model AND company_id = :companyId ORDER BY marked_at LIMIT :limit',
     { replacements: { model: def.name, companyId, limit }, transaction }
   );
-  return rows.map((r) => Object.fromEntries(def.keyColumns.map((c, i) => [c, JSON.parse(r.aggregate_key)[i]])));
+  return rows.map((r) => Object.fromEntries(aggregateColumnsOf(def).map((c, i) => [c, JSON.parse(r.aggregate_key)[i]])));
 }
 
-module.exports = { lockAggregate, upsertAggregate, markStale, clearStale, listStale, keyText };
+module.exports = { aggregateColumnsOf, lockAggregate, upsertAggregate, markStale, clearStale, listStale, keyText };

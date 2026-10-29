@@ -64,6 +64,8 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
     slaDueAt,
     beforeEvidenceFileIds,
     requiresAcceptance,
+    causeCode,
+    teamLabel,
   } = payload;
 
   if (!groupId || !companyId || !description) {
@@ -126,6 +128,8 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
       beforeEvidenceFileIds: resolvedBeforeEvidence,
       afterEvidenceFileIds: [],
       requiresAcceptance: Boolean(requiresAcceptance),
+      causeCode: causeCode ? String(causeCode).trim().slice(0, 64).toUpperCase() : null, // M9-D618: dimensões do BI
+      teamLabel: teamLabel ? String(teamLabel).trim().slice(0, 120) : null,
       evidenceReuseFlagged: reuse.flagged,
       evidenceReuseReferenceId: reuse.referenceId,
       evidenceReuseDetails: reuse.details,

@@ -8,7 +8,10 @@
  *     version: 1,                         // versão do esquema do read model (sobe quando o formato muda)
  *     keyColumns: ['account_id'],         // chave do agregado, além de company_id (índice único em (company_id, ...keyColumns))
  *     eventTypes: ['finance.entry.settled'],
- *     aggregateKey: (event) => ({ account_id: event.payloadJson.accountId }),   // null = evento não interessa
+ *     aggregateKey: (event) => ({ account_id: event.payloadJson.accountId }),   // null = evento não interessa; pode ser async e recebe { now, transaction }
+ *     aggregateColumns: ['project_id'],   // opcional (M9-D618): colunas da chave que identificam o AGREGADO, quando ele tem várias linhas (uma por dimensão);
+ *                                         // padrão = keyColumns; [] = a empresa inteira. `recompute` devolve então `rows: [{ key: {dimensão}, fields }]`,
+ *                                         // que SUBSTITUEM todas as linhas do agregado (estado, nunca delta)
  *     recompute: async ({ companyId, groupId, key, limit, asOfDate, now, event, transaction }) =>
  *       ({ fields: { balance: '120000.00' }, sourceSnapshotAt, truncated }),    // lê o ESTADO atual da fonte, nunca soma delta
  *     scheduled: { keys: async ({ companyId, groupId, limit, transaction }) => [{ account_id }] },   // só para quem depende do relógio
@@ -33,6 +36,9 @@ function assertDefinition(def) {
     throw new Error(`Read model ${def.name}: keyColumns deve listar as colunas da chave do agregado.`);
   }
   if (!Array.isArray(def.eventTypes) || !def.eventTypes.every((t) => typeof t === 'string' && t)) throw new Error(`Read model ${def.name}: eventTypes inválido.`);
+  if (def.aggregateColumns !== undefined && (!Array.isArray(def.aggregateColumns) || !def.aggregateColumns.every((c) => def.keyColumns.includes(c)))) {
+    throw new Error(`Read model ${def.name}: aggregateColumns deve ser um subconjunto de keyColumns.`);
+  }
   if (typeof def.aggregateKey !== 'function' || typeof def.recompute !== 'function') throw new Error(`Read model ${def.name}: informe aggregateKey e recompute.`);
   if (def.scheduled && typeof def.scheduled.keys !== 'function') throw new Error(`Read model ${def.name}: scheduled.keys deve ser função.`);
   if (def.rebuild && (typeof def.rebuild.keys !== 'function' || (def.rebuild.corrections && typeof def.rebuild.corrections !== 'function'))) {
@@ -47,6 +53,7 @@ function setConsumerInstaller(fn) {
 
 function registerReadModel(def) {
   assertDefinition(def);
+  if (def.aggregateColumns === undefined) def.aggregateColumns = def.keyColumns;
   if (models.has(def.name)) throw new Error(`Read model duplicado: ${def.name}.`);
   models.set(def.name, def);
   for (const type of def.eventTypes) {

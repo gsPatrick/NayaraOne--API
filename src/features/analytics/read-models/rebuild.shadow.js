@@ -32,7 +32,7 @@ async function fillShadow(def, scope, { snapshotAt, now, asOfDate }, transaction
     seen.add(id);
     const result = await def.recompute({ ...scope, key, limit: null, asOfDate, now, event: null, transaction });
     if (result && result.truncated) throw new Error(`Read model ${def.name}: recompute sem limite não pode devolver truncated.`);
-    await upsertAggregate(def, { ...scope, key, fields: result.fields, sourceSnapshotAt: result.sourceSnapshotAt || snapshotAt }, transaction, shadowName(def.name));
+    await upsertAggregate(def, { ...scope, key, fields: result.fields, rows: result.rows, sourceSnapshotAt: result.sourceSnapshotAt || snapshotAt }, transaction, shadowName(def.name));
     rows += 1;
   }
   return { rows };

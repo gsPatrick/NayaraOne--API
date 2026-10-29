@@ -7,7 +7,7 @@
  * (rm_stale_aggregates) marcados até a fotografia saem, porque a sombra os recalculou sem teto de linhas.
  */
 const { sequelize } = require('../../../models');
-const { upsertAggregate } = require('./readModel.upsert');
+const { upsertAggregate, aggregateColumnsOf } = require('./readModel.upsert');
 const { shadowName } = require('./rebuild.shadow');
 
 const T = (name) => `analytics."${name}"`;
@@ -29,7 +29,7 @@ async function duringRebuildKeys(def, scope, { snapshotText, snapshotAt, windowM
         AND NOT pg_visible_in_snapshot((((pg_current_xact_id()::text::bigint >> 32) << 32) + xmin::text::bigint)::text::xid8, CAST(:snapshotText AS pg_snapshot))`,
     { replacements: { model: def.name, companyId: scope.companyId, snapshotAt, windowMinutes, snapshotText }, transaction }
   );
-  return rows.map((r) => Object.fromEntries(def.keyColumns.map((c, i) => [c, JSON.parse(r.aggregate_key)[i]])));
+  return rows.map((r) => Object.fromEntries(aggregateColumnsOf(def).map((c, i) => [c, JSON.parse(r.aggregate_key)[i]])));
 }
 
 async function replaceRows(def, scope, transaction) {
@@ -48,7 +48,7 @@ async function swapShadow(def, scope, ctx, transaction) {
   await replaceRows(def, scope, transaction);
   for (const key of touched) {
     const result = await def.recompute({ ...scope, key, limit: null, asOfDate: ctx.asOfDate, now: ctx.now, event: null, transaction });
-    await upsertAggregate(def, { ...scope, key, fields: result.fields, sourceSnapshotAt: result.sourceSnapshotAt || ctx.now }, transaction);
+    await upsertAggregate(def, { ...scope, key, fields: result.fields, rows: result.rows, sourceSnapshotAt: result.sourceSnapshotAt || ctx.now }, transaction);
   }
   await sequelize.query('DELETE FROM analytics.rm_stale_aggregates WHERE read_model = :model AND company_id = :companyId AND marked_at <= CAST(:snapshotAt AS timestamptz)', {
     replacements: { model: def.name, companyId: scope.companyId, snapshotAt: ctx.snapshotAt }, transaction,

@@ -58,6 +58,9 @@ module.exports = (sequelize) => {
       evidenceReuseFlagged: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'evidence_reuse_flagged' },
       evidenceReuseReferenceId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_reuse_reference_id' },
       evidenceReuseDetails: { type: DataTypes.JSONB, allowNull: true, field: 'evidence_reuse_details' },
+      // M9-D618: causa e equipe (opcionais) são as dimensões de recorrência do BI; sem valor o read model usa NAO_INFORMADA.
+      causeCode: { type: DataTypes.STRING(64), allowNull: true, field: 'cause_code' },
+      teamLabel: { type: DataTypes.STRING(120), allowNull: true, field: 'team_label' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

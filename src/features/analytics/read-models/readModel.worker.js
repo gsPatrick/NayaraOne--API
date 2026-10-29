@@ -29,7 +29,7 @@ async function withTimeout(transaction, ms, fn) {
 }
 
 async function applyToModel(def, event, scope, params, transaction, now) {
-  const key = def.aggregateKey(event, { now });
+  const key = await def.aggregateKey(event, { now, transaction }); // pode ser async (resolve a obra pelo registro do evento)
   if (!key) return { skipped: 1 };
   const [claimed] = await sequelize.query(
     `INSERT INTO analytics.rm_applied_events (read_model, source_event_id, company_id, group_id, aggregate_id, aggregate_key)
@@ -51,7 +51,7 @@ async function applyToModel(def, event, scope, params, transaction, now) {
     return { stale: 1 };
   }
   const snapshotAt = result.sourceSnapshotAt || event.occurredAt || now;
-  await upsertAggregate(def, { ...scope, key, fields: result.fields, sourceSnapshotAt: snapshotAt }, transaction);
+  await upsertAggregate(def, { ...scope, key, fields: result.fields, rows: result.rows, sourceSnapshotAt: snapshotAt }, transaction);
   await clearStale(def, { ...scope, key }, transaction);
   return { upserted: 1, def, snapshotAt };
 }

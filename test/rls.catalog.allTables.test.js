@@ -365,3 +365,12 @@ test('M9-D627: os 8 read models de Marketing e Atendimento têm RLS, FORCE RLS e
     assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
   }
 });
+
+// M9-D618: read models de Obras, Estoque/Patrimônio e Pós-obra no BI com RLS + FORCE RLS e 4 políticas.
+test('M9-D618: os 9 read models de Obras, Estoque e Pós-obra têm RLS, FORCE RLS e 4 políticas', async () => {
+  const tables = ['rm_project_progress', 'rm_project_cost', 'rm_project_delays', 'rm_project_measurements', 'rm_project_nonconformities', 'rm_project_waste', 'rm_postwork_cost', 'rm_inventory_health', 'rm_tool_assets'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as nove tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+});

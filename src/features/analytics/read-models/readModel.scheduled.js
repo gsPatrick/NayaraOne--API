@@ -37,7 +37,7 @@ async function refreshModel(def, scope, params, now, transaction) {
         await lockAggregate(def, scope.companyId, key, savepoint);
         const result = await def.recompute({ ...scope, key, limit: null, asOfDate: businessDateKey(now), now, event: null, transaction: savepoint });
         const snapshotAt = result.sourceSnapshotAt || now;
-        await upsertAggregate(def, { ...scope, key, fields: result.fields, sourceSnapshotAt: snapshotAt }, savepoint);
+        await upsertAggregate(def, { ...scope, key, fields: result.fields, rows: result.rows, sourceSnapshotAt: snapshotAt }, savepoint);
         await clearStale(def, { ...scope, key }, savepoint);
         rows += 1;
         lastSnapshot = snapshotAt;
