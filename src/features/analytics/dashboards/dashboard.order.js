@@ -31,6 +31,7 @@ function sortItems(items, mode, list) {
     const rank = (id) => (index.has(id) ? index.get(id) : list.length);
     return rows.sort((a, b) => rank(a.id) - rank(b.id) || byText(a.id, b.id));
   }
+  if (mode === 'ID') return rows.sort((a, b) => byText(a.id, b.id)); // M9-D682: pelo código da linha (sondas, quadro de integrações)
   if (mode === 'NUMERIC') return rows.sort((a, b) => lead(a.id) - lead(b.id) || byText(a.id, b.id));
   return rows.sort((a, b) => num(b) - num(a) || byText(a.id, b.id));
 }

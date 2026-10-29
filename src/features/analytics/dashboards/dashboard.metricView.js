@@ -14,6 +14,7 @@ const { periodView } = require('../metrics/query.period');
 const { qualityView, componentsOf } = require('../metrics/query.present');
 
 const INCOMPLETE_TEXT = 'Dado incompleto';
+const STALE_TEXT = 'Dado desatualizado'; // M9-D682: a medição da fila passou do limite; o valor da última medição continua à vista, com este aviso
 const MISSING = new Set(['ANALYTICS_SNAPSHOT_NOT_AVAILABLE', 'ANALYTICS_METRIC_NOT_FOUND']);
 const UNKNOWN_FRESHNESS = Object.freeze({ state: 'UNKNOWN', label: 'Ainda sem atualização', ageMinutes: null, sourceSnapshotAt: null, refreshedAt: null, historical: false });
 
@@ -49,7 +50,7 @@ async function readMetricView(ctx, widget, { asOfDate, period, meta, domainMap }
   const incomplete = raw.value === null || raw.value === undefined || raw.status === 'DEGRADED' || raw.status === 'INCOMPLETE';
   const metric = {
     metricCode: raw.metricCode, name: (meta && meta.name) || widget.title, version: raw.version, unit: raw.unit, valueNature: raw.valueNature, valueNatureLabel: natureLabel(raw.valueNature),
-    value: incomplete ? null : raw.value, formatted: incomplete ? null : formatValue(raw.unit, raw.value), status: raw.status, valueReliable: raw.valueReliable !== false && !incomplete, quality: raw.quality, incomplete, incompleteText: incomplete ? INCOMPLETE_TEXT : null,
+    value: incomplete ? null : raw.value, formatted: incomplete ? null : formatValue(raw.unit, raw.value), status: raw.status, staleText: raw.status === 'STALE' ? STALE_TEXT : null, valueReliable: raw.valueReliable !== false && !incomplete, quality: raw.quality, incomplete, incompleteText: incomplete ? INCOMPLETE_TEXT : null,
     freshness: raw.freshness, asOfDate: raw.asOfDate, sourceSnapshotAt: raw.sourceSnapshotAt, refreshedAt: raw.refreshedAt, historical: raw.historical, sourceRefs: raw.sourceRefs,
   };
   const capable = Boolean(meta && (meta.criticality === 'CRITICAL' || meta.drilldownEnabled)) && Array.isArray(raw.sourceRefs) && raw.sourceRefs.length > 0;

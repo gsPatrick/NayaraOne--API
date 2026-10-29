@@ -10,7 +10,7 @@ const money = require('../metrics/formulas/money');
 // unidade -> [casas, prefixo, sufixo]
 const SHAPES = Object.freeze({
   BRL: [2, 'R$ ', ''], BRL_PER_UNIT: [2, 'R$ ', ''], PERCENT: [2, '', '%'], COUNT: [0, '', ''], DAYS: [1, '', ' dias'], HOURS: [1, '', ' h'],
-  MINUTES: [1, '', ' min'], SECONDS: [0, '', ' s'], SCORE: [2, '', ''], NUMBER: [2, '', ''], PP: [1, '', ' p.p.'],
+  MINUTES: [1, '', ' min'], SECONDS: [0, '', ' s'], MS: [0, '', ' ms'], GRADE: [1, '', ''], SCORE: [2, '', ''], NUMBER: [2, '', ''], PP: [1, '', ' p.p.'],
 });
 
 function withSeparators(plain) {

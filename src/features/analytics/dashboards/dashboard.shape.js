@@ -37,13 +37,13 @@ function indexDimensions(dimensions) {
   return { flat, groups };
 }
 
-const cell = (metric, key, label, dim) => {
-  const unit = dimensionUnit(key, metric.unit);
+const cell = (metric, key, label, dim, unitOverride) => {
+  const unit = unitOverride || dimensionUnit(key, metric.unit);
   return { key, label, unit, value: dim ? dim.value : null, formatted: dim ? formatValue(unit, dim.value) : null };
 };
 
 function factsOf(config, metric, flat) {
-  return (config.facts || []).filter((f) => flat.has(f.key)).map((f) => cell(metric, f.key, f.label, flat.get(f.key)));
+  return (config.facts || []).filter((f) => flat.has(f.key)).map((f) => cell(metric, f.key, f.label, flat.get(f.key), f.unit));
 }
 
 function seriesOf(config, metric, flat) {
@@ -62,7 +62,8 @@ function rowsOfGroup(config, metric, items) {
     const row = { id, label: humanize(id), value: main ? main.value : null, formatted: main ? formatValue(dimensionUnit(valueKey, metric.unit), main.value) : null };
     if (config.share) row.share = measures.has(config.share) ? cell(metric, config.share, 'Participação', measures.get(config.share)) : null;
     if (config.extra) row.extra = config.extra.filter((x) => measures.has(x.key)).map((x) => cell(metric, x.key, x.label, measures.get(x.key)));
-    if (config.measures) row.cells = config.measures.map((m) => cell(metric, m.key, m.label, measures.get(m.key)));
+    if (config.measures) row.cells = config.measures.map((m) => cell(metric, m.key, m.label, measures.get(m.key), m.unit));
+    if (config.idParts) { row.parts = id.split('~'); row.label = row.parts.join(' · '); } // M9-D682: o código da linha reúne várias partes (fornecedor~ambiente~família)
     return row;
   });
 }
@@ -77,6 +78,16 @@ function itemsOf(config, metric, groups, orderList) {
     .map((r) => ({ ...r, id: `${spec.group}:${r.id}`, rawId: r.id, group: spec.group, groupLabel: spec.label, label: `${spec.label}: ${r.label}` })));
 }
 
+/** M9-D682: linhas separadas por grupo fixo (as 14 famílias de integração), na ordem da configuração; o que não é de nenhum grupo vai em "Outras". Cada grupo traz as suas linhas. */
+function partGroupsOf(config, items) {
+  const part = config.partGroupAt;
+  const known = new Set(config.partGroups.map((g) => g.id));
+  const rows = (id) => items.filter((i) => i.parts[part] === id);
+  const groups = config.partGroups.map((g) => ({ id: g.id, label: g.label, rows: rows(g.id) }));
+  const others = items.filter((i) => !known.has(i.parts[part]));
+  return others.length ? [...groups, { id: 'OUTRAS', label: 'Outras famílias', rows: others }] : groups;
+}
+
 /** `alert` = o cartão está em alerta: o indicador (ou a chave `alertOn`) tem valor maior que zero. Decidido aqui, nunca no Front. */
 function alertOf(config, metric, flat) {
   if (!config.alertOn && !config.alert) return false;
@@ -89,6 +100,8 @@ function buildBody(widgetType, config, metric, dimensions, orderList) {
   const body = { facts: factsOf(config, metric, flat), series: seriesOf(config, metric, flat), alert: alertOf(config, metric, flat) };
   if (config.group || config.groups) body.items = itemsOf(config, metric, groups, orderList);
   if (config.measures) body.columns = config.measures.map((m) => ({ key: m.key, label: m.label }));
+  if (config.idParts) body.partColumns = config.idParts;
+  if (config.idParts && Array.isArray(config.partGroups) && config.partGroups.length) body.partGroups = partGroupsOf(config, body.items);
   if (config.chart) body.chart = config.chart;
   if (config.link) body.link = config.link; // tela de lista que o cartão abre (indicador NORMAL não tem detalhe de BI; D712)
   if (config.noTotal) body.noTotal = true; // séries de naturezas diferentes: o cartão não tem total (M9-D610)
