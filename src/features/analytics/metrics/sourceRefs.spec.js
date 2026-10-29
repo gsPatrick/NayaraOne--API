@@ -18,6 +18,7 @@
 const { MODES } = require('./sourceRefs.mode');
 
 const IDENT = /^[a-z_][a-z0-9_]*$/;
+const FILTER_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 const TABLE = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
 const CODE = /^[a-z][a-z0-9]*[.][a-z][a-z0-9_]*$/;
 const specs = new Map();
@@ -29,7 +30,7 @@ function fail(spec, message) {
 function assertColumns(spec) {
   const c = spec.columns || {};
   for (const key of ['period', 'status', 'nature']) if (c[key] !== undefined && !IDENT.test(c[key])) fail(spec, `columns.${key} inválido.`);
-  for (const [name, col] of Object.entries(c.equals || {})) if (!IDENT.test(name) || !IDENT.test(col)) fail(spec, `columns.equals.${name} inválido.`);
+  for (const [name, col] of Object.entries(c.equals || {})) if (!FILTER_NAME.test(name) || !IDENT.test(col)) fail(spec, `columns.equals.${name} inválido.`);
 }
 
 function assertLeaf(spec) {
