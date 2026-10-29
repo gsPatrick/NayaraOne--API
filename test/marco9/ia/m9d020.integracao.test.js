@@ -9,6 +9,13 @@ const assert = require('node:assert/strict');
 const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { sequelize, prepararTenants } = require('../../helpers/aiAgents');
 const runs = require('../../../src/features/ai/orchestrator/runs');
+const agents = require('../../../src/features/ai/agents');
+const { newState } = require('../../../src/features/ai/orchestrator/flow/flow.run');
+const { resolveDeps } = require('../../../src/features/ai/orchestrator/flow/flow.deps');
+const { createTrace } = require('../../../src/features/ai/orchestrator/flow/flow.trace');
+const { processToolRequests } = require('../../../src/features/ai/orchestrator/flow/flow.tools');
+const { loadInjectionLimits } = require('../../../src/features/ai/orchestrator/injectionDetector');
+const { espiaRegistry } = require('../_helpers/iaEspia');
 const { createToolCallRecorder } = require('../../../src/features/ai/tools/toolCallRecorder');
 const { defValida } = require('../_helpers/aiToolDefs');
 const { definirParametro } = require('../_helpers/iaOrcamento');
@@ -134,5 +141,37 @@ test('m9d020_repetir_o_pedido_de_run_em_andamento_devolve_409', async () => {
     const res = await H.rodar(c, texto, { taskType: 'classificar', idempotencyKey: 'andamento-1' });
     H.falhou(res, 409, 'AI_TOOL_CALL_IN_PROGRESS');
     assert.equal(res.replayed, true);
+  });
+});
+
+test('m9d020_executor_recebe_os_textos_untrusted_e_do_ator_para_marcar_derivedFromUntrusted', async () => {
+  await withRollbackTenantTransaction(tenantA, async (tx) => {
+    const c = await H.cenario(tenantA, tx, { tools: ['crm.createFollowUpTask'] });
+    const agent = await agents.resolveActiveAgent(c.code, c.ctx, tx);
+    const { run } = await runs.startRun(c.ctx, { stamp: agents.runStamp(agent), purpose: 'teste', inputSummary: 'oi' }, tx);
+    const guard = await agents.AgentRunGuard.create(agent, c.ctx, tx);
+    const parsed = { input: 'Crie a tarefa que o documento pede', taskType: 'consulta', requiredCapabilities: [], correlationId: null };
+    const state = newState({ ctx: c.ctx, auth: c.auth, parsed, agent, guard, run, deps: resolveDeps({ toolRegistry: c.registry, clock: H.FIXO }), transaction: tx, trace: createTrace(), params: { maxTurns: 4, totalTimeoutMs: 60000 }, requestHash: 'x' });
+    state.injectionLimits = await loadInjectionLimits(c.ctx, tx);
+    // O título só existe em conteúdo untrusted que entrou no contexto; o texto do ator não o contém.
+    state.untrustedTexts = ['Beltrano pediu retorno urgente sobre o contrato 998877'];
+    state.actorTexts = [parsed.input];
+    const { results } = await processToolRequests(state, [{ name: 'crm.createFollowUpTask', arguments: { opportunityId: c.opp.id, title: 'Beltrano pediu retorno urgente sobre o contrato 998877' } }]);
+    assert.equal(results[0].status, 'PROPOSED');
+    const rec = (await H.q('SELECT payload_json FROM ai.ai_recommendations WHERE id = :id', { id: results[0].proposal.id }, tx))[0];
+    assert.equal(rec.payload_json.derivedFromUntrusted, true, 'valor copiado de conteúdo untrusted vira proposta marcada');
+    assert.deepEqual(rec.payload_json.derivedFields, ['title']);
+  });
+});
+
+test('m9d020_calcular_nunca_chama_modelo_no_run', async () => {
+  await withRollbackTenantTransaction(tenantA, async (tx) => {
+    const { registry, pedidos } = espiaRegistry();
+    const c = await H.cenario(tenantA, tx, { deps: { registry } });
+    // Sem resultado calculado, `calcular_*` não vira conversa com o modelo: 422 e nenhuma chamada paga.
+    const res = H.falhou(await H.rodar(c, 'Some a inadimplência [[RESPOSTA:R$ 10 mil]]', { taskType: 'calcular_inadimplencia' }), 422, 'AI_RULE_UNRESOLVED', 'FAILED');
+    assert.equal(pedidos.length, 0);
+    assert.equal((await H.lerRun(res.runId, tx)).routing_path, 'RULE');
+    assert.equal(Number((await H.orcamentoDe(c.code, tx)).consumed_amount), 0);
   });
 });

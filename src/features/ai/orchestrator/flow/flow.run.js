@@ -153,4 +153,4 @@ async function closeWithoutAgent(ctx, opened, transaction, trace) {
   return failureOutcome(opened.run.id, opened.error, final, { trace: trace.spans });
 }
 
-module.exports = { executeRun };
+module.exports = { executeRun, newState };
