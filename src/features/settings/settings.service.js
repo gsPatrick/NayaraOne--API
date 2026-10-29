@@ -53,6 +53,7 @@ const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/fin
 const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
 const { QUERY_SETTINGS_SCHEMA } = require('../analytics/metrics/query.settings');
 const { FINANCE_DELINQUENCY_SETTINGS_SCHEMA } = require('../analytics/read-models/financeDelinquency.settings');
+const { PANEL_SETTINGS_SCHEMA } = require('../analytics/panelSettings'); // M9-D626
 const { DECISAO_FILA_SETTINGS_SCHEMA } = require('../analytics/read-models/decisaoFilaKpi.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/imoveisKpi.settings');
@@ -285,6 +286,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
   // Marco 9, M9-D622 — KPIs de inadimplência: faixas de atraso do valor inadimplente e owner de cada um dos três indicadores.
   ...FINANCE_DELINQUENCY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D626 — painel Financeiro: limiar dos cartões de conciliações pendentes e anomalias abertas quando não há alerta publicado.
+  ...PANEL_SETTINGS_SCHEMA,
   // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
   ...CASH_SETTINGS_SCHEMA,
   ...COMERCIAL_SETTINGS_SCHEMA,

@@ -49,7 +49,7 @@ async function setup() {
     });
     return { status: res.status, body: await res.json().catch(() => null) };
   }
-  return { admin, tenantA, tenantB, server, router, call };
+  return { admin, tenantA, tenantB, tenants, server, router, call };
 }
 
 async function teardown(env) {

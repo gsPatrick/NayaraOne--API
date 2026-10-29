@@ -103,6 +103,8 @@ function buildBody(widgetType, config, metric, dimensions, orderList) {
   if (config.idParts) body.partColumns = config.idParts;
   if (config.idParts && Array.isArray(config.partGroups) && config.partGroups.length) body.partGroups = partGroupsOf(config, body.items);
   if (config.chart) body.chart = config.chart;
+  if (config.zeroText && metric.value !== null && metric.value !== undefined && Number(metric.value) === 0) body.zeroText = config.zeroText; // M9-D622: necessidade 0,00 = "Sem necessidade no horizonte"
+  if (config.horizonText) body.horizonText = config.horizonText; // M9-D626: texto do horizonte do indicador (o prazo vem da definição do indicador)
   if (config.link) body.link = config.link; // tela de lista que o cartão abre (indicador NORMAL não tem detalhe de BI; D712)
   if (config.noTotal) body.noTotal = true; // séries de naturezas diferentes: o cartão não tem total (M9-D610)
   if (config.labelKind) body.labelKind = config.labelKind; // USER: o código da linha é um usuário; o Front mostra o nome que ele conhece

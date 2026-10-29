@@ -56,4 +56,19 @@ async function listDimensionSnapshots({ metricCode, version, companyId, asOfDate
   return rows;
 }
 
-module.exports = { findPublishedDashboard, dashboardHasCriticalMetric, listMetricMeta, listDimensionSnapshots };
+/**
+ * M9-D626 — limiar do alerta PUBLICADO de limite simples de um indicador (sem recorte por dimensão): a definição da empresa vale mais que a do grupo, e a
+ * versão mais nova mais que a anterior. null quando não há.
+ */
+async function findPublishedAlertThreshold({ metricCode, companyId, groupId }, transaction) {
+  const [rows] = await sequelize.query(
+    `SELECT threshold->>'operator' AS operator, threshold->>'value' AS value FROM analytics.alert_definitions
+      WHERE metric_code = :metricCode AND status = 'PUBLISHED' AND condition_type = 'THRESHOLD' AND COALESCE(scope->>'dimensionKey', '') = ''
+        AND ((company_id = :companyId) OR (company_id IS NULL AND group_id = :groupId))
+      ORDER BY (company_id IS NULL), version DESC LIMIT 1`,
+    { replacements: { metricCode, companyId, groupId }, transaction }
+  );
+  return rows[0] || null;
+}
+
+module.exports = { findPublishedDashboard, dashboardHasCriticalMetric, listMetricMeta, listDimensionSnapshots, findPublishedAlertThreshold };

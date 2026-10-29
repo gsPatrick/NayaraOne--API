@@ -19,6 +19,7 @@ const { assertGroupScope, permittedCompanies, listGroupCompanies, inCompany } = 
 const { readCompanies } = require('./consolidation/companyKpi');
 const { loadPairs } = require('./consolidation/intercompany');
 const { consolidate } = require('./consolidation/compute');
+const { formatValue } = require('../dashboards/dashboard.format');
 
 const UNMATCHED_MESSAGE = 'Há transferências entre empresas sem contrapartida; o consolidado está incompleto.';
 const PARTIAL_MESSAGE = 'Consolidado só das empresas permitidas.';
@@ -62,7 +63,9 @@ async function consolidateMetric(ctx, input, transaction) {
   const times = byCompany.map((c) => c.sourceSnapshotAt).filter(Boolean).map((d) => new Date(d).getTime());
   return {
     metricCode: input.metricCode, scope: 'GROUP', groupId: ctx.groupId, asOfDate: input.asOfDate, unit: result.unit,
-    value: result.value, byCompany: byCompany.map(({ dimensions, period, ...company }) => company), eliminations: result.eliminations, eliminatedTransfers: result.eliminatedPairs,
+    value: result.value, formatted: formatValue(result.unit, result.value), // M9-D626: o painel mostra o texto pt-BR pronto
+    byCompany: byCompany.map(({ dimensions, period, ...company }) => ({ ...company, formatted: formatValue(company.unit, company.value) })),
+    eliminations: result.eliminations, eliminationsFormatted: formatValue(result.unit, result.eliminations), eliminatedTransfers: result.eliminatedPairs,
     consolidatedStatus: result.consolidatedStatus, status: result.consolidatedStatus,
     ...(unmatched.length ? { code: 'ANALYTICS_INTERCOMPANY_UNMATCHED', message: UNMATCHED_MESSAGE } : {}),
     details: { unmatchedIntercompany: unmatched, companiesIncluded: allowed.length, companiesInGroup: total, ...(result.numerator !== undefined ? { numerator: result.numerator, denominator: result.denominator } : {}) },

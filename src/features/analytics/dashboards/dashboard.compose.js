@@ -13,6 +13,8 @@ const { readMetricView } = require('./dashboard.metricView');
 const { buildQualityBanner } = require('./dashboard.banner');
 const { evaluateBlock } = require('../quality/status.block');
 const { defaultPeriodOf } = require('../metrics/query.period');
+const { isMatrix, matrixCodes, composeMatrix, bannerViewsOf } = require('./dashboard.matrix');
+const { resolveAlertLimit, passesLimit } = require('./dashboard.alertLimit');
 
 const METRIC_TYPES = new Set(['KPI_CARD', 'TREND', 'TABLE', 'BAR']);
 
@@ -30,12 +32,19 @@ async function composeMetricWidget(ctx, w, shared, transaction) {
     : await store.listDimensionSnapshots({ metricCode: w.metric_code, version: metric.version, companyId: ctx.companyId, asOfDate: shared.asOfDate }, transaction);
   const config = w.config || {};
   const orderList = await loadOrderList(config.order, ctx, transaction);
-  return { ...base, metric, drilldown, view: buildBody(w.widget_type, config, metric, dimensions, orderList) };
+  const view = buildBody(w.widget_type, config, metric, dimensions, orderList);
+  if (config.alertLimit) { // M9-D626: o cartão acende pelo limiar do alerta publicado (ou do parâmetro), nunca por valor fixo
+    const limit = await resolveAlertLimit(ctx, w.metric_code, config.alertLimit, transaction);
+    view.alert = passesLimit(metric.value, limit);
+    view.alertLimit = limit;
+  }
+  if (isMatrix(config)) view.matrix = await composeMatrix(ctx, w, shared, transaction);
+  return { ...base, metric, drilldown, view };
 }
 
 /** widgets: linhas de dashboard_widgets na ordem; devolve { widgets, quality }. */
 async function composeWidgets(ctx, widgets, asOfDate, transaction, period = defaultPeriodOf(asOfDate)) {
-  const codes = [...new Set(widgets.filter((w) => METRIC_TYPES.has(w.widget_type) && w.metric_code).map((w) => w.metric_code))];
+  const codes = [...new Set(widgets.filter((w) => METRIC_TYPES.has(w.widget_type) && w.metric_code).flatMap((w) => [w.metric_code, ...matrixCodes(w.config)]))];
   const metas = new Map((await store.listMetricMeta(codes, transaction)).map((m) => [m.metricCode, m]));
   const domainMap = await loadDomainMap(ctx, transaction);
   const shared = { asOfDate, forMetric: (code) => ({ asOfDate, period, meta: metas.get(code), domainMap }) };
@@ -47,7 +56,7 @@ async function composeWidgets(ctx, widgets, asOfDate, transaction, period = defa
     const dependsOn = !w.metric && w.config && w.config.dependsOn;
     if (Array.isArray(dependsOn) && dependsOn.length) composed[i] = { ...w, block: await evaluateBlock(ctx, dependsOn, asOfDate, transaction) };
   }
-  const { banner, quality } = buildQualityBanner(composed.filter((c) => c.metric), composed.filter((c) => c.block && c.block.deferred));
+  const { banner, quality } = buildQualityBanner(bannerViewsOf(composed), composed.filter((c) => c.block && c.block.deferred));
   return { widgets: composed.map((c) => (c.type === 'QUALITY_BANNER' ? { ...c, banner } : c)), quality };
 }
 
