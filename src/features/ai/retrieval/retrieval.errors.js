@@ -2,7 +2,7 @@
 
 const AppError = require('../../../utils/AppError');
 
-/** Erros da ingestão do RAG (M9-D022). Código estável, mensagem em português, sem detalhe técnico. */
+/** Erros da ingestão e da busca do RAG (M9-D022 e M9-D023). Código estável, mensagem em português, sem detalhe técnico. */
 const notAuthorized = () => AppError.forbidden('Você não pode indexar este documento.', 'AI_INGEST_NOT_AUTHORIZED');
 const malware = () => new AppError('O arquivo foi rejeitado pela verificação de segurança.', 422, 'AI_INGEST_MALWARE');
 const unclassified = () => new AppError('Classifique o documento antes de indexá-lo.', 422, 'AI_INGEST_UNCLASSIFIED');
@@ -16,6 +16,8 @@ const sourceInvalid = () => new AppError('A origem a indexar não foi encontrada
 const failed = () => new AppError('A ingestão falhou por um erro técnico. Reenvie o documento.', 502, 'AI_INGEST_FAILED');
 const invalid = (message, details) => new AppError(message, 400, 'AI_INGEST_INVALID', details);
 const notFound = () => AppError.notFound('Ingestão não encontrada.', 'AI_INGEST_NOT_FOUND');
+const crossCompany = () => AppError.notFound('Dado não encontrado.', 'AI_CROSS_COMPANY_BLOCKED');
+const searchInvalid = (message) => new AppError(message, 400, 'AI_RETRIEVAL_INVALID');
 const classifyInvalid = (message) => new AppError(message, 400, 'AI_FILE_CLASSIFICATION_INVALID');
 
 /** Código de rejeição (gravado em ai.ingestions.error_code) -> erro HTTP. */
@@ -41,5 +43,5 @@ function rejectionError(code, ingestionId) {
 
 module.exports = {
   notAuthorized, malware, unclassified, urlBlocked, restricted, unsupported, unreadable, secrets, empty, sourceInvalid, failed, invalid, notFound,
-  classifyInvalid, rejectionError, REJECTIONS,
+  crossCompany, searchInvalid, classifyInvalid, rejectionError, REJECTIONS,
 };

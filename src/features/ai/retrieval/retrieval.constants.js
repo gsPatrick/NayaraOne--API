@@ -10,5 +10,6 @@ const STEPS = Object.freeze({
   authorize: 'AUTHORIZE', fetch: 'FETCH', scan: 'SCAN', hash: 'HASH', classify: 'CLASSIFY', parse: 'PARSE', secrets: 'SECRETS', chunk: 'CHUNK', embed: 'EMBED', index: 'INDEX', done: 'DONE',
 });
 const DEFAULT_PERMISSION = 'ai:use';
+const INSUFFICIENT_MESSAGE = 'Não encontrei fontes que você possa consultar para responder.';
 
-module.exports = { SOURCE_KINDS, CLASSIFICATIONS, CLASSIFICATION_RANK, INGESTION_STATUSES, STEPS, DEFAULT_PERMISSION };
+module.exports = { SOURCE_KINDS, CLASSIFICATIONS, CLASSIFICATION_RANK, INGESTION_STATUSES, STEPS, DEFAULT_PERMISSION, INSUFFICIENT_MESSAGE };
