@@ -4,10 +4,13 @@ const { Op } = require('sequelize');
 const AppError = require('../../../utils/AppError');
 const { sequelize, IntegrationError } = require('../../../models');
 const { getCurrentCorrelationId } = require('../../../middlewares/correlationId.middleware');
-const { SOURCES, ERROR_CLASSES, MESSAGE_MAX } = require('./errors.constants');
+const { SOURCES, ERROR_CLASSES, SEVERITIES, MESSAGE_MAX } = require('./errors.constants');
 const { sanitizeText, sanitizePayload } = require('./sanitizeForError');
 const { readErrorParams } = require('./errors.params');
 const { severityFor, maxSeverity } = require('./errors.severity');
+
+/** Severidade pela regra da classe (M9-D207); quem tem a gravidade medida por fora (auditoria de dependências, M9-D248) a informa em `severity`. */
+const gravidade = (d, attempts, params) => (SEVERITIES.includes(d.severity) ? d.severity : severityFor({ ...d, attempts, exhaustedAttempts: params.exhaustedAttempts }));
 
 const invalido = (msg) => AppError.badRequest(msg, 'INTEGRATION_ERROR_INVALID');
 
@@ -52,7 +55,7 @@ async function recordError(ctx, data, transaction) {
   const existente = await acharGrupoAberto(ctx, d, params, transaction);
   if (existente) {
     const attempts = existente.attempts + 1;
-    const severity = maxSeverity(existente.severity, severityFor({ ...d, attempts, exhaustedAttempts: params.exhaustedAttempts }));
+    const severity = maxSeverity(existente.severity, gravidade(d, attempts, params));
     await existente.update({ attempts, severity, httpStatus: d.httpStatus ?? existente.httpStatus }, { transaction });
     return existente;
   }
@@ -70,7 +73,7 @@ async function recordError(ctx, data, transaction) {
       operation: d.operation ? String(d.operation).slice(0, 40) : null,
       errorClass: d.errorClass,
       errorCode: d.errorCode,
-      severity: severityFor({ ...d, attempts, exhaustedAttempts: params.exhaustedAttempts }),
+      severity: gravidade(d, attempts, params),
       message: sanitizeText(d.message || 'Falha na integração.', MESSAGE_MAX),
       sanitizedPayload: saneado ? saneado.sanitized : null,
       payloadHash: d.payloadHash || (saneado ? saneado.hash : null),

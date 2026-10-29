@@ -1,0 +1,4 @@
+{
+  "_comment": "Exceções registradas da auditoria de dependências (M9-D248). Cada exceção exige id do aviso (GHSA ou número), pacote, motivo, mitigação, responsável, grantedAt e expiresAt (AAAA-MM-DD) com no máximo integration.sdk.audit_exception_max_days dias entre os dois (padrão 30). Vencida, volta a bloquear. A aprovação fica no histórico do git.",
+  "exceptions": []
+}

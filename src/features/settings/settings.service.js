@@ -29,6 +29,7 @@ const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings'
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
+const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
 const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
@@ -192,6 +193,8 @@ const SETTINGS_SCHEMA = {
   ...MINIMIZATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
+  // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.
+  ...DEPAUDIT_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
   // Marco 9, M9-D604 — versionamento de métricas do BI: mínimo de caracteres do motivo da mudança de fórmula.

@@ -180,6 +180,10 @@ jobs:
       - name: Security scan (npm audit — dependências de produção)
         run: node scripts/securityScan.js
 
+      # M9-D248: high/critical bloqueia a entrega salvo exceção válida (security/audit-exceptions.json, no máximo 30 dias) e SDK de fornecedor exige versão exata.
+      - name: Auditoria de dependências com exceções (M9-D248)
+        run: node scripts/dependencyAudit.js
+
       # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
       # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
       # cluster — que o Postgres sempre cria como SUPERUSER, com BYPASSRLS implícito. Isso
