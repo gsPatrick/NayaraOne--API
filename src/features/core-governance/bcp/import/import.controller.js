@@ -16,8 +16,8 @@ async function importOperations(req, res) {
 }
 
 async function listReconciliations(req, res) {
-  const data = await req.withTenantTransaction((transaction) => decideService.list({ ...actor(req), query: req.query, transaction }));
-  return success(res, { data });
+  const { items, pagination } = await req.withTenantTransaction((transaction) => decideService.list({ ...actor(req), query: req.query, transaction }));
+  return success(res, { data: items, pagination });
 }
 
 async function decide(req, res) {

@@ -21,8 +21,11 @@ async function insertLink(link, transaction) {
 const findById = (companyId, id, transaction, { lock = false } = {}) => one(`SELECT ${COLUMNS} FROM governance.share_links l WHERE l.company_id = :companyId AND l.id = :id${lock ? ' FOR UPDATE' : ''}`, { companyId, id }, transaction);
 const findByJob = (companyId, exportJobId, transaction) => one(`SELECT ${COLUMNS} FROM governance.share_links l WHERE l.company_id = :companyId AND l.export_job_id = :exportJobId`, { companyId, exportJobId }, transaction);
 
-async function listLinks(companyId, createdBy, transaction) {
-  return select(`SELECT ${COLUMNS} FROM governance.share_links l WHERE l.company_id = :companyId AND (CAST(:createdBy AS uuid) IS NULL OR l.created_by = :createdBy) ORDER BY l.created_at DESC LIMIT 500`, { companyId, createdBy }, transaction);
+async function listLinks(companyId, createdBy, { limit, offset }, transaction) {
+  const where = 'l.company_id = :companyId AND (CAST(:createdBy AS uuid) IS NULL OR l.created_by = :createdBy)';
+  const [{ total }] = await select(`SELECT count(*)::int AS total FROM governance.share_links l WHERE ${where}`, { companyId, createdBy }, transaction);
+  const rows = await select(`SELECT ${COLUMNS} FROM governance.share_links l WHERE ${where} ORDER BY l.created_at DESC, l.id LIMIT :limit OFFSET :offset`, { companyId, createdBy, limit, offset }, transaction);
+  return { rows, total };
 }
 
 /** Resolve a empresa pelo hash do token (a política share_token_lookup só deixa ver a linha cujo hash é o da transação). Devolve { id, groupId, companyId } ou null. */

@@ -88,7 +88,7 @@ test('m9d801 sem permissão 403, from maior que to e sourceType desconhecido 400
   assert.equal(origem.status, 400);
   assert.equal(origem.body.error.code, 'GOV_CALENDAR_SOURCE_INVALID');
   assert.equal(origem.body.error.message, 'Tipo de origem inválido.');
-  assert.equal((await call('A:gestor', 'GET', '/calendar?pageSize=500')).body.error.code, 'VALIDATION_ERROR');
+  assert.equal((await call('A:gestor', 'GET', '/calendar?pageSize=500')).body.error.code, 'GOV_VALIDATION_PAGINATION');
 });
 
 test('m9d801 não existe rota de escrita em calendar_items', async (t) => {

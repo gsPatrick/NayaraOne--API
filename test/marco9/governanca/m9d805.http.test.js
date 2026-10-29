@@ -74,10 +74,11 @@ async function committedPair(extra = {}) {
 test('m9d805 GET /data-quality/queue lista a fila e respeita a permissão de leitura', async (t) => {
   if (httpSkip) return t.skip(httpSkip);
   const { item } = await committedPair();
-  const list = await call('leitura', 'GET', '/data-quality/queue?status=OPEN&entityType=PERSON&limit=200');
+  const list = await call('leitura', 'GET', '/data-quality/queue?status=OPEN&entityType=PERSON&pageSize=200');
   assert.equal(list.status, 200);
-  assert.ok(list.body.data.items.some((i) => i.id === item.id && i.score === 100 && i.status === 'OPEN'));
-  assert.equal(list.body.data.limit, 200);
+  assert.ok(list.body.data.some((i) => i.id === item.id && i.score === 100 && i.status === 'OPEN'));
+  assert.equal(list.body.pagination.pageSize, 200);
+  assert.equal(list.body.pagination.page, 1);
 });
 
 test('m9d805 POST decision: 403 sem permissão, 200 do steward, 409 ao repetir', async (t) => {

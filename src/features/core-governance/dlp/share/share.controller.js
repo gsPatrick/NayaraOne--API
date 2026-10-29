@@ -31,8 +31,8 @@ async function revoke(req, res) {
 }
 
 async function list(req, res) {
-  const data = await req.withTenantTransaction((transaction) => service.listShareLinks({ ...actor(req), transaction }));
-  return success(res, { data });
+  const { items, pagination } = await req.withTenantTransaction((transaction) => service.listShareLinks({ ...actor(req), query: req.query, transaction }));
+  return success(res, { data: items, pagination });
 }
 
 /** Rota pública: cabeçalhos de limite em toda resposta, Retry-After no 429, nada em cache e sem indexação; arquivo avulso sai como anexo. */

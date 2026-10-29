@@ -28,9 +28,11 @@ function checkPagination(query = {}) {
 }
 
 /** page, pageSize, limit e offset prontos para a consulta; o tamanho padrão vem do parâmetro da empresa. */
-async function parsePagination(query, tenant, transaction) {
+async function parsePagination(query, tenant, transaction, moduleDefault) {
   const checked = checkPagination(query);
-  const fallback = Number(await getSetting(PAGE_SIZE_KEY, tenant, transaction, STANDARDS_SETTING_DEFAULTS[PAGE_SIZE_KEY]));
+  // `moduleDefault`: tamanho padrão próprio do módulo (parâmetro dele, já lido); sem ele vale governanca.api.paginacao.tamanho_padrao. Nunca passa de MAX_PAGE_SIZE.
+  const given = Number(moduleDefault);
+  const fallback = Number.isInteger(given) && given > 0 ? Math.min(given, MAX_PAGE_SIZE) : Number(await getSetting(PAGE_SIZE_KEY, tenant, transaction, STANDARDS_SETTING_DEFAULTS[PAGE_SIZE_KEY]));
   const page = checked.page || 1;
   const pageSize = checked.pageSize || fallback;
   return { page, pageSize, limit: pageSize, offset: (page - 1) * pageSize };
@@ -38,9 +40,15 @@ async function parsePagination(query, tenant, transaction) {
 
 const buildPagination = ({ page, pageSize, total }) => ({ page, pageSize, total, totalPages: Math.ceil(total / pageSize) });
 
+/** Resultado de lista no formato único: `items` da página e o bloco `pagination` {page,pageSize,total,totalPages}. */
+const pageResult = (items, paging, total) => ({ items, pagination: buildPagination({ page: paging.page, pageSize: paging.pageSize, total }) });
+
+/** Lista pequena já em memória (catálogo fixo): recorta a página pedida e devolve no formato único. */
+const pageOfArray = (rows, paging) => pageResult(rows.slice(paging.offset, paging.offset + paging.pageSize), paging, rows.length);
+
 /** Middleware: recusa page/pageSize inválidos antes do handler (aplicado às rotas de governança). */
 function paginationGuard(req, _res, next) {
   try { checkPagination(req.query); return next(); } catch (error) { return next(error); }
 }
 
-module.exports = { MAX_PAGE_SIZE, checkPagination, parsePagination, buildPagination, paginationGuard };
+module.exports = { MAX_PAGE_SIZE, checkPagination, parsePagination, buildPagination, pageResult, pageOfArray, paginationGuard };

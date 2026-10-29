@@ -1,5 +1,6 @@
 'use strict';
 
+const { buildPagination } = require('../api-governance/standards/pagination.helper');
 const { getSetting } = require('../../../features/settings/settings.service');
 const settings = require('./calendar.settings');
 const { TIMEZONE } = require('./calendar.constants');
@@ -26,7 +27,7 @@ async function listCalendar(tenant, { permissions, query, now = new Date() }, tr
   const { rows, total } = await repository.listItems(filters, allowed, tenant, transaction, denied);
   return {
     items: rows.map((row) => presentItem(row, now)),
-    pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.max(1, Math.ceil(total / filters.pageSize)) },
+    pagination: buildPagination({ page: filters.page, pageSize: filters.pageSize, total }),
     meta: { from: iso(filters.from), to: iso(filters.to), timezone: TIMEZONE },
   };
 }

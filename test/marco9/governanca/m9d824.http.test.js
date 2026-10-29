@@ -48,20 +48,20 @@ test('m9d824 GET /dlp/anomalies lista para a revisão e exige governance:dlp:adm
   } finally { env.teardown(); }
   const list = await http.call('gestorA', 'GET', '/dlp/anomalies?status=OPEN&kind=EXPORT');
   assert.equal(list.status, 200, 'a anomalia não derrubou a sessão do usuário');
-  assert.equal(list.body.data.total, 1);
-  const [anomaly] = list.body.data.items;
+  assert.equal(list.body.pagination.total, 1);
+  const [anomaly] = list.body.data;
   assert.deepEqual([anomaly.kind, anomaly.status, anomaly.userId, anomaly.triggerSignals.total], ['EXPORT', 'OPEN', http.tenants.A.userId, 3]);
   assert.ok(new Date(anomaly.restrictedUntil) > new Date());
   const bad = await http.call('gestorA', 'GET', '/dlp/anomalies?status=TALVEZ');
   assert.deepEqual([bad.status, bad.body.error.code], [400, 'GOV_DLP_REQUEST_INVALID']);
   const other = await http.call('gestorB', 'GET', '/dlp/anomalies');
-  assert.deepEqual([other.status, other.body.data.total], [200, 0], 'a empresa B não enxerga a anomalia de A');
+  assert.deepEqual([other.status, other.body.pagination.total], [200, 0], 'a empresa B não enxerga a anomalia de A');
   const noReason = await http.call('gestorA', 'POST', `/dlp/anomalies/${anomaly.id}/review`, { decision: 'FALSE_POSITIVE' });
   assert.deepEqual([noReason.status, noReason.body.error.code, noReason.body.error.message], [400, 'GOV_ANOMALY_REASON_REQUIRED', 'Informe o motivo da revisão.']);
   const done = await http.call('gestorA', 'POST', `/dlp/anomalies/${anomaly.id}/review`, { decision: 'FALSE_POSITIVE', reason: 'Fechamento mensal conferido.' });
   assert.equal(done.status, 200, JSON.stringify(done.body));
   assert.deepEqual([done.body.data.status, done.body.data.restrictedUntil, done.body.data.reviewedBy], ['FALSE_POSITIVE', null, http.tenants.A.userId]);
   const after = await http.call('gestorA', 'GET', '/dlp/anomalies?status=OPEN');
-  assert.equal(after.body.data.total, 0);
+  assert.equal(after.body.pagination.total, 0);
   assert.equal((await env.stateOf(http.tenants.A, http.tenants.A.userId)).dlp_restricted_until, null);
 });

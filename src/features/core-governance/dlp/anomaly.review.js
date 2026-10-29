@@ -4,6 +4,7 @@ const { getSetting } = require('../../settings/settings.service');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { govNotFound } = require('../governance.errors');
 const { requestInvalid, anomalyReasonRequired, anomalyTransition } = require('./dlp.errors');
+const { parsePagination, pageResult } = require('../api-governance/standards/pagination.helper');
 const settings = require('./anomaly.settings');
 const anomalies = require('./anomaly.repository');
 const userState = require('./userState.repository');
@@ -13,17 +14,15 @@ const DECISIONS = Object.freeze(['CONFIRMED', 'FALSE_POSITIVE']);
 const ALLOWED = Object.freeze({ OPEN: ['CONFIRMED', 'FALSE_POSITIVE'], CONFIRMED: ['FALSE_POSITIVE'], FALSE_POSITIVE: [] });
 
 const view = (row) => row;
-const MAX_LIMIT = 200;
 
 async function listAnomalies(tenant, query, transaction) {
   const status = query.status ? String(query.status).toUpperCase() : null;
   const kind = query.kind ? String(query.kind).toUpperCase() : null;
   if (status && !['OPEN', 'CONFIRMED', 'FALSE_POSITIVE'].includes(status)) throw requestInvalid('Situação inválida.', { field: 'status' });
   if (kind && !['READ', 'EXPORT'].includes(kind)) throw requestInvalid('Tipo inválido.', { field: 'kind' });
-  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), MAX_LIMIT);
-  const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
-  const { rows, total } = await anomalies.list(tenant.companyId, { status, kind, userId: query.userId || null, limit, offset }, transaction);
-  return { items: rows.map(view), total, limit, offset };
+  const paging = await parsePagination(query, tenant, transaction);
+  const { rows, total } = await anomalies.list(tenant.companyId, { status, kind, userId: query.userId || null, limit: paging.limit, offset: paging.offset }, transaction);
+  return pageResult(rows.map(view), paging, total);
 }
 
 /**

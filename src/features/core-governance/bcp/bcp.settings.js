@@ -7,7 +7,7 @@ const { SECTOR_CODES } = require('./bcp.constants');
  * Parâmetros do BCP (aba Governança em /painel/configuracoes; catálogo em Maturacao/demandas/parametros.csv).
  *  - governanca.bcp.setor_por_papel (M9-D830 §3.0b): JSON { "SETOR": ["NOME DO PAPEL", ...] }. O setor do usuário vem do NOME do papel que ele tem na empresa (sem diferenciar
  *    maiúsculas); o papel ADMIN pertence aos seis. Os nomes iniciais são os de uso comum; o administrador troca pelos da sua empresa.
- *  - governanca.bcp.listagem_limite: máximo de operações por página em GET /bcp/manual-operations (padrão 100).
+ *  - governanca.bcp.listagem_limite: tamanho padrão da página (pageSize, no máximo 200) de GET /bcp/manual-operations e /bcp/reconciliations (padrão 100).
  *  - governanca.bcp.impressao_max_folhas (M9-D834 §3.3): máximo de folhas numeradas por impressão de formulário (padrão 500).
  *  - governanca.bcp.importacao_lote_max (M9-D832): máximo de operações por pedido de importação (padrão 200).
  *  - governanca.bcp.importacao_lead_prazo_horas (M9-D832): prazo, em horas, do próximo contato de um lead importado do papel (padrão 24).
@@ -60,7 +60,7 @@ function validateSectorRoles(key, value) {
 
 const BCP_SETTINGS_SCHEMA = {
   [SECTOR_ROLES_KEY]: { type: 'string', validate: validateSectorRoles },
-  [LIST_LIMIT_KEY]: { type: 'integer', min: 1, max: 1000 },
+  [LIST_LIMIT_KEY]: { type: 'integer', min: 1, max: 200 },
   [PRINT_MAX_KEY]: { type: 'integer', min: 1, max: 5000 },
   [IMPORT_BATCH_MAX_KEY]: { type: 'integer', min: 1, max: 1000 },
   [IMPORT_LEAD_HOURS_KEY]: { type: 'integer', min: 1, max: 720 },

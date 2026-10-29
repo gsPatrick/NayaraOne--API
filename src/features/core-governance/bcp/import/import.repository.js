@@ -46,15 +46,18 @@ const applyDecision = (companyId, id, { decision, decidedBy, note, reconciledBy 
 );
 
 /** Lista as reconciliações dos setores dados, com a operação junto (referência, setor, ação). `pending` = DIVERGENT ainda sem decisão. */
-function listReconciliations(companyId, { sectors, result, pending, limit, offset }, transaction) {
-  return select(
-    `SELECT ${RECON_COLUMNS}, o.manual_reference AS "manualReference", o.sector, o.intended_action AS "intendedAction", o.status AS "operationStatus"
-       FROM governance.reconciliations r JOIN governance.manual_operations o ON o.id = r.manual_operation_id
+async function listReconciliations(companyId, { sectors, result, pending, limit, offset }, transaction) {
+  const from = `FROM governance.reconciliations r JOIN governance.manual_operations o ON o.id = r.manual_operation_id
       WHERE r.company_id = :companyId AND o.sector IN (:sectors) AND (CAST(:result AS text) IS NULL OR r.result = :result)
-        AND (CAST(:pending AS boolean) IS NULL OR (r.decision IS NULL AND r.result = 'DIVERGENT') = :pending)
+        AND (CAST(:pending AS boolean) IS NULL OR (r.decision IS NULL AND r.result = 'DIVERGENT') = :pending)`;
+  const replacements = { companyId, sectors, result: result || null, pending: pending === undefined ? null : pending };
+  const [{ total }] = await select(`SELECT count(*)::int AS total ${from}`, replacements, transaction);
+  const rows = await select(
+    `SELECT ${RECON_COLUMNS}, o.manual_reference AS "manualReference", o.sector, o.intended_action AS "intendedAction", o.status AS "operationStatus" ${from}
       ORDER BY r.created_at DESC, o.manual_reference LIMIT :limit OFFSET :offset`,
-    { companyId, sectors, result: result || null, pending: pending === undefined ? null : pending, limit, offset }, transaction
+    { ...replacements, limit, offset }, transaction
   );
+  return { rows, total };
 }
 
 /** Operações do pedido: por ids ou por correlation_ref, ordenadas por registro. */

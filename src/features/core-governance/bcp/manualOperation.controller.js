@@ -17,8 +17,8 @@ async function update(req, res) {
 }
 
 async function list(req, res) {
-  const data = await req.withTenantTransaction((transaction) => service.listOperations({ ...actor(req), query: req.query, transaction }));
-  return success(res, { data });
+  const { items, pagination } = await req.withTenantTransaction((transaction) => service.listOperations({ ...actor(req), query: req.query, transaction }));
+  return success(res, { data: items, pagination });
 }
 
 module.exports = { create, update, list };

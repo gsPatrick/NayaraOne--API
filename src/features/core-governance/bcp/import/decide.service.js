@@ -4,6 +4,7 @@ const { registrarAuditoria } = require('../../../../engines/audit/auditLog.servi
 const { getSetting } = require('../../../settings/settings.service');
 const { govError } = require('../../governance.errors');
 const { STATUS } = require('../bcp.constants');
+const { parsePagination, pageResult } = require('../../api-governance/standards/pagination.helper');
 const { LIST_LIMIT_KEY, BCP_SETTING_DEFAULTS } = require('../bcp.settings');
 const { assertUserSector, userSectors } = require('../bcp.sectors');
 const E = require('../bcp.errors');
@@ -50,16 +51,15 @@ async function decide({ tenant, actorUserId, id, body, transaction }) {
   return { ...updated, manualReference: operation.manualReference, sector: operation.sector, operationStatus: status };
 }
 
-/** GET /bcp/reconciliations: reconciliações dos setores do usuário; filtros `result`, `pending` (true = divergência sem decisão), `limit`, `offset`. */
+/** GET /bcp/reconciliations: reconciliações dos setores do usuário; filtros `result`, `pending` (true = divergência sem decisão), `page`, `pageSize`. */
 async function list({ tenant, actorUserId, query = {}, transaction }) {
   const sectors = await userSectors(actorUserId, tenant, transaction);
   if (query.result && !['MATCHED', 'DIVERGENT'].includes(query.result)) throw govError(400, 'VALIDATION_ERROR', 'O resultado deve ser MATCHED ou DIVERGENT.', { field: 'result' });
-  if (!sectors.length) return [];
-  const max = Number(await getSetting(LIST_LIMIT_KEY, tenant, transaction, BCP_SETTING_DEFAULTS[LIST_LIMIT_KEY]));
-  const asked = Number.parseInt(query.limit, 10);
-  const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, max) : max;
+  const paging = await parsePagination(query, tenant, transaction, await getSetting(LIST_LIMIT_KEY, tenant, transaction, BCP_SETTING_DEFAULTS[LIST_LIMIT_KEY]));
+  if (!sectors.length) return pageResult([], paging, 0);
   const pending = query.pending === undefined ? undefined : String(query.pending) === 'true';
-  return repository.listReconciliations(tenant.companyId, { sectors, result: query.result, pending, limit, offset: Math.max(0, Number.parseInt(query.offset, 10) || 0) }, transaction);
+  const { rows, total } = await repository.listReconciliations(tenant.companyId, { sectors, result: query.result, pending, limit: paging.limit, offset: paging.offset }, transaction);
+  return pageResult(rows, paging, total);
 }
 
 module.exports = { decide, list };

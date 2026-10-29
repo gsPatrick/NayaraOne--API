@@ -166,6 +166,6 @@ test('m9d824 isolamento entre empresas', { skip: skip() }, async () => {
   assert.equal((await env.anomaliesOf(A())).length, 1);
   assert.equal((await env.anomaliesOf(tenants.B)).length, 0);
   const listed = await env.withRollbackTenantTransaction(tenants.B, (tx) => review.listAnomalies(tenants.B, {}, tx));
-  assert.equal(listed.total, 0, 'a RLS esconde a anomalia de A');
+  assert.equal(listed.pagination.total, 0, 'a RLS esconde a anomalia de A');
   assert.equal(await env.stateOf(tenants.B, userB), null);
 });

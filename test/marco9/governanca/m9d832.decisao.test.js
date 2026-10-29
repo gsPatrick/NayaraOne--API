@@ -93,13 +93,13 @@ test('m9d832 só decide quem é do setor da operação e a listagem mostra o que
   const err = await env.failure(env.decide(A, rec.id, { decision: 'ACCEPT', note: 'x' }, maker));
   assert.deepEqual([err.status, err.code, err.message], [403, 'GOV_BCP_SECTOR_FORBIDDEN', 'Você não pode decidir divergências deste setor.']);
   const listFor = (query, userId) => env.inTx(A, (transaction) => decideService.list({ tenant: env.tenantOf(A), actorUserId: userId || A.userId, query, transaction }), userId);
-  const pending = await listFor({ pending: 'true' });
+  const pending = (await listFor({ pending: 'true' })).items;
   assert.ok(pending.some((r) => r.manualReference === op.manualReference && r.result === 'DIVERGENT' && r.decision === null && r.sector === 'FINANCEIRO'));
-  assert.deepEqual(await listFor({ pending: 'true' }, maker), [], 'o outro setor não enxerga');
-  assert.ok((await listFor({ result: 'MATCHED' })).every((r) => r.result === 'MATCHED'));
+  assert.deepEqual((await listFor({ pending: 'true' }, maker)).items, [], 'o outro setor não enxerga');
+  assert.ok((await listFor({ result: 'MATCHED' })).items.every((r) => r.result === 'MATCHED'));
   assert.equal((await env.failure(listFor({ result: 'XIS' }))).code, 'VALIDATION_ERROR');
   await env.decide(A, rec.id, { decision: 'ACCEPT', note: 'ok' });
-  assert.ok(!(await listFor({ pending: 'true' })).some((r) => r.manualReference === op.manualReference), 'decidida some das pendentes');
+  assert.ok(!(await listFor({ pending: 'true' })).items.some((r) => r.manualReference === op.manualReference), 'decidida some das pendentes');
 });
 
 test('m9d832 serviço de decisão exposto aceita só os valores do livro', { skip: skip() }, async () => {

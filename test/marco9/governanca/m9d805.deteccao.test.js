@@ -160,7 +160,7 @@ test('m9d805 detecção nunca compara empresas e a listagem filtra por tipo e st
       assert.ok(list.items.some((i) => [i.primaryId, i.secondaryId].includes(other.id)));
       assert.ok(list.items.every((i) => i.entityType === 'PERSON' && i.status === 'OPEN'));
       assert.ok(list.items[0].primaryName && list.items[0].secondaryName, 'a lista traz os nomes dos dois cadastros');
-      assert.equal((await mergeService.listQueue(A(), { entityType: 'PROPERTY', limit: '1' }, tx)).limit, 1);
+      assert.equal((await mergeService.listQueue(A(), { entityType: 'PROPERTY', pageSize: '1' }, tx)).pagination.pageSize, 1);
     });
   } finally {
     await adminQuery('DELETE FROM people.persons WHERE id = $1', [foreign.id]);

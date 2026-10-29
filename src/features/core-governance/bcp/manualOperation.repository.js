@@ -36,15 +36,14 @@ function updatePayload(companyId, id, payload, validationErrors, transaction) {
 }
 
 /** Lista as operações dos setores permitidos (já filtrados pelo chamador), com os filtros opcionais. */
-function listOperations(companyId, { sectors, status, sector, correlationRef, limit, offset }, transaction) {
-  return select(
-    `SELECT ${COLUMNS} FROM governance.manual_operations o
-      WHERE o.company_id = :companyId AND o.sector IN (:sectors)
+async function listOperations(companyId, { sectors, status, sector, correlationRef, limit, offset }, transaction) {
+  const where = `o.company_id = :companyId AND o.sector IN (:sectors)
         AND (CAST(:status AS text) IS NULL OR o.status = :status) AND (CAST(:sector AS text) IS NULL OR o.sector = :sector)
-        AND (CAST(:correlationRef AS uuid) IS NULL OR o.correlation_ref = :correlationRef)
-      ORDER BY o.recorded_at DESC, o.manual_reference LIMIT :limit OFFSET :offset`,
-    { companyId, sectors, status: status || null, sector: sector || null, correlationRef: correlationRef || null, limit, offset }, transaction
-  );
+        AND (CAST(:correlationRef AS uuid) IS NULL OR o.correlation_ref = :correlationRef)`;
+  const replacements = { companyId, sectors, status: status || null, sector: sector || null, correlationRef: correlationRef || null };
+  const [{ total }] = await select(`SELECT count(*)::int AS total FROM governance.manual_operations o WHERE ${where}`, replacements, transaction);
+  const rows = await select(`SELECT ${COLUMNS} FROM governance.manual_operations o WHERE ${where} ORDER BY o.recorded_at DESC, o.manual_reference LIMIT :limit OFFSET :offset`, { ...replacements, limit, offset }, transaction);
+  return { rows, total };
 }
 
 /** A evidência existe na empresa (a RLS de people.files isola; o filtro explícito vale também) e está ativa? */

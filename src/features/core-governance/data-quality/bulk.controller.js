@@ -3,9 +3,10 @@
 const { success } = require('../../../utils/httpResponse');
 const { tenantFromAuth } = require('../governance.module');
 const service = require('./bulk.service');
+const { buildPagination } = require('../api-governance/standards/pagination.helper');
 
 const actorFrom = (req) => ({ userId: req.auth.userId, roles: req.auth.roles || [] });
-const paging = ({ page, pageSize, total }) => ({ page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+const paging = buildPagination;
 
 /** POST /data-quality/bulk-changes: a permissão, a Idempotency-Key e o MFA recente já foram checados nos middlewares da rota. */
 async function create(req, res) {

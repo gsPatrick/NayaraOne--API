@@ -9,8 +9,8 @@ const { STATUS } = require('./merge.constants');
 const actorFrom = (req) => ({ userId: req.auth.userId, roles: req.auth.roles || [] });
 
 async function listQueue(req, res) {
-  const data = await req.withTenantTransaction((transaction) => service.listQueue(tenantFromAuth(req), req.query, transaction));
-  return success(res, { data });
+  const { items, pagination } = await req.withTenantTransaction((transaction) => service.listQueue(tenantFromAuth(req), req.query, transaction));
+  return success(res, { data: items, pagination });
 }
 
 async function impact(req, res) {

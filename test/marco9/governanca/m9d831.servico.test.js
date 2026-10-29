@@ -149,7 +149,7 @@ test('m9d831 registro não executa efeito de negócio', { skip: skip() }, async 
 test('m9d831 isolamento entre empresas', { skip: skip() }, async () => {
   const op = await env.record(A);
   const listB = await env.inTx(B, (tx) => service.listOperations({ tenant: env.tenantOf(B), actorUserId: B.userId, query: {}, transaction: tx }), B.userId);
-  assert.ok(!listB.some((o) => o.id === op.id), 'B não vê a operação de A');
+  assert.ok(!listB.items.some((o) => o.id === op.id), 'B não vê a operação de A');
   const patch = await failure(env.inTx(B, (tx) => service.updatePayload({ tenant: env.tenantOf(B), actorUserId: B.userId, id: op.id, body: { payload: env.RECEBIMENTO }, transaction: tx }), B.userId));
   assert.equal(patch.status, 404);
   const rls = await env.inTx(B, async (tx) => (await env.sequelize.query('SELECT count(*)::int AS n FROM governance.manual_operations', { transaction: tx, type: 'SELECT' }))[0].n, B.userId);

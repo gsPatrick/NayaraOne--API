@@ -5,6 +5,7 @@ const { publishGovernanceEvent } = require('../governance.events');
 const { getSetting } = require('../../settings/settings.service');
 const { govError } = require('../governance.errors');
 const { STATUS } = require('./bcp.constants');
+const { parsePagination, pageResult } = require('../api-governance/standards/pagination.helper');
 const { LIST_LIMIT_KEY, BCP_SETTING_DEFAULTS } = require('./bcp.settings');
 const { assertUserSector, userSectors } = require('./bcp.sectors');
 const { validatePayload } = require('./bcp.payload');
@@ -74,18 +75,16 @@ async function updatePayload({ tenant, actorUserId, id, body, transaction }) {
   return updated;
 }
 
-/** Lista as operações, sempre limitada aos setores do usuário (M9-D830 §3.0b); filtros status, sector e correlationRef; página pelo parâmetro governanca.bcp.listagem_limite. */
+/** Lista as operações, sempre limitada aos setores do usuário (M9-D830 §3.0b); filtros status, sector e correlationRef; página (page/pageSize, M9-D843) com tamanho padrão do parâmetro governanca.bcp.listagem_limite. */
 async function listOperations({ tenant, actorUserId, query = {}, transaction }) {
   const mine = await userSectors(actorUserId, tenant, transaction);
   const sectors = query.sector ? mine.filter((sector) => sector === query.sector) : mine;
   if (query.correlationRef && !input.UUID.test(String(query.correlationRef))) throw govError(400, 'VALIDATION_ERROR', 'A referência de correlação deve ser um UUID.', { field: 'correlationRef' });
   if (query.status && !Object.values(STATUS).includes(query.status)) throw govError(400, 'VALIDATION_ERROR', `O status deve ser um destes: ${Object.values(STATUS).join(', ')}.`, { field: 'status' });
-  if (!sectors.length) return [];
-  const max = Number(await getSetting(LIST_LIMIT_KEY, tenant, transaction, BCP_SETTING_DEFAULTS[LIST_LIMIT_KEY]));
-  const asked = Number.parseInt(query.limit, 10);
-  const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, max) : max;
-  const offset = Math.max(0, Number.parseInt(query.offset, 10) || 0);
-  return repository.listOperations(tenant.companyId, { sectors, status: query.status, sector: query.sector, correlationRef: query.correlationRef && String(query.correlationRef).toLowerCase(), limit, offset }, transaction);
+  const paging = await parsePagination(query, tenant, transaction, await getSetting(LIST_LIMIT_KEY, tenant, transaction, BCP_SETTING_DEFAULTS[LIST_LIMIT_KEY]));
+  if (!sectors.length) return pageResult([], paging, 0);
+  const { rows, total } = await repository.listOperations(tenant.companyId, { sectors, status: query.status, sector: query.sector, correlationRef: query.correlationRef && String(query.correlationRef).toLowerCase(), limit: paging.limit, offset: paging.offset }, transaction);
+  return pageResult(rows, paging, total);
 }
 
 module.exports = { recordOperation, updatePayload, listOperations, EVENT_RECORDED };

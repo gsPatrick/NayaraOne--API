@@ -10,6 +10,8 @@ const { applyPlan, auditLot } = require('./bulk.apply');
 const { auditBlocked, recordFailure } = require('./bulk.audit');
 const { lotView, itemView } = require('./bulk.view');
 
+const { parsePagination } = require('../api-governance/standards/pagination.helper');
+
 const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, settings.BULK_SETTING_DEFAULTS[key]);
 const BLOCKING = /^GOV_(BULK_TOO_LARGE|EVIDENCE_)/;
 
@@ -62,11 +64,7 @@ async function impactOf(tenant, body, transaction) {
 }
 
 async function pageOf(tenant, query, transaction) {
-  const size = Number(await read(settings.PAGE_SIZE_KEY, tenant, transaction));
-  const page = Number(query && query.page) || 1;
-  const pageSize = Number(query && query.pageSize) || size;
-  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) throw errors.validation('Paginação inválida: page >= 1 e pageSize de 1 a 200.');
-  return { page, pageSize, limit: pageSize, offset: (page - 1) * pageSize };
+  return parsePagination(query || {}, tenant, transaction, Number(await read(settings.PAGE_SIZE_KEY, tenant, transaction)));
 }
 
 /** GET /data-quality/bulk-changes/:id — o lote e seus itens (só hashes), paginados. */

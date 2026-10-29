@@ -1,5 +1,6 @@
 'use strict';
 
+const { parsePagination, pageResult, pageOfArray } = require('../api-governance/standards/pagination.helper');
 const { userSectors } = require('./bcp.sectors');
 const templates = require('./formTemplates.repository');
 
@@ -7,8 +8,9 @@ const templates = require('./formTemplates.repository');
 async function listForUser({ tenant, actorUserId, query = {}, transaction }) {
   const mine = await userSectors(actorUserId, tenant, transaction);
   const sectors = query.sector ? mine.filter((sector) => sector === query.sector) : mine;
-  if (!sectors.length) return [];
-  return templates.listTemplates(transaction, sectors);
+  const paging = await parsePagination(query, tenant, transaction);
+  if (!sectors.length) return pageResult([], paging, 0);
+  return pageOfArray(await templates.listTemplates(transaction, sectors), paging);
 }
 
 module.exports = { listForUser };

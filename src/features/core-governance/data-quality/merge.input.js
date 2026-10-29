@@ -29,11 +29,10 @@ function parseDecision(body) {
 
 const isUuid = (value) => typeof value === 'string' && UUID.test(value);
 
-function parseListQuery(query, defaultPageSize) {
+/** Filtros da fila; a página (page/pageSize) vem de parsePagination (M9-D843). */
+function parseListQuery(query, paging) {
   const q = query || {};
-  const limit = Math.min(Math.max(Number.parseInt(q.limit, 10) || defaultPageSize, 1), 200);
-  const offset = Math.max(Number.parseInt(q.offset, 10) || 0, 0);
-  return { status: q.status ? String(q.status).toUpperCase() : null, entityType: q.entityType ? String(q.entityType).toUpperCase() : null, kind: q.kind ? String(q.kind).toUpperCase() : null, limit, offset };
+  return { status: q.status ? String(q.status).toUpperCase() : null, entityType: q.entityType ? String(q.entityType).toUpperCase() : null, kind: q.kind ? String(q.kind).toUpperCase() : null, limit: paging.limit, offset: paging.offset };
 }
 
 module.exports = { parseDecision, parseListQuery, isUuid };

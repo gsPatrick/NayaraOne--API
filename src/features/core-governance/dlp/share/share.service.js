@@ -3,6 +3,7 @@
 const { getSetting } = require('../../../settings/settings.service');
 const { hasRecentMfa } = require('../../../users/mfa.service');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
+const { parsePagination, pageResult } = require('../../api-governance/standards/pagination.helper');
 const guardService = require('../guard.service');
 const { blockedError } = require('../guard.reasons');
 const dlpSettings = require('../dlp.settings');
@@ -108,9 +109,11 @@ async function revokeShareLink({ tenant, actorUserId, permissions, id, transacti
 }
 
 /** GET /dlp/share-links: os links de quem pede; governance:dlp:admin vê os da empresa toda. */
-async function listShareLinks({ tenant, actorUserId, permissions, transaction }) {
+async function listShareLinks({ tenant, actorUserId, permissions, query = {}, transaction }) {
   const admin = (permissions || []).includes(ADMIN_PERMISSION);
-  return (await repo.listLinks(tenant.companyId, admin ? null : actorUserId, transaction)).map((link) => shareView(link));
+  const paging = await parsePagination(query, tenant, transaction);
+  const { rows, total } = await repo.listLinks(tenant.companyId, admin ? null : actorUserId, paging, transaction);
+  return pageResult(rows.map((link) => shareView(link)), paging, total);
 }
 
 module.exports = { createShareLink, revokeShareLink, listShareLinks };

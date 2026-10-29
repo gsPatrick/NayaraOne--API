@@ -6,6 +6,7 @@ const settings = require('./merge.settings');
 const errors = require('./merge.errors');
 const repository = require('./merge.repository');
 const { STATUS, KINDS, FINAL_STATUSES } = require('./merge.constants');
+const { parsePagination, pageResult } = require('../api-governance/standards/pagination.helper');
 const { assertDomainSteward } = require('./merge.steward');
 const { parseDecision, parseListQuery, isUuid } = require('./merge.input');
 const { applyMerge } = require('./merge.apply');
@@ -21,9 +22,9 @@ const view = (row) => ({
 /** GET /data-quality/queue — a fila (abertos primeiro, maior score primeiro), com filtros status, entityType e kind e paginação. */
 async function listQueue(tenant, query, transaction) {
   const size = Number(await getSetting(settings.PAGE_SIZE_KEY, tenant, transaction, settings.MERGE_SETTING_DEFAULTS[settings.PAGE_SIZE_KEY]));
-  const filters = parseListQuery(query, size);
-  const { items, total } = await repository.listItems(tenant, filters, transaction);
-  return { items: items.map(view), total, limit: filters.limit, offset: filters.offset };
+  const paging = await parsePagination(query || {}, tenant, transaction, size);
+  const { items, total } = await repository.listItems(tenant, parseListQuery(query, paging), transaction);
+  return pageResult(items.map(view), paging, total);
 }
 
 /** A decisão é válida para o tipo do item? REVIEW só aceita DISMISSED (falso alarme); MERGED exige o sobrevivente dentro do par. */

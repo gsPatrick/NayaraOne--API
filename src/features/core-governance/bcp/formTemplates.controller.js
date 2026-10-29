@@ -8,8 +8,8 @@ const printService = require('./formPrint.service');
 const actor = (req) => ({ tenant: tenantFromAuth(req), actorUserId: req.auth.userId });
 
 async function list(req, res) {
-  const data = await req.withTenantTransaction((transaction) => service.listForUser({ ...actor(req), query: req.query, transaction }));
-  return success(res, { data });
+  const { items, pagination } = await req.withTenantTransaction((transaction) => service.listForUser({ ...actor(req), query: req.query, transaction }));
+  return success(res, { data: items, pagination });
 }
 
 async function print(req, res) {
