@@ -8,6 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { isFormulaFile } = require('../../src/features/analytics/metrics/formulaCatalog');
+const { avaliarTestesDeFormula } = require('./ci/gates/formulas');
 
 const DEFAULT_FORMULAS = path.join(__dirname, '..', '..', 'src', 'features', 'analytics', 'metrics', 'formulas');
 const DEFAULT_TESTS = path.join(__dirname, '..', '..', 'test', 'analytics', 'formulas');
@@ -25,7 +26,13 @@ if (require.main === module) {
     console.error(`Fórmula sem teste de tabela (*.formula.test.js): ${missing.join(', ')}`);
     process.exit(1);
   }
-  console.log('OK: toda fórmula do registry tem teste de tabela.');
+  // M9-D705 etapa 4 (critério da M9-D605): o conteúdo também conta - arquivo vazio ou sem o ajudante formulaTable reprova.
+  const conteudo = avaliarTestesDeFormula();
+  if (!conteudo.ok) {
+    conteudo.problemas.forEach((p) => console.error(p));
+    process.exit(1);
+  }
+  console.log('OK: toda fórmula do registry tem teste de tabela com o ajudante formulaTable (5 tipos de caso).');
 }
 
 module.exports = { findFormulasWithoutTests };

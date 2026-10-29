@@ -11,7 +11,8 @@ const { listBiSources } = require('../../lib/frontReadOnlyScan');
 const { API_ROOT, listFiles, violation } = require('./files');
 
 const CARD_FILE = /(?:Card|Tile|Kpi)[A-Za-z0-9]*\.(?:jsx?|tsx?)$/;
-const REQUIRES_FRESHNESS = /(?:throw\b[^\n]*freshness|!\s*freshness\b|freshness\s*(?:==|===)\s*(?:null|undefined)|freshness\s*\?\?\s*(?:null|undefined))/;
+// `freshnessDisplay(` é o ajudante único do Front (lib/analytics/freshness.js): sem o bloco de freshness ele devolve showValue false e o card não mostra o valor.
+const REQUIRES_FRESHNESS = /(?:throw\b[^\n]*freshness|!\s*freshness\b|freshness\s*(?:==|===)\s*(?:null|undefined)|freshness\s*\?\?\s*(?:null|undefined)|\bfreshnessDisplay\s*\()/;
 
 function isMetricResponse(text) {
   return /\bmetricCode\s*:/.test(text) && /\bvalue\s*:/.test(text) && /\bvalueNature\s*:/.test(text);

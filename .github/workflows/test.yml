@@ -91,6 +91,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # M9-D705: o repositório do Front fica ao lado da API (../NayaraOne--FRONT), como no desenvolvimento, para as guardas 1 e 5 do "Não improvisar"
+      # varrerem o código de BI de verdade. Sem o Front a etapa FALHA (os testes m9d614 regra1 e regra5 não podem ficar pulados no CI). Repositório
+      # privado: o segredo FRONT_REPO_TOKEN dá leitura; sem ele vale o token do próprio workflow.
+      - name: Checkout do Front de BI (NayaraOne--FRONT)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
+          path: front-checkout
+
+      - name: Posicionar o Front ao lado da API
+        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+
       # Conferência Nayara 18/10/2026, E01: o artifact do run 39127433976 se chamava
       # test-results-14e9580c… e não test-results-8f7c97c…. Causa: aquele run foi disparado pelo
       # evento pull_request, em que github.sha é o commit de MERGE TEMPORÁRIO que o GitHub cria
@@ -168,6 +181,11 @@ jobs:
 
       - name: Testes de fórmula do BI (M9-D604)
         run: npm run guard:formula-tests
+
+      # M9-D705 (critério transferido da M9-D614): regra 1 (o Front de BI não calcula KPI) sobre o Front desta execução; a regra 5 do card do Front
+      # já roda em guard:analytics-rules acima, agora com o Front presente.
+      - name: Regra 1 do Não improvisar no Front (M9-D614)
+        run: node scripts/analytics/checkFrontNoKpiMath.js
 
       # M9-D210: SDK de fornecedor só dentro do adapter, HTTP externo só pelo IntegrationHttpClient, providers isolados; M9-D244: certificado nunca desligado.
       - name: Fronteiras de integração (M9-D210)
@@ -361,6 +379,86 @@ jobs:
             test-results.log
             load-test-light.json
             load-test-light.log
+          retention-days: 90
+
+  # M9-D705 (Guia §12): a esteira do BI, 14 etapas na ordem do livro, cada uma bloqueando a seguinte. Em todo push e pull request roda a fase pr
+  # (etapas 1 a 11, em banco descartável local: nenhuma etapa escreve no banco compartilhado). O resultado de cada etapa (log + resumo.json)
+  # sobe como artifact. Segredo nunca aparece no log (redigido pelos padrões da varredura M9-D246).
+  bi-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Checkout do Front de BI (NayaraOne--FRONT)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
+          path: front-checkout
+      - name: Posicionar o Front ao lado da API
+        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # a etapa 2 (typecheck) compila as telas de BI do Front com o TypeScript do próprio Front
+      - name: Dependências do Front (typecheck da etapa 2)
+        run: npm ci --prefix front-checkout
+      - name: Esteira do BI, etapas 1 a 11
+        run: node scripts/analytics/ci/run.js --fase pr --saida docs/evidencias/ci/bi-pipeline
+      # M9-D704: a suíte adversarial inteira (os 15 testes nomeados do Caderno §21 e a suíte que vigia nomes, skip/only, os 10 testes primeiro do
+      # Guia e a mutação) como etapa PRÓPRIA, em banco descartável. Sem skip: o arquivo é lido por scripts/analytics/ci/gates/suiteAdversarial.js.
+      - name: Suíte adversarial do BI (M9-D704)
+        run: |
+          node scripts/withDisposableDb.js -- env LOG_LEVEL=info bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && node --test --test-concurrency=1 test/marco9/analytics/m9d704.adversarial.test.js test/marco9/analytics/m9d704.suite.test.js"
+      - name: Resumo da esteira
+        if: always()
+        run: |
+          { echo "## Esteira do BI (M9-D705)"; echo '```'; cat docs/evidencias/ci/bi-pipeline/resumo.json | head -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publicar o resultado de cada etapa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-pipeline-${{ github.sha }}
+          path: docs/evidencias/ci/bi-pipeline
+          retention-days: 90
+
+  # Etapas 12 a 14 (DEV, LAB e reconciliação com aceite dos owners): só na promoção, depois do deploy no DEV (que é decisão do Patrick: o pipeline só
+  # prepara). Sem DEV_API_BASE_URL e DEV_SMOKE_TOKEN a etapa 12 reprova e a promoção fica bloqueada; ambiente PRODUCAO exige aceite de todas as métricas.
+  bi-promocao:
+    needs: [bi-pipeline, deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
+    runs-on: ubuntu-latest
+    environment: lab
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      DEV_API_BASE_URL: ${{ secrets.DEV_API_BASE_URL }}
+      DEV_SMOKE_TOKEN: ${{ secrets.DEV_SMOKE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Esteira do BI, etapas 12 a 14
+        run: node scripts/analytics/ci/run.js --fase promocao --ambiente LAB --saida docs/evidencias/ci/bi-promocao
+      - name: Publicar o resultado de cada etapa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-promocao-${{ github.sha }}
+          path: docs/evidencias/ci/bi-promocao
           retention-days: 90
 
   # Caderno do Marco 8: depois da suíte e da varredura de segredo vêm DEV e LAB.

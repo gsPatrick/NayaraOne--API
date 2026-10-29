@@ -1,0 +1,152 @@
+{
+  "fase": "pr",
+  "ok": false,
+  "reprovadaNaEtapa": 7,
+  "etapas": [
+    {
+      "n": 1,
+      "chave": "lint",
+      "livro": "lint",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:21:02.922Z",
+      "fim": "2026-10-29T13:21:35.645Z",
+      "log": "etapa-01-lint.log"
+    },
+    {
+      "n": 2,
+      "chave": "typecheck",
+      "livro": "typecheck",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:21:35.645Z",
+      "fim": "2026-10-29T13:23:19.642Z",
+      "log": "etapa-02-typecheck.log"
+    },
+    {
+      "n": 3,
+      "chave": "migrations",
+      "livro": "migrations",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:23:19.642Z",
+      "fim": "2026-10-29T13:23:37.333Z",
+      "log": "etapa-03-migrations.log"
+    },
+    {
+      "n": 4,
+      "chave": "metric-formula-tests",
+      "livro": "metric formula tests",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:23:37.333Z",
+      "fim": "2026-10-29T13:23:45.417Z",
+      "log": "etapa-04-metric-formula-tests.log"
+    },
+    {
+      "n": 5,
+      "chave": "read-model-idempotency",
+      "livro": "read model idempotency",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:23:45.418Z",
+      "fim": "2026-10-29T13:24:19.168Z",
+      "log": "etapa-05-read-model-idempotency.log"
+    },
+    {
+      "n": 6,
+      "chave": "reconciliation-tests",
+      "livro": "reconciliation tests",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:24:19.168Z",
+      "fim": "2026-10-29T13:24:33.008Z",
+      "log": "etapa-06-reconciliation-tests.log"
+    },
+    {
+      "n": 7,
+      "chave": "rls",
+      "livro": "RLS",
+      "fase": "pr",
+      "status": "REPROVADA",
+      "motivo": "at parseErrorMessage (<api>/node_modules/pg-protocol/dist/parser.js:306:11)",
+      "inicio": "2026-10-29T13:24:33.008Z",
+      "fim": "2026-10-29T13:24:52.281Z",
+      "log": "etapa-07-rls.log"
+    },
+    {
+      "n": 8,
+      "chave": "quality-checks",
+      "livro": "quality checks",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 7 (RLS)",
+      "inicio": "2026-10-29T13:24:52.281Z",
+      "fim": "2026-10-29T13:24:52.281Z",
+      "log": "etapa-08-quality-checks.log"
+    },
+    {
+      "n": 9,
+      "chave": "alert-dedup",
+      "livro": "alert dedup",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 7 (RLS)",
+      "inicio": "2026-10-29T13:24:52.282Z",
+      "fim": "2026-10-29T13:24:52.282Z",
+      "log": "etapa-09-alert-dedup.log"
+    },
+    {
+      "n": 10,
+      "chave": "export-security",
+      "livro": "export security",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 7 (RLS)",
+      "inicio": "2026-10-29T13:24:52.282Z",
+      "fim": "2026-10-29T13:24:52.282Z",
+      "log": "etapa-10-export-security.log"
+    },
+    {
+      "n": 11,
+      "chave": "load-rebuild",
+      "livro": "load/rebuild",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 7 (RLS)",
+      "inicio": "2026-10-29T13:24:52.282Z",
+      "fim": "2026-10-29T13:24:52.282Z",
+      "log": "etapa-11-load-rebuild.log"
+    },
+    {
+      "n": 12,
+      "chave": "dev",
+      "livro": "DEV",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 12 roda na fase promocao"
+    },
+    {
+      "n": 13,
+      "chave": "lab",
+      "livro": "LAB",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 13 roda na fase promocao"
+    },
+    {
+      "n": 14,
+      "chave": "owner-reconciliation",
+      "livro": "owner reconciliation",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 14 roda na fase promocao"
+    }
+  ]
+}

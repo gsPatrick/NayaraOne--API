@@ -1,0 +1,51 @@
+{
+  "fase": "pr",
+  "ok": false,
+  "reprovadaNaEtapa": 11,
+  "etapas": [
+    {
+      "n": 8,
+      "chave": "quality-checks",
+      "livro": "quality checks",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:26:08.297Z",
+      "fim": "2026-10-29T13:26:25.979Z",
+      "log": "etapa-08-quality-checks.log"
+    },
+    {
+      "n": 9,
+      "chave": "alert-dedup",
+      "livro": "alert dedup",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:26:25.979Z",
+      "fim": "2026-10-29T13:26:44.837Z",
+      "log": "etapa-09-alert-dedup.log"
+    },
+    {
+      "n": 10,
+      "chave": "export-security",
+      "livro": "export security",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:26:44.837Z",
+      "fim": "2026-10-29T13:26:58.162Z",
+      "log": "etapa-10-export-security.log"
+    },
+    {
+      "n": 11,
+      "chave": "load-rebuild",
+      "livro": "load/rebuild",
+      "fase": "pr",
+      "status": "REPROVADA",
+      "motivo": "✖ m9d699 p95 dos painéis dentro das metas sob a carga (1.900875ms)",
+      "inicio": "2026-10-29T13:26:58.162Z",
+      "fim": "2026-10-29T13:28:09.811Z",
+      "log": "etapa-11-load-rebuild.log"
+    }
+  ]
+}

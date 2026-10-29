@@ -11,6 +11,9 @@ const { FRONT_ROOT } = require('../../../scripts/analytics/guardrails/files');
 const { INITIAL_DEFINITIONS } = require('../../../src/features/ai/tools/definitions');
 
 const HAS_FRONT = fs.existsSync(path.join(FRONT_ROOT, 'app'));
+// M9-D705: no CI o Front é obrigatório (o workflow faz o checkout ao lado da API); sem ele a regra 1 e a regra 5 do Front FALHAM em vez de serem puladas.
+const CI = process.env.CI === 'true' || process.env.CI === '1';
+const exigirFrontNoCi = () => { if (CI) assert.ok(HAS_FRONT, 'no CI o repositório do Front precisa estar ao lado da API (checkout do workflow)'); };
 const API_ROOT = path.join(__dirname, '..', '..', '..');
 
 function tmpTree(files) {
@@ -23,7 +26,8 @@ function tmpTree(files) {
 }
 const rulesOf = (res) => [...new Set(res.violations.map((v) => v.rule))];
 
-test('m9d614 regra1 front não calcula KPI (varredura estática)', { skip: !HAS_FRONT && 'repositório do Front ausente' }, () => {
+test('m9d614 regra1 front não calcula KPI (varredura estática)', { skip: !HAS_FRONT && !CI && 'repositório do Front ausente' }, () => {
+  exigirFrontNoCi();
   const real = guards.checkRule1(FRONT_ROOT);
   assert.deepEqual(real.violations, [], real.violations.map(guards.formatViolation).join('\n'));
   const root = tmpTree({
@@ -68,7 +72,8 @@ test('m9d614 regra3 free_cash só lê linhas próprias', () => {
   assert.deepEqual(ok.violations, []);
 });
 
-test('m9d614 regra5 resposta sem freshness reprova', { skip: !HAS_FRONT && 'repositório do Front ausente' }, () => {
+test('m9d614 regra5 resposta sem freshness reprova', { skip: !HAS_FRONT && !CI && 'repositório do Front ausente' }, () => {
+  exigirFrontNoCi();
   const real = guards.checkRule5(API_ROOT, FRONT_ROOT);
   assert.deepEqual(real.violations, [], real.violations.map(guards.formatViolation).join('\n'));
   const root = tmpTree({ 'src/features/analytics/metrics/resposta.js': "module.exports = (s) => ({ metricCode: s.code, value: s.v, valueNature: s.n, asOfDate: s.d });\n" });

@@ -1,0 +1,152 @@
+{
+  "fase": "pr",
+  "ok": false,
+  "reprovadaNaEtapa": 4,
+  "etapas": [
+    {
+      "n": 1,
+      "chave": "lint",
+      "livro": "lint",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:15:27.076Z",
+      "fim": "2026-10-29T13:16:14.787Z",
+      "log": "etapa-01-lint.log"
+    },
+    {
+      "n": 2,
+      "chave": "typecheck",
+      "livro": "typecheck",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:16:14.787Z",
+      "fim": "2026-10-29T13:17:56.220Z",
+      "log": "etapa-02-typecheck.log"
+    },
+    {
+      "n": 3,
+      "chave": "migrations",
+      "livro": "migrations",
+      "fase": "pr",
+      "status": "APROVADA",
+      "motivo": null,
+      "inicio": "2026-10-29T13:17:56.220Z",
+      "fim": "2026-10-29T13:18:11.010Z",
+      "log": "etapa-03-migrations.log"
+    },
+    {
+      "n": 4,
+      "chave": "metric-formula-tests",
+      "livro": "metric formula tests",
+      "fase": "pr",
+      "status": "REPROVADA",
+      "motivo": "Fórmula sem teste de tabela (*.formula.test.js): finSemTesteM9d705.js",
+      "inicio": "2026-10-29T13:18:11.010Z",
+      "fim": "2026-10-29T13:18:11.083Z",
+      "log": "etapa-04-metric-formula-tests.log"
+    },
+    {
+      "n": 5,
+      "chave": "read-model-idempotency",
+      "livro": "read model idempotency",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.083Z",
+      "fim": "2026-10-29T13:18:11.083Z",
+      "log": "etapa-05-read-model-idempotency.log"
+    },
+    {
+      "n": 6,
+      "chave": "reconciliation-tests",
+      "livro": "reconciliation tests",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.084Z",
+      "fim": "2026-10-29T13:18:11.084Z",
+      "log": "etapa-06-reconciliation-tests.log"
+    },
+    {
+      "n": 7,
+      "chave": "rls",
+      "livro": "RLS",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.084Z",
+      "fim": "2026-10-29T13:18:11.084Z",
+      "log": "etapa-07-rls.log"
+    },
+    {
+      "n": 8,
+      "chave": "quality-checks",
+      "livro": "quality checks",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.084Z",
+      "fim": "2026-10-29T13:18:11.084Z",
+      "log": "etapa-08-quality-checks.log"
+    },
+    {
+      "n": 9,
+      "chave": "alert-dedup",
+      "livro": "alert dedup",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.084Z",
+      "fim": "2026-10-29T13:18:11.084Z",
+      "log": "etapa-09-alert-dedup.log"
+    },
+    {
+      "n": 10,
+      "chave": "export-security",
+      "livro": "export security",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.085Z",
+      "fim": "2026-10-29T13:18:11.085Z",
+      "log": "etapa-10-export-security.log"
+    },
+    {
+      "n": 11,
+      "chave": "load-rebuild",
+      "livro": "load/rebuild",
+      "fase": "pr",
+      "status": "BLOQUEADA",
+      "motivo": "bloqueada pela etapa 4 (metric formula tests)",
+      "inicio": "2026-10-29T13:18:11.085Z",
+      "fim": "2026-10-29T13:18:11.085Z",
+      "log": "etapa-11-load-rebuild.log"
+    },
+    {
+      "n": 12,
+      "chave": "dev",
+      "livro": "DEV",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 12 roda na fase promocao"
+    },
+    {
+      "n": 13,
+      "chave": "lab",
+      "livro": "LAB",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 13 roda na fase promocao"
+    },
+    {
+      "n": 14,
+      "chave": "owner-reconciliation",
+      "livro": "owner reconciliation",
+      "fase": "promocao",
+      "status": "FORA_DA_FASE",
+      "motivo": "a etapa 14 roda na fase promocao"
+    }
+  ]
+}
