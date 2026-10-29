@@ -73,7 +73,7 @@ test('errors_http_lista_resolve_e_permissoes', async () => {
   assert.equal(item.severity, 'HIGH');
   assert.deepEqual(item.sanitizedPayload, { status: 'DENIED', cpf: '[REDACTED]', token: '[REDACTED]' });
   assert.equal(corpo.data.retentionDays, 180);
-  assert.equal((await chamar(tokenRead, 'GET', '/admin/integrations/errors?status=XYZ')).status, 400);
+  assert.equal((await chamar(tokenRead, 'GET', '/admin/integrations/errors?status=XYZ')).status, 422, 'filtro inválido: 422 VALIDATION_ERROR (M9-D249)');
 
   const semPermissao = await chamar(tokenRead, 'POST', `/admin/integrations/errors/${e.id}/resolve`, { note: 'Credencial renovada' });
   assert.equal(semPermissao.status, 403, 'resolver exige integration:retry');

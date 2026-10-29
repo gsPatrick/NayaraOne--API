@@ -1,34 +1,50 @@
 'use strict';
 
-const AppError = require('../../../utils/AppError');
+const { Op, literal, where: sqlWhere, fn, col } = require('sequelize');
 const { IntegrationError } = require('../../../models');
-const { SOURCES, STATUSES } = require('./errors.constants');
 const { readErrorParams } = require('./errors.params');
 const { serializeError } = require('./errors.serialize');
+const { encodeCursor } = require('../admin/admin.query');
+const { brtDeep } = require('../admin/admin.format');
 
-const LIMITE_PADRAO = 100;
-const LIMITE_MAXIMO = 500;
+const LIMITE_PADRAO = 50;
+// O instante do cursor é o do banco, cortado em milissegundos: é a mesma chave da ordenação, então a próxima página nunca repete nem pula linha.
+const CURSOR_TS = literal(`to_char(date_trunc('milliseconds', "created_at") AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`);
+const CHAVE_TEMPO = fn('date_trunc', 'milliseconds', col('created_at'));
 
-/** Lista os erros da empresa (RLS isola as demais). `retentionDays` mostra quanto tempo o erro fica guardado. */
+/**
+ * Lista os erros da empresa (RLS isola as demais), do mais novo para o mais antigo, paginada por cursor (M9-D249).
+ * `query` já validado por parseErrorsQuery: status, source, provider, connectionId, limit (1 a 200, padrão 50) e cursor decodificado.
+ * `nextCursor` é null na última página. `retentionDays` mostra quanto tempo o erro fica guardado.
+ */
 async function listErrors(ctx, query = {}, transaction) {
-  const where = { companyId: ctx.companyId };
-  if (query.status) {
-    if (!STATUSES.includes(query.status)) throw AppError.badRequest(`O filtro "status" deve ser um de: ${STATUSES.join(', ')}.`, 'INTEGRATION_ERROR_INVALID');
-    where.status = query.status;
+  const filtros = { companyId: ctx.companyId };
+  if (query.status) filtros.status = query.status;
+  if (query.source) filtros.source = query.source;
+  if (query.provider || query.providerCode) filtros.providerCode = query.provider || query.providerCode;
+  if (query.connectionId) filtros.connectionId = query.connectionId;
+  const limit = Number.isInteger(query.limit) && query.limit >= 1 ? query.limit : LIMITE_PADRAO;
+  const e = [filtros];
+  if (query.cursor) {
+    e.push({ [Op.or]: [
+      sqlWhere(CHAVE_TEMPO, Op.lt, query.cursor.createdAt),
+      { [Op.and]: [sqlWhere(CHAVE_TEMPO, Op.eq, query.cursor.createdAt), { id: { [Op.lt]: query.cursor.id } }] },
+    ] });
   }
-  if (query.source) {
-    if (!SOURCES.includes(query.source)) throw AppError.badRequest(`O filtro "source" deve ser um de: ${SOURCES.join(', ')}.`, 'INTEGRATION_ERROR_INVALID');
-    where.source = query.source;
-  }
-  if (query.providerCode) where.providerCode = String(query.providerCode);
-  if (query.connectionId) where.connectionId = String(query.connectionId);
-  const pedido = Number(query.limit);
-  const limit = Number.isFinite(pedido) && pedido >= 1 ? Math.min(Math.floor(pedido), LIMITE_MAXIMO) : LIMITE_PADRAO;
   const [rows, params] = await Promise.all([
-    IntegrationError.findAll({ where, order: [['created_at', 'DESC']], limit, transaction }),
+    IntegrationError.findAll({
+      where: { [Op.and]: e },
+      attributes: { include: [[CURSOR_TS, 'cursor_ts']] },
+      order: [[CHAVE_TEMPO, 'DESC'], ['id', 'DESC']],
+      limit: limit + 1,
+      transaction,
+    }),
     readErrorParams(ctx, transaction),
   ]);
-  return { items: rows.map(serializeError), retentionDays: params.retentionDays };
+  const pagina = rows.slice(0, limit);
+  const ultima = pagina[pagina.length - 1];
+  const nextCursor = rows.length > limit && ultima ? encodeCursor(ultima.get('cursor_ts'), ultima.id) : null;
+  return brtDeep({ items: pagina.map(serializeError), retentionDays: params.retentionDays, nextCursor });
 }
 
 module.exports = { listErrors };

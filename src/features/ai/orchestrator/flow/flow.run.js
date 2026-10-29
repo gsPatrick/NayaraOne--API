@@ -1,6 +1,7 @@
 'use strict';
 
 const { AgentRunGuard } = require('../../agents');
+const { applyAgentOutputRules } = require('../../agents/scope');
 const runs = require('../runs');
 const { buildUserContext, withRun } = require('../executionContext');
 const { createPiiRedactor } = require('../../security/piiRedactor');
@@ -94,12 +95,14 @@ function successOutcome(state, run, answer, grounded, proposals) {
 /** Run parado numa proposta (D019): o run já está AWAITING_APPROVAL; só registra o custo e devolve o aviso. Quem o fecha é o ApprovalService. */
 async function finishAwaiting(state) {
   const { trace } = state;
+  // O agente pode dar a sua marca ao aviso (ex.: NAY Financeira, M9-D036: "Preparei uma proposta para aprovação humana").
+  const awaitingText = await applyAgentOutputRules(state.agent.code, { taskType: state.parsed.taskType, input: state.parsed.input, ctx: state.ctx, transaction: state.transaction, awaiting: true }, AWAITING_TEXT);
   await trace.span(10, 'registrar', async () => {
     await recordProgress(state);
-    return runs.recordRunProgress(state.ctx, state.runId, { outputSummary: AWAITING_TEXT }, state.transaction);
+    return runs.recordRunProgress(state.ctx, state.runId, { outputSummary: awaitingText }, state.transaction);
   });
   return trace.span(12, 'devolver', async () => ({
-    ok: true, replayed: false, runId: state.runId, status: 'AWAITING_APPROVAL', answer: AWAITING_TEXT, sources: [], groundingStatus: null, confidence: null, snapshotAt: null,
+    ok: true, replayed: false, runId: state.runId, status: 'AWAITING_APPROVAL', answer: awaitingText, sources: [], groundingStatus: null, confidence: null, snapshotAt: null,
     proposals: state.proposals, cost: { amount: totalCost(state), tokensIn: state.usage.tokensIn, tokensOut: state.usage.tokensOut }, routingPath: state.decision.path,
     provider: state.decision.provider, model: state.decision.model, escalated: state.escalated, cached: false, budgetAlerts: state.alerts, trace: state.trace.spans,
   }));

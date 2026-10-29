@@ -11,6 +11,7 @@ const { analyticsBi } = require('./analytics.services');
 const { contactStatus, publicListings, handoff } = require('./atendimento.services');
 const { crmPipeline, constructionPortfolio, inventoryRisks } = require('./aggregates.services');
 const { legalExpiring, withStalledScope } = require('./scoped.services');
+const { financeProjection } = require('./financeProjection.services');
 
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
@@ -29,6 +30,7 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     constructionPortfolio: constructionPortfolio(transaction, scope),
     inventoryRisks: inventoryRisks(transaction, scope),
     legalExpiring: legalExpiring(transaction, scope),
+    financeProjection: financeProjection(transaction, scope), // M9-D036: projeção de fluxo e anomalias da NAY Financeira
     analyticsBi: analyticsBi(transaction, scope), // M9-D695: leitura do BI pela NAY Diretoria (catálogo fechado, sem SQL)
   };
   if (includeWrite) {

@@ -219,9 +219,9 @@ test('catalogo_listagem_admin_14_dominios_e_criticidade_configuravel', async () 
   });
 });
 
-test('catalogo_rota_get_admin_integrations_protegida', () => {
+test('catalogo_rota_get_admin_integrations_catalog_protegida', () => {
   const router = require('../../src/features/integrations/providers/catalog.routes');
-  const camada = router.stack.find((l) => l.route && l.route.path === '/admin/integrations' && l.route.methods.get);
-  assert.ok(camada, 'GET /admin/integrations montada');
+  const camada = router.stack.find((l) => l.route && l.route.path === '/admin/integrations/catalog' && l.route.methods.get);
+  assert.ok(camada, 'GET /admin/integrations/catalog montada');
   assert.ok(camada.route.stack.length >= 2, 'com a porta de permissão antes do controller');
 });

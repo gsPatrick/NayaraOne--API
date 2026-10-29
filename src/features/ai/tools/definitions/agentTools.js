@@ -13,6 +13,8 @@ const AGENT_TOOL_DEFINITIONS = Object.freeze([
   require('./constructionGetPortfolioProgress'),
   require('./inventoryGetStockRisks'),
   require('./legalGetExpiringContracts'),
+  require('./financeGetCashflowProjection'),
+  require('./financeGetAnomalies'),
 ]);
 
 module.exports = { AGENT_TOOL_DEFINITIONS };

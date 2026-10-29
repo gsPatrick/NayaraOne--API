@@ -27,6 +27,7 @@ const correspondentRouter = require('../features/correspondent/correspondent.rou
 const integrationRegistryRouter = require('../features/integrations/registry/registry.routes');
 require('../features/integrations/errors'); // liga o repórter de credencial vencida (M9-D207)
 const integrationErrorsRouter = require('../features/integrations/errors/errors.routes');
+const integrationAdminRouter = require('../features/integrations/admin/admin.routes');
 const { catalogRouter: integrationCatalogRouter } = require('../features/integrations');
 const correspondentWebhooksController = require('../features/correspondent/webhooks.controller');
 const insuranceController = require('../features/procurement/insurance.controller');
@@ -113,6 +114,7 @@ router.use('/v1', procurementRouter);
 router.use('/v1', correspondentRouter);
 router.use('/v1', integrationRegistryRouter);
 router.use('/v1', integrationErrorsRouter);
+router.use('/v1', integrationAdminRouter);
 router.use('/v1', integrationCatalogRouter);
 router.use('/v1', auditRouter);
 router.use('/v1', billingRouter);

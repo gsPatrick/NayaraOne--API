@@ -5,6 +5,7 @@ const E = require('./agents.errors');
 const repo = require('./agents.repository');
 const { ctxOk } = require('./agentAccess');
 const { normalizeCode } = require('./agents.validation');
+const { applyToolGates } = require('./toolGates');
 
 /**
  * Versão do agente que vai rodar: a ACTIVE da empresa; se a empresa não tem, a do sistema; se nenhuma está ACTIVE e
@@ -16,7 +17,7 @@ async function resolveActiveAgent(rawCode, ctx, transaction) {
   if (!code) throw aiAgentDisabled(rawCode);
   const agent = await repo.findActiveFor(ctx, code, transaction);
   if (!agent || !agent.enabled) throw aiAgentDisabled(code);
-  return agent;
+  return applyToolGates(agent, ctx, transaction); // tool cadastrada desabilitada que a empresa liberou por configuração (M9-D036)
 }
 
 /** O que o run grava para saber com qual versão rodou (D005/D020 persistem em ai.runs). */

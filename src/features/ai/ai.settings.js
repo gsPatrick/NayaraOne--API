@@ -33,6 +33,7 @@ const { CORRESPONDENTE_SETTING_DEFAULTS, CORRESPONDENTE_SETTINGS_SCHEMA } = requ
 const { RUN_API_SETTING_DEFAULTS, RUN_API_SETTINGS_SCHEMA } = require('./runApi/runApi.settings');
 const { COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA } = require('./agents/nay_comercial/comercial.settings');
 const { DIRETORIA_SETTING_DEFAULTS, DIRETORIA_SETTINGS_SCHEMA } = require('./agents/nay_diretoria/diretoria.settings');
+const { FINANCEIRA_SETTING_DEFAULTS, FINANCEIRA_SETTINGS_SCHEMA } = require('./agents/nay_financeira/financeira.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
 const AI_AGENTS_ENABLED_KEY = 'ai.agents.enabled';
@@ -72,6 +73,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...RUN_API_SETTING_DEFAULTS,
   ...COMERCIAL_SETTING_DEFAULTS,
   ...DIRETORIA_SETTING_DEFAULTS,
+  ...FINANCEIRA_SETTING_DEFAULTS,
 });
 
 const AI_SETTINGS_SCHEMA = {
@@ -104,6 +106,7 @@ const AI_SETTINGS_SCHEMA = {
   ...RUN_API_SETTINGS_SCHEMA,
   ...COMERCIAL_SETTINGS_SCHEMA,
   ...DIRETORIA_SETTINGS_SCHEMA,
+  ...FINANCEIRA_SETTINGS_SCHEMA,
 };
 
 function isAiSettingKey(key) {
