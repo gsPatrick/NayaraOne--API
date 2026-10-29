@@ -2,7 +2,7 @@
 
 /**
  * M9-D691 (3.1 passo 2) — o valor que o alerta avalia: o snapshot mais recente da métrica no escopo da empresa (e da dimensão da definição),
- * com a freshness da M9-D609. Métrica DEGRADED (inclui freshness EXPIRED), INCOMPLETE ou sem snapshot não dispara pelo valor: a definição
+ * com a freshness da M9-D609 e a qualidade da M9-D697 (check BLOCK falho, componente ruim). Métrica DEGRADED (inclui freshness EXPIRED), INCOMPLETE ou sem snapshot não dispara pelo valor: a definição
  * fica "em espera" nesta rodada (BI-015: indicador sem qualidade suficiente mostra incompleto, não valor enganoso).
  */
 const { sequelize } = require('../../../models');
@@ -10,6 +10,8 @@ const clock = require('../metrics/clock');
 const { computeFreshness, maxStalenessOf } = require('../metrics/freshness');
 const { resolveStatus } = require('../metrics/freshness.present');
 const { readFreshnessParams } = require('../metrics/freshness.settings');
+const { assessQuality } = require('../quality/status.service');
+const { worstStatus } = require('../quality/status.priority');
 
 const BLOCKING = new Set(['DEGRADED', 'INCOMPLETE']);
 
@@ -44,7 +46,8 @@ async function loadAlertInput(def, scope, { now = clock.now() } = {}, transactio
     asOfDate: String(snapshot.as_of_date), sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
     maxStalenessMinutes: maxStalenessOf(snapshot.refresh_policy, metric.domain, params), factor: params.factor, now,
   });
-  const status = resolveStatus(snapshot.status, freshness.state);
+  const assessed = await assessQuality({ metricCode: def.metric_code, scope, asOfDate: clock.businessToday(now), transaction }); // M9-D697: check BLOCK falho ou componente ruim
+  const status = worstStatus(resolveStatus(snapshot.status, freshness.state), assessed.status);
   if (BLOCKING.has(status)) return { hold: status, snapshot, status, freshness };
   if (snapshot.value_numeric === null || snapshot.value_numeric === undefined) return { hold: 'NOT_NUMERIC', snapshot, status, freshness };
   return { snapshot, previous: rows[1] || null, value: String(snapshot.value_numeric), status, freshness, domain: metric.domain };

@@ -65,12 +65,14 @@ async function readMetricValue(ctx, { metricCode, scopeType, scopeId, asOfDate, 
     replacements: { id: snapshot.metric_version_id }, transaction,
   });
   const rawValue = snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text;
-  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId }, transaction }); // M9-D609: freshness no servidor
+  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId, groupId: ctx.groupId }, transaction }); // M9-D609 e M9-D697: freshness e qualidade no servidor
   return {
     metricCode: definition.metric_code,
     value: shown.value,
     unit: version.unit,
     status: shown.status,
+    valueReliable: shown.valueReliable, // M9-D697
+    quality: shown.quality,
     version: version.version,
     valueNature: version.value_nature,
     valueNatureLabel: natureLabel(version.value_nature),

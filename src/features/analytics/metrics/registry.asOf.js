@@ -20,26 +20,28 @@ const { dimensionNature } = require('./dimensionNature');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 
-async function versionAt(ctx, metricCode, asOfDate, transaction) {
-  assertCanRead(ctx);
+async function versionAt(ctx, metricCode, asOfDate, transaction, { check = true } = {}) {
+  if (check) assertCanRead(ctx);
   const definition = await findDefinition(metricCode, transaction);
   const version = await store.getMetricVersionAt(definition.id, asOfDate, transaction);
   if (!version) throw notAvailable();
   return { definition, version };
 }
 
-async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, dimensionKey = '' }, transaction) {
-  const { definition, version } = await versionAt(ctx, metricCode, asOfDate, transaction);
+async function readSnapshotView(ctx, { metricCode, scopeType, scopeId, asOfDate, dimensionKey = '' }, transaction, { check = true, visited } = {}) {
+  const { definition, version } = await versionAt(ctx, metricCode, asOfDate, transaction, { check });
   const revisions = await store.listSnapshotRevisions({ metricId: definition.id, metricVersionId: version.id, scopeType, scopeId, asOfDate, dimensionKey }, transaction);
   const snapshot = revisions[revisions.length - 1];
   if (!snapshot) throw notAvailable();
   const rawValue = snapshot.value_numeric != null ? String(snapshot.value_numeric) : snapshot.value_text;
-  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId }, transaction }); // M9-D609: freshness no servidor
+  const shown = await presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope: { companyId: ctx.companyId, groupId: ctx.groupId }, transaction, visited }); // M9-D609 e M9-D697: freshness e qualidade no servidor
   return {
     metricCode: definition.metric_code,
     value: shown.value,
     unit: dimensionUnit(dimensionKey, version.unit),
     status: shown.status,
+    valueReliable: shown.valueReliable, // M9-D697: false em DEGRADED/INCOMPLETE (o valor sai nulo)
+    quality: shown.quality, // M9-D697: checks que reprovaram e componentes de que herdou
     version: version.version,
     formulaId: version.formula_id,
     valueNature: dimensionNature(definition.metric_code, dimensionKey, version.value_nature), // M9-D650: cada série do custo da obra com a sua natureza
@@ -55,6 +57,10 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
   };
 }
 
+const readMetricAsOf = (ctx, args, transaction) => readSnapshotView(ctx, args, transaction);
+/** Leitura interna (sem permissão do usuário): só para quem já decidiu o acesso, como a herança de qualidade do KPI composto (M9-D697). */
+const readMetricAsOfUnchecked = (ctx, args, transaction, options = {}) => readSnapshotView(ctx, args, transaction, { ...options, check: false });
+
 async function recalculateHistorical(ctx, { metricCode, asOfDate, inputs, params }, transaction, options = {}) {
   const { definition, version } = await versionAt(ctx, metricCode, asOfDate, transaction);
   const formula = (options.catalog || getFormulaCatalog()).get(version.formula_id);
@@ -63,4 +69,4 @@ async function recalculateHistorical(ctx, { metricCode, asOfDate, inputs, params
   return { version: version.version, ...recalculate({ formula, metricCode: definition.metric_code, version: version.version, inputs, params: used, asOfDate }) };
 }
 
-module.exports = { readMetricAsOf, recalculateHistorical };
+module.exports = { readMetricAsOf, readMetricAsOfUnchecked, recalculateHistorical };

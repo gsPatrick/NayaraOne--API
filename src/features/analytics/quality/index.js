@@ -9,12 +9,16 @@ const { checkRefresh, EVENT_TYPE } = require('./quality.record');
 const { executeChecks, ERROR_CODE } = require('./quality.execute');
 const { datasetQuality } = require('./quality.dataset');
 const listener = require('./quality.listener');
+const priority = require('./status.priority');
+const block = require('./status.block');
+const transition = require('./status.transition');
 
 require('./checks'); // carrega quality/checks/<read-model>.checks.js
 listener.install(); // liga ao fim de cada lote de refresh e ao rebuild
 
 module.exports = {
   camada: 'quality',
+  ...priority, ...block, DEGRADED_EVENT: transition.DEGRADED_EVENT, RECOVERED_EVENT: transition.RECOVERED_EVENT,
   types, sql, checkRefresh, executeChecks, datasetQuality, EVENT_TYPE, ERROR_CODE,
   registerChecks: catalog.registerChecks, unregisterChecks: catalog.unregisterChecks, getChecks: catalog.getChecks,
   assertEveryReadModelDeclaresChecks: catalog.assertEveryReadModelDeclaresChecks,

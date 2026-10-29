@@ -35,7 +35,7 @@ async function readRaw(ctx, metricCode, asOfDate, transaction) {
 function missingMetric(metricCode, title, asOfDate) {
   return {
     metricCode, name: title, version: null, unit: null, valueNature: null, valueNatureLabel: null, value: null, formatted: null, status: 'INCOMPLETE', incomplete: true,
-    incompleteText: INCOMPLETE_TEXT, freshness: { ...UNKNOWN_FRESHNESS, asOfDate }, asOfDate, sourceRefs: [],
+    incompleteText: INCOMPLETE_TEXT, valueReliable: false, quality: { degradedBy: [], inheritedFrom: [] }, freshness: { ...UNKNOWN_FRESHNESS, asOfDate }, asOfDate, sourceRefs: [],
   };
 }
 
@@ -46,7 +46,7 @@ async function readMetricView(ctx, widget, { asOfDate, meta, domainMap }, transa
   const incomplete = raw.value === null || raw.value === undefined || raw.status === 'DEGRADED' || raw.status === 'INCOMPLETE';
   const metric = {
     metricCode: raw.metricCode, name: (meta && meta.name) || widget.title, version: raw.version, unit: raw.unit, valueNature: raw.valueNature, valueNatureLabel: natureLabel(raw.valueNature),
-    value: incomplete ? null : raw.value, formatted: incomplete ? null : formatValue(raw.unit, raw.value), status: raw.status, incomplete, incompleteText: incomplete ? INCOMPLETE_TEXT : null,
+    value: incomplete ? null : raw.value, formatted: incomplete ? null : formatValue(raw.unit, raw.value), status: raw.status, valueReliable: raw.valueReliable !== false && !incomplete, quality: raw.quality, incomplete, incompleteText: incomplete ? INCOMPLETE_TEXT : null,
     freshness: raw.freshness, asOfDate: raw.asOfDate, sourceSnapshotAt: raw.sourceSnapshotAt, refreshedAt: raw.refreshedAt, historical: raw.historical, sourceRefs: raw.sourceRefs,
   };
   const capable = Boolean(meta && (meta.criticality === 'CRITICAL' || meta.drilldownEnabled)) && Array.isArray(raw.sourceRefs) && raw.sourceRefs.length > 0;

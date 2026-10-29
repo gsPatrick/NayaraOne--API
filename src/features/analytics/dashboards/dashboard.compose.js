@@ -11,6 +11,7 @@ const { buildBody } = require('./dashboard.shape');
 const { loadOrderList } = require('./dashboard.order');
 const { readMetricView } = require('./dashboard.metricView');
 const { buildQualityBanner } = require('./dashboard.banner');
+const { evaluateBlock } = require('../quality/status.block');
 
 const METRIC_TYPES = new Set(['KPI_CARD', 'TREND', 'TABLE', 'BAR']);
 
@@ -41,7 +42,11 @@ async function composeWidgets(ctx, widgets, asOfDate, transaction) {
   for (const w of widgets) {
     composed.push(METRIC_TYPES.has(w.widget_type) && w.metric_code ? await composeMetricWidget(ctx, w, shared, transaction) : toWidgetView(w));
   }
-  const { banner, quality } = buildQualityBanner(composed.filter((c) => c.metric));
+  for (const [i, w] of composed.entries()) { // M9-D697 3.4: bloco que depende de métrica ruim adia a conclusão (Centro de Comando)
+    const dependsOn = !w.metric && w.config && w.config.dependsOn;
+    if (Array.isArray(dependsOn) && dependsOn.length) composed[i] = { ...w, block: await evaluateBlock(ctx, dependsOn, asOfDate, transaction) };
+  }
+  const { banner, quality } = buildQualityBanner(composed.filter((c) => c.metric), composed.filter((c) => c.block && c.block.deferred));
   return { widgets: composed.map((c) => (c.type === 'QUALITY_BANNER' ? { ...c, banner } : c)), quality };
 }
 

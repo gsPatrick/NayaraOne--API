@@ -3,7 +3,8 @@
 /**
  * M9-D696 (3.2, 3.4) — fim de cada refresh: roda os checks do read model, grava UMA linha por execução em data_quality_checks (execução
  * repetida grava nova linha, nunca altera a anterior) e, havendo falha BLOCK (ou check em ERROR), marca o refresh como DEGRADED, publica
- * `analytics.quality.check_failed` (na mesma transação, outbox) e deixa o log estruturado. Aviso (WARN) só registra.
+ * `analytics.quality.check_failed` (na mesma transação, outbox) e deixa o log estruturado. Aviso (WARN) só registra. M9-D697: a mudança de estado da
+ * métrica (OK para DEGRADED e a recuperação) publica `analytics.quality.degraded` / `analytics.quality.recovered`.
  */
 const { sequelize } = require('../../../models');
 const logger = require('../../../utils/logger');
@@ -12,6 +13,7 @@ const { enableAnalyticsWriter } = require('../metricStore.service');
 const { recordQualityCheck } = require('../dataQualityCheckStore.service');
 const { executeChecks } = require('./quality.execute');
 const { isBlocking } = require('./quality.severity');
+const { readStates, publishTransitions } = require('./status.transition');
 
 const EVENT_TYPE = 'analytics.quality.check_failed';
 const DEGRADED_CODE = 'ANALYTICS_QUALITY_BLOCKED';
@@ -44,12 +46,14 @@ async function publishFailures(input, saved, transaction) {
 async function checkRefresh(input, transaction) {
   await enableAnalyticsWriter(transaction);
   const results = await executeChecks(input, transaction);
+  const before = input.refreshId ? await readStates(results, input.scope, transaction) : new Map(); // M9-D697: estado das métricas antes desta execução
   for (const r of results) {
     await recordQualityCheck({ ...r, readModel: input.readModel, companyId: input.scope.companyId, groupId: input.scope.groupId, refreshId: input.refreshId || undefined }, input.scope, transaction);
   }
   const failed = results.filter(degrades);
   if (failed.length && input.refreshId) await markRefreshDegraded(input.refreshId, failed, transaction);
   await publishFailures(input, results, transaction);
+  await publishTransitions({ input, before, after: input.refreshId ? await readStates(results, input.scope, transaction) : new Map(), transaction });
   return { results, degraded: failed.length > 0 };
 }
 

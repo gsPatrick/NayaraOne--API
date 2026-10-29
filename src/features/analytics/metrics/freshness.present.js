@@ -12,6 +12,8 @@
 const clock = require('./clock');
 const { STATES, computeFreshness, maxStalenessOf } = require('./freshness');
 const { readFreshnessParams } = require('./freshness.settings');
+const { assessQuality } = require('../quality/status.service');
+const { worstStatus, isUnreliable } = require('../quality/status.priority');
 
 const WORSE = new Set(['DEGRADED', 'INCOMPLETE']);
 
@@ -22,18 +24,26 @@ function resolveStatus(recorded, state) {
   return recorded;
 }
 
-/** { value, status, freshness }: `rawValue` é o valor gravado (texto) e `snapshot` a linha de metric_snapshots. */
-async function presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope, transaction, now = clock.now() }) {
+/**
+ * { value, status, valueReliable, quality, freshness }: `rawValue` é o valor gravado (texto) e `snapshot` a linha de metric_snapshots. M9-D697: o pior entre
+ * a freshness, o status gravado, os checks de qualidade e os componentes vence; DEGRADED e INCOMPLETE nunca saem com valor (nulo != 0).
+ */
+async function presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope, transaction, visited, now = clock.now() }) {
   const params = await readFreshnessParams(scope, transaction);
   const historical = asOfDate < clock.businessToday(now);
   const freshness = computeFreshness({
     asOfDate, sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
     maxStalenessMinutes: maxStalenessOf(version.refresh_policy, definition.domain, params), factor: params.factor, now, historical,
   });
-  if (historical) return { value: rawValue, status: snapshot.status, freshness };
-  const status = resolveStatus(snapshot.status, freshness.state);
-  const hidden = freshness.state === STATES.UNKNOWN || freshness.state === STATES.EXPIRED;
-  return { value: hidden ? null : rawValue, status, freshness };
+  const base = historical ? snapshot.status : resolveStatus(snapshot.status, freshness.state);
+  const assessed = await assessQuality({ metricCode: definition.metric_code, scope, asOfDate, historical, transaction, visited });
+  const status = worstStatus(base, assessed.status);
+  const unreliable = isUnreliable(status);
+  const hidden = unreliable || (!historical && (freshness.state === STATES.UNKNOWN || freshness.state === STATES.EXPIRED));
+  return {
+    value: hidden ? null : rawValue, status, valueReliable: !unreliable, freshness,
+    quality: { degradedBy: assessed.degradedBy, inheritedFrom: assessed.inheritedFrom },
+  };
 }
 
 module.exports = { presentSnapshot, resolveStatus };
