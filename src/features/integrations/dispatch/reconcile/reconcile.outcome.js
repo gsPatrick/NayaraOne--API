@@ -5,7 +5,7 @@
  * sucesso -> CONFIRMED; status final de recusa ou cancelamento -> FAILED; qualquer outro (em processamento, na fila, pendente) -> SUBMITTED,
  * que o webhook ou a consulta de status levam ao final depois. Os conjuntos são o vocabulário dos status que os adapters devolvem.
  */
-const SUCCESS = Object.freeze(['PAID', 'CONFIRMED', 'COMPLETED', 'SIGNED', 'PUBLISHED', 'APPROVED', 'ISSUED', 'AUTHORIZED', 'DELIVERED', 'SETTLED', 'ACTIVE', 'DONE', 'SUCCESS', 'SUCCEEDED', 'LIVE']);
+const SUCCESS = Object.freeze(['PAID', 'CONFIRMED', 'COMPLETED', 'SIGNED', 'PUBLISHED', 'APPROVED', 'ISSUED', 'AUTHORIZED', 'DELIVERED', 'SETTLED', 'ACTIVE', 'DONE', 'SUCCESS', 'SUCCEEDED', 'LIVE', 'DELETED', 'REMOVED']);
 const FAILURE = Object.freeze(['FAILED', 'REJECTED', 'CANCELLED', 'CANCELED', 'DENIED', 'ERROR', 'EXPIRED', 'REFUSED', 'DECLINED', 'REVERSED', 'RETURNED', 'VOIDED']);
 
 function classifyExternalStatus(status) {

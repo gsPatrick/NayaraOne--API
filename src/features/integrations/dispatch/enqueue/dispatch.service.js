@@ -21,7 +21,7 @@ const payloadInvalid = (problemas) => AppError.unprocessable('Os dados não aten
  * saída (M9-D219) e validado pelo schema do port; snapshot canônico e hash; chave de idempotência (a informada, senão a derivada
  * do conteúdo); repetir a mesma intenção devolve o mesmo envio; chave informada com conteúdo diferente é 409.
  * `args`: companyId, connectionId | domain, operation, aggregateType, aggregateId, payload, idempotencyKey?, opClass?, correlationId,
- * outboxEventId, userId, consentedFields, essential, transaction.
+ * outboxEventId, userId, consentedFields, essential, nextAttemptAt (agendamento, M9-D239), transaction.
  */
 async function enqueue(args) {
   const a = args || {};
@@ -53,7 +53,7 @@ async function enqueue(args) {
   const policy = await resolveEffectivePolicy(ctx, connection, a.transaction);
   const { dispatch, created } = await createDispatch(ctx, {
     connectionId: connection.id, operation, idempotencyKey: key, snapshot, criticalityOp: opClass, outboxEventId: a.outboxEventId,
-    aggregateType: a.aggregateType, aggregateId: a.aggregateId, purpose, fieldsDropped, confirmationMode: def.confirmation, correlationId: a.correlationId, essential: a.essential === true || def.essential === true, maxAttempts: policy.retry.max_attempts,
+    aggregateType: a.aggregateType, aggregateId: a.aggregateId, purpose, fieldsDropped, confirmationMode: def.confirmation, correlationId: a.correlationId, essential: a.essential === true || def.essential === true, maxAttempts: policy.retry.max_attempts, nextAttemptAt: a.nextAttemptAt,
   }, a.transaction);
   if (!created && dispatch.payloadHash !== payloadHash) throw conflict();
   return { dispatchId: dispatch.id, status: dispatch.status, created, dispatch };

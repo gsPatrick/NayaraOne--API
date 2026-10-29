@@ -48,6 +48,12 @@ class IntegrationAdapter {
   supportsIdempotency(_operation) { return false; }
 
   /**
+   * A resposta da operação, com o id do recurso e o status final, basta como confirmação? Padrão: não (M9-D239 3.1: rede social SEM consulta
+   * de status confirma pelo `externalPostId` da resposta). Com `true`, o worker confirma por `RESPONSE_ID` quando a resposta traz o id e um status final de sucesso.
+   */
+  confirmsOnResponse(_operation) { return false; }
+
+  /**
    * Cota informada pelo fornecedor numa resposta ou erro (M9-D218 3.1): { limit, remaining, resetsAt } ou null. O padrão lê os cabeçalhos
    * X-RateLimit-Limit, -Remaining e -Reset (e Retry-After); o adapter sobrescreve quando a cota vem em outro lugar (campo do corpo).
    */

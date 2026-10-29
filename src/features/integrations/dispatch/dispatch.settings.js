@@ -1,6 +1,7 @@
 'use strict';
 
 const { RECONCILE_SETTINGS_SCHEMA } = require('./reconcile/reconcile.settings');
+const { SOCIAL_SETTINGS_SCHEMA } = require('../social/social.settings');
 
 /** Parâmetros dos envios (M9-D205): só o dicionário de SETTINGS_SCHEMA; a leitura está em dispatch.params.js. */
 const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
@@ -33,6 +34,8 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   'integration.analytics.drop_after_s': { type: 'integer', min: 1, max: 86400 },
   // M9-D215: reconciliação do envio incerto (consultas, esperas, job) e recuperador de envios presos em SENDING.
   ...RECONCILE_SETTINGS_SCHEMA,
+  // M9-D239: redes sociais (janela de dias para achar o post duplicado e política de publicação automática).
+  ...SOCIAL_SETTINGS_SCHEMA,
 });
 
 module.exports = { DISPATCH_SETTINGS_SCHEMA };

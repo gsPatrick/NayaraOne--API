@@ -6,12 +6,13 @@ const { applyTransition } = require('../dispatch.transition');
 const { publishDispatchEvent, EVENTS } = require('../dispatch.events');
 const { portOperation } = require('../enqueue/resolveTarget');
 
-const SOURCES = Object.freeze(['RESPONSE', 'WEBHOOK_SIGNED', 'STATUS_QUERY']);
+const SOURCES = Object.freeze(['RESPONSE', 'RESPONSE_ID', 'WEBHOOK_SIGNED', 'STATUS_QUERY']);
 
 /**
  * confirmDispatch — leva o envio a CONFIRMED SOMENTE com evidência suficiente (M9-D214 3.3). Operação ON_STATUS (pagamento,
  * assinatura, financiamento, publicação) exige status final por webhook assinado (`WEBHOOK_SIGNED`) ou consulta de status
- * (`STATUS_QUERY`): a resposta de submissão (`RESPONSE`, HTTP 200 ou 202) nunca confirma. Ao confirmar grava confirmed_at e publica
+ * (`STATUS_QUERY`): a resposta de submissão (`RESPONSE`, HTTP 200 ou 202) nunca confirma. `RESPONSE_ID` (M9-D239): a rede que não tem consulta de status
+ * (`adapter.confirmsOnResponse`) confirma pela resposta que traz o id do recurso e um status final de sucesso. Ao confirmar grava confirmed_at e publica
  * `integration.dispatch.confirmed` no outbox, na mesma transação e uma única vez. Confirmar de novo não faz nada.
  * `evidence`: { source, status, externalResourceId }.
  */

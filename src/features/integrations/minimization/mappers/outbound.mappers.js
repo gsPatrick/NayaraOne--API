@@ -7,7 +7,11 @@ module.exports = {
   social: {
     publishPost: defineMapper({
       purpose: 'SOCIAL_PUBLICATION',
-      fields: [{ name: 'text', classification: 'PUBLIC', freeText: true, required: true }, { name: 'mediaRefs', classification: 'PUBLIC' }, { name: 'link', classification: 'PUBLIC' }],
+      fields: [
+        { name: 'text', classification: 'PUBLIC', freeText: true, required: true }, { name: 'mediaRefs', classification: 'PUBLIC' }, { name: 'link', classification: 'PUBLIC' },
+        // M9-D239: a referência do conteúdo aprovado (item, versão e hash) e o horário agendado acompanham o post.
+        { name: 'contentRef', classification: 'PUBLIC' }, { name: 'scheduledAt', classification: 'PUBLIC' },
+      ],
     }),
   },
   analytics: {

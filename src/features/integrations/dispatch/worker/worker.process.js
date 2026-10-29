@@ -69,7 +69,7 @@ async function phaseB(ctx, id, attemptId, now, probe = false) {
       return { failed: true };
     }
     await observe({ ctx, dispatch, connection, adapter, response: bruta || normalized, attemptId, now, transaction });
-    await handleSuccess({ ctx, dispatch, def, normalized, attemptId, latencyMs: Date.now() - inicio, transaction });
+    await handleSuccess({ ctx, dispatch, def, adapter, normalized, attemptId, latencyMs: Date.now() - inicio, transaction });
     await recordCallResult(connection, ctx, transaction, { ok: true, probe, now });
     return { ok: true };
   });

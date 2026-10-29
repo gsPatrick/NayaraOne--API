@@ -35,4 +35,12 @@ async function createPropertyPublicationDispatch(ctx, d, transaction) {
   }, transaction);
 }
 
-module.exports = { createPropertyPublicationDispatch, OPERATIONS };
+/**
+ * assertPropertyPublishable — o imóvel continua no PublicPropertyReadModel (M9-D239: conteúdo de rede social sobre um imóvel só sai se o
+ * read model público o tem); senão 409 INTEGRATION_PROPERTY_NOT_PUBLISHABLE. Só lê: nada é enviado nem gravado.
+ */
+async function assertPropertyPublishable(ctx, propertyId, transaction) {
+  await loadPublicPropertyReadModel(propertyId, ctx, transaction);
+}
+
+module.exports = { createPropertyPublicationDispatch, assertPropertyPublishable, OPERATIONS };
