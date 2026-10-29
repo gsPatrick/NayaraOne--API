@@ -16,6 +16,7 @@ const { startMarketingContentTypesJob } = require('./src/engines/jobs/marketingC
 const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
 const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJob');
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
+const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -177,6 +178,10 @@ if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_OVERDUE_JOB_DISABLED
 }
 if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_CONFLICT_JOB_DISABLED !== 'true') {
   startCalendarConflictJob();
+}
+// Detecção noturna de cadastros duplicados de Person, Property e Supplier para a fila do steward (M9-D805), na hora configurada (padrão 03:00 de Brasília).
+if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_MERGE_JOB_DISABLED !== 'true') {
+  startDataQualityMergeDetectionJob();
 }
 
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.

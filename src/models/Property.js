@@ -167,6 +167,12 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.UUIDV4,
         field: 'public_id',
       },
+      mergedIntoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'merged_into_id',
+        comment: 'M9-D805: imóvel sobrevivente da união de cadastros (o absorvido nunca é apagado)',
+      },
       publishedAt: {
         type: DataTypes.DATE,
         allowNull: true,

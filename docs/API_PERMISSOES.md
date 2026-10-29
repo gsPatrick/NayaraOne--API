@@ -229,6 +229,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/cost-centers` | `finance:create` | não |
 | `POST` | `/api/v1/finance/entries/:id/clear-manual-review` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
+| `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
 | `POST` | `/api/v1/finance/entries/:id/settle-partial` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence/detach` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence` | `finance:settle` | não |
@@ -655,3 +658,5 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/verify` | só login (o próprio usuário) | não |
 | `GET` | `/api/version` | público (saúde do serviço) | não |
+| `governance:data-quality:read` | LOW | `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality` |
+| `governance:data-quality:manage` | MEDIUM | `POST /api/v1/data-quality/queue/:id/decision`, `PUT /api/v1/data-quality/domains/:code/assignments` |

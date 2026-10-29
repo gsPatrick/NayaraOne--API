@@ -500,3 +500,12 @@ test('M9-D609: snapshot_job_runs tem RLS, FORCE RLS e 4 políticas', async () =>
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });
+
+// M9-D805: governance.review_queue_items (fila de merge e review de Person, Property e Supplier) com RLS + FORCE RLS e a política tenant_isolation.
+test('M9-D805: review_queue_items tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'review_queue_items'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
+});

@@ -7,10 +7,10 @@ const { moduleSettingKey } = require('../../features/core-governance/governance.
 
 /**
  * Percorre grupos e empresas abrindo uma transação por empresa com o contexto de tenant (RLS), pulando as que desligaram o módulo
- * Calendário. `work(tenant, transaction)` devolve o resumo da empresa (ou null quando não houve trabalho). Erro de uma empresa é
+ * (Calendário por padrão; `moduleCode` escolhe outro, ex.: data-quality). `work(tenant, transaction)` devolve o resumo da empresa (ou null quando não houve trabalho). Erro de uma empresa é
  * registrado e não derruba as demais. Usado pelos jobs de alerta do calendário (vencido e conflito).
  */
-async function runForEachCompany(name, work) {
+async function runForEachCompany(name, work, moduleCode = 'calendar') {
   const total = { companies: 0, ran: 0, errors: 0, summaries: [] };
   for (const group of await Group.findAll()) {
     const companies = await sequelize.transaction(async (transaction) => {
@@ -25,7 +25,7 @@ async function runForEachCompany(name, work) {
             replacements: { groupId: group.id, companyId: company.id }, transaction,
           });
           const tenant = { groupId: group.id, companyId: company.id };
-          if ((await getSetting(moduleSettingKey('calendar'), tenant, transaction, true)) === false) return null;
+          if ((await getSetting(moduleSettingKey(moduleCode), tenant, transaction, true)) === false) return null;
           return work(tenant, transaction);
         });
         if (summary) { total.ran += 1; total.summaries.push({ companyId: company.id, ...summary }); }
