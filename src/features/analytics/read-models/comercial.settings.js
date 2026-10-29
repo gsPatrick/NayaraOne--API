@@ -7,6 +7,8 @@
  *                                                 agendadas não geram evento no momento do agendamento)
  *   analytics.comercial.primeira_resposta_inclui_nay   a resposta da NAY conta como primeira resposta do lead (padrão Desligado: a resposta
  *                                                      automática não conta, M9-D630; era Ligado na M9-D616)
+ *   analytics.comercial.proxima_acao_inclui_hoje       a tarefa aberta com data de hoje vale como próxima ação (padrão Desligado: "data posterior
+ *                                                      a hoje", M9-D631)
  *   analytics.imoveis.faixas_sem_venda_dias       limites, em dias, das faixas de "imóvel sem venda" (padrão do livro: 30,90,180 = 0-30, 31-90, 91-180 e 181+)
  * Arquivo sem dependência de settings.service no topo (evita ciclo; a leitura usa import tardio).
  */
@@ -16,6 +18,7 @@ const KEYS = Object.freeze({
   stalledDays: 'analytics.centro.opp_parada_dias',
   recalcDays: 'analytics.comercial.janela_recalculo_dias',
   includeNay: 'analytics.comercial.primeira_resposta_inclui_nay',
+  nextActionToday: 'analytics.comercial.proxima_acao_inclui_hoje',
   noSaleBands: 'analytics.imoveis.faixas_sem_venda_dias',
 });
 
@@ -23,6 +26,7 @@ const COMERCIAL_DEFAULTS = Object.freeze({
   [KEYS.stalledDays]: 7,
   [KEYS.recalcDays]: 7,
   [KEYS.includeNay]: false,
+  [KEYS.nextActionToday]: false,
   [KEYS.noSaleBands]: '30,90,180', // M9-D632: as faixas do livro (0-30, 31-90, 91-180 e 181+)
 });
 
@@ -42,20 +46,22 @@ const COMERCIAL_SETTINGS_SCHEMA = {
   [KEYS.stalledDays]: { type: 'integer', min: 1, max: 365 },
   [KEYS.recalcDays]: { type: 'integer', min: 1, max: 90 },
   [KEYS.includeNay]: { type: 'boolean' },
+  [KEYS.nextActionToday]: { type: 'boolean' },
   [KEYS.noSaleBands]: { type: 'string', validate: validateBands },
 };
 
 const int = (v, key, min, max) => (Number.isInteger(v) && v >= min && v <= max ? v : COMERCIAL_DEFAULTS[key]);
 
-/** { stalledDays, recalcDays, includeNay, bands } vigentes para a empresa; ausente ou inválido cai no padrão. */
+/** { stalledDays, recalcDays, includeNay, nextActionIncludesToday, bands } vigentes para a empresa; ausente ou inválido cai no padrão. */
 async function readComercialParams(scope, transaction) {
   const { getSetting } = require('../../settings/settings.service');
   const get = (key) => getSetting(key, { companyId: scope.companyId, groupId: scope.groupId }, transaction, COMERCIAL_DEFAULTS[key]);
-  const [stalled, recalc, nay, bands] = await Promise.all([get(KEYS.stalledDays), get(KEYS.recalcDays), get(KEYS.includeNay), get(KEYS.noSaleBands)]);
+  const [stalled, recalc, nay, bands, today] = await Promise.all([get(KEYS.stalledDays), get(KEYS.recalcDays), get(KEYS.includeNay), get(KEYS.noSaleBands), get(KEYS.nextActionToday)]);
   return {
     stalledDays: int(stalled, KEYS.stalledDays, 1, 365),
     recalcDays: int(recalc, KEYS.recalcDays, 1, 90),
     includeNay: typeof nay === 'boolean' ? nay : COMERCIAL_DEFAULTS[KEYS.includeNay],
+    nextActionIncludesToday: typeof today === 'boolean' ? today : COMERCIAL_DEFAULTS[KEYS.nextActionToday],
     bands: parseBands(bands) || parseBands(COMERCIAL_DEFAULTS[KEYS.noSaleBands]),
   };
 }

@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * M9-D630 — leitura dos read models do CRM para o cálculo dos KPIs do funil. Só lê o schema analytics (nunca o OLTP): o valor sai do estado
+ * M9-D630 / M9-D631 — leitura dos read models do CRM para o cálculo dos KPIs do funil. Só lê o schema analytics (nunca o OLTP): o valor sai do estado
  * que o worker de read models gravou (M9-D607). O período é o mês de São Paulo da data-base (M9-D606, mesmo padrão do resolvedor de período): do dia
  * 1 até a data-base. A tabela vem de constantes (a varredura de segurança M9-D700 só deixa citar o nome do read model na camada read-models).
  */
 const { sequelize } = require('../../../../models');
 const { READ_MODELS } = require('./crm.definitions');
 
-const T = Object.freeze({ leads: READ_MODELS.lead });
+const T = Object.freeze({ leads: READ_MODELS.lead, stage: READ_MODELS.stage, outcome: READ_MODELS.outcome, next: READ_MODELS.next });
 
 const monthOf = (asOfDate) => asOfDate.slice(0, 7);
 
@@ -28,14 +28,31 @@ async function latestSnapshotAt(companyId, models, transaction) {
   return times.length ? new Date(Math.max(...times.map((d) => d.getTime()))) : null;
 }
 
-/** Linhas do read model de leads por dia para a empresa e a data-base (a M9-D631 acrescenta os de estágio, desfecho e próxima ação). */
+/** Linhas dos quatro read models do funil para a empresa e a data-base. */
 async function loadCrmRows(scope, asOfDate, transaction) {
   const base = { companyId: scope.companyId, from: `${monthOf(asOfDate)}-01`, asOfDate, month: monthOf(asOfDate) };
   const leads = await query(
     `SELECT origin, broker_id::text AS "brokerId", sum(leads)::text AS leads, sum(first_response_count)::text AS answered, sum(first_response_seconds_sum)::text AS seconds
        FROM analytics.${T.leads} WHERE company_id = :companyId AND day >= :from AND day <= :asOfDate GROUP BY origin, broker_id`, base, transaction
   );
-  return { leads, month: base.month, from: base.from, snapshotAt: { lead: await latestSnapshotAt(scope.companyId, [T.leads], transaction) } };
+  const stages = await query(
+    `SELECT stage, broker_id::text AS "brokerId", count::text AS count, stalled_count::text AS stalled, idle_days_sum::text AS "idleDays" FROM analytics.${T.stage} WHERE company_id = :companyId`, base, transaction
+  );
+  const outcomeRows = await query(
+    `SELECT broker_id::text AS "brokerId", lost_reason AS "lostReason", won::text AS won, lost::text AS lost, withdrawn::text AS withdrawn, lost_count::text AS "lostCount"
+       FROM analytics.${T.outcome} WHERE company_id = :companyId AND month = :month`, base, transaction
+  );
+  const next = await query(
+    `SELECT broker_id::text AS "brokerId", open_total::text AS "openTotal", without_valid_next_action::text AS without, by_stage AS "byStage" FROM analytics.${T.next} WHERE company_id = :companyId`, base, transaction
+  );
+  return {
+    leads, stages, next, month: base.month, from: base.from,
+    totals: outcomeRows.filter((r) => r.lostReason === ''), reasons: outcomeRows.filter((r) => r.lostReason !== ''),
+    snapshotAt: {
+      lead: await latestSnapshotAt(scope.companyId, [T.leads], transaction), stage: await latestSnapshotAt(scope.companyId, [T.stage, T.outcome], transaction),
+      outcome: await latestSnapshotAt(scope.companyId, [T.outcome], transaction), next: await latestSnapshotAt(scope.companyId, [T.next], transaction),
+    },
+  };
 }
 
 module.exports = { loadCrmRows, T };

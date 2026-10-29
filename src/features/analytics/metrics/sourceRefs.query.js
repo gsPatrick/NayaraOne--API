@@ -21,6 +21,11 @@ function buildWhere(spec, filter) {
     parts.push(p.sql);
     Object.assign(replacements, p.replacements);
   }
+  for (const predicate of spec.predicates || []) { // parte FIXA da origem em código (M9-D631): condição própria do KPI, com valores por parâmetro
+    const p = predicate(filter);
+    parts.push(p.sql);
+    Object.assign(replacements, p.replacements);
+  }
   const c = spec.columns || {};
   if (filter.period) {
     if (!c.period) throw new Error(`Origem ${spec.metricCode}: não declara coluna de período.`);
@@ -35,6 +40,7 @@ function buildWhere(spec, filter) {
   }
   Object.entries(filter.equals || {}).forEach(([name, value], i) => {
     if ((spec.flags || []).includes(name)) return; // chave que só liga uma parcela (addends), não filtra coluna
+    if ((spec.flags || []).includes(name)) return; // chave que só leva um valor à condição fixa da origem (predicates), não filtra coluna
     const column = (c.equals || {})[name];
     if (!column) throw new Error(`Origem ${spec.metricCode}: filtro ${name} não é declarado.`);
     if (value === null) { parts.push(`${col(column)} IS NULL`); return; }

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D630 / M9-D611 — filtro canônico (assinado) de cada KPI do funil: os registros de crm.opportunities que reproduzem o número. Período em
+ * M9-D630 / M9-D631 / M9-D611 — filtro canônico (assinado) de cada KPI do funil: os registros de crm.opportunities que reproduzem o número. Período em
  * instantes (meia-noite de São Paulo, início inclusivo e fim exclusivo) do mês da data-base até o fim do dia-base (M9-D606). Oportunidade excluída fica
  * fora, como nos read models. Os marcadores crmClosedFrom/To e crmTaskDueFrom alimentam as condições fixas da origem (sourceSpecs.crm).
  */
@@ -25,6 +25,10 @@ function filtersOf(asOfDate, includeToday) {
     byCode: {
       'crm.leads_by_origin': { period, equals: live },
       'crm.first_response_time': { period, equals: live },
+      'crm.opportunities_by_stage': { equals: { ...live, crmClosedFrom: w.from, crmClosedTo: w.to } },
+      'crm.conversion_rate': { period, status: ['CLOSED_LOST', 'CLOSED_WON'], equals: live },
+      'crm.loss_reasons': { period, status: ['CLOSED_LOST'], equals: live },
+      'crm.portfolio_without_next_action': { equals: { ...live, crmTaskDueFrom: w.taskDueFrom } },
     },
   };
 }

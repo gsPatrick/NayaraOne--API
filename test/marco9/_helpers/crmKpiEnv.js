@@ -1,6 +1,6 @@
 'use strict';
 
-// Apoio dos testes dos KPIs do funil comercial (M9-D630; a M9-D631 acrescenta as fábricas de oportunidade, tarefa e desfechos): reaproveita o ambiente dos read models de Comercial (duas empresas NOVAS no grupo do
+// Apoio dos testes dos KPIs do funil comercial (M9-D630, M9-D631): reaproveita o ambiente dos read models de Comercial (duas empresas NOVAS no grupo do
 // seed, relógio fixo em 28/10/2026 12:00 de São Paulo, fábricas das fontes do CRM) e acrescenta o cálculo dos KPIs, a leitura como a API lê e a limpeza
 // dos registros do BI. Banco descartável (127.0.0.1).
 const bi = require('./biEnv');
@@ -60,4 +60,35 @@ async function dimension(t, metricCode, dimensionKey, asOfDate = TODAY) {
 /** Cenário padrão: abre uma oportunidade com atalhos de fuso (hora de Brasília = UTC-3). */
 const at = (day, hh = 12, mm = 0) => new Date(Date.UTC(2026, 9, day, hh + 3, mm)).toISOString();
 
-module.exports = { ...bi, setup, teardown, refresh, refreshAll, kpis, readKpi, dimension, ctxOf, at, created, CODES, src, registry };
+/** Oportunidade completa para o funil: estágio, fechamento, motivo, próxima ação com data e última edição (a fábrica de biSources não cobre next_action_due_at). */
+const opp = (env, t, c = {}) => src.insert(env, 'crm.opportunities', t, {
+  person_id: src.uuid(), owner_user_id: 'owner' in c ? c.owner : null, stage: 'stage' in c ? c.stage : 'NEW', lead_source: c.source || null, closed_at: c.closedAt || null, lost_reason: c.lostReason || null,
+  next_action: c.nextAction || null, next_action_due_at: c.nextActionDueAt || null, created_at: c.created || at(1), updated_at: c.updated || c.created || at(1),
+});
+
+/** Tarefa de CRM (core.tasks) ligada à oportunidade. */
+const task = (env, t, c) => src.insert(env, 'core.tasks', t, {
+  title: 'Retornar ao cliente', status: c.status || 'OPEN', related_entity_type: 'crm.opportunities', related_entity_id: c.opportunity, due_at: c.dueAt || null,
+  created_at: at(1), updated_at: at(1),
+});
+
+/**
+ * Exemplo numérico da M9-D631 em agosto de 2026 (mês sem outro dado): 6 ganhas e 14 perdidas (preço 6, desistência do cliente 5, sem motivo 3) e
+ * uma desistência (WITHDRAWN, que não conta). Devolve { ids, closed, brokers } para `refreshAll`.
+ */
+async function augustOutcomes(env, t) {
+  const brokers = [src.uuid(), src.uuid()];
+  const ids = [];
+  const closed = {};
+  const add = async (stage, i, reason) => {
+    const id = await opp(env, t, { owner: brokers[i % 2], stage, created: '2026-07-20T15:00:00Z', closedAt: new Date(Date.UTC(2026, 7, 3 + i, 15)).toISOString(), lostReason: reason });
+    ids.push(id);
+    closed[id] = stage === 'CLOSED_WON' ? 'won' : 'lost';
+  };
+  for (let i = 0; i < 6; i += 1) await add('CLOSED_WON', i);
+  for (let i = 0; i < 14; i += 1) await add('CLOSED_LOST', i, i < 6 ? 'PRICE' : i < 11 ? 'CLIENT_GAVE_UP' : null);
+  await add('WITHDRAWN', 20);
+  return { ids, closed, brokers };
+}
+
+module.exports = { ...bi, opp, task, augustOutcomes, setup, teardown, refresh, refreshAll, kpis, readKpi, dimension, ctxOf, at, created, CODES, src, registry };

@@ -14,6 +14,7 @@
  *     predicates: [(filter) => ({ sql: '(t."stage" NOT IN (:x))', replacements: { x: [...] } })],  // condições FIXAS do código (M9-D631), em AND com o filtro; a tabela é `t`; valores por parâmetro
  *     addends: [(filter) => ({ sql: 'SELECT ... AS total', replacements: {} })],        // parcelas fora da tabela (ex.: saldo de abertura, M9-D620) somadas no modo SUM; sql FIXO do código, valores por parâmetro (:companyId já vem)
  *     flags: ['includeOpening'],                                                       // nomes de `equals` que não são coluna: só ligam/desligam uma parcela
+ *     predicates: [(filter) => ({ sql: '(t."stage" NOT IN (:x))', replacements: { x: [...] } })],  // condições FIXAS do código (M9-D631), em AND com o filtro; a tabela é `t`; valores por parâmetro; os valores variáveis vêm de `flags` do filtro
  *     formulaId: '...', rowColumns: ['...'], formulaParams: {},                       // modo RECOMPUTE
  *     describe: (filter) => 'Lançamentos liquidados da empresa ...',
  *   })
@@ -44,6 +45,7 @@ function assertLeaf(spec) {
   assertColumns(spec);
   if (spec.valueColumn !== undefined && !IDENT.test(spec.valueColumn)) fail(spec, 'valueColumn inválido.');
   if (spec.valueSign && (!IDENT.test(spec.valueSign.column) || !Array.isArray(spec.valueSign.negative))) fail(spec, 'valueSign inválido.');
+  if (spec.predicates !== undefined && !(Array.isArray(spec.predicates) && spec.predicates.every((p) => typeof p === 'function'))) fail(spec, 'predicates deve listar funções (filtro) => { sql, replacements }.');
   if (spec.unlinked !== undefined && !(TABLE.test((spec.unlinked || {}).table || '') && IDENT.test((spec.unlinked || {}).column || ''))) fail(spec, 'unlinked exige table (schema.tabela) e column.');
   if (spec.addends !== undefined && !(Array.isArray(spec.addends) && spec.addends.every((a) => typeof a === 'function'))) fail(spec, 'addends deve listar funções (filtro) => { sql, replacements } | null.');
   if (spec.flags !== undefined && !(Array.isArray(spec.flags) && spec.flags.every((f) => FILTER_NAME.test(f)))) fail(spec, 'flags inválido.');

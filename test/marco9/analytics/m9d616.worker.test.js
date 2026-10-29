@@ -8,6 +8,7 @@ const bi = require('../_helpers/biEnv');
 const asserts = require('../_helpers/readModelAsserts');
 const { seed, iso } = require('../_helpers/biSeed616');
 const readModels = require('../../../src/features/analytics/read-models');
+const clock = require('../../../src/features/analytics/metrics/clock');
 
 const { src, apply, makeEvent, rows, pick, runSchedule, inTx } = bi;
 const MODELS = ['rm_crm_lead_daily', 'rm_crm_opportunity_stage', 'rm_crm_outcome', 'rm_crm_next_action', 'rm_crm_visits_proposals', 'rm_property_portfolio', 'rm_property_price_changes', 'rm_radar_matches', 'rm_broker_performance'];
@@ -25,7 +26,9 @@ test('m9d616 replay do mesmo evento não duplica', async () => {
   assert.ok(first.upserted >= 3, 'o evento da oportunidade atualiza vários read models');
 });
 
-test('m9d616 rebuild reproduz o incremental', async () => {
+test('m9d616 rebuild reproduz o incremental', async (t) => {
+  clock.setClock(() => bi.NOW); // dias parados (M9-D631) dependem do dia: incremental e rebuild medem no mesmo instante
+  t.after(() => clock.resetClock());
   for (const event of events) await apply(env.cX, event);
   for (const model of MODELS) {
     process.stdout.write(`# rebuild ${model}\n`);

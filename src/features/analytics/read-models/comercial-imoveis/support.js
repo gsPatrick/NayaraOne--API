@@ -15,7 +15,10 @@ const brokerExpr = (col) => `COALESCE(${col}, CAST('${NO_BROKER}' AS uuid))`;
 
 async function params(scope, transaction) {
   const p = await readComercialParams(scope, transaction);
-  return { stalledDays: p.stalledDays, recalcDays: p.recalcDays, includeNay: p.includeNay, bands: p.bands, closedStages: CLOSED_STAGES, noBroker: NO_BROKER };
+  return {
+    stalledDays: p.stalledDays, recalcDays: p.recalcDays, includeNay: p.includeNay, bands: p.bands, closedStages: CLOSED_STAGES, noBroker: NO_BROKER,
+    taskDueOffsetDays: p.nextActionIncludesToday ? 0 : 1, // M9-D631: tarefa "com data posterior a hoje" começa amanhã, salvo o parâmetro
+  };
 }
 
 /** Primeira linha de uma consulta de leitura (ou null). */

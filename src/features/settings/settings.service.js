@@ -251,7 +251,7 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D624 — KPIs de conciliações pendentes e anomalias: idade máxima do extrato, faixas de idade e owner de cada KPI.
   ...FINANCE_KPI_SETTINGS_SCHEMA,
   ...FINANCE_WINDOW_SETTINGS_SCHEMA,
-  // Marco 9, M9-D630 — KPIs do funil comercial: owner de cada KPI e limites de qualidade (origem vazia e amostra mínima).
+  // Marco 9, M9-D630 / M9-D631 — KPIs do funil comercial: owner de cada KPI, limites de qualidade (origem vazia, sem motivo, amostra mínima, sem corretor) e ordem dos estágios.
   ...CRM_KPI_SETTINGS_SCHEMA,
   ...FINANCE_RESULT_SETTINGS_SCHEMA,
   // Marco 9, M9-D699 — teste de carga do BI: quanto o p95 do fluxo operacional pode subir com os painéis sob carga.
