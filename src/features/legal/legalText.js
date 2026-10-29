@@ -10,7 +10,7 @@ const AppError = require('../../utils/AppError');
  * Unicode (Z: U+00A0, U+2000-200A, U+3000...), preenchedores que renderizam em branco
  * (U+034F, U+115F, U+1160, U+3164, U+FFA0) e seletores de variacao (U+FE00-FE0F).
  */
-const INVISIBLE_CLASS = '[\\p{Cc}\\p{Cf}\\p{Z}\\u034F\\u115F\\u1160\\u3164\\uFFA0\\uFE00-\\uFE0F]';
+const INVISIBLE_CLASS = '[\\p{Cc}\\p{Cf}\\p{Z}\\u034F\\u115F\\u1160\\u3164\\uFFA0\\p{Variation_Selector}]';
 const INVISIBLE_ALL = new RegExp(INVISIBLE_CLASS, 'gu');
 const INVISIBLE_EDGES = new RegExp(`^${INVISIBLE_CLASS}+|${INVISIBLE_CLASS}+$`, 'gu');
 
