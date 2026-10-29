@@ -21,7 +21,7 @@ function registerDashboardRoutes(router) {
     const { period, asOfDate } = resolveQueryPeriod(req.query); // M9-D606: calendário de São Paulo; futuro é 400 ANALYTICS_AS_OF_FUTURE
     const data = await req.withTenantTransaction(async (tx) => {
       await resolveCompanyScope(ctxOf(req), req.query.companyId, tx); // outro grupo ou sem vínculo: 404 ANALYTICS_SCOPE_NOT_FOUND
-      return openDashboard(ctxOf(req), req.params.code, { ip: req.ip, route: 'GET /analytics/dashboards/:code', asOfDate, period }, tx);
+      return openDashboard(ctxOf(req), req.params.code, { ip: req.ip, route: 'GET /analytics/dashboards/:code', asOfDate, period, block: typeof req.query.bloco === 'string' ? req.query.bloco : null }, tx);
     });
     return success(res, { data });
   }));

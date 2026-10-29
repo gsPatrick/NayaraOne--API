@@ -8,7 +8,7 @@ const AppError = require('../../../utils/AppError');
 
 const PERIOD_PARAMS = Object.freeze(['period', 'month', 'quarter', 'year', 'from', 'to', 'asOf']);
 const METRIC_PARAMS = Object.freeze(['companyId', 'groupId', ...PERIOD_PARAMS, 'dimension', 'dimensionValue', 'compareTo']);
-const DASHBOARD_PARAMS = Object.freeze(['companyId', ...PERIOD_PARAMS]);
+const DASHBOARD_PARAMS = Object.freeze(['companyId', ...PERIOD_PARAMS, 'bloco']); // `bloco` (M9-D685): o Centro de Comando mostra por inteiro o bloco pedido em "Ver todos"
 const MAX_NAME = 60;
 
 function assertKnownParams(query, allowed) {

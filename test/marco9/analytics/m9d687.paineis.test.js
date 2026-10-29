@@ -47,7 +47,7 @@ test('m9d687 seed cria os 12 painéis e o command_center sem duplicar', async ()
   );
   assert.equal(widgets.length, 13);
   assert.ok(widgets.every((w) => w.widget_type === 'QUALITY_BANNER'), 'o primeiro widget de todo painel é a faixa de qualidade');
-  const [[row]] = await env.admin.query("SELECT count(*)::int AS n FROM analytics.dashboard_widgets w JOIN analytics.dashboard_definitions d ON d.id = w.dashboard_id WHERE d.dashboard_code = 'command_center' AND w.widget_type = 'BRIEF'");
+  const [[row]] = await env.admin.query("SELECT count(*)::int AS n FROM analytics.dashboard_widgets w JOIN analytics.dashboard_definitions d ON d.id = w.dashboard_id WHERE d.dashboard_code = 'command_center' AND d.status = 'PUBLISHED' AND w.widget_type = 'BRIEF'"); // só a versão vigente (a 2, da M9-D685, mantém o BRIEF)
   assert.equal(row.n, 1);
 });
 

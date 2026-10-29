@@ -18,10 +18,12 @@ const { cached } = require('./cache');
 const { composeWidgets, toWidgetView } = require('./dashboard.compose');
 const clock = require('../metrics/clock');
 const { defaultPeriodOf, periodView } = require('../metrics/query.period');
+const { decorateCommandCenter } = require('./command/commandCenter.service');
 
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');
 const CODE_RE = /^[a-z][a-z0-9_]*$/;
 const PUBLISH_SCOPES = ['COMPANY', 'GROUP'];
+const COMMAND_CENTER = 'command_center';
 
 function toView(dash, widgets) {
   return {
@@ -32,20 +34,22 @@ function toView(dash, widgets) {
 }
 
 /** Painel aberto: a definição mais os valores prontos de cada widget na data-base (M9-D634): widgets, resumo de qualidade e instante da composição. */
-async function toOpenView(ctx, dash, asOfDate, period, transaction) {
+async function toOpenView(ctx, dash, asOfDate, period, transaction, extra = {}) {
   const { widgets } = await store.getDashboardWithWidgets(dash.id, transaction);
   const composed = await composeWidgets(ctx, widgets, asOfDate, transaction, period);
-  return { ...toView(dash, []), widgets: composed.widgets, asOfDate, period: periodView(period, asOfDate), generatedAt: clock.now().toISOString(), quality: composed.quality };
+  const view = { ...toView(dash, []), widgets: composed.widgets, asOfDate, period: periodView(period, asOfDate), generatedAt: clock.now().toISOString(), quality: composed.quality };
+  if (dash.dashboard_code !== COMMAND_CENTER) return view;
+  return { ...view, ...await decorateCommandCenter(ctx, composed, { asOfDate, route: extra.route, ip: extra.ip, block: extra.block }, transaction) }; // M9-D685: os 6 blocos e o briefing
 }
 
-async function openDashboard(ctx, code, { ip = null, route = null, asOfDate = clock.businessToday(), period = defaultPeriodOf(asOfDate) } = {}, transaction) {
+async function openDashboard(ctx, code, { ip = null, route = null, asOfDate = clock.businessToday(), period = defaultPeriodOf(asOfDate), block = null } = {}, transaction) {
   assertPermission(ctx, P.READ);
   if (typeof code !== 'string' || !CODE_RE.test(code)) throw notFound();
   const dash = await readStore.findPublishedDashboard({ code, companyId: ctx.companyId, groupId: ctx.groupId }, transaction);
   if (!dash) throw notFound();
   assertPermission(ctx, dash.required_permission);
   // Cache por permissão e escopo (M9-D698 3.3): a conferência de permissão acima e o log abaixo valem em TODA abertura, com ou sem cache.
-  const view = await cached(ctx, { dashboardCode: code, period: `${period.startDate}:${period.endDate}:${asOfDate}`, version: dash.version }, () => toOpenView(ctx, dash, asOfDate, period, transaction), { transaction });
+  const view = await cached(ctx, { dashboardCode: code, period: `${period.startDate}:${period.endDate}:${asOfDate}${block ? `:${block}` : ''}`, version: dash.version }, () => toOpenView(ctx, dash, asOfDate, period, transaction, { route, ip, block }), { transaction });
   const mode = await readParam(KEYS.PANEL_OPEN_LOG, ctx, transaction);
   if (mode === 'TODOS' || await readStore.dashboardHasCriticalMetric(dash.id, transaction)) {
     await recordAccess(ctx, {

@@ -8,7 +8,7 @@
 const AppError = require('../../utils/AppError');
 const { hasForbiddenKey, MSG, invalid, requireOneOf, requireText, isPlainObject } = require('./analyticsStoreSupport');
 
-const WIDGET_TYPES = ['KPI_CARD', 'TREND', 'TABLE', 'BAR', 'LIST_ALERTS', 'QUALITY_BANNER', 'BRIEF'];
+const WIDGET_TYPES = ['KPI_CARD', 'TREND', 'TABLE', 'BAR', 'LIST_ALERTS', 'QUALITY_BANNER', 'BRIEF', 'COMMAND_BLOCK']; // COMMAND_BLOCK (M9-D685): um dos 6 blocos do Centro de Comando
 const METRIC_WIDGET_TYPES = ['KPI_CARD', 'TREND', 'TABLE', 'BAR'];
 const VALUE_NATURES = ['ACTUAL', 'PLANNED', 'ESTIMATED', 'PROJECTED'];
 const METRIC_CODE_RE = /^[a-z][a-z0-9]*[.][a-z][a-z0-9_]*$/;
