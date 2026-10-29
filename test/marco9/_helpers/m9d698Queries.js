@@ -23,7 +23,9 @@ async function capture(admin, fn) {
   } finally {
     sequelize.options.logging = previous;
   }
-  return { sql, sources: sql.filter((q) => re.test(q)) };
+  // Texto entre aspas é valor (inclusive o código de um indicador, como 'crm.visits', que tem a forma schema.tabela): fora da conferência.
+  const withoutLiterals = (text) => text.replace(/'(?:[^']|'')*'/g, "''");
+  return { sql, sources: sql.filter((q) => re.test(withoutLiterals(q))) };
 }
 
 module.exports = { capture, sourceSchemas };

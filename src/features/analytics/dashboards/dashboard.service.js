@@ -15,17 +15,12 @@ const readStore = require('../dashboardReadStore.service');
 const metricStore = require('../metricStore.service');
 const { assertPermission, P, recordAccess, readParam, KEYS } = require('../security');
 const { cached } = require('./cache');
+const { composeWidgets, toWidgetView } = require('./dashboard.compose');
+const clock = require('../metrics/clock');
 
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');
 const CODE_RE = /^[a-z][a-z0-9_]*$/;
 const PUBLISH_SCOPES = ['COMPANY', 'GROUP'];
-
-function toWidgetView(w) {
-  return {
-    position: w.position, type: w.widget_type, metricCode: w.metric_code, dimensionKey: w.dimension_key, title: w.title,
-    valueNature: w.value_nature, drilldownEnabled: w.drilldown_enabled, config: w.config,
-  };
-}
 
 function toView(dash, widgets) {
   return {
@@ -35,17 +30,21 @@ function toView(dash, widgets) {
   };
 }
 
-async function openDashboard(ctx, code, { ip = null, route = null } = {}, transaction) {
+/** Painel aberto: a definição mais os valores prontos de cada widget na data-base (M9-D634): widgets, resumo de qualidade e instante da composição. */
+async function toOpenView(ctx, dash, asOfDate, transaction) {
+  const { widgets } = await store.getDashboardWithWidgets(dash.id, transaction);
+  const composed = await composeWidgets(ctx, widgets, asOfDate, transaction);
+  return { ...toView(dash, []), widgets: composed.widgets, asOfDate, generatedAt: clock.now().toISOString(), quality: composed.quality };
+}
+
+async function openDashboard(ctx, code, { ip = null, route = null, asOfDate = clock.businessToday() } = {}, transaction) {
   assertPermission(ctx, P.READ);
   if (typeof code !== 'string' || !CODE_RE.test(code)) throw notFound();
   const dash = await readStore.findPublishedDashboard({ code, companyId: ctx.companyId, groupId: ctx.groupId }, transaction);
   if (!dash) throw notFound();
   assertPermission(ctx, dash.required_permission);
   // Cache por permissão e escopo (M9-D698 3.3): a conferência de permissão acima e o log abaixo valem em TODA abertura, com ou sem cache.
-  const view = await cached(ctx, { dashboardCode: code, period: 'atual', version: dash.version }, async () => {
-    const { widgets } = await store.getDashboardWithWidgets(dash.id, transaction);
-    return toView(dash, widgets);
-  }, { transaction });
+  const view = await cached(ctx, { dashboardCode: code, period: asOfDate, version: dash.version }, () => toOpenView(ctx, dash, asOfDate, transaction), { transaction });
   const mode = await readParam(KEYS.PANEL_OPEN_LOG, ctx, transaction);
   if (mode === 'TODOS' || await readStore.dashboardHasCriticalMetric(dash.id, transaction)) {
     await recordAccess(ctx, {

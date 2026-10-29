@@ -22,7 +22,7 @@ const LIVRO = ['health', 'finance', 'crm', 'rental', 'correspondent', 'construct
 async function countGlobal() {
   const [rows] = await env.admin.query(
     `SELECT dashboard_code, status, version, p95_target_ms, required_permission FROM analytics.dashboard_definitions
-      WHERE company_id IS NULL AND group_id IS NULL ORDER BY dashboard_code`
+      WHERE company_id IS NULL AND group_id IS NULL AND status = 'PUBLISHED' ORDER BY dashboard_code`
   );
   return rows;
 }
@@ -33,7 +33,7 @@ test('m9d687 seed cria os 12 painéis e o command_center sem duplicar', async ()
   assert.equal(before1.length, 13);
   for (const row of before1) {
     assert.equal(row.status, 'PUBLISHED', row.dashboard_code);
-    assert.equal(row.version, 1);
+    assert.ok(row.version >= 1, `${row.dashboard_code}: versão vigente`); // os painéis com conteúdo (M9-D634, M9-D662...) publicam a versão seguinte
     assert.ok(row.p95_target_ms > 0, `${row.dashboard_code} sem meta p95`);
   }
   // roda a migration de novo (a lógica de up da 9687) e confere que nada duplicou
@@ -42,7 +42,7 @@ test('m9d687 seed cria os 12 painéis e o command_center sem duplicar', async ()
   assert.equal(after1.length, 13, 'o seed duplicou painéis');
   const [widgets] = await env.admin.query(
     `SELECT d.dashboard_code, w.position, w.widget_type FROM analytics.dashboard_widgets w JOIN analytics.dashboard_definitions d ON d.id = w.dashboard_id
-      WHERE d.company_id IS NULL AND d.group_id IS NULL AND d.dashboard_code IN (:codes) AND w.position = 0`,
+      WHERE d.company_id IS NULL AND d.group_id IS NULL AND d.status = 'PUBLISHED' AND d.dashboard_code IN (:codes) AND w.position = 0`,
     { replacements: { codes: catalog.DASHBOARD_CODES } }
   );
   assert.equal(widgets.length, 13);

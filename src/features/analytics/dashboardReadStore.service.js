@@ -27,4 +27,33 @@ async function dashboardHasCriticalMetric(dashboardId, transaction) {
   return rows.length > 0;
 }
 
-module.exports = { findPublishedDashboard, dashboardHasCriticalMetric };
+/**
+ * M9-D634 — dados do indicador para o painel: definição vigente de cada código (a da empresa, senão a do grupo, senão a global; mesma precedência da
+ * leitura de métricas) e as linhas de dimensão do snapshot da data-base (a revisão mais nova de cada chave), na versão da métrica já resolvida.
+ */
+async function listMetricMeta(codes, transaction) {
+  if (!codes.length) return [];
+  const [rows] = await sequelize.query(
+    `SELECT DISTINCT ON (d.metric_code) d.metric_code AS "metricCode", d.name, d.domain, d.criticality, d.drilldown_enabled AS "drilldownEnabled"
+       FROM analytics.metric_definitions d WHERE d.metric_code IN (:codes) AND d.status = 'PUBLISHED'
+      ORDER BY d.metric_code, (d.company_id IS NULL), (d.group_id IS NULL)`,
+    { replacements: { codes }, transaction }
+  );
+  return rows;
+}
+
+async function listDimensionSnapshots({ metricCode, version, companyId, asOfDate }, transaction) {
+  const [rows] = await sequelize.query(
+    `SELECT DISTINCT ON (s.dimension_key) s.dimension_key AS key, s.value_numeric::text AS value, s.status
+       FROM analytics.metric_snapshots s
+       JOIN analytics.metric_definitions d ON d.id = s.metric_id
+       JOIN analytics.metric_versions v ON v.id = s.metric_version_id
+      WHERE d.metric_code = :metricCode AND v.version = :version AND s.scope_type = 'COMPANY' AND s.scope_id = :companyId
+        AND s.as_of_date = :asOfDate AND s.dimension_key <> ''
+      ORDER BY s.dimension_key, s.revision_no DESC`,
+    { replacements: { metricCode, version, companyId, asOfDate }, transaction }
+  );
+  return rows;
+}
+
+module.exports = { findPublishedDashboard, dashboardHasCriticalMetric, listMetricMeta, listDimensionSnapshots };
