@@ -14,11 +14,13 @@ const AppError = require('../../utils/AppError');
  * arabe (U+061C), U+1D159 (nota musical nula), alem de tudo que o Unicode marca como
  * Default_Ignorable_Code_Point (tags U+E0000-E007F, seletores U+E0100-E01EF, U+180B-180F...).
  */
+/* eslint-disable no-misleading-character-class -- a lista de combinantes/invisiveis e proposital */
 const INVISIBLE_CLASS =
   '[\\p{Cc}\\p{Cf}\\p{Z}\\p{Variation_Selector}\\p{Default_Ignorable_Code_Point}' +
   '\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u2800\\u3164\\uFFA0\\u{1D159}\\u{1D173}-\\u{1D17A}]';
 const INVISIBLE_ALL = new RegExp(INVISIBLE_CLASS, 'gu');
 const INVISIBLE_EDGES = new RegExp(`^${INVISIBLE_CLASS}+|${INVISIBLE_CLASS}+$`, 'gu');
+/* eslint-enable no-misleading-character-class */
 
 function assertString(value, field) {
   if (typeof value !== 'string') {
