@@ -16,6 +16,7 @@ const { readRebuildParams } = require('./rebuild.settings');
 consumer.install(); // liga o worker ao outbox: cada registerReadModel passa a receber os eventos dos seus tipos
 require('./financeiro-finance-health.readmodel'); // M9-D615: saúde financeira por empresa e data-base
 require('./financeiro-finance-sector-margin.readmodel'); // M9-D615: margem por setor
+require('./comercial-imoveis.readmodel'); // M9-D616: Comercial/CRM e Imóveis
 require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Estoque/Patrimônio e Pós-obra
 require('./marketing-atendimento.readmodel'); // M9-D627: Marketing e Atendimento/Satisfação
 

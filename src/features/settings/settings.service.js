@@ -37,6 +37,7 @@ const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-mo
 const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/rebuild.settings');
 const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/sourceRefs.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
+const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
@@ -215,6 +216,8 @@ const SETTINGS_SCHEMA = {
   ...SOURCE_REFS_SETTINGS_SCHEMA,
   // Marco 9, M9-D615 — read model financeiro: janela, em dias, do vencido que entra na taxa de inadimplência.
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
+  ...COMERCIAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.
   ...OBRA_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
