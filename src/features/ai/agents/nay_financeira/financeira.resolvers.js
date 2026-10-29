@@ -7,6 +7,7 @@ const { permissionDenied } = require('../../orchestrator/toolSecurity.errors');
 const { readToolOutput, servicesFor } = require('../kit/readTool');
 const { itemsFromReport, itemsFromDelinquency } = require('../../tools/numbers/financeNumbers');
 const { cashflowItems, anomalyItems, tag } = require('./financeira.numbers');
+const { recommendCollections } = require('./financeira.recommendations');
 const { CODE, DATA_SCOPES } = require('./financeira.policy');
 
 const isMine = (ruleInput) => Boolean(ruleInput) && String(ruleInput.agentCode || '').toUpperCase() === CODE;
@@ -31,12 +32,31 @@ async function fluxoDaSemana(ruleInput, env) {
   return { answer, numbersPayload: items, sources: [sourceOf(items[0].source, 'Saúde financeira da semana', items)], snapshotAt: latest(items) };
 }
 
+const cents = (n) => Number(n).toFixed(2);
+
+/** Linhas e itens das sugestões de cobrança (valor e dias saem do Financeiro; o servidor escreve os números). */
+function suggestionBlock(suggestions, asOf) {
+  const items = suggestions.flatMap((s, i) => [
+    { ref: `sugestao${i + 1}_valor`, label: 'Valor do título vencido', value: cents(s.amount), unit: 'BRL', source: 'finance.financial_entries', asOf },
+    { ref: `sugestao${i + 1}_dias`, label: 'Dias em atraso', value: String(s.daysOverdue), unit: 'dias', source: 'finance.financial_entries', asOf },
+  ]);
+  const lines = suggestions.map((s, i) => `- ${s.kind === 'COBRANCA' ? 'Cobrança' : 'Renegociação'}: título de {{num:sugestao${i + 1}_valor}} vencido há {{num:sugestao${i + 1}_dias}}.`);
+  return { items, lines };
+}
+
 async function inadimplencia(ruleInput, env) {
   if (!isMine(ruleInput)) return null;
   const items = itemsFromDelinquency(await read('finance.getDelinquency', ruleInput, env));
-  const answer = 'Inadimplência (valores REALIZADOS, a receber vencido): {{num:inadimplencia_parcelas}} parcelas em atraso, somando {{num:inadimplencia_valor}}'
+  const services = servicesFor({ ruleInput, tenant: env.tenant, transaction: env.transaction, dataScopes: DATA_SCOPES });
+  const suggestions = (await services.financeProjection.getCollectionSuggestions()).items;
+  const recommended = await recommendCollections({ suggestions, tenant: env.tenant, userId: ruleInput.userId, runId: ruleInput.runId, transaction: env.transaction });
+  const asOf = latest(items);
+  const block = suggestionBlock(suggestions, asOf);
+  const head = 'Inadimplência (valores REALIZADOS, a receber vencido): {{num:inadimplencia_parcelas}} parcelas em atraso, somando {{num:inadimplencia_valor}}'
     + `${items.some((i) => i.ref === 'inadimplencia_percentual') ? ', o que é {{num:inadimplencia_percentual}} do total elegível' : ''}. Esta resposta só informa: não cobra nem negocia.`;
-  return { answer, numbersPayload: items, sources: [sourceOf(items[0].source, 'Inadimplência', items)], snapshotAt: latest(items) };
+  const tail = recommended.length ? ['Ações sugeridas (viram recomendações para a equipe decidir; nada foi cobrado):', ...block.lines] : [];
+  const payload = [...items, ...(recommended.length ? block.items : [])];
+  return { answer: [head, ...tail].join('\n'), numbersPayload: payload, sources: [sourceOf(items[0].source, 'Inadimplência', payload)], snapshotAt: asOf, recommendations: recommended.map((r) => r.id) };
 }
 
 const RISK_LABEL = { LOW: 'baixo', MEDIUM: 'médio', HIGH: 'alto', CRITICAL: 'crítico' };

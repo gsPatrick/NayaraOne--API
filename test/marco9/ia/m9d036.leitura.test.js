@@ -129,3 +129,33 @@ test('m9d036_projecao_rotulada_realizado_previsto_estimado', async () => {
     assert.equal(saida, 1);
   });
 });
+
+test('m9d036_acao_sugerida_vira_recomendacao_ou_proposta', async () => {
+  await withRollbackTenantTransaction(tenantA, async (tx) => {
+    // O teto de sugestões vai a 50 para as nossas entrarem mesmo num banco com outros recebíveis vencidos.
+    const c = await H.cenario(tenantA, tx, { params: { 'ia.financeira.sugestoes_max_itens': 50 } });
+    const [curto, longo] = await Dados.criarRecebiveis(tenantA, tx, [{ dias: -10, valor: 700 }, { dias: -45, valor: 1300 }]);
+    const antes = await H.fotografia(tx);
+    const minhas = () => H.q("SELECT recommendation_type, status, proposed_action, ai_run_id, related_entity_id, risk_level FROM ai.ai_recommendations WHERE related_entity_id IN (:ids) ORDER BY recommendation_type", { ids: [curto.id, longo.id] }, tx);
+    const res = await regra(c, 'Quem está inadimplente e o que fazer?', 'financeira_inadimplencia');
+    assert.match(res.answer, /Ações sugeridas \(viram recomendações para a equipe decidir; nada foi cobrado\)/);
+    assert.match(res.answer, /- Cobrança: título de R\$ 700,00 vencido há (10|11) dias\./); // 10 ou 11: o dia útil é o de São Paulo e a data do teste é UTC
+    assert.match(res.answer, /- Renegociação: título de R\$ 1\.300,00 vencido há (45|46) dias\./);
+    const recs = await minhas();
+    assert.deepEqual(recs.map((r) => [r.recommendation_type, r.status, r.proposed_action, r.risk_level]), [['COLLECTION_SUGGESTION', 'PENDING', null, 'LOW'], ['RENEGOTIATION_SUGGESTION', 'PENDING', null, 'LOW']]);
+    assert.ok(recs.every((r) => r.ai_run_id === res.runId), 'ligadas ao run');
+    // O mesmo dia, a mesma sugestão: não duplica.
+    await regra(c, 'Quem está inadimplente? Repita', 'financeira_inadimplencia');
+    assert.equal((await minhas()).length, 2);
+    // Nada foi cobrado, negociado nem pago: o Financeiro está exatamente como estava.
+    assert.deepEqual(await H.fotografia(tx), antes);
+    // O limite de dias para renegociar é parâmetro da empresa: com 60 dias, os 45 viram cobrança.
+  });
+  await withRollbackTenantTransaction(tenantA, async (tx) => {
+    const c = await H.cenario(tenantA, tx, { params: { 'ia.financeira.sugestoes_max_itens': 50, 'ia.financeira.dias_renegociacao': 60 } });
+    const [, longo] = await Dados.criarRecebiveis(tenantA, tx, [{ dias: -10, valor: 700 }, { dias: -45, valor: 1300 }]);
+    await regra(c, 'Quem está inadimplente e o que fazer?', 'financeira_inadimplencia');
+    const [r] = await H.q("SELECT recommendation_type FROM ai.ai_recommendations WHERE related_entity_id = :id", { id: longo.id }, tx);
+    assert.equal(r.recommendation_type, 'COLLECTION_SUGGESTION');
+  });
+});

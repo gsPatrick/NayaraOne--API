@@ -7,6 +7,8 @@
  */
 const FINANCEIRA_KEYS = Object.freeze({
   anomaliesMax: 'ia.financeira.anomalias_max_itens',
+  suggestionsMax: 'ia.financeira.sugestoes_max_itens',
+  renegotiateAfterDays: 'ia.financeira.dias_renegociacao',
   scopeTerms: 'ia.financeira.termos_escopo',
   forbidPay: 'ia.financeira.proibicao.pagar',
   forbidSettle: 'ia.financeira.proibicao.liquidar',
@@ -18,6 +20,8 @@ const FINANCEIRA_KEYS = Object.freeze({
 
 const FINANCEIRA_SETTING_DEFAULTS = Object.freeze({
   [FINANCEIRA_KEYS.anomaliesMax]: 20,
+  [FINANCEIRA_KEYS.suggestionsMax]: 10,
+  [FINANCEIRA_KEYS.renegotiateAfterDays]: 30,
   [FINANCEIRA_KEYS.scopeTerms]: 'fluxo,caixa,saldo,inadimpl,vencid,atraso,atrasad,receber,pagar,pagamento,anomalia,anomalias,projecao,projetar,lancamento,lancamentos,financeir,cobranca,fornecedor,receita,despesa,conciliacao,extrato,antifraude,semana,titulo,titulos,parcela,parcelas,favorecido,conta bancaria,periodo,devedor,devedores,cliente,clientes,recomend',
   [FINANCEIRA_KEYS.forbidPay]: 'pague,faca o pagamento,fazer o pagamento,efetue o pagamento,efetuar o pagamento,realize o pagamento,realizar o pagamento,quite,quitar,mande pagar,mandar pagar,transfira,transferir,pagar agora',
   [FINANCEIRA_KEYS.forbidSettle]: 'liquide,liquidar,de baixa,dar baixa,baixe o titulo,baixar o titulo,marque como pago,marcar como pago,marque como liquidado',
@@ -29,6 +33,8 @@ const FINANCEIRA_SETTING_DEFAULTS = Object.freeze({
 
 const FINANCEIRA_SETTINGS_SCHEMA = {
   [FINANCEIRA_KEYS.anomaliesMax]: { type: 'integer', min: 1, max: 200 },
+  [FINANCEIRA_KEYS.suggestionsMax]: { type: 'integer', min: 1, max: 50 },
+  [FINANCEIRA_KEYS.renegotiateAfterDays]: { type: 'integer', min: 1, max: 365 },
   [FINANCEIRA_KEYS.scopeTerms]: { type: 'string' },
   [FINANCEIRA_KEYS.forbidPay]: { type: 'string' },
   [FINANCEIRA_KEYS.forbidSettle]: { type: 'string' },
