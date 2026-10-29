@@ -524,6 +524,16 @@ test('M9-D805: review_queue_items tem RLS, FORCE RLS e a política tenant_isolat
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
 });
 
+// M9-D806: governance.quality_rules, quality_scores e quality_issues (qualidade de cadastro) com RLS + FORCE RLS e a política tenant_isolation.
+test('M9-D806: quality_rules, quality_scores e quality_issues têm RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const tables = ['quality_rules', 'quality_scores', 'quality_issues'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+});
+
 // M9-D652: read model das ocorrências de obra (recorrência) com RLS + FORCE RLS e 4 políticas.
 test('M9-D652: rm_project_occurrences tem RLS, FORCE RLS e 4 políticas', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies

@@ -1,19 +1,9 @@
 'use strict';
 
-const { isModuleEnabled } = require('../governance.module');
+const { getDataQuality } = require('./quality.query');
 
 /**
- * Dados mestres e qualidade — serviço do módulo. O alicerce (M9-D800) entrega o esqueleto: o estado do módulo para a empresa. As regras de
- * negócio entram nas demandas M9-D804 a M9-D808, sobre este mesmo arquivo.
+ * Dados mestres e qualidade — serviço do módulo. GET /data-quality devolve o resumo da empresa e os cadastros avaliados (M9-D806); a nota, as issues e
+ * a varredura estão em quality.*.js; designação de donos e curadores em stewardship.*; filas de merge e review em merge.*.
  */
-async function getOverview(tenant, transaction) {
-  return {
-    modulo: 'data-quality',
-    rotulo: 'Dados mestres e qualidade',
-    habilitado: await isModuleEnabled('data-quality', tenant, transaction),
-    fase: 'alicerce',
-    itens: [],
-  };
-}
-
-module.exports = { getOverview };
+module.exports = { getDataQuality };

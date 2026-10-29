@@ -88,7 +88,12 @@ function tenantMiddleware(req, res, next) {
         'SELECT set_config(\'app.group_id\', :groupId, true), set_config(\'app.company_id\', :companyId, true), set_config(\'app.user_id\', :userId, true)',
         { replacements: { groupId, companyId, userId }, transaction }
       );
-      return fn(transaction);
+      const result = await fn(transaction);
+      // M9-D806: a avaliação de qualidade dos cadastros gravados na requisição roda aqui, antes do commit (quality.pending.js).
+      if (transaction.qualityPending && transaction.qualityPending.size) {
+        await require('../features/core-governance/data-quality/quality.pending').flushQualityEvaluations(transaction);
+      }
+      return result;
     });
   }
 
