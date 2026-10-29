@@ -72,6 +72,12 @@ test('m9d022_http_ciclo_de_ingestao_recusas_e_isolamento', { skip: SKIP }, async
   assert.equal((await call('POST', '/ai/ingestions', leitura, { sourceKind: 'FILE', sourceRef: proprio.body.data.id })).status, 201);
   assert.equal((await call('POST', '/ai/ingestions', leitura, { sourceKind: 'URL', sourceRef: 'https://a.example.test/x.pdf', classification: 'INTERNAL' })).status, 403);
 
+  // SQL do que ficou gravado (superusuário do cluster descartável): uma linha por pedido que chegou ao pipeline, a recusa de classificação inclusive.
+  const gravadas = await admin("SELECT status, step, error_code, source_version, source_kind FROM ai.ingestions WHERE source_id = ANY($1::uuid[]) OR source_kind = 'URL' ORDER BY created_at", [[fileId, outro.body.data.id, proprio.body.data.id]]);
+  const resumo = gravadas.rows.map((r) => [r.source_kind, r.status, r.step, r.error_code, r.source_version].join('/'));
+  for (const esperado of ['FILE/REJECTED/CLASSIFY/AI_INGEST_UNCLASSIFIED/1', 'FILE/INDEXED/DONE//2', 'FILE/REJECTED/SCAN/AI_INGEST_MALWARE/1', 'URL/REJECTED/FETCH/AI_INGEST_URL_BLOCKED/1']) assert.ok(resumo.includes(esperado), `${esperado} em ${JSON.stringify(resumo)}`);
+  assert.equal((await admin("SELECT count(*)::int AS n FROM ai.chunks WHERE source_type = 'URL'")).rows[0].n, 0, 'nenhum trecho de URL no índice');
+
   // Outra empresa não vê a ingestão nem indexa o arquivo da primeira: 404 sem revelar existência.
   assert.equal((await call('GET', `/ai/ingestions/${ok.body.data.id}`, gestorB)).status, 404);
   const cross = await call('POST', '/ai/ingestions', gestorB, { sourceKind: 'FILE', sourceRef: fileId });
