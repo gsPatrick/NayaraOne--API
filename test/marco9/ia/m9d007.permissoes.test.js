@@ -96,14 +96,14 @@ test('m9d007_aprovador_distinto_de_quem_solicitou_o_run', async () => {
     const nay = comPerm(ctxDe(tenantA), 'ai:use');
     const alto = (await rec.createRecommendation(nay, dadosComAcao({ aiRunId: run.id, riskLevel: 'HIGH' }), tx)).recommendation;
     const baixo = (await rec.createRecommendation(nay, dadosComAcao({ aiRunId: run.id, riskLevel: 'LOW' }), tx)).recommendation;
-    await nega(rec.acceptRecommendation(solicitante, alto.id, {}, tx), 403, 'AI_RECOMMENDATION_SAME_REQUESTER');
+    await nega(rec.acceptRecommendation(solicitante, alto.id, {}, tx), 403, 'AI_APPROVAL_SELF_BLOCKED');
     assert.equal((await rec.acceptRecommendation(solicitante, baixo.id, {}, tx)).recommendation.status, 'ACCEPTED', 'risco baixo não exige distinto');
     // Desligado o parâmetro da D019, o mesmo usuário pode decidir.
     await upsertSetting('ia.aprovacao.aprovador_distinto', false, solicitante, solicitante.userId, tx);
     assert.equal((await rec.acceptRecommendation(solicitante, alto.id, {}, tx)).recommendation.status, 'ACCEPTED');
     const critico = (await rec.createRecommendation(nay, dadosComAcao({ aiRunId: run.id, riskLevel: 'CRITICAL' }), tx)).recommendation;
     await upsertSetting('ia.aprovacao.aprovador_distinto', true, solicitante, solicitante.userId, tx);
-    await nega(rec.rejectRecommendation(solicitante, critico.id, { reason: 'x' }, tx), 403, 'AI_RECOMMENDATION_SAME_REQUESTER');
+    await nega(rec.rejectRecommendation(solicitante, critico.id, { reason: 'x' }, tx), 403, 'AI_APPROVAL_SELF_BLOCKED');
     assert.equal((await rec.acceptRecommendation(outro, critico.id, {}, tx)).recommendation.status, 'ACCEPTED');
   });
 });

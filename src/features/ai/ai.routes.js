@@ -14,6 +14,7 @@ const { registerKnowledgeRoutes } = require('./knowledge/knowledge.routes');
 const { registerToolRoutes } = require('./tools/tools.routes');
 const { registerServiceIdentityRoutes } = require('./serviceIdentities/serviceIdentities.routes');
 const { registerEvaluationRoutes } = require('./evaluations/evaluations.routes');
+const { registerApprovalRoutes } = require('./approval/approval.routes');
 const { registerBudgetRoutes } = require('./budgets/budgets.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
@@ -45,6 +46,8 @@ registerToolRoutes(router);
 registerServiceIdentityRoutes(router);
 // Avaliações, homologação humana, feedback e fila de candidatos ao golden dataset (M9-D031/D032).
 registerEvaluationRoutes(router);
+// Decisão humana das propostas da NAY (M9-D019): POST /ai/recommendations/:id/accept|reject.
+registerApprovalRoutes(router);
 // Orçamento de uso da NAY (M9-D014): GET/POST /ai/budgets e PUT /ai/budgets/:id.
 registerBudgetRoutes(router);
 

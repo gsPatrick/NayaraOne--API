@@ -11,12 +11,14 @@ const { loadSecuritySettings } = require('./securitySettings');
 const { createSecurityRecorder } = require('./securityRecorder');
 const { createToolCallStore } = require('../tools/toolCallStore');
 const { authorizeToolCall } = require('./toolAuthorizer');
+const { createWritePolicy } = require('../approval/writePolicy');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * @param {object} p execCtx (executionContext), agent (resolveActiveAgent), registry (ToolRegistry), toolName, args (do modelo),
  *   requestText (pedido do usuário), source ('USER' | 'RETRIEVED'), transaction (do tenant), recorder (opcional), toolCallStore
- *   (porta de ai.tool_calls), proposeAction (M9-D019), argsLimits e executorOptions (repassados ao executor).
+ *   (porta de ai.tool_calls), proposeAction (M9-D019, opcional: sem ele e com `execCtx.runId` uuid, a política de escrita monta o da NAY), argsLimits e
+ *   executorOptions (repassados ao executor).
  */
 async function runToolCall({ execCtx, agent, registry, toolName, args, requestText, source = 'USER', transaction, recorder, toolCallStore, proposeAction, argsLimits, services, executorOptions }) {
   await assertRuntimeConnection(transaction);
@@ -28,9 +30,10 @@ async function runToolCall({ execCtx, agent, registry, toolName, args, requestTe
 
   const userId = execCtx.actor.type === 'USER' ? execCtx.actor.userId : null;
   const escopo = { groupId: execCtx.groupId, companyId: execCtx.companyId, userId, permissions: autorizada.effective };
-  const montados = services || buildToolServices(transaction, escopo);
+  const politica = await createWritePolicy({ registry, execCtx, agent, runId: UUID.test(String(execCtx.runId)) ? execCtx.runId : null, transaction });
+  const montados = services || buildToolServices(transaction, escopo, { includeWrite: politica.directWriteEnabled });
   return executeTool({
-    registry: registry.executorMap(),
+    registry: registry.executorMap({ allowDirectWrite: politica.allowDirectWrite }),
     toolName,
     input: autorizada.args,
     contextParts: {
@@ -42,7 +45,7 @@ async function runToolCall({ execCtx, agent, registry, toolName, args, requestTe
       correlationId: execCtx.correlationId,
     },
     recorder: gravador,
-    proposeAction,
+    proposeAction: proposeAction || politica.proposeAction,
     argsLimits,
     transaction,
     ...(executorOptions || {}),

@@ -9,8 +9,9 @@ const { buildToolContext, guardContext, capacidadeNegada, CODIGO_CAPACIDADE_NEGA
 const { validateToolArgs, BLOCKED_REASON } = require('./argsValidator');
 const { loadArgsLimits } = require('./argsSettings');
 const { checkDerived } = require('./derivedArgs');
+const { SENSITIVE_DOMAINS } = require('./toolRisk');
 
-const DOMINIOS_COM_WORKFLOW = new Set(['FINANCIAL', 'LEGAL', 'BANKING', 'PERMISSION', 'PUBLICATION']);
+const DOMINIOS_COM_WORKFLOW = new Set(SENSITIVE_DOMAINS);
 const RISCOS_COM_WORKFLOW = new Set(['HIGH', 'CRITICAL']);
 
 /** AI-007: financeira, jurídica, bancária, de permissão, publicação crítica, ou risco alto, nunca executa direto. */
@@ -80,7 +81,14 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
     if (typeof proposeAction !== 'function') {
       return bloquear(capacidadeNegada('acao_critica_sem_workflow', { tool: toolName, reason: 'acao_critica_sem_workflow' }), 'acao_critica_sem_workflow');
     }
-    const proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId, ...marca, ...(derivedFromUntrusted ? { derivedFields } : {}) });
+    let proposta;
+    try {
+      proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId, ...marca, ...(derivedFromUntrusted ? { derivedFields } : {}) });
+    } catch (e) {
+      // M9-D019: proposta recusada por regra (pagamento desligado, run já aguardando aprovação): a chamada fica BLOCKED e nada é criado.
+      if (e && e.details && e.details.proposalRefused === true) return bloquear(e, 'proposta_recusada', e.details.reason);
+      throw e;
+    }
     await recorder.record({ ...base(), status: 'PROPOSED', proposalId: proposta && proposta.id, ...marca });
     return { status: 'PROPOSED', proposal: proposta };
   }

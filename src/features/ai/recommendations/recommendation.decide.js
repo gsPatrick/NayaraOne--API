@@ -51,6 +51,7 @@ async function decide(ctx, id, decision, data, transaction) {
     P.assertCanDecide(ctx, before);
     if (row.decision === decision && row.decidedByUserId === ctx.userId) return { recommendation: before, replayed: true };
     if (row.status !== 'PENDING') throw E.state();
+    await assertDistinctApprover(ctx, row, params, transaction);
     if (decision === 'ACCEPTED' && before.proposedAction && before.proposedAction.snapshot_hash) {
       const checker = getSnapshotChecker();
       if (checker && (await checker(before, ctx, transaction)) !== before.proposedAction.snapshot_hash) {
@@ -63,7 +64,6 @@ async function decide(ctx, id, decision, data, transaction) {
         return { recommendation: stale, replayed: false, stale: true };
       }
     }
-    await assertDistinctApprover(ctx, row, params, transaction);
     row.status = decision;
     row.decision = decision;
     row.decisionReason = reason;
@@ -87,4 +87,4 @@ async function decide(ctx, id, decision, data, transaction) {
 const acceptRecommendation = (ctx, id, data, transaction) => decide(ctx, id, 'ACCEPTED', data, transaction);
 const rejectRecommendation = (ctx, id, data, transaction) => decide(ctx, id, 'REJECTED', data, transaction);
 
-module.exports = { acceptRecommendation, rejectRecommendation, lockOwn, guarded };
+module.exports = { acceptRecommendation, rejectRecommendation, lockOwn, guarded, assertDistinctApprover };

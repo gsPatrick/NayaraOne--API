@@ -8,7 +8,7 @@ const notFound = () => new AppError('Recomendação não encontrada.', 404, 'AI_
 const state = (message = 'Esta recomendação já foi decidida.') => new AppError(message, 409, 'AI_RECOMMENDATION_STATE');
 const stale = () => new AppError('A situação mudou desde a proposta. Gere uma nova recomendação.', 409, 'AI_PROPOSAL_STALE');
 const humanOnly = () => new AppError('Só uma pessoa pode decidir uma recomendação da NAY.', 403, 'AI_RECOMMENDATION_HUMAN_ONLY');
-const sameRequester = () => new AppError('Quem solicitou a execução da NAY não pode decidir esta recomendação de risco alto.', 403, 'AI_RECOMMENDATION_SAME_REQUESTER');
+const sameRequester = () => new AppError('Quem solicitou não pode aprovar a própria proposta.', 403, 'AI_APPROVAL_SELF_BLOCKED');
 const denied = (required) => AppError.forbidden('Você não tem permissão para esta ação. Peça o acesso a quem administra o seu perfil.', 'PERMISSION_DENIED', { required });
 
 /** Traduz a recusa do gatilho do banco (AI021) e a unicidade da pendente; devolve null se o erro não for dele. */
