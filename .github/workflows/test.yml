@@ -157,6 +157,10 @@ jobs:
       - name: archGuard da NAY (M9-D001)
         run: node scripts/ai-arch-guard.js
 
+      # M9-D210: SDK de fornecedor só dentro do adapter, HTTP externo só pelo IntegrationHttpClient, providers isolados; M9-D244: certificado nunca desligado.
+      - name: Fronteiras de integração (M9-D210)
+        run: node scripts/checkIntegrationBoundaries.js
+
       # M9-D246: varredura de segredo no repositório e nos logs de CI guardados (AKIA, chave PEM, sk_live_, xox, ghp_, JWT,
       # Bearer, string de conexão com senha). Falso positivo só entra na allowlist revisada (scripts/secretScan.allowlist.json).
       - name: Varredura de segredo (M9-D246)

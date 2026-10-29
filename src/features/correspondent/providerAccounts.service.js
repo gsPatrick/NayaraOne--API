@@ -3,7 +3,7 @@
 const { IntegrationConnection } = require('../../models');
 const registry = require('../integrations/registry/registry.service');
 const AppError = require('../../utils/AppError');
-const { toCatalogCode, toCorrespondentCode } = require('../integrations/providers/catalog.legacy');
+const { catalogLegacy: { toCatalogCode, toCorrespondentCode } } = require('../integrations');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { looksLikeEmbeddedSecret } = require('../../shared/redaction');
 

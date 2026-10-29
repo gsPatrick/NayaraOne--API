@@ -20,7 +20,7 @@ const { COST_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/cos
 const { SEGMENT_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/segment.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
-const { CATALOG_SETTINGS_SCHEMA } = require('../integrations/providers/catalog.settings');
+const { CATALOG_SETTINGS_SCHEMA, IntegrationHttpClient } = require('../integrations');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
 const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
 const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
@@ -385,6 +385,9 @@ async function getSettingRow(key, tenant, transaction) {
 
 const INTEGRATION_STATUS_TIMEOUT_MS = 5000;
 
+// Painel de status das integrações (M9-D210): a chamada de teste também passa pelo cliente HTTP único.
+const statusHttp = new IntegrationHttpClient({ providerCode: 'integration-status' });
+
 /**
  * pingProvider — executa `fn(signal)` (uma chamada HTTP real e barata ao provedor) sob um
  * timeout curto (5s por padrão), pra nunca travar a tela de configurações esperando resposta
@@ -433,7 +436,7 @@ async function getIntegrationsStatus(tenant, transaction) {
       const environment = await getSetting('legal.clicksign_environment', tenant, transaction, 'production');
       const baseUrl = environment === 'sandbox' ? 'https://sandbox.clicksign.com/api/v3' : 'https://app.clicksign.com/api/v3';
       const ping = await pingProvider(async (signal) => {
-        const response = await fetch(`${baseUrl}/envelopes?page%5Bsize%5D=1`, {
+        const response = await statusHttp.fetch(`${baseUrl}/envelopes?page%5Bsize%5D=1`, {
           headers: { Accept: 'application/vnd.api+json', Authorization: token },
           signal,
         });
@@ -445,7 +448,7 @@ async function getIntegrationsStatus(tenant, transaction) {
     const token = await getDecryptedSetting('legal.zapsign_api_token', tenant, transaction, null);
     if (token) {
       const ping = await pingProvider(async (signal) => {
-        const response = await fetch('https://api.zapsign.com.br/api/v1/docs/?limit=1', {
+        const response = await statusHttp.fetch('https://api.zapsign.com.br/api/v1/docs/?limit=1', {
           headers: { Authorization: `Bearer ${token}` },
           signal,
         });
@@ -463,7 +466,7 @@ async function getIntegrationsStatus(tenant, transaction) {
     if (token) {
       const period = new Date().toISOString().slice(0, 7).replace('-', '');
       const ping = await pingProvider(async (signal) => {
-        const response = await fetch(`https://api.fgvdados.fgv.br/v1/indicadores/igpm/${period}`, {
+        const response = await statusHttp.fetch(`https://api.fgvdados.fgv.br/v1/indicadores/igpm/${period}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal,
         });

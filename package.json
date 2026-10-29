@@ -24,6 +24,7 @@
     "lint": "node scripts/lintRatchet.js",
     "ai:arch-guard": "node scripts/ai-arch-guard.js",
     "guard:file-size": "node scripts/check-file-size.js",
+    "guard:integration-boundaries": "node scripts/checkIntegrationBoundaries.js",
     "guard:formula-tests": "node scripts/analytics/checkFormulaTests.js",
     "guard:analytics-rules": "node scripts/analytics/checkGuardrails.js",
     "scan:secrets": "node scripts/secretScan.js",

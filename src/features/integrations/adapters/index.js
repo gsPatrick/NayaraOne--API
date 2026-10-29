@@ -10,15 +10,20 @@ const { BankSandboxContractAdapter } = require('./legacy/bank.adapters');
 const { SignatureSandboxContractAdapter, SignatureClicksignContractAdapter } = require('./legacy/signature.adapters');
 const { InsuranceSandboxContractAdapter } = require('./legacy/insurance.adapters');
 const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
+const { registerAiAdapters } = require('../../ai/providers/builtIn');
+const { MessagingSandboxAdapter } = require('../providers/messaging/sandbox/messaging-sandbox.adapter');
+const { PortalSandboxAdapter } = require('../providers/portal/sandbox/portal-sandbox.adapter');
 
 const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxContractAdapter,
   SignatureClicksignContractAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
+  MessagingSandboxAdapter, PortalSandboxAdapter,
 ]);
 
 /** Registra todos; contrato inválido lança 500 INTEGRATION_ADAPTER_CONTRACT_INVALID (o boot não segue). Devolve a lista registrada. */
 function registerBuiltInAdapters() {
   BUILT_IN_ADAPTERS.forEach((A) => registry.register(A));
+  registerAiAdapters(); // sandbox e fornecedores de modelo (M9-D011), pelo ProviderRegistry
   return registry.list();
 }
 
