@@ -113,7 +113,7 @@ test('m9d009_idempotencia_nao_duplica', async () => {
 const insert = (extra = '', valores = '') => `INSERT INTO ai.memories (group_id, company_id, memory_type, scope, value, source_type, source_id${extra})
   VALUES (:g, :c, 'DECISION', 'COMPANY', '{"decision":"x"}', 'RUN', gen_random_uuid()${valores})`;
 
-test('m9d009_expires_at_obrigatorio_no_banco', async () => {
+test('m9d009_expires_at_obrigatorio', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const r = { g: tenantA.groupId, c: tenantA.companyId };
     await expectDbError(tx, insert(), r, /expires_at/);
