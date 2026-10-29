@@ -67,6 +67,50 @@ class IntegrationAdapter {
    */
   webhookVerifier() { return null; }
 
+  /**
+   * Esquemas JSON (Ajv) dos eventos que o fornecedor envia (M9-D212 e M9-D213, INT-009): { '<tipo do evento>' ou '*': { '<versão da API>': esquema } }.
+   * Padrão: null, e todo evento do fornecedor vai para a fila de erros (SCHEMA_INVALID): payload externo nunca é aceito sem esquema declarado.
+   */
+  webhookSchemas() { return null; }
+
+  /** O evento do fornecedor traz sempre o tipo (corpo ou cabeçalho)? Padrão: sim, e a rota manda para a fila de erros o que vier sem tipo (M9-D213 3.3). */
+  webhookRequiresEventType() { return true; }
+
+  /** O fornecedor NÃO manda identificador do evento (M9-D213 3.1): o id é derivado de sha256(fornecedor:horário:hash do corpo). Padrão: não. */
+  webhookDerivesEventId() { return false; }
+
+  /** Tipos de conteúdo extras que o fornecedor usa nos webhooks, além dos aceitos pela empresa (ex.: 'application/x-www-form-urlencoded'). */
+  webhookContentTypes() { return []; }
+
+  /** Versão da API de um evento recebido (cabeçalho x-api-version ou campo api_version/apiVersion do corpo); null quando o evento não diz. */
+  webhookApiVersion(payload, headers) {
+    const h = headers && (headers['x-api-version'] || headers['X-Api-Version']);
+    const doCorpo = payload && typeof payload === 'object' ? (payload.api_version || payload.apiVersion) : null;
+    const v = h || doCorpo;
+    return typeof v === 'string' && v.trim() ? v.trim().slice(0, 16) : null;
+  }
+
+  /** Ordem dos status internos (M9-D212 3.2 item 4): { PROCESSING: 2, PAID: 3 }. Evento com ordem menor que a já aplicada é guardado sem regredir o domínio. Padrão: sem ordem. */
+  statusRank() { return {}; }
+
+  /**
+   * Evento do fornecedor -> evento interno normalizado (M9-D212 3.2 item 3): { eventType, resourceRef, externalStatus, idempotencyKey, data }.
+   * `meta`: { eventType, externalEventId, apiVersion }. O padrão lê os nomes comuns; o adapter sobrescreve quando o formato do fornecedor é outro.
+   */
+  toInternalEvent(payload, meta = {}) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const domain = String(this.constructor.domain || 'integration').toLowerCase();
+    const tipo = String(meta.eventType || 'event').toLowerCase().replace(/[^a-z0-9.]+/g, '_');
+    const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 160) : (typeof v === 'number' && Number.isFinite(v) ? String(v) : null));
+    return {
+      eventType: `integration.${domain}.${tipo}`,
+      resourceRef: texto(p.resourceId ?? p.resource_id ?? p.externalResourceId ?? p.external_resource_id),
+      externalStatus: texto(p.status),
+      idempotencyKey: texto(p.idempotencyKey ?? p.idempotency_key),
+      data: {},
+    };
+  }
+
   /** Cópia sem segredo nem dado pessoal, para log e erro. */
   redact(obj) {
     if (obj === null || obj === undefined) return obj;

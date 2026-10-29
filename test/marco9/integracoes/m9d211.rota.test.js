@@ -40,7 +40,7 @@ test('webhook_aceito_e_persistido_com_200', async () => {
   const corpo = `{"id":"${id}","type":"payment.paid"}`;
   const r = await enviar(c, corpo);
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json, { status: 'accepted' });
+  assert.deepEqual(r.json, { status: 'accepted', eventId: id });
   const [linha] = await env.inbox(tenant, c.provider, id);
   assert.ok(linha, 'a linha entrou na caixa de entrada');
   assert.equal(linha.status, 'RECEIVED');
@@ -51,7 +51,7 @@ test('webhook_aceito_e_persistido_com_200', async () => {
   assert.equal(linha.signature_valid, true);
   assert.equal(Buffer.compare(linha.payload_raw, Buffer.from(corpo)), 0, 'o corpo bruto exato foi guardado');
   const repetido = await enviar(c, corpo);
-  assert.deepEqual([repetido.status, repetido.json], [200, { status: 'duplicate' }], 'o mesmo evento não grava segunda linha');
+  assert.deepEqual([repetido.status, repetido.json], [200, { status: 'duplicate', eventId: id }], 'o mesmo evento não grava segunda linha');
   assert.equal((await env.inbox(tenant, c.provider, id)).length, 1);
 });
 
@@ -82,7 +82,7 @@ test('webhook_corpo_bruto_exato', async () => {
 
 test('webhook_canal_desconhecido_resposta_generica', async () => {
   const c = await env.criarCanal(tenant);
-  const corpo = Buffer.from('{"id":"x"}');
+  const corpo = Buffer.from('{"id":"x","type":"t.e"}');
   const alvos = [
     `/v1/webhooks/messaging-sandbox/${'x'.repeat(32)}`, // canal inexistente de fornecedor que existe
     `/v1/webhooks/fornecedor-que-nao-existe/${'y'.repeat(32)}`, // fornecedor inexistente
@@ -114,7 +114,7 @@ test('webhook_canal_desconhecido_registra_contador_sem_payload', async () => {
 test('webhook_sem_verifier_recusado', async () => {
   const c = await env.criarCanal(tenant, { provider: 'analytics-sandbox' });
   const id = novoId();
-  const corpo = `{"id":"${id}"}`;
+  const corpo = `{"id":"${id}","type":"t.e"}`;
   const r = await enviar(c, corpo);
   assert.equal(r.status, 501, 'fornecedor sem verificador nunca é aceito');
   assert.equal(r.json.error.code, 'INTEGRATION_WEBHOOK_NO_VERIFIER');
@@ -144,7 +144,7 @@ test('webhook_tenant_vem_da_connection', async (t) => {
 test('webhook_assinatura_falsa_registra_erro_sem_payload', async () => {
   const c = await env.criarCanal(tenant);
   const marcador = `payload-confidencial-${env.uniqueSuffix()}`;
-  const corpo = Buffer.from(`{"id":"${novoId()}","nota":"${marcador}","cpf":"123.456.789-09"}`);
+  const corpo = Buffer.from(`{"id":"${novoId()}","type":"t.e","nota":"${marcador}","cpf":"123.456.789-09"}`);
   const falhasAntes = await signatureFailuresCount(c.provider);
   const r = await env.postar(caminho(c), corpo, env.assinar('segredo-errado', corpo));
   assert.equal(r.status, 401);
@@ -167,14 +167,14 @@ test('webhook_janela_de_graca_segredo_antigo', async () => {
   await store.put(ref, novo, { graceMs: 5 * 60 * 1000 });
   const versoes = await store.getAcceptedVersions(ref);
   assert.equal(versoes.length, 2, 'corrente e anterior (em graça)');
-  const velho = await enviar(c, `{"id":"${novoId()}"}`);
+  const velho = await enviar(c, `{"id":"${novoId()}","type":"t.e"}`);
   assert.equal(velho.status, 200, 'a versão anterior é aceita durante a graça');
-  const corpo = Buffer.from(`{"id":"${novoId()}"}`);
+  const corpo = Buffer.from(`{"id":"${novoId()}","type":"t.e"}`);
   const comNovo = await env.postar(caminho(c), corpo, env.assinar(novo, corpo));
   assert.equal(comNovo.status, 200, 'a nova também');
   const anterior = versoes.find((v) => v.value.reveal() === c.segredo);
   await store.revoke(ref, anterior.version);
-  const depois = await enviar(c, `{"id":"${novoId()}"}`);
+  const depois = await enviar(c, `{"id":"${novoId()}","type":"t.e"}`);
   assert.equal(depois.status, 401, 'revogada, a versão antiga deixa de valer');
 });
 
@@ -204,17 +204,17 @@ test('webhook_payload_invalido_apos_assinatura_vai_para_dlq_com_200', async () =
 
 test('webhook_alias_raiz_igual_ao_v1_e_ligado_por_parametro', async () => {
   const c = await env.criarCanal(tenant);
-  const a = await env.postar(`/v1/webhooks/${c.provider}/${c.canal}`, Buffer.from(`{"id":"${novoId()}"}`), env.assinar(c.segredo, 'x'));
-  const bruto1 = Buffer.from(`{"id":"${novoId()}"}`);
-  const bruto2 = Buffer.from(`{"id":"${novoId()}"}`);
+  const a = await env.postar(`/v1/webhooks/${c.provider}/${c.canal}`, Buffer.from(`{"id":"${novoId()}","type":"t.e"}`), env.assinar(c.segredo, 'x'));
+  const bruto1 = Buffer.from(`{"id":"${novoId()}","type":"t.e"}`);
+  const bruto2 = Buffer.from(`{"id":"${novoId()}","type":"t.e"}`);
   const comV1 = await env.postar(`/v1/webhooks/${c.provider}/${c.canal}`, bruto1, env.assinar(c.segredo, bruto1));
   const semV1 = await env.postar(`/webhooks/${c.provider}/${c.canal}`, bruto2, env.assinar(c.segredo, bruto2));
-  assert.deepEqual([comV1.status, comV1.json], [semV1.status, semV1.json], 'as duas rotas respondem igual');
+  assert.deepEqual([comV1.status, comV1.json.status], [semV1.status, semV1.json.status], 'as duas rotas respondem igual');
   assert.equal(semV1.status, 200);
   assert.equal(a.status, 401);
   await env.comTenant(tenant, (t) => settingsService.upsertSetting('integration.webhook.alias_root_enabled', false, tenant, tenant.userId, t));
   try {
-    const bruto3 = Buffer.from(`{"id":"${novoId()}"}`);
+    const bruto3 = Buffer.from(`{"id":"${novoId()}","type":"t.e"}`);
     const desligado = await env.postar(`/webhooks/${c.provider}/${c.canal}`, bruto3, env.assinar(c.segredo, bruto3));
     assert.equal(desligado.status, 404, 'alias da raiz desligado pela empresa: responde como canal desconhecido');
     const aindaV1 = await env.postar(`/v1/webhooks/${c.provider}/${c.canal}`, bruto3, env.assinar(c.segredo, bruto3));

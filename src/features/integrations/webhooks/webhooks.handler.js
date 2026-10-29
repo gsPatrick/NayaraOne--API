@@ -1,19 +1,22 @@
 'use strict';
 
 const logger = require('../../../utils/logger');
-const { checkWebhookRate, enforceCompanyLimit } = require('./webhooks.rateLimit');
-const { resolveChannel, noteUnknownChannel, withTenant } = require('./webhooks.resolve');
-const { readWebhookParams } = require('./webhooks.params');
+const { withTenant } = require('./webhooks.resolve');
 const { verifierFor } = require('./verifiers/registry');
+const adapterRegistry = require('../registry/adapterRegistry');
 const { acceptedWebhookSecrets } = require('./webhooks.secret');
 const { parseEvent, foreignTenant } = require('./webhooks.payload');
 const { persistAccepted, persistRejected } = require('./webhooks.persist');
-const { recordSignatureFailure } = require('./webhooks.reject');
-const { unknownChannel, noVerifier, signatureInvalid, tooLarge } = require('./webhooks.errors');
+const { recordSignatureFailure, recordRefusal } = require('./webhooks.reject');
+const { noVerifier, signatureInvalid } = require('./webhooks.errors');
+const { assertMediaType } = require('./intake/intake.mediaType');
+const { withIntakeDeadline } = require('./intake/intake.deadline');
 
 /**
- * POST /v1/webhooks/:provider/:channel (e o alias da raiz) — M9-D211 3.2. A ordem é a do livro e qualquer desvio é bug:
- * 2 limite por IP e fornecedor, 3 connection do canal, 4 verificador, 5 assinatura sobre o corpo bruto em tempo constante, 6 só então ler o JSON, 7 persistir e responder.
+ * POST /v1/webhooks/:provider/:channel (e o alias da raiz) — M9-D211 3.2, M9-D212 3.1, M9-D213. A ordem é a do livro e qualquer desvio é bug:
+ * 2 limite por IP e fornecedor, 3 connection do canal e parâmetros (webhooks.preflight.js), 4 tamanho do corpo (webhooks.rawBody.js), 5 verificador e assinatura sobre o
+ * corpo bruto em tempo constante, 6 tipo de conteúdo e horário assinado (replay), 7 só então ler o JSON e conferir a estrutura, 8 gravar e responder. A rota só valida,
+ * grava e responde: nenhuma regra de negócio, nenhuma chamada de rede; quem converte em evento interno é o worker (M9-D212).
  */
 function verifyAll(verifier, secrets, rawBody, headers) {
   // Confere com todas as versões aceitas (corrente e graça) sem parar na primeira que casa.
@@ -22,31 +25,17 @@ function verifyAll(verifier, secrets, rawBody, headers) {
   return bom || resultados[0] || { ok: false, reason: 'segredo ausente' };
 }
 
+const refuse = (intake, req, extra) => recordRefusal(intake.conn, { provider: intake.provider, channel: intake.channel, rawBody: req.rawBody, ip: req.ip, ...extra });
+
 async function receiveWebhook(req, res) {
-  const provider = String(req.params.provider || '').toLowerCase().slice(0, 48);
-  const { channel } = req.params;
+  const { provider, channel, conn, params, startedAt } = req.webhookIntake;
   const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
 
-  const rate = await checkWebhookRate(req, provider, res);
-  const conn = await resolveChannel(provider, channel);
-  if (!conn) {
-    await noteUnknownChannel(provider);
-    throw unknownChannel();
-  }
-
   const prep = await withTenant(conn, async (transaction) => {
-    const params = await readWebhookParams({ groupId: conn.groupId, companyId: conn.companyId }, transaction);
-    if (req.webhookViaRootAlias && !params.aliasRootEnabled) return { params, off: true };
     const verifier = verifierFor(provider);
-    if (!verifier) return { params, noVerifier: true };
-    return { params, verifier, ...(await acceptedWebhookSecrets(conn, transaction)) };
+    if (!verifier) return { noVerifier: true };
+    return { verifier, ...(await acceptedWebhookSecrets(conn, transaction)) };
   });
-  if (prep.off) {
-    await noteUnknownChannel(provider);
-    throw unknownChannel();
-  }
-  enforceCompanyLimit(rate, prep.params.rateLimitPerMinute, res);
-  if (rawBody.length > prep.params.maxBodyBytes) throw tooLarge();
   if (prep.noVerifier) {
     logger.warn({ provider }, 'Webhook recusado: o fornecedor não tem verificador de assinatura.');
     throw noVerifier();
@@ -58,17 +47,32 @@ async function receiveWebhook(req, res) {
     throw signatureInvalid();
   }
 
+  const adapter = adapterRegistry.instantiate(provider);
+  let contentType;
+  try {
+    contentType = assertMediaType(req.headers, params.acceptedContentTypes, adapter ? adapter.webhookContentTypes() : []);
+  } catch (err) {
+    await refuse(req.webhookIntake, req, { code: err.code, httpStatus: err.statusCode, message: 'Webhook recusado: tipo de conteúdo não aceito.', reason: String(req.headers['content-type'] || 'ausente').slice(0, 60) });
+    throw err;
+  }
+
   const ctx = { groupId: conn.groupId, companyId: conn.companyId, userId: null };
-  const dados = { provider, channel, rawBody, headers: req.headers };
-  const result = await withTenant(conn, async (transaction) => {
-    const parsed = parseEvent(rawBody, req.headers, verified);
+  const dados = { provider, channel, rawBody, headers: req.headers, maxStoredBytes: req.webhookBodyLimit };
+  let parsed;
+  try {
+    parsed = parseEvent(rawBody, req.headers, verified, { limits: params, contentType, provider, deriveEventId: Boolean(adapter && adapter.webhookDerivesEventId()), requireEventType: !adapter || adapter.webhookRequiresEventType() });
+  } catch (err) {
+    await refuse(req.webhookIntake, req, { code: err.code, httpStatus: err.statusCode, message: 'Webhook recusado: evento fora da janela de tempo permitida.', errorClass: 'SECURITY', severity: 'MEDIUM', reason: 'horário assinado fora da tolerância' });
+    throw err;
+  }
+  const result = await withIntakeDeadline(startedAt, params.responseTimeoutMs, () => withTenant(conn, async (transaction) => {
     if (parsed.ok && foreignTenant(parsed.body, conn)) {
       return persistRejected(ctx, conn, { ...dados, body: parsed.body, eventType: parsed.eventType, reason: 'SCHEMA_INVALID', detail: 'O evento cita outra empresa ou grupo que não os do canal.', security: true }, transaction);
     }
     if (!parsed.ok) return persistRejected(ctx, conn, { ...dados, body: parsed.body, reason: parsed.reason, detail: parsed.detail }, transaction);
     return persistAccepted(ctx, conn, { ...dados, body: parsed.body, eventId: parsed.eventId, eventType: parsed.eventType }, transaction);
-  });
-  return res.status(200).json({ status: result.status });
+  }));
+  return res.status(200).json(result.eventId ? { status: result.status, eventId: result.eventId } : { status: result.status });
 }
 
 module.exports = { receiveWebhook, verifyAll };

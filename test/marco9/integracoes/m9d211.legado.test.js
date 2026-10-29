@@ -109,7 +109,7 @@ test('webhook_financiamento_tem_canal_na_connection_e_rota_unica', async () => {
   const corpo = Buffer.from(JSON.stringify({ externalCaseId: 'caso-qualquer', externalEventId: id, status: 'ANALYSIS' }));
   const assinatura = { 'x-webhook-signature': `sha256=${crypto.createHmac('sha256', c.segredo).update(corpo).digest('hex')}` };
   const ok = await env.postar(`/v1/webhooks/financing-sandbox/${c.canal}`, corpo, assinatura);
-  assert.deepEqual([ok.status, ok.json], [200, { status: 'accepted' }]);
+  assert.deepEqual([ok.status, ok.json], [200, { status: 'accepted', eventId: id }]);
   assert.equal((await env.inbox(tenant, 'financing-sandbox', id)).length, 1);
   const falsa = await env.postar(`/v1/webhooks/financing-sandbox/${c.canal}`, corpo, { 'x-webhook-signature': `sha256=${'0'.repeat(64)}` });
   assert.equal(falsa.status, 401);

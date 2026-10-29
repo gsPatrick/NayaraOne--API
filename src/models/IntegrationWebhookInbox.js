@@ -29,6 +29,11 @@ module.exports = (sequelize) => sequelize.define(
     receivedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'received_at' },
     processedAt: { type: DataTypes.DATE, allowNull: true, field: 'processed_at' },
     deadLetterReason: { type: DataTypes.TEXT, allowNull: true, field: 'dead_letter_reason' },
+    // M9-D212: ordem dos eventos (recurso do fornecedor, status normalizado, posição na ordem e se o evento foi aplicado ao domínio).
+    resourceRef: { type: DataTypes.STRING(160), allowNull: true, field: 'resource_ref' },
+    internalStatus: { type: DataTypes.STRING(48), allowNull: true, field: 'internal_status' },
+    statusRank: { type: DataTypes.INTEGER, allowNull: true, field: 'status_rank' },
+    applied: { type: DataTypes.BOOLEAN, allowNull: true },
     correlationId: { type: DataTypes.UUID, allowNull: true, field: 'correlation_id' },
   },
   { schema: 'integration', tableName: 'webhook_inbox', timestamps: false, underscored: true }

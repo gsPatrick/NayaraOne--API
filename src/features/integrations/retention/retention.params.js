@@ -5,6 +5,7 @@ const { readHealthParams } = require('../health/healthParams');
 const { readErrorParams } = require('../errors/errors.params');
 const { readInboxParams } = require('../inbox/inbox.params');
 const { readDispatchParams } = require('../dispatch/dispatch.params');
+const { readIntakeParams } = require('../webhooks/intake/intake.params');
 
 const PADROES = Object.freeze({ jobHour: 2 });
 const AREAS = Object.freeze(['health', 'errors', 'inbox', 'dispatch']);
@@ -19,7 +20,9 @@ async function readRetentionPayload(ctx, transaction, areas = AREAS) {
   if (areas.includes('errors')) p.errors_days = (await readErrorParams(ctx, transaction)).retentionDays;
   if (areas.includes('inbox')) {
     const i = await readInboxParams(ctx, transaction);
-    Object.assign(p, { inbox_raw_days: i.rawRetentionDays, inbox_days: i.retentionDays, inbox_dlq_raw_days: i.dlqRetryRetentionDays });
+    // M9-D213 3.1: a linha do evento (o identificador que recusa o reenvio) fica pelo menos pela janela de replay, mesmo que o prazo de retenção seja menor.
+    const janelaDias = Math.ceil((await readIntakeParams(ctx, transaction)).replayWindowS / 86400);
+    Object.assign(p, { inbox_raw_days: i.rawRetentionDays, inbox_days: Math.max(i.retentionDays, janelaDias), inbox_dlq_raw_days: i.dlqRetryRetentionDays });
   }
   if (areas.includes('dispatch')) {
     const d = await readDispatchParams(ctx, transaction);

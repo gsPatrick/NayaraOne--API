@@ -2,6 +2,7 @@
 
 const { getSetting } = require('../../settings/settings.service');
 const { PADROES: PADROES_INBOX } = require('../inbox/inbox.params');
+const { readIntakeParams } = require('./intake/intake.params');
 
 /** Padrões do parametros.csv, usados quando a empresa não configurou (e, antes de saber a empresa, como teto da rota pública). */
 const PADROES = Object.freeze({ aliasRootEnabled: true, rateLimitPerMinute: 120, channelTokenLength: 32, maxBodyBytes: PADROES_INBOX.maxBodyBytes });
@@ -10,12 +11,14 @@ const inteiro = (v, padrao, min) => (Number.isInteger(v) && v >= min ? v : padra
 
 /** Parâmetros da empresa dona do canal. */
 async function readWebhookParams(tenant, transaction) {
-  const [alias, rate, body] = await Promise.all([
+  const [alias, rate, body, intake] = await Promise.all([
     getSetting('integration.webhook.alias_root_enabled', tenant, transaction, PADROES.aliasRootEnabled),
     getSetting('integration.webhook.rate_limit_per_minute', tenant, transaction, PADROES.rateLimitPerMinute),
     getSetting('integration.webhook.max_body_bytes', tenant, transaction, PADROES.maxBodyBytes),
+    readIntakeParams(tenant, transaction),
   ]);
   return {
+    ...intake,
     aliasRootEnabled: alias !== false && alias !== 'false',
     rateLimitPerMinute: inteiro(rate, PADROES.rateLimitPerMinute, 10),
     maxBodyBytes: Math.min(inteiro(body, PADROES.maxBodyBytes, 1024), platformBodyCeiling()),

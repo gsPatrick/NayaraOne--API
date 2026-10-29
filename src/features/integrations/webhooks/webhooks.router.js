@@ -2,6 +2,7 @@
 
 const express = require('express');
 const catchAsync = require('../../../utils/catchAsync');
+const { webhookPreflight } = require('./webhooks.preflight');
 const { rawBodyMiddleware } = require('./webhooks.rawBody');
 const { receiveWebhook } = require('./webhooks.handler');
 
@@ -14,7 +15,7 @@ const router = express.Router();
 const handler = catchAsync(receiveWebhook);
 const viaRootAlias = (req, _res, next) => { req.webhookViaRootAlias = true; next(); };
 
-router.post('/v1/webhooks/:provider/:channel', rawBodyMiddleware, handler);
-router.post('/webhooks/:provider/:channel', viaRootAlias, rawBodyMiddleware, handler);
+router.post('/v1/webhooks/:provider/:channel', webhookPreflight, rawBodyMiddleware, handler);
+router.post('/webhooks/:provider/:channel', viaRootAlias, webhookPreflight, rawBodyMiddleware, handler);
 
 module.exports = router;

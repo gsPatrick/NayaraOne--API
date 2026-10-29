@@ -33,7 +33,8 @@ const PII_TEXT_RULES = [
 ];
 
 function sanitizeText(value, maxLength = 500) {
-  let text = redactText(String(value ?? '').trim(), { secretsOnly: true });
+  // O texto é cortado ANTES das expressões regulares (M9-D213): evento com um texto de megabytes não pode prender o processador; o resultado já seria cortado em maxLength.
+  let text = redactText(String(value ?? '').slice(0, maxLength * 4 + 1000).trim(), { secretsOnly: true });
   for (const [re, troca] of PII_TEXT_RULES) text = text.replace(re, troca);
   return text.slice(0, maxLength);
 }

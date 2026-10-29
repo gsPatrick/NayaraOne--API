@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { SocialAdapter } = require('../social.port');
 const { classifyHttpError } = require('../../../registry/classifyHttpError');
 const { hmacWithTimestamp } = require('../../../registry/webhookVerifiers');
+const { statusEventSchemas } = require('../../../registry/webhookSchemas');
 
 const STATUS = Object.freeze({ QUEUED: 'QUEUED', PUBLISHED: 'PUBLISHED', FAILED: 'FAILED', DELETED: 'DELETED' });
 /** Falhas que o laboratório pode injetar na connection (`config.sandbox_fault`): timeout depois do envio (uma vez por post), 401 e 503. */
@@ -30,6 +31,10 @@ class SocialSandboxAdapter extends SocialAdapter {
 
   /** Webhook do sandbox: HMAC-SHA256 com horário assinado (cabeçalho x-signature: t=...,v1=...), M9-D211 3.3. */
   webhookVerifier() { return hmacWithTimestamp(); }
+
+  /** Esquema do evento de status (M9-D213 3.3). */
+  webhookSchemas() { return statusEventSchemas(); }
+
 
   async healthCheck() { return { ok: true, latencyMs: 0, detail: 'Sandbox local: não faz chamada externa.' }; }
 

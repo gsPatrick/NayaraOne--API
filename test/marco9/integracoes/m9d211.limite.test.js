@@ -44,7 +44,7 @@ test('webhook_rate_limit_compartilhado_d843_antes_da_connection', async () => {
       assert.ok(metade <= teto && Math.max(a.last, b.last) <= metade * 2, 'cada processo sozinho fica abaixo do teto; só a soma passa dele');
     }
     const antes = await env.desconhecidos('(desconhecido)');
-    const corpo = Buffer.from('{"id":"x"}');
+    const corpo = Buffer.from('{"id":"x","type":"t.e"}');
     // A janela do contador é de 60 s pelo relógio do banco: se virar no meio da semeadura, semeia de novo (no máximo 3 vezes).
     let r;
     for (let i = 0; i < 3 && !(r && r.status === 429); i += 1) {
@@ -79,7 +79,7 @@ test('webhook_rate_limit_da_empresa_aperta_o_teto', async () => {
     const settings = require('../../../src/features/settings/settings.service');
     await env.comTenant(tenant, (t) => settings.upsertSetting('integration.webhook.rate_limit_per_minute', 10, tenant, tenant.userId, t));
     try {
-      const corpo = Buffer.from(`{"id":"evt-lim-${env.uniqueSuffix()}"}`);
+      const corpo = Buffer.from(`{"id":"evt-lim-${env.uniqueSuffix()}","type":"t.e"}`);
       let r;
       for (let i = 0; i < 3 && !(r && r.status === 429); i += 1) {
         await Promise.all(IPS.map((ip) => filho(scopeKeyOf(ip, c.provider), 11)));

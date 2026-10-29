@@ -4,7 +4,7 @@ const logger = require('../../../utils/logger');
 const { recordError } = require('../errors');
 const { sha256Hex } = require('../inbox/inbox.hash');
 const { truncateIp } = require('./webhooks.ip');
-const { countSignatureFailure } = require('./webhooks.metrics');
+const { countSignatureFailure, countRefusal } = require('./webhooks.metrics');
 const { withTenant } = require('./webhooks.resolve');
 
 /**
@@ -30,9 +30,27 @@ async function recordSignatureFailure(conn, { provider, channel, rawBody, ip, re
 async function recordRejectedPayload(ctx, conn, { provider, reason, detail, body, inboxId, hash, security = false }, transaction) {
   await recordError(ctx, {
     providerCode: provider, connectionId: conn.connectionId, source: 'WEBHOOK', sourceRefId: inboxId, errorClass: security ? 'SECURITY' : 'VALIDATION', severity: security ? 'HIGH' : undefined,
-    errorCode: security ? 'INTEGRATION_WEBHOOK_TENANT_MISMATCH' : 'INTEGRATION_WEBHOOK_PAYLOAD_INVALID', operation: 'webhook.receive', message: `Evento recebido e enviado para a fila de erros (${reason}): ${detail}`,
+    errorCode: security ? 'INTEGRATION_WEBHOOK_TENANT_MISMATCH' : (reason === 'EVENT_ID_MISSING' ? 'INTEGRATION_WEBHOOK_EVENT_ID_MISSING' : 'INTEGRATION_WEBHOOK_PAYLOAD_INVALID'), operation: 'webhook.receive',
+    message: reason === 'EVENT_ID_MISSING' ? 'Evento sem identificador externo; enviado para a fila de erros.' : `Evento recebido e enviado para a fila de erros (${reason}): ${detail}`,
     payload: body && typeof body === 'object' ? body : undefined, payloadHash: hash,
   }, transaction);
 }
 
-module.exports = { recordSignatureFailure, recordRejectedPayload };
+/**
+ * Recusa na borda antes de qualquer gravação do evento (M9-D213 6): replay (401), corpo grande demais (413) e tipo de conteúdo não aceito (415). Contador por
+ * fornecedor e código, mais um erro de integração SEM o conteúdo (tamanho, hash quando o corpo foi lido, IP truncado). Nunca lança nem muda a resposta.
+ */
+async function recordRefusal(conn, { provider, channel, code, httpStatus, message, errorClass = 'VALIDATION', severity, rawBody, sizeBytes, ip, reason }) {
+  countRefusal(provider, code);
+  try {
+    await withTenant(conn, (transaction) => recordError({ groupId: conn.groupId, companyId: conn.companyId }, {
+      providerCode: provider, connectionId: conn.connectionId, source: 'WEBHOOK', errorClass, severity, errorCode: code, operation: 'webhook.receive', httpStatus, message,
+      payload: { reason: String(reason || code).slice(0, 80), sizeBytes: sizeBytes ?? (rawBody ? rawBody.length : null), ipTruncated: truncateIp(ip), channelLength: String(channel).length },
+      allowlist: ['reason', 'sizeBytes', 'ipTruncated', 'channelLength'], payloadHash: rawBody ? sha256Hex(rawBody) : undefined,
+    }, transaction));
+  } catch (err) {
+    logger.warn({ err: err.message, provider, code }, 'webhook.refusal.record.failed');
+  }
+}
+
+module.exports = { recordSignatureFailure, recordRejectedPayload, recordRefusal };

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { MessagingAdapter } = require('../messaging.port');
 const { classifyHttpError } = require('../../../registry/classifyHttpError');
 const { hmacWithTimestamp } = require('../../../registry/webhookVerifiers');
+const { statusEventSchemas } = require('../../../registry/webhookSchemas');
 
 const STATUS = Object.freeze({ QUEUED: 'QUEUED', SENT: 'SENT', DELIVERED: 'DELIVERED', READ: 'READ', FAILED: 'FAILED' });
 
@@ -23,6 +24,11 @@ class MessagingSandboxAdapter extends MessagingAdapter {
 
   /** Webhook do sandbox: HMAC-SHA256 com horário assinado (cabeçalho x-signature: t=...,v1=...), M9-D211 3.3. */
   webhookVerifier() { return hmacWithTimestamp(); }
+
+  /** Esquema do evento de status (M9-D213 3.3). */
+  webhookSchemas() { return statusEventSchemas(); }
+
+  statusRank() { return { QUEUED: 1, SENT: 2, DELIVERED: 3, READ: 4, FAILED: 5 }; }
 
   async healthCheck() { return { ok: true, latencyMs: 0, detail: 'Sandbox local: não faz chamada externa.' }; }
 

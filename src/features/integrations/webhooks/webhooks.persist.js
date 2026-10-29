@@ -9,9 +9,9 @@ const { recordRejectedPayload } = require('./webhooks.reject');
 async function persistAccepted(ctx, conn, d, transaction) {
   const r = await receiveEvent(ctx, {
     providerCode: d.provider, externalEventId: d.eventId, rawBody: d.rawBody, body: d.body, headers: d.headers, eventType: d.eventType,
-    channel: d.channel, connectionId: conn.connectionId,
+    channel: d.channel, connectionId: conn.connectionId, maxStoredBytes: d.maxStoredBytes,
   }, transaction);
-  return { status: r.status === 'duplicate' ? 'duplicate' : 'accepted', inboxId: r.id };
+  return { status: r.status === 'duplicate' ? 'duplicate' : 'accepted', inboxId: r.id, eventId: d.eventId };
 }
 
 /**

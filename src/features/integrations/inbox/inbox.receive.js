@@ -45,7 +45,7 @@ async function receiveEvent(ctx, d, transaction) {
   const hash = sha256Hex(raw);
   const params = await readInboxParams(ctx, transaction);
   const deadReason = d.deadLetterReason ? String(d.deadLetterReason).slice(0, 80) : null;
-  const stored = deadReason ? { raw: null, payload: null } : bodyToStore(raw, d.body, params.maxBodyBytes);
+  const stored = deadReason ? { raw: null, payload: null } : bodyToStore(raw, d.body, Number.isInteger(d.maxStoredBytes) && d.maxStoredBytes > 0 ? d.maxStoredBytes : params.maxBodyBytes);
   const correlation = getCurrentCorrelationId();
   const headers = { ...pickHeaders(d.headers, params.headerAllowlist), ...(d.extraHeaders || {}) };
 
