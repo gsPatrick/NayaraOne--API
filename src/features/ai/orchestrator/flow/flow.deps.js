@@ -4,6 +4,7 @@ const { ModelRouter } = require('../../providers/ModelRouter');
 const { providerRegistry } = require('../../providers/ProviderRegistry');
 const { createFallbackSelector } = require('../../providers/fallback');
 const { getToolRegistry } = require('../../tools/bootRegistry');
+const cache = require('../../budgets/cache.service');
 const { retrieveFromIndex } = require('./flow.retrieve');
 
 let sharedRouter = null;
@@ -18,6 +19,7 @@ let sharedRouter = null;
  *    o padrão é o seletor de equivalência segura de providers/fallback;
  *  - `openTransaction(fn)` (M9-D030): abre o run numa transação própria, confirmada na hora, para o run longo (resposta 202) já ser visível a
  *    quem o consulta; sem ele o run nasce na transação do chamador;
+ *  - `cacheStore(ctx, dados, transaction)` guarda o resultado elegível do run no cache seguro (D015); `null` desliga a gravação;
  *  - `clock()` em ms (prazo total do run) e `onSpan(evento)` (trilha dos 12 passos).
  */
 function resolveDeps(deps = {}) {
@@ -27,6 +29,7 @@ function resolveDeps(deps = {}) {
     registry: deps.registry || providerRegistry,
     toolRegistry: deps.toolRegistry || getToolRegistry(),
     retrieve: deps.retrieve === undefined ? retrieveFromIndex : deps.retrieve,
+    cacheStore: deps.cacheStore === undefined ? cache.store : deps.cacheStore,
     fallbackSelector: deps.fallbackSelector || createFallbackSelector({ registry: deps.registry || providerRegistry }),
     aiAccess: deps.aiAccess || null,
     openTransaction: deps.openTransaction || null,

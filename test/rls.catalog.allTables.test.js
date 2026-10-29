@@ -296,6 +296,18 @@ test('M9-D014: ai.budgets e ai.budget_alerts têm RLS, FORCE RLS e a política t
   }
 });
 
+// M9-D015: ai.cache_entries (cache seguro da NAY) com RLS, FORCE RLS e a política tenant_isolation.
+test('M9-D015: ai.cache_entries tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'ai' AND c.relname = 'cache_entries'`
+  );
+  assert.equal(rows.length, 1, 'ai.cache_entries não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS em ai.cache_entries');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS em ai.cache_entries');
+  assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+});
+
 // M9-D032: ai.evaluations, evaluation_items, feedback e golden_candidates (avaliação da NAY) com RLS, FORCE RLS, a política tenant_isolation e o gatilho de proteção.
 test('M9-D032: ai.evaluations, ai.evaluation_items, ai.feedback e ai.golden_candidates têm RLS, FORCE RLS, tenant_isolation e gatilho de imutabilidade', async () => {
   const gatilhos = { evaluations: 'evaluations_guard', evaluation_items: 'evaluation_items_guard', feedback: null, golden_candidates: 'golden_candidates_guard' };

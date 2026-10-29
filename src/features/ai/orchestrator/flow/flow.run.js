@@ -21,6 +21,7 @@ const { presetAnswer } = require('./flow.preset');
 const { recordProgress } = require('./flow.progress');
 const { validateAndFinish } = require('./flow.finalize');
 const { finalizeFailure } = require('./flow.fail');
+const { cacheAnswer } = require('./flow.cache');
 const E = require('./flow.errors');
 
 const AWAITING_TEXT = 'A NAY preparou uma ação, mas ela só será feita depois que uma pessoa autorizada aprovar. Há uma proposta pendente de aprovação.';
@@ -72,6 +73,7 @@ async function finish(state, text) {
     return response.text;
   });
   const { run, answer, grounded } = await trace.span(11, 'validar_saida', () => validateAndFinish(state, text, regenerate));
+  await cacheAnswer(state, { run, answer, grounded });
   const proposals = grounded.recommendation ? [{ id: grounded.recommendation.id, kind: 'CONFIRMATION' }] : [];
   return trace.span(12, 'devolver', async () => successOutcome(state, run, answer, grounded, proposals));
 }

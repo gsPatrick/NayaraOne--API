@@ -32,6 +32,8 @@ function presetAnswer(state, decision) {
   const payload = Array.isArray(body.numbersPayload) ? body.numbersPayload : [];
   const text = typeof body.answer === 'string' ? body.answer : (payload.length ? deterministicAnswer(payload) : null);
   if (text === null) throw E.ruleUnresolved();
+  // Acerto de cache: o usuário vê a data real do dado (snapshot_at original), não a do acerto.
+  if (decision.path === 'CACHE' && body.snapshotAt) state.parsed = { ...state.parsed, snapshotAt: body.snapshotAt };
   state.numbersPayload.push(...payload);
   for (const s of body.sources || []) {
     state.sources.push({

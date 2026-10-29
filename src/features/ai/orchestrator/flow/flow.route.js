@@ -18,6 +18,8 @@ async function routerInput(state, { inputSize, skipShortCircuit = false } = {}) 
   const policy = agent.modelPolicy || {};
   return {
     agentCode: agent.code,
+    agentVersion: agent.version,
+    cacheableTaskTypes: Array.isArray(policy.cacheableTaskTypes) ? policy.cacheableTaskTypes : [],
     taskType: parsed.taskType,
     criticality: agent.criticality,
     inputSize: inputSize === undefined ? estimateTokens(parsed.input) : inputSize,
