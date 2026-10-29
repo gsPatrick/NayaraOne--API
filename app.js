@@ -118,8 +118,13 @@ const jsonParser = express.json({
 });
 // Webhook público de financiamento: sem login, então o corpo aceito é pequeno (evento de status, não arquivo).
 const webhookJsonParser = express.json({ limit: '256kb', verify: keepRawBody });
-app.use((req, res, next) => (req.path.includes('/correspondent/webhooks/') ? webhookJsonParser(req, res, next) : jsonParser(req, res, next)));
-app.use(express.urlencoded({ extended: true }));
+// M9-D211: as rotas públicas de webhook (a única e os aliases dos fornecedores) recebem o corpo BRUTO (webhooks.rawBody.js), sem parser de JSON nem de formulário.
+const { isFrameworkWebhookPath } = require('./src/features/integrations/webhooks/webhooks.paths');
+const apiPrefixForWebhooks = process.env.APP_API_PREFIX || '/api';
+const isWebhookRoute = (req) => req.method === 'POST' && isFrameworkWebhookPath(req.path, apiPrefixForWebhooks);
+app.use((req, res, next) => (isWebhookRoute(req) ? next() : (req.path.includes('/correspondent/webhooks/') ? webhookJsonParser(req, res, next) : jsonParser(req, res, next))));
+const urlencodedParser = express.urlencoded({ extended: true });
+app.use((req, res, next) => (isWebhookRoute(req) ? next() : urlencodedParser(req, res, next)));
 
 const apiPrefix = process.env.APP_API_PREFIX || '/api';
 

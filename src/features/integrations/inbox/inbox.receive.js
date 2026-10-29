@@ -15,10 +15,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const INSERT_SQL = `
 INSERT INTO "integration"."webhook_inbox"
   (group_id, company_id, connection_id, provider_code, channel, external_event_id, event_type, api_version, signature_valid,
-   payload_hash, payload_raw, payload, headers_json, correlation_id, status, attempts, processed_at)
+   payload_hash, payload_raw, payload, headers_json, correlation_id, status, attempts, processed_at, dead_letter_reason)
 VALUES (:groupId, :companyId, :connectionId, :providerCode, :channel, :eventId, :eventType, :apiVersion, true,
         :hash, :raw, CAST(:payload AS jsonb), CAST(:headers AS jsonb), :correlationId, :status, :attempts,
-        CASE WHEN :status = 'PROCESSED' THEN now() END)
+        CASE WHEN :status = 'PROCESSED' THEN now() END, :deadReason)
 ON CONFLICT (provider_code, external_event_id) DO NOTHING
 RETURNING id`;
 
@@ -34,7 +34,7 @@ function bodyToStore(raw, body, maxBytes) {
  * difere do original, é tentativa de adulteração: registra WEBHOOK_PAYLOAD_MISMATCH (HIGH) e mantém o original.
  * `d`: providerCode, externalEventId, rawBody (Buffer|texto), body (já lido), headers, eventType, apiVersion, channel,
  * connectionId, extraHeaders (ex.: {caseRef}), processedInline (quem processa na hora, como o Correspondente, grava já
- * PROCESSED para o worker não repetir o efeito).
+ * PROCESSED para o worker não repetir o efeito), deadLetterReason (M9-D211: evento assinado mas com conteúdo inválido já nasce DEAD_LETTER, sem corpo guardado).
  */
 async function receiveEvent(ctx, d, transaction) {
   if (!ctx || !ctx.companyId || !ctx.groupId) throw unknownChannel();
@@ -44,7 +44,8 @@ async function receiveEvent(ctx, d, transaction) {
   const raw = Buffer.isBuffer(d.rawBody) ? d.rawBody : Buffer.from(d.rawBody != null ? String(d.rawBody) : JSON.stringify(d.body ?? null), 'utf8');
   const hash = sha256Hex(raw);
   const params = await readInboxParams(ctx, transaction);
-  const stored = bodyToStore(raw, d.body, params.maxBodyBytes);
+  const deadReason = d.deadLetterReason ? String(d.deadLetterReason).slice(0, 80) : null;
+  const stored = deadReason ? { raw: null, payload: null } : bodyToStore(raw, d.body, params.maxBodyBytes);
   const correlation = getCurrentCorrelationId();
   const headers = { ...pickHeaders(d.headers, params.headerAllowlist), ...(d.extraHeaders || {}) };
 
@@ -54,7 +55,7 @@ async function receiveEvent(ctx, d, transaction) {
       eventId: eventId.slice(0, 160), eventType: d.eventType ? String(d.eventType).slice(0, 80) : null, apiVersion: d.apiVersion ? String(d.apiVersion).slice(0, 16) : null,
       hash, raw: stored.raw, payload: JSON.stringify(stored.payload), headers: JSON.stringify(headers),
       correlationId: correlation && UUID_RE.test(correlation) ? correlation : null,
-      status: d.processedInline ? 'PROCESSED' : 'RECEIVED', attempts: d.processedInline ? 1 : 0,
+      status: deadReason ? 'DEAD_LETTER' : (d.processedInline ? 'PROCESSED' : 'RECEIVED'), attempts: d.processedInline ? 1 : 0, deadReason,
     },
     transaction,
   });

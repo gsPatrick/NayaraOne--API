@@ -61,6 +61,12 @@ class IntegrationAdapter {
     return require('../dispatch/quota/quota.extract').extractQuotaFromHeaders(responseOrError && (responseOrError.headers ? responseOrError : responseOrError.raw), now);
   }
 
+  /**
+   * Verificador de assinatura dos webhooks do fornecedor (M9-D211 3.3): objeto { name, verify({ rawBody, headers, secret, now }) } escolhido entre os
+   * prontos de webhooks/verifiers (hmacSha256Hex, hmacSha256Base64, hmacWithTimestamp) ou próprio. Padrão: nenhum, e a rota responde 501 (nunca aceita sem verificar).
+   */
+  webhookVerifier() { return null; }
+
   /** Cópia sem segredo nem dado pessoal, para log e erro. */
   redact(obj) {
     if (obj === null || obj === undefined) return obj;

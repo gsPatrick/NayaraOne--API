@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { PortalAdapter } = require('../portal.port');
 const { classifyHttpError } = require('../../../registry/classifyHttpError');
+const { hmacWithTimestamp } = require('../../../registry/webhookVerifiers');
 
 const STATUS = Object.freeze({ PUBLISHED: 'PUBLISHED', UPDATED: 'UPDATED', UNPUBLISHED: 'UNPUBLISHED', REJECTED: 'REJECTED' });
 
@@ -18,6 +19,9 @@ class PortalSandboxAdapter extends PortalAdapter {
   capabilities() { return ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']; }
 
   supportedVersions() { return ['v1']; }
+
+  /** Webhook do sandbox: HMAC-SHA256 com horário assinado (cabeçalho x-signature: t=...,v1=...), M9-D211 3.3. */
+  webhookVerifier() { return hmacWithTimestamp(); }
 
   async healthCheck() { return { ok: true, latencyMs: 0, detail: 'Sandbox local: não faz chamada externa.' }; }
 

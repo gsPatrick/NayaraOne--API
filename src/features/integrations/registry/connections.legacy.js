@@ -4,6 +4,7 @@ const { sequelize, IntegrationConnection } = require('../../../models');
 const { ctxOk } = require('./registry.helpers');
 const { CORRESPONDENT_TO_CATALOG } = require('../providers/catalog.legacy');
 const { serializeConnection, auditar } = require('./registry.auditoria');
+const { readChannelTokenLength } = require('../webhooks/webhooks.params');
 
 /**
  * Copia correspondent.provider_accounts da empresa atual para connections (domínio FINANCING),
@@ -16,7 +17,7 @@ const CATALOG_CODE_SQL = `CASE lower(a.provider_code)${Object.entries(CORRESPOND
 
 const COPIA_LEGADO_SQL = `
 INSERT INTO "integration"."connections"
-  (id, group_id, company_id, provider_code, environment, label, status, secret_ref, config_json, policy_json, created_by, updated_by, created_at, updated_at)
+  (id, group_id, company_id, provider_code, environment, label, status, secret_ref, config_json, policy_json, created_by, updated_by, created_at, updated_at, webhook_channel)
 SELECT s.id, s.group_id, s.company_id, s.catalog_code, 'SANDBOX',
        CASE WHEN s.rn = 1 THEN s.label ELSE left(s.label, 74) || ' (' || s.rn || ')' END,
        CASE WHEN NOT s.active THEN 'DISABLED'
@@ -25,7 +26,8 @@ SELECT s.id, s.group_id, s.company_id, s.catalog_code, 'SANDBOX',
                WHERE x.company_id = s.company_id AND x.provider_code = s.catalog_code
                  AND x.environment = 'SANDBOX' AND x.status = 'ACTIVE') THEN 'ACTIVE'
             ELSE 'PAUSED' END,
-       s.secret_ref, '{}'::jsonb, '{}'::jsonb, s.created_by, s.created_by, s.created_at, s.updated_at
+       s.secret_ref, '{}'::jsonb, '{}'::jsonb, s.created_by, s.created_by, s.created_at, s.updated_at,
+       substr(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 1, :channelLength) -- M9-D211: canal opaco do webhook, tamanho pelo parâmetro
 FROM (
   SELECT a.*, c.catalog_code,
          row_number() OVER (PARTITION BY a.company_id, c.catalog_code, lower(a.label) ORDER BY a.active DESC, a.created_at, a.id) AS rn,
@@ -41,7 +43,7 @@ RETURNING id;
 
 async function migrateLegacyProviderAccounts(ctx, transaction) {
   ctxOk(ctx);
-  const [rows] = await sequelize.query(COPIA_LEGADO_SQL, { replacements: { companyId: ctx.companyId }, transaction });
+  const [rows] = await sequelize.query(COPIA_LEGADO_SQL, { replacements: { companyId: ctx.companyId, channelLength: await readChannelTokenLength(ctx, transaction) }, transaction });
   for (const { id } of rows) {
     const c = await IntegrationConnection.findByPk(id, { transaction });
     await auditar(ctx, c, null, serializeConnection(c), `Conta de provider legada migrada para a integração "${c.label}".`, transaction);

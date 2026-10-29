@@ -33,7 +33,7 @@ const integrationContingencyRouter = require('../features/integrations/contingen
 const { catalogRouter: integrationCatalogRouter } = require('../features/integrations');
 const correspondentWebhooksController = require('../features/correspondent/webhooks.controller');
 const insuranceController = require('../features/procurement/insurance.controller');
-const { createWebhookRateLimiter } = require('../middlewares/webhookRateLimit.middleware');
+const { webhooks: integrationWebhooks } = require('../features/integrations');
 const auditRouter = require('../features/audit/audit.routes');
 const billingRouter = require('../features/billing/billing.routes');
 const settingsRouter = require('../features/settings/settings.routes');
@@ -72,17 +72,19 @@ router.use('/', healthRouter);
 // do corpo bruto (ver clicksignPublicWebhook/verifyProviderWebhookSignature em
 // legal.controller.js), validado contra o segredo por-tenant resolvido via a tabela de
 // roteamento sem RLS (migration 20260101000172).
-router.post('/v1/legal/webhooks/clicksign', legalController.clicksignPublicWebhook);
+// Marco 9 (M9-D211): a rota única POST /v1/webhooks/:provider/:channel (e o alias da raiz) e os aliases abaixo passam pelo mesmo framework: corpo bruto e limite WEBHOOK compartilhado.
+router.use(integrationWebhooks.router);
+router.post('/v1/legal/webhooks/clicksign', ...integrationWebhooks.legacyAlias('clicksign', legalController.clicksignPublicWebhook));
 // Mesmo motivo acima, pro webhook do provider bancário (PROVIDER_BANCARIO.md) — resolve o
 // tenant via BankPaymentProviderRouting (sem RLS), nunca via JWT (o banco não tem um).
-router.post('/v1/finance/webhooks/bank-payment', financeController.bankPaymentPublicWebhook);
+router.post('/v1/finance/webhooks/bank-payment', ...integrationWebhooks.legacyAlias('bank-payment', financeController.bankPaymentPublicWebhook));
 // Mesmo motivo acima, pro webhook de seguradora (Insurance Hub, Marco 7) — resolve o tenant via
 // InsuranceProviderSubmission (sem RLS).
-router.post('/v1/procurement/webhooks/insurance', insuranceController.insurancePublicWebhook);
+router.post('/v1/procurement/webhooks/insurance', ...integrationWebhooks.legacyAlias('insurance', insuranceController.insurancePublicWebhook));
 // Marco 8 Fase 6 — webhook de financiamento. Path segue a API mínima literal do Caderno
 // ("POST /webhooks/financing/:provider"), prefixado com /v1/correspondent como os demais.
-// Limite por IP/provider antes de qualquer consulta ao banco (webhook público, sem login).
-router.post('/v1/correspondent/webhooks/financing/:provider', createWebhookRateLimiter(), correspondentWebhooksController.financingPublicWebhook);
+// Limite WEBHOOK por IP/provider (contador compartilhado) antes de qualquer consulta ao banco (webhook público, sem login).
+router.post('/v1/correspondent/webhooks/financing/:provider', ...integrationWebhooks.legacyAlias((req) => req.params.provider, correspondentWebhooksController.financingPublicWebhook));
 // Carrinho de imóveis compartilhável (crm.carts, item 3) — link PÚBLICO, sem JWT (quem recebe
 // o link é um lead/cliente final, não um usuário do sistema). Resolve o tenant via
 // CartShareRouting (sem RLS), mesmo padrão dos webhooks acima.

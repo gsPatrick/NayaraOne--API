@@ -39,6 +39,7 @@ const SignatureClicksignContractAdapter = wrapLegacy({
     return new ClicksignSignatureAdapter({ apiToken: segredo.value.reveal(), baseUrl: ctx.connection.config?.baseUrl });
   },
   mapper: mapFrom(STATUS),
+  webhookHeader: 'content-hmac',
   health: async (ctx) => {
     const t0 = Date.now();
     try { await ctx.secret('test-connection'); return { ok: true, latencyMs: Date.now() - t0, detail: 'Credencial lida do cofre; sem chamada de teste ao fornecedor.' }; } catch (e) { return { ok: false, latencyMs: Date.now() - t0, detail: 'Credencial indisponível no cofre.' }; }

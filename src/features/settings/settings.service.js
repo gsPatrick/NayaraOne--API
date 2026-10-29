@@ -30,6 +30,7 @@ const { CIRCUIT_SETTINGS_SCHEMA } = require('../integrations/health/circuit.sett
 const { ALERT_SETTINGS_SCHEMA } = require('../integrations/health/alerts/alerts.settings');
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
+const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
@@ -245,6 +246,8 @@ const SETTINGS_SCHEMA = {
   ...SYNC_SETTINGS_SCHEMA,
   // Marco 9, M9-D203 — caixa de entrada de webhooks: tentativas, retenção do corpo e da linha, espera entre tentativas, tamanho e cabeçalhos guardados.
   ...INBOX_SETTINGS_SCHEMA,
+  // Marco 9, M9-D211 — rota pública de webhooks: alias da raiz, limite por minuto (classe WEBHOOK) e tamanho do token do canal.
+  ...WEBHOOK_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).

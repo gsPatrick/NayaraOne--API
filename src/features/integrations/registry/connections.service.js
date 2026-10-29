@@ -12,6 +12,8 @@ const { validarSecretRefDaConexao } = require('../secrets/secretRefRules');
 const { exigirMfaSegredoBank } = require('../secrets/secretPolicy');
 const { validarRegrasIA, exigirSegredoParaAtivarIA } = require('./connections.aiRules');
 const { validatePolicyJson } = require('../dispatch/retry/retry.limits');
+const { generateChannelToken } = require('../webhooks/webhooks.channel');
+const { CHANNEL_RE } = require('../webhooks/webhooks.resolve');
 
 /** Conexões de cada empresa com cada fornecedor, por ambiente (`integration.connections`). */
 
@@ -65,7 +67,10 @@ async function createConnection(payload, ctx, transaction, opts = {}) {
   const apiVersion = texto(p.apiVersion, 'versão da API', 16);
   conferirVersao(provider, apiVersion);
   const secretRef = texto(p.secretRef, 'referência do cofre', 160);
-  const webhookChannel = texto(p.webhookChannel, 'canal do webhook', 48);
+  // M9-D211: o canal é um token opaco aleatório (24 a 48 caracteres); quem não informa recebe um gerado pelo servidor.
+  const canalInformado = texto(p.webhookChannel, 'canal do webhook', 48);
+  if (canalInformado && !CHANNEL_RE.test(canalInformado)) throw AppError.badRequest('O canal do webhook deve ter de 24 a 48 caracteres (letras, números, - e _).', 'VALIDATION_ERROR');
+  const webhookChannel = canalInformado || await generateChannelToken(ctx, transaction);
   await validarSecretRefDaConexao({ secretRef, companyId: ctx.companyId, legacy: opts.legacySecretRef, ctx, transaction });
   if (secretRef) await exigirMfaSegredoBank(provider.domain, ctx, transaction);
 
@@ -148,7 +153,11 @@ async function updateConnection(id, patch, ctx, transaction, opts = {}) {
     }
     c.secretRef = novoRef;
   }
-  if (p.webhookChannel !== undefined) c.webhookChannel = texto(p.webhookChannel, 'canal do webhook', 48);
+  if (p.webhookChannel !== undefined) {
+    const canal = texto(p.webhookChannel, 'canal do webhook', 48);
+    if (canal && !CHANNEL_RE.test(canal)) throw AppError.badRequest('O canal do webhook deve ter de 24 a 48 caracteres (letras, números, - e _).', 'VALIDATION_ERROR');
+    c.webhookChannel = canal || await generateChannelToken(ctx, transaction); // vazio troca por um canal novo: a connection nunca fica sem canal
+  }
   if (await rotuloEmUso(c, transaction)) {
     throw AppError.conflict('Já existe uma integração deste fornecedor, neste ambiente, com este nome.', 'INTEGRATION_CONNECTION_DUPLICATE_LABEL');
   }

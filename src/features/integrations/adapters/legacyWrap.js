@@ -2,6 +2,7 @@
 
 const { classifyHttpError } = require('../registry/classifyHttpError');
 const { hmacVerify } = require('./hmacVerify');
+const { hmacSha256Hex } = require('../webhooks/verifiers/hmac');
 
 const SANDBOX_HEALTH = async () => ({ ok: true, latencyMs: 0, detail: 'Sandbox local: não faz chamada externa.' });
 
@@ -11,10 +12,11 @@ const SANDBOX_HEALTH = async () => ({ ok: true, latencyMs: 0, detail: 'Sandbox l
  * código, as capabilities e as versões, e traduz cada operação `(ctx, request)` para a chamada antiga.
  * `ops`: capability -> async (legacy, request, self) => { externalRequestId?, externalResourceId?, status, raw? }.
  * `mapper`: status do fornecedor -> status interno (ou null).
+ * `webhookHeader` (M9-D211): cabeçalho da assinatura HMAC-SHA256 dos adapters que declaram a capability verifyWebhook (padrão x-webhook-signature).
  * `idempotentOps` (M9-D240): operações em que a chave de idempotência do envio chega em `meta.idempotencyKey` (4º argumento de `ops`); `lookups`: consultas de
  * reconciliação (M9-D215) `findByIdempotencyKey` etc., como `async (legacy, request, self) => ({ found, status, externalResourceId })`.
  */
-function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, makeLegacy, ops, mapper, health = SANDBOX_HEALTH, idempotentOps = [], lookups = {} }) {
+function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, makeLegacy, ops, mapper, health = SANDBOX_HEALTH, idempotentOps = [], lookups = {}, webhookHeader = 'x-webhook-signature' }) {
   const Adapter = class extends Port {
     providerCode() { return code; }
 
@@ -29,6 +31,8 @@ function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, ma
     mapStatus(externalStatus) { return mapper(String(externalStatus ?? '').toUpperCase()); }
 
     supportsIdempotency(operation) { return idempotentOps.includes(operation); }
+
+    webhookVerifier() { return capabilities.includes('verifyWebhook') ? hmacSha256Hex({ header: webhookHeader }) : null; }
 
     async legacy(ctx) {
       if (!this.legacyInstance) this.legacyInstance = await makeLegacy(ctx);
