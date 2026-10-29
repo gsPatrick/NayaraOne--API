@@ -29,6 +29,7 @@ async function buildAdapterCtx(connection, tenant, transaction, { adapterHosts =
     http: new IntegrationHttpClient({
       providerCode: connection.providerCode, connectionId: connection.id, timeouts, allowedHosts: egressHostsOf(connection, adapterHosts),
       environment: connection.environment, egressMode: egress.mode, onEgress: makeEgressRecorder(tenant, connection, transaction),
+      maxAttempts: 1, // M9-D216: a repetição é do Dispatch Service (por classe de erro), nunca escondida dentro da chamada
     }),
     secret: (purpose = 'dispatch', opts = {}) => readConnectionSecret(connection, tenant, { purpose, transaction, ...opts }),
   });

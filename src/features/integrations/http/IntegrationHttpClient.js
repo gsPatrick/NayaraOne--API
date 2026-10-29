@@ -22,7 +22,8 @@ class IntegrationHttpClient {
   /**
    * `opts`: providerCode, connectionId, timeouts { readMs, writeMs }, allowedHosts (hosts do fornecedor), environment
    * (SANDBOX, HOMOLOG ou PRODUCTION), egressMode ('enforce' | 'log', do parâmetro da empresa) e onEgress(evento) para
-   * registrar bloqueios (o repórter da empresa grava o erro de integração).
+   * registrar bloqueios (o repórter da empresa grava o erro de integração). `maxAttempts` (M9-D216): tentativas internas de cada `request`;
+   * o contexto dos adapters usa 1, porque quem repete é o Dispatch Service, por classe de erro e com a política da connection.
    */
   constructor(opts = {}) {
     this.providerCode = opts.providerCode || 'desconhecido';
@@ -32,13 +33,14 @@ class IntegrationHttpClient {
     this.environment = opts.environment || null;
     this.egressMode = resolveEgressMode({ mode: opts.egressMode, environment: this.environment });
     this.onEgress = typeof opts.onEgress === 'function' ? opts.onEgress : null;
+    this.defaultMaxAttempts = Number.isInteger(opts.maxAttempts) && opts.maxAttempts >= 1 ? opts.maxAttempts : undefined;
   }
 
   /** Cópia do cliente com hosts a mais (os da configuração validada do adapter, ex.: a URL base do fornecedor). */
   scoped(hosts = []) {
     return new IntegrationHttpClient({
       providerCode: this.providerCode, connectionId: this.connectionId, timeouts: this.timeouts, allowedHosts: [...this.allowedHosts, ...hosts],
-      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress,
+      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts,
     });
   }
 
@@ -76,7 +78,7 @@ class IntegrationHttpClient {
   /** Chamada com timeout, tentativas só para erro transitório e circuit breaker (resilientFetch). */
   async request({ method = 'GET', url, headers, body, timeoutMs, maxAttempts, circuitKey, allowedHosts }) {
     await this.guard(url, method, allowedHosts);
-    return resilientFetch({ circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts });
+    return resilientFetch({ circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: maxAttempts ?? this.defaultMaxAttempts });
   }
 
   /** Passagem ao fetch global (o mesmo contrato dele), com tempo máximo quando o chamador não trouxe um sinal. `opts.allowedHosts` soma hosts da chamada. */
