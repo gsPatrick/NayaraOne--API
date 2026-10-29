@@ -31,12 +31,12 @@ const RECONCILIATION_DEFINITIONS = Object.freeze([
 ]);
 
 // M9-D621: as janelas de contas a pagar e recebíveis entram na mesma publicação e no mesmo cálculo
-const KPI_DEFINITIONS = Object.freeze([...RECONCILIATION_DEFINITIONS, ...require('./finance.horizon').DEFINITIONS]);
+const KPI_DEFINITIONS = Object.freeze([...RECONCILIATION_DEFINITIONS, ...require('./finance.horizon').DEFINITIONS, ...require('./finance.results').DEFINITIONS]);
 
 /** Entrada completa de `publishMetric` (escopo da empresa, para o owner seguir o parâmetro de cada empresa). */
 async function publishInput(def, scope, transaction) {
   return {
-    ...def, scopeLevel: 'COMPANY', sourceReadModel: SOURCE_READ_MODEL, filters: {}, version: 1, validFrom: '2026-01-01', valueNature: def.valueNature || 'ACTUAL',
+    ...def, scopeLevel: 'COMPANY', sourceReadModel: def.sourceReadModel || SOURCE_READ_MODEL, filters: {}, version: 1, validFrom: '2026-01-01', valueNature: def.valueNature || 'ACTUAL',
     ownerRole: await readOwner(def.metricCode, scope, transaction),
     refreshPolicy: { mode: 'EVENT', maxStalenessMinutes: MAX_STALENESS_MINUTES },
   };

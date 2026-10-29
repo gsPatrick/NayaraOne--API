@@ -6,8 +6,19 @@
  * M9-D611 aplica à tabela do Financeiro. Instantes em ISO (UTC); período com início inclusivo e fim exclusivo.
  */
 const { iso } = require('./financeHealth.dates');
+const { businessDateKey } = require('../../../utils/businessDate');
 
 const OWN = { thirdParty: false, reversal: null };
+
+/** M9-D623: critérios das margens por setor, comissões e repasses (o mesmo filtro que a especificação de origem aplica à tabela do Financeiro). */
+function resultCriteria(companyId, b) {
+  return {
+    'fin.sector_margin': { companyId, status: ['SETTLED'], nature: ['PAYABLE', 'RECEIVABLE'], equals: { ...OWN, competenceMonth: businessDateKey(b('monthStart')).slice(0, 7) } },
+    'fin.commissions_provisioned': { companyId, status: ['PENDING'] },
+    'fin.commissions_paid': { companyId, period: { from: b('monthStart'), to: b('nextMonthStart') }, status: ['PAID'] },
+    'fin.owner_repasses_pending': { companyId, status: ['PENDING', 'APPROVED'] },
+  };
+}
 
 function financeCriteria(companyId, bounds) {
   const b = (key) => iso(bounds[key]);
@@ -26,6 +37,7 @@ function financeCriteria(companyId, bounds) {
     'fin.overdue_receivables': pending('RECEIVABLE', null, 'today'),
     'fin.reconciliations_pending': { companyId, period: { from: null, to: b('dayEnd') } }, // M9-D624: a origem exclui as transações já conciliadas
     'fin.anomalies_open': { companyId, status: ['OPEN'] },
+    ...resultCriteria(companyId, b), // M9-D623
     'fin.commissions_unlinked_30d': { companyId, period: { from: null, to: b('horizon30') }, status: ['PENDING'], equals: { financialEntryId: null } },
   };
 }

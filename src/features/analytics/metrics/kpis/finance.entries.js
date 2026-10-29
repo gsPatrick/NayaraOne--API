@@ -9,6 +9,8 @@ const { getFormulaCatalog } = require('../formulaCatalog');
 const { calcHash } = require('../calcHash');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { readStatementMaxAgeDays } = require('../../read-models/financeKpi.settings');
+const { readResultParams } = require('../../read-models/financeResults.settings');
+const { EXTRAS } = require('./finance.results');
 const { P } = require('../../security/permissionCatalog');
 const { KPI_DEFINITIONS, SOURCE_READ_MODEL } = require('./finance.definitions');
 const { INPUTS, paramsOf } = require('./finance.inputs');
@@ -38,14 +40,15 @@ const snapshotInputs = (base, result) => [
 async function buildFinanceKpiEntries(scope, asOfDate, transaction) {
   const row = await loadRow(scope.companyId, asOfDate, transaction);
   if (!row) return [];
-  const settings = { maxStatementAgeDays: await readStatementMaxAgeDays(scope, transaction) };
+  const settings = { maxStatementAgeDays: await readStatementMaxAgeDays(scope, transaction), ...(await readResultParams(scope, transaction)) };
   const sourceCtx = { groupId: scope.groupId, companyId: scope.companyId, permissions: [P.READ] };
   const catalog = getFormulaCatalog();
   const out = [];
   for (const def of KPI_DEFINITIONS) {
     const published = await publishedVersion(def.metricCode, scope.companyId, transaction);
     if (!published) continue;
-    const inputs = INPUTS[def.metricCode](row, asOfDate);
+    const extra = EXTRAS[def.metricCode] ? await EXTRAS[def.metricCode](scope, asOfDate, transaction) : undefined; // M9-D623: a margem lê também os setores do mês
+    const inputs = INPUTS[def.metricCode](row, asOfDate, extra);
     const params = paramsOf(def.metricCode, settings);
     const result = catalog.get(def.formulaId).compute(inputs, params);
     const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: (row.source_criteria || {})[def.metricCode], unit: published.unit }, transaction);

@@ -56,7 +56,7 @@ async function rebuildKeys({ companyId, transaction }) {
 
 const def = registerReadModel({
   name: MODEL, version: 1, keyColumns: ['result_center_id', 'competence_month'], eventTypes: [...ENTRY_EVENTS], aggregateKey, recompute, scheduled: { keys: scheduledKeys },
-  rebuild: { keys: rebuildKeys },
+  rebuild: { keys: rebuildKeys, corrections: (args) => require('../metrics/kpis').financeKpiCorrections(args) }, // M9-D623: a margem por setor também revisa os snapshots do KPI
 });
 
 module.exports = { def, NO_CENTER, aggregateKey };

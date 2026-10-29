@@ -10,3 +10,8 @@ const LEDGER_CODES = [
 ];
 for (const code of LEDGER_CODES) registerDrilldownDetail(code, LEDGER);
 registerDrilldownDetail('fin.commissions_unlinked_30d', { columns: ['due_at'], link: '/painel/financeiro/comissoes-repasses' });
+// M9-D623: margem por setor (lançamentos da competência), parcelas de comissão e repasses ao proprietário
+registerDrilldownDetail('fin.sector_margin', { columns: ['result_center_id', 'competence_month', 'settled_at'], link: LEDGER.link });
+registerDrilldownDetail('fin.commissions_provisioned', { columns: ['due_at', 'installment_number'], link: '/painel/financeiro/comissoes-repasses' });
+registerDrilldownDetail('fin.commissions_paid', { columns: ['paid_at', 'installment_number'], link: '/painel/financeiro/comissoes-repasses' });
+registerDrilldownDetail('fin.owner_repasses_pending', { columns: ['reference_month', 'created_at'], link: '/painel/financeiro/comissoes-repasses' });

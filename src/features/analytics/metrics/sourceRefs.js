@@ -11,4 +11,5 @@ module.exports = {
   ...require('./sourceRefs.settings'),
 };
 require('./sourceSpecs.finance'); // origem dos componentes do read model financeiro (M9-D615)
+require('./sourceSpecs.finance.results'); // origem da margem por setor, comissões e repasses (M9-D623)
 

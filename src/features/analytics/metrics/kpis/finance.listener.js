@@ -11,7 +11,7 @@ const { materializeFinanceKpis } = require('./finance.materialize');
 const { SOURCE_READ_MODEL } = require('./finance.definitions');
 
 async function onFlushed(entry, transaction) {
-  if (entry.readModel !== SOURCE_READ_MODEL) return;
+  if (entry.readModel !== SOURCE_READ_MODEL && entry.readModel !== 'rm_finance_sector_margin') return; // M9-D623: a margem por setor também recalcula o KPI
   try {
     await sequelize.transaction({ transaction }, async (savepoint) => {
       // a data-base é a da linha que o refresh acabou de gravar (a de hoje; em teste, a do relógio injetado)

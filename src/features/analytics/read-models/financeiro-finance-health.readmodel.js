@@ -19,6 +19,8 @@ const { readEntryComponents } = require('./financeHealth.entries');
 const { readOtherComponents, breathingNeed } = require('./financeHealth.others');
 const { financeCriteria } = require('./financeHealth.criteria');
 const { readOverdueWindowDays } = require('./financeHealth.settings');
+const { readCommissionDetails } = require('./financeHealth.commissions');
+const { readOwnerRepasseDetail } = require('./financeHealth.repasses');
 
 const MODEL = 'rm_finance_health';
 
@@ -29,6 +31,15 @@ const kpiFields = (o) => ({
   open_anomalies_high: o.anomalies.byRisk.ALTO, open_anomalies_unclassified: o.anomalies.byRisk.NAO_CLASSIFICADO,
   open_anomalies_oldest_date: o.anomalies.oldest, open_anomalies_by_risk: o.anomalies.byRisk, open_anomalies_by_type: o.anomalies.byType,
 });
+
+/** M9-D623: detalhe das comissões (por corretor e tipo, sem corretor, paga sem lançamento) e dos repasses pendentes (por proprietário, imóvel e idade). */
+async function resultFields(companyId, bounds, asOf, transaction) {
+  const commissions = await readCommissionDetails(companyId, bounds, transaction);
+  return {
+    provisioned_commissions_detail: commissions.provisioned, paid_commissions_detail: commissions.paid,
+    owner_repasses_detail: await readOwnerRepasseDetail(companyId, asOf, transaction),
+  };
+}
 
 async function recompute({ companyId, groupId, key, now, transaction }) {
   const bounds = financeBounds(key.as_of_date, await readOverdueWindowDays({ companyId, groupId }, transaction));
@@ -45,6 +56,7 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
     open_anomalies: o.openAnomalies, entries_without_due_date: e.without_due_date,
     payables_without_due_date: e.payables_without_due_date, receivables_without_due_date: e.receivables_without_due_date, // M9-D621: qualidade das janelas por natureza
     ...kpiFields(o),
+    ...(await resultFields(companyId, bounds, key.as_of_date, transaction)),
     source_criteria: financeCriteria(companyId, bounds),
   };
   fields.breathing_need = await breathingNeed({

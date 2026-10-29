@@ -8,6 +8,8 @@
 function dimensionUnit(dimensionKey, versionUnit) {
   if (/(^|:)[a-z_]*_brl$/.test(dimensionKey || '')) return 'BRL';
   if (/(^|:)[a-z_]*_dias$/.test(dimensionKey || '')) return 'DAYS';
+  if (/(^|:)[a-z_]*_pct$/.test(dimensionKey || '')) return 'PERCENT'; // M9-D623: margem % e parte sem setor
+  if (/(^|:)[a-z_]*_qtd$/.test(dimensionKey || '')) return 'COUNT'; // M9-D623: quantidades dentro de um indicador em reais
   return versionUnit;
 }
 
