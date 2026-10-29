@@ -1,7 +1,7 @@
 'use strict';
 
 // Provider SANDBOX determinístico da NAY (código `ai-sandbox`): nunca acessa a rede, a resposta é função pura da entrada.
-// Fixtures no último `user`: `[[ECO]] x` devolve x; `[[TOOL:nome:{json}]]` devolve um pedido de tool; `[[CUSTO:valor]]` define o
+// Fixtures no último `user`: `[[ECO]] x` devolve x; `[[JSON:{...}]]` devolve o JSON; `[[TOOL:nome:{json}]]` devolve um pedido de tool; `[[CUSTO:valor]]` define o
 // custo em reais; `[[LENTO:ms]]` define a latência informada. Sem fixture: texto derivado do hash. Custo = tokens x preço de
 // teste fixo (micro-reais por token), em inteiros: sem ponto flutuante. O ProviderRegistry (M9-D011) envolve esta função.
 const crypto = require('node:crypto');
@@ -10,6 +10,7 @@ const SANDBOX_PRICE_IN_MICROS = 2;
 const SANDBOX_PRICE_OUT_MICROS = 6;
 const ECO = /^\s*\[\[ECO\]\]\s*([\s\S]*)$/;
 const TOOL = /\[\[TOOL:([A-Za-z0-9_.-]+)(?::(\{[\s\S]*?\}))?\]\]/g;
+const JSON_FIXTURE = /\[\[JSON:(\{[\s\S]*?\}|\[[\s\S]*?\])\]\]/;
 const CUSTO = /\[\[CUSTO:([0-9]+(?:[.,][0-9]{1,6})?)\]\]/;
 const LENTO = /\[\[LENTO:([0-9]{1,7})\]\]/;
 
@@ -26,6 +27,10 @@ function parseArgs(raw) {
   try { return JSON.parse(raw); } catch (e) { return {}; }
 }
 
+function jsonValido(raw) {
+  try { JSON.parse(raw); return true; } catch (e) { return false; }
+}
+
 /** generate({ system, messages }) -> { text, toolRequests, inputTokens, outputTokens, costMicros, latencyMs }. */
 function sandboxGenerate({ system = '', messages = [] } = {}) {
   const ultimoUser = [...messages].reverse().find((m) => m && m.role === 'user');
@@ -33,8 +38,10 @@ function sandboxGenerate({ system = '', messages = [] } = {}) {
   const digest = hash(`${system}\n${messages.map((m) => `${m.role}:${m.content}`).join('\n')}`);
   const toolRequests = [...entrada.matchAll(TOOL)].map((m) => ({ name: m[1], args: parseArgs(m[2]) }));
   const eco = ECO.exec(entrada);
+  const fixtureJson = JSON_FIXTURE.exec(entrada);
   let text;
   if (eco) text = eco[1].replace(CUSTO, '').replace(LENTO, '').trim();
+  else if (fixtureJson && jsonValido(fixtureJson[1])) text = fixtureJson[1];
   else if (toolRequests.length) text = '';
   else text = `Resposta de teste ${digest.slice(0, 8)}.`;
   const inputTokens = tokensOf(`${system}${entrada}`);
@@ -48,6 +55,7 @@ function sandboxGenerate({ system = '', messages = [] } = {}) {
     outputTokens,
     costMicros: custo ? microsOf(custo[1]) : inputTokens * SANDBOX_PRICE_IN_MICROS + outputTokens * SANDBOX_PRICE_OUT_MICROS,
     latencyMs: lento ? Number(lento[1]) : 20 + (parseInt(digest.slice(0, 4), 16) % 80),
+    digest,
     providerCode: 'ai-sandbox',
     modelCode: 'sandbox-1',
   };
