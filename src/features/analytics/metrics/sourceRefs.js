@@ -15,3 +15,4 @@ require('./sourceSpecs.finance.results'); // origem da margem por setor, comiss�
 require('./sourceSpecs.crm'); // origem dos KPIs do funil comercial (M9-D630 e M9-D631)
 require('./sourceSpecs.obras.custo'); // origem dos KPIs de avanço, custo e margem das obras (M9-D650)
 require('./sourceSpecs.obras.operacao'); // origem dos KPIs de atrasos, medições e não conformidades das obras (M9-D651)
+require('./sourceSpecs.legal'); // origem dos KPIs do Jurídico (M9-D660)

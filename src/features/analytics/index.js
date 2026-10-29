@@ -8,6 +8,7 @@ require('./metrics/kpis').installFinanceKpis(); // liga os KPIs financeiros (con
 require('./metrics/kpis/commercial').installCommercialKpis(); // liga os KPIs de visitas, propostas, imóveis, Radar e corretores ao fim do refresh dos read models de origem (M9-D632 e M9-D633)
 require('./metrics/kpis').installObraKpis(); // liga os KPIs de Obras ao fim do refresh dos read models de Obras (M9-D650 e M9-D651)
 require('./metrics/kpis').installCrmKpis(); // liga os KPIs do funil comercial ao fim do refresh dos read models do CRM (M9-D630 e M9-D631)
+require('./metrics/kpis').installLegalCorKpis(); // liga os KPIs do Jurídico e do Correspondente ao fim do refresh dos seus read models (M9-D660 e M9-D661)
 
 /**
  * src/features/analytics — camada de leitura gerencial do Marco 9 (BI e Centro de Comando). Esta entrada exporta o router de

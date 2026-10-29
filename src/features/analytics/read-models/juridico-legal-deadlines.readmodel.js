@@ -20,7 +20,8 @@ async function recompute({ companyId, asOfDate, transaction }) {
             (count(*) FILTER (WHERE due BETWEEN CAST(:asOf AS date) + 7 AND CAST(:asOf AS date) + 29))::int AS due_7_to_29d,
             (count(*) FILTER (WHERE due < CAST(:asOf AS date)))::int AS overdue,
             (CAST(:asOf AS date) - min(due) FILTER (WHERE due < CAST(:asOf AS date)))::int AS oldest_overdue_days,
-            (count(*))::int AS open_total
+            (count(*))::int AS open_total,
+            (count(*) FILTER (WHERE due IS NULL))::int AS without_date
        FROM d`,
     { replacements: { companyId, asOf: asOfDate, tz: BUSINESS_TIMEZONE }, transaction }
   );

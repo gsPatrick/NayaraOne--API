@@ -15,11 +15,11 @@ const ALL = 'TODOS';
 async function recompute({ companyId, transaction }) {
   const [rows] = await sequelize.query(
     `WITH p AS (
-       SELECT r.contract_id, r.requirement_type FROM legal.contract_requirements r JOIN legal.contracts c ON c.id = r.contract_id
+       SELECT r.contract_id, r.requirement_type, (c.starts_at IS NULL) AS no_deadline FROM legal.contract_requirements r JOIN legal.contracts c ON c.id = r.contract_id
         WHERE r.company_id = :companyId AND c.company_id = :companyId AND c.deleted_at IS NULL AND c.status NOT IN ('CANCELLED', 'CLOSED') AND r.status = 'PENDING')
-     SELECT requirement_type, (count(DISTINCT contract_id))::int AS contracts_missing, (count(*))::int AS requirements_pending FROM p GROUP BY 1
+     SELECT requirement_type, (count(DISTINCT contract_id))::int AS contracts_missing, (count(*))::int AS requirements_pending, (count(*) FILTER (WHERE no_deadline))::int AS requirements_without_deadline FROM p GROUP BY 1
      UNION ALL
-     SELECT CAST(:all AS varchar), (count(DISTINCT contract_id))::int, (count(*))::int FROM p HAVING count(*) > 0
+     SELECT CAST(:all AS varchar), (count(DISTINCT contract_id))::int, (count(*))::int, (count(*) FILTER (WHERE no_deadline))::int FROM p HAVING count(*) > 0
      ORDER BY 1`,
     { replacements: { companyId, all: ALL }, transaction }
   );

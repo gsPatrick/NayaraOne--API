@@ -57,6 +57,7 @@ const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/o
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
 const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraOperacaoKpi.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
+const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridicoCorrespondenteKpi.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
 const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
@@ -271,6 +272,8 @@ const SETTINGS_SCHEMA = {
   ...OBRA_OPERACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D619 — read models do Jurídico: status que tiram o processo de "ativo".
   ...JURIDICO_SETTINGS_SCHEMA,
+  // Marco 9, M9-D660 — KPIs do Jurídico: owner de cada um e limites de qualidade (processos sem risco e exigências sem prazo).
+  ...JUR_COR_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
