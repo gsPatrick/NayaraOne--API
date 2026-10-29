@@ -8,6 +8,7 @@ const AppError = require('../../utils/AppError');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getSetting } = require('../settings/settings.service');
+const { recordMfaFailure } = require('../analytics/tech-signals/record');
 
 const BCRYPT_ROUNDS = 10;
 const RECOVERY_CODE_COUNT = 8;
@@ -251,6 +252,7 @@ async function verifyMfa(userId, code, actorContext, transaction, requestMeta = 
 
   if (!valid) {
     await registerFailedAttempt(credential, userId, actorContext, transaction);
+    await recordMfaFailure({ userId, ip: requestMeta && requestMeta.ip }); // M9-D628: sinal técnico (só hash), alimenta rm_tech_auth_failures
     throw AppError.unauthorized('Código MFA inválido.', 'MFA_INVALID_CODE');
   }
 

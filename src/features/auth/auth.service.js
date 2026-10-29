@@ -7,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../../utils/jwt');
 const { getEffectiveAccess } = require('../memberships/effectivePermissions.service');
 const { getSetting } = require('../settings/settings.service');
+const { recordLoginFailure } = require('../analytics/tech-signals/record');
 
 
 /**
@@ -125,11 +126,13 @@ async function login({ email, password, companyId }, meta = {}) {
     AppError.unauthorized('Credenciais inválidas.', 'INVALID_CREDENTIALS');
 
   if (!user || user.status !== 'ACTIVE') {
+    await recordLoginFailure({ email, ip: meta.ipAddress }); // M9-D628: sinal técnico (só hash), alimenta rm_tech_auth_failures
     throw invalidCredentials();
   }
 
   const passwordMatches = await bcrypt.compare(password, user.passwordHash);
   if (!passwordMatches) {
+    await recordLoginFailure({ email, ip: meta.ipAddress });
     throw invalidCredentials();
   }
 

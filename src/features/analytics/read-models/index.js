@@ -28,6 +28,7 @@ require('./locacao.readmodel'); // M9-D617: Locação
 require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Estoque/Patrimônio e Pós-obra
 require('./juridico-correspondente.readmodel'); // M9-D619: Jurídico e Correspondente Bancário
 require('./marketing-atendimento.readmodel'); // M9-D627: Marketing e Atendimento/Satisfação
+require('./tecnologia-seguranca-ia.readmodel'); // M9-D628: Tecnologia, Integrações, Segurança e IA
 
 module.exports = {
   camada: 'read-models',

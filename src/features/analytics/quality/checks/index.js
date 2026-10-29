@@ -48,3 +48,12 @@ require('./rm_mkt_automation.checks');
 require('./rm_support_satisfaction.checks');
 require('./rm_support_complaints.checks');
 require('./rm_support_sla.checks');
+require('./rm_tech_availability.checks'); // M9-D628
+require('./rm_tech_queues.checks'); // M9-D628
+require('./rm_tech_integrations.checks'); // M9-D628
+require('./rm_tech_freshness.checks'); // M9-D628
+require('./rm_tech_blocked_events.checks'); // M9-D628
+require('./rm_tech_auth_failures.checks'); // M9-D628
+require('./rm_ai_cost.checks'); // M9-D628
+require('./rm_ai_quality.checks'); // M9-D628
+require('./rm_ai_tool_calls.checks'); // M9-D628

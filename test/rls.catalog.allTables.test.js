@@ -531,3 +531,12 @@ test('M9-D652: rm_project_occurrences tem RLS, FORCE RLS e 4 políticas', async 
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });
+
+// M9-D628: read models de Tecnologia e IA do BI com RLS + FORCE RLS e 4 políticas; o registro de sinais técnicos globais (sem company_id) com RLS + FORCE RLS e só o escritor do BI.
+test('M9-D628: rm_tech_* e rm_ai_* têm RLS, FORCE RLS e 4 políticas; tech_signal_log tem RLS, FORCE RLS e 3 políticas', async () => {
+  const tables = ['rm_tech_availability', 'rm_tech_queues', 'rm_tech_freshness', 'rm_tech_integrations', 'rm_tech_blocked_events', 'rm_tech_auth_failures', 'rm_ai_cost', 'rm_ai_quality', 'rm_ai_tool_calls', 'tech_signal_log'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as dez tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, r.relname === 'tech_signal_log' ? 3 : 4], r.relname);
+});
