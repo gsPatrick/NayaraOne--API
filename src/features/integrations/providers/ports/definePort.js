@@ -2,6 +2,7 @@
 
 const { IntegrationAdapter } = require('../../registry/IntegrationAdapter');
 const { DOMAIN_CAPABILITIES } = require('../catalog.domains');
+const { OPERATION_POLICY } = require('./operationPolicy');
 
 /** Saída normalizada de toda operação (INT-009): validada por schema antes de sair do adapter. */
 const OUTPUT_SCHEMA = Object.freeze({
@@ -27,11 +28,17 @@ function definePort(className, domain, operations, portVersion = '1') {
   const ops = {};
   nomes.forEach((nome) => {
     const def = Array.isArray(operations[nome]) ? { required: operations[nome] } : operations[nome];
+    // M9-D214: classe de risco e forma de confirmação da operação (operationPolicy.js); sem linha lá o port não carrega.
+    const politica = OPERATION_POLICY[domain] && OPERATION_POLICY[domain][nome];
+    if (!politica) throw new Error(`Port ${className}: operação ${nome} sem classe de risco em operationPolicy.js`);
     ops[nome] = Object.freeze({
       inputSchema: Object.freeze({ type: 'object', required: def.required || [], properties: def.properties || {} }),
       outputSchema: OUTPUT_SCHEMA,
       // M9-D219: mapper de saída da operação (allowlist + classificação). Operação sem dado de domínio no pedido não declara.
       outputMapper: def.outputMapper || null,
+      opClass: politica.opClass,
+      confirmation: politica.confirmation,
+      finalStatuses: politica.finalStatuses,
     });
   });
   const Port = class extends IntegrationAdapter {};

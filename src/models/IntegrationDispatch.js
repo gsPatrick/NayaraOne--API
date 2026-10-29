@@ -37,6 +37,10 @@ module.exports = (sequelize) => sequelize.define(
     correlationId: { type: DataTypes.UUID, allowNull: true, field: 'correlation_id' },
     purpose: { type: DataTypes.STRING(48), allowNull: true },
     fieldsDropped: { type: DataTypes.INTEGER, allowNull: true, field: 'fields_dropped' },
+    confirmationMode: { type: DataTypes.STRING(12), allowNull: true, field: 'confirmation_mode' },
+    externalStatus: { type: DataTypes.STRING(64), allowNull: true, field: 'external_status' },
+    essential: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    submittedAt: { type: DataTypes.DATE, allowNull: true, field: 'submitted_at' },
     createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
   },
   { schema: 'integration', tableName: 'dispatches', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at', underscored: true }

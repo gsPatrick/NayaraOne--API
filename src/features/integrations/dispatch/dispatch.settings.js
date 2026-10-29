@@ -10,6 +10,11 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   'integration.dispatch.payload_retention_days': { type: 'integer', min: 1, max: 3650 },
   // INT-P004: tentativas máximas de um envio novo (o retry humano soma 3).
   'integration.retry.max_attempts': { type: 'integer', min: 1, max: 50 },
+  // M9-D214 3.2: de quantos em quantos segundos o worker de envios roda, quantos envios pega por rodada e quanto espera antes de
+  // reconferir uma conexão parada (PAUSED, DISABLED, AUTH_FAILED ou sem adaptador) sem gastar tentativa.
+  'integration.dispatch.worker_interval_s': { type: 'integer', min: 1, max: 3600 },
+  'integration.dispatch.worker_batch_size': { type: 'integer', min: 1, max: 500 },
+  'integration.dispatch.blocked_recheck_s': { type: 'integer', min: 5, max: 86400 },
 });
 
 module.exports = { DISPATCH_SETTINGS_SCHEMA };

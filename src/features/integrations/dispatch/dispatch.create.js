@@ -14,9 +14,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const INSERT_SQL = `
 INSERT INTO "integration"."dispatches"
   (group_id, company_id, connection_id, provider_code, operation, outbox_event_id, aggregate_type, aggregate_id, criticality_op,
-   payload_snapshot, payload_hash, idempotency_key, max_attempts, next_attempt_at, correlation_id, created_by, purpose, fields_dropped)
+   payload_snapshot, payload_hash, idempotency_key, max_attempts, next_attempt_at, correlation_id, created_by, purpose, fields_dropped, confirmation_mode, essential)
 VALUES (:groupId, :companyId, :connectionId, :providerCode, :operation, :outboxEventId, :aggregateType, :aggregateId, :criticalityOp,
-        CAST(:snapshot AS jsonb), :hash, :key, :maxAttempts, now(), :correlationId, :createdBy, :purpose, :fieldsDropped)
+        CAST(:snapshot AS jsonb), :hash, :key, :maxAttempts, now(), :correlationId, :createdBy, :purpose, :fieldsDropped, :confirmationMode, :essential)
 ON CONFLICT (connection_id, operation, idempotency_key) DO NOTHING
 RETURNING id`;
 
@@ -25,7 +25,8 @@ RETURNING id`;
  * aprovado (`snapshot`, já minimizado), o hash do JSON canônico e a chave de idempotência. Repetir o pedido com a mesma
  * (conexão, operação, chave) não grava de novo e devolve o envio existente (`created:false`).
  * `d`: connectionId, operation, idempotencyKey, snapshot, criticalityOp (padrão DANGEROUS), outboxEventId, aggregateType, aggregateId,
- * purpose e fieldsDropped (M9-D219: quem minimiza informa; envio com mapper sai por createMinimizedDispatch).
+ * purpose e fieldsDropped (M9-D219: quem minimiza informa; envio com mapper sai por createMinimizedDispatch), maxAttempts (M9-D216: da política
+ * efetiva da conexão; sem ele vale o parâmetro da empresa) e confirmationMode (M9-D214: copiado do port).
  */
 async function createDispatch(ctx, d, transaction) {
   if (!ctx || !ctx.companyId || !ctx.groupId) throw AppError.badRequest('Envio exige a empresa e o grupo.', 'VALIDATION_ERROR');
@@ -43,15 +44,17 @@ async function createDispatch(ctx, d, transaction) {
   if (!connection) throw AppError.notFound('Integração não encontrada.', 'INTEGRATION_CONNECTION_NOT_FOUND');
 
   const params = await readDispatchParams(ctx, transaction);
-  const correlation = getCurrentCorrelationId();
+  const correlation = d.correlationId || getCurrentCorrelationId();
   const hash = hashPayload(d.snapshot);
   const [rows] = await sequelize.query(INSERT_SQL, {
     replacements: {
       groupId: ctx.groupId, companyId: ctx.companyId, connectionId: connection.id, providerCode: connection.providerCode, operation,
       outboxEventId: d.outboxEventId || null, aggregateType: d.aggregateType ? String(d.aggregateType).slice(0, 128) : null, aggregateId: d.aggregateId || null,
-      criticalityOp, snapshot: JSON.stringify(d.snapshot), hash, key, maxAttempts: params.maxAttempts,
+      criticalityOp, snapshot: JSON.stringify(d.snapshot), hash, key, maxAttempts: Number.isInteger(d.maxAttempts) && d.maxAttempts >= 1 ? d.maxAttempts : params.maxAttempts,
       correlationId: correlation && UUID_RE.test(correlation) ? correlation : null, createdBy: ctx.userId || null,
       purpose: d.purpose || null, fieldsDropped: Number.isInteger(d.fieldsDropped) ? d.fieldsDropped : null,
+      essential: d.essential === true,
+      confirmationMode: ['ON_RESPONSE', 'ON_STATUS'].includes(d.confirmationMode) ? d.confirmationMode : null,
     },
     transaction,
   });

@@ -10,6 +10,7 @@ const { recordError } = require('../errors');
  * resposta NORMALIZADA ({ externalRequestId, externalResourceId, status }). `raw` NUNCA sai daqui. Status que o adapter não
  * conseguiu mapear (502 INTEGRATION_STATUS_UNMAPPED) vira erro de integração da empresa quando `opts.tenant` é informado, gravado
  * na transação de quem chama (que precisa capturar a recusa e comitar para a linha ficar).
+ * `opts.meta` (M9-D214): { dispatchId, attempt, idempotencyKey } entregue como 3º argumento da operação.
  */
 async function invoke(adapter, operation, request, opts = {}) {
   const Port = adapter.constructor;
@@ -21,7 +22,7 @@ async function invoke(adapter, operation, request, opts = {}) {
   if (pedido.length) throw requestInvalid(operation, pedido);
   let resposta;
   try {
-    resposta = await adapter[operation](adapter.ctx, request ?? {});
+    resposta = await adapter[operation](adapter.ctx, request ?? {}, opts.meta);
   } catch (err) {
     if (err && err.code === 'INTEGRATION_STATUS_UNMAPPED' && opts.tenant) {
       await recordError(opts.tenant, {

@@ -44,6 +44,7 @@ const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyt
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
+const { startIntegrationDispatchWorkerJob } = require('./src/engines/jobs/integrationDispatchWorkerJob');
 
 const app = express();
 
@@ -119,6 +120,9 @@ const registeredAdapters = require('./src/features/integrations/adapters').regis
 logger.info({ adapters: registeredAdapters }, `Adapters de integração registrados: ${registeredAdapters.length}`);
 
 if (process.env.NODE_ENV !== 'test') {
+// M9-D214: o Dispatch Service é quem recebe do outbox os eventos com destino externo (1 evento = 1 envio PENDING, na transação do despacho).
+require('./src/features/integrations/dispatch').installOutboxEnqueuer();
+
   runMigrationsOnBoot();
   // M9-D016: o registro de tools da NAY confere cada definição contra core.permissions; definição inválida derruba o boot.
   require('./src/features/ai/tools').initToolRegistry()
@@ -300,6 +304,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DEPENDENCY_AUDIT_
 
 // Marco 9, M9-D244 — retenção das tabelas de integração por integration.purge_expired() (o runtime não tem DELETE).
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RETENTION_JOB_DISABLED !== 'true') {
+// Marco 9, M9-D214 — worker dos envios a fornecedores (PENDING/RETRY_WAIT -> SENDING -> SUBMITTED/CONFIRMED), a cada integration.dispatch.worker_interval_s.
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DISPATCH_WORKER_JOB_DISABLED !== 'true') {
+  startIntegrationDispatchWorkerJob();
+}
+
   startIntegrationRetentionJob();
 }
 

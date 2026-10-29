@@ -41,6 +41,12 @@ class IntegrationAdapter {
   /** Hosts que o fornecedor pode receber (M9-D244 3.2): 'api.exemplo.com.br' ou '*.exemplo.com.br'. Vazio = nenhuma saída. */
   allowedHosts() { return []; }
 
+  /**
+   * A operação aceita chave de idempotência do chamador (cabeçalho ou campo do fornecedor)? Padrão: não (M9-D214 3.2 item 3). Com
+   * `true`, o Dispatch Service entrega a chave estável em `meta.idempotencyKey` (3º argumento da operação) e repetir é seguro (M9-D216).
+   */
+  supportsIdempotency(_operation) { return false; }
+
   /** Cópia sem segredo nem dado pessoal, para log e erro. */
   redact(obj) {
     if (obj === null || obj === undefined) return obj;

@@ -8,7 +8,7 @@ const { auditarMudanca, visao } = require('./dispatch.audit');
 const { ERROR_CLASSES, HUMAN_RETRY_EXTRA_ATTEMPTS } = require('./dispatch.constants');
 
 /** Campos que quem transiciona pode informar (o conteúdo aprovado nunca está aqui). */
-const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts'];
+const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus'];
 
 function pickPatch(patch) {
   const out = {};
@@ -24,6 +24,9 @@ function sideEffects(row, to, opts) {
   const agora = new Date();
   const efeitos = {};
   if (to === 'SENDING') efeitos.attempts = row.attempts + 1;
+  if (to === 'SUBMITTED') efeitos.submittedAt = agora;
+  // Devolução sem tentativa gasta (circuito, cota, conexão parada, AUTH ou 429): o contador volta ao que era antes do SENDING.
+  if (opts.refundAttempt && row.attempts > 0) efeitos.attempts = row.attempts - 1;
   if (to === 'CONFIRMED') efeitos.confirmedAt = agora;
   if (to === 'UNKNOWN') efeitos.unknownSince = agora;
   if (row.status === 'UNKNOWN' && to !== 'UNKNOWN') efeitos.unknownSince = null;
