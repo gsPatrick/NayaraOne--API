@@ -3,6 +3,7 @@
 const { QueryTypes } = require('sequelize');
 const { sequelize, Notification } = require('../../../../models');
 const { activeUserIdsWithRole, findCompanyUser } = require('../../governance.users');
+const { CHANNEL_IN_APP } = require('./alerts.constants');
 
 /** Destinatários do alerta: o responsável (se ativo) ou, sem usuário, todos os ativos do papel gravado em `owner_team`. */
 async function recipientsOf(item, tenant, transaction) {
@@ -28,7 +29,7 @@ async function claimAlert(tenant, { key, type, itemId, recipients }, transaction
 
 async function notify(tenant, userIds, { title, body }, transaction) {
   for (const userId of userIds) {
-    await Notification.create({ groupId: tenant.groupId, companyId: tenant.companyId, userId, channel: 'IN_APP', title, body, createdBy: null, updatedBy: null }, { transaction });
+    await Notification.create({ groupId: tenant.groupId, companyId: tenant.companyId, userId, channel: CHANNEL_IN_APP, title, body, createdBy: null, updatedBy: null }, { transaction });
   }
 }
 

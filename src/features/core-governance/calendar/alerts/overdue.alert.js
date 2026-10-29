@@ -4,6 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../../models');
 const { dateKeyInZone } = require('../sources/time');
 const { recipientsOf, claimAlert, notify } = require('./alerts.log');
+const { ALERT_TYPE } = require('./alerts.constants');
 
 /**
  * Alerta de item VENCIDO (M9-D802 §3.5): lê SÓ `governance.calendar_items` (nunca as tabelas de origem, decisão K9) e avisa o
@@ -19,7 +20,7 @@ async function runOverdueAlerts(tenant, transaction, now = new Date()) {
   for (const item of items) {
     const recipients = await recipientsOf(item, tenant, transaction);
     if (!recipients.length) { summary.skipped += 1; continue; }
-    const claimed = await claimAlert(tenant, { key: `calendar.overdue:${item.id}:${day}`, type: 'OVERDUE', itemId: item.id, recipients: recipients.length }, transaction);
+    const claimed = await claimAlert(tenant, { key: `calendar.overdue:${item.id}:${day}`, type: ALERT_TYPE.OVERDUE, itemId: item.id, recipients: recipients.length }, transaction);
     if (!claimed) { summary.skipped += 1; continue; }
     await notify(tenant, recipients, {
       title: 'Item vencido no calendário',

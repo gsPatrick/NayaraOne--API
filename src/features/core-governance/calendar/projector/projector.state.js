@@ -4,6 +4,8 @@
  * Regras puras do projetor (M9-D802 §3.2 e §3.2.1), sem banco: estado do item, mescla do rascunho (UPSERT), matriz de transição,
  * desempate e comparação de mudança efetiva.
  */
+const { EFFECT } = require('./projector.constants');
+
 const SEVERITY_RANK = { INFO: 0, WARNING: 1, CRITICAL: 2 };
 // Desempate de occurredAt igual: DONE vence CANCELLED, que vence OPEN.
 const STATUS_RANK = { OPEN: 0, CANCELLED: 1, DONE: 2 };
@@ -43,11 +45,11 @@ const ALLOWED = { DONE: ['OPEN'], CANCELLED: ['OPEN'], OPEN: ['DONE', 'CANCELLED
 
 /** Aplica um fechamento/reabertura. Devolve { state, effect } com effect APPLIED, NO_ITEM, NOT_ALLOWED ou TIE_LOST. */
 function applyTransition(state, transition, { tie = false } = {}) {
-  if (!state) return { state, effect: 'NO_ITEM' };
+  if (!state) return { state, effect: EFFECT.NO_ITEM };
   const target = transition.status;
-  if (!(ALLOWED[target] || []).includes(state.status)) return { state, effect: 'NOT_ALLOWED' };
-  if (tie && STATUS_RANK[target] <= STATUS_RANK[state.status]) return { state, effect: 'TIE_LOST' };
-  return { state: { ...state, status: target, cancelReason: target === 'CANCELLED' ? transition.cancelReason || null : null }, effect: 'APPLIED' };
+  if (!(ALLOWED[target] || []).includes(state.status)) return { state, effect: EFFECT.NOT_ALLOWED };
+  if (tie && STATUS_RANK[target] <= STATUS_RANK[state.status]) return { state, effect: EFFECT.TIE_LOST };
+  return { state: { ...state, status: target, cancelReason: target === 'CANCELLED' ? transition.cancelReason || null : null }, effect: EFFECT.APPLIED };
 }
 
 /** Campos que mudaram de verdade: { campo: { antes, apos } }. Data compara por instante; item novo (before nulo) devolve todos. */

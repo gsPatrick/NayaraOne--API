@@ -2,11 +2,12 @@
 
 const { dueFromDateValue } = require('./time');
 const { lifecycle, ownerOf } = require('./lifecycle');
+const { SOURCE } = require('./sources.constants');
 
 /** Fontes CRM_TASK e VISIT (M9-D802 §3.1.1). Sem tabela própria: o evento da origem carrega o necessário. */
-const task = lifecycle('CRM_TASK', (p, ctx) => {
+const task = lifecycle(SOURCE.CRM_TASK, (p, ctx) => {
   const dueAt = dueFromDateValue(p.dueAt, { dateOnly: false });
-  return dueAt && { title: p.title || 'Tarefa do CRM', dueAt, deepLink: `/painel/crm/tarefas/${p.id}`, ...ownerOf(p.assignedToUserId, 'CRM_TASK', ctx) };
+  return dueAt && { title: p.title || 'Tarefa do CRM', dueAt, deepLink: `/painel/crm/tarefas/${p.id}`, ...ownerOf(p.assignedToUserId, SOURCE.CRM_TASK, ctx) };
 });
 
 const visit = lifecycle('VISIT', (p, ctx) => {

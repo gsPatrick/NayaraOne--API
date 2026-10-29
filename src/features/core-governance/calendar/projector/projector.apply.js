@@ -4,6 +4,7 @@ const { upsertItem, lockItem, touchLastEvent } = require('../calendar.projection
 const { publishDomainEvent } = require('../../../../engines/events/outbox');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { rowToState, mergeDraft, applyTransition, diffStates, compareOccurred } = require('./projector.state');
+const { EFFECT, OUTCOME } = require('./projector.constants');
 
 const AGGREGATE = 'CalendarItem';
 
@@ -18,7 +19,7 @@ function keysOf(mapped) {
 async function applyKey(tenant, event, key, mapped, transaction) {
   const existing = rowToState(await lockItem(tenant, key.sourceType, key.sourceId, transaction));
   const order = compareOccurred(existing, event.occurredAt);
-  if (order === 'STALE') return { outcome: 'STALE', key };
+  if (order === 'STALE') return { outcome: OUTCOME.STALE, key };
   let next = existing;
   const effects = [];
   for (const draft of mapped.items.filter((d) => d.sourceType === key.sourceType && d.sourceId === key.sourceId)) next = mergeDraft(next, draft);
@@ -33,8 +34,8 @@ async function applyKey(tenant, event, key, mapped, transaction) {
   const changes = next ? diffStates(existing, next) : {};
   if (!next || !Object.keys(changes).length) {
     if (existing && order === 'NEWER') await touchLastEvent(existing.id, event.id, event.occurredAt, transaction);
-    const ignored = effects.length > 0 && effects.every((e) => e !== 'APPLIED');
-    return { outcome: ignored ? 'IGNORED_TRANSITION' : 'UNCHANGED', key, effects };
+    const ignored = effects.length > 0 && effects.every((e) => e !== EFFECT.APPLIED);
+    return { outcome: ignored ? OUTCOME.IGNORED_TRANSITION : OUTCOME.UNCHANGED, key, effects };
   }
   const row = await upsertItem(tenant, { ...next, lastEventId: event.id, lastEventOccurredAt: event.occurredAt }, transaction);
   await publishDomainEvent({
@@ -46,7 +47,7 @@ async function applyKey(tenant, event, key, mapped, transaction) {
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: null, action: 'governance.calendar_item.project', entityType: 'governance.calendar_item',
     entityId: row.id, beforeJson: existing, afterJson: rowToState(row), reason: `Evento ${event.eventType} projetado no calendário.`,
   }, transaction);
-  return { outcome: 'APPLIED', key, itemId: row.id, changes };
+  return { outcome: OUTCOME.APPLIED, key, itemId: row.id, changes };
 }
 
 async function applyMapped(tenant, event, mapped, transaction) {

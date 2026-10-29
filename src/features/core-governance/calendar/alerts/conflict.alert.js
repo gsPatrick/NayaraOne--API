@@ -6,6 +6,7 @@ const { getSetting } = require('../../../settings/settings.service');
 const settings = require('../calendar.settings');
 const { dateKeyInZone } = require('../sources/time');
 const { claimAlert, notify } = require('./alerts.log');
+const { ALERT_TYPE } = require('./alerts.constants');
 
 // Janela de cada item: [due_at, fim). O fim é end_at ou, sem ele, o início mais a duração padrão. Sobreposição estrita: 11:00-11:00 não conflita.
 const PAIRS_SQL = `
@@ -32,11 +33,11 @@ async function runConflictAlerts(tenant, transaction, now = new Date()) {
   const day = dateKeyInZone(now);
   const summary = { pairs: pairs.length, alerted: 0, skipped: 0 };
   for (const pair of pairs) {
-    const claimed = await claimAlert(tenant, { key: `calendar.conflict:${pair.a_id}:${pair.b_id}:${day}`, type: 'CALENDAR_CONFLICT', itemId: pair.a_id, recipients: 1 }, transaction);
+    const claimed = await claimAlert(tenant, { key: `calendar.conflict:${pair.a_id}:${pair.b_id}:${day}`, type: ALERT_TYPE.CONFLICT, itemId: pair.a_id, recipients: 1 }, transaction);
     if (!claimed) { summary.skipped += 1; continue; }
     await notify(tenant, [pair.owner_user_id], {
       title: 'Conflito de agenda',
-      body: `CALENDAR_CONFLICT: "${pair.a_title}" e "${pair.b_title}" se sobrepõem em ${pair.overlap_min} minuto(s).`,
+      body: `${ALERT_TYPE.CONFLICT}: "${pair.a_title}" e "${pair.b_title}" se sobrepõem em ${pair.overlap_min} minuto(s).`,
     }, transaction);
     summary.alerted += 1;
   }

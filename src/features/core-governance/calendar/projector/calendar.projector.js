@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../../../engines/audit/auditLog.servi
 const { mapSourceEvent, EVENT_MAPPERS } = require('../sources');
 const { readProjectorContext, isCalendarEnabled } = require('./projector.context');
 const { applyMapped } = require('./projector.apply');
+const { INBOX, OUTCOME, SKIP_MODULE_DISABLED } = require('./projector.constants');
 
 const CONSUMER = 'governance.calendar.projector';
 
@@ -27,9 +28,9 @@ async function discardMismatch(event, sessionCompanyId, transaction) {
 }
 
 function toInboxStatus(results) {
-  if (results.length && results.every((r) => r.outcome === 'STALE')) return { inboxStatus: 'IGNORED_STALE', reason: 'Evento anterior ao último gravado (occurredAt).' };
-  if (results.length && results.every((r) => r.outcome === 'IGNORED_TRANSITION')) return { inboxStatus: 'IGNORED_TRANSITION', reason: 'Transição fora da matriz de status.' };
-  return { inboxStatus: 'PROCESSED' };
+  if (results.length && results.every((r) => r.outcome === OUTCOME.STALE)) return { inboxStatus: INBOX.STALE, reason: 'Evento anterior ao último gravado (occurredAt).' };
+  if (results.length && results.every((r) => r.outcome === OUTCOME.IGNORED_TRANSITION)) return { inboxStatus: INBOX.TRANSITION, reason: 'Transição fora da matriz de status.' };
+  return { inboxStatus: INBOX.PROCESSED };
 }
 
 /**
@@ -44,14 +45,14 @@ async function projectEvent(event, transaction) {
   if ((session && session !== event.companyId) || (payload.companyId && payload.companyId !== event.companyId)) {
     return discardMismatch(event, session || event.companyId, transaction);
   }
-  if (!(await isCalendarEnabled(tenant, transaction))) return { skipped: true, reason: 'MODULE_DISABLED' };
+  if (!(await isCalendarEnabled(tenant, transaction))) return { skipped: true, reason: SKIP_MODULE_DISABLED };
 
   // Tudo ou nada: item, evento de saída, auditoria e registro do inbox voltam juntos se qualquer passo falhar (savepoint de nome único).
   return withUniqueSavepoint(transaction, () => consumeInboundEvent({
     sourceId: CONSUMER, eventId: event.id, groupId: event.groupId, companyId: event.companyId, payload: { eventType: event.eventType }, transaction,
   }, async (inboxTx) => {
     if (!EVENT_MAPPERS[event.eventType]) {
-      return { inboxStatus: 'DEAD', reason: `GOV_CALENDAR_EVENT_UNKNOWN: ${event.eventType}` };
+      return { inboxStatus: INBOX.DEAD, reason: `GOV_CALENDAR_EVENT_UNKNOWN: ${event.eventType}` };
     }
     const ctx = await readProjectorContext(tenant, inboxTx);
     const mapped = mapSourceEvent({ id: event.id, eventType: event.eventType, companyId: event.companyId, occurredAt: event.occurredAt, payload }, ctx);

@@ -9,6 +9,7 @@ const { commitmentDeepLink } = require('./calendar.deeplinks');
 const { severityFor } = require('./calendar.severity');
 const { applyMapped } = require('./projector/projector.apply');
 const { transition } = require('./sources/draft');
+const { CANCEL } = require('./sources/sources.constants');
 const { parseCreate, parsePatch } = require('./commitments.input');
 const repository = require('./commitments.repository');
 const { UUID } = require('./calendar.query');
@@ -34,7 +35,7 @@ async function project(tenant, commitment, transaction) {
   };
   // Mesma regra do projetor (matriz de status, versão e calendar.item.updated só quando algo muda de verdade).
   const event = { id: null, eventType: `governance.calendar_commitment.${commitment.status.toLowerCase()}`, occurredAt: new Date() };
-  const closing = transition('COMMITMENT', commitment.id, commitment.status, commitment.status === 'CANCELLED' ? 'SOURCE_CANCELLED' : null);
+  const closing = transition('COMMITMENT', commitment.id, commitment.status, commitment.status === 'CANCELLED' ? CANCEL.SOURCE_CANCELLED : null);
   return applyMapped(tenant, event, { items: [draft], transitions: [closing] }, transaction);
 }
 
