@@ -5,6 +5,7 @@ const { Person } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
 const { hostOf } = require('../../integrations/http/egressPolicy');
+const { fetchExternalUrl } = require('../../integrations/http/ssrfGuard');
 const { generateContractPdf } = require('../contractPdf.service');
 
 // M9-D209: toda chamada HTTP de adapter passa pelo IntegrationHttpClient.
@@ -324,15 +325,9 @@ class ClicksignSignatureAdapter {
     // URL presignada — SEM os headers de autenticação da API (Authorization/Accept JSON:API),
     // que não se aplicam a um download direto de S3 e podem até fazer a assinatura da URL
     // presignada ser rejeitada.
-    const fileResponse = await httpClient.fetch(downloadUrl);
-    if (!fileResponse.ok) {
-      throw AppError.internal(
-        `Falha ao baixar o documento assinado do Clicksign (HTTP ${fileResponse.status}).`,
-        'LEGAL_SIGNATURE_PROVIDER_ERROR'
-      );
-    }
-    const arrayBuffer = await fileResponse.arrayBuffer();
-    return { buffer: Buffer.from(arrayBuffer), fileName: document.attributes && document.attributes.filename };
+    // M9-D245: o link veio na resposta do fornecedor (terceiro): a busca passa pelo guarda SSRF e o conteúdo vem da quarentena.
+    const baixado = await fetchExternalUrl(downloadUrl, { flow: 'signature_download' });
+    return { buffer: baixado.buffer, fileName: document.attributes && document.attributes.filename, quarantine: baixado.quarantine };
   }
 }
 
@@ -447,15 +442,9 @@ class ZapSignSignatureAdapter {
     const downloadUrl = doc && doc.signed_file_url;
     if (!downloadUrl) return null;
 
-    const fileResponse = await httpClient.fetch(downloadUrl);
-    if (!fileResponse.ok) {
-      throw AppError.internal(
-        `Falha ao baixar o documento assinado do ZapSign (HTTP ${fileResponse.status}).`,
-        'LEGAL_SIGNATURE_PROVIDER_ERROR'
-      );
-    }
-    const arrayBuffer = await fileResponse.arrayBuffer();
-    return { buffer: Buffer.from(arrayBuffer), fileName: (doc && doc.filename) || null };
+    // M9-D245: o link veio na resposta do fornecedor (terceiro): a busca passa pelo guarda SSRF e o conteúdo vem da quarentena.
+    const baixado = await fetchExternalUrl(downloadUrl, { flow: 'signature_download' });
+    return { buffer: baixado.buffer, fileName: (doc && doc.filename) || null, quarantine: baixado.quarantine };
   }
 }
 

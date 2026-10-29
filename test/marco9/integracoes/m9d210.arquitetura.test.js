@@ -19,7 +19,7 @@ test('arvore_do_modulo_existe_com_os_arquivos_base_e_o_barrel', () => {
     assert.ok(fs.statSync(path.join(INTEG, pasta)).isDirectory(), `integrations/${pasta}`);
   }
   for (const arquivo of ['index.js', 'registry/IntegrationAdapter.js', 'registry/adapterRegistry.js', 'registry/registry.service.js',
-    'dispatch/dispatchStateMachine.js', 'http/IntegrationHttpClient.js', 'http/egressPolicy.js', 'http/tlsPolicy.js', 'secrets/fileMountedStore.js', 'secrets/httpVaultStore.js', 'webhooks/index.js']) {
+    'dispatch/dispatchStateMachine.js', 'http/IntegrationHttpClient.js', 'http/egressPolicy.js', 'http/tlsPolicy.js', 'http/ssrfGuard.js', 'secrets/fileMountedStore.js', 'secrets/httpVaultStore.js', 'webhooks/index.js']) {
     assert.ok(fs.existsSync(path.join(INTEG, arquivo)), `integrations/${arquivo}`);
   }
   const dominios = ['messaging', 'portal', 'bank', 'signature', 'financing', 'insurance', 'email', 'social', 'fiscal', 'storage', 'identity', 'analytics', 'site'];
