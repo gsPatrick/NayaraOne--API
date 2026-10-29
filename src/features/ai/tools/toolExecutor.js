@@ -8,6 +8,7 @@ const AppError = require('../../../utils/AppError');
 const { buildToolContext, guardContext, capacidadeNegada, CODIGO_CAPACIDADE_NEGADA } = require('../orchestrator/toolContext');
 const { validateToolArgs, BLOCKED_REASON } = require('./argsValidator');
 const { loadArgsLimits } = require('./argsSettings');
+const { checkDerived } = require('./derivedArgs');
 
 const DOMINIOS_COM_WORKFLOW = new Set(['FINANCIAL', 'LEGAL', 'BANKING', 'PERMISSION', 'PUBLICATION']);
 const RISCOS_COM_WORKFLOW = new Set(['HIGH', 'CRITICAL']);
@@ -26,7 +27,7 @@ function tabela(registry, nome) {
  * `argsLimits` ({ stringMax, arrayMax }) é opcional: sem ele, os limites da empresa (ia.tool.*) são lidos com a `transaction` do
  * tenant (M9-D018). Os argumentos são validados contra o inputSchema da tool ANTES de qualquer proposta ou execução.
  */
-async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction, argsLimits, transaction } = {}) {
+async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction, argsLimits, transaction, untrustedTexts, actorTexts, trustedValues, injectionLimits } = {}) {
   if (!recorder || typeof recorder.record !== 'function') {
     throw AppError.internal('Executor de tools sem registro de auditoria.', 'AI_AUDIT_RECORDER_REQUIRED');
   }
@@ -66,12 +67,18 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
     throw e;
   }
 
-  if (exigeWorkflow(tool)) {
+  // M9-D021: valor que só existe em conteúdo untrusted e vai para tool de escrita ou envio externo nunca executa direto.
+  const derivedFields = await checkDerived({ args, untrustedTexts, actorTexts, trustedValues, injectionLimits, tenant: ctx, transaction });
+  const derivedFromUntrusted = derivedFields.length > 0;
+  const marca = derivedFromUntrusted ? { derivedFromUntrusted: true } : {};
+  const alteraOuEnvia = tool.category === 'WRITE' || tool.externalSend === true;
+
+  if (exigeWorkflow(tool) || (derivedFromUntrusted && alteraOuEnvia)) {
     if (typeof proposeAction !== 'function') {
       return bloquear(capacidadeNegada('acao_critica_sem_workflow', { tool: toolName, reason: 'acao_critica_sem_workflow' }), 'acao_critica_sem_workflow');
     }
-    const proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId });
-    await recorder.record({ ...base(), status: 'PROPOSED', proposalId: proposta && proposta.id });
+    const proposta = await proposeAction({ tool: tool.name || toolName, toolVersion: tool.version, args, auth: ctx.auth, companyId: ctx.companyId, groupId: ctx.groupId, correlationId: ctx.correlationId, ...marca, ...(derivedFromUntrusted ? { derivedFields } : {}) });
+    await recorder.record({ ...base(), status: 'PROPOSED', proposalId: proposta && proposta.id, ...marca });
     return { status: 'PROPOSED', proposal: proposta };
   }
 
@@ -92,7 +99,7 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
     // a tool engoliu o erro: o pedido de capacidade proibida continua valendo como bloqueio
     return bloquear(capacidadeNegada(tentativas[0].capability, { path: tentativas[0].path }), tentativas[0].capability);
   }
-  await recorder.record({ ...base(), status: 'SUCCEEDED' });
+  await recorder.record({ ...base(), status: 'SUCCEEDED', ...marca });
   return { status: 'SUCCEEDED', output: saida };
 }
 

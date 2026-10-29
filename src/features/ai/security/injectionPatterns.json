@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "descricao": "Lista versionada de padrões do InjectionDetector (M9-D021). Textos casados DEPOIS da normalização (sem acento, minúsculo, espaços únicos, homóglifos e caracteres invisíveis tratados). Peso em centésimos (inteiro) para a soma ser exata: score = min(100, maior peso + 10 x (padrões distintos - 1)). soloOnly: só conta se nenhum outro padrão casou.",
+  "patterns": [
+    {
+      "id": "IGNORAR_INSTRUCOES",
+      "weight": 85,
+      "regex": "\\b(?:ignor(?:e|ar|em|a|ando)|disregard)\\b(?:\\s+(?:todas?|tudo|all|any|every|as|os|suas|seus|essas|esses|estas|estes|the|your|previous|prior|above|anteriores?|acima|minhas|das|de))*\\s+(?:instrucoes|regras|diretrizes|politicas?|instructions|rules|guidelines|policies|prompts?|restricoes)\\b",
+      "soloOnly": false,
+      "descricao": "ignore/ignorar (todas as) instruções/regras"
+    },
+    {
+      "id": "REVELAR_PROMPT",
+      "weight": 80,
+      "regex": "(?:revele|revelar|exiba|exibir|mostre|mostrar|imprima|repita|divulgue|show|reveal|print|display|repeat|leak|dump)\\b(?:\\s+\\S+){0,4}?\\s+(?:prompts?|system\\b|instrucoes\\s+(?:do\\s+sistema|internas|iniciais|de\\s+sistema)|system\\s+(?:message|instructions)|regras\\s+internas)",
+      "soloOnly": false,
+      "descricao": "revele/exiba o prompt/system"
+    },
+    {
+      "id": "EXIBIR_SEGREDO",
+      "weight": 80,
+      "regex": "\\b(?:revele|revelar|exiba|exibir|mostre|mostrar|informe|diga|me\\s+de|me\\s+passe|envie|imprima|show|reveal|print|display|give\\s+me|tell\\s+me|send\\s+me)\\b(?:\\s+\\S+){0,4}?\\s+(?:senhas?|passwords?|tokens?|api\\s*keys?|apikeys?|chaves?\\s+(?:secretas?|privadas?|de\\s+api|de\\s+acesso|do\\s+sistema)|secrets?|segredos?|credenciais|credentials)\\b",
+      "soloOnly": false,
+      "descricao": "exiba a senha/token/chave"
+    },
+    {
+      "id": "EXFIL_URL",
+      "weight": 80,
+      "regex": "!\\[[^\\]]*\\]\\(\\s*https?:\\/\\/[^)\\s]*\\?[^)\\s]*\\)|<img[^>]+src\\s*=\\s*[\\\"']?https?:\\/\\/[^\\\"'>\\s]*\\?",
+      "soloOnly": false,
+      "descricao": "URL de exfiltração (imagem em markdown com parâmetros)"
+    },
+    {
+      "id": "MODO_DESENVOLVEDOR",
+      "weight": 60,
+      "regex": "\\b(?:modo|mode)\\s+(?:desenvolvedor|developer|dev|deus|god|dan|irrestrito|sem\\s+restricoes)\\b|\\bdeveloper\\s+mode\\b|\\bjailbreak\\b",
+      "soloOnly": false,
+      "descricao": "modo desenvolvedor"
+    },
+    {
+      "id": "DESCONSIDERE",
+      "weight": 50,
+      "regex": "\\b(?:desconsidere|desconsiderar|desconsiderem|disregard)\\b",
+      "soloOnly": false,
+      "descricao": "desconsidere"
+    },
+    {
+      "id": "VOCE_AGORA_E",
+      "weight": 50,
+      "regex": "\\bvoce\\s+agora\\s+(?:e|eh|sera|passa\\s+a\\s+ser)\\b|\\bagora\\s+voce\\s+(?:e|eh|sera)\\b|\\byou\\s+are\\s+now\\b|\\bfrom\\s+now\\s+on,?\\s+you\\b",
+      "soloOnly": false,
+      "descricao": "você agora é"
+    },
+    {
+      "id": "ENVIE_PARA",
+      "weight": 50,
+      "regex": "\\b(?:envie|enviar|mande|mandar|encaminhe|encaminhar|repasse|send|forward|email|e-mail)\\b[^.\\n]{0,80}?\\b(?:para|to)\\s+(?:[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}|https?:\\/\\/\\S+|www\\.\\S+)",
+      "soloOnly": false,
+      "descricao": "envie para <e-mail/URL>"
+    },
+    {
+      "id": "CHAMAR_TOOL",
+      "weight": 50,
+      "regex": "\\b(?:chame|chamar|invoque|invocar|execute|executar|acione|call|invoke|run)\\b(?:\\s+(?:a|o|the))?\\s+(?:tool|ferramenta|funcao|function)\\s+[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+|\\[\\[tool:|<tool_call",
+      "soloOnly": false,
+      "descricao": "instrução para chamar tool específica"
+    },
+    {
+      "id": "SIGA_INSTRUCOES",
+      "weight": 50,
+      "regex": "\\bsiga\\s+(?:as\\s+|estas\\s+|essas\\s+)?instrucoes\\s+(?:abaixo|a\\s+seguir|seguintes)|\\bfollow\\s+(?:the\\s+|these\\s+)?(?:instructions|steps)\\s+(?:below|that\\s+follow)|\\bobedeca\\s+(?:as\\s+)?instrucoes\\s+abaixo",
+      "soloOnly": false,
+      "descricao": "siga as instruções abaixo"
+    },
+    {
+      "id": "BASE64_LONGO",
+      "weight": 40,
+      "regex": "base64\\b[^a-z0-9+/=]{0,20}[a-z0-9+/=]{200,}",
+      "soloOnly": false,
+      "descricao": "base64 seguido de payload de 200 caracteres ou mais"
+    },
+    {
+      "id": "IGNORAR_ISOLADO",
+      "weight": 10,
+      "regex": "\\bignor(?:e|ar|em|a|ando|ei)\\b",
+      "soloOnly": true,
+      "descricao": "ignore/ignorar isolado (só conta se for o único padrão que casou)"
+    }
+  ]
+}

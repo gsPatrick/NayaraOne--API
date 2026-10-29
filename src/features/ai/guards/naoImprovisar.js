@@ -18,7 +18,7 @@ const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
 
 /** Embrulha cada trecho recuperado em bloco `untrusted`, com os delimitadores do conteúdo escapados (não dá para "fechar" a tag). */
 function wrapUntrusted(trechos) {
-  return (trechos || []).map((t) => `<untrusted id="${escAttr(t.id)}" origin="${escAttr(t.origin)}" classification="${escAttr(t.classification)}">\n${esc(t.text)}\n</untrusted>`).join('\n');
+  return (trechos || []).map((t) => `<untrusted id="${escAttr(t.id)}" origin="${escAttr(t.origin)}" classification="${escAttr(t.classification)}"${t.suspicious === true ? ' suspicious="true"' : ''}>\n${esc(t.text)}\n</untrusted>`).join('\n');
 }
 
 const PEDIDO_TOOL = /\[\[TOOL:([A-Za-z0-9_.-]+)(?:\s+(\{[\s\S]*?\}))?\s*\]\]/g;

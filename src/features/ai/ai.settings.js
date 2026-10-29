@@ -11,6 +11,7 @@ const { RUN_SETTING_DEFAULTS, RUN_SETTINGS_SCHEMA } = require('./orchestrator/ru
 const { GROUNDING_SETTING_DEFAULTS, GROUNDING_SETTINGS_SCHEMA } = require('./orchestrator/grounding/grounding.settings');
 const { PRIVACY_SETTING_DEFAULTS, PRIVACY_SETTINGS_SCHEMA } = require('./security/privacy.settings');
 const { ARGS_SETTING_DEFAULTS, ARGS_SETTINGS_SCHEMA } = require('./tools/args.settings');
+const { INJECTION_SETTING_DEFAULTS, INJECTION_SETTINGS_SCHEMA } = require('./security/injection.settings');
 const { RETENTION_SETTING_DEFAULTS, RETENTION_SETTINGS_SCHEMA } = require('./retention/retention.settings');
 const { AUDIT_SETTING_DEFAULTS, AUDIT_SETTINGS_SCHEMA } = require('./audit/audit.settings');
 
@@ -30,6 +31,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...GROUNDING_SETTING_DEFAULTS,
   ...PRIVACY_SETTING_DEFAULTS,
   ...ARGS_SETTING_DEFAULTS,
+  ...INJECTION_SETTING_DEFAULTS,
   ...RETENTION_SETTING_DEFAULTS,
   ...AUDIT_SETTING_DEFAULTS,
 });
@@ -42,6 +44,7 @@ const AI_SETTINGS_SCHEMA = {
   ...GROUNDING_SETTINGS_SCHEMA,
   ...PRIVACY_SETTINGS_SCHEMA,
   ...ARGS_SETTINGS_SCHEMA,
+  ...INJECTION_SETTINGS_SCHEMA,
   ...RETENTION_SETTINGS_SCHEMA,
   ...AUDIT_SETTINGS_SCHEMA,
 };
