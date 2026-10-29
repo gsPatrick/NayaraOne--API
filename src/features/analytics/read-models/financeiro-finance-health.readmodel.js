@@ -21,6 +21,7 @@ const { financeCriteria } = require('./financeHealth.criteria');
 const { readOverdueWindowDays } = require('./financeHealth.settings');
 const { readCommissionDetails } = require('./financeHealth.commissions');
 const { readOwnerRepasseDetail } = require('./financeHealth.repasses');
+const { readOverdueReceivablesDetail } = require('./financeHealth.overdue');
 const { readCashParams } = require('./cash.settings');
 const { readCashComponents } = require('./financeHealth.cash');
 const { readManualReviewPending, readReconciliationGap } = require('./financeHealth.cashGap');
@@ -71,6 +72,7 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
     payables_without_due_date: e.payables_without_due_date, receivables_without_due_date: e.receivables_without_due_date, // M9-D621: qualidade das janelas por natureza
     ...kpiFields(o),
     ...(await resultFields(companyId, bounds, key.as_of_date, transaction)),
+    overdue_receivables_detail: await readOverdueReceivablesDetail(companyId, bounds, await readOverdueWindowDays({ companyId, groupId }, transaction), key.as_of_date, transaction), // M9-D622: por faixa de atraso e contrato
     ...cash.fields,
     source_criteria: financeCriteria(companyId, bounds, cash.params),
   };

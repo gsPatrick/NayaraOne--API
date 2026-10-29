@@ -13,6 +13,7 @@ const INPUTS = Object.freeze({
   ...require('./finance.horizon').INPUTS, // M9-D621
   ...require('./finance.cash').INPUTS, // M9-D620
   ...require('./finance.results').INPUTS, // M9-D623
+  ...require('./finance.delinquency').INPUTS, // M9-D622
   'fin.reconciliations_pending': (row, asOfDate) => ({
     asOfDate, count: row.pending_reconciliations, amountAbs: String(row.pending_reconciliations_amount), oldestDate: dateText(row.pending_reconciliations_oldest_date),
     byBand: row.pending_reconciliations_by_band || { labels: [], accounts: {} }, lastImportDate: dateText(row.last_statement_import_date),
@@ -23,6 +24,7 @@ const INPUTS = Object.freeze({
 });
 
 const paramsOf = (code, settings) => {
+  if (require('./finance.delinquency').PARAMS[code]) return require('./finance.delinquency').PARAMS[code](settings); // M9-D622: faixas de atraso
   if (require('./finance.results').PARAMS[code]) return require('./finance.results').PARAMS[code](settings); // M9-D623: limite sem setor, dias de alerta e faixas dos repasses
   if (code === 'fin.free_cash') return { tolerance: settings.cashTolerance }; // M9-D620: tolerância da conciliação (analytics.qualidade.tolerancia_conciliacao)
   return code === 'fin.reconciliations_pending' ? { maxStatementAgeDays: settings.maxStatementAgeDays } : {};

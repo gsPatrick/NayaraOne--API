@@ -20,11 +20,12 @@ function qualityView(quality) {
 }
 
 /** Componentes de um indicador composto com o estado que cada um tem (os que não aparecem em `inheritedFrom` estão OK). */
-function componentsOf(metricCode, quality) {
+function componentsOf(metricCode, quality, sourceRefs) {
   const spec = getSourceSpec(metricCode);
   if (!spec || !Array.isArray(spec.components)) return [];
   const bad = new Map(((quality && quality.inheritedFrom) || []).map((c) => [c.metricCode, c.status]));
-  return spec.components.map((code) => ({ metricCode: code, status: bad.get(code) || 'OK' }));
+  const refs = Array.isArray(sourceRefs) ? sourceRefs : [];
+  return spec.components.map((code) => ({ metricCode: code, status: bad.get(code) || 'OK', sourceRefs: refs.filter((ref) => ref.component === code) })); // M9-D622: cada componente com os seus sourceRefs
 }
 
 /** `enabled`: o indicador tem detalhe (CRITICAL ou habilitado, com origem); `allowed`: o usuário pode abri-lo (analytics:drilldown + permissão do domínio). */
@@ -42,7 +43,7 @@ function presentMetric({ ctx, definition, raw, period, asOfDate, domainMap, vari
     formatted: formatValue(raw.unit, raw.value),
     period: periodView(period, asOfDate),
     quality: qualityView(raw.quality),
-    components: componentsOf(raw.metricCode, raw.quality),
+    components: componentsOf(raw.metricCode, raw.quality, raw.sourceRefs),
     variation,
     drilldown: drilldownOf(ctx, definition, raw.sourceRefs, domainMap),
     owner: definition.owner_role,

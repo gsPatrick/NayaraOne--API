@@ -31,7 +31,7 @@ const RECONCILIATION_DEFINITIONS = Object.freeze([
 ]);
 
 // M9-D621: as janelas de contas a pagar e recebíveis entram na mesma publicação e no mesmo cálculo
-const KPI_DEFINITIONS = Object.freeze([...RECONCILIATION_DEFINITIONS, ...require('./finance.horizon').DEFINITIONS, ...require('./finance.cash').DEFINITIONS, ...require('./finance.results').DEFINITIONS]);
+const KPI_DEFINITIONS = Object.freeze([...RECONCILIATION_DEFINITIONS, ...require('./finance.horizon').DEFINITIONS, ...require('./finance.cash').DEFINITIONS, ...require('./finance.results').DEFINITIONS, ...require('./finance.delinquency').DEFINITIONS]); // M9-D622: inadimplência, taxa e necessidade para respirar
 
 /** Entrada completa de `publishMetric` (escopo da empresa, para o owner seguir o parâmetro de cada empresa). */
 async function publishInput(def, scope, transaction) {

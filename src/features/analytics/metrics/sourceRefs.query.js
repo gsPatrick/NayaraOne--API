@@ -89,7 +89,7 @@ async function sumValue(spec, filter, transaction) {
 
 /** Linhas completas (colunas de `rowColumns`) para refazer a fórmula; ordenadas pelo id para o resultado ser repetível. */
 async function fetchRows(spec, filter, transaction) {
-  const cols = (spec.rowColumns || []).map((c) => `t."${c}"::text AS "${c}"`);
+  const cols = [...(spec.rowColumns || []).map((c) => `t."${c}"::text AS "${c}"`), ...Object.entries(spec.rowExpressions || {}).map(([name, sql]) => `(${sql})::text AS "${name}"`)]; // rowExpressions: SQL FIXO da origem (M9-D622)
   if (!cols.length) throw new Error(`Origem ${spec.metricCode}: não declara rowColumns para o modo RECOMPUTE.`);
   const { where, replacements } = buildWhere(spec, filter);
   const [rows] = await sequelize.query(`SELECT ${cols.join(', ')} ${from(spec)} WHERE ${where} ORDER BY t."${spec.idColumn}"`, { replacements, transaction });

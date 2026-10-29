@@ -15,6 +15,7 @@
  *     flags: ['includeOpening'],                                                       // nomes de `equals` que não são coluna: só ligam/desligam uma parcela
  *     predicates: [(filter) => ({ sql: '(t."stage" NOT IN (:x))', replacements: { x: [...] } })],  // condições FIXAS do código (M9-D631), em AND com o filtro; a tabela é `t`; valores por parâmetro; os valores variáveis vêm de `flags` do filtro
  *     formulaId: '...', rowColumns: ['...'], formulaParams: {},                       // modo RECOMPUTE
+ *     rowExpressions: { due_day: "(t.\"due_at\" AT TIME ZONE 'America/Sao_Paulo')::date" },   // colunas calculadas por SQL FIXO do código (M9-D622), em AND com rowColumns, para refazer a fórmula
  *     describe: (filter) => 'Lançamentos liquidados da empresa ...',
  *   })
  *   registerSourceSpec({ metricCode: 'fin.breathing_need', components: ['fin.payables_30d', 'fin.free_cash'] })   // KPI composto
@@ -49,6 +50,7 @@ function assertLeaf(spec) {
   if (spec.predicates !== undefined && !(Array.isArray(spec.predicates) && spec.predicates.every((p) => typeof p === 'function'))) fail(spec, 'predicates deve listar funções (filtro) => { sql, replacements }.');
   if (spec.flags !== undefined && !(Array.isArray(spec.flags) && spec.flags.every((f) => FILTER_NAME.test(f)))) fail(spec, 'flags inválido.');
   if (spec.rowColumns !== undefined && !(Array.isArray(spec.rowColumns) && spec.rowColumns.every((c) => IDENT.test(c)))) fail(spec, 'rowColumns inválido.');
+  if (spec.rowExpressions !== undefined && !(spec.rowExpressions && typeof spec.rowExpressions === 'object' && Object.entries(spec.rowExpressions).every(([name, sql]) => IDENT.test(name) && typeof sql === 'string' && sql.length > 0))) fail(spec, 'rowExpressions inválido.');
   if (spec.reconcileMode !== undefined && !MODES.includes(spec.reconcileMode)) fail(spec, 'reconcileMode inválido.');
   if (typeof spec.describe !== 'function') fail(spec, 'informe describe(filter) em linguagem de negócio.');
 }

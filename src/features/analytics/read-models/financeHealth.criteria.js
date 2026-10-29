@@ -36,6 +36,7 @@ function financeCriteria(companyId, bounds, cash = {}) {
     'fin.receivables_60d': pending('RECEIVABLE', 'today', 'horizon60'),
     'fin.overdue_payables': pending('PAYABLE', null, 'today'),
     'fin.overdue_receivables': pending('RECEIVABLE', null, 'today'),
+    'fin.delinquency_rate': { companyId, period: { from: b('windowStart'), to: b('dayEnd') }, status: ['PENDING', 'PARTIALLY_SETTLED', 'SETTLED'], nature: ['RECEIVABLE'], equals: { ...OWN } }, // M9-D622: a base da taxa (a origem reconcilia refazendo a conta)
     'fin.reconciliations_pending': { companyId, period: { from: null, to: b('dayEnd') } }, // M9-D624: a origem exclui as transações já conciliadas
     'fin.anomalies_open': { companyId, status: ['OPEN'] },
     ...resultCriteria(companyId, b), // M9-D623
