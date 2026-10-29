@@ -122,4 +122,4 @@ function openPanel(env, code, { perms, tenant = 'A', query = `asOf=${AS_OF}`, ke
 
 const getMetric = (env, code, perms) => env.call('GET', `/analytics/metrics/${code}?asOf=${AS_OF}`, { perms });
 
-module.exports = { AS_OF, NOW, PREFIX, CRM_USER, LEGAL_USER, COR_USER, setup, teardown, seedMetric, seedPanel, cleanup, publishAll, openPanel, getMetric, caseOf, dashboards, registry, http };
+module.exports = { AS_OF, NOW, PREFIX, FILTERS, CRM_USER, LEGAL_USER, COR_USER, setup, teardown, seedMetric, seedPanel, cleanup, publishAll, openPanel, getMetric, caseOf, dashboards, registry, http };

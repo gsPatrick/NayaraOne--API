@@ -54,18 +54,27 @@ function seriesOf(config, metric, flat) {
   });
 }
 
-/** Linhas do grupo: cada uma com a medida principal (sem sufixo), a participação (`share`), as medidas extras e as colunas da tabela. */
-function itemsOf(config, metric, groups, orderList) {
-  const items = groups.get(config.group) || new Map();
-  const rows = [...items.entries()].map(([id, measures]) => {
-    const main = measures.get('') || null;
-    const row = { id, label: humanize(id), value: main ? main.value : null, formatted: main ? formatValue(dimensionUnit('', metric.unit), main.value) : null };
+/** Linhas de um grupo: cada uma com a medida principal (`valueKey`, ou a sem sufixo), a participação (`share`), as medidas extras e as colunas da tabela. */
+function rowsOfGroup(config, metric, items) {
+  const valueKey = config.valueKey || '';
+  return [...items.entries()].map(([id, measures]) => {
+    const main = measures.get(valueKey) || null;
+    const row = { id, label: humanize(id), value: main ? main.value : null, formatted: main ? formatValue(dimensionUnit(valueKey, metric.unit), main.value) : null };
     if (config.share) row.share = measures.has(config.share) ? cell(metric, config.share, 'Participação', measures.get(config.share)) : null;
     if (config.extra) row.extra = config.extra.filter((x) => measures.has(x.key)).map((x) => cell(metric, x.key, x.label, measures.get(x.key)));
     if (config.measures) row.cells = config.measures.map((m) => cell(metric, m.key, m.label, measures.get(m.key)));
     return row;
   });
-  return sortItems(rows, config.order, orderList);
+}
+
+/**
+ * Linhas do widget. Com `group`, uma lista só. Com `groups` ([{ group, label }], M9-D654: ranking por causa, equipe e material; perdas por obra e
+ * material), uma lista por grupo, cada uma ordenada pelo seu valor, uma depois da outra; a linha leva `group`, `groupLabel` e o código em `rawId`.
+ */
+function itemsOf(config, metric, groups, orderList) {
+  if (!config.groups) return sortItems(rowsOfGroup(config, metric, groups.get(config.group) || new Map()), config.order, orderList);
+  return config.groups.flatMap((spec) => sortItems(rowsOfGroup(config, metric, groups.get(spec.group) || new Map()), config.order, orderList)
+    .map((r) => ({ ...r, id: `${spec.group}:${r.id}`, rawId: r.id, group: spec.group, groupLabel: spec.label, label: `${spec.label}: ${r.label}` })));
 }
 
 /** `alert` = o cartão está em alerta: o indicador (ou a chave `alertOn`) tem valor maior que zero. Decidido aqui, nunca no Front. */
@@ -78,7 +87,7 @@ function alertOf(config, metric, flat) {
 function buildBody(widgetType, config, metric, dimensions, orderList) {
   const { flat, groups } = indexDimensions(dimensions);
   const body = { facts: factsOf(config, metric, flat), series: seriesOf(config, metric, flat), alert: alertOf(config, metric, flat) };
-  if (config.group) body.items = itemsOf(config, metric, groups, orderList);
+  if (config.group || config.groups) body.items = itemsOf(config, metric, groups, orderList);
   if (config.measures) body.columns = config.measures.map((m) => ({ key: m.key, label: m.label }));
   if (config.chart) body.chart = config.chart;
   if (config.link) body.link = config.link; // tela de lista que o cartão abre (indicador NORMAL não tem detalhe de BI; D712)
