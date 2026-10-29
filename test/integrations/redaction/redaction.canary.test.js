@@ -57,7 +57,8 @@ before(async () => {
 after(async () => {
   removerTap();
   await comoTenant(async (t) => {
-    if (idsErro.length) await sequelize.query('DELETE FROM integration.integration_errors WHERE id IN (:ids)', { replacements: { ids: idsErro }, transaction: t });
+    // M9-D244: o runtime não apaga erros de integração (só integration.purge_expired()); as linhas de teste são encerradas em vez de apagadas.
+    if (idsErro.length) await sequelize.query("UPDATE integration.integration_errors SET status = 'IGNORED' WHERE id IN (:ids) AND status = 'OPEN'", { replacements: { ids: idsErro }, transaction: t });
     if (idsConexao.length) await sequelize.query('DELETE FROM integration.connections WHERE id IN (:ids)', { replacements: { ids: idsConexao }, transaction: t });
   });
   await sequelize.close();
