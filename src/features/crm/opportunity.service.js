@@ -99,6 +99,17 @@ async function createOpportunity(payload, actorUserId, transaction) {
     transaction
   );
 
+  // M9-D431: origem do lead com rastreio (formulário, WhatsApp, ligação). Referência de campanha/link inválida não impede a criação:
+  // o lead nasce sem atribuição (attribution_valid = false).
+  if (payload.leadSource) {
+    const { service: tracking } = require('../../features/marketing/tracking'); // require tardio: evita ciclo de carga entre o CRM e o Marketing
+    await tracking.recordLeadSource(
+      { tenant: { groupId, companyId }, actor: actorUserId, opportunityId: opportunity.id, leadSource: payload.leadSource,
+        campaignId: payload.campaignId, trackingLinkId: payload.trackingLinkId, clickAt: payload.clickAt },
+      transaction
+    );
+  }
+
   return opportunity;
 }
 

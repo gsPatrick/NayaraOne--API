@@ -1,13 +1,15 @@
 'use strict';
 
-const { mktNotImplemented } = require('../marketing.errors');
-
 /**
- * Marketing / tracking — serviço da área. A fundação (M9-D402) entrega a casa e as portas de permissão; as regras de negócio entram
- * nas demandas dona de cada rota (M9-D435 lista as rotas e as demandas que as preenchem), sobre este mesmo arquivo.
+ * Marketing / tracking — serviço da área (M9-D431): links de rastreio assinados, clique com consentimento, origem do lead, venda
+ * atribuída (first-touch e last-touch) e relatório por campanha e canal.
  */
-function pendingOwner(owner) {
-  throw mktNotImplemented(owner);
-}
-
-module.exports = { pendingOwner };
+module.exports = {
+  ...require('./tracking.links.service'),
+  ...require('./tracking.lead.service'),
+  ...require('./tracking.sale.service'),
+  ...require('./tracking.report.service'),
+  ...require('./tracking.redirect.service'),
+  ...require('./tracking.url'),
+  recordEvent: require('./tracking.events.service').recordEvent,
+};

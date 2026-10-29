@@ -18,9 +18,13 @@ const killSwitchRouter = require('./killswitch.routes');
  */
 const areas = { content, campaigns, automations, publications, tracking, suppression };
 
+// Rotas públicas (sem login) do Marketing: hoje só GET /t/:shortCode (M9-D431). Montadas FORA de /marketing, antes das rotas autenticadas.
+const publicRouter = Router();
+publicRouter.use(tracking.publicRouter);
+
 const router = Router();
 router.use('/marketing', authMiddleware, tenantMiddleware);
 for (const area of Object.values(areas)) router.use(area.router);
 router.use(killSwitchRouter);
 
-module.exports = { router, areas };
+module.exports = { router, publicRouter, areas };

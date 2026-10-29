@@ -37,7 +37,7 @@ const settingsRouter = require('../features/settings/settings.routes');
 const filesRouter = require('../features/files/files.routes');
 const { router: governanceRouter } = require('../features/core-governance');
 const { router: aiModuleRouter } = require('../features/ai');
-const { router: marketingModuleRouter } = require('../features/marketing');
+const { router: marketingModuleRouter, publicRouter: marketingPublicRouter } = require('../features/marketing');
 const { router: analyticsModuleRouter } = require('../features/analytics');
 
 /**
@@ -78,6 +78,8 @@ router.post('/v1/correspondent/webhooks/financing/:provider', createWebhookRateL
 // CartShareRouting (sem RLS), mesmo padrão dos webhooks acima.
 router.get('/v1/crm/carts/public/:token', crmController.getPublicCart);
 router.post('/v1/crm/carts/public/:token/properties/:propertyId/click', crmController.clickPublicCartProperty);
+// Marketing — link de rastreio público GET /t/:shortCode (M9-D431): 302 com UTMs, assinatura do link como autorização.
+router.use(marketingPublicRouter);
 
 // Rotas de domínio versionadas.
 router.use('/v1', pingRouter);
