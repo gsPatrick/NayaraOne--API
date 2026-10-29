@@ -5,15 +5,15 @@ const { registerHealthSampleSource } = require('../../health/sampleSources');
 
 /**
  * Fonte das amostras de saúde (M9-D206) alimentada pelas tentativas de envio. Uma chamada conta como sucesso ou falha da
- * disponibilidade do fornecedor; erro de VALIDATION (dado nosso) e limite do fornecedor (429, contado à parte em rateLimitCount) não
- * entram em `calls`. A cota devolvida é a última válida (renovação no futuro) ou a mais recente da janela.
+ * disponibilidade do fornecedor; erro de VALIDATION (dado nosso) não entra em `calls`; o limite do fornecedor (429) entra como falha, porque o
+ * ritmo é nosso (M9-D225) e também é contado à parte em rateLimitCount. A cota devolvida é a última válida (renovação no futuro) ou a mais recente da janela.
  */
 async function dispatchHealthSample({ connection, from, to }, transaction) {
   const q = (sql, rep) => sequelize.query(sql, { replacements: { id: connection.id, from, to, ...rep }, transaction }).then(([rows]) => rows);
   const [calls, counts, backlog, dlq, quota] = await Promise.all([
     q(`SELECT outcome, latency_ms, finished_at FROM "integration"."dispatch_attempts"
         WHERE connection_id = :id AND started_at >= :from AND started_at <= :to AND outcome IS NOT NULL
-          AND NOT rate_limited AND COALESCE(error_class, '') <> 'VALIDATION'`),
+          AND COALESCE(error_class, '') <> 'VALIDATION'`),
     q(`SELECT count(*) FILTER (WHERE rate_limited)::int AS rate_limited, count(*) FILTER (WHERE error_class = 'AUTH')::int AS auth,
               count(*) FILTER (WHERE attempt_no > 1)::int AS retries, max(finished_at) AS last_at
          FROM "integration"."dispatch_attempts" WHERE connection_id = :id AND started_at >= :from AND started_at <= :to`),

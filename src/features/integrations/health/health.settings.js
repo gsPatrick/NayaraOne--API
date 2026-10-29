@@ -2,6 +2,7 @@
 
 const AppError = require('../../../utils/AppError');
 const { parseSlo } = require('./sloParse');
+const { assertSloInRange } = require('./slo');
 
 /**
  * Parâmetros da saúde dos fornecedores (M9-D206). Dicionário fail-closed de SETTINGS_SCHEMA; a leitura com os
@@ -11,9 +12,8 @@ const sloSpec = {
   type: 'string',
   validate: (key, value) => {
     const slo = parseSlo(value);
-    if (!slo || slo.minSuccessRate <= 0 || slo.minSuccessRate > 100 || slo.p95Ms <= 0 || slo.p99Ms < slo.p95Ms) {
-      throw AppError.badRequest(`O valor de "${key}" deve seguir o formato "99.5% / p95 5 s / p99 12 s / backlog 15 min" (p99 não menor que p95).`, 'SETTING_INVALID_VALUE', { key, value });
-    }
+    if (!slo) throw AppError.badRequest(`O valor de "${key}" deve seguir o formato "99.5% / p95 5 s / p99 12 s / backlog 15 min".`, 'SETTING_INVALID_VALUE', { key, value });
+    assertSloInRange(key, value, slo); // M9-D225: sucesso entre o piso (90%) e o teto (99,99%), p99 não menor que p95
   },
 };
 

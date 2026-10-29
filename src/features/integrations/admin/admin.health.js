@@ -5,6 +5,8 @@ const AppError = require('../../../utils/AppError');
 const { getServerEnvironment } = require('../registry/registry.helpers');
 const { getCurrentHealth } = require('../health/healthQuery');
 const { loadHealthContext } = require('../health/healthContext');
+const { buildSloReport } = require('../health/sloReport');
+const { runbookPathFor } = require('../health/runbooks');
 const { q, SELECT } = require('../health/healthStore');
 const { metricsFromRow } = require('./admin.metrics');
 const { brtDeep } = require('./admin.format');
@@ -17,7 +19,7 @@ const WINDOWS = Object.freeze({
   '1d': { bucketMin: DAY_MIN, rangeMin: 7 * DAY_MIN },
   '30d': { bucketMin: DAY_MIN, rangeMin: 30 * DAY_MIN },
 });
-const runbookPathOf = (providerCode) => `docs/runbooks/integrations/${providerCode}.md`;
+const runbookPathOf = runbookPathFor; // o caminho do runbook tem dona única: health/runbooks.js (M9-D223)
 
 /** A connection do fornecedor na empresa: a do ambiente pedido; sem pedido, a ativa, depois a do ambiente do servidor, depois a mais recente. */
 async function findConnection(providerCode, environment, ctx, transaction) {
@@ -41,19 +43,6 @@ async function readSeries(connection, window, now, transaction) {
   }));
 }
 
-/** O sucesso medido no período contra a meta da criticidade (a soma das janelas; sem chamadas não há taxa). */
-function sloSummary(target, criticality, series) {
-  const total = series.reduce((s, p) => s + p.callsTotal, 0);
-  const ok = series.reduce((s, p) => s + p.callsSuccess, 0);
-  const rate = total === 0 ? null : Math.round((ok / total) * 10000) / 100;
-  return {
-    criticality,
-    target,
-    measured: { callsTotal: total, callsSuccess: ok, callsFailed: total - ok, successRate: rate },
-    violated: total === 0 ? null : (ok / total) * 100 < target.minSuccessRate,
-  };
-}
-
 /**
  * GET /admin/integrations/:provider/health (M9-D249): saúde detalhada de um fornecedor da empresa. Fornecedor que a empresa não
  * tem (ou que é de outra empresa) é 404 INTEGRATION_CONNECTION_NOT_FOUND.
@@ -65,6 +54,8 @@ async function getProviderHealth(providerCode, query, ctx, transaction, { now = 
     loadHealthContext(connection, transaction),
     readSeries(connection, query.window, now, transaction),
   ]);
+  const period = { from: new Date(now.getTime() - WINDOWS[query.window].rangeMin * 60000), to: now };
+  const slo = await buildSloReport({ connection, criticality: healthCtx.criticality, target: healthCtx.slo, series, period, window: query.window, now }, transaction);
   return brtDeep({
     provider: connection.providerCode,
     connectionId: connection.id,
@@ -79,7 +70,7 @@ async function getProviderHealth(providerCode, query, ctx, transaction, { now = 
       consecutiveFailures: current.consecutiveFailures ?? 0, halfOpenSuccesses: current.halfOpenSuccesses ?? 0,
     },
     quota: { limit: current.quotaLimit ?? null, remaining: current.quotaRemaining ?? null, resetsAt: current.quotaResetsAt || null },
-    slo: sloSummary(healthCtx.slo, healthCtx.criticality, series),
+    slo,
     runbookPath: runbookPathOf(connection.providerCode),
   });
 }
