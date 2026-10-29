@@ -1,55 +1,19 @@
-'use strict';
+// Apoio dos testes da NAY Correspondente (M9-D039): agente ativado pelo ciclo completo (iaAgenteNay), casos de financiamento com checklist
+// e simulações conhecidos. Banco descartável, nayara_runtime, rollback.
 
-// Apoio dos testes da NAY Correspondente (M9-D039): agente provisionado pela definição de código e ativado pelo ciclo normal, casos de
-// financiamento com checklist e simulações conhecidos, e o orquestrador com o provider sandbox. Banco descartável, nayara_runtime, rollback.
-
-const agents = require('../../../src/features/ai/agents');
-const { AiOrchestrator } = require('../../../src/features/ai/orchestrator');
-const { buildDefaultRegistry } = require('../../../src/features/ai/tools');
-const { registerAiAdapters } = require('../../../src/features/ai/providers');
-const { provisionAgentVersion, installGoldenCases } = require('../../../src/features/ai/agents/kit');
-const { AiEvaluationService } = require('../../../src/features/ai/evaluations');
-const { avaliar } = require('./iaAvaliacao');
-const { DEFINITION, CODE, GOLDEN_CASES, registerNayCorrespondente } = require('../../../src/features/ai/agents/nay_correspondente');
+const { ativarAgente, rodar, como, svc, FIXO } = require('./iaAgenteNay');
+const nayCorrespondente = require('../../../src/features/ai/agents/nay_correspondente');
 const financingCases = require('../../../src/features/correspondent/cases/financingCases.service');
 const caseDocuments = require('../../../src/features/correspondent/cases/caseDocuments.service');
 const { Person } = require('../../../src/models');
-const { carregarPessoas, ctxDe, q, run, uid } = require('../../helpers/aiAgents');
-const { criarOrcamento, AGORA } = require('./iaOrcamento');
+const { q, run, uid } = require('../../helpers/aiAgents');
 
-const FIXO = () => AGORA.getTime();
 const PERMS = ['ai:use', 'correspondent:read'];
 
-const como = (tenant, userId, ...permissions) => ({ groupId: tenant.groupId, companyId: tenant.companyId, userId, permissions });
-const svc = new AiEvaluationService();
-
-/**
- * Agente NAY_CORRESPONDENTE pelo ciclo completo de um agente de alto impacto: versão da empresa criada da definição (DRAFT), golden
- * cadastrado, avaliação golden e adversarial (suíte ALL) verde, homologação da versão e da avaliação por pessoas diferentes e ativação
- * por outra. `perms` são as permissões de quem pergunta; `deps` substitui dependências do orquestrador.
- */
-async function cenario(tenant, tx, { perms = PERMS, deps = {}, orcamento = true } = {}) {
-  registerNayCorrespondente(); // só este agente: os demais pacotes têm os seus próprios testes
-  registerAiAdapters();
-  await carregarPessoas();
-  const registry = await buildDefaultRegistry();
-  const [criador, disparador, homologador, avaliador, ativador] = [0, 1, 2, 3, 4].map(() => ctxDe(tenant).userId);
-  const draft = await provisionAgentVersion(como(tenant, criador), DEFINITION, tx);
-  await installGoldenCases(como(tenant, criador), CODE, GOLDEN_CASES, tx);
-  const ev = await avaliar(svc, como(tenant, disparador, 'ai:evaluate'), tx, { agentCode: CODE, suite: 'all', agentVersion: draft.version });
-  if (ev.status !== 'PASSED') throw new Error(`avaliação do golden não passou: ${JSON.stringify({ status: ev.status, metrics: ev.metrics, falhas: (ev.items || []).filter((i) => !i.passed).map((i) => [i.caseId, i.expected, i.actualSummary]) })}`);
-  await agents.homologate(como(tenant, homologador), CODE, draft.version, {}, tx);
-  await svc.homologate(como(tenant, avaliador, 'ai:evaluate'), ev.id, { note: 'Golden e adversarial conferidos.' }, tx);
-  const dono = como(tenant, ativador);
-  await agents.activate(dono, CODE, draft.version, tx);
-  if (orcamento) await criarOrcamento(dono, tx, { agentCode: CODE, limit: '500.00' });
-  const auth = { userId: ativador, groupId: tenant.groupId, companyId: tenant.companyId, permissions: perms, roles: ['TESTE'] };
-  const orch = new AiOrchestrator({ toolRegistry: registry, clock: FIXO, ...deps });
-  return { tenant, code: CODE, registry, auth, orch, tx, ctx: dono, version: draft.version, evaluation: ev, pessoas: { criador, disparador, homologador, avaliador, ativador } };
-}
-
-/** Uma consulta pelo orquestrador; `over` troca taskType, finalidade ou as permissões (`over.auth`). */
-const rodar = (c, texto, over = {}) => c.orch.run({ agentCode: c.code, purpose: 'Acompanhar o financiamento', input: texto, taskType: 'consulta', ...over }, over.auth || c.auth, c.tx);
+/** NAY_CORRESPONDENTE ativa (ciclo de alto impacto). `perms` são as permissões de quem pergunta. */
+const cenario = (tenant, tx, opts = {}) => ativarAgente(tenant, tx, {
+  CODE: nayCorrespondente.CODE, DEFINITION: nayCorrespondente.DEFINITION, GOLDEN_CASES: nayCorrespondente.GOLDEN_CASES, register: nayCorrespondente.registerNayCorrespondente,
+}, { perms: PERMS, ...opts });
 
 /** Caso de financiamento do provider `sandbox` com um proponente. */
 async function criarCaso(tenant, tx) {

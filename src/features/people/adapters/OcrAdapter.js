@@ -38,7 +38,8 @@ class SandboxOcrAdapter {
         fields: mock.fields || {},
         confidence: typeof mock.confidence === 'number' ? mock.confidence : 0.95,
         illegible: false,
-        raw: { sandbox: true, documentType },
+        // Posição de origem (página) e confiança por campo, quando o documento de teste as traz (NAY Documental, M9-D040).
+        raw: { sandbox: true, documentType, ...(mock.positions ? { positions: mock.positions } : {}), ...(mock.fieldConfidence ? { fieldConfidence: mock.fieldConfidence } : {}) },
       };
     } catch (err) {
       // Marcador presente mas malformado — tratamos como ilegível em vez de tentar adivinhar.

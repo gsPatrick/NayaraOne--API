@@ -15,6 +15,10 @@ const AGENT_TOOL_DEFINITIONS = Object.freeze([
   require('./legalGetExpiringContracts'),
   require('./financeGetCashflowProjection'),
   require('./financeGetAnomalies'),
+  require('./documentsTranscribe'),
+  require('./documentsClassifySuggest'),
+  require('./documentsExtractFields'),
+  require('./documentsCheckConsistency'),
 ]);
 
 module.exports = { AGENT_TOOL_DEFINITIONS };

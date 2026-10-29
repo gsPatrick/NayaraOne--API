@@ -21,10 +21,9 @@ async function subir(porta) {
   return R.subir(porta);
 }
 
-/** Versão ATIVA da empresa com o conteúdo da definição (DRAFT, allowlist, HOMOLOGATED, ACTIVE) e o orçamento mensal pela rota. */
-async function agenteAtivo(env, tenant) {
+/** Versão ATIVA da empresa com o conteúdo da definição de código `d` (padrão: a da NAY Correspondente) (DRAFT, allowlist, HOMOLOGATED, ACTIVE) e o orçamento mensal pela rota. */
+async function agenteAtivo(env, tenant, d = DEFINITION) {
   const id = crypto.randomUUID();
-  const d = DEFINITION;
   await admin(
     `INSERT INTO ai.agents (id, group_id, company_id, code, version, status, purpose, system_policy, model_policy, data_scopes, limits, criticality, enabled, config_hash)
      VALUES ($1, $2, $3, $4, 1, 'DRAFT', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, false, $11)`,

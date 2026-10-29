@@ -7,6 +7,7 @@ const { radarMatches } = require('./radar.services');
 const { financeHealth, financePayments } = require('./finance.services');
 const { constructionProjects, legalContracts, legalDrafts, correspondentCases } = require('./operations.services');
 const { knowledge } = require('./knowledge.services');
+const { documents } = require('../agents/nay_documental/services');
 const { analyticsBi } = require('./analytics.services');
 const { constructionObras } = require('../agents/nay_obras/obras.toolServices');
 const { legalNay } = require('../agents/nay_juridica/juridica.toolServices');
@@ -25,6 +26,7 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     legalContracts: legalContracts(transaction),
     correspondentCases: withStalledScope(correspondentCases(transaction, scope), transaction, scope), // M9-D035: a Diretoria recebe só o agregado
     knowledge: knowledge(transaction, scope),
+    documents: documents(transaction, scope), // M9-D040: NAY Documental (OCR, classificação, extração e checagem, só leitura e sugestão)
     atendimentoContact: contactStatus(transaction, scope), // M9-D041: NAY Atendimento (contato do contexto, anúncios públicos, encaminhamento)
     atendimentoListings: publicListings(transaction, scope),
     atendimentoHandoff: handoff(transaction, scope),

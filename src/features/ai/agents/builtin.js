@@ -6,6 +6,7 @@ const { wireScopeGuard } = require('./scope');
 const { registerNayObras } = require('./nay_obras');
 const { registerNayJuridica } = require('./nay_juridica');
 const { registerNayCorrespondente } = require('./nay_correspondente');
+const { registerNayDocumental } = require('./nay_documental');
 const { registerNayDiretoria } = require('./nay_diretoria');
 const { registerNayFinanceira } = require('./nay_financeira');
 const { registerNayComercial } = require('./nay_comercial');
@@ -18,6 +19,7 @@ function registerBuiltInAgents() {
   registerNayObras();
   registerNayJuridica();
   registerNayCorrespondente();
+  registerNayDocumental();
   registerNayDiretoria();
   registerNayFinanceira();
   registerNayComercial();

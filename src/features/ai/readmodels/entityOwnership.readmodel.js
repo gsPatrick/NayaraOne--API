@@ -15,6 +15,7 @@ const ENTITY_TABLES = Object.freeze({
   legalContract: 'legal.contracts',
   financingCase: 'correspondent.financing_cases',
   financialEntry: 'finance.financial_entries',
+  file: 'people.files',
 });
 
 async function findEntityCompany(entity, id, transaction) {
