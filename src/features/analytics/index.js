@@ -12,6 +12,7 @@ require('./metrics/kpis').installLegalCorKpis(); // liga os KPIs do Jurídico e 
 require('./metrics/kpis').installMarketingKpis(); // liga os KPIs de Marketing ao fim do refresh dos seus read models (M9-D670 e M9-D671)
 require('./metrics/kpis').installSupportKpis(); // liga os KPIs de Atendimento ao fim do refresh dos seus read models (M9-D672)
 require('./metrics/kpis').installRentalDeadlineKpis(); // liga os KPIs de prazos da Locação ao fim do refresh dos seus read models (M9-D641)
+require('./metrics/kpis').installRentalCareKpis(); // liga os KPIs de chamados, satisfação e repasses da Locação ao fim do refresh dos seus read models (M9-D642)
 require('./metrics/kpis').installCommandEventKpis(); // liga os KPIs de fatos do dia do Centro de Comando ao fim do refresh de rm_command_events (M9-D710)
 require('./metrics/kpis').installTechKpis(); // liga os KPIs de Tecnologia ao fim do refresh dos seus read models (M9-D680)
 require('./metrics/kpis').installDecisionQueueKpis(); // liga os KPIs da fila de decisão ao fim do refresh de rm_decision_queue (M9-D709)

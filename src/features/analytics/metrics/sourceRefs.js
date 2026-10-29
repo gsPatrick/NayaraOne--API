@@ -22,6 +22,7 @@ require('./sourceSpecs.estoque'); // origem dos KPIs de Estoque e Patrimônio (M
 require('./sourceSpecs.obraCustos'); // origem do desperdício, custo pós-obra e recorrência (M9-D652)
 require('./sourceSpecs.support'); // origem dos KPIs de Atendimento (M9-D672)
 require('./sourceSpecs.rentalDeadlines'); // origem dos KPIs de prazos da Locação (M9-D641)
+require('./sourceSpecs.rentalCare'); // origem dos KPIs de chamados, satisfação e repasses da Locação (M9-D642)
 require('./sourceSpecs.commandEvents'); // origem dos KPIs de fatos do dia do Centro de Comando (M9-D710)
 require('./sourceSpecs.tecnologia'); // origem dos KPIs de Tecnologia (M9-D680)
 require('./sourceSpecs.decisionQueue'); // origem dos KPIs da fila de decisão (M9-D709)
