@@ -25,7 +25,7 @@ test('dispatch_politica_de_toda_operacao_dos_ports', () => {
   for (const [d, o] of perigosas) {
     assert.deepEqual([PORTS[d].operations[o].opClass, PORTS[d].operations[o].confirmation], ['DANGEROUS', 'ON_STATUS'], `${d}.${o}`);
   }
-  const seguras = [['PORTAL', 'unpublishListing'], ['SITE', 'unpublishPage'], ['SOCIAL', 'deletePost'], ['BANK', 'getPaymentStatus'], ['MESSAGING', 'getStatus']];
+  const seguras = [['MESSAGING', 'sendText'], ['EMAIL', 'sendEmail'], ['PORTAL', 'unpublishListing'], ['SITE', 'unpublishPage'], ['SOCIAL', 'deletePost'], ['BANK', 'getPaymentStatus'], ['MESSAGING', 'getStatus']];
   for (const [d, o] of seguras) assert.equal(PORTS[d].operations[o].opClass, 'SAFE', `${d}.${o}`);
   // E-mail aceito pela fila do fornecedor só conta como SUBMITTED: ON_RESPONSE com status final declarado.
   assert.deepEqual([...PORTS.EMAIL.operations.sendEmail.finalStatuses], ['DELIVERED']);
