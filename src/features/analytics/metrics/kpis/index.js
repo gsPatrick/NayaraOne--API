@@ -14,6 +14,7 @@ const atendimento = require('./atendimento'); // M9-D672: KPIs de Atendimento (r
 const locacaoPrazos = require('./locacao-prazos'); // M9-D641: KPIs de prazos da Locação (garantias, obrigações, vistorias e chaves)
 const locacaoAtendimento = require('./locacao-atendimento'); // M9-D642: KPIs de chamados, satisfação e repasses da Locação
 const decisao = require('./decisao'); // M9-D709: KPIs da fila de decisão do Centro de Comando (aprovações financeiras, ajustes de estoque, regras e propostas da NAY)
+const locacaoCarteira = require('./locacao-carteira'); // M9-D640: KPIs da carteira de Locação (contratos ativos, vacância e inadimplência)
 const centroComando = require('./centro-comando'); // M9-D710: KPIs de fatos do dia do Centro de Comando (contratos assinados, oportunidades ganhas, pagamentos liquidados)
 const tecnologia = require('./tecnologia'); // M9-D680: KPIs de Tecnologia (disponibilidade, filas, integrações, freshness, autenticação e bloqueios)
 const ia = require('./ia'); // M9-D681: KPIs de IA (custo por agente, grounding e avaliação, orçamento e chamadas de ferramenta bloqueadas)
@@ -32,6 +33,7 @@ Object.assign(module.exports, legalCor); // M9-D660 / M9-D661
 Object.assign(module.exports, marketing); // M9-D670 / M9-D671
 Object.assign(module.exports, atendimento); // M9-D672
 Object.assign(module.exports, locacaoPrazos); // M9-D641
+Object.assign(module.exports, locacaoCarteira); // M9-D640
 Object.assign(module.exports, locacaoAtendimento); // M9-D642
 Object.assign(module.exports, tecnologia); // M9-D680
 Object.assign(module.exports, ia); // M9-D681

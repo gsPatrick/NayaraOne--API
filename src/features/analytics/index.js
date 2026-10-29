@@ -13,6 +13,7 @@ require('./metrics/kpis').installMarketingKpis(); // liga os KPIs de Marketing a
 require('./metrics/kpis').installSupportKpis(); // liga os KPIs de Atendimento ao fim do refresh dos seus read models (M9-D672)
 require('./metrics/kpis').installRentalDeadlineKpis(); // liga os KPIs de prazos da Locação ao fim do refresh dos seus read models (M9-D641)
 require('./metrics/kpis').installRentalCareKpis(); // liga os KPIs de chamados, satisfação e repasses da Locação ao fim do refresh dos seus read models (M9-D642)
+require('./metrics/kpis').installRentalPortfolioKpis(); // liga os KPIs de contratos ativos, vacância e inadimplência da Locação ao fim do refresh dos seus read models (M9-D640)
 require('./metrics/kpis').installCommandEventKpis(); // liga os KPIs de fatos do dia do Centro de Comando ao fim do refresh de rm_command_events (M9-D710)
 require('./metrics/kpis').installTechKpis(); // liga os KPIs de Tecnologia ao fim do refresh dos seus read models (M9-D680)
 require('./metrics/kpis').installIaKpis(); // liga os KPIs de IA (custo, qualidade, orçamento e chamadas bloqueadas) ao fim do refresh dos seus read models (M9-D681)

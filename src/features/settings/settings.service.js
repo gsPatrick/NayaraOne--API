@@ -74,6 +74,7 @@ const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/t
 const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
 const { IA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/iaKpi.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
+const { RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoCarteiraKpi.settings');
 const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
 const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
@@ -320,6 +321,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.
   ...TECH_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D681 — KPIs de IA: owner de cada um, limite de alerta do orçamento, semanas de histórico da qualidade e motivos de bloqueio com linha própria.
+  // Marco 9, M9-D640 — KPIs da carteira de Locação: owner de contratos ativos, vacância e inadimplência da locação e faixas de valor do aluguel.
+  ...RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA,
   ...IA_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
   ...QUALITY_SETTINGS_SCHEMA,

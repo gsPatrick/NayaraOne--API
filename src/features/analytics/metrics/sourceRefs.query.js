@@ -89,10 +89,11 @@ async function sumValue(spec, filter, transaction) {
 
 /** Linhas completas (colunas de `rowColumns`) para refazer a fórmula; ordenadas pelo id para o resultado ser repetível. */
 async function fetchRows(spec, filter, transaction) {
-  const cols = [...(spec.rowColumns || []).map((c) => `t."${c}"::text AS "${c}"`), ...Object.entries(spec.rowExpressions || {}).map(([name, sql]) => `(${sql})::text AS "${name}"`)]; // rowExpressions: SQL FIXO da origem (M9-D622)
+  const exprs = Object.entries(spec.rowExpressions || {}).map(([name, sql]) => ({ name, ...(typeof sql === 'function' ? sql(filter) : { sql, replacements: {} }) })); // rowExpressions: SQL FIXO da origem (M9-D622, M9-D640)
+  const cols = [...(spec.rowColumns || []).map((c) => `t."${c}"::text AS "${c}"`), ...exprs.map((e) => `(${e.sql})::text AS "${e.name}"`)];
   if (!cols.length) throw new Error(`Origem ${spec.metricCode}: não declara rowColumns para o modo RECOMPUTE.`);
   const { where, replacements } = buildWhere(spec, filter);
-  const [rows] = await sequelize.query(`SELECT ${cols.join(', ')} ${from(spec)} WHERE ${where} ORDER BY t."${spec.idColumn}"`, { replacements, transaction });
+  const [rows] = await sequelize.query(`SELECT ${cols.join(', ')} ${from(spec)} WHERE ${where} ORDER BY t."${spec.idColumn}"`, { replacements: Object.assign({}, ...exprs.map((e) => e.replacements), replacements), transaction });
   return rows;
 }
 
