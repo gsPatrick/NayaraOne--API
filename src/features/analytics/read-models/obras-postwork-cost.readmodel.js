@@ -2,7 +2,7 @@
 
 /**
  * M9-D618 — read model rm_postwork_cost (schema analytics): por obra, causa, equipe e material, os casos de garantia (pós-obra) abertos e totais e
- * o custo da garantia. Custo = mão de obra e material do caso + custo de cada ação de garantia (mesma soma de postObraHealth). Causa = causa-raiz do
+ * o custo da garantia. Custo = mão de obra e material do caso + custo de cada ação de garantia (mesma soma de postObraHealth); `warranty_cost_open` é a parte dos casos ainda abertos (o previsto do KPI, M9-D652). Causa = causa-raiz do
  * caso; equipe e material vêm da ação ('NAO_INFORMADA' quando não informados, M9-D652). Um caso aparece em cada combinação das suas ações; o custo
  * do próprio caso (sem equipe nem material) fica na combinação 'NAO_INFORMADA' sem contar o caso duas vezes. Caso sem obra vinculada vai para a obra
  * zero (o KPI marca DEGRADED). Só ids e rótulos; a descrição e o solicitante não entram. O agregado é a obra.
@@ -29,7 +29,8 @@ async function recompute({ companyId, key, transaction }) {
      SELECT cause, team AS team_id, material AS material_id,
             (count(DISTINCT id) FILTER (WHERE counts_case AND status <> 'CLOSED'))::int AS cases_open,
             (count(DISTINCT id) FILTER (WHERE counts_case))::int AS cases_total,
-            COALESCE(SUM(cost), 0)::text AS warranty_cost
+            COALESCE(SUM(cost), 0)::text AS warranty_cost,
+            COALESCE(SUM(cost) FILTER (WHERE status <> 'CLOSED'), 0)::text AS warranty_cost_open
        FROM u GROUP BY 1, 2, 3 HAVING count(DISTINCT id) FILTER (WHERE counts_case) > 0 OR COALESCE(SUM(cost), 0) <> 0 ORDER BY 1, 2, 3`,
     { replacements: { companyId, projectId: key.project_id, nil: NIL_PROJECT }, transaction }
   );

@@ -54,6 +54,7 @@ const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-m
 const { CORRETORES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/corretoresKpi.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
+const { OBRA_COST_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraPerdasKpi.settings');
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
 const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraOperacaoKpi.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
@@ -266,6 +267,8 @@ const SETTINGS_SCHEMA = {
   ...LOCACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.
   ...OBRA_SETTINGS_SCHEMA,
+  // Marco 9, M9-D652 — KPIs de desperdício, custo pós-obra e recorrência: owner de cada KPI e janela, mínimo, tamanho do ranking e limite de ocorrências sem classificação.
+  ...OBRA_COST_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D650 — KPIs de Obras no BI (avanço, custo e margem): owner de cada indicador.
   ...OBRA_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D651 — KPIs de Obras no BI (atrasos, medições e não conformidades): owner de cada indicador e limite de não conformidade sem causa.

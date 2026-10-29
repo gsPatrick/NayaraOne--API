@@ -30,6 +30,7 @@ require('./rm_project_measurements.checks');
 require('./rm_project_nonconformities.checks');
 require('./rm_project_waste.checks');
 require('./rm_postwork_cost.checks');
+require('./rm_project_occurrences.checks'); // M9-D652
 require('./rm_inventory_health.checks');
 require('./rm_tool_assets.checks');
 require('./rm_legal_deadlines.checks');
