@@ -1,5 +1,6 @@
 'use strict';
 
+const { RULE } = require('./openapi.constants');
 const { change } = require('./diff.schema');
 
 /**
@@ -17,9 +18,9 @@ function diffErrorCodes(base, cand, where, catalog) {
   const before = codesOf(base.operation);
   const after = codesOf(cand.operation);
   for (const [status, code] of before) {
-    if (after.has(status) && after.get(status) !== code) out.push(change('ERROR_CODE_CHANGED', 9, where, `código do ${status} mudou de ${code} para ${after.get(status)}`));
+    if (after.has(status) && after.get(status) !== code) out.push(change(RULE.ERROR_CODE_CHANGED, 9, where, `código do ${status} mudou de ${code} para ${after.get(status)}`));
   }
-  if (catalog) for (const [status, code] of after) if (!catalog.has(code)) out.push(change('ERROR_CODE_CHANGED', 9, where, `código ${code} (${status}) não consta no catálogo de erros`));
+  if (catalog) for (const [status, code] of after) if (!catalog.has(code)) out.push(change(RULE.ERROR_CODE_CHANGED, 9, where, `código ${code} (${status}) não consta no catálogo de erros`));
   return out;
 }
 

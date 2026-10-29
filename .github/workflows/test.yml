@@ -181,6 +181,10 @@ jobs:
 
       # M9-D840: contrato OpenAPI versionado. Em pull request compara com o contrato da branch principal (breaking change dentro da mesma major reprova); em push confere a cobertura das
       # rotas do escopo fechado (openapi/escopo.json) e a validade do arquivo.
+      # M9-D843: todo código de erro de src/features/core-governance está no catálogo (errorCatalog.data.json / docs/ERROR_CODES.md), começa com GOV_ (fora da lista fechada) e o documento está atualizado.
+      - name: Catálogo de códigos de erro (M9-D843)
+        run: npm run check:error-codes
+
       - name: Contrato OpenAPI, base x candidata (M9-D840)
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then

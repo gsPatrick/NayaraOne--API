@@ -36,7 +36,9 @@ after(async () => {
   await stopHttp({});
 });
 
-const importHttp = (who, body) => http.call(who, 'POST', '/bcp/manual-operations/import', body);
+let keySeq = 0;
+// A importação exige Idempotency-Key (M9-D843 §3.3): uma chave nova por chamada, para a repetição do mesmo pedido ser uma NOVA importação (a resposta repetida é `alreadyImported`).
+const importHttp = (who, body) => { keySeq += 1; return http.call(who, 'POST', '/bcp/manual-operations/import', body, { 'Idempotency-Key': `m9d832-http-${Date.now()}-${keySeq}` }); };
 
 test('m9d832 HTTP: importa 3 formulários, o comando nasce com a origem BCP e a segunda importação não duplica', { skip: skip() }, async () => {
   const ops = [await env.recordAction(A, 'REGISTER_LEAD', ctx), await env.recordAction(A, 'EMERGENCY_PAYMENT', ctx), await env.recordAction(A, 'MATERIAL_REQUEST', ctx)];

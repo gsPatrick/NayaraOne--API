@@ -705,3 +705,21 @@ test('M9-D833: manual_operation_checks e bcp_payment_pendings têm RLS, FORCE RL
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
   }
 });
+
+// M9-D843: a chave de idempotência (governance.idempotency_keys) é da EMPRESA; o catálogo de erros (governance.error_catalog) é do sistema, com leitura aberta e escrita só na sincronização;
+// o contador de requisições (governance.rate_limit_counters, UNLOGGED) não tem empresa e só abre para o limitador.
+test('M9-D843: idempotency_keys, error_catalog e rate_limit_counters têm RLS, FORCE RLS e as políticas esperadas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, c.relpersistence,
+      (SELECT string_agg(p.polname, ',' ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN ('idempotency_keys', 'error_catalog', 'rate_limit_counters') ORDER BY 1`);
+  assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies]), [
+    ['error_catalog', true, true, 'error_catalog_read,error_catalog_sync'],
+    ['idempotency_keys', true, true, 'tenant_isolation'],
+    ['rate_limit_counters', true, true, 'rate_limit_writer'],
+  ]);
+  assert.equal(rows.find((r) => r.relname === 'rate_limit_counters').relpersistence, 'u', 'UNLOGGED');
+  for (const table of ['idempotency_keys', 'error_catalog', 'rate_limit_counters']) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});

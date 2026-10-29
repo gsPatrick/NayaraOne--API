@@ -102,7 +102,7 @@ test('m9d822 exportação HIGH real: 202, job READY, URL assinada, arquivo, audi
   assert.equal((await gone.json()).error.code, 'GOV_EXPORT_EXPIRED');
 });
 
-test('m9d822 mesma Idempotency-Key repete o mesmo pedido e outro corpo é 409', { skip: skip() }, async () => {
+test('m9d822 mesma Idempotency-Key repete o mesmo pedido e outro corpo é 422', { skip: skip() }, async () => {
   await env.grantMfa(A);
   const key = env.nextKey('same');
   const first = await post('gestorA', payload(), key);
@@ -110,7 +110,7 @@ test('m9d822 mesma Idempotency-Key repete o mesmo pedido e outro corpo é 409', 
   assert.deepEqual([first.status, second.status, second.body.data.exportJobId === first.body.data.exportJobId], [202, 202, true]);
   assert.equal(second.headers.get('idempotent-replay'), 'true');
   const clash = await post('gestorA', payload({ format: 'PDF' }), key);
-  assert.deepEqual([clash.status, clash.body.error.code], [409, 'GOV_DLP_IDEMPOTENCY_CONFLICT']);
+  assert.deepEqual([clash.status, clash.body.error.code], [422, 'GOV_IDEMPOTENCY_KEY_REUSED']);
   const sameKeyOtherUser = await post('makerA', payload(), key);
   assert.notEqual(sameKeyOtherUser.body.data && sameKeyOtherUser.body.data.exportJobId, first.body.data.exportJobId, 'a chave é de cada usuário');
 });

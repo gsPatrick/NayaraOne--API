@@ -1,0 +1,788 @@
+{
+  "codes": {
+    "GOV_ANOMALY_INVALID_TRANSITION": {
+      "status": 409,
+      "message": "Esta anomalia não pode mudar para a situação pedida.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_ANOMALY_REASON_REQUIRED": {
+      "status": 400,
+      "message": "Informe o motivo da revisão.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_ASSIGNEE_INACTIVE": {
+      "status": 422,
+      "message": "Só usuário ativo da empresa pode ser designado.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_ACTION_INVALID": {
+      "status": 422,
+      "message": "Esta ação não existe para o setor.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_ALREADY_FINAL": {
+      "status": 409,
+      "message": "Esta operação já foi concluída.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_COMMAND_REJECTED": {
+      "status": 422,
+      "message": "O sistema recusou a operação: <valor>.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_DATE_INVALID": {
+      "status": 422,
+      "message": "A data da operação é inválida.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_DECISION_NOTE_REQUIRED": {
+      "status": 400,
+      "message": "Informe a justificativa da decisão.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_EVIDENCE_REQUIRED": {
+      "status": 422,
+      "message": "Anexe a foto ou o escaneamento do formulário.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_FORM_NOT_FOUND": {
+      "status": 404,
+      "message": "Formulário não encontrado para este setor.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_NOT_EDITABLE": {
+      "status": 409,
+      "message": "Esta operação já foi importada e não pode ser editada.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_PAYLOAD_INVALID": {
+      "status": 422,
+      "message": "Os dados do formulário não passam nas regras do sistema.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_PAYMENT_DOUBLE_CHECK": {
+      "status": 422,
+      "message": "Pagamento manual exige conferência por duas pessoas diferentes.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_PAYMENT_SAME_PERSON": {
+      "status": 403,
+      "message": "As duas conferências devem ser de pessoas diferentes.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_RANGE_INVALID": {
+      "status": 400,
+      "message": "A faixa de folhas é inválida (máximo de <valor>).",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_REFERENCE_DUPLICATE": {
+      "status": 409,
+      "message": "Este número de formulário já foi registrado.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_REFERENCE_INVALID": {
+      "status": 422,
+      "message": "O número do formulário é inválido para este setor.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BCP_SECTOR_FORBIDDEN": {
+      "status": 403,
+      "message": "Você não pode <valor> deste setor.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BULK_FILTER_INVALID": {
+      "status": 400,
+      "message": "Filtro inválido.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_BULK_TOO_LARGE": {
+      "status": 422,
+      "message": "O lote excede o limite de registros.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CALENDAR_EVENT_UNKNOWN": {
+      "status": 422,
+      "message": "Tipo de evento sem origem conhecida no calendário.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CALENDAR_RANGE_INVALID": {
+      "status": 400,
+      "message": "A data inicial deve ser anterior à final.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CALENDAR_SOURCE_INVALID": {
+      "status": 400,
+      "message": "Tipo de origem inválido.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CALENDAR_TENANT_MISMATCH": {
+      "status": 403,
+      "message": "O evento pertence a outra empresa e foi descartado.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CODIGO_FORA_DO_PADRAO": {
+      "status": 500,
+      "message": "Código de erro fora do padrão GOV_ (o código original vai em details.codigoOriginal).",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_COMMITMENT_INVALID": {
+      "status": 400,
+      "message": "O fim do compromisso deve ser após o início.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_COMMITMENT_OWNER_ONLY": {
+      "status": 403,
+      "message": "Somente a pessoa responsável pelo compromisso ou um administrador pode fazer esta alteração.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_COMMITMENT_TRANSITION_INVALID": {
+      "status": 409,
+      "message": "Esta mudança de situação do compromisso não é permitida.",
+      "module": "calendar",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_DENIED": {
+      "status": 403,
+      "message": "Esta ação não é permitida para dados desta classificação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_FLOOR_VIOLATION": {
+      "status": 422,
+      "message": "Esta classificação exige justificativa, verificação em duas etapas, auditoria e expiração.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_IDEMPOTENCY_CONFLICT": {
+      "status": 409,
+      "message": "Esta chave de idempotência já foi usada em outro pedido.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_PERMISSION": {
+      "status": 403,
+      "message": "Você não tem permissão para esta exportação.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_POLICY_INVALID": {
+      "status": 400,
+      "message": "Classificação ou ação inválida.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_PURPOSE_REQUIRED": {
+      "status": 422,
+      "message": "Informe a finalidade e a justificativa para continuar.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_REQUEST_INVALID": {
+      "status": 400,
+      "message": "Os dados do pedido de proteção de dados são inválidos.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_USER_SUSPENDED": {
+      "status": 403,
+      "message": "Suas exportações estão suspensas para revisão de segurança.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DLP_VOLUME_EXCEEDED": {
+      "status": 422,
+      "message": "O volume pedido excede o limite desta classificação.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DOMAIN_INVALID": {
+      "status": 400,
+      "message": "Domínio de dados inválido.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DOMAIN_OWNER_EXISTS": {
+      "status": 409,
+      "message": "Informe um único responsável (owner) por domínio.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_DQ_FILTER_INVALID": {
+      "status": 400,
+      "message": "Filtro de qualidade inválido.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_ERROR_CODE_INCOMPLETE": {
+      "status": 422,
+      "message": "Entrada incompleta no catálogo de erros: <código>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_ERROR_CODE_PREFIX": {
+      "status": 422,
+      "message": "Código fora do padrão GOV_: <código>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_ERROR_CODE_UNKNOWN": {
+      "status": 422,
+      "message": "Código de erro não catalogado: <código>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVENT_IDEMPOTENCY_REQUIRED": {
+      "status": 500,
+      "message": "Todo evento de governança exige idempotencyKey.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVENT_UNKNOWN": {
+      "status": 500,
+      "message": "Tipo de evento fora do catálogo de governança.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVIDENCE_FILE_REQUIRED": {
+      "status": 422,
+      "message": "Anexe o documento que comprova a alteração.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVIDENCE_NOTE_TOO_SHORT": {
+      "status": 422,
+      "message": "Descreva a origem com pelo menos <valor> caracteres.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVIDENCE_REQUIRED": {
+      "status": 422,
+      "message": "Informe a origem e o comprovante desta alteração.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EVIDENCE_SOURCE_INVALID": {
+      "status": 422,
+      "message": "Origem inválida para esta operação.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_COLUMN_INVALID": {
+      "status": 400,
+      "message": "Coluna inválida para esta exportação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_EXPIRED": {
+      "status": 410,
+      "message": "O arquivo expirou. Faça uma nova solicitação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_FAILED": {
+      "status": 409,
+      "message": "A geração do arquivo falhou. Faça uma nova solicitação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_FILTER_INVALID": {
+      "status": 400,
+      "message": "Filtro inválido para esta exportação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_FORMAT_INVALID": {
+      "status": 400,
+      "message": "Formato inválido.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_GENERATION_FAILED": {
+      "status": 500,
+      "message": "A geração da exportação falhou.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_LINK_INVALID": {
+      "status": 403,
+      "message": "Endereço de download inválido ou vencido.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_MOVED": {
+      "status": 410,
+      "message": "Esta exportação agora é pedida por POST /exports, com finalidade e justificativa.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_NOT_OWNER": {
+      "status": 403,
+      "message": "Este arquivo foi gerado para outra pessoa.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_NOT_READY": {
+      "status": 409,
+      "message": "O arquivo ainda está sendo gerado.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_PERMISSION_LOST": {
+      "status": 403,
+      "message": "A pessoa que pediu a exportação não tem mais a permissão necessária.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_REQUEST_INVALID": {
+      "status": 400,
+      "message": "Os dados do pedido de exportação são inválidos.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_RESOURCE_INVALID": {
+      "status": 400,
+      "message": "Tipo de exportação inválido.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_EXPORT_TIMEOUT": {
+      "status": 500,
+      "message": "A geração da exportação passou do tempo máximo.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_IDEMPOTENCY_KEY_INVALID": {
+      "status": 400,
+      "message": "A chave de idempotência deve ter de 8 a 128 caracteres.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_IDEMPOTENCY_KEY_REQUIRED": {
+      "status": 400,
+      "message": "Envie o cabeçalho Idempotency-Key.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_IDEMPOTENCY_KEY_REUSED": {
+      "status": 422,
+      "message": "Esta chave de idempotência já foi usada com outra requisição.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_IDEMPOTENCY_RESPONSE_PENDING": {
+      "status": 409,
+      "message": "A requisição original ainda está em andamento ou não guardou a resposta. Tente de novo em instantes.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_AREA_INVALID": {
+      "status": 400,
+      "message": "Área de lineage inválida.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_AREA_MISSING": {
+      "status": 422,
+      "message": "Área sem lineage cadastrado.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_AREA_REQUIRED": {
+      "status": 422,
+      "message": "Informe a área do nó de lineage.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_CODE_INVALID": {
+      "status": 400,
+      "message": "Informe o código do nó (letras, números, ponto, dois-pontos, barra, hífen e sublinhado; até 200 caracteres).",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_CRITICALITY_INVALID": {
+      "status": 400,
+      "message": "Criticidade de lineage inválida.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_CRITICALITY_LOCKED": {
+      "status": 409,
+      "message": "Esta área exige lineage crítico.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_DESCRIPTION_REQUIRED": {
+      "status": 422,
+      "message": "Descreva o nó de lineage.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_EDGE_EXISTS": {
+      "status": 409,
+      "message": "Esta ligação de lineage já existe.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_LAYER_INVALID": {
+      "status": 422,
+      "message": "Esta ligação não respeita a ordem das camadas.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_MAP_DRIFT": {
+      "status": 422,
+      "message": "O mapa de migração e o lineage divergem.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_NODE_EXISTS": {
+      "status": 409,
+      "message": "Já existe um nó de lineage com este tipo e código.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_NODE_INCOMPLETE": {
+      "status": 422,
+      "message": "Nó de lineage incompleto: <código>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_NODE_TYPE_INVALID": {
+      "status": 400,
+      "message": "Tipo de nó de lineage inválido.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_OWNER_REQUIRED": {
+      "status": 422,
+      "message": "Informe o domínio responsável pelo nó.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_SEED_CONFLICT": {
+      "status": 500,
+      "message": "Duas sementes de lineage definem o mesmo nó de formas diferentes.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_SEED_INVALID": {
+      "status": 500,
+      "message": "Semente de lineage inválida.",
+      "module": "lineage",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINEAGE_UNCOVERED": {
+      "status": 422,
+      "message": "KPI crítico sem lineage: <código>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_ALREADY_FINAL": {
+      "status": 409,
+      "message": "Este link já foi encerrado.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_EXPIRY_TOO_LONG": {
+      "status": 422,
+      "message": "O prazo máximo para esta classificação é de <valor> horas.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_NOT_OWNER": {
+      "status": 403,
+      "message": "Você não pode revogar este link.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_REQUEST_INVALID": {
+      "status": 400,
+      "message": "Os dados do pedido de link externo são inválidos.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_RESOURCE_INVALID": {
+      "status": 400,
+      "message": "Tipo de recurso inválido para compartilhar.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_RESOURCE_NOT_SHAREABLE": {
+      "status": 422,
+      "message": "Este recurso não pode ser compartilhado por link.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_UNAVAILABLE": {
+      "status": 404,
+      "message": "Link indisponível.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_LINK_WATERMARK_UNSUPPORTED": {
+      "status": 422,
+      "message": "Este tipo de arquivo não aceita a marca d'água exigida para esta classificação.",
+      "module": "dlp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_MERGE_FIELD_CHOICE_REQUIRED": {
+      "status": 400,
+      "message": "Escolha o valor que fica em cada campo em conflito.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_MERGE_REFERENCE_CONFLICT": {
+      "status": 409,
+      "message": "Não foi possível unir: um dado ligado aos dois cadastros entra em conflito ao ser unificado. Revise os cadastros.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_MERGE_SURVIVOR_INVALID": {
+      "status": 400,
+      "message": "O registro mantido deve ser um dos dois do par.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_MODULE_DISABLED": {
+      "status": 403,
+      "message": "Este módulo de governança está desativado pelo administrador.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_NOT_DOMAIN_STEWARD": {
+      "status": 403,
+      "message": "Você não é responsável por este domínio.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_NOT_FOUND": {
+      "status": 404,
+      "message": "Reconciliação não encontrada.",
+      "module": "bcp",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_OPENAPI_BREAKING_CHANGE": {
+      "status": 422,
+      "message": "Mudança incompatível dentro da major <valor>: <regra> em <caminho>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_OPENAPI_INVALID": {
+      "status": 422,
+      "message": "O contrato OpenAPI é inválido: <valor>.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_OPENAPI_ROUTE_UNDOCUMENTED": {
+      "status": 422,
+      "message": "Rota sem documentação no contrato: <método> <caminho>.",
+      "module": "core-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_QUEUE_DECISION_INVALID": {
+      "status": 400,
+      "message": "Decisão inválida para este item.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_QUEUE_ITEM_FINAL": {
+      "status": 409,
+      "message": "Este item já foi decidido.",
+      "module": "data-quality",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_RATE_LIMITED": {
+      "status": 429,
+      "message": "Muitas requisições. Tente novamente em <N> segundos.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_VALIDATION_PAGINATION": {
+      "status": 400,
+      "message": "Parâmetros de paginação inválidos.",
+      "module": "api-governance",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "INTERNAL_ERROR": {
+      "status": 500,
+      "message": "Erro interno.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE": {
+      "status": 409,
+      "message": "Esta vistoria já tem assinatura registrada e ficou imutável.",
+      "module": "legal",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "MFA_REQUIRED_NOT_ENABLED": {
+      "status": 403,
+      "message": "Ative a verificação em duas etapas para continuar.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "MFA_STEP_UP_REQUIRED": {
+      "status": 403,
+      "message": "Confirme sua identidade com o código de verificação em duas etapas.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "MISSING_ACCESS_TOKEN": {
+      "status": 401,
+      "message": "Token de acesso ausente.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "PERMISSION_DENIED": {
+      "status": 403,
+      "message": "Você não tem permissão para realizar esta ação.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    },
+    "VALIDATION_ERROR": {
+      "status": 400,
+      "message": "Os dados enviados são inválidos.",
+      "module": "plataforma",
+      "since": "1.0.0",
+      "deprecated": false
+    }
+  }
+}

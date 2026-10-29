@@ -58,7 +58,20 @@ function mapMarketingDatabaseError(err) {
 
 const isIntegrationRoute = (req) => /\/(integrations|webhooks)(\/|\?|$)/i.test(String(req.originalUrl || ''));
 
+/** M9-D843 / K5: todo corpo de erro leva `error.traceId` (o correlationId da requisição, o mesmo de X-Correlation-Id); nunca na raiz. */
+function attachTraceId(req, res) {
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (body && body.success === false && body.error && typeof body.error === 'object' && !body.error.traceId) {
+      const { traceId: _root, ...root } = body;
+      return json({ ...root, error: { ...body.error, traceId: req.correlationId || res.getHeader('X-Correlation-Id') || null } });
+    }
+    return json(body);
+  };
+}
+
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
+  attachTraceId(req, res);
   const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
 

@@ -22,6 +22,8 @@ const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
 const { startBcpPaymentReconciliationJob } = require('./src/engines/jobs/bcpPaymentReconciliationJob');
+const { startRateLimitCleanupJob } = require('./src/engines/jobs/rateLimitCleanupJob');
+const { startIdempotencyCleanupJob } = require('./src/engines/jobs/idempotencyCleanupJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -187,6 +189,18 @@ if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_BACKFILL_JOB_DISABLE
 // Conciliação do pagamento emergencial do BCP com o extrato (M9-D833): casa as linhas e alerta o prazo vencido (a cada 30 minutos por padrão).
 if (process.env.NODE_ENV !== 'test' && process.env.BCP_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
   startBcpPaymentReconciliationJob();
+}
+
+// Padrões de API (M9-D843): limpeza das janelas do contador de requisições e das chaves de idempotência vencidas; catálogo de códigos de erro sincronizado no banco.
+if (process.env.NODE_ENV !== 'test' && process.env.RATE_LIMIT_CLEANUP_JOB_DISABLED !== 'true') {
+  startRateLimitCleanupJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISABLED !== 'true') {
+  startIdempotencyCleanupJob();
+}
+if (process.env.NODE_ENV !== 'test') {
+  require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()
+    .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;

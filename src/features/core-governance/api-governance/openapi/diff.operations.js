@@ -1,5 +1,6 @@
 'use strict';
 
+const { RULE } = require('./openapi.constants');
 const { METHODS } = require('./openapi.load');
 const { resolve, jsonSchemaOf } = require('./diff.refs');
 const { diffSchemas, change } = require('./diff.schema');
@@ -27,25 +28,25 @@ function diffParameters(baseDoc, candDoc, base, cand, where, out) {
   const candParams = paramsOf(candDoc, cand.item, cand.operation);
   const pathCount = (map) => [...map.values()].filter((p) => p.in === 'path').length;
   for (const [key, param] of baseParams) {
-    if (param.in === 'path') { if (pathCount(baseParams) > pathCount(candParams)) out.push(change('PARAM_REMOVED', 1, where, `parâmetro de caminho "${param.name}" removido`)); continue; }
+    if (param.in === 'path') { if (pathCount(baseParams) > pathCount(candParams)) out.push(change(RULE.PARAM_REMOVED, 1, where, `parâmetro de caminho "${param.name}" removido`)); continue; }
     const next = candParams.get(key);
-    if (!next) { out.push(change('PARAM_REMOVED', 1, where, `parâmetro ${param.in} "${param.name}" removido`)); continue; }
-    if (!param.required && next.required) out.push(change('REQUEST_REQUIRED_ADDED', 3, where, `parâmetro "${param.name}" passou a ser obrigatório`));
+    if (!next) { out.push(change(RULE.PARAM_REMOVED, 1, where, `parâmetro ${param.in} "${param.name}" removido`)); continue; }
+    if (!param.required && next.required) out.push(change(RULE.REQUEST_REQUIRED_ADDED, 3, where, `parâmetro "${param.name}" passou a ser obrigatório`));
     if (param.schema && next.schema) out.push(...diffSchemas(baseDoc, candDoc, param.schema, next.schema, 'request', `${where} ${param.in}:${param.name}`));
   }
-  for (const [key, param] of candParams) if (param.in !== 'path' && param.required && !baseParams.has(key)) out.push(change('REQUEST_REQUIRED_ADDED', 3, where, `parâmetro obrigatório novo "${param.name}"`));
+  for (const [key, param] of candParams) if (param.in !== 'path' && param.required && !baseParams.has(key)) out.push(change(RULE.REQUEST_REQUIRED_ADDED, 3, where, `parâmetro obrigatório novo "${param.name}"`));
 }
 
 function diffBodyAndResponses(baseDoc, candDoc, base, cand, where, out) {
   const baseBody = resolve(baseDoc, base.operation.requestBody);
   const candBody = resolve(candDoc, cand.operation.requestBody);
-  if (candBody && candBody.required === true && !(baseBody && baseBody.required === true)) out.push(change('REQUEST_REQUIRED_ADDED', 3, where, 'corpo da requisição passou a ser obrigatório'));
+  if (candBody && candBody.required === true && !(baseBody && baseBody.required === true)) out.push(change(RULE.REQUEST_REQUIRED_ADDED, 3, where, 'corpo da requisição passou a ser obrigatório'));
   const baseReq = baseBody && jsonSchemaOf(baseDoc, baseBody);
   const candReq = candBody && jsonSchemaOf(candDoc, candBody);
   if (baseReq && candReq) out.push(...diffSchemas(baseDoc, candDoc, baseReq, candReq, 'request', `${where} requestBody`));
   for (const [status, response] of Object.entries(base.operation.responses)) {
     const next = cand.operation.responses[status];
-    if (!next) { out.push(change('RESPONSE_REMOVED', 1, where, `resposta ${status} removida`)); continue; }
+    if (!next) { out.push(change(RULE.RESPONSE_REMOVED, 1, where, `resposta ${status} removida`)); continue; }
     const baseRes = jsonSchemaOf(baseDoc, response);
     const candRes = jsonSchemaOf(candDoc, next);
     if (baseRes && candRes) out.push(...diffSchemas(baseDoc, candDoc, baseRes, candRes, 'response', `${where} ${status}`));
@@ -64,8 +65,8 @@ function diffOperations(baseDoc, candDoc, options = {}) {
     if (!cand) {
       const moved = base.operation.operationId && candById.get(base.operation.operationId);
       const pathStillThere = Object.keys(candDoc.paths).some((p) => shape(p) === shape(base.path));
-      if (moved && !pathStillThere) out.push(change('ROUTE_RENAMED', 2, where, `rota renomeada para ${moved.method} ${moved.path}`));
-      else out.push(change(pathStillThere ? 'METHOD_REMOVED' : 'ROUTE_REMOVED', 1, where, pathStillThere ? 'método removido' : 'rota removida'));
+      if (moved && !pathStillThere) out.push(change(RULE.ROUTE_RENAMED, 2, where, `rota renomeada para ${moved.method} ${moved.path}`));
+      else out.push(change(pathStillThere ? RULE.METHOD_REMOVED : RULE.ROUTE_REMOVED, 1, where, pathStillThere ? 'método removido' : 'rota removida'));
       continue;
     }
     diffParameters(baseDoc, candDoc, base, cand, where, out);

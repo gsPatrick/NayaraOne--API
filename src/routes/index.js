@@ -42,6 +42,7 @@ const { router: governanceRouter, viewPolicyRouter } = require('../features/core
 const { router: aiModuleRouter } = require('../features/ai');
 const { router: marketingModuleRouter, publicRouter: marketingPublicRouter } = require('../features/marketing');
 const { router: analyticsModuleRouter } = require('../features/analytics');
+const { rateLimitMiddleware } = require('../features/core-governance/api-governance/standards');
 
 /**
  * Agregador único de rotas da API.
@@ -49,6 +50,9 @@ const { router: analyticsModuleRouter } = require('../features/analytics');
  * deve registrar rotas diretamente no app Express.
  */
 const router = Router();
+
+// Marco 9 (M9-D843): limite de requisições por credencial, com X-RateLimit-* em toda resposta; o contador está no banco e vale entre processos.
+router.use(rateLimitMiddleware);
 
 // GET /health — fora do prefixo /v1, usado por health checks de infraestrutura.
 router.use('/', healthRouter);

@@ -6,6 +6,7 @@ const { LINEAGE_SETTING_DEFAULTS, LINEAGE_SETTINGS_SCHEMA } = require('./lineage
 const { DLP_SETTING_DEFAULTS, DLP_SETTINGS_SCHEMA } = require('./dlp/dlp.settings');
 const { BCP_SETTING_DEFAULTS, BCP_SETTINGS_SCHEMA } = require('./bcp/bcp.settings');
 const { HOLIDAYS_DEFAULTS, HOLIDAYS_SCHEMA } = require('./calendar/holidays.settings');
+const { STANDARDS_SETTING_DEFAULTS, STANDARDS_SETTINGS_SCHEMA } = require('./api-governance/standards/standards.settings');
 
 /**
  * Parâmetros do bloco de governança que o administrador configura na tela /painel/configuracoes (aba Governança).
@@ -41,6 +42,7 @@ const GOVERNANCE_SETTING_DEFAULTS = {
   ...DLP_SETTING_DEFAULTS,
   ...BCP_SETTING_DEFAULTS,
   ...HOLIDAYS_DEFAULTS,
+  ...STANDARDS_SETTING_DEFAULTS,
   [ERRORS_EXCEPTIONS_KEY]: 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR',
   [PROFILES_MANAGEMENT_KEY]: 'GESTAO, GESTÃO, DIRETOR, GERENTE, GESTOR',
   [PROFILES_FINANCE_KEY]: 'FINANCEIRO',
@@ -54,6 +56,7 @@ const GOVERNANCE_SETTINGS_SCHEMA = {
   ...DLP_SETTINGS_SCHEMA,
   ...BCP_SETTINGS_SCHEMA,
   ...HOLIDAYS_SCHEMA,
+  ...STANDARDS_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

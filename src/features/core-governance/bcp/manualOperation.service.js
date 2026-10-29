@@ -13,6 +13,7 @@ const templates = require('./formTemplates.repository');
 const input = require('./manualOperation.input');
 const E = require('./bcp.errors');
 const { recordPreparer } = require('./payment/payment.guard');
+const { ACTION: PAYMENT_ACTION } = require('./payment/payment.constants');
 
 const EVENT_RECORDED = 'bcp.manual_operation.recorded';
 
@@ -40,7 +41,7 @@ async function recordOperation({ tenant, actorUserId, body, transaction }) {
   }, transaction);
   if (!operation) throw E.referenceDuplicate();
 
-  if (operation.intendedAction === 'EMERGENCY_PAYMENT') await recordPreparer({ tenant, operation }, transaction); // checker_1 gravado no registro (M9-D833)
+  if (operation.intendedAction === PAYMENT_ACTION) await recordPreparer({ tenant, operation }, transaction); // checker_1 gravado no registro (M9-D833)
   await publishGovernanceEvent({
     groupId: tenant.groupId, companyId: tenant.companyId, aggregateType: 'BcpManualOperation', aggregateId: operation.id, eventType: EVENT_RECORDED,
     // A chave do outbox é única na plataforma toda; o número do papel só é único por empresa, então a empresa entra na chave.

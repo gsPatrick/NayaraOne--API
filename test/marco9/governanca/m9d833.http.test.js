@@ -13,7 +13,9 @@ let A;
 let ctx;
 let restore;
 const skip = () => (http && http.skip) || (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
-const importHttp = (who, ids) => http.call(who, 'POST', '/bcp/manual-operations/import', { ids });
+let keySeq = 0;
+// A importação exige Idempotency-Key (M9-D843 §3.3): chave nova por chamada.
+const importHttp = (who, ids) => { keySeq += 1; return http.call(who, 'POST', '/bcp/manual-operations/import', { ids }, { 'Idempotency-Key': `m9d833-http-${Date.now()}-${keySeq}` }); };
 
 before(async () => {
   if (!env.DISPOSABLE) return;

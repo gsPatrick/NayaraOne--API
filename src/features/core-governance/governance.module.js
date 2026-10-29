@@ -8,6 +8,7 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { getSetting } = require('../../features/settings/settings.service');
 const { govModuleDisabled } = require('./governance.errors');
 const { moduleSettingKey, GOVERNANCE_SETTING_DEFAULTS } = require('./governance.settings');
+const { idempotency, replayErrorHandler, isRequired, paginationGuard } = require('./api-governance/standards');
 
 function tenantFromAuth(req) {
   return { groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -38,8 +39,11 @@ function buildModuleRouter(mod, routeDefs) {
   for (const def of routeDefs) {
     // `permission: null` = rota que exige apenas login (a ação é do próprio usuário, ex.: POST /dlp/copy-events); o módulo ligado continua valendo.
     const gate = def.permission === null ? [] : [Array.isArray(def.permission) ? requireAnyPermission(def.permission) : requirePermission(def.permission)];
-    router[def.method](def.path, ...(def.before || []), ...gate, requireModuleEnabled(mod.code), ...(def.after || []), catchAsync(def.handler));
+    // Padrões de API (M9-D843): paginação válida em toda rota; Idempotency-Key em toda criação (exigida nas rotas da lista fechada), depois do MFA e dos demais `after`.
+    const idem = def.method === 'post' ? [idempotency({ required: isRequired(def.method, def.path) })] : [];
+    router[def.method](def.path, ...(def.before || []), ...gate, requireModuleEnabled(mod.code), paginationGuard, ...(def.after || []), ...idem, catchAsync(def.handler));
   }
+  router.use(replayErrorHandler);
   return router;
 }
 
