@@ -4,7 +4,7 @@
  * M9-D696 (3.1 item 4) — ROW_COUNT_RANGE: (a) contagem de linhas do refresh dentro de [mínimo, máximo] calculados como média móvel dos últimos N
  * refreshes (padrão 14) do mesmo read model e empresa +- `faixa_contagem_pct` (padrão 50%); no rebuild a referência é a tabela atual e o
  * observado é a sombra; (b) queda para zero linhas quando a fonte tem dados é falha; (c) valores fora de faixa plausível (percentual > 100,
- * valor monetário negativo onde não pode) falham (`plausibleValues`).
+ * valor monetário negativo onde não pode) falham (`plausibleValues`). No rebuild só a queda abaixo da faixa reprova (DI-D696-11).
  */
 const sql = require('../quality.sql');
 
@@ -39,7 +39,8 @@ function rowCountRange({ code, metrics = [], sourceCount }) {
       const expected = { ...band, average: base.average, samples: base.samples, rangePct: pct };
       const observed = { rows, sourcePopulated: rows === 0 ? populated : null };
       if (rows === 0 && populated) return { passed: false, severityKey: 'ROW_COUNT_RANGE', expected, observed };
-      if (hasBand && (rows < band.min || rows > band.max)) return { passed: false, severityKey: 'ROW_COUNT_RANGE', expected, observed };
+      // No rebuild só a QUEDA reprova: a reconstrução completa achar mais linhas que a tabela montada por eventos é a correção esperada (DI-D696-11).
+      if (hasBand && (rows < band.min || (!rebuild && rows > band.max))) return { passed: false, severityKey: 'ROW_COUNT_RANGE', expected, observed };
       return { passed: true, expected, observed };
     },
   };
