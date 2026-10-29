@@ -2,6 +2,7 @@
 
 const AppError = require('../../../../utils/AppError');
 const { circuitProblems } = require('../../health/circuitPolicy');
+const { contingencyProblems } = require('../../contingency/contingency.policyRules');
 
 /**
  * Limites da política de envio (M9-D216 seção 6): impedem configuração destrutiva (zero tentativas, atraso de anos, jitter que
@@ -42,6 +43,7 @@ function validatePolicyJson(policy) {
   checkSection(policy.retry, 'retry', RETRY_LIMITS, problemas);
   checkSection(policy.rate_limit, 'rate_limit', RATE_LIMIT_LIMITS, problemas);
   problemas.push(...circuitProblems(policy.circuit)); // M9-D217: limiar, cooldown e chamadas de teste do circuito
+  problemas.push(...contingencyProblems(policy.contingency)); // M9-D226: modo, prazo da fila, alternativo e papéis da contingência
   const r = policy.retry;
   if (r && Number.isInteger(r.base_delay_ms) && Number.isInteger(r.cap_delay_ms) && r.cap_delay_ms < r.base_delay_ms) problemas.push('retry.cap_delay_ms: não pode ser menor que base_delay_ms');
   if (problemas.length) throw invalid(problemas);

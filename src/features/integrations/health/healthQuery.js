@@ -40,6 +40,7 @@ async function getCurrentHealth(connectionId, ctx, transaction, { now = new Date
     lastSampleAt: row.last_sample_at,
     lastCheckAt: row.last_check_at,
     lastCheckOk: row.last_check_ok,
+    checkConsecutiveOk: row.check_consecutive_ok,
     lastCheckLatencyMs: row.last_check_latency_ms,
     updatedAt: row.updated_at,
   };

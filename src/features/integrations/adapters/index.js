@@ -17,6 +17,7 @@ const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/anal
 const { installAnalytics } = require('../analytics');
 const { registerAiContingency } = require('../providers/ai/ai.degrade');
 
+const { installContingency } = require('../contingency');
 const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxContractAdapter,
   SignatureClicksignContractAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
@@ -30,6 +31,8 @@ function registerBuiltInAdapters() {
   installAnalytics(); // descarte de métricas vencidas na rodada do worker (M9-D243)
   registerAiContingency(); // IA fora: modo determinístico (M9-D243)
   return registry.list();
+  require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
+  installContingency(); // contingência das famílias e passo da rodada do worker (M9-D226)
 }
 
 module.exports = { registerBuiltInAdapters, BUILT_IN_ADAPTERS };

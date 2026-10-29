@@ -43,7 +43,7 @@ async function aoAbrir(connection, transaction) {
     },
     sp,
   ));
-  if (provider) await triggerContingency({ domain: provider.domain, companyId: connection.companyId, providerCode: connection.providerCode }, transaction);
+  if (provider) await triggerContingency({ domain: provider.domain, companyId: connection.companyId, providerCode: connection.providerCode, connectionId: connection.id, reason: 'CIRCUIT_OPEN' }, transaction);
 }
 
 /**

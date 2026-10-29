@@ -20,6 +20,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/admin/integrations/registry/providers/:code` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/providers` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/catalog` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/contingency` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/contingency/dispatches/:id/switch` | `integration:manage` | sim |
 | `GET` | `/api/v1/admin/integrations` | `integration:read` | não |
 | `POST` | `/api/v1/ai/agents/:code/chat` | `ai:use` | não |
 | `POST` | `/api/v1/ai/agents/:code/versions/:version/activate` | `ai:admin` | não |
