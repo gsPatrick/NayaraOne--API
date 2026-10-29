@@ -45,7 +45,10 @@ function ageText(minutes) {
 
 const clockText = (instant) => new Intl.DateTimeFormat('pt-BR', { timeZone: BUSINESS_TIMEZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(instant));
 
-function labelOf(state, ageMinutes, sourceSnapshotAt) {
+const dateText = (asOfDate) => asOfDate.split('-').reverse().join('/');
+
+function labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate) {
+  if (historical && asOfDate) return `Registro de ${dateText(asOfDate)}`; // dia passado: o selo descreve o registro, não a atualidade
   if (state === STATES.FRESH) return `Atualizado às ${clockText(sourceSnapshotAt)}`;
   if (state === STATES.STALE) return `Desatualizado há ${ageText(ageMinutes)}`;
   if (state === STATES.EXPIRED) return EXPIRED_TEXT;
@@ -61,7 +64,7 @@ function computeFreshness({ asOfDate = null, sourceSnapshotAt, refreshedAt, maxS
   const state = classify(ageMinutes, maxStalenessMinutes, factor);
   return {
     state, ageMinutes, asOfDate, sourceSnapshotAt: sourceSnapshotAt || null, refreshedAt: refreshedAt || null, maxStalenessMinutes,
-    expiredAboveMinutes: maxStalenessMinutes * factor, historical, label: labelOf(state, ageMinutes, sourceSnapshotAt),
+    expiredAboveMinutes: maxStalenessMinutes * factor, historical, label: labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate),
   };
 }
 

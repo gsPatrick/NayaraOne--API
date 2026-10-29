@@ -138,6 +138,7 @@ test('m9d609 leitura de dia passado devolve o registro como foi gravado, com a f
   assert.equal(r.freshness.historical, true);
   assert.equal(r.freshness.ageMinutes, 10, 'idade de quando foi gravado');
   assert.equal(r.freshness.state, 'FRESH');
+  assert.equal(r.freshness.label, 'Registro de 20/10/2026', 'o selo de dia passado descreve o registro');
   const today = await metricAged(5);
   assert.equal((await e.readAsOf(tenant, today.code, TODAY)).historical, false);
 });
