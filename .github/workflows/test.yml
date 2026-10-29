@@ -179,6 +179,17 @@ jobs:
       - name: Portão de lineage (M9-D811)
         run: npm run check:lineage
 
+      # M9-D840: contrato OpenAPI versionado. Em pull request compara com o contrato da branch principal (breaking change dentro da mesma major reprova); em push confere a cobertura das
+      # rotas do escopo fechado (openapi/escopo.json) e a validade do arquivo.
+      - name: Contrato OpenAPI, base x candidata (M9-D840)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            npm run lint:openapi -- --base "origin/${{ github.base_ref }}" --candidate openapi/openapi.v1.yaml
+          else
+            npm run lint:openapi -- --base openapi/openapi.v1.yaml --candidate openapi/openapi.v1.yaml
+          fi
+
       - name: Testes de fórmula do BI (M9-D604)
         run: npm run guard:formula-tests
 

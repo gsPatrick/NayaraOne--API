@@ -1,0 +1,21 @@
+{
+  "descricao": "Escopo FECHADO do contrato OpenAPI (M9-D840 §3.1). Entradas sem método são prefixos de caminho (sem /api/v1); com método são rotas exatas. Mudar esta lista é mudar o contrato público.",
+  "entries": [
+    "/public",
+    "/auth/login",
+    "/api-external",
+    "/calendar",
+    "/data-quality",
+    "/data-lineage",
+    "/dlp",
+    "/exports",
+    "/bcp",
+    "/api-governance",
+    "/finops",
+    "/feature-flags",
+    "POST /legal/inspections/items/{itemId}/media",
+    "GET /legal/contracts",
+    "POST /legal/contracts",
+    "GET /legal/contracts/{id}/timeline"
+  ]
+}

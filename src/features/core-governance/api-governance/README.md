@@ -30,3 +30,9 @@ Nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela deman
 
 ## Como diagnosticar
 Use o `traceId` da resposta de erro (igual ao cabeçalho `X-Correlation-Id`) para achar a requisição nos logs e no registro de auditoria. Módulo respondendo 403 `GOV_MODULE_DISABLED`: conferir a chave `governanca.modulos.api_governance.habilitado` em Configurações > Governança.
+
+## Contrato OpenAPI versionado (M9-D840)
+- Arquivo `openapi/openapi.v<MAJOR>.yaml` (OpenAPI 3.0.3, `info.version` SemVer) e escopo FECHADO em `openapi/escopo.json` (prefixos e rotas exatas; rota fora dele pode constar, não é exigida). `node scripts/gerarOpenapi.js --missing` mostra o que falta das rotas reais do escopo; o arquivo versionado é a fonte.
+- `npm run lint:openapi -- --base <arquivo|ref git> --candidate openapi/openapi.v1.yaml [--scope] [--error-codes docs/ERROR_CODES.md] [--routes-file] [--json] [--report arquivo]`. Saída 0 ok; 1 `GOV_OPENAPI_BREAKING_CHANGE` ou `GOV_OPENAPI_ROUTE_UNDOCUMENTED`; 2 `GOV_OPENAPI_INVALID`. Não lê banco. No CI (`test.yml`): pull request compara com a branch de destino; push confere cobertura e validade.
+- Código em `api-governance/openapi/`: `openapi.load.js` (leitura e validação), `diff.schema.js` (regras 2 a 7), `diff.operations.js` (regras 1 e 3), `diff.security.js` (8), `diff.errorCodes.js` (9, lê `x-error-code` das respostas e o catálogo `docs/ERROR_CODES.md`), `versions.js` (major nova exige a anterior com `info.x-deprecated: true` e `info.x-sunset`), `scope.js`, `skeleton.js`, `lint.service.js`.
+- Convenções do contrato: `x-closed: true` num enum marca valor novo em resposta como breaking; `x-error-code` numa resposta fixa o código de erro estável da condição; `x-permissions` lista a permissão da rota.
