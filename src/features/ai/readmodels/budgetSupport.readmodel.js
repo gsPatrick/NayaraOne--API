@@ -23,6 +23,17 @@ function lockApplicable(ctx, { agentCode, modelClass, at }, transaction) {
   );
 }
 
+/** Os mesmos orçamentos de lockApplicable, só para leitura (sem travar): o roteador consulta o estado antes de escolher o caminho. */
+function peekApplicable(ctx, { agentCode, at }, transaction) {
+  return select(
+    `SELECT ${COLUMNS} FROM ai.budgets
+      WHERE company_id = :companyId AND status = 'ACTIVE' AND period_start <= :at AND period_end > :at
+        AND (agent_code IS NULL OR agent_code = :agentCode)
+      ORDER BY id`,
+    { companyId: ctx.companyId, at, agentCode: agentCode || null }, transaction
+  );
+}
+
 /** Cria a linha do período atual copiando a mais recente de cada escopo anterior (limites, limiares, ação e status). */
 async function copyPreviousPeriods(ctx, period, transaction) {
   const [, meta] = await run(
@@ -132,6 +143,6 @@ async function usersWithPermission(ctx, code, transaction) {
 }
 
 module.exports = {
-  lockApplicable, copyPreviousPeriods, insertBudget, findById, updateBudget, listForPeriod, overLimit, addReservation, swapReservation,
+  lockApplicable, peekApplicable, copyPreviousPeriods, insertBudget, findById, updateBudget, listForPeriod, overLimit, addReservation, swapReservation,
   insertAlert, listAlerts, usersWithPermission,
 };

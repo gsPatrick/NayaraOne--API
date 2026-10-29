@@ -54,6 +54,7 @@ function sandboxGenerate({ system = '', messages = [] } = {}) {
     inputTokens,
     outputTokens,
     costMicros: custo ? microsOf(custo[1]) : inputTokens * SANDBOX_PRICE_IN_MICROS + outputTokens * SANDBOX_PRICE_OUT_MICROS,
+    fixedCost: Boolean(custo),
     latencyMs: lento ? Number(lento[1]) : 20 + (parseInt(digest.slice(0, 4), 16) % 80),
     digest,
     providerCode: 'ai-sandbox',

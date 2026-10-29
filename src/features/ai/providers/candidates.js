@@ -1,7 +1,7 @@
 'use strict';
 
 const { costMicros, microsToAmount } = require('./providers.cost');
-const { modelSupports } = require('./providers.models');
+const { modelSupports, OPERATION_FLAG } = require('./providers.models');
 
 const FREE = ['PUBLIC', 'INTERNAL'];
 const KNOWN = [...FREE, 'CONFIDENTIAL', 'RESTRICTED'];
@@ -13,6 +13,15 @@ function acceptsClassification(classification, { policy, retention }) {
   if (c === 'CONFIDENTIAL') return policy.allowsConfidential === true && Boolean(policy.contractRef);
   return policy.allowsRestricted === true && retention === 'NONE';
 }
+
+/** Capacidade exigida: operação do adapter (generate, embed...) ou característica do modelo (vision, structuredOutput, toolUse). */
+function hasCapability(entry, cap) {
+  if (OPERATION_FLAG[cap]) return entry.capabilities.includes(cap) && modelSupports(entry.model, cap);
+  return ['structuredOutput', 'toolUse', 'vision'].includes(cap) && entry.model[cap] === true;
+}
+
+/** O pedido cabe na janela de entrada do modelo? Sem tamanho informado, cabe. */
+const fitsInput = (entry, requestSize) => !Number.isFinite(requestSize.tokensIn) || requestSize.tokensIn <= entry.model.maxInputTokens;
 
 /** Política da chamada: lab_only fora de produção, classificação, retenções e regiões aceitas. */
 function passesPolicy(entry, { politica, production }) {
@@ -33,7 +42,8 @@ function passesPolicy(entry, { politica, production }) {
 function rankCandidates(entries, { capabilities, criticidade, politica = {}, requestSize = {}, latencyBudgetMs }, { production, criticalMinSafetyTier }) {
   const exigidas = capabilities.length ? capabilities : ['generate'];
   const lista = entries
-    .filter((e) => exigidas.every((cap) => e.capabilities.includes(cap) && modelSupports(e.model, cap)))
+    .filter((e) => exigidas.every((cap) => hasCapability(e, cap)))
+    .filter((e) => fitsInput(e, requestSize))
     .filter((e) => passesPolicy(e, { politica, production }))
     .filter((e) => String(criticidade || '').toUpperCase() !== 'CRITICAL' || e.model.safetyTier >= criticalMinSafetyTier)
     .filter((e) => !Number.isFinite(latencyBudgetMs) || e.model.p95LatencyMs <= latencyBudgetMs)
@@ -45,6 +55,10 @@ function rankCandidates(entries, { capabilities, criticidade, politica = {}, req
         classe: e.model.classe,
         safetyTier: e.model.safetyTier,
         p95LatencyMs: e.model.p95LatencyMs,
+        maxInputTokens: e.model.maxInputTokens,
+        maxOutputTokens: e.model.maxOutputTokens,
+        structuredOutput: e.model.structuredOutput,
+        toolUse: e.model.toolUse,
         region: e.policy.region || e.model.region,
         dataRetention: e.policy.dataRetention || e.model.dataRetention,
         estimatedCostMicros: micros,

@@ -36,7 +36,7 @@ const modelos = (...m) => m.map(paraConfig);
 test('m9d011_candidates_filtra_por_capability_com_conexoes_ativas', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     // Sem conexão real só o sandbox concorre (lab_only, fora de produção).
-    assert.deepEqual(nomes(await providerRegistry.candidates({ capability: 'generate' }, tenantA, tx)), ['ai-sandbox/sandbox-1']);
+    assert.deepEqual(nomes(await providerRegistry.candidates({ capability: 'generate' }, tenantA, tx)), ['ai-sandbox/sandbox-1', 'ai-sandbox/sandbox-advanced-1']);
     assert.deepEqual(nomes(await providerRegistry.candidates({ capability: 'transcribe' }, tenantA, tx)), ['ai-sandbox/sandbox-media-1']);
     // Conexão em rascunho não conta; ativa, conta. O adapter que não declara a capability nunca é roteado.
     const rascunho = await P.criarConexao(tenantA, tx, { providerCode: 'openai', config: { models: modelos(modelo({ model: 'oa-gen', pricePerMTokIn: 0.5 }), MODELO_EMBED()) } });
@@ -49,7 +49,7 @@ test('m9d011_candidates_filtra_por_capability_com_conexoes_ativas', async () => 
     assert.ok(!embed.some((n) => n.startsWith('anthropic')));
     const gerar = await providerRegistry.candidates({ capability: 'generate', requestSize: { tokensIn: 1000, tokensOut: 1000 } }, tenantA, tx);
     // 1.000 tokens de entrada e 1.000 de saída: sandbox 2+6 = 8.000; anthropic 0,10+15 = 15.100; openai 0,50+15 = 15.500 micro-reais.
-    assert.deepEqual(gerar.map((c) => [`${c.providerCode}/${c.model}`, c.estimatedCostMicros]), [['ai-sandbox/sandbox-1', 8000], ['anthropic/an-gen', 15100], ['openai/oa-gen', 15500]]);
+    assert.deepEqual(gerar.map((c) => [`${c.providerCode}/${c.model}`, c.estimatedCostMicros]), [['ai-sandbox/sandbox-1', 8000], ['anthropic/an-gen', 15100], ['openai/oa-gen', 15500], ['ai-sandbox/sandbox-advanced-1', 40000]]);
     assert.deepEqual(nomes(await providerRegistry.candidates({ capability: 'analyzeImage' }, tenantA, tx)), ['ai-sandbox/sandbox-media-1']);
   });
 });
@@ -58,14 +58,14 @@ test('m9d011_candidates_usa_politica_da_conexao_e_parametros_da_empresa', async 
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     await P.ativarConexao(tenantA, tx, { providerCode: 'openai', config: { data_retention: '30D', region: 'US', models: modelos(modelo({ model: 'oa-gen', safetyTier: 1 })) } });
     const por = async (q) => nomes(await providerRegistry.candidates({ capability: 'generate', ...q }, tenantA, tx));
-    assert.deepEqual((await por({ politica: { retentions: ['NONE'] } })), ['ai-sandbox/sandbox-1'], 'a retenção da conexão (30D) manda');
+    assert.deepEqual((await por({ politica: { retentions: ['NONE'] } })), ['ai-sandbox/sandbox-1', 'ai-sandbox/sandbox-advanced-1'], 'a retenção da conexão (30D) manda');
     assert.deepEqual(await por({ politica: { regions: ['US'] } }), ['openai/oa-gen']);
     // Dado CONFIDENTIAL só vai a provedor que o aceita; ligar exige ai:admin e contrato.
     assert.deepEqual(await por({ politica: { classification: 'CONFIDENTIAL' } }), [], 'nem o sandbox nem o openai aceitam confidencial sem allowsConfidential e contrato');
     // Agente crítico: oa-gen tem safetyTier 1 < 2 (parâmetro) e sai; baixando o piso para 1 ele volta.
-    assert.deepEqual(await por({ criticidade: 'CRITICAL' }), ['ai-sandbox/sandbox-1']);
+    assert.deepEqual(await por({ criticidade: 'CRITICAL' }), ['ai-sandbox/sandbox-1', 'ai-sandbox/sandbox-advanced-1']);
     await P.ajustar(tenantA, 'ia.provedor.safety_tier_minimo_critico', 1, tx);
-    assert.deepEqual((await por({ criticidade: 'CRITICAL' })).sort(), ['ai-sandbox/sandbox-1', 'openai/oa-gen']);
+    assert.deepEqual((await por({ criticidade: 'CRITICAL' })).sort(), ['ai-sandbox/sandbox-1', 'ai-sandbox/sandbox-advanced-1', 'openai/oa-gen']);
     // Produção: o sandbox (lab_only) sai da lista.
     await P.ajustar(tenantA, 'ia.ambiente', 'PRODUCAO', tx);
     assert.deepEqual(await por({}), ['openai/oa-gen']);

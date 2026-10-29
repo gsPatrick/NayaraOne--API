@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { AIProviderAdapter } = require('../AIProviderAdapter');
 const { AiProviderError } = require('../providers.errors');
-const { microsToAmount } = require('../providers.cost');
+const { microsToAmount, costMicros } = require('../providers.cost');
 const { sandboxGenerate } = require('./sandboxGenerate');
 const { sandboxEmbedText } = require('./sandboxEmbed');
 const { failureFixture } = require('./sandboxFailure');
@@ -45,12 +45,14 @@ class SandboxAdapter extends AIProviderAdapter {
     if (falha) throw falha;
     const out = sandboxGenerate({ system: request.system || '', messages: request.messages || [] });
     this.guardTimeout(out.latencyMs, request);
+    // `[[CUSTO:x]]` manda no custo; sem ele o custo segue o preço do modelo escolhido (o avançado custa mais que o pequeno).
+    const micros = out.fixedCost ? out.costMicros : costMicros({ tokensIn: out.inputTokens, tokensOut: out.outputTokens, pricePerMTokIn: entry.pricePerMTokIn, pricePerMTokOut: entry.pricePerMTokOut });
     const toolRequests = (out.toolRequests || []).map((t) => ({ name: t.name, arguments: t.args }));
     return {
       text: out.text,
       toolRequests,
       usage: { tokensIn: out.inputTokens, tokensOut: out.outputTokens },
-      costAmount: microsToAmount(out.costMicros),
+      costAmount: microsToAmount(micros),
       finishReason: toolRequests.length ? 'tool_calls' : 'stop',
       providerRequestId: `sandbox-${out.digest.slice(0, 16)}`,
       latencyMs: out.latencyMs,
