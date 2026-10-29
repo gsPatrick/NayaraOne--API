@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const propertiesController = require('./properties.controller');
+require('./publicReadModel'); // M9-D231: consumidores do read model público (property.* -> recalcula o registro)
 
 const propertiesRouter = Router();
 

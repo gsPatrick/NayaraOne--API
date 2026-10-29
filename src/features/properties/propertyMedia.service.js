@@ -2,6 +2,7 @@
 
 const { PropertyMedia, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
 
 /**
  * propertyMedia.service.js — CRUD de "real_estate"."property_media" (tabela criada pela
@@ -49,7 +50,7 @@ async function createMedia(propertyId, payload, actorUserId, transaction) {
     resolvedPosition = last && last.position != null ? last.position + 1 : 0;
   }
 
-  return PropertyMedia.create(
+  const created = await PropertyMedia.create(
     {
       groupId: property.groupId,
       companyId: property.companyId,
@@ -69,6 +70,8 @@ async function createMedia(propertyId, payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  await publishPropertyPublicSourceChanged(property, transaction);
+  return created;
 }
 
 async function listMedia(propertyId, transaction) {
@@ -87,6 +90,7 @@ async function deleteMedia(propertyId, mediaId, transaction) {
   const media = await PropertyMedia.findOne({ where: { id: mediaId, propertyId }, transaction });
   if (!media) throw AppError.notFound('Mídia não encontrada.', 'PROPERTY_MEDIA_NOT_FOUND');
   await media.destroy({ transaction });
+  await publishPropertyPublicSourceChanged(await assertPropertyExists(propertyId, transaction), transaction);
   return { id: mediaId };
 }
 

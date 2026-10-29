@@ -2,6 +2,7 @@
 
 const { PropertyDocument, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
 
 /**
  * propertyDocuments.service.js — CRUD de "real_estate"."property_documents" (migration ...081).
@@ -53,7 +54,7 @@ async function createDocument(propertyId, payload, actorUserId, transaction) {
     }
   }
 
-  return PropertyDocument.create(
+  const created = await PropertyDocument.create(
     {
       groupId: property.groupId,
       companyId: property.companyId,
@@ -68,6 +69,8 @@ async function createDocument(propertyId, payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  await publishPropertyPublicSourceChanged(property, transaction);
+  return created;
 }
 
 async function listDocuments(propertyId, transaction) {
@@ -79,6 +82,7 @@ async function deleteDocument(propertyId, documentId, transaction) {
   const document = await PropertyDocument.findOne({ where: { id: documentId, propertyId }, transaction });
   if (!document) throw AppError.notFound('Documento do imóvel não encontrado.', 'PROPERTY_DOCUMENT_NOT_FOUND');
   await document.destroy({ transaction });
+  await publishPropertyPublicSourceChanged(await assertPropertyExists(propertyId, transaction), transaction);
   return { id: documentId };
 }
 

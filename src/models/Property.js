@@ -148,6 +148,19 @@ module.exports = (sequelize) => {
         field: 'public_address_policy',
         comment: 'COMPLETO|RUA_SEM_NUMERO|SO_BAIRRO|OCULTO',
       },
+      // M9-D231: visibilidade do endereço no site e nos portais (PUBLIC | APPROXIMATE | RESTRICTED) e texto público próprio.
+      addressVisibility: {
+        type: DataTypes.STRING(12),
+        allowNull: false,
+        defaultValue: 'RESTRICTED',
+        field: 'address_visibility',
+        comment: 'PUBLIC|APPROXIMATE|RESTRICTED',
+      },
+      descriptionPublic: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'description_public',
+      },
       publicId: {
         type: DataTypes.UUID,
         allowNull: false,

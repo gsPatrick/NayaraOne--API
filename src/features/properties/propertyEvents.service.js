@@ -103,6 +103,23 @@ function publishPropertyAvailabilityEvent(eventType, property, transaction) {
   );
 }
 
+// M9-D231: mídia, documento (IPTU/condomínio) ou oferta do imóvel mudou — o que é público pode ter mudado e o read model recalcula.
+// Sem dado pessoal: só o id do imóvel.
+function publishPropertyPublicSourceChanged(property, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: property.groupId,
+      companyId: property.companyId,
+      aggregateType: 'Property',
+      aggregateId: property.id,
+      eventType: 'property.public_source.changed',
+      payload: { id: property.id },
+      idempotencyKey: `property.public_source.changed:${property.id}:${Date.now()}:${Math.floor(Math.random() * 1e6)}`,
+    },
+    transaction
+  );
+}
+
 const publishPropertySold = (property, transaction) => publishPropertyAvailabilityEvent('property.sold', property, transaction);
 const publishPropertyRented = (property, transaction) => publishPropertyAvailabilityEvent('property.rented', property, transaction);
 
@@ -114,4 +131,5 @@ module.exports = {
   publishPropertyPublished,
   publishPropertyPriceChanged,
   publishPropertyUpdated,
+  publishPropertyPublicSourceChanged,
 };

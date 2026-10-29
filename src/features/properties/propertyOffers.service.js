@@ -4,7 +4,7 @@ const { PropertyOffer, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { recordPriceHistory } = require('./propertyPriceHistory.service');
 const { supersedeCurrentActiveOffer } = require('./propertyOfferSupersede.service');
-const { publishPropertyOfferCreated } = require('./propertyEvents.service');
+const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { OutboxEvent } = require('../../models');
 const { matchNewPropertyToRadars } = require('../radar/radarMatching.service');
@@ -295,6 +295,7 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
     transaction
   );
 
+  await publishPropertyPublicSourceChanged(property, transaction);
   return offer;
 }
 

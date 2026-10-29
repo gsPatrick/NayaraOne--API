@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { publishPropertyCreated, publishPropertyUpdated, publishPropertyPublished, publishPropertySold, publishPropertyRented } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
+const { ADDRESS_VISIBILITIES } = require('./publicReadModel/constants');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 // M9-D403: política de endereço em conteúdo público de Marketing (padrão do banco: SO_BAIRRO).
@@ -222,6 +223,8 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     parkingSpots,
     attributesJson,
     publicAddressPolicy,
+    addressVisibility,
+    descriptionPublic,
   } = payload;
 
   if (publicAddressPolicy !== undefined) {
@@ -233,6 +236,20 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
       );
     }
     property.publicAddressPolicy = normalizedPolicy;
+  }
+  // M9-D231: visibilidade do endereço no site e nos portais e texto público próprio (passa por redação ao entrar no read model).
+  if (addressVisibility !== undefined) {
+    const normalizedVisibility = String(addressVisibility).toUpperCase();
+    if (!ADDRESS_VISIBILITIES.includes(normalizedVisibility)) {
+      throw AppError.badRequest(`O campo "addressVisibility" deve ser um de: ${ADDRESS_VISIBILITIES.join(', ')}.`, 'PROPERTY_VALIDATION');
+    }
+    property.addressVisibility = normalizedVisibility;
+  }
+  if (descriptionPublic !== undefined) {
+    if (descriptionPublic !== null && String(descriptionPublic).length > 5000) {
+      throw AppError.badRequest('O campo "descriptionPublic" aceita até 5000 caracteres.', 'PROPERTY_VALIDATION');
+    }
+    property.descriptionPublic = descriptionPublic === null || String(descriptionPublic).trim() === '' ? null : String(descriptionPublic);
   }
   if (description !== undefined) property.description = description;
   if (bedrooms !== undefined) property.bedrooms = bedrooms;

@@ -28,6 +28,7 @@ const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
+const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
@@ -193,6 +194,8 @@ const SETTINGS_SCHEMA = {
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).
   ...MINIMIZATION_SETTINGS_SCHEMA,
+  // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
+  ...PUBLICATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.

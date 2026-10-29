@@ -25,11 +25,11 @@ const listing = (extra = []) => defineMapper({
   ],
 });
 
-const status = defineMapper({ purpose: 'LISTING_PUBLICATION', fields: [{ name: 'externalResourceId', classification: 'INTERNAL' }] });
+const status = defineMapper({ purpose: 'LISTING_PUBLICATION', fields: [{ name: 'externalResourceId', classification: 'PUBLIC' }] });
 
 module.exports = {
   publishListing: listing(),
-  updateListing: listing([{ name: 'externalResourceId', classification: 'INTERNAL', required: true }]),
+  updateListing: listing([{ name: 'externalResourceId', classification: 'PUBLIC', required: true }]),
   unpublishListing: status,
   getListingStatus: status,
 };
