@@ -20,8 +20,8 @@ const DASHBOARD_CATALOG = Object.freeze([
   { code: 'inventory', p95TargetMs: 1800, name: 'Estoque/Patrimônio', domain: 'INVENTORY', requiredPermission: 'inventory:read', contentDemand: 'M9-D654' },
   { code: 'postwork', p95TargetMs: 1800, name: 'Pós-obra', domain: 'CONSTRUCTION', requiredPermission: 'construction:read', contentDemand: 'M9-D654' },
   { code: 'legal', p95TargetMs: 1800, name: 'Jurídico', domain: 'LEGAL', requiredPermission: 'legal:read', contentDemand: 'M9-D662' },
-  { code: 'marketing', p95TargetMs: 1500, name: 'Marketing', domain: 'MARKETING', requiredPermission: 'crm:opportunities:read', contentDemand: 'M9-D673' },
-  { code: 'support', p95TargetMs: 1500, name: 'Atendimento/Satisfação', domain: 'SUPPORT', requiredPermission: 'crm:opportunities:read', contentDemand: 'M9-D673' },
+  { code: 'marketing', p95TargetMs: 1500, name: 'Marketing', domain: 'MARKETING', requiredPermission: 'marketing:attribution:read', contentDemand: 'M9-D673' },
+  { code: 'support', p95TargetMs: 1500, name: 'Atendimento/Satisfação', domain: 'SUPPORT', requiredPermission: 'crm:feedback:read', contentDemand: 'M9-D673' },
   { code: 'tech', p95TargetMs: 1400, name: 'Segurança/Integrações/IA', domain: 'TECH_AI', requiredPermission: 'analytics:read:tech', contentDemand: 'M9-D682' },
   { code: 'command_center', p95TargetMs: 2500, name: 'Centro de Comando', domain: 'GENERAL', requiredPermission: 'analytics:read', contentDemand: 'M9-D685', home: true },
 ].map((p) => Object.freeze({ ...p, widgets: Object.freeze(p.home ? [QUALITY_BANNER, BRIEF, ALERTS] : [QUALITY_BANNER, ALERTS]) })));

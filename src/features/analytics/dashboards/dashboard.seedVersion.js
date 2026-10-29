@@ -42,12 +42,13 @@ async function inWriterTx(queryInterface, fn) {
   });
 }
 
-async function publishPanelVersion(queryInterface, { code, widgets, description }) {
+async function publishPanelVersion(queryInterface, { code, widgets, description, requiredPermission }) {
   const wanted = widgets.map(fromDefinition);
   return inWriterTx(queryInterface, async (q) => {
     const current = await currentOf(q, code);
     if (!current) throw new Error(`O painel ${code} não está no catálogo (aplique antes a migration 20260101009687).`);
-    if (canonical(await widgetsOf(q, current.id)) === canonical(wanted)) return current.version;
+    const permission = requiredPermission || current.required_permission; // M9-D673: o painel pode trocar a permissão do domínio ao publicar o conteúdo
+    if (canonical(await widgetsOf(q, current.id)) === canonical(wanted) && permission === current.required_permission) return current.version;
     await q("UPDATE analytics.dashboard_definitions SET status = 'RETIRED', updated_at = now() WHERE id = :id", { id: current.id });
     const [[created]] = await q(
       `INSERT INTO analytics.dashboard_definitions
@@ -55,7 +56,7 @@ async function publishPanelVersion(queryInterface, { code, widgets, description 
        VALUES (:code, :name, :description, :domain, CAST(:audience AS jsonb), CAST(:layout AS jsonb), 'DRAFT', :version, :p95, :permission) RETURNING id, version`,
       {
         code, name: current.name, description: description || current.description, domain: current.domain, audience: JSON.stringify(current.audience_roles),
-        layout: JSON.stringify(current.layout), version: current.version + 1, p95: current.p95_target_ms, permission: current.required_permission,
+        layout: JSON.stringify(current.layout), version: current.version + 1, p95: current.p95_target_ms, permission,
       }
     );
     for (const w of wanted) {

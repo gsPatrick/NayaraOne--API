@@ -13,7 +13,7 @@ let env;
 before(async () => { env = await sup.setup(); });
 after(() => sup.teardown(env));
 
-const ALL = ['analytics:read', 'analytics:read:tech', 'analytics:audit:read', 'finance:read', 'crm:opportunities:read', 'legal:read', 'construction:read', 'inventory:read', 'correspondent:read'];
+const ALL = ['analytics:read', 'analytics:read:tech', 'analytics:audit:read', 'finance:read', 'crm:opportunities:read', 'legal:read', 'construction:read', 'inventory:read', 'correspondent:read', 'marketing:attribution:read', 'crm:feedback:read'];
 
 test('m9d698 painel não consulta tabelas de origem (instrumentação)', async () => {
   dashboards.clearCache();

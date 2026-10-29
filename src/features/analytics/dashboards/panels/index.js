@@ -7,7 +7,9 @@ const { CORRESPONDENT_PANEL } = require('./correspondent.panel');
 const { CONSTRUCTION_PANEL } = require('./construction.panel'); // M9-D654
 const { INVENTORY_PANEL } = require('./inventory.panel');
 const { POSTWORK_PANEL } = require('./postwork.panel');
+const { MARKETING_PANEL } = require('./marketing.panel'); // M9-D673
+const { SUPPORT_PANEL } = require('./support.panel'); // M9-D673
 
-const PANELS = Object.freeze({ crm: CRM_PANEL, legal: LEGAL_PANEL, correspondent: CORRESPONDENT_PANEL, construction: CONSTRUCTION_PANEL, inventory: INVENTORY_PANEL, postwork: POSTWORK_PANEL });
+const PANELS = Object.freeze({ crm: CRM_PANEL, legal: LEGAL_PANEL, correspondent: CORRESPONDENT_PANEL, construction: CONSTRUCTION_PANEL, inventory: INVENTORY_PANEL, postwork: POSTWORK_PANEL, marketing: MARKETING_PANEL, support: SUPPORT_PANEL });
 
-module.exports = { PANELS, CRM_PANEL, LEGAL_PANEL, CORRESPONDENT_PANEL, CONSTRUCTION_PANEL, INVENTORY_PANEL, POSTWORK_PANEL };
+module.exports = { PANELS, CRM_PANEL, LEGAL_PANEL, CORRESPONDENT_PANEL, CONSTRUCTION_PANEL, INVENTORY_PANEL, POSTWORK_PANEL, MARKETING_PANEL, SUPPORT_PANEL };
