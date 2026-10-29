@@ -5,7 +5,8 @@
  *   analytics.centro.opp_parada_dias              dias sem movimento para a oportunidade em andamento contar como parada (livro/PD-026: 7)
  *   analytics.comercial.janela_recalculo_dias     quantos dias para trás a agenda recalcula os read models diários (visitas e propostas
  *                                                 agendadas não geram evento no momento do agendamento)
- *   analytics.comercial.primeira_resposta_inclui_nay   a resposta da NAY conta como primeira resposta do lead (padrão Ligado)
+ *   analytics.comercial.primeira_resposta_inclui_nay   a resposta da NAY conta como primeira resposta do lead (padrão Desligado: a resposta
+ *                                                      automática não conta, M9-D630; era Ligado na M9-D616)
  *   analytics.imoveis.faixas_sem_venda_dias       limites, em dias, das faixas de "imóvel sem venda" (ex.: 30,60,90,180)
  * Arquivo sem dependência de settings.service no topo (evita ciclo; a leitura usa import tardio).
  */
@@ -21,7 +22,7 @@ const KEYS = Object.freeze({
 const COMERCIAL_DEFAULTS = Object.freeze({
   [KEYS.stalledDays]: 7,
   [KEYS.recalcDays]: 7,
-  [KEYS.includeNay]: true,
+  [KEYS.includeNay]: false,
   [KEYS.noSaleBands]: '30,60,90,180',
 });
 

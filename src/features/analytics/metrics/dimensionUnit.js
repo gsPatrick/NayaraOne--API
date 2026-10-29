@@ -10,6 +10,7 @@ function dimensionUnit(dimensionKey, versionUnit) {
   if (/(^|:)[a-z_]*_dias$/.test(dimensionKey || '')) return 'DAYS';
   if (/(^|:)[a-z_]*_pct$/.test(dimensionKey || '')) return 'PERCENT'; // M9-D623: margem % e parte sem setor
   if (/(^|:)[a-z_]*_qtd$/.test(dimensionKey || '')) return 'COUNT'; // M9-D623: quantidades dentro de um indicador em reais
+  if (/(^|:)[a-z_]*_min$/.test(dimensionKey || '')) return 'MINUTES'; // M9-D630: tempo médio por origem e por corretor
   return versionUnit;
 }
 

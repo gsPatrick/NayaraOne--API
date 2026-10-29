@@ -24,7 +24,7 @@ const slice = ({ where }) => `
     LEFT JOIN LATERAL (
       SELECT MIN(m.created_at) AS first_at FROM crm.messages m
        WHERE m.company_id = o.company_id AND m.opportunity_id = o.id AND m.direction = 'OUTBOUND' AND m.created_at >= o.created_at
-         AND (CAST(:includeNay AS boolean) OR m.author_type <> 'NAY')
+         AND (m.author_type = 'EMPLOYEE' OR (CAST(:includeNay AS boolean) AND m.author_type = 'NAY'))
     ) fr ON true
    WHERE o.company_id = :companyId AND o.deleted_at IS NULL${where({ day: sqlDay('o.created_at') })}
    GROUP BY 1, 2, 3`;

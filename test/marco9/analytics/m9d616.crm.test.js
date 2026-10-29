@@ -28,13 +28,13 @@ test('m9d616 leads por dia, origem e corretor, com a primeira resposta em segund
   const list = await rows(env, 'rm_crm_lead_daily', env.cX);
   assert.equal(list.length, 2, 'o dia 2026-10-20 de SP tem duas linhas (a terceira criada às 01:30Z ainda é 20/10 em SP)');
   const a = pick(list, { origin: 'PORTAL_A', broker_id: b1 });
-  assert.deepEqual([a.day, a.leads, a.first_response_count, Number(a.first_response_seconds_sum)], ['2026-10-20', 2, 2, 600 + 120], 'a NAY conta como resposta por padrão');
+  assert.deepEqual([a.day, a.leads, a.first_response_count, Number(a.first_response_seconds_sum)], ['2026-10-20', 2, 2, 600 + 900], 'a resposta automática da NAY não conta por padrão (M9-D630) e a mensagem do cliente nunca conta');
   const none = pick(list, { origin: 'NAO_INFORMADA', broker_id: b2 });
   assert.deepEqual([none.leads, none.first_response_count, Number(none.first_response_seconds_sum)], [1, 0, 0], 'sem resposta não entra na soma');
-  await setSetting(env, env.cX, 'analytics.comercial.primeira_resposta_inclui_nay', false);
+  await setSetting(env, env.cX, 'analytics.comercial.primeira_resposta_inclui_nay', true);
   await apply(env.cX, makeEvent(env.cX, 'crm.interaction.recorded', { id: src.uuid(), opportunityId: o2, direction: 'OUTBOUND' }));
   const again = pick(await rows(env, 'rm_crm_lead_daily', env.cX), { origin: 'PORTAL_A', broker_id: b1 });
-  assert.equal(Number(again.first_response_seconds_sum), 600 + 900, 'com o parâmetro desligado a resposta da NAY não conta');
+  assert.equal(Number(again.first_response_seconds_sum), 600 + 120, 'com o parâmetro ligado a resposta da NAY conta');
 });
 
 test('m9d616 oportunidades em andamento por estágio, paradas e parâmetro de dias', async () => {

@@ -12,4 +12,4 @@ module.exports = {
 };
 require('./sourceSpecs.finance'); // origem dos componentes do read model financeiro (M9-D615)
 require('./sourceSpecs.finance.results'); // origem da margem por setor, comissões e repasses (M9-D623)
-
+require('./sourceSpecs.crm'); // origem dos KPIs do funil comercial (M9-D630 e M9-D631)
