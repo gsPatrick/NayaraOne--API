@@ -348,3 +348,20 @@ test('M9-D615: analytics.rm_finance_health e rm_finance_sector_margin têm RLS, 
     assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
   }
 });
+
+// M9-D627: read models de Marketing e Atendimento/Satisfação no BI com RLS + FORCE RLS e 4 políticas.
+test('M9-D627: os 8 read models de Marketing e Atendimento têm RLS, FORCE RLS e 4 políticas', async () => {
+  for (const table of ['rm_mkt_campaigns', 'rm_mkt_delivery', 'rm_mkt_frequency', 'rm_mkt_reviews', 'rm_mkt_automation', 'rm_support_satisfaction', 'rm_support_complaints', 'rm_support_sla']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
+  }
+});

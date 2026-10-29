@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { canContact } = require('../people/personConsents.service');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
+const { businessDateKey } = require('../../utils/businessDate');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -137,9 +138,25 @@ async function updateMessageStatus(id, status, actorUserId, transaction) {
   if (!status) {
     throw AppError.badRequest('O campo "status" é obrigatório.', 'MESSAGE_VALIDATION');
   }
+  const previousStatus = message.status;
   message.status = String(status).toUpperCase();
   message.updatedBy = actorUserId || null;
   await message.save({ transaction });
+  // M9-D627: o status de entrega muda os números do BI de Marketing (entregues e falhas do dia da mensagem); o dia é o de criação, em SP.
+  if (message.direction === 'OUTBOUND' && previousStatus !== message.status) {
+    await publishDomainEvent(
+      {
+        groupId: message.groupId,
+        companyId: message.companyId,
+        aggregateType: 'Message',
+        aggregateId: message.id,
+        eventType: 'crm.message.status_changed',
+        payload: { id: message.id, channel: message.channel, status: message.status, day: businessDateKey(message.getDataValue('created_at')) },
+        idempotencyKey: `crm.message.status_changed:${message.id}:${message.status}:${new Date(message.getDataValue('updated_at')).getTime()}`,
+      },
+      transaction
+    );
+  }
   return message;
 }
 

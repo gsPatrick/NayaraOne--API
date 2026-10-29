@@ -37,6 +37,7 @@ const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-mo
 const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/rebuild.settings');
 const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/sourceRefs.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
+const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 
 /**
@@ -212,6 +213,8 @@ const SETTINGS_SCHEMA = {
   ...SOURCE_REFS_SETTINGS_SCHEMA,
   // Marco 9, M9-D615 — read model financeiro: janela, em dias, do vencido que entra na taxa de inadimplência.
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
+  ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,
   // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
   ...SECURITY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
