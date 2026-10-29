@@ -17,6 +17,11 @@ function toBudget(row, params, alerts = []) {
     consumedAmount: row.consumedAmount,
     reservedAmount: row.reservedAmount,
     consumedPct: pctOf(row.consumedAmount, row.limitAmount),
+    // Nomes do contrato de GET /ai/budgets (M9-D031): os mesmos valores, sem recálculo.
+    limit: row.limitAmount,
+    consumed: row.consumedAmount,
+    reserved: row.reservedAmount,
+    pct: pctOf(row.consumedAmount, row.limitAmount),
     thresholds: row.thresholds || null,
     effectiveThresholds: row.thresholds || params.thresholds,
     actionAt100: row.actionAt100 || null,

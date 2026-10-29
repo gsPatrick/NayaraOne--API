@@ -4,6 +4,7 @@ const catchAsync = require('../../../utils/catchAsync');
 const { success } = require('../../../utils/httpResponse');
 const { requirePermission } = require('../../../middlewares/auth.middleware');
 const { aiGate } = require('../aiGate.middleware');
+const { anyOf } = require('../anyOf');
 const { staleError } = require('../recommendations');
 const AE = require('./approval.errors');
 const service = require('./ApprovalService');
@@ -25,9 +26,10 @@ const reject = catchAsync(async (req, res) => {
   return success(res, { data: view(out) });
 });
 
-/** POST /v1/ai/recommendations/:id/accept|reject (no router de /v1/ai, que já autentica e abre o tenant). Exigem `ai:approve`. */
+/** POST /v1/ai/recommendations/:id/accept|reject (no router de /v1/ai, que já autentica e abre o tenant). Reject exige `ai:approve`; accept, `ai:approve` ou (informativa dirigida à pessoa) `ai:read`. */
 function registerApprovalRoutes(router) {
-  router.post('/ai/recommendations/:id/accept', requirePermission('ai:approve'), gate, accept);
+  // A recomendação informativa (sem ação) é aceita pelo destinatário com ai:read (M9-D007/D031); a de ação proposta exige ai:approve (o serviço confere por recomendação).
+  router.post('/ai/recommendations/:id/accept', anyOf('ai:approve', 'ai:read'), gate, accept);
   router.post('/ai/recommendations/:id/reject', requirePermission('ai:approve'), gate, reject);
 }
 
