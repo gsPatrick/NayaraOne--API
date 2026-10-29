@@ -106,6 +106,9 @@ test('m9d614 os guardas não têm flag para desligar e o pipeline os executa', (
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(API_ROOT, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts['guard:analytics-rules'], 'node scripts/analytics/checkGuardrails.js');
+  const wf = fs.readFileSync(path.join(API_ROOT, '.github', 'workflows', 'test.yml'), 'utf8');
+  assert.match(wf, /run:\s*npm run guard:analytics-rules/, 'o workflow de CI executa os guardas do Não improvisar');
+  assert.match(wf, /run:\s*npm run guard:formula-tests/, 'o workflow de CI executa os testes de fórmula');
   assert.match(pkg.scripts.test, /test\/marco9\/\*\*\/\*\.test\.js/, 'npm test inclui o teste dos guardas com banco (regras 4 e 7)');
   assert.deepEqual(Object.keys(guards.RULE_TITLES), ['1', '2', '3', '4', '5', '6', '7']);
 });

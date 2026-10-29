@@ -157,6 +157,14 @@ jobs:
       - name: archGuard da NAY (M9-D001)
         run: node scripts/ai-arch-guard.js
 
+      # M9-D614: guardas do "Não improvisar" que só leem arquivos (regras 2, 3, 5 e 6; as regras 1 e 5-Front dependem do repositório do Front, M9-D705)
+      # e testes de fórmula do BI. As regras 4 e 7 rodam na suíte (test/marco9/analytics/m9d614.*).
+      - name: Guardas do Não improvisar (M9-D614)
+        run: npm run guard:analytics-rules
+
+      - name: Testes de fórmula do BI (M9-D604)
+        run: npm run guard:formula-tests
+
       # M9-D210: SDK de fornecedor só dentro do adapter, HTTP externo só pelo IntegrationHttpClient, providers isolados; M9-D244: certificado nunca desligado.
       - name: Fronteiras de integração (M9-D210)
         run: node scripts/checkIntegrationBoundaries.js
