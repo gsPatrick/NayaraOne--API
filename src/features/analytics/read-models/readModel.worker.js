@@ -10,6 +10,7 @@
 const { sequelize } = require('../../../models');
 const logger = require('../../../utils/logger');
 const { businessDateKey } = require('../../../utils/businessDate');
+const clock = require('../metrics/clock');
 const { enableAnalyticsWriter } = require('../metricStore.service');
 const { modelsFor } = require('./readModel.registry');
 const { lockAggregate, upsertAggregate, markStale, clearStale, keyText } = require('./readModel.upsert');
@@ -68,7 +69,7 @@ async function applyEvent(event, transaction, options = {}) {
     return { ignored: 'UNKNOWN_EVENT' };
   }
   const scope = { companyId: event.companyId, groupId: event.groupId };
-  const now = options.now || new Date();
+  const now = options.now || clock.now();
   const out = { upserted: 0, replayIgnored: 0, stale: 0, skipped: 0 };
   const upserts = await sequelize.transaction({ transaction }, async (savepoint) => {
     await enableAnalyticsWriter(savepoint);

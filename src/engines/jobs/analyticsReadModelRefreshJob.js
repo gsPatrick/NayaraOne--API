@@ -2,6 +2,7 @@
 
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
+const clock = require('../../features/analytics/metrics/clock');
 const { readRefreshParams, refreshCompanyScheduled, scheduleDue, afterRun } = require('../../features/analytics/read-models');
 
 /**
@@ -35,7 +36,7 @@ async function runCompany(group, company, now, force, summary) {
 }
 
 /** Uma passada por todas as empresas. `force` ignora a agenda (teste e execução manual). */
-async function runAnalyticsReadModelRefreshJob({ now = new Date(), force = false } = {}) {
+async function runAnalyticsReadModelRefreshJob({ now = clock.now(), force = false } = {}) {
   if (force) stateByCompany.clear();
   const summary = { companies: 0, readModels: 0, rows: 0, errors: 0 };
   const groups = await Group.findAll();

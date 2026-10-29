@@ -7,6 +7,7 @@
  * por empresa e read model. O acúmulo fica em memória, preso à transação raiz; evento que falha depois de contado só faz o diário
  * subestimar/superestimar uma linha, nunca a projeção (que é transacional).
  */
+const clock = require('../metrics/clock');
 const { enableAnalyticsWriter } = require('../metricStore.service');
 const { startRefresh, finishRefresh } = require('../readModelRefreshStore.service');
 const { readRefreshParams } = require('./readModel.settings');
@@ -53,7 +54,7 @@ function notifyBatchListeners(entry, refreshId, params, now, transaction) {
 }
 
 /** Fecha o lote da transação: uma linha de refresh por empresa e read model tocados. Devolve as linhas gravadas. */
-async function flushBatch(transaction, { now = new Date() } = {}) {
+async function flushBatch(transaction, { now = clock.now() } = {}) {
   const root = rootOf(transaction);
   const map = pending.get(root);
   if (!map || !map.size) return [];

@@ -9,6 +9,7 @@
 const { sequelize } = require('../../../models');
 const logger = require('../../../utils/logger');
 const { businessDateKey } = require('../../../utils/businessDate');
+const clock = require('../metrics/clock');
 const { enableAnalyticsWriter } = require('../metricStore.service');
 const { startRefresh, finishRefresh } = require('../readModelRefreshStore.service');
 const { listReadModels } = require('./readModel.registry');
@@ -53,7 +54,7 @@ async function refreshModel(def, scope, params, now, transaction) {
 }
 
 /** Passada agendada da empresa (já com o contexto de tenant na transação). Devolve o resumo por read model. */
-async function refreshCompanyScheduled(scope, params, transaction, { now = new Date() } = {}) {
+async function refreshCompanyScheduled(scope, params, transaction, { now = clock.now() } = {}) {
   await enableAnalyticsWriter(transaction);
   const out = [];
   for (const def of listReadModels()) {

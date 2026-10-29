@@ -251,6 +251,8 @@ test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTT
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}/v1/analytics/metrics/${code}`;
+  const clock = require('../src/features/analytics/metrics/clock');
+  clock.setClock(() => new Date('2026-12-01T15:00:00Z')); // M9-D606: data-base futura é 400; o relógio fixo deixa as datas do teste no passado
   try {
     const get = async (qs) => { const res = await fetch(`${base}${qs}`); return { status: res.status, body: await res.json() }; };
     const a = await get('?asOf=2026-10-31');
@@ -264,6 +266,7 @@ test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTT
     assert.equal(c.body.error.code, 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
     assert.equal(patch.status, 405);
   } finally {
+    clock.resetClock();
     await new Promise((resolve) => server.close(resolve));
   }
 });

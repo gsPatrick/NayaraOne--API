@@ -2,10 +2,8 @@
 
 const { Router } = require('express');
 const AppError = require('../../../utils/AppError');
-const { businessDateKey } = require('../../../utils/businessDate');
 const { readMetricAsOf } = require('./registry.asOf');
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const { resolveAsOf } = require('./period');
 
 /**
  * GET /analytics/metrics/:code?asOf=AAAA-MM-DD (M9-D604, 3.4). Resolve a versão vigente na data e devolve o snapshot gravado dela,
@@ -18,10 +16,7 @@ async function getMetric(req, res, next) {
     if (req.query.companyId && req.query.companyId !== companyId) {
       throw AppError.notFound('Empresa não encontrada ou sem acesso.', 'ANALYTICS_SCOPE_NOT_FOUND');
     }
-    const asOfDate = req.query.asOf === undefined ? businessDateKey(new Date()) : String(req.query.asOf);
-    if (!DATE_RE.test(asOfDate) || Number.isNaN(Date.parse(`${asOfDate}T00:00:00Z`))) {
-      throw AppError.badRequest('A data (asOf) deve estar no formato AAAA-MM-DD.', 'ANALYTICS_PERIOD_INVALID');
-    }
+    const asOfDate = resolveAsOf(req.query.asOf); // M9-D606: data de calendário de SP; futuro é 400 ANALYTICS_AS_OF_FUTURE
     const data = await req.withTenantTransaction((transaction) => readMetricAsOf(
       { companyId, groupId, permissions }, { metricCode: req.params.code, scopeType: 'COMPANY', scopeId: companyId, asOfDate }, transaction
     ));

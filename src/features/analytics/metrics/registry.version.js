@@ -16,6 +16,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../../../engines/events/outbox');
 const { businessDateKey } = require('../../../utils/businessDate');
+const clock = require('./clock');
 const store = require('../metricStore.service');
 const { assertCanManage } = require('./registry.permission');
 const { assertComplete, validateShape } = require('./registry.fields');
@@ -113,7 +114,7 @@ async function publishVersion(code, input, ctx, transaction, options = {}) {
     throw AppError.badRequest('Informe a versão que será publicada (a seguinte à vigente).', 'ANALYTICS_METRIC_INVALID');
   }
   assertReason(input, options.reasonMinChars || await readReasonMinChars(ctx, transaction));
-  assertValidFrom(input.validFrom, businessDateKey(options.now || new Date()));
+  assertValidFrom(input.validFrom, businessDateKey(options.now || clock.now()));
   return sequelize.transaction({ transaction }, (savepoint) => publishInside(code, input, ctx, savepoint, options));
 }
 
