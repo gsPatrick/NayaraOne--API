@@ -10,7 +10,9 @@
  * (a cada 15 min e às 00:05 de São Paulo) recalcula o que depende do relógio (janelas e vencidos mudam sem nenhum evento).
  */
 const { registerReadModel } = require('./readModel.registry');
+const { sequelize } = require('../../../models');
 const { businessDateKey } = require('../../../utils/businessDate');
+const clock = require('../metrics/clock');
 const { HEALTH_EVENTS } = require('./financeHealth.events');
 const { financeBounds } = require('./financeHealth.dates');
 const { readEntryComponents } = require('./financeHealth.entries');
@@ -50,6 +52,16 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
   return { fields, sourceSnapshotAt: now };
 }
 
+/** M9-D699 / M9-D608: TODAS as datas-base da empresa (as linhas já gravadas) e a de hoje; o rebuild recalcula cada uma a partir das fontes. */
+async function rebuildKeys({ companyId, now, transaction }) {
+  const [rows] = await sequelize.query(`SELECT as_of_date::text AS as_of_date FROM analytics.${MODEL} WHERE company_id = :companyId`, { replacements: { companyId }, transaction });
+  const dates = new Set([...rows.map((r) => r.as_of_date), businessDateKey(now || clock.now())]);
+  return [...dates].sort().map((as_of_date) => ({ as_of_date }));
+}
+
+/** Snapshots dos KPIs financeiros (M9-D624) já gravados que dependem desta tabela: o rebuild os revisa (nova revisão) quando o número mudou. */
+const corrections = (args) => require('../metrics/kpis').financeKpiCorrections(args);
+
 const def = registerReadModel({
   name: MODEL,
   version: 1,
@@ -58,6 +70,7 @@ const def = registerReadModel({
   aggregateKey: (_event, { now }) => ({ as_of_date: businessDateKey(now) }), // o worker sempre informa o relógio (nunca new Date() aqui)
   recompute,
   scheduled: { keys: async ({ now }) => [{ as_of_date: businessDateKey(now) }] },
+  rebuild: { keys: rebuildKeys, corrections },
 });
 
 module.exports = { def, recompute };

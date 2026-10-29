@@ -41,6 +41,7 @@ const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metric
 const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/drilldown.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
 const { FINANCE_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/financeKpi.settings');
+const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
@@ -231,6 +232,8 @@ const SETTINGS_SCHEMA = {
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D624 — KPIs de conciliações pendentes e anomalias: idade máxima do extrato, faixas de idade e owner de cada KPI.
   ...FINANCE_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D699 — teste de carga do BI: quanto o p95 do fluxo operacional pode subir com os painéis sob carga.
+  ...LOAD_SETTINGS_SCHEMA,
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
   ...COMERCIAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D617 — read models de Locação: tipos de contrato, prazo do repasse e nota de cada tipo de registro de atendimento (a janela da inadimplência é a da D615).

@@ -20,6 +20,7 @@
     "verify-restore:inventory-procurement": "node scripts/verifyRestoreInventoryProcurementData.js",
     "restore-drill:inventory-full": "node scripts/restoreDrill/inventoryFullDrill.js",
     "load-test:inventory": "node scripts/withDisposableDb.js -- node scripts/loadTestInventoryProcurement.js",
+    "load-test:analytics": "node scripts/withDisposableDb.js -- node scripts/analytics/loadTest.js",
     "test:failure-drills:inventory": "node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/inventory.failureDrills.test.js",
     "lint": "node scripts/lintRatchet.js",
     "ai:arch-guard": "node scripts/ai-arch-guard.js",

@@ -12,6 +12,7 @@ const { readSectorMargin } = require('./financeHealth.entries');
 const { businessDateKey } = require('../../../utils/businessDate');
 
 const NO_CENTER = '00000000-0000-0000-0000-000000000000';
+const MODEL = 'rm_finance_sector_margin';
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function aggregateKey(event) {
@@ -42,8 +43,20 @@ function recentMonths(now) {
   return [`${y}-${String(m).padStart(2, '0')}`, prev];
 }
 
+/** M9-D699 / M9-D608: todos os setores e meses com lançamento liquidado na fonte, mais as linhas já gravadas (setor que zerou continua com a linha zerada). */
+async function rebuildKeys({ companyId, transaction }) {
+  const [rows] = await sequelize.query(
+    `SELECT COALESCE(result_center_id, CAST(:nil AS uuid))::text AS result_center_id, competence_month FROM finance.financial_entries
+      WHERE company_id = :companyId AND status = 'SETTLED' AND competence_month IS NOT NULL
+      UNION SELECT result_center_id::text, competence_month FROM analytics.${MODEL} WHERE company_id = :companyId ORDER BY 2, 1`,
+    { replacements: { companyId, nil: NO_CENTER }, transaction }
+  );
+  return rows.filter((r) => MONTH_RE.test(r.competence_month));
+}
+
 const def = registerReadModel({
-  name: 'rm_finance_sector_margin', version: 1, keyColumns: ['result_center_id', 'competence_month'], eventTypes: [...ENTRY_EVENTS], aggregateKey, recompute, scheduled: { keys: scheduledKeys },
+  name: MODEL, version: 1, keyColumns: ['result_center_id', 'competence_month'], eventTypes: [...ENTRY_EVENTS], aggregateKey, recompute, scheduled: { keys: scheduledKeys },
+  rebuild: { keys: rebuildKeys },
 });
 
 module.exports = { def, NO_CENTER, aggregateKey };
