@@ -30,11 +30,11 @@ const run = (t, input) => service.createAndRun({ tenant, actor: tenant.userId, i
 
 test('compliance_redige_dado_pessoal_em_nova_versao_e_registra_o_que_removeu', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const { content } = await run(t, { type: 'INSTITUTIONAL', title: 'QA-M9 contato', texto: 'Fale com a Ana pelo e-mail ana@exemplo.com.br ou CPF 123.456.789-09.' });
+    const { content } = await run(t, { type: 'INSTITUTIONAL', title: 'QA-M9 contato', texto: 'Fale com a Ana pelo e-mail ana@exemplo.com.br.' }); // número solto (CPF, telefone) já é barrado antes, pelo validador factual (M9-D407)
     assert.equal(content.status, 'PENDING_APPROVAL');
-    assert.doesNotMatch(content.currentVersion.body.texto, /ana@exemplo|123\.456/);
+    assert.doesNotMatch(content.currentVersion.body.texto, /ana@exemplo/);
     assert.match(content.currentVersion.body.texto, /\[REDIGIDO\]/);
-    assert.deepEqual(content.checks.compliance.detalhes.redactedPatterns, ['CPF', 'EMAIL']);
+    assert.deepEqual(content.checks.compliance.detalhes.redactedPatterns, ['EMAIL']);
     const versions = await fx.versionsOf(t, content.id);
     assert.equal(versions.length, 2, 'a versão original é imutável; a limpa é a próxima versão');
     assert.match(versions[0].body_json.texto, /ana@exemplo/);

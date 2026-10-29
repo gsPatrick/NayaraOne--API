@@ -34,4 +34,13 @@ async function parseWhen(value, tenant, transaction) {
   return new Date(row.instant);
 }
 
-module.exports = { parseWhen };
+/** Dia, mês e ano de `instant` no fuso da empresa (a "data do conteúdo" do validador factual, M9-D407). */
+async function companyDateParts(instant, tenant, transaction) {
+  const [row] = await sequelize.query(
+    'SELECT EXTRACT(DAY FROM d)::int AS day, EXTRACT(MONTH FROM d)::int AS month, EXTRACT(YEAR FROM d)::int AS year FROM (SELECT (:instant::timestamptz AT TIME ZONE :zone) AS d) x',
+    { replacements: { instant: instant.toISOString(), zone: await companyTimeZone(tenant, transaction) }, transaction, type: QueryTypes.SELECT }
+  );
+  return { day: row.day, month: row.month, year: row.year };
+}
+
+module.exports = { parseWhen, companyDateParts };

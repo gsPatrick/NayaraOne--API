@@ -12,6 +12,7 @@ const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../features/marketing/content/publicFields.settings');
 const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/template.settings');
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
+const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
@@ -134,6 +135,8 @@ const SETTINGS_SCHEMA = {
   ...CAMPAIGN_SETTINGS_SCHEMA,
   // Marco 9, M9-D406 — antecedência mínima do agendamento de conteúdo do Marketing.
   ...PIPELINE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D407 — validador factual: tolerância de área, dicionário de características e telefones da empresa.
+  ...FACTUAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // Marco 9, M9-D417 — cadência, quiet hours e frequency cap do Marketing (lidos por getMarketingParam; escrita exige marketing:automation:manage).
   ...CADENCE_SETTINGS_SCHEMA,
