@@ -10,6 +10,8 @@
  *  analytics.alert.owner_reserva               papel que recebe o alerta semente quando a métrica não tem owner (e o reserva do owner removido, M9-D692)
  *  analytics.alert.prazo_tarefa_horas          prazo (horas) da tarefa que o alerta CRITICAL com tarefa cria (M9-D692)
  *  analytics.alert.link_painel                 caminho do painel para onde o aviso e a tarefa apontam (M9-D692)
+ *  analytics.alert.lista_tamanho_padrao        itens por página de GET /analytics/alerts quando o pedido não informa pageSize (M9-D703)
+ *  analytics.alert.lista_tamanho_maximo        maior pageSize aceito em GET /analytics/alerts, no máximo 100 (M9-D703)
  *  analytics.alerta_semente.<chave>            limiar, severidade e tarefa de cada alerta semente (ver seed.catalog.js)
  */
 const AppError = require('../../../utils/AppError');
@@ -23,11 +25,13 @@ const KEYS = Object.freeze({
   ownerFallback: 'analytics.alert.owner_reserva',
   taskHours: 'analytics.alert.prazo_tarefa_horas',
   panelLink: 'analytics.alert.link_painel',
+  listPageSize: 'analytics.alert.lista_tamanho_padrao',
+  listMaxPageSize: 'analytics.alert.lista_tamanho_maximo',
 });
 const SEVERITY_LEVELS = Object.freeze(['INFO', 'WARNING', 'CRITICAL']);
 const DEFAULT_COOLDOWNS = Object.freeze({ INFO: 240, WARNING: 120, CRITICAL: 60 });
 const DEFAULTS = Object.freeze({
-  [KEYS.cooldown]: 'INFO 240; WARNING 120; CRITICAL 60', [KEYS.toResolve]: 2, [KEYS.interval]: 5, [KEYS.ownerFallback]: 'Diretoria', [KEYS.taskHours]: 24, [KEYS.panelLink]: '/painel/centro-de-comando',
+  [KEYS.cooldown]: 'INFO 240; WARNING 120; CRITICAL 60', [KEYS.toResolve]: 2, [KEYS.interval]: 5, [KEYS.ownerFallback]: 'Diretoria', [KEYS.taskHours]: 24, [KEYS.panelLink]: '/painel/centro-de-comando', [KEYS.listPageSize]: 25, [KEYS.listMaxPageSize]: 100,
   ...Object.fromEntries(SEEDS.map((s) => [settingKey(s), s.default])),
 });
 
@@ -60,6 +64,8 @@ const BI_ALERT_SETTINGS_SCHEMA = {
   [KEYS.ownerFallback]: { type: 'string' },
   [KEYS.taskHours]: { type: 'integer', min: 1, max: 720 },
   [KEYS.panelLink]: { type: 'string', validate: validatePanelLink },
+  [KEYS.listPageSize]: { type: 'integer', min: 1, max: 100 },
+  [KEYS.listMaxPageSize]: { type: 'integer', min: 1, max: 100 },
   ...Object.fromEntries(SEEDS.map((s) => [settingKey(s), { type: 'string', validate: s.kind === 'FRESHNESS' ? validateFreshnessSeed : validateSeed }])),
 };
 
@@ -77,7 +83,9 @@ async function readAlertParams(scope, transaction) {
     toResolve: positiveInt(get(KEYS.toResolve), DEFAULTS[KEYS.toResolve]),
     intervalMinutes: positiveInt(get(KEYS.interval), DEFAULTS[KEYS.interval]),
     ownerFallback: owner || DEFAULTS[KEYS.ownerFallback],
+    listMaxPageSize: Math.min(positiveInt(get(KEYS.listMaxPageSize), DEFAULTS[KEYS.listMaxPageSize]), 100),
     taskHours: positiveInt(get(KEYS.taskHours), DEFAULTS[KEYS.taskHours]),
+    listPageSize: Math.min(positiveInt(get(KEYS.listPageSize), DEFAULTS[KEYS.listPageSize]), positiveInt(get(KEYS.listMaxPageSize), DEFAULTS[KEYS.listMaxPageSize]), 100),
     panelLink: /^\/[A-Za-z0-9/_-]*$/.test(String(get(KEYS.panelLink) ?? '')) ? get(KEYS.panelLink) : DEFAULTS[KEYS.panelLink],
     seeds: Object.fromEntries(SEEDS.map((s) => [s.key, parseSeedText(get(settingKey(s))) || parseSeedText(s.default)])),
   };

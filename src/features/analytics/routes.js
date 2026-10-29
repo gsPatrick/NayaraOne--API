@@ -8,6 +8,7 @@ const { createMetricsRouter } = require('./metrics/metrics.routes');
 const { registerDashboardRoutes } = require('./dashboards/dashboard.routes');
 const { registerAccessLogRoutes } = require('./security/accessLog.routes');
 const { registerDrilldownRoutes } = require('./metrics/drilldown.routes');
+const { registerAlertRoutes } = require('./alerts/alert.routes');
 
 /**
  * Rotas do BI em /v1/analytics/*. Ordem em toda rota: autenticação -> tenant -> guarda de método (405) -> transação somente
@@ -21,6 +22,7 @@ function createAnalyticsRouter({ authChain = [authMiddleware, tenantMiddleware] 
   registerDashboardRoutes(router);
   registerAccessLogRoutes(router);
   registerDrilldownRoutes(router);
+  registerAlertRoutes(router);
   return router;
 }
 

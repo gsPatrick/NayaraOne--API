@@ -42,6 +42,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/ai/runs` | `ai:use` | não |
 | `GET` | `/api/v1/ai/status` | `ai:read` | não |
 | `GET` | `/api/v1/analytics/access-log` | `analytics:audit:read` | não |
+| `GET` | `/api/v1/analytics/alerts` | `analytics:read` | não |
+| `POST` | `/api/v1/analytics/alerts/:id/ack` | `analytics:alert:ack` | não |
 | `GET` | `/api/v1/analytics/dashboards/:code` | `analytics:read` | não |
 | `POST` | `/api/v1/analytics/dashboards` | `analytics:manage` | não |
 | `GET` | `/api/v1/analytics/metrics/:code/drilldown` | `analytics:read` | não |

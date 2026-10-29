@@ -22,11 +22,21 @@ async function teardown(env) {
     await env.admin.query('DELETE FROM analytics.alert_instances WHERE alert_definition_id IN (:ids)', { replacements: { ids: env.made.defs } });
     await env.admin.query('DELETE FROM analytics.alert_definitions WHERE id IN (:ids)', { replacements: { ids: env.made.defs } });
   }
-  if (env.made.users.length) {
-    await env.admin.query('DELETE FROM core.user_memberships WHERE user_id IN (:ids)', { replacements: { ids: env.made.users } });
-    await env.admin.query('DELETE FROM core.users WHERE id IN (:ids)', { replacements: { ids: env.made.users } });
+  // a trilha de auditoria é append-only e referencia o usuário: quem ficou na trilha (ex.: quem reconheceu um alerta) permanece, é banco descartável
+  for (const id of env.made.users) {
+    try {
+      await env.admin.transaction(async (transaction) => {
+        await env.admin.query('DELETE FROM core.user_memberships WHERE user_id = :id', { replacements: { id }, transaction });
+        await env.admin.query('DELETE FROM core.users WHERE id = :id', { replacements: { id }, transaction });
+      });
+    } catch (err) {
+      if (!/foreign key|violates/i.test(String(err.message))) throw err;
+    }
   }
-  if (env.made.roles.length) await env.admin.query('DELETE FROM core.roles WHERE id IN (:ids)', { replacements: { ids: env.made.roles } });
+  if (env.made.roles.length) {
+    await env.admin.query('UPDATE core.user_memberships SET role_id = NULL WHERE role_id IN (:ids)', { replacements: { ids: env.made.roles } });
+    await env.admin.query('DELETE FROM core.roles WHERE id IN (:ids)', { replacements: { ids: env.made.roles } });
+  }
   await base.teardown(env);
 }
 
