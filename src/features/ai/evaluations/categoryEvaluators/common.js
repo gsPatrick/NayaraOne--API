@@ -15,6 +15,7 @@ const micros6 = (m) => `${Math.floor(m / 1000000)}.${String(m % 1000000).padStar
 async function callModel(env, input) {
   const out = await env.generate({ system: env.agent.systemPolicy || '', messages: [{ role: 'user', content: input }] }, env.runtime);
   env.calls.push({ costMicros: out.costMicros, latencyMs: out.latencyMs, modelCode: out.modelCode || null });
+  env.last = { text: out.text, toolRequests: out.toolRequests || [] };
   return out;
 }
 

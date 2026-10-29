@@ -5,7 +5,6 @@ const E = require('./evaluations.errors');
 const repo = require('./evaluations.repository');
 const agentRepo = require('../agents/agents.repository');
 const { resolveLimits } = require('../agents/agentLimits');
-const { getToolRegistry, buildDefaultRegistry } = require('../tools');
 const { loadGroundingSettings } = require('../orchestrator/grounding');
 const { loadInjectionLimits } = require('../orchestrator/injectionDetector');
 const { readEvaluationParams } = require('./evaluations.params');
@@ -16,10 +15,11 @@ const { summarize } = require('./evaluationMetrics');
 const { toEvaluation } = require('./evaluations.mapper');
 const { publishEvaluationEvent, auditEvaluation } = require('./evaluations.events');
 const { sha256, makeItem } = require('./categoryEvaluators/common');
+const { evalToolRegistry } = require('./evalRegistry');
+const { attachGoldenCases, registerGoldenSource, applyGoldenChecks } = require('./golden');
+const { computeGlobalHash } = require('../regression/globalHash');
 
-async function toolRegistry() {
-  try { return getToolRegistry(); } catch (e) { return buildDefaultRegistry(); }
-}
+registerGoldenSource();
 
 const enabledToolCount = (agent) => (agent.tools || []).filter((t) => t.enabled !== false).length;
 
@@ -32,8 +32,9 @@ async function latencyBudget(agent, ctx, transaction) {
 
 /** Roda um caso; falha inesperada do avaliador reprova o caso (não derruba a avaliação inteira). */
 async function runCase(caseDef, env) {
+  env.last = null;
   try {
-    return await EVALUATORS[caseDef.category](caseDef, env);
+    return applyGoldenChecks(await EVALUATORS[caseDef.category](caseDef, env), caseDef, env.last);
   } catch (e) {
     return makeItem({ ...caseDef, input: caseDef.input || caseDef.id }, { expected: 'caso executado', actual: 'falha na execução do caso', passed: false, details: { error: String((e && e.code) || 'CASE_ERROR') } });
   }
@@ -62,10 +63,12 @@ async function executeEvaluation(baseCtx, row, transaction) {
   const agent = await agentRepo.findOwn(ctx, row.agentCode, row.agentVersion, transaction);
   const generate = resolveEvalProvider(row.providerCode || C.SANDBOX_PROVIDER);
   if (!agent || !generate) return finish(ctx, row, { status: 'ERROR', errorCode: agent ? E.providerNotFound().code : 'AI_AGENT_NOT_FOUND' }, transaction);
-  const registry = await toolRegistry();
+  const registry = await evalToolRegistry();
   const params = await readEvaluationParams(ctx, transaction);
+  const latencyBudgetMs = await latencyBudget(agent, ctx, transaction);
+  await attachGoldenCases(ctx, agent, transaction);
   const env = {
-    agent, generate, registry, params, calls: [],
+    agent, generate, registry, params, calls: [], latencyBudgetMs, last: null,
     runtime: { ctx, transaction },
     groundingSettings: await loadGroundingSettings(ctx, transaction),
     injectionLimits: await loadInjectionLimits(ctx, transaction),
@@ -77,8 +80,11 @@ async function executeEvaluation(baseCtx, row, transaction) {
   const items = [];
   for (const c of cases) items.push(await runCase(c, env));
   for (const item of items) await repo.insertItem(ctx, row.id, item, transaction);
-  const summary = summarize(items, { required, params, latencyBudgetMs: await latencyBudget(agent, ctx, transaction), calls: env.calls });
-  const metrics = { ...summary.metrics, notApplicable, casesHash: sha256(cases.map((c) => c.id).sort().join('|')) };
+  const summary = summarize(items, { required, params, latencyBudgetMs, calls: env.calls });
+  // Regressão (M9-D033): os dois hashes contra os quais a avaliação rodou. O da versão é o do agente; o global é o de agora.
+  const metrics = {
+    ...summary.metrics, notApplicable, casesHash: sha256(cases.map((c) => c.id).sort().join('|')), configHash: agent.configHash, globalHash: await computeGlobalHash(ctx, transaction),
+  };
   return finish(ctx, row, { status: summary.status, totals: summary.totals, metrics, providerCode: row.providerCode || C.SANDBOX_PROVIDER, modelCode: (env.calls[0] && env.calls[0].modelCode) || null }, transaction);
 }
 

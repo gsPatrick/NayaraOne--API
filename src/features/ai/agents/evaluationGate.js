@@ -2,9 +2,10 @@
 
 const { getSetting } = require('../../../features/settings/settings.service');
 const E = require('./agents.errors');
-const { evaluationsTableExists, passedEvaluationSuites, homologatedEvaluationSuites } = require('../readmodels/agentSupport.readmodel');
+const { evaluationsTableExists, homologatedEvaluationSuites } = require('../readmodels/agentSupport.readmodel');
 const { isHighImpact } = require('../evaluations/highImpact');
 const { EVALUATION_KEYS, EVALUATION_SETTING_DEFAULTS } = require('../evaluations/evaluations.settings');
+const { assertRegressionPassed } = require('../regression/regression.gate');
 
 const REQUIRE_GREEN_KEY = 'ia.agente.avaliacao_verde_obrigatoria';
 
@@ -20,8 +21,9 @@ async function assertGreenEvaluation(ctx, agent, transaction) {
   const required = await getSetting(REQUIRE_GREEN_KEY, ctx, transaction, true);
   if (required === false) return { checked: false };
   if (!(await evaluationsTableExists(transaction))) throw E.evaluationRequired();
-  const suites = await passedEvaluationSuites(ctx.companyId, agent.code, agent.version, transaction);
-  if (!isGreen(suites)) throw E.evaluationRequired();
+  // Regressão (M9-D033): a avaliação verde precisa ser a do `config_hash` da versão e a do `global_hash` de agora; sem ela, 409
+  // AI_REGRESSION_REQUIRED (versão nunca avaliada, editada depois da avaliação ou avaliada antes de mudar provedor, roteador ou padrões de injeção).
+  await assertRegressionPassed(ctx, agent, { homologated: false }, transaction);
   return { checked: true };
 }
 
@@ -39,6 +41,7 @@ async function assertHumanHomologatedEvaluation(ctx, agent, transaction) {
   if (!(await evaluationsTableExists(transaction))) throw E.notHomologated();
   const suites = await homologatedEvaluationSuites(ctx.companyId, agent.code, agent.version, transaction);
   if (!isGreen(suites)) throw E.notHomologated();
+  await assertRegressionPassed(ctx, agent, { homologated: true }, transaction);
   return { checked: true };
 }
 

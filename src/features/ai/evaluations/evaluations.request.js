@@ -10,6 +10,10 @@ const { auditEvaluation } = require('./evaluations.events');
 const { toEvaluation } = require('./evaluations.mapper');
 const agentRepo = require('../agents/agents.repository');
 const { requireOwn } = require('../agents/agentAccess');
+const { getSetting } = require('../../settings/settings.service');
+const { assertGoldenCoverage } = require('./golden');
+const { evalToolRegistry } = require('./evalRegistry');
+const { REGRESSION_KEYS, REGRESSION_SETTING_DEFAULTS } = require('../regression/regression.settings');
 
 /**
  * Enfileira uma avaliação (POST /ai/evaluations/run): valida a versão da empresa, só aceita o provider de testes (ou, com
@@ -28,12 +32,18 @@ async function requestEvaluation(ctx, body, transaction) {
     }
   }
   const params = await readEvaluationParams(ctx, transaction);
-  if (data.providerCode !== C.SANDBOX_PROVIDER) {
+  if (!C.SANDBOX_PROVIDERS.includes(data.providerCode)) {
     if (!params.allowRealProvider) throw E.realProviderDisabled();
     if (!hasEvalProvider(data.providerCode)) throw E.providerNotFound();
   }
   const version = data.agentVersion || (await agentRepo.latestVersionNumber(ctx, data.agentCode, transaction)) || 1;
   await requireOwn(ctx, data.agentCode, version, transaction);
+  if (data.suite !== 'ADVERSARIAL') {
+    // Golden com ao menos um caso por categoria aplicável (M9-D033): senão a categoria nunca seria medida.
+    const agent = await agentRepo.findOwn(ctx, data.agentCode, version, transaction);
+    const strict = (await getSetting(REGRESSION_KEYS.requireRegisteredDataset, ctx, transaction, REGRESSION_SETTING_DEFAULTS[REGRESSION_KEYS.requireRegisteredDataset])) === true;
+    await assertGoldenCoverage(ctx, agent, { strict }, await evalToolRegistry(), transaction);
+  }
   const row = await repo.insertQueued(ctx, { ...data, agentVersion: version }, transaction);
   const evaluation = toEvaluation(row);
   await auditEvaluation(ctx, 'ai.evaluation.queued', evaluation, null, `Avaliação da versão ${version} do agente ${data.agentCode} enfileirada (${data.suite}).`, transaction);

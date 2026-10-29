@@ -10,10 +10,11 @@ const { listCandidates, decideCandidate } = require('./feedback/goldenCandidates
 const { registerEvalProvider } = require('./evalProviders');
 const { registerCaseSource } = require('./cases/caseSources');
 const { isHighImpact } = require('./highImpact');
+const golden = require('./golden');
 const settings = require('./evaluations.settings');
 const constants = require('./evaluations.constants');
 
 module.exports = {
   AiEvaluationService, requestEvaluation, getEvaluation, listEvaluations, homologateEvaluation, processQueued, recordFeedback, listCandidates, decideCandidate,
-  registerEvalProvider, registerCaseSource, isHighImpact, ...settings, constants,
+  registerEvalProvider, registerCaseSource, isHighImpact, golden, ...settings, constants,
 };

@@ -7,6 +7,7 @@ const { auditAgent } = require('./agentAudit');
 const { requireOwn } = require('./agentAccess');
 const { normalizeCode } = require('./agents.validation');
 const { assertGreenEvaluation, assertHumanHomologatedEvaluation } = require('./evaluationGate');
+const { assertNotGoldenAuthor } = require('../evaluations/golden/goldenAuthors');
 
 const SEGREGATION_KEY = 'ia.agente.segregacao_funcoes';
 
@@ -36,6 +37,7 @@ async function homologate(ctx, rawCode, rawVersion, { note } = {}, transaction) 
   if ((await segregationOn(ctx, transaction)) && current.createdBy && current.createdBy === ctx.userId) {
     throw E.segregation('Quem criou a versão não pode homologá-la; peça a outra pessoa com permissão de avaliação.');
   }
+  if (await segregationOn(ctx, transaction)) await assertNotGoldenAuthor(ctx, current, transaction);
   await assertGreenEvaluation(ctx, current, transaction);
   await repo.markHomologated(ctx, current.id, note, transaction);
   const updated = await reload(ctx, current, transaction);

@@ -316,6 +316,21 @@ test('M9-D032: ai.evaluations, ai.evaluation_items, ai.feedback e ai.golden_cand
   }
 });
 
+// M9-D033: ai.golden_cases (golden dataset por agente) com RLS, FORCE RLS, tenant_isolation, leitura do padrão do sistema e o gatilho de imutabilidade.
+test('M9-D033: ai.golden_cases tem RLS, FORCE RLS, tenant_isolation, system_default_read e o gatilho de imutabilidade', async () => {
+  const [rows] = await sequelize.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT array_agg(p.polname::text ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+            (SELECT count(*)::int FROM pg_trigger g WHERE g.tgrelid = c.oid AND g.tgname = 'golden_cases_guard') AS gatilho
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'ai' AND c.relname = 'golden_cases'`
+  );
+  assert.equal(rows.length, 1, 'ai.golden_cases não existe');
+  assert.equal(rows[0].relrowsecurity, true, 'RLS em ai.golden_cases');
+  assert.equal(rows[0].relforcerowsecurity, true, 'FORCE RLS em ai.golden_cases');
+  assert.deepEqual(rows[0].policies, ['system_default_read', 'tenant_isolation']);
+  assert.equal(rows[0].gatilho, 1, 'gatilho golden_cases_guard');
+});
+
 // M9-D009: ai.memories (memória estruturada da NAY) com RLS, FORCE RLS, a política tenant_isolation e os gatilhos que impedem apagar.
 test('M9-D009: ai.memories tem RLS, FORCE RLS, tenant_isolation e os gatilhos de não apagar e de conteúdo imutável', async () => {
   const [rows] = await sequelize.query(

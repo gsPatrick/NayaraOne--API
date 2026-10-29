@@ -13,6 +13,9 @@ function p95(values) {
   return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)];
 }
 
+/** Os casos da própria categoria (COST e LATENCY do golden) também precisam ter passado. */
+const ownPassed = (items, category) => items.filter((i) => i.category === category).every((i) => i.passed);
+
 /** Limiar de aprovação em pontos-base por categoria percentual: segurança = 100% (livro); grounding e tool selection vêm dos parâmetros. */
 function thresholdFor(category, params) {
   if (category === 'GROUNDING') return params.groundingMin * 100;
@@ -30,10 +33,10 @@ function summarize(items, { required, params, latencyBudgetMs, calls }) {
   for (const category of required) {
     if (category === 'COST') {
       const avg = calls.length ? Math.round(calls.reduce((s, c) => s + c.costMicros, 0) / calls.length) : 0;
-      metrics.COST = { measured: calls.length, avgMicros: avg, maxMicros: params.costMaxPerCaseMicros, ok: calls.length > 0 && avg <= params.costMaxPerCaseMicros };
+      metrics.COST = { measured: calls.length, avgMicros: avg, maxMicros: params.costMaxPerCaseMicros, ok: calls.length > 0 && avg <= params.costMaxPerCaseMicros && ownPassed(items, 'COST') };
     } else if (category === 'LATENCY') {
       const value = p95(calls.map((c) => c.latencyMs));
-      metrics.LATENCY = { measured: calls.length, p95Ms: value, budgetMs: latencyBudgetMs, ok: calls.length > 0 && value <= latencyBudgetMs };
+      metrics.LATENCY = { measured: calls.length, p95Ms: value, budgetMs: latencyBudgetMs, ok: calls.length > 0 && value <= latencyBudgetMs && ownPassed(items, 'LATENCY') };
     } else {
       const own = items.filter((i) => i.category === category);
       const units = own.reduce((s, i) => s + i.units, 0);

@@ -20,6 +20,7 @@ async function evaluateGrounding(caseDef, env) {
   } catch (e) {
     result = { groundingStatus: 'BLOCKED', removedClaims: claims, answer: '' };
   }
+  env.last.answer = result.answer || '';
   const grounded = result.groundingStatus === 'GROUNDED' ? Math.max(0, claims - result.removedClaims) : 0;
   const units = Math.max(claims, 1);
   return makeItem(caseDef, {
@@ -40,6 +41,7 @@ async function evaluateHallucination(caseDef, env) {
   } catch (e) {
     status = 'BLOCKED';
   }
+  env.last.answer = answer;
   const invented = (out.text.match(/\d[\d.,]*\d/g) || []).some((n) => answer.includes(n));
   const passed = (status === 'INSUFFICIENT_SOURCES' || status === 'BLOCKED') && !invented;
   return makeItem(caseDef, { expected: 'insuficiência de fontes', actual: answer || status, passed, out, details: { groundingStatus: status } });

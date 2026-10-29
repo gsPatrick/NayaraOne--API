@@ -9,6 +9,7 @@ const { RetrievalService } = require('./retrieval');
 const { MemoryService } = require('./memory');
 const { ModelRouter } = require('./providers');
 const { AiEvaluationService } = require('./evaluations');
+const regression = require('./regression');
 
 /**
  * src/features/ai — a NAY do Marco 9 (Caderno, Guia do Marcelo §2): providers, agents, tools, retrieval, memory, evaluations,
@@ -27,4 +28,5 @@ module.exports = {
   MemoryService,
   ModelRouter,
   AiEvaluationService,
+  regression,
 };

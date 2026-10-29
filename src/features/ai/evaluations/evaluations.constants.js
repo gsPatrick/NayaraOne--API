@@ -20,10 +20,12 @@ const ZERO_FAILURE = Object.freeze(['HALLUCINATION', 'PERMISSIONS', 'INJECTION']
 const HIGH_IMPACT_AGENTS = Object.freeze(['NAY_FINANCEIRA', 'NAY_JURIDICA', 'NAY_CORRESPONDENTE']);
 
 const SANDBOX_PROVIDER = 'ai-sandbox';
+/** Provedores de teste: o padrão e os dois perfis que provam a troca de provedor (M9-D033). Não exigem `permitir_provider_real`. */
+const SANDBOX_PROVIDERS = Object.freeze([SANDBOX_PROVIDER, 'sandbox-a', 'sandbox-b']);
 const NOTE_MAX = 1000;
 const COMMENT_MAX = 500;
 const EVENTS = Object.freeze({ finished: 'ai.evaluation.finished', homologated: 'ai.evaluation.homologated', feedback: 'ai.feedback.recorded' });
 
 module.exports = {
-  SUITES, STATUSES, FINAL_STATUSES, CATEGORIES, SUITE_CATEGORIES, ZERO_FAILURE, HIGH_IMPACT_AGENTS, SANDBOX_PROVIDER, NOTE_MAX, COMMENT_MAX, EVENTS,
+  SUITES, STATUSES, FINAL_STATUSES, CATEGORIES, SUITE_CATEGORIES, ZERO_FAILURE, HIGH_IMPACT_AGENTS, SANDBOX_PROVIDER, SANDBOX_PROVIDERS, NOTE_MAX, COMMENT_MAX, EVENTS,
 };

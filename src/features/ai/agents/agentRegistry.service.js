@@ -5,6 +5,7 @@ const repo = require('./agents.repository');
 const { computeConfigHash } = require('./agentConfigHash');
 const { auditAgent } = require('./agentAudit');
 const { ctxOk, requireOwn } = require('./agentAccess');
+const { assertAgentPairEvaluated } = require('../regression/regression.gate');
 const { withoutPolicy } = require('./agents.mapper');
 const {
   validateCode, normalizeCode, validateAgentFields, validateTools, validateIdempotencyKey, validatePurpose,
@@ -57,6 +58,8 @@ async function createVersion(ctx, rawCode, payload, transaction) {
   }
   const base = await pickBase(ctx, code, body.copyFromVersion, transaction);
   const fields = mergeFields(base, overrides);
+  // Trocar provider ou modelo em relação à versão de origem exige a regressão do novo par (M9-D033) antes de gravar.
+  await assertAgentPairEvaluated(ctx, code, base ? base.modelPolicy : fields.modelPolicy, fields.modelPolicy, transaction);
   const tools = body.tools !== undefined ? validateTools(body.tools) : (base ? base.tools.map((t) => ({ ...t })) : []);
   await assertPermissionsExist(tools, transaction);
   const version = (await repo.latestVersionNumber(ctx, code, transaction)) + 1;
@@ -80,6 +83,7 @@ async function updateDraft(ctx, rawCode, rawVersion, patch, transaction) {
   const overrides = validateAgentFields(patch || {});
   if (!Object.keys(overrides).length) return current;
   const fields = { ...Object.fromEntries(CAMPOS.map((k) => [k, current[k]])), ...overrides };
+  await assertAgentPairEvaluated(ctx, current.code, current.modelPolicy, fields.modelPolicy, transaction);
   const configHash = computeConfigHash({ code: current.code, ...fields, tools: current.tools });
   await repo.updateDraftFields(ctx, current.id, { ...fields, configHash }, transaction);
   const updated = await repo.findOwn(ctx, current.code, current.version, transaction);

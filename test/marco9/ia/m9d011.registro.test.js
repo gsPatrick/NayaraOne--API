@@ -11,6 +11,8 @@ const { registerAiAdapters } = require('../../../src/features/ai/providers/built
 const { readProviderParams } = require('../../../src/features/ai/providers/providers.params');
 const { sequelize, prepararTenants, q } = require('../../helpers/aiAgents');
 const P = require('../_helpers/iaProviders');
+const { semearAprovada } = require('../_helpers/iaGolden');
+require('../../../src/features/ai/regression');
 
 let tenantA;
 before(async () => {
@@ -80,6 +82,9 @@ test('m9d011_provedor_padrao_e_parametros_configuraveis', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const p0 = await readProviderParams(tenantA, tx);
     assert.deepEqual(p0, { defaultProvider: 'ai-sandbox', criticalMinSafetyTier: 2, production: false });
+    // M9-D033: trocar o provedor padrão exige avaliação aprovada para o novo par.
+    await P.recusa(P.ajustar(tenantA, 'ia.provedor.padrao', 'openai', tx), 'AI_REGRESSION_REQUIRED', 409);
+    await semearAprovada(tenantA, tx, { code: 'NAY_COMERCIAL', provider: 'openai', model: 'gpt-teste' });
     await P.ajustar(tenantA, 'ia.provedor.padrao', 'openai', tx);
     await P.ajustar(tenantA, 'ia.provedor.safety_tier_minimo_critico', 3, tx);
     assert.deepEqual(await readProviderParams(tenantA, tx), { defaultProvider: 'openai', criticalMinSafetyTier: 3, production: false });

@@ -9,6 +9,7 @@ const { Client } = require('pg');
 const { withRollbackTenantTransaction } = require('../testHelpers');
 const { upsertSetting } = require('../../src/features/settings/settings.service');
 const agents = require('../../src/features/ai/agents');
+const { computeGlobalHash } = require('../../src/features/ai/regression');
 const {
   carregarPessoas, sequelize, uid, q, ctxDe, BASE_AGENT, FERRAMENTA, prepararTenants,
 } = require('../helpers/aiAgents');
@@ -101,7 +102,8 @@ test('m9d004_homologar_exige_avaliacao_verde_por_padrao', async () => {
     const criador = ctxDe(tenantA); const code = codigoNovo();
     await agents.createVersion(criador, code, corpo(), tx);
     // Sem a tabela de avaliações entregue (D032) ou sem avaliação aprovada, o padrão do livro barra a homologação.
-    await rejeita(agents.homologate(ctxDe(tenantA), code, 1, {}, tx), 409, 'AI_AGENT_EVALUATION_REQUIRED');
+    // M9-D033: sem avaliação aprovada para o config_hash da versão e o global_hash de agora, a recusa é a da regressão.
+    await rejeita(agents.homologate(ctxDe(tenantA), code, 1, {}, tx), 409, 'AI_REGRESSION_REQUIRED');
   });
 });
 
@@ -121,9 +123,15 @@ test('m9d004_avaliacao_verde_aprovada_libera_a_homologacao', { skip: process.env
     await withRollbackTenantTransaction(tenantA, async (tx) => {
       const criador = ctxDe(tenantA);
       await agents.createVersion(criador, code, corpo(), tx);
-      await rejeita(agents.homologate(ctxDe(tenantA), code, 1, {}, tx), 409, 'AI_AGENT_EVALUATION_REQUIRED');
+      await rejeita(agents.homologate(ctxDe(tenantA), code, 1, {}, tx), 409, 'AI_REGRESSION_REQUIRED');
     });
-    await admin.query("INSERT INTO ai.evaluations (group_id, company_id, agent_code, agent_version, suite, status) VALUES ($1, $2, $3, 1, 'ALL', 'PASSED')", [tenantA.groupId, tenantA.companyId, code]);
+    // Os dois hashes (M9-D033): o da versão que o serviço cria e o global de agora.
+    let hashes;
+    await withRollbackTenantTransaction(tenantA, async (tx) => {
+      const v = await agents.createVersion(ctxDe(tenantA), code, corpo(), tx);
+      hashes = { configHash: v.configHash, globalHash: await computeGlobalHash(tenantA, tx) };
+    });
+    await admin.query("INSERT INTO ai.evaluations (group_id, company_id, agent_code, agent_version, suite, status, metrics) VALUES ($1, $2, $3, 1, 'ALL', 'PASSED', $4::jsonb)", [tenantA.groupId, tenantA.companyId, code, JSON.stringify(hashes)]);
     await withRollbackTenantTransaction(tenantA, async (tx) => {
       await agents.createVersion(ctxDe(tenantA), code, corpo(), tx);
       const ok = await agents.homologate(ctxDe(tenantA), code, 1, {}, tx);

@@ -218,6 +218,7 @@ const modelDefiners = {
   AiEvaluationItem: require('./AiEvaluationItem'),
   AiFeedback: require('./AiFeedback'),
   AiGoldenCandidate: require('./AiGoldenCandidate'),
+  AiGoldenCase: require('./AiGoldenCase'),
   KnowledgeEntry: require('./KnowledgeEntry'),
   AiRecommendation: require('./AiRecommendation'),
   AiMemory: require('./AiMemory'),

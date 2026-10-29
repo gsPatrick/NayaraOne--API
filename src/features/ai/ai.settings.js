@@ -22,6 +22,7 @@ const { BUDGET_SETTING_DEFAULTS, BUDGET_SETTINGS_SCHEMA } = require('./budgets/b
 const { APPROVAL_SETTING_DEFAULTS, APPROVAL_SETTINGS_SCHEMA } = require('./approval/approval.settings');
 const { PROVIDER_SETTING_DEFAULTS, PROVIDER_SETTINGS_SCHEMA } = require('./providers/providers.settings');
 const { MEMORY_SETTING_DEFAULTS, MEMORY_SETTINGS_SCHEMA } = require('./memory/memory.settings');
+const { REGRESSION_SETTING_DEFAULTS, REGRESSION_SETTINGS_SCHEMA } = require('./regression/regression.settings');
 const { ROUTER_SETTING_DEFAULTS, ROUTER_SETTINGS_SCHEMA } = require('./providers/router/router.settings');
 
 const AI_ENABLED_KEY = 'ia.habilitada';
@@ -53,6 +54,7 @@ const AI_SETTING_DEFAULTS = Object.freeze({
   ...MEMORY_SETTING_DEFAULTS,
   ...ROUTER_SETTING_DEFAULTS,
 });
+  ...REGRESSION_SETTING_DEFAULTS,
 
 const AI_SETTINGS_SCHEMA = {
   [AI_ENABLED_KEY]: { type: 'boolean' },
@@ -77,6 +79,7 @@ const AI_SETTINGS_SCHEMA = {
 };
 
 function isAiSettingKey(key) {
+  ...REGRESSION_SETTINGS_SCHEMA,
   return typeof key === 'string' && AI_SETTING_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
