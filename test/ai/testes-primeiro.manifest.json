@@ -1,0 +1,113 @@
+{
+  "descricao": "M9-D043: os testes do Guia, seção 14 (Testes primeiro). Cada entrada liga o nome do teste à dona, ao arquivo, ao commit que entregou teste e implementação juntos e a um arquivo de implementação que NÃO existe no commit anterior (a árvore sem a implementação reprova o teste: módulo ausente).",
+  "testes": [
+    {
+      "item": 1,
+      "nome": "m9d023_retrieval_cross_company_bloqueado",
+      "dona": "M9-D023",
+      "arquivo": "test/marco9/ia/m9d023.busca.test.js",
+      "commit": "83f1aef",
+      "implementacao": "src/features/ai/retrieval/retrieval.access.js",
+      "evidencia_vermelho": "No commit 83f1aef^ o arquivo src/features/ai/retrieval/retrieval.access.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D023)."
+    },
+    {
+      "item": 1,
+      "nome": "m9d017_cross_company_args_de_tool_bloqueado",
+      "dona": "M9-D017",
+      "arquivo": "test/marco9/ia/m9d017.adversariais.test.js",
+      "commit": "241a71b",
+      "implementacao": "src/features/ai/orchestrator/toolCallPipeline.js",
+      "evidencia_vermelho": "No commit 241a71b^ o arquivo src/features/ai/orchestrator/toolCallPipeline.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D017)."
+    },
+    {
+      "item": 2,
+      "nome": "m9d021_injection_em_pdf_nao_altera_tool_policy",
+      "dona": "M9-D021",
+      "arquivo": "test/marco9/ia/m9d021.prompt.test.js",
+      "commit": "90983b1",
+      "implementacao": "src/features/ai/orchestrator/promptBuilder.js",
+      "evidencia_vermelho": "No commit 90983b1^ o arquivo src/features/ai/orchestrator/promptBuilder.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D021)."
+    },
+    {
+      "item": 3,
+      "nome": "m9d017_tool_sem_permissao_bloqueada",
+      "dona": "M9-D017",
+      "arquivo": "test/marco9/ia/m9d017.adversariais.test.js",
+      "commit": "241a71b",
+      "implementacao": "src/features/ai/orchestrator/toolAuthorizer.js",
+      "evidencia_vermelho": "No commit 241a71b^ o arquivo src/features/ai/orchestrator/toolAuthorizer.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D017)."
+    },
+    {
+      "item": 4,
+      "nome": "m9d018_argumento_invalido_rejeitado",
+      "dona": "M9-D018",
+      "arquivo": "test/marco9/ia/m9d018.validador.test.js",
+      "commit": "7460141",
+      "implementacao": "src/features/ai/tools/argsValidator.js",
+      "evidencia_vermelho": "No commit 7460141^ o arquivo src/features/ai/tools/argsValidator.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D018)."
+    },
+    {
+      "item": 5,
+      "nome": "m9d024_fonte_revogada_nao_grounding",
+      "dona": "M9-D024",
+      "arquivo": "test/marco9/ia/m9d024.revogada.test.js",
+      "commit": "d810091",
+      "implementacao": "src/features/ai/retrieval/vigencia.js",
+      "evidencia_vermelho": "No commit d810091^ o arquivo src/features/ai/retrieval/vigencia.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D024)."
+    },
+    {
+      "item": 6,
+      "nome": "m9d025_sem_fonte_insuficiencia",
+      "dona": "M9-D025",
+      "arquivo": "test/marco9/ia/m9d025.validador.test.js",
+      "commit": "51300e9",
+      "implementacao": "src/features/ai/orchestrator/groundingValidator.js",
+      "evidencia_vermelho": "No commit 51300e9^ o arquivo src/features/ai/orchestrator/groundingValidator.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D025)."
+    },
+    {
+      "item": 7,
+      "nome": "m9d026_finance_number_igual_read_model",
+      "dona": "M9-D026",
+      "arquivo": "test/marco9/ia/m9d026.readmodel.test.js",
+      "commit": "1567bad",
+      "implementacao": "src/features/ai/orchestrator/numberAuditor.js",
+      "evidencia_vermelho": "No commit 1567bad^ o arquivo src/features/ai/orchestrator/numberAuditor.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D026)."
+    },
+    {
+      "item": 8,
+      "nome": "m9d014_budget_limit_funciona",
+      "dona": "M9-D014",
+      "arquivo": "test/marco9/ia/m9d014.reserva.test.js",
+      "commit": "781ea98",
+      "implementacao": "src/features/ai/budgets/budgets.policy.js",
+      "evidencia_vermelho": "No commit 781ea98^ o arquivo src/features/ai/budgets/budgets.policy.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D014)."
+    },
+    {
+      "item": 9,
+      "nome": "m9d013_fallback_seguro",
+      "dona": "M9-D013",
+      "arquivo": "test/marco9/ia/m9d013.orquestrador.test.js",
+      "commit": "4dce922",
+      "implementacao": "src/features/ai/providers/fallback/fallbackSelector.js",
+      "evidencia_vermelho": "No commit 4dce922^ o arquivo src/features/ai/providers/fallback/fallbackSelector.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D013)."
+    },
+    {
+      "item": 10,
+      "nome": "m9d033_provider_swap_passa_golden_tests",
+      "dona": "M9-D033",
+      "arquivo": "test/marco9/ia/m9d033.troca_provider.test.js",
+      "commit": "88e6b56",
+      "implementacao": "src/features/ai/regression/regression.gate.js",
+      "evidencia_vermelho": "No commit 88e6b56^ o arquivo src/features/ai/regression/regression.gate.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D033)."
+    },
+    {
+      "item": 11,
+      "nome": "m9d019_write_critical_vira_proposal",
+      "dona": "M9-D019",
+      "arquivo": "test/marco9/ia/m9d019.proposta.test.js",
+      "commit": "0d5c2fe",
+      "implementacao": "src/features/ai/approval/ApprovalService.js",
+      "evidencia_vermelho": "No commit 0d5c2fe^ o arquivo src/features/ai/approval/ApprovalService.js não existe: o teste falha ao carregar o módulo (registro de execução da M9-D019)."
+    }
+  ]
+}
