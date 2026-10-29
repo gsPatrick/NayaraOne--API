@@ -43,6 +43,7 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
     pending_reconciliations: o.pendingReconciliations, pending_owner_repasses: o.pendingOwnerRepasses,
     provisioned_commissions: o.provisionedCommissions, paid_commissions: o.paidCommissions, commissions_unlinked_30d: o.commissionsUnlinked30d,
     open_anomalies: o.openAnomalies, entries_without_due_date: e.without_due_date,
+    payables_without_due_date: e.payables_without_due_date, receivables_without_due_date: e.receivables_without_due_date, // M9-D621: qualidade das janelas por natureza
     ...kpiFields(o),
     source_criteria: financeCriteria(companyId, bounds),
   };

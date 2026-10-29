@@ -33,7 +33,9 @@ async function readEntryComponents(companyId, bounds, transaction) {
        ${sumWhen("status = 'PENDING' AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND due_at >= :windowStart AND due_at < :today", 'overdue_in_window')},
        ${sumWhen("status = 'PENDING' AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND due_at < :windowStart", 'overdue_outside_window')},
        ${sumWhen("status NOT IN ('REVERSED', 'CANCELLED') AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND due_at >= :windowStart AND due_at < :dayEnd", 'receivables_base')},
-       COUNT(*) FILTER (WHERE status = 'PENDING' AND nature IN ('PAYABLE', 'RECEIVABLE') AND NOT is_third_party_funds AND due_at IS NULL)::int AS without_due_date
+       COUNT(*) FILTER (WHERE status = 'PENDING' AND nature IN ('PAYABLE', 'RECEIVABLE') AND NOT is_third_party_funds AND due_at IS NULL)::int AS without_due_date,
+       COUNT(*) FILTER (WHERE status = 'PENDING' AND nature = 'PAYABLE' AND NOT is_third_party_funds AND due_at IS NULL)::int AS payables_without_due_date,
+       COUNT(*) FILTER (WHERE status = 'PENDING' AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND due_at IS NULL)::int AS receivables_without_due_date
      FROM finance.financial_entries
      WHERE company_id = :companyId AND reversal_of_entry_id IS NULL`,
     { replacements: { companyId, ...b }, transaction }

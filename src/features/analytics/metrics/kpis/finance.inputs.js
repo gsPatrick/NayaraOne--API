@@ -10,6 +10,7 @@ const dateText = (value) => {
 };
 
 const INPUTS = Object.freeze({
+  ...require('./finance.horizon').INPUTS, // M9-D621
   'fin.reconciliations_pending': (row, asOfDate) => ({
     asOfDate, count: row.pending_reconciliations, amountAbs: String(row.pending_reconciliations_amount), oldestDate: dateText(row.pending_reconciliations_oldest_date),
     byBand: row.pending_reconciliations_by_band || { labels: [], accounts: {} }, lastImportDate: dateText(row.last_statement_import_date),

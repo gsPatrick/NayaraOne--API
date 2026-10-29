@@ -14,7 +14,7 @@ const ROWS = Object.freeze([
   ...require('./criticality.rows.juridicoMarketing').ROWS,
   ...require('./criticality.rows.tecnologiaIa').ROWS,
   ...require('./criticality.rows.centroComando').ROWS,
-].map((row) => Object.freeze({ ...row, formulaId: `${row.code}.v1` })));
+].map((row) => Object.freeze({ ...row, formulaId: row.code }))); // o catálogo real guarda a fórmula pelo código do indicador e a versão no campo version (M9-D621/D623)
 
 const BY_CODE = new Map(ROWS.map((row) => [row.code, row]));
 if (BY_CODE.size !== ROWS.length) throw new Error('Tabela de criticidade com código duplicado.');

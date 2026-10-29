@@ -1,0 +1,6 @@
+'use strict';
+
+/** M9-D621 — KPI fin.receivables_7d: janela de 7 dias (hoje até hoje+6, cumulativa), próprio e pendente, em reais. Regra em _finWindow.js. */
+const { windowFormula } = require('./_finWindow');
+
+module.exports = windowFormula({ id: 'fin.receivables_7d', windowDays: 7, caseAmounts: ['18000.00', '18000.00', '2.675', '2.68'] });

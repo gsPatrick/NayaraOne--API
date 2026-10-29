@@ -11,7 +11,7 @@ const REFERENCE_REPORT = 'Relatório de conciliação de KPIs do Financeiro (M9-
 const MAX_STALENESS_MINUTES = 15;
 const SOURCE_READ_MODEL = 'rm_finance_health'; // a tabela vem da definição, nunca citada solta: a varredura de segurança (M9-D700, R1) só deixa citar a tabela do read model na camada read-models
 
-const KPI_DEFINITIONS = Object.freeze([
+const RECONCILIATION_DEFINITIONS = Object.freeze([
   {
     metricCode: 'fin.reconciliations_pending', name: 'Conciliações pendentes',
     description: 'Transações bancárias importadas, até o dia-base, ainda sem conciliação: quantidade, soma dos valores absolutos em reais e idade da mais antiga.',
@@ -30,10 +30,13 @@ const KPI_DEFINITIONS = Object.freeze([
   },
 ]);
 
+// M9-D621: as janelas de contas a pagar e recebíveis entram na mesma publicação e no mesmo cálculo
+const KPI_DEFINITIONS = Object.freeze([...RECONCILIATION_DEFINITIONS, ...require('./finance.horizon').DEFINITIONS]);
+
 /** Entrada completa de `publishMetric` (escopo da empresa, para o owner seguir o parâmetro de cada empresa). */
 async function publishInput(def, scope, transaction) {
   return {
-    ...def, scopeLevel: 'COMPANY', sourceReadModel: SOURCE_READ_MODEL, filters: {}, version: 1, validFrom: '2026-01-01', valueNature: 'ACTUAL',
+    ...def, scopeLevel: 'COMPANY', sourceReadModel: SOURCE_READ_MODEL, filters: {}, version: 1, validFrom: '2026-01-01', valueNature: def.valueNature || 'ACTUAL',
     ownerRole: await readOwner(def.metricCode, scope, transaction),
     refreshPolicy: { mode: 'EVENT', maxStalenessMinutes: MAX_STALENESS_MINUTES },
   };

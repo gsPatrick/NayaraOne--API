@@ -61,7 +61,7 @@ async function readReconciliationBands(scope, transaction) {
 }
 
 async function readOwner(metricCode, scope, transaction) {
-  const value = await readSetting(OWNER_KEYS[metricCode], scope, transaction);
+  const value = await readSetting(OWNER_KEYS[metricCode] || `analytics.owner.${metricCode}`, scope, transaction); // M9-D621/D623: o owner de cada indicador segue o mesmo padrão de chave
   return typeof value === 'string' && value.trim() ? value.trim() : DEFAULT_OWNER;
 }
 
