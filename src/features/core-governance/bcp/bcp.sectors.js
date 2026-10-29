@@ -37,10 +37,10 @@ async function userSectors(userId, tenant, transaction) {
   return SECTOR_CODES.filter((sector) => (map[sector] || []).some((name) => roles.includes(name)));
 }
 
-/** Recusa com 403 GOV_BCP_SECTOR_FORBIDDEN se o setor não é de um dos setores do usuário. Devolve os setores do usuário. */
-async function assertUserSector(userId, tenant, sector, transaction) {
+/** Recusa com 403 GOV_BCP_SECTOR_FORBIDDEN se o setor não é de um dos setores do usuário (`verb` completa a mensagem: registrar operações, importar operações, decidir divergências). Devolve os setores do usuário. */
+async function assertUserSector(userId, tenant, sector, transaction, verb) {
   const sectors = await userSectors(userId, tenant, transaction);
-  if (!sectors.includes(sector)) throw sectorForbidden();
+  if (!sectors.includes(sector)) throw sectorForbidden(verb);
   return sectors;
 }
 

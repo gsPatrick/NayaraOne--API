@@ -313,7 +313,9 @@ async function previewKeyDeliveryTerm(id, query, transaction) {
  * contract_id na vistoria, para o mesmo imóvel do contrato — contratos de venda podem ter
  * vistorias sem vínculo direto, mas o caso de uso central aqui é locação).
  */
-async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
+// `options.deliveredAt` (só de chamador interno, nunca do corpo da requisição): data real da entrega quando o fato aconteceu antes do registro, como a importação do formulário
+// de contingência em papel (M9-D832). Sem ela vale o instante da liberação. Todas as travas continuam valendo.
+async function releaseKeyDelivery(id, payload, actorUserId, transaction, options = {}) {
   const keyDelivery = await getKeyDelivery(id, transaction);
   if (keyDelivery.status === 'RELEASED') {
     throw AppError.conflict('Entrega de chaves já foi liberada.', 'LEGAL_KEY_DELIVERY_ALREADY_RELEASED');
@@ -480,7 +482,7 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction) {
 
   const beforeJson = keyDelivery.toJSON();
   keyDelivery.status = 'RELEASED';
-  keyDelivery.deliveredAt = new Date();
+  keyDelivery.deliveredAt = options && options.deliveredAt ? new Date(options.deliveredAt) : new Date();
   keyDelivery.deliveredByUserId = actorUserId || null;
   keyDelivery.updatedBy = actorUserId || null;
   // FIX (ciclo cético Marco 5): a coluna já existe (migration 20260101000290) e agora está

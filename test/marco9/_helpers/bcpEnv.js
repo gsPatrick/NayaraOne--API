@@ -52,6 +52,8 @@ const otherUserId = async () => (await env.adminQuery("SELECT id FROM core.users
 
 /** Remove operações e parâmetros de teste (a auditoria e as evidências são só de acréscimo e ficam). */
 async function cleanBcp() {
+  await env.adminQuery('DELETE FROM governance.reconciliations');
+  await env.adminQuery('DELETE FROM governance.manual_operation_imports');
   await env.adminQuery('DELETE FROM governance.manual_operations');
   await env.adminQuery("DELETE FROM core.tenant_settings WHERE key LIKE 'governanca.bcp.%'");
 }

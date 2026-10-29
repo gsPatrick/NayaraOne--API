@@ -662,6 +662,20 @@ test('M9-D834: bcp_form_templates tem RLS, FORCE RLS e a política de leitura', 
 test('M9-D830: bcp_sectors tem RLS, FORCE RLS e a política de leitura', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
       (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'bcp_sectors_read') AS named
+// M9-D832: a importação das operações manuais (governance.manual_operation_imports) e a conferência (governance.reconciliations) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
+test('M9-D832: manual_operation_imports e reconciliations têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
+  const tables = ['manual_operation_imports', 'reconciliations'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const table of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});
+
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'bcp_sectors'`);
   assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies, r.named]), [['bcp_sectors', true, true, 1, 1]]);
   const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.bcp_sectors', 'SELECT') AS sel WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");

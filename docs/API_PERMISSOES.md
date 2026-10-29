@@ -105,8 +105,11 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/bcp/form-templates/:sector/:formType/print` | `governance:bcp:record` | não |
 | `GET` | `/api/v1/bcp/form-templates` | `governance:bcp:record` | não |
 | `PATCH` | `/api/v1/bcp/manual-operations/:id` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/manual-operations/import` | `governance:bcp:import` | não |
 | `GET` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
 | `POST` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/reconciliations/:id/decide` | `governance:bcp:approve` | não |
+| `GET` | `/api/v1/bcp/reconciliations` | `governance:bcp:import` | não |
 | `GET` | `/api/v1/bcp` | `governance:bcp:record` | não |
 | `DELETE` | `/api/v1/companies/:id` | `companies:delete` | não |
 | `GET` | `/api/v1/companies/:id` | `companies:read` | não |
@@ -705,8 +708,8 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:dlp:admin` | CRITICAL | `POST /api/v1/dlp/anomalies/:id/review`, `GET /api/v1/dlp/anomalies`, `PUT /api/v1/dlp/policies/:classification/:action`, `GET /api/v1/dlp` |
 | `governance:dlp:view-restricted` | CRITICAL | nenhuma ainda |
 | `governance:bcp:record` | MEDIUM | `GET /api/v1/bcp/form-templates/:sector/:formType/print`, `GET /api/v1/bcp/form-templates`, `PATCH /api/v1/bcp/manual-operations/:id`, `GET /api/v1/bcp/manual-operations`, `POST /api/v1/bcp/manual-operations`, `GET /api/v1/bcp` |
-| `governance:bcp:import` | HIGH | nenhuma ainda |
-| `governance:bcp:approve` | CRITICAL | nenhuma ainda |
+| `governance:bcp:import` | HIGH | `POST /api/v1/bcp/manual-operations/import`, `GET /api/v1/bcp/reconciliations` |
+| `governance:bcp:approve` | CRITICAL | `POST /api/v1/bcp/reconciliations/:id/decide` |
 | `governance:api:read` | LOW | `GET /api/v1/api-governance/consumers` |
 | `governance:api:manage` | HIGH | nenhuma ainda |
 | `governance:finops:read` | LOW | `GET /api/v1/finops/health` |

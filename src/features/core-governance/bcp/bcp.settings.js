@@ -9,10 +9,14 @@ const { SECTOR_CODES } = require('./bcp.constants');
  *    maiúsculas); o papel ADMIN pertence aos seis. Os nomes iniciais são os de uso comum; o administrador troca pelos da sua empresa.
  *  - governanca.bcp.listagem_limite: máximo de operações por página em GET /bcp/manual-operations (padrão 100).
  *  - governanca.bcp.impressao_max_folhas (M9-D834 §3.3): máximo de folhas numeradas por impressão de formulário (padrão 500).
+ *  - governanca.bcp.importacao_lote_max (M9-D832): máximo de operações por pedido de importação (padrão 200).
+ *  - governanca.bcp.importacao_lead_prazo_horas (M9-D832): prazo, em horas, do próximo contato de um lead importado do papel (padrão 24).
  */
 const SECTOR_ROLES_KEY = 'governanca.bcp.setor_por_papel';
 const LIST_LIMIT_KEY = 'governanca.bcp.listagem_limite';
 const PRINT_MAX_KEY = 'governanca.bcp.impressao_max_folhas';
+const IMPORT_BATCH_MAX_KEY = 'governanca.bcp.importacao_lote_max';
+const IMPORT_LEAD_HOURS_KEY = 'governanca.bcp.importacao_lead_prazo_horas';
 
 const DEFAULT_SECTOR_ROLES = Object.freeze({
   ATENDIMENTO: ['ATENDIMENTO', 'ATENDENTE', 'CORRETOR', 'RECEPCAO'],
@@ -27,6 +31,8 @@ const BCP_SETTING_DEFAULTS = Object.freeze({
   [SECTOR_ROLES_KEY]: JSON.stringify(DEFAULT_SECTOR_ROLES),
   [LIST_LIMIT_KEY]: 100,
   [PRINT_MAX_KEY]: 500,
+  [IMPORT_BATCH_MAX_KEY]: 200,
+  [IMPORT_LEAD_HOURS_KEY]: 24,
 });
 
 /** Texto JSON -> { SETOR: [NOME MAIÚSCULO] } ou null se estiver fora do formato (chaves só entre os seis setores; valores listas de textos não vazios). */
@@ -53,6 +59,8 @@ const BCP_SETTINGS_SCHEMA = {
   [SECTOR_ROLES_KEY]: { type: 'string', validate: validateSectorRoles },
   [LIST_LIMIT_KEY]: { type: 'integer', min: 1, max: 1000 },
   [PRINT_MAX_KEY]: { type: 'integer', min: 1, max: 5000 },
+  [IMPORT_BATCH_MAX_KEY]: { type: 'integer', min: 1, max: 1000 },
+  [IMPORT_LEAD_HOURS_KEY]: { type: 'integer', min: 1, max: 720 },
 };
 
-module.exports = { SECTOR_ROLES_KEY, LIST_LIMIT_KEY, PRINT_MAX_KEY, DEFAULT_SECTOR_ROLES, BCP_SETTING_DEFAULTS, BCP_SETTINGS_SCHEMA, parseSectorRoles };
+module.exports = { SECTOR_ROLES_KEY, LIST_LIMIT_KEY, PRINT_MAX_KEY, IMPORT_BATCH_MAX_KEY, IMPORT_LEAD_HOURS_KEY, DEFAULT_SECTOR_ROLES, BCP_SETTING_DEFAULTS, BCP_SETTINGS_SCHEMA, parseSectorRoles };
