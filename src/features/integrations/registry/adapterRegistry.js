@@ -52,4 +52,10 @@ async function resolve(connection, tenant, transaction) {
   return new AdapterClass(await buildAdapterCtx(connection, tenant, transaction, { adapterHosts: declaredHosts(AdapterClass) }));
 }
 
-module.exports = { register, resolve, has, list, unregister };
+/** Instância do adapter SEM connection (contexto nulo), para quem só usa operações puras, como conferir a assinatura de um webhook antes de saber a empresa (M9-D240). */
+function instantiate(providerCode) {
+  const entry = registered.get(String(providerCode));
+  return entry ? new entry.AdapterClass(null) : null;
+}
+
+module.exports = { register, resolve, has, list, unregister, instantiate };

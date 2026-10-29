@@ -71,7 +71,7 @@ async function processOnePendingSubmission(candidateId, group, company) {
     await submission.save({ transaction });
     // Tempo máximo de espera do provider: parâmetro da empresa (Parâmetros do correspondente).
     const timeoutMs = await getProviderTimeoutMs(group.id, company.id, transaction);
-    return { providerCode: financingCase.providerCode, requestSnapshot: submission.requestSnapshot, timeoutMs };
+    return { providerCode: financingCase.providerCode, requestSnapshot: submission.requestSnapshot, timeoutMs, submission: submission.toJSON(), financingCase: financingCase.toJSON() };
   });
   if (prepared.retried) {
     await sendNeededDocumentsDetached((fn) => tenantTx(group, company, fn), prepared.caseId, prepared.submissionId);
@@ -79,8 +79,24 @@ async function processOnePendingSubmission(candidateId, group, company) {
   }
   if (!prepared.providerCode) return prepared.done;
 
-  const adapter = resolveFinancingProviderAdapterByCode(prepared.providerCode);
-  const outcome = await callProviderSubmit(adapter, { requestSnapshot: prepared.requestSnapshot }, prepared.timeoutMs);
+  const adapterBase = resolveFinancingProviderAdapterByCode(prepared.providerCode);
+  // O pedido ao provider passa pelo Dispatch Service (M9-D240): a intenção é gravada e o worker de envios faz a chamada, fora de qualquer transação nossa.
+  const outcome = await callProviderSubmit(adapterBase, prepared.submission, prepared.timeoutMs, {
+    ctx: { groupId: group.id, companyId: company.id, userId: prepared.submission.createdBy || null }, financingCase: prepared.financingCase,
+  });
+  const adapter = outcome.adapter || adapterBase;
+  if (outcome.deferred) {
+    // Fornecedor fora (circuito aberto, cota ou integração parada) e sem alternativo elegível: nada saiu. A submissão volta a PENDING e a próxima rodada tenta de novo.
+    await tenantTx(group, company, async (transaction) => {
+      const { submission } = await lockCaseThenSubmission(candidateId, transaction);
+      if (submission && submission.status === 'UNKNOWN' && submission.failureReason === 'ENVIO_EM_ANDAMENTO') {
+        submission.status = 'PENDING';
+        submission.failureReason = null;
+        await submission.save({ transaction });
+      }
+    });
+    return true;
+  }
 
   const stored = await tenantTx(group, company, async (transaction) => {
     const { financingCase, submission } = await lockCaseThenSubmission(candidateId, transaction);

@@ -22,6 +22,7 @@ const { recordIntegrationError } = require('../integrationErrors.service');
 const { sanitizeProviderMessage } = require('../sanitizeProviderMessage');
 const { safeAudit } = require('../safeAudit');
 const { syncOpportunityFromFinancingCase, STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
+const { submitViaDispatch } = require('../dispatch/submitViaDispatch');
 
 // Tempo máximo de espera do provider antes de tratar o envio como incerto (UNKNOWN): o valor da empresa vem de
 // Parâmetros (providerTimeoutSeconds). Este é só o último recurso quando ninguém informou o tempo; variável de
@@ -817,8 +818,14 @@ async function preflightSubmission(submission, financingCase, actorUserId, trans
   return adapter;
 }
 
-/** callProviderSubmit — a única parte ambígua: só ela pode virar UNKNOWN ou FAILED. Nunca lança. */
-async function callProviderSubmit(adapter, submission, timeoutMs) {
+/**
+ * callProviderSubmit — a única parte ambígua: só ela pode virar UNKNOWN ou FAILED. Nunca lança. Desde o Marco 9 (M9-D240) o pedido ao provider passa pelo Dispatch
+ * Service: com `via` ({ ctx, financingCase, transaction? }) a intenção nasce em integration.dispatches e o worker de envios faz a chamada; devolve { result, adapter } (aceito),
+ * { error } (falhou ou incerto) ou { deferred } (o fornecedor não pôde atender agora e nada saiu: a submissão segue PENDING). Sem `via` (chamada isolada, sem empresa nem
+ * transação, como a auditoria M8-AUDI-53) só resta a chamada direta ao adapter recebido.
+ */
+async function callProviderSubmit(adapter, submission, timeoutMs, via = null) {
+  if (via) return submitViaDispatch({ ...via, submission, timeoutMs, withTimeout });
   try {
     // O provider recebe só o necessário para abrir o caso (documentos seguem por uploadDocument, só referência).
     const { financingCaseId: caseRef, amount: amountRef, idempotencyKey: keyRef } = submission.requestSnapshot;
@@ -930,8 +937,10 @@ async function processPendingSubmission(submission, financingCase, actorUserId, 
   const adapter = await preflightSubmission(submission, financingCase, actorUserId, transaction);
   if (!adapter) return submission;
   const timeoutMs = await getProviderTimeoutMs(submission.groupId, submission.companyId, transaction);
-  const outcome = await callProviderSubmit(adapter, submission, timeoutMs);
-  return applyProviderOutcome(adapter, submission, financingCase, outcome, actorUserId, transaction);
+  const ctx = { groupId: submission.groupId, companyId: submission.companyId, userId: actorUserId || null };
+  const outcome = await callProviderSubmit(adapter, submission, timeoutMs, { ctx, financingCase, transaction });
+  if (outcome.deferred) return submission; // fornecedor fora e sem alternativo: nada saiu, a submissão segue PENDING para a próxima rodada
+  return applyProviderOutcome(outcome.adapter || adapter, submission, financingCase, outcome, actorUserId, transaction);
 }
 
 /**

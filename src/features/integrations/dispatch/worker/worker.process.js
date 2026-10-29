@@ -1,6 +1,6 @@
 'use strict';
 
-const { IntegrationDispatch, IntegrationConnection } = require('../../../../models');
+const { sequelize, IntegrationDispatch, IntegrationConnection } = require('../../../../models');
 const adapterRegistry = require('../../registry/adapterRegistry');
 const { invoke } = require('../../registry/adapterInvoke');
 const { portOperation } = require('../enqueue/resolveTarget');
@@ -17,8 +17,8 @@ const { admitCall, recordCallResult } = require('../../health/circuitBreaker');
 const lockSending = (ctx, id, transaction) => IntegrationDispatch.findOne({ where: { id, companyId: ctx.companyId, status: 'SENDING' }, transaction, lock: transaction.LOCK.UPDATE });
 
 /** Fase A (tx curta): relê a conexão, aplica as esperas e abre a tentativa. Devolve { attemptId } ou { deferred }. */
-async function phaseA(ctx, id, now) {
-  return tenantTx(ctx, async (transaction) => {
+async function phaseA(ctx, id, now, run = tenantTx) {
+  return run(ctx, async (transaction) => {
     const dispatch = await lockSending(ctx, id, transaction);
     if (!dispatch) return { skipped: true };
     const connection = await IntegrationConnection.findOne({ where: { id: dispatch.connectionId, companyId: ctx.companyId }, transaction });
@@ -42,8 +42,8 @@ async function observe(args) {
 }
 
 /** Fase B (tx da chamada): resolve o adapter, chama pelo contrato, e grava sucesso ou falha. O commit de SENDING já aconteceu. */
-async function phaseB(ctx, id, attemptId, now, probe = false) {
-  return tenantTx(ctx, async (transaction) => {
+async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx) {
+  return run(ctx, async (transaction) => {
     const dispatch = await lockSending(ctx, id, transaction);
     if (!dispatch) return { skipped: true };
     const connection = await IntegrationConnection.findOne({ where: { id: dispatch.connectionId, companyId: ctx.companyId }, transaction });
@@ -66,7 +66,7 @@ async function phaseB(ctx, id, attemptId, now, probe = false) {
       const latencyMs = Date.now() - inicio;
       await observe({ ctx, dispatch, connection, adapter, error, attemptId, now, transaction });
       await handleFailure({ ctx, dispatch, connection, probe, def, adapter, error, attemptId, latencyMs, now, transaction });
-      return { failed: true };
+      return { failed: true, error };
     }
     await observe({ ctx, dispatch, connection, adapter, response: bruta || normalized, attemptId, now, transaction });
     await handleSuccess({ ctx, dispatch, def, adapter, normalized, attemptId, latencyMs: Date.now() - inicio, transaction });
@@ -76,10 +76,12 @@ async function phaseB(ctx, id, attemptId, now, probe = false) {
 }
 
 /** Processa UM envio já pego (SENDING): fase A e, se liberado, fase B. */
-async function processClaimed(ctx, id, { now = new Date() } = {}) {
-  const a = await phaseA(ctx, id, now);
+async function processClaimed(ctx, id, { now = new Date(), transaction = null } = {}) {
+  // Com `transaction` (M9-D240: fluxo do Correspondente dentro da transação do pedido) as duas fases rodam nela; sem, cada fase abre a sua.
+  const run = transaction ? (_ctx, fn) => sequelize.transaction({ transaction }, fn) : tenantTx; // savepoint: a falha de uma fase não aborta a transação do pedido
+  const a = await phaseA(ctx, id, now, run);
   if (a.skipped || a.deferred || a.failed) return a;
-  return phaseB(ctx, id, a.attemptId, now, a.probe);
+  return phaseB(ctx, id, a.attemptId, now, a.probe, run);
 }
 
 module.exports = { processClaimed };

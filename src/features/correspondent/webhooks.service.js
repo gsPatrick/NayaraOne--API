@@ -11,7 +11,8 @@ const {
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { getDecryptedSetting, getSetting } = require('../settings/settings.service');
+const { resolveWebhookSecret } = require('./secrets/webhookSecret');
+const { confirmSubmitDispatchByStatus } = require('./dispatch/confirmByStatus');
 const { resolveFinancingProviderAdapterByCode } = require('./adapters/resolveFinancingProviderAdapter');
 const { shouldApplyTransition, shouldApplyPolledTransition } = require('./statusMachine');
 const { publishFinancingStatusChanged, publishIntegrationCorrespondentFailed } = require('./correspondentEvents.service');
@@ -172,16 +173,12 @@ async function processFinancingWebhook(providerCodeRaw, rawBody, headers, body, 
       }
 
       const tenant = { groupId, companyId };
-      // Um segredo por provider (correspondent.<provider>_webhook_secret): um provider novo nunca herda o segredo do sandbox.
-      const secretKey = `correspondent.${providerCode}_webhook_secret`;
-      const webhookSecret = await getDecryptedSetting(secretKey, tenant, transaction, null);
+      // Um segredo por provider: um provider novo nunca herda o segredo do sandbox. Lido pelo cofre de segredos (SecretStore); o valor antigo de tenant_settings migra para ele (M9-D240).
+      const { secret: webhookSecret, legacyStored } = await resolveWebhookSecret({ providerCode, tenant, transaction });
       const isValid = adapter.verifyWebhook(rawBody, headers, webhookSecret);
       if (!isValid) {
         let reason = 'assinatura inválida';
-        if (!webhookSecret) {
-          const stored = await getSetting(secretKey, tenant, transaction, null);
-          reason = stored ? 'o segredo do webhook desta empresa está ilegível (refaça o cadastro do segredo)' : 'o segredo do webhook não está configurado para esta empresa';
-        }
+        if (!webhookSecret) reason = legacyStored ? 'o segredo do webhook desta empresa está ilegível (refaça o cadastro do segredo)' : 'o segredo do webhook não está configurado para esta empresa';
         throw invalidSignature(reason);
       }
 
@@ -240,6 +237,9 @@ async function processFinancingWebhook(providerCodeRaw, rawBody, headers, body, 
         },
         { transaction }
       );
+
+      // O status assinado pelo provider confirma o envio do caso (ON_STATUS, M9-D214): a resposta da submissão nunca confirma sozinha.
+      if (normalizedStatus) await confirmSubmitDispatchByStatus({ groupId, companyId }, { providerCode, externalCaseId, rawStatus: rawProviderStatus, source: 'WEBHOOK_SIGNED' }, transaction);
 
       if (applied) {
         financingCase.status = normalizedStatus;
@@ -312,6 +312,8 @@ async function applyPolledStatus(financingCase, adapter, result, transaction) {
   const rawText = String(rawProviderStatus).slice(0, 255);
   const normalizedStatus = adapter.normalizeProviderStatus(rawProviderStatus);
   const { groupId, companyId } = financingCase;
+  // O status consultado no provider confirma o envio do caso (ON_STATUS, M9-D214).
+  if (normalizedStatus && result?.externalId) await confirmSubmitDispatchByStatus({ groupId, companyId }, { providerCode: financingCase.providerCode, externalCaseId: result.externalId, rawStatus: rawProviderStatus, source: 'STATUS_QUERY' }, transaction);
   // Nunca perde o status bruto: status que o mapa não reconhece fica no histórico (uma vez, não a cada consulta).
   const lastPoll = await ProviderStatusHistory.findOne({ where: { financingCaseId: financingCase.id, groupId, companyId, source: 'poll' }, order: [['occurred_at', 'DESC']], transaction });
   if (!normalizedStatus) {

@@ -59,11 +59,20 @@ async function processOnePendingAppraisal(candidateId, group, company) {
     if (!adapter) return null;
     appraisal.responseSnapshot = { inProgress: true, startedAt: new Date().toISOString() };
     await appraisal.save({ transaction });
-    return { providerCode: financingCase.providerCode, requestSnapshot: appraisal.requestSnapshot, id: appraisal.id };
+    return { providerCode: financingCase.providerCode, requestSnapshot: appraisal.requestSnapshot, id: appraisal.id, appraisal: appraisal.toJSON(), financingCase: financingCase.toJSON() };
   });
   if (!prepared) return true;
   const adapter = resolveFinancingProviderAdapterByCode(prepared.providerCode);
-  const outcome = await callAppraisal(adapter, { id: prepared.id, requestSnapshot: prepared.requestSnapshot });
+  // O pedido de avaliação passa pelo Dispatch Service (M9-D240): a intenção é gravada e o worker de envios faz a chamada, fora de qualquer transação nossa.
+  const outcome = await callAppraisal(adapter, prepared.appraisal, { ctx: { groupId: group.id, companyId: company.id, userId: prepared.appraisal.createdBy || null }, financingCase: prepared.financingCase });
+  if (outcome.deferred) {
+    // Fornecedor fora e sem alternativo elegível: nada saiu. A avaliação volta a "não processada" e a próxima rodada tenta de novo.
+    await tenantTx(group, company, async (transaction) => {
+      const appraisal = await Appraisal.findByPk(candidateId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (appraisal && appraisal.status === 'REQUESTED' && appraisal.responseSnapshot && appraisal.responseSnapshot.inProgress === true) { appraisal.responseSnapshot = null; await appraisal.save({ transaction }); }
+    });
+    return true;
+  }
   await tenantTx(group, company, async (transaction) => {
     const appraisal = await Appraisal.findByPk(candidateId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!appraisal) return;

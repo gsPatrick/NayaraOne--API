@@ -11,6 +11,7 @@ const { assertCaseAcceptsAction } = require('./caseActionGate');
 const MAX_VALUE = 99999999999;
 const { assertEligible } = require('../eligibility.service');
 const { recordIntegrationError } = require('../integrationErrors.service');
+const { requestAppraisalViaDispatch } = require('../dispatch/submitViaDispatch');
 const { publishIntegrationCorrespondentFailed } = require('../correspondentEvents.service');
 
 const APPRAISAL_TIMEOUT_MS = (() => {
@@ -179,7 +180,9 @@ async function preflightAppraisal(appraisal, financingCase, actorUserId, transac
 }
 
 /** callAppraisal — só a chamada ao provider (ambígua). Nunca lança. */
-async function callAppraisal(adapter, appraisal) {
+async function callAppraisal(adapter, appraisal, via = null) {
+  // Desde o Marco 9 (M9-D240) o pedido de avaliação passa pelo Dispatch Service (com `via`: { ctx, financingCase, transaction? }); sem `via` só resta a chamada direta ao adapter recebido.
+  if (via) return requestAppraisalViaDispatch({ ...via, appraisal, timeoutMs: APPRAISAL_TIMEOUT_MS, withTimeout });
   try {
     const result = await withTimeout(adapter.requestAppraisal({ ...appraisal.requestSnapshot, idempotencyKey: (appraisal.requestSnapshot && appraisal.requestSnapshot.idempotencyKey) || `appraisal:${appraisal.id}` }), APPRAISAL_TIMEOUT_MS);
     return { result };
@@ -240,7 +243,8 @@ async function applyAppraisalOutcome(appraisal, financingCase, outcome, actorUse
 async function processPendingAppraisal(appraisal, financingCase, actorUserId, transaction) {
   const adapter = await preflightAppraisal(appraisal, financingCase, actorUserId, transaction);
   if (!adapter) return appraisal;
-  const outcome = await callAppraisal(adapter, appraisal);
+  const outcome = await callAppraisal(adapter, appraisal, { ctx: { groupId: appraisal.groupId, companyId: appraisal.companyId, userId: actorUserId || null }, financingCase, transaction });
+  if (outcome.deferred) return appraisal; // fornecedor fora e sem alternativo: nada saiu, a avaliação segue REQUESTED para a próxima rodada
   return applyAppraisalOutcome(appraisal, financingCase, outcome, actorUserId, transaction);
 }
 

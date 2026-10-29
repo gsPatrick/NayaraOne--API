@@ -1,53 +1,52 @@
 'use strict';
 
 const { getSetting } = require('../../settings/settings.service');
-const {
-  SandboxFinancingProviderAdapter,
-  ManualWorkflowFinancingProviderAdapter,
-} = require('./FinancingProviderAdapter');
+const adapterRegistry = require('../../integrations/registry/adapterRegistry');
+const { catalogLegacy: { toCatalogCode } } = require('../../integrations');
+const { ensureFinancingConnection } = require('../dispatch/financingConnection');
+const { FinancingSandboxContractAdapter, FinancingManualContractAdapter } = require('../../integrations/adapters/legacy/financing.adapters');
 
-// Mesmo padrão exato de resolveInsuranceAdapter.js/resolveBankAdapter.js: fallback seguro pro
-// Sandbox sempre que não houver provider real configurado — ausência de configuração NUNCA
-// quebra o fluxo de negócio. Nenhum banco real está integrado ainda nesta Fase 0 (só a
-// interface/contrato está pronta); quando a Nayara formalizar parceria com um banco/financeira
-// (ver memória do projeto sobre contratos de produção ficarem a cargo da Nayara), um adapter
-// novo entra aqui do mesmo jeito que Porto Seguro/Yelum entraram em resolveInsuranceAdapter.js.
-async function resolveFinancingProviderAdapter(tenant, transaction) {
-  const provider = await getSetting('correspondent.financing_provider', tenant, transaction, 'sandbox');
+// Desde o Marco 9 (M9-D240) o adapter do Correspondente vem do registro único de integrações (AdapterRegistry): o fornecedor é uma connection FINANCING da empresa e
+// o adapter é o do contrato (`financing-sandbox`, `financing-manual`). O Correspondente continua falando com a interface original (simulate, submitCase, getCaseStatus,
+// uploadDocument, requestAppraisal, cancelCase, findSubmissionByKey, normalizeProviderStatus e verifyWebhook): é o objeto antigo que o adapter do contrato embrulha.
+// Mesmo padrão de antes: ausência de configuração nunca quebra o fluxo de negócio (sandbox é o padrão), mas provider desconhecido em produção é erro de configuração.
+const LEGACY_CODES = Object.freeze(['sandbox', 'manual']);
 
-  if (provider === 'manual') {
-    return new ManualWorkflowFinancingProviderAdapter();
-  }
-
-  // Qualquer outro valor (incluindo nomes de banco ainda não implementados) cai no sandbox —
-  // nunca tenta adivinhar uma integração que não existe de verdade. Em produção isso seria um
-  // "banco" que aprova sozinho, então lá um provider desconhecido é erro de configuração.
-  if (provider !== 'sandbox' && process.env.DEPLOY_ENVIRONMENT === 'production') {
-    throw new Error(`Provider de financiamento "${provider}" não está implementado neste ambiente.`);
-  }
-  return new SandboxFinancingProviderAdapter();
+/** O registro é preenchido no boot da API (registerBuiltInAdapters); processos que não sobem a API (jobs avulsos, testes) registram aqui os dois do financiamento. Idempotente. */
+function ensureFinancingAdapters() {
+  [FinancingSandboxContractAdapter, FinancingManualContractAdapter].forEach((A) => {
+    if (!adapterRegistry.has(new A(null).providerCode())) adapterRegistry.register(A);
+  });
 }
 
-// Registry por CÓDIGO de provider (não por tenant/settings) — usado especificamente pelo
-// roteamento de webhook ("POST /webhooks/financing/:provider"), que recebe o provider na própria
-// URL e precisa resolver o adapter certo ANTES de saber a qual tenant o caso pertence (o tenant
-// só é descoberto depois, pelo financing_case vinculado ao external_case_id — mesmo padrão do
-// webhook de seguro em insurance.controller.js, que resolve a submission antes do tenant).
-// "Registry resolve adapter" — Caderno Técnico, Marco 8, seção Webhook.
-const FINANCING_PROVIDER_REGISTRY = {
-  // O sandbox aprova sozinho: em produção/staging não existe (um caso sandbox lá seria um "banco" falso).
-  sandbox: () => (['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production' ? null : new SandboxFinancingProviderAdapter()),
-  manual: () => new ManualWorkflowFinancingProviderAdapter(),
-};
+async function resolveFinancingProviderAdapter(tenant, transaction) {
+  const provider = await getSetting('correspondent.financing_provider', tenant, transaction, 'sandbox');
+  // Qualquer outro valor (incluindo nomes de banco ainda não implementados) cai no sandbox — nunca tenta adivinhar uma integração que não existe de verdade.
+  // Em produção isso seria um "banco" que aprova sozinho, então lá um provider desconhecido é erro de configuração.
+  if (provider !== 'manual' && provider !== 'sandbox' && process.env.DEPLOY_ENVIRONMENT === 'production') {
+    throw new Error(`Provider de financiamento "${provider}" não está implementado neste ambiente.`);
+  }
+  const codigo = provider === 'manual' ? 'manual' : 'sandbox';
+  ensureFinancingAdapters();
+  const connection = await ensureFinancingConnection(tenant, codigo, transaction);
+  const adapter = await adapterRegistry.resolve(connection, tenant, transaction);
+  return adapter.legacyAdapterSync();
+}
 
+// Resolução por CÓDIGO de provider (não por empresa) — usada pelo roteamento do webhook ("POST /webhooks/financing/:provider"), que recebe o provider na própria URL e
+// precisa do adapter ANTES de saber a empresa. É a instância do registro (sem connection): só as operações puras (assinatura e mapa de status) saem daqui.
+// O sandbox aprova sozinho: em produção/staging ele não existe (um caso sandbox lá seria um "banco" falso).
 function resolveFinancingProviderAdapterByCode(providerCode) {
-  const factory = FINANCING_PROVIDER_REGISTRY[String(providerCode || '').toLowerCase()];
-  if (!factory) return null;
-  return factory() || null;
+  const codigo = String(providerCode || '').toLowerCase();
+  if (!LEGACY_CODES.includes(codigo)) return null;
+  ensureFinancingAdapters();
+  if (codigo === 'sandbox' && (['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production')) return null;
+  const adapter = adapterRegistry.instantiate(toCatalogCode(codigo));
+  return adapter && adapter.legacyAdapterSync ? adapter.legacyAdapterSync() : null;
 }
 
 function listFinancingProviderCodes() {
-  return Object.keys(FINANCING_PROVIDER_REGISTRY);
+  return [...LEGACY_CODES];
 }
 
 module.exports = { resolveFinancingProviderAdapter, resolveFinancingProviderAdapterByCode, listFinancingProviderCodes };

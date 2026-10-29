@@ -1,0 +1,26 @@
+{
+  "gerada_em": "2026-10-29",
+  "descricao": "sha256 dos arquivos da bateria do Correspondente (todos os testes correspondent*) antes da migração para o registro de integração (M9-D240 3.3): a bateria roda sem alterar nenhuma expectativa.",
+  "arquivos": {
+    "test/correspondent.adversarialConsolidated.test.js": "60adb707908793588c964f794b52ae4fe963a627175f739e8e8a414bf58eec4d",
+    "test/correspondent.appraisals.test.js": "3013827975453bdc3e88e897678377f33118774161ab8bbcf219e2f8e6e6a4b5",
+    "test/correspondent.asyncWorkers.test.js": "dfff272189d0c9218da0713a0ebfaa263e1277c791d6f6cd0d6a5fddca99445b",
+    "test/correspondent.caseDocumentExpiry.test.js": "3b9b087704f2acbc6c7212a57130db90483c5b45cfb9e3ba08fbf23ff2cbf2d6",
+    "test/correspondent.caseDocuments.test.js": "4572ff018251c69d353a6127f151ca72616e33d1372d471a9e63bbc95df0f88f",
+    "test/correspondent.commissions.test.js": "d5c6e60841db26b149d3dc4b8249835c19db521ba932f3d17c00aa00a147ef9d",
+    "test/correspondent.documentPipeline.test.js": "5b99d9452e0826796ab2307df7353080fa4772fea90497b7bf9446e2f34925d7",
+    "test/correspondent.domainEvents.test.js": "163dd7ad0f40d6aa993890482b0363fedb03016cbeab06d0b0cffde5d231bd6d",
+    "test/correspondent.eligibility.test.js": "858920f35b96c0f8a9fd20754b28b7c5bcd4c1881b3058ddff614ddf0280b151",
+    "test/correspondent.financingCases.test.js": "f9b9529a18ae2f0be742195cf8978b3ea45c145cead362d463b71197fdbddd51",
+    "test/correspondent.fiscal.test.js": "c3f9b0ab49db67ad1d8f57b730b2831ba0055e133f4906cb0022b6b7b8381f3e",
+    "test/correspondent.httpRoutes.test.js": "074099fa64fd1444e398963bccad328d456f0a248c979bc88f7708260e027fab",
+    "test/correspondent.nay.test.js": "e5b0f9376f5d31d831c1b02f5fcc0b013595a8ee45bdd509d3c8e5ce58c45936",
+    "test/correspondent.providerAdapter.test.js": "4ce78deae0e906d334df139333ba8d92bcb34f53a551a7cb75d77eed28350ac7",
+    "test/correspondent.restrictedFileGuard.test.js": "e8a087f38689a44b2e28e772fd04fb4b8f9d45fb256c78bcebacc2061ed547b5",
+    "test/correspondent.security.test.js": "b55bf541bb5534acbcef3d9cc04f482574ee50264afd870c72b75d7fb4c8b4e4",
+    "test/correspondent.simulations.test.js": "170b0d4d58a097b3a87dde387d09c600c6dad2134f96b80c86e2e891aaeca426",
+    "test/correspondent.submissions.test.js": "c14c9ddeadc4213c5bd0f126ee60e068ec227c41f1e6428c7931cacb9ab4b50d",
+    "test/correspondent.webhooks.test.js": "7f0aca2369f7f356872ae7cfce9469ae5f6a1cfe5588e3e41d0e42e361e7d02b",
+    "test/integrations/errors/errors.correspondente.test.js": "41e9084e7befe1e525bace772c26be94f554e40b5cb3bdd83a634b6d471fd9ae"
+  }
+}

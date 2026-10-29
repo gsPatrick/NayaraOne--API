@@ -9,6 +9,7 @@ const { peekEligibilityConfig } = require('../../features/correspondent/eligibil
 const { applyPolledStatus } = require('../../features/correspondent/webhooks.service');
 const { withTimeout, finalizeAcceptedSubmission } = require('../../features/correspondent/cases/submissions.service');
 const { recordIntegrationError, resolveIntegrationError } = require('../../features/correspondent/integrationErrors.service');
+const { sweepCaseStatusStream } = require('../../features/correspondent/dispatch/statusStream');
 
 /**
  * correspondentStatusPollJob (Marco 8): "getCaseStatus()" do contrato do adapter. Para provider sem
@@ -113,20 +114,14 @@ async function pollCompany(group, company) {
   if (config.statusPollingEnabled !== true) return { candidates: 0, applied: 0 };
   await recoverStaleUnknownSubmissions(group, company, Number.isInteger(config.unknownReleaseMinutes) ? config.unknownReleaseMinutes : 2);
 
-  const ids = await tenantTx(group, company, async (transaction) => {
-    const rows = await FinancingCase.findAll({ where: { status: { [Op.in]: POLLED_STATUSES }, providerCode: { [Op.ne]: 'manual' } }, attributes: ['id'], transaction });
-    return rows.map((r) => r.id);
-  });
-  let applied = 0;
-  for (const id of ids) {
+  // Os casos em andamento são varridos pelo stream de sincronização `financing.case_status` (cursor retomável e lease, M9-D240); cada caso segue a regra de sempre.
+  const pollCaseSafely = async (id) => {
     try {
-      // eslint-disable-next-line no-await-in-loop
-      if (await pollOneCase(group, company, id)) applied += 1;
+      return await pollOneCase(group, company, id);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(`[CorrespondentStatusPollJob] Falha ao consultar o caso ${id}: ${sanitizeProviderMessage(err.message)}`);
       try {
-        // eslint-disable-next-line no-await-in-loop
         await tenantTx(group, company, async (transaction) => {
           const c = await FinancingCase.findByPk(id, { transaction });
           if (!c) return;
@@ -140,9 +135,10 @@ async function pollCompany(group, company) {
       } catch (ignored) {
         // registrar o erro nunca derruba a rodada
       }
+      return false;
     }
-  }
-  return { candidates: ids.length, applied };
+  };
+  return sweepCaseStatusStream({ group, company, polledStatuses: POLLED_STATUSES, pollCase: pollCaseSafely });
 }
 
 async function runCorrespondentStatusPollJob() {

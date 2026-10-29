@@ -39,9 +39,11 @@ module.exports = {
       purpose: 'FINANCING_PROPOSAL',
       fields: [
         { name: 'caseRef', classification: 'INTERNAL', required: true },
-        { name: 'proponentName', classification: 'PERSONAL', required: true },
-        { name: 'proponentDocument', classification: 'PERSONAL', required: true },
+        // Proponente: o fluxo do Correspondente (M9-D240) envia o que o caso tem; quem exige nome e documento é o adapter da promotora real (no inputSchema dele), não a minimização.
+        { name: 'proponentName', classification: 'PERSONAL' },
+        { name: 'proponentDocument', classification: 'PERSONAL' },
         { name: 'propertyValue', classification: 'INTERNAL' },
+        { name: 'amount', classification: 'INTERNAL' },
         { name: 'incomeDeclared', classification: 'SENSITIVE' },
         { name: 'healthDeclaration', classification: 'SENSITIVE' },
       ],
