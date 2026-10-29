@@ -52,6 +52,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'pix_key',
       },
+      openingBalance: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0,
+        field: 'opening_balance',
+        comment: 'Saldo antes do primeiro lançamento do sistema (M9-D620); entra no caixa total do BI',
+      },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,

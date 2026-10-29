@@ -21,6 +21,9 @@ const { financeCriteria } = require('./financeHealth.criteria');
 const { readOverdueWindowDays } = require('./financeHealth.settings');
 const { readCommissionDetails } = require('./financeHealth.commissions');
 const { readOwnerRepasseDetail } = require('./financeHealth.repasses');
+const { readCashParams } = require('./cash.settings');
+const { readCashComponents } = require('./financeHealth.cash');
+const { readManualReviewPending, readReconciliationGap } = require('./financeHealth.cashGap');
 
 const MODEL = 'rm_finance_health';
 
@@ -31,6 +34,17 @@ const kpiFields = (o) => ({
   open_anomalies_high: o.anomalies.byRisk.ALTO, open_anomalies_unclassified: o.anomalies.byRisk.NAO_CLASSIFICADO,
   open_anomalies_oldest_date: o.anomalies.oldest, open_anomalies_by_risk: o.anomalies.byRisk, open_anomalies_by_type: o.anomalies.byType,
 });
+
+/** M9-D620: caixa livre e dinheiro de terceiros (com abertura, transferências, origem) e os dados da regra de qualidade do caixa. */
+async function cashFields(companyId, groupId, bounds, transaction) {
+  const params = await readCashParams({ companyId, groupId }, transaction);
+  const cash = await readCashComponents(companyId, bounds, params, transaction);
+  const gap = await readReconciliationGap(companyId, bounds.dayEnd.toISOString(), params, transaction);
+  return {
+    params,
+    fields: { ...cash, manual_review_pending: await readManualReviewPending(companyId, transaction), reconciliation_gap: gap.gap, reconciliation_gap_accounts: gap.accounts },
+  };
+}
 
 /** M9-D623: detalhe das comissões (por corretor e tipo, sem corretor, paga sem lançamento) e dos repasses pendentes (por proprietário, imóvel e idade). */
 async function resultFields(companyId, bounds, asOf, transaction) {
@@ -44,9 +58,9 @@ async function resultFields(companyId, bounds, asOf, transaction) {
 async function recompute({ companyId, groupId, key, now, transaction }) {
   const bounds = financeBounds(key.as_of_date, await readOverdueWindowDays({ companyId, groupId }, transaction));
   const e = await readEntryComponents(companyId, bounds, transaction);
+  const cash = await cashFields(companyId, groupId, bounds, transaction);
   const o = await readOtherComponents(companyId, bounds, transaction, { groupId, asOf: key.as_of_date });
   const fields = {
-    free_cash: e.free_cash, third_party_cash: e.third_party_cash,
     payables_7d: e.payables_7d, payables_30d: e.payables_30d, payables_60d: e.payables_60d,
     receivables_7d: e.receivables_7d, receivables_30d: e.receivables_30d, receivables_60d: e.receivables_60d,
     overdue_payables: e.overdue_payables, overdue_amount: e.overdue_amount,
@@ -57,7 +71,8 @@ async function recompute({ companyId, groupId, key, now, transaction }) {
     payables_without_due_date: e.payables_without_due_date, receivables_without_due_date: e.receivables_without_due_date, // M9-D621: qualidade das janelas por natureza
     ...kpiFields(o),
     ...(await resultFields(companyId, bounds, key.as_of_date, transaction)),
-    source_criteria: financeCriteria(companyId, bounds),
+    ...cash.fields,
+    source_criteria: financeCriteria(companyId, bounds, cash.params),
   };
   fields.breathing_need = await breathingNeed({
     overduePayables: fields.overdue_payables, payables30d: fields.payables_30d, commissionsUnlinked30d: fields.commissions_unlinked_30d, freeCash: fields.free_cash,

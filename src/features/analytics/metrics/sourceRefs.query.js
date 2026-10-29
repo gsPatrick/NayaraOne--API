@@ -6,6 +6,7 @@
  * Roda na transação do chamador, portanto sob o RLS da empresa.
  */
 const { sequelize } = require('../../../models');
+const money = require('./formulas/money');
 
 function buildWhere(spec, filter) {
   const col = (name) => `t."${name}"`;
@@ -28,6 +29,7 @@ function buildWhere(spec, filter) {
     replacements[`${key}List`] = filter[key];
   }
   Object.entries(filter.equals || {}).forEach(([name, value], i) => {
+    if ((spec.flags || []).includes(name)) return; // chave que só liga uma parcela (addends), não filtra coluna
     const column = (c.equals || {})[name];
     if (!column) throw new Error(`Origem ${spec.metricCode}: filtro ${name} não é declarado.`);
     if (value === null) { parts.push(`${col(column)} IS NULL`); return; }
@@ -55,6 +57,18 @@ async function sampleIds(spec, filter, limit, transaction) {
   return rows.map((r) => r.id);
 }
 
+/** Parcelas declaradas pela origem (`addends`, M9-D620) para o filtro: [{ label, total }] com o total em texto decimal. */
+async function addendBreakdown(spec, filter, transaction) {
+  const out = [];
+  for (const addend of spec.addends || []) {
+    const q = addend(filter);
+    if (!q) continue;
+    const [[row]] = await sequelize.query(q.sql, { replacements: { companyId: filter.companyId, ...q.replacements }, transaction });
+    out.push({ label: q.label, total: row.total });
+  }
+  return out;
+}
+
 /** Soma exata (texto decimal) do campo monetário; linhas do sinal negativo entram subtraindo (ex.: pagamentos no caixa). */
 async function sumValue(spec, filter, transaction) {
   if (!spec.valueColumn) throw new Error(`Origem ${spec.metricCode}: não declara valueColumn para o modo SUM.`);
@@ -64,7 +78,8 @@ async function sumValue(spec, filter, transaction) {
   const [[row]] = await sequelize.query(`SELECT COALESCE(SUM(${expr}), 0)::text AS total ${from(spec)} WHERE ${where}`, {
     replacements: { ...replacements, ...(sign ? { negatives: sign.negative } : {}) }, transaction,
   });
-  return row.total;
+  const extra = await addendBreakdown(spec, filter, transaction);
+  return extra.length ? money.toString(money.sum([row.total, ...extra.map((e) => e.total)])) : row.total;
 }
 
 /** Linhas completas (colunas de `rowColumns`) para refazer a fórmula; ordenadas pelo id para o resultado ser repetível. */
@@ -76,4 +91,4 @@ async function fetchRows(spec, filter, transaction) {
   return rows;
 }
 
-module.exports = { buildWhere, countRows, sampleIds, sumValue, fetchRows };
+module.exports = { buildWhere, countRows, sampleIds, sumValue, fetchRows, addendBreakdown };

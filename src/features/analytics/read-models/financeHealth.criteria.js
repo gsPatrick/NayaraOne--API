@@ -20,12 +20,13 @@ function resultCriteria(companyId, b) {
   };
 }
 
-function financeCriteria(companyId, bounds) {
+function financeCriteria(companyId, bounds, cash = {}) {
   const b = (key) => iso(bounds[key]);
+  const realized = cash.realizedStatuses || ['SETTLED'];
   const pending = (nature, from, to) => ({ companyId, period: { from: from ? b(from) : null, to: b(to) }, status: ['PENDING'], nature: [nature], equals: { ...OWN } });
-  const settled = (equals) => ({ companyId, period: { from: null, to: b('dayEnd') }, status: ['SETTLED'], nature: ['PAYABLE', 'RECEIVABLE'], equals });
+  const settled = (equals) => ({ companyId, period: { from: null, to: b('dayEnd') }, status: realized, nature: ['PAYABLE', 'RECEIVABLE'], equals });
   return {
-    'fin.free_cash': settled({ ...OWN }),
+    'fin.free_cash': settled({ ...OWN, includeOpening: cash.includeOpening !== false }), // M9-D620: a abertura e as transferências liquidadas completam a soma na origem
     'fin.third_party_cash': settled({ thirdParty: true, reversal: null }),
     'fin.payables_7d': pending('PAYABLE', 'today', 'horizon7'),
     'fin.payables_30d': pending('PAYABLE', 'today', 'horizon30'),

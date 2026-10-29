@@ -20,9 +20,27 @@ function pendingSpec(metricCode, label) {
   };
 }
 
+/** Saldo de abertura das contas da empresa: só quando o filtro liga `includeOpening` (parâmetro analytics.caixa.usar_saldo_abertura no momento do cálculo). */
+const openingAddend = (filter) => ((filter.equals || {}).includeOpening ? {
+  label: 'Saldo de abertura das contas bancárias',
+  sql: 'SELECT COALESCE(SUM(a.opening_balance), 0)::text AS total FROM finance.bank_accounts a WHERE a.company_id = :companyId AND a.deleted_at IS NULL AND a.owner_person_id IS NULL',
+  replacements: {},
+} : null);
+
+/** Pernas das transferências entre empresas já liquidadas (entrada soma, saída subtrai): mesmas regras de status e período do filtro. */
+const intercompanyAddend = (filter) => ({
+  label: 'Transferências entre empresas liquidadas',
+  sql: `SELECT COALESCE(SUM(CASE WHEN e.entry_type = 'CREDIT' THEN e.amount ELSE -e.amount END), 0)::text AS total FROM finance.financial_entries e
+         WHERE e.company_id = :companyId AND e.nature = 'ADJUSTMENT' AND e.idempotency_key LIKE 'intercompany-transfer:%' AND e.reversal_of_entry_id IS NULL
+           AND e.status IN (:addStatus)${filter.period && filter.period.to ? ' AND e.settled_at < :addTo' : ''}`,
+  replacements: { addStatus: filter.status && filter.status.length ? filter.status : ['SETTLED'], addTo: filter.period ? filter.period.to : null },
+});
+
 const SPECS = [
-  { ...ENTRIES, metricCode: 'fin.free_cash', valueSign: { column: 'nature', negative: ['PAYABLE'] }, columns: { ...ENTRIES.columns, period: 'settled_at' },
-    describe: (f) => `Lançamentos próprios liquidados (entradas menos saídas, sem terceiros nem estornos) até ${day(f.period.to)}` },
+  { // M9-D620: o ledger próprio liquidado mais as parcelas que não estão nele (abertura das contas e transferências entre empresas liquidadas)
+    ...ENTRIES, metricCode: 'fin.free_cash', valueSign: { column: 'nature', negative: ['PAYABLE'] }, columns: { ...ENTRIES.columns, period: 'settled_at' },
+    flags: ['includeOpening'], addends: [openingAddend, intercompanyAddend],
+    describe: (f) => `Lançamentos próprios liquidados (entradas menos saídas, sem terceiros nem estornos)${(f.equals || {}).includeOpening ? ', mais o saldo de abertura das contas,' : ''} e as transferências entre empresas liquidadas, até ${day(f.period.to)}` },
   { ...ENTRIES, metricCode: 'fin.third_party_cash', valueSign: { column: 'nature', negative: ['PAYABLE'] }, columns: { ...ENTRIES.columns, period: 'settled_at' },
     describe: (f) => `Lançamentos de dinheiro de terceiros liquidados (recebido menos devolvido) até ${day(f.period.to)}` },
   ...[7, 30, 60].flatMap((n) => [

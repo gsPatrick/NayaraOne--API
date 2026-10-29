@@ -17,13 +17,29 @@ async function ledgerValue(ctx, asOf, where) {
     { dayEnd: boundsOf(asOf).dayEnd.toISOString() });
 }
 
+/**
+ * M9-D620: o que o caixa livre soma além do ledger de receber e pagar — o saldo de abertura das contas (quando o read model o usou, o que fica guardado nos
+ * critérios da própria linha) e as transferências entre empresas liquidadas (sai de uma conta, entra em outra). Texto decimal.
+ */
+async function cashAdjustments(ctx, row, withOpening = true) {
+  const criteria = JSON.parse((await latestRow(ctx, ['source_criteria']))?.source_criteria || '{}');
+  const useOpening = withOpening && (((criteria['fin.free_cash'] || {}).equals || {}).includeOpening !== false);
+  const opening = useOpening ? await sql.value(ctx, 'SELECT COALESCE(SUM(opening_balance), 0)::text AS v FROM finance.bank_accounts WHERE company_id = :companyId AND deleted_at IS NULL AND owner_person_id IS NULL') : '0';
+  const legs = await sql.value(ctx, `SELECT COALESCE(SUM(CASE WHEN entry_type = 'CREDIT' THEN amount ELSE -amount END), 0)::text AS v FROM finance.financial_entries
+     WHERE company_id = :companyId AND status = 'SETTLED' AND nature = 'ADJUSTMENT' AND idempotency_key LIKE 'intercompany-transfer:%' AND reversal_of_entry_id IS NULL AND settled_at < :dayEnd`,
+  { dayEnd: boundsOf(row.as_of_date).dayEnd.toISOString() });
+  return sql.value(ctx, 'SELECT (CAST(:a AS numeric) + CAST(:b AS numeric))::text AS v', { a: opening, b: legs });
+}
+
 function cashReconciliation() {
   return t.reconciliation({
     code: 'finance_health_free_cash_reconciliation', metrics: ['fin.free_cash'],
     expected: async (ctx) => (await latestRow(ctx, ['free_cash']))?.free_cash,
     observed: async (ctx) => {
       const row = await latestRow(ctx, ['free_cash']);
-      return row ? ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND ${OWN_LIVE} AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`) : null;
+      if (!row) return null;
+      const own = await ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND ${OWN_LIVE} AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`);
+      return sql.value(ctx, 'SELECT (CAST(:a AS numeric) + CAST(:b AS numeric))::text AS v', { a: own, b: await cashAdjustments(ctx, row) });
     },
   });
 }
@@ -61,7 +77,8 @@ const cashSplit = t.consistency({
   async evaluate(ctx) {
     const row = await latestRow(ctx, ['free_cash', 'third_party_cash']);
     if (!row) return { ok: true, expected: { rule: 'caixa livre + terceiros = caixa total' }, observed: {} };
-    const total = await ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND reversal_of_entry_id IS NULL AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`);
+    const ledgerTotal = await ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND reversal_of_entry_id IS NULL AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`);
+    const total = await sql.value(ctx, 'SELECT (CAST(:a AS numeric) + CAST(:b AS numeric))::text AS v', { a: ledgerTotal, b: await cashAdjustments(ctx, row) }); // M9-D620: caixa total = ledger + abertura + transferências
     const [{ sum }] = await sql.rows(ctx, 'SELECT (CAST(:free AS numeric) + CAST(:third AS numeric))::text AS sum', { free: row.free_cash, third: row.third_party_cash });
     const [{ equal }] = await sql.rows(ctx, 'SELECT CAST(:a AS numeric) = CAST(:b AS numeric) AS equal', { a: sum, b: total });
     return { ok: equal, expected: { rule: 'caixa livre + terceiros = caixa total', total }, observed: { freeCash: row.free_cash, thirdPartyCash: row.third_party_cash, sum } };

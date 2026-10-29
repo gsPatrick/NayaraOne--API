@@ -27,6 +27,15 @@ function hoursSince(date) {
 const SENSITIVE_FIELDS = ['bankCode', 'agency', 'accountNumber', 'pixKey', 'ownerPersonId'];
 const STATUSES = ['PENDING_COOLDOWN', 'ACTIVE', 'BLOCKED'];
 
+// M9-D620: saldo de abertura da conta (antes do primeiro lançamento do sistema), em reais com até 2 casas; entra no caixa total do BI.
+function parseOpeningBalance(value) {
+  const text = String(value).trim().replace(',', '.');
+  if (!/^-?\d{1,16}(\.\d{1,2})?$/.test(text)) {
+    throw AppError.badRequest('O campo "openingBalance" deve ser um valor em reais com até 2 casas decimais.', 'FINANCE_BANK_ACCOUNT_VALIDATION');
+  }
+  return text;
+}
+
 async function createBankAccount(payload, actorUserId, transaction) {
   const { groupId, companyId, ownerPersonId, bankCode, agency, accountNumber, pixKey } = payload;
   if (!groupId || !companyId) {
@@ -48,6 +57,7 @@ async function createBankAccount(payload, actorUserId, transaction) {
       agency: agency || null,
       accountNumber: accountNumber || null,
       pixKey: pixKey || null,
+      openingBalance: payload.openingBalance === undefined || payload.openingBalance === null || payload.openingBalance === '' ? '0.00' : parseOpeningBalance(payload.openingBalance),
       status: 'PENDING_COOLDOWN',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -112,6 +122,10 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
   if (ownerPersonId !== undefined && (ownerPersonId || null) !== (bankAccount.ownerPersonId || null)) {
     bankAccount.ownerPersonId = ownerPersonId || null;
     sensitiveChanged = true;
+  }
+
+  if (payload.openingBalance !== undefined && payload.openingBalance !== null && payload.openingBalance !== '') {
+    bankAccount.openingBalance = parseOpeningBalance(payload.openingBalance); // não é dado sensível: não reabre o resfriamento
   }
 
   let reverificationAfterUnblock = false;

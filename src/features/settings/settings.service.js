@@ -45,6 +45,7 @@ const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
 const { FINANCE_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/financeKpi.settings');
 const { FINANCE_WINDOW_SETTINGS_SCHEMA } = require('../analytics/read-models/financeWindow.settings');
+const { CASH_SETTINGS_SCHEMA } = require('../analytics/read-models/cash.settings');
 const { CRM_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/crmKpi.settings');
 const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/financeResults.settings');
 const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
@@ -253,6 +254,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D699 — teste de carga do BI: quanto o p95 do fluxo operacional pode subir com os painéis sob carga.
   ...LOAD_SETTINGS_SCHEMA,
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
+  // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
+  ...CASH_SETTINGS_SCHEMA,
   ...COMERCIAL_SETTINGS_SCHEMA,
   ...IMOVEIS_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D617 — read models de Locação: tipos de contrato, prazo do repasse e nota de cada tipo de registro de atendimento (a janela da inadimplência é a da D615).

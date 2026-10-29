@@ -9,6 +9,7 @@ const { getFormulaCatalog } = require('../formulaCatalog');
 const { calcHash } = require('../calcHash');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { readStatementMaxAgeDays } = require('../../read-models/financeKpi.settings');
+const { readQualityParams } = require('../../quality/quality.settings');
 const { readResultParams } = require('../../read-models/financeResults.settings');
 const { EXTRAS } = require('./finance.results');
 const { P } = require('../../security/permissionCatalog');
@@ -40,7 +41,7 @@ const snapshotInputs = (base, result) => [
 async function buildFinanceKpiEntries(scope, asOfDate, transaction) {
   const row = await loadRow(scope.companyId, asOfDate, transaction);
   if (!row) return [];
-  const settings = { maxStatementAgeDays: await readStatementMaxAgeDays(scope, transaction), ...(await readResultParams(scope, transaction)) };
+  const settings = { maxStatementAgeDays: await readStatementMaxAgeDays(scope, transaction), cashTolerance: (await readQualityParams(scope, transaction)).tolerance, ...(await readResultParams(scope, transaction)) };
   const sourceCtx = { groupId: scope.groupId, companyId: scope.companyId, permissions: [P.READ] };
   const catalog = getFormulaCatalog();
   const out = [];

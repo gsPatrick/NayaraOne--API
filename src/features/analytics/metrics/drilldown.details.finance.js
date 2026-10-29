@@ -9,6 +9,8 @@ const LEDGER_CODES = [
   ...[7, 30, 60].flatMap((n) => [`fin.payables_${n}d`, `fin.receivables_${n}d`]),
 ];
 for (const code of LEDGER_CODES) registerDrilldownDetail(code, LEDGER);
+// M9-D620: no dinheiro de terceiros o detalhe mostra a origem (referência) e a pessoa detentora; só quem tem analytics:drilldown e finance:read chega aqui
+registerDrilldownDetail('fin.third_party_cash', { columns: [...LEDGER.columns, 'third_party_reference', 'third_party_holder_person_id', 'third_party_release_type'], link: LEDGER.link });
 registerDrilldownDetail('fin.commissions_unlinked_30d', { columns: ['due_at'], link: '/painel/financeiro/comissoes-repasses' });
 // M9-D623: margem por setor (lançamentos da competência), parcelas de comissão e repasses ao proprietário
 registerDrilldownDetail('fin.sector_margin', { columns: ['result_center_id', 'competence_month', 'settled_at'], link: LEDGER.link });
