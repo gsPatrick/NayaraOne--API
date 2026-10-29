@@ -4,6 +4,7 @@ const { Asset, InventoryMaintenanceOrder } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceOpened, publishMaintenanceClosed } = require('./inventoryEvents.service');
+const { publishMaintenanceScheduled, publishMaintenanceCompleted } = require('./maintenanceCalendarEvents.service');
 
 // Guia do Marcelo §8/item 7: devolução danificada abre manutenção; OS fecha manualmente e
 // libera o asset de volta para AVAILABLE.
@@ -18,7 +19,7 @@ const { publishMaintenanceOpened, publishMaintenanceClosed } = require('./invent
 // AVAILABLE, trava de verdade; se o asset já está LOANED, bloqueia — manutenção não pode abrir
 // sobre uma ferramenta em uso sem passar pela devolução primeiro).
 async function openMaintenanceOrder(payload, actorUserId, transaction) {
-  const { groupId, companyId, assetId, sourceToolLoanId, description } = payload;
+  const { groupId, companyId, assetId, sourceToolLoanId, description, scheduledAt } = payload;
   if (!groupId || !companyId || !assetId) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "assetId" são obrigatórios.', 'MAINTENANCE_VALIDATION');
   }
@@ -107,6 +108,7 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
       description: description || null,
       status: 'OPEN',
       openedAt: new Date(),
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -114,6 +116,7 @@ async function openMaintenanceOrder(payload, actorUserId, transaction) {
   );
 
   await publishMaintenanceOpened(order, transaction);
+  await publishMaintenanceScheduled(order, false, transaction);
 
   await registrarAuditoria(
     { groupId, companyId, actorUserId, action: 'MAINTENANCE_ORDER_OPENED', entityType: 'InventoryMaintenanceOrder', entityId: order.id, afterJson: order.toJSON(), reason: 'Ordem de manutenção aberta.' },
@@ -159,6 +162,7 @@ async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, t
   }
 
   await publishMaintenanceClosed(order, transaction);
+  await publishMaintenanceCompleted(order, transaction);
 
   await registrarAuditoria(
     { groupId: order.groupId, companyId: order.companyId, actorUserId, action: 'MAINTENANCE_ORDER_CLOSED', entityType: 'InventoryMaintenanceOrder', entityId: order.id,
@@ -171,4 +175,28 @@ async function closeMaintenanceOrder(orderId, groupId, companyId, actorUserId, t
   return order;
 }
 
-module.exports = { openMaintenanceOrder, listMaintenanceOrders, closeMaintenanceOrder };
+/** M9-D802 — reagenda uma ordem aberta (nova data/hora); o Calendário move o item pelo evento maintenance.order.rescheduled. */
+async function rescheduleMaintenanceOrder(orderId, scheduledAt, groupId, companyId, actorUserId, transaction) {
+  const when = new Date(scheduledAt);
+  if (!scheduledAt || Number.isNaN(when.getTime())) {
+    throw AppError.badRequest('O campo "scheduledAt" deve ser uma data e hora válidas.', 'MAINTENANCE_VALIDATION');
+  }
+  const order = await InventoryMaintenanceOrder.findOne({ where: { id: orderId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+  if (!order) throw AppError.notFound('Ordem de manutenção não encontrada.', 'MAINTENANCE_NOT_FOUND');
+  if (order.status !== 'OPEN') {
+    throw AppError.badRequest(`Só é possível reagendar uma OS em OPEN (atual: ${order.status}).`, 'MAINTENANCE_INVALID_TRANSITION');
+  }
+  const beforeJson = { scheduledAt: order.scheduledAt };
+  order.scheduledAt = when;
+  order.updatedBy = actorUserId || null;
+  await order.save({ transaction });
+  await registrarAuditoria(
+    { groupId, companyId, actorUserId, action: 'MAINTENANCE_ORDER_RESCHEDULED', entityType: 'InventoryMaintenanceOrder', entityId: order.id,
+      beforeJson, afterJson: { scheduledAt: order.scheduledAt }, reason: 'Ordem de manutenção reagendada.' },
+    transaction
+  );
+  await publishMaintenanceScheduled(order, true, transaction);
+  return order;
+}
+
+module.exports = { openMaintenanceOrder, listMaintenanceOrders, closeMaintenanceOrder, rescheduleMaintenanceOrder };

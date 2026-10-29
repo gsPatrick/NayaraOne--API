@@ -1,6 +1,7 @@
 'use strict';
 
 const { BillingSchedule, BillingScheduleItem, Contract } = require('../../models');
+const { publishScheduleUpserted, publishSchedulePaid } = require('./billingCalendarEvents.service');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBillingGenerated } = require('./billingEvents.service');
@@ -106,6 +107,7 @@ async function generateBillingSchedule(payload, actorUserId, transaction) {
   }
 
   await publishBillingGenerated(billingSchedule, transaction);
+  await publishScheduleUpserted(billingSchedule, transaction);
 
   await registrarAuditoria(
     {
@@ -197,6 +199,7 @@ async function registerPayment(id, amountPaid, actorUserId, transaction) {
     },
     transaction
   );
+  if (billingSchedule.status === 'PAID') await publishSchedulePaid(billingSchedule, transaction);
 
   return billingSchedule;
 }

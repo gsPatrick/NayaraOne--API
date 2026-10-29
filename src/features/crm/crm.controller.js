@@ -78,6 +78,13 @@ const createOpportunityTask = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: task });
 });
 
+const updateOpportunityTask = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((transaction) =>
+    opportunityTasksService.updateOpportunityTask(req.params.id, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { data });
+});
+
 const listOpportunityTasks = catchAsync(async (req, res) => {
   const tasks = await req.withTenantTransaction((transaction) =>
     opportunityTasksService.listOpportunityTasks(req.params.id, transaction, {
@@ -329,6 +336,7 @@ module.exports = {
   removeOpportunity,
   createOpportunityTask,
   listOpportunityTasks,
+  updateOpportunityTask,
   getOpportunityTimeline,
   createVisit,
   listVisits,

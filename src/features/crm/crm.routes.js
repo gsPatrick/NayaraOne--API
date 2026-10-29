@@ -44,6 +44,7 @@ crmRouter.delete('/opportunities/:id', requirePermission('crm:opportunities:dele
 // ('/opportunities/:id/tasks'), o Express casa pela rota inteira, então a ordem é livre.
 crmRouter.post('/opportunities/:id/tasks', requirePermission('crm:tasks:create'), crmController.createOpportunityTask);
 crmRouter.get('/opportunities/:id/tasks', requirePermission('crm:tasks:read'), crmController.listOpportunityTasks);
+crmRouter.patch('/tasks/:id', requirePermission('crm:tasks:create'), crmController.updateOpportunityTask);
 crmRouter.get(
   '/opportunities/:id/timeline',
   requirePermission('crm:opportunities:read'),

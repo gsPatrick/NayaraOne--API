@@ -6,6 +6,7 @@ const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const service = require('./insurance.service');
+const renewalService = require('./insuranceRenewal.service');
 const { assertSandboxAllowed } = require('./adapters/resolveInsuranceAdapter');
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 37, 2026-10-05): insurancePublicWebhook
@@ -73,6 +74,11 @@ const quotePolicy = catchAsync(async (req, res) => {
 const issuePolicy = catchAsync(async (req, res) => {
   const policy = await req.withTenantTransaction((t) => service.issuePolicy(req.params.id, req.body, actorWithTenant(req), t));
   return success(res, { data: policy });
+});
+
+const completeRenewalTask = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => renewalService.completeRenewalTask(req.params.id, actorWithTenant(req), t));
+  return success(res, { data });
 });
 
 const cancelPolicy = catchAsync(async (req, res) => {
@@ -177,7 +183,7 @@ const insurancePublicWebhook = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createPolicy, listPolicies, getPolicy, quotePolicy, issuePolicy, cancelPolicy,
+  completeRenewalTask, createPolicy, listPolicies, getPolicy, quotePolicy, issuePolicy, cancelPolicy,
   openClaim, submitClaim, insurancePublicWebhook,
   attachPolicyDocument, listPolicyDocuments,
   listPolicyInstallments, payPolicyInstallment,

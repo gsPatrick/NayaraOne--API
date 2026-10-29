@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCase } = require('./legalCases.service');
 const { publishLegalDeadlineCreated } = require('./legalEvents.service');
+const { publishDeadlineChange } = require('./legalDeadlineCalendarEvents.service');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -124,6 +125,7 @@ async function getLegalDeadline(id, transaction) {
 async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   const deadline = await getLegalDeadline(id, transaction);
   const beforeJson = deadline.toJSON();
+  const beforeStatus = deadline.status;
   const { status, description, dueAt, conclusionEvidenceFileId, conclusionNote, changeReason } = payload;
 
   // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
@@ -201,6 +203,9 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  // M9-D802: o Calendário fecha/reabre/atualiza o item a partir deste evento (a conclusão acontece AQUI, na origem).
+  await publishDeadlineChange(deadline, beforeStatus, transaction);
 
   return deadline;
 }

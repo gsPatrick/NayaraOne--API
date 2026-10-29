@@ -5,6 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { getFiscalSettings } = require('../commissionSplit.service');
 const { brasiliaDate } = require('./fiscalCommon');
+const { publishObligationUpserted, publishObligationFulfilled } = require('./fiscalCalendarEvents.service');
 
 const OBLIGATION_TYPES = { DIMOB_ANNUAL: 'DIMOB anual' };
 
@@ -80,6 +81,7 @@ async function ensureObligation({ obligationType, referenceYear, dueAt, descript
     },
     transaction
   );
+  await publishObligationUpserted(obligation, transaction);
   return obligation;
 }
 
@@ -130,6 +132,7 @@ async function completeObligation(obligationId, note, actorUserId, groupId, comp
     },
     transaction
   );
+  await publishObligationFulfilled(obligation, transaction);
   return obligation;
 }
 
@@ -172,6 +175,7 @@ async function updateObligationDueDate(obligationId, dueAt, reasonText, actorUse
     },
     transaction
   );
+  await publishObligationUpserted(obligation, transaction);
   return obligation;
 }
 

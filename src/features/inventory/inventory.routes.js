@@ -71,6 +71,7 @@ inventoryRouter.get('/tool-loans', requirePermission('inventory:read'), inventor
 // Maintenance orders (Guia do Marcelo §8) — OPEN -> CLOSED.
 inventoryRouter.post('/maintenance-orders', requirePermission('inventory:create'), inventoryController.openMaintenanceOrder);
 inventoryRouter.get('/maintenance-orders', requirePermission('inventory:read'), inventoryController.listMaintenanceOrders);
+inventoryRouter.patch('/maintenance-orders/:id/schedule', requirePermission('inventory:update'), inventoryController.rescheduleMaintenanceOrder);
 inventoryRouter.post('/maintenance-orders/:id/close', requirePermission('inventory:update'), inventoryController.closeMaintenanceOrder);
 
 // Loss cases (Guia do Marcelo §11, EST-010) — OPEN -> APPROVED/REJECTED. Decisão exige inventory:approve.

@@ -4,6 +4,7 @@ const { Task, Opportunity, User } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
+const { publishTaskChange } = require('./crmCalendarEvents.service');
 
 /**
  * M3-11 — Tarefas no ciclo de vida da Oportunidade.
@@ -104,6 +105,56 @@ async function createOpportunityTask(opportunityId, payload, actorUserId, transa
     transaction
   );
 
+  await publishTaskChange(task, null, transaction);
+
+  return task;
+}
+
+/**
+ * M9-D802 — altera uma tarefa do CRM (status, prazo, responsável, título). O Calendário só fecha o item quando a tarefa é concluída
+ * ou cancelada AQUI, na origem. Controle de concorrência por `lockVersion` (opcional no corpo).
+ */
+async function updateOpportunityTask(taskId, payload, actorUserId, transaction) {
+  const task = await Task.findOne({ where: { id: taskId, relatedEntityType: RELATED_ENTITY_TYPE }, transaction, lock: transaction.LOCK.UPDATE });
+  if (!task) throw AppError.notFound('Tarefa não encontrada.', 'OPPORTUNITY_TASK_NOT_FOUND');
+  const { title, assignedToUserId, dueAt, status, priority, lockVersion } = payload || {};
+  if (lockVersion !== undefined && Number(lockVersion) !== task.lockVersion) {
+    throw AppError.conflict('A tarefa foi alterada por outra pessoa. Recarregue e tente de novo.', 'OPPORTUNITY_TASK_VERSION_CONFLICT');
+  }
+  const beforeJson = task.toJSON();
+  const before = task.status;
+  if (status !== undefined) {
+    const normalized = String(status).toUpperCase();
+    if (!STATUSES.includes(normalized)) throw AppError.badRequest(`O campo "status" deve ser um de: ${STATUSES.join(', ')}.`, 'OPPORTUNITY_TASK_VALIDATION');
+    task.status = normalized;
+  }
+  if (priority !== undefined) {
+    const normalized = String(priority).toUpperCase();
+    if (!PRIORITIES.includes(normalized)) throw AppError.badRequest(`O campo "priority" deve ser um de: ${PRIORITIES.join(', ')}.`, 'OPPORTUNITY_TASK_VALIDATION');
+    task.priority = normalized;
+  }
+  if (title !== undefined) {
+    if (!String(title).trim()) throw AppError.badRequest('O campo "title" não pode ficar vazio.', 'OPPORTUNITY_TASK_VALIDATION');
+    task.title = String(title).trim();
+  }
+  if (dueAt !== undefined) task.dueAt = dueAt || null;
+  if (assignedToUserId !== undefined) {
+    if (assignedToUserId) {
+      const assignee = await User.findByPk(assignedToUserId, { transaction });
+      if (!assignee) throw AppError.notFound('Usuário responsável pela tarefa não encontrado.', 'USER_NOT_FOUND');
+      if (assignee.status && String(assignee.status).toUpperCase() !== 'ACTIVE') {
+        throw AppError.unprocessable('Não é possível atribuir uma tarefa a um usuário que não está ativo.', 'OPPORTUNITY_TASK_ASSIGNEE_NOT_ACTIVE', { assignedToUserId });
+      }
+    }
+    task.assignedToUserId = assignedToUserId || null;
+  }
+  task.updatedBy = actorUserId || null;
+  await task.save({ transaction });
+  await registrarAuditoria({
+    groupId: task.groupId, companyId: task.companyId, actorUserId, action: 'opportunity.task_update', entityType: 'Task', entityId: task.id,
+    beforeJson, afterJson: task.toJSON(), reason: `Tarefa "${task.title}" alterada.`,
+  }, transaction);
+  await publishTaskChange(task, before, transaction);
   return task;
 }
 
@@ -133,5 +184,6 @@ module.exports = {
   STATUSES,
   PRIORITIES,
   createOpportunityTask,
+  updateOpportunityTask,
   listOpportunityTasks,
 };

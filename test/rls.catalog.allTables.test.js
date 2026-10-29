@@ -391,4 +391,14 @@ test('M9-D617: os 9 read models de Locação têm RLS, FORCE RLS e 4 políticas'
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as nove tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 4], `analytics.${r.relname}`);
+
+// M9-D802: tabela nova do bloco de governança com RLS + FORCE RLS e a política de isolamento por empresa.
+test('M9-D802: calendar_alert_log tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const tables = ['calendar_alert_log'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'a tabela existe');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+});
 });

@@ -272,7 +272,9 @@ function publishLegalDeadlineCreated(deadline, transaction) {
       aggregateType: 'LegalDeadline',
       aggregateId: deadline.id,
       eventType: 'legal.deadline.created',
-      payload: { id: deadline.id, legalCaseId: deadline.legalCaseId, dueAt: deadline.dueAt },
+      payload: {
+        id: deadline.id, legalCaseId: deadline.legalCaseId, dueAt: deadline.dueAt, description: deadline.description, responsibleUserId: deadline.responsibleUserId || null, status: deadline.status,
+      },
       idempotencyKey: `legal.deadline.created:${deadline.id}`,
     },
     transaction

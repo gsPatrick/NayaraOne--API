@@ -222,6 +222,11 @@ const listMaintenanceOrders = catchAsync(async (req, res) => {
   const orders = await req.withTenantTransaction((t) => maintenanceService.listMaintenanceOrders(req.auth.groupId, req.auth.companyId, t, { status: req.query.status, assetId: req.query.assetId }));
   return success(res, { data: orders });
 });
+const rescheduleMaintenanceOrder = catchAsync(async (req, res) => {
+  const order = await req.withTenantTransaction((t) => maintenanceService.rescheduleMaintenanceOrder(req.params.id, req.body && req.body.scheduledAt, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
+  return success(res, { data: order });
+});
+
 const closeMaintenanceOrder = catchAsync(async (req, res) => {
   const order = await req.withTenantTransaction((t) => maintenanceService.closeMaintenanceOrder(req.params.id, req.auth.groupId, req.auth.companyId, req.auth.userId, t));
   return success(res, { data: order });
@@ -311,6 +316,7 @@ module.exports = {
   openMaintenanceOrder,
   listMaintenanceOrders,
   closeMaintenanceOrder,
+  rescheduleMaintenanceOrder,
   openLossCase,
   listLossCases,
   decideLossCase,

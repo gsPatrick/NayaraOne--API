@@ -19,6 +19,7 @@ module.exports = (sequelize) => {
       description: { type: DataTypes.TEXT, allowNull: true, field: 'description' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
       openedAt: { type: DataTypes.DATE, allowNull: false, field: 'opened_at' },
+      scheduledAt: { type: DataTypes.DATE, allowNull: true, field: 'scheduled_at' },
       closedAt: { type: DataTypes.DATE, allowNull: true, field: 'closed_at' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

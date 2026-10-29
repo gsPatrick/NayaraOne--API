@@ -48,6 +48,7 @@ procurementRouter.get('/procurement/insurance-policies/:id', requirePermission('
 procurementRouter.post('/procurement/insurance-policies/:id/quote', requirePermission('procurement:create'), insuranceController.quotePolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/issue', requirePermission('procurement:approve'), insuranceController.issuePolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/cancel', requirePermission('procurement:approve'), insuranceController.cancelPolicy);
+procurementRouter.post('/procurement/insurance-renewal-tasks/:id/complete', requirePermission('procurement:approve'), insuranceController.completeRenewalTask);
 procurementRouter.post('/procurement/insurance-policies/:id/claims', requirePermission('procurement:create'), insuranceController.openClaim);
 procurementRouter.post('/procurement/insurance-claims/:id/submit', requirePermission('procurement:approve'), insuranceController.submitClaim);
 procurementRouter.post('/procurement/insurance-policies/:id/documents', requirePermission('procurement:create'), insuranceController.attachPolicyDocument);

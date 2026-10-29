@@ -20,9 +20,9 @@ const AppError = require('../../utils/AppError');
  *     // handlerFn — lógica de negócio do consumo, roda no máximo 1x por (sourceId, eventId)
  *   });
  *
- * Retorna `{ processed: boolean, duplicate: boolean }`.
+ * Retorna `{ processed: boolean, duplicate: boolean, status }`.
  */
-async function consumeInboundEvent({ sourceId, eventId, groupId, companyId, payload }, handlerFn) {
+async function consumeInboundEvent({ sourceId, eventId, groupId, companyId, payload, transaction: outer }, handlerFn) {
   if (!sourceId || !eventId) {
     throw AppError.internal('consumeInboundEvent requer sourceId e eventId.', 'INBOX_EVENT_INCOMPLETE');
   }
@@ -35,7 +35,11 @@ async function consumeInboundEvent({ sourceId, eventId, groupId, companyId, payl
 
   const idempotencyKey = `${sourceId}:${eventId}`;
 
-  return sequelize.transaction(async (transaction) => {
+  // `transaction` do chamador (opcional): o consumo roda DENTRO dela (mesmo contexto de tenant e mesmo commit), sem abrir outro
+  // savepoint — o Sequelize repete o nome do savepoint quando um aninhado abre dentro de outro e o rollback deixaria dado para trás.
+  // Quem passa a transação (o despachante do outbox) já a envolve num savepoint próprio: erro desfaz tudo, inclusive o registro do inbox.
+  const inTransaction = (work) => (outer ? work(outer) : sequelize.transaction(work));
+  return inTransaction(async (transaction) => {
     const existing = await IntegrationInbox.findOne({ where: { idempotencyKey }, transaction });
     if (existing) {
       // Já visto antes — não reprocessa (deduplicação). PROCESSING também conta como duplicata
@@ -57,10 +61,12 @@ async function consumeInboundEvent({ sourceId, eventId, groupId, companyId, payl
     );
 
     try {
-      await handlerFn(transaction);
-      inboxRecord.status = 'PROCESSED';
+      const outcome = await handlerFn(transaction);
+      // O handler pode fechar o registro com outro estado (ex.: IGNORED_STALE, DEAD) devolvendo { inboxStatus, reason }.
+      inboxRecord.status = (outcome && outcome.inboxStatus) || 'PROCESSED';
+      if (outcome && outcome.reason) inboxRecord.deadLetterReason = outcome.reason;
       await inboxRecord.save({ transaction });
-      return { processed: true, duplicate: false, status: 'PROCESSED' };
+      return { processed: true, duplicate: false, status: inboxRecord.status };
     } catch (err) {
       inboxRecord.status = 'FAILED';
       inboxRecord.deadLetterReason = err.message;

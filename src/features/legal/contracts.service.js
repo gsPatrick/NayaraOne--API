@@ -1,6 +1,7 @@
 'use strict';
 
 const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
+const { publishContractRenewalChange } = require('./legalDeadlineCalendarEvents.service');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('./legalEvents.service');
@@ -464,6 +465,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   await contract.save({ transaction });
 
   await publishContractStatusChanged(contract, fromStatus, transaction);
+  await publishContractRenewalChange(contract, transaction);
   if (targetStatus === 'ACTIVE') {
     await publishContractActivated(contract, transaction);
   }
@@ -546,6 +548,7 @@ async function applyGatedTransition(contract, targetStatus, actorUserId, reason,
   await contract.save({ transaction });
 
   await publishContractStatusChanged(contract, fromStatus, transaction);
+  await publishContractRenewalChange(contract, transaction);
   if (targetStatus === 'TERMINATED') {
     await publishContractTerminated(contract, transaction);
   }
@@ -745,6 +748,7 @@ async function correctContractData(contractId, payload, actorUserId, transaction
     },
     transaction
   );
+  await publishContractRenewalChange(contract, transaction);
 
   return contract;
 }

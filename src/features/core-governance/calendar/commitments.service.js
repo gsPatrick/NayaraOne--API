@@ -7,7 +7,8 @@ const { STATUS_TRANSITIONS } = require('./calendar.constants');
 const { canManageCommitment, ADMIN_ROLE } = require('./calendar.permissions');
 const { commitmentDeepLink } = require('./calendar.deeplinks');
 const { severityFor } = require('./calendar.severity');
-const { upsertItem } = require('./calendar.projection.store');
+const { applyMapped } = require('./projector/projector.apply');
+const { transition } = require('./sources/draft');
 const { parseCreate, parsePatch } = require('./commitments.input');
 const repository = require('./commitments.repository');
 const { UUID } = require('./calendar.query');
@@ -20,7 +21,7 @@ const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, 
 /** Projeta o compromisso no calendário (origem COMMITMENT) na MESMA transação: criar/alterar = UPSERT; DONE/CANCELLED fecham o item. */
 async function project(tenant, commitment, transaction) {
   const severityMap = settings.parseSeverityMap(await read(settings.SEVERITY_KEY, tenant, transaction));
-  return upsertItem(tenant, {
+  const draft = {
     sourceType: 'COMMITMENT',
     sourceId: commitment.id,
     title: commitment.title,
@@ -30,7 +31,11 @@ async function project(tenant, commitment, transaction) {
     severity: severityFor('COMMITMENT', severityMap),
     status: commitment.status,
     deepLink: commitmentDeepLink(commitment.id),
-  }, transaction);
+  };
+  // Mesma regra do projetor (matriz de status, versão e calendar.item.updated só quando algo muda de verdade).
+  const event = { id: null, eventType: `governance.calendar_commitment.${commitment.status.toLowerCase()}`, occurredAt: new Date() };
+  const closing = transition('COMMITMENT', commitment.id, commitment.status, commitment.status === 'CANCELLED' ? 'SOURCE_CANCELLED' : null);
+  return applyMapped(tenant, event, { items: [draft], transitions: [closing] }, transaction);
 }
 
 async function assertOwnerIsMember(ownerUserId, tenant, transaction) {

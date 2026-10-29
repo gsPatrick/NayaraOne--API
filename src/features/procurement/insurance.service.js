@@ -17,6 +17,7 @@ const {
   Contract,
   Person,
 } = require('../../models');
+const { publishRenewalUpserted, publishRenewalCancelled } = require('./insuranceCalendarEvents.service');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
@@ -481,10 +482,11 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
   // `addDaysDateOnly` opera só em componentes UTC/string, nunca convertendo pra fuso local.
   if (policy.expiryDate) {
     const dueDate = addDaysDateOnly(policy.expiryDate, -30);
-    await InsuranceRenewalTask.create(
+    const renewalTask = await InsuranceRenewalTask.create(
       { groupId: policy.groupId, companyId: policy.companyId, policyId: policy.id, dueDate, status: 'PENDING' },
       { transaction }
     );
+    await publishRenewalUpserted(renewalTask, policy, transaction);
   }
 
   // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 11, 2026-10-05): o contrato lista
@@ -1136,6 +1138,7 @@ async function cancelPolicy(policyId, payload, actor, transaction) {
     await installment.save({ transaction });
     canceledInstallmentIds.push(installment.id);
   }
+  const pendingRenewalTasks = await InsuranceRenewalTask.findAll({ where: { policyId: policy.id, groupId: policy.groupId, companyId: policy.companyId, status: 'PENDING' }, transaction });
   const [dismissedRenewalTasks] = await InsuranceRenewalTask.update(
     { status: 'DISMISSED' },
     { where: { policyId: policy.id, groupId: policy.groupId, companyId: policy.companyId, status: 'PENDING' }, transaction }
@@ -1144,6 +1147,10 @@ async function cancelPolicy(policyId, payload, actor, transaction) {
   policy.status = 'CANCELED';
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
+  for (const renewalTask of pendingRenewalTasks) {
+    renewalTask.status = 'DISMISSED';
+    await publishRenewalCancelled(renewalTask, policy, transaction);
+  }
 
   const compensation = { canceledInstallmentIds, reversedFinancialEntryIds, paidPremiumAmount, dismissedRenewalTasks };
   await registrarAuditoria(

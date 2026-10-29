@@ -22,6 +22,12 @@ const BACKFILL_HOUR_KEY = 'governanca.calendario.varredura_hora';
 // M9-D803 (reabertura): permissão extra por tipo de item (`source_kind`) dentro de uma origem; ex.: GUARANTEE mistura fiança (jurídico) e garantia de obra.
 const KIND_PERMISSION_KEY = 'governanca.calendario.permissao_por_tipo_origem';
 
+// M9-D802: papel que recebe o alerta quando a origem não tem responsável, fontes que entram no conflito de agenda e horários dos jobs.
+const TEAM_KEY = 'governanca.calendario.papel_por_fonte';
+const CONFLICT_SOURCES_KEY = 'governanca.calendario.fontes_conflito';
+const OVERDUE_HOUR_KEY = 'governanca.calendario.alerta_vencido_hora';
+const CONFLICT_INTERVAL_KEY = 'governanca.calendario.conflito_intervalo_min';
+
 const CALENDAR_SETTING_DEFAULTS = Object.freeze({
   [SEVERITY_KEY]: 'LEGAL_DEADLINE=CRITICAL, FISCAL=CRITICAL, BILLING=WARNING, GUARANTEE=WARNING',
   [PERMISSION_KEY]: 'CRM_TASK=crm:tasks:read, VISIT=crm:visits:read, LEGAL_DEADLINE=legal:read, RENEWAL=procurement:read|legal:read, '
@@ -33,6 +39,10 @@ const CALENDAR_SETTING_DEFAULTS = Object.freeze({
   [DURATION_KEY]: 60,
   [WARRANTY_MONTHS_KEY]: 60,
   [BACKFILL_HOUR_KEY]: 6,
+  [TEAM_KEY]: 'BILLING=financeiro, FISCAL=fiscal',
+  [CONFLICT_SOURCES_KEY]: 'VISIT, COMMITMENT, MAINTENANCE',
+  [OVERDUE_HOUR_KEY]: 6,
+  [CONFLICT_INTERVAL_KEY]: 15,
 });
 
 /** Divide "A=B, C=D" em pares [chave, valor]; ignora vazios e itens sem "=". */
@@ -94,7 +104,32 @@ function validatePairs(allowedValue, label, allowedKeys = SOURCE_TYPES) {
   };
 }
 
+/** { FONTE: 'papel' } do texto "FONTE=papel, ..."; fonte fora de SOURCE_TYPES ou sem papel é ignorada. */
+function parseTeamMap(text) {
+  const map = {};
+  for (const [source, role] of parsePairs(text)) if (SOURCE_TYPES.includes(source) && role) map[source] = role;
+  return map;
+}
+
+/** Lista de tipos de origem de "A, B"; item inválido é ignorado; vazio volta ao padrão. */
+function parseSourceList(text, fallback) {
+  const list = String(typeof text === 'string' ? text : '').split(',').map((v) => v.trim().toUpperCase()).filter((v) => SOURCE_TYPES.includes(v));
+  return list.length ? list : parseSourceList(fallback, 'COMMITMENT');
+}
+
+function validateSourceList(key, value) {
+  const { govError } = require('../governance.errors');
+  const items = String(value).split(',').map((v) => v.trim().toUpperCase()).filter(Boolean);
+  if (!items.length || items.some((v) => !SOURCE_TYPES.includes(v))) {
+    throw govError(400, 'VALIDATION_ERROR', `O valor de "${key}" deve listar tipos de origem separados por vírgula, entre: ${SOURCE_TYPES.join(', ')}.`, { key, value });
+  }
+}
+
 const CALENDAR_SETTINGS_SCHEMA = {
+  [TEAM_KEY]: { type: 'string', validate: validatePairs((v) => /^[^=,]{1,60}$/.test(v), 'papel (nome do perfil)') },
+  [CONFLICT_SOURCES_KEY]: { type: 'string', validate: validateSourceList },
+  [OVERDUE_HOUR_KEY]: { type: 'integer', min: 0, max: 23 },
+  [CONFLICT_INTERVAL_KEY]: { type: 'integer', min: 1, max: 1440 },
   [SEVERITY_KEY]: { type: 'string', validate: validatePairs((v) => SEVERITIES.includes(v.toUpperCase()), 'NIVEL (INFO, WARNING ou CRITICAL)') },
   [PERMISSION_KEY]: { type: 'string', validate: validatePairs((v) => v.split('|').every((p) => /^[a-z][a-z0-9:_-]*$/i.test(p.trim()) && p.trim()), 'permissão (várias com |)') },
   [KIND_PERMISSION_KEY]: { type: 'string', validate: validatePairs((v) => v.split('|').every((p) => /^[a-z][a-z0-9:_-]*$/i.test(p.trim()) && p.trim()), 'permissão (várias com |)', SOURCE_KINDS) },
@@ -107,5 +142,6 @@ const CALENDAR_SETTINGS_SCHEMA = {
 
 module.exports = {
   SEVERITY_KEY, PERMISSION_KEY, WINDOW_DAYS_KEY, PAGE_SIZE_KEY, DURATION_KEY, WARRANTY_MONTHS_KEY, BACKFILL_HOUR_KEY, KIND_PERMISSION_KEY, SOURCE_KINDS,
+  TEAM_KEY, CONFLICT_SOURCES_KEY, OVERDUE_HOUR_KEY, CONFLICT_INTERVAL_KEY, parseTeamMap, parseSourceList,
   CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA, parsePairs, parseSeverityMap, parsePermissionMap, parseKindPermissionMap,
 };

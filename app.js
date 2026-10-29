@@ -14,6 +14,8 @@ const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob')
 const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecycleJob');
 const { startMarketingContentTypesJob } = require('./src/engines/jobs/marketingContentTypesJob');
 const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
+const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJob');
+const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
 const { startLegalGuaranteeExpiryAlertJob } = require('./src/engines/jobs/legalGuaranteeExpiryAlertJob');
@@ -155,6 +157,14 @@ if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_BACKFILL_JOB_DISABLE
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
+// Alertas do Calendário (M9-D802): itens vencidos (diário, 06:00 de Brasília) e conflito de agenda (a cada 15 min); ambos leem só calendar_items.
+if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_OVERDUE_JOB_DISABLED !== 'true') {
+  startCalendarOverdueJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_CONFLICT_JOB_DISABLED !== 'true') {
+  startCalendarConflictJob();
+}
+
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.
 if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLED !== 'true') {
   startOutboxDispatcherJob();

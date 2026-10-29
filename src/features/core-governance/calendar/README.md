@@ -23,8 +23,22 @@ Calendário unificado: uma agenda única, sem ser nova fonte de verdade. `calend
 - `calendarBackfillJob` (`src/engines/jobs`): varredura diária por empresa na hora de `governanca.calendario.varredura_hora` (padrão 6, America/Sao_Paulo) que traz os registros abertos já existentes (idempotente), fecha `PROJECT_WARRANTY` vencido lendo só `calendar_items` e cancela (`SOURCE_NOT_OPEN`) item aberto cuja origem não está mais aberta. Desligar no processo: `CALENDAR_BACKFILL_JOB_DISABLED=true`.
 - Parâmetro `governanca.calendario.garantia_obra_meses` (60): meses de garantia somados à data da entrega para o `warrantyEndsAt`.
 
+## Projetor por eventos (M9-D802)
+- `projector/calendar.projector.js` (`projectEvent`) é registrado no outbox para todos os eventos de origem mapeados (`projector/projector.consumer.js`, ligado em `index.js`). Idempotência dupla: inbox por `event_id` (consumidor `governance.calendar.projector`) e UPSERT por `(company_id, source_type, source_id)`. Roda como savepoint de nome único (`engines/events/savepoint.js`): falha em qualquer passo desfaz item, evento de saída, auditoria e inbox, e o evento segue pendente.
+- Ordem e versão: evento com `occurredAt` anterior ao gravado (`last_event_occurred_at`) é ignorado (inbox `IGNORED_STALE`). Empate: prevalece DONE, depois CANCELLED, depois OPEN. Transição fora da matriz de §3.2.1 é `IGNORED_TRANSITION` (regras puras em `projector/projector.state.js`; aplicação e gravação em `projector/projector.apply.js`).
+- Mapa de eventos por fonte em `sources/` (`crm.source.js`: CRM_TASK e VISIT; `legal.source.js`: LEGAL_DEADLINE e RENEWAL; `finance.source.js`: BILLING e FISCAL; `maintenance.source.js`: MAINTENANCE; `construction.source.js` e `guarantee.source.js` de M9-D803). Cada módulo de origem publica o seu evento na própria transação (`calendar.publisher.js`).
+- Evento de saída `calendar.item.updated` `{itemId, sourceType, sourceId, changes:{campo:{antes,apos}}}`, chave `calendar.item.updated:<itemId>:<projection_version>`: uma vez por mudança efetiva (projetor, compromissos avulsos e fechamentos da varredura de M9-D803). Replay não muda a versão.
+- Evento de empresa diferente da sessão ou com `companyId` divergente no payload: descartado e auditado (`GOV_CALENDAR_TENANT_MISMATCH`). Tipo sem mapeamento: inbox `DEAD` com `GOV_CALENDAR_EVENT_UNKNOWN`. Módulo desligado: ignora.
+- Novas operações de origem criadas para fechar o item na origem: `PATCH /tasks/:id` (tarefa do CRM), `PATCH /maintenance-orders/:id/schedule` (reagendar manutenção) e `POST /procurement/insurance-renewal-tasks/:id/complete` (renovação de apólice). Não existe rota de conclusão no calendário.
+
+## Alertas (M9-D802 §3.5)
+Leem SÓ `governance.calendar_items` (decisão K9). Chave de deduplicação em `governance.calendar_alert_log` (UNIQUE por empresa).
+- Vencido (`calendarOverdueJob`, diário na hora `governanca.calendario.alerta_vencido_hora`, padrão 06:00 Brasília): `Notification` IN_APP ao responsável ou, sem usuário, a cada usuário ativo do perfil de `owner_team`; uma vez por item e por dia (`calendar.overdue:<item>:<AAAA-MM-DD>`).
+- Conflito (`calendarConflictJob`, a cada `governanca.calendario.conflito_intervalo_min`, padrão 15): itens OPEN das fontes `governanca.calendario.fontes_conflito` (VISIT, COMMITMENT, MAINTENANCE) do mesmo responsável com janelas que se sobrepõem em algum minuto (11:00-11:00 não conflita); janela = `end_at` ou início + `duracao_padrao_min`; um alerta por par e por dia (`calendar.conflict:<menorId>:<maiorId>:<AAAA-MM-DD>`).
+- Desligar no processo: `CALENDAR_OVERDUE_JOB_DISABLED=true`, `CALENDAR_CONFLICT_JOB_DISABLED=true`.
+
 ## Jobs e horários
-`calendarBackfillJob` (M9-D803, diário na hora configurada, padrão 06:00 America/Sao_Paulo). O job diário de vencidos e o de conflito de agenda são do M9-D802.
+`calendarBackfillJob` (M9-D803, diário na hora configurada, padrão 06:00 America/Sao_Paulo), `calendarOverdueJob` e `calendarConflictJob` (M9-D802).
 
 ## Parâmetros
 Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametros.csv`):
@@ -34,6 +48,8 @@ Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametr
 - `governanca.calendario.permissao_por_tipo_origem` (`LEGAL_GUARANTEE=legal:read, WARRANTY_CASE=construction:read, PROJECT_WARRANTY=construction:read`): permissão extra por tipo de item (`source_kind`) dentro da origem; a origem GUARANTEE mistura fiança (jurídico) e garantia de obra (obras), e quem só tem uma das permissões não vê o tipo da outra. Tipo fora da lista segue só a regra da origem.
 - `governanca.calendario.janela_padrao_dias` (30) e `governanca.calendario.tamanho_pagina_padrao` (50): consulta sem filtros.
 - `governanca.calendario.duracao_padrao_min` (60): fim de compromisso sem `endsAt`; M9-D802 usa o mesmo valor para visita e manutenção.
+- `governanca.calendario.papel_por_fonte` (`BILLING=financeiro, FISCAL=fiscal`): perfil que recebe o aviso quando a origem não tem responsável (gravado em `owner_team`).
+- `governanca.calendario.fontes_conflito` (`VISIT, COMMITMENT, MAINTENANCE`), `governanca.calendario.alerta_vencido_hora` (6) e `governanca.calendario.conflito_intervalo_min` (15).
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_`.

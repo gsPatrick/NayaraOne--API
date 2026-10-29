@@ -3,6 +3,10 @@
 const { Visit, Property, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { publishVisitScheduled, publishVisitCancelled, visitPayload } = require('./crmCalendarEvents.service');
+
+const CLOSED_WITHOUT_VISIT = ['CANCELED', 'NO_SHOW'];
+const OPEN_STATUSES = ['SCHEDULED', 'CONFIRMED'];
 
 const VISIT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'DONE', 'CANCELED', 'NO_SHOW'];
 
@@ -85,11 +89,15 @@ async function createVisit(payload, actorUserId, transaction) {
         aggregateType: 'Visit',
         aggregateId: visit.id,
         eventType: 'crm.visit.completed',
-        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId },
+        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId, ...visitPayload(visit, property.title) },
         idempotencyKey: `crm.visit.completed:${visit.id}`,
       },
       transaction
     );
+  } else if (OPEN_STATUSES.includes(normalizedStatus)) {
+    await publishVisitScheduled(visit, property.title, false, transaction);
+  } else if (CLOSED_WITHOUT_VISIT.includes(normalizedStatus)) {
+    await publishVisitCancelled(visit, property.title, transaction);
   }
 
   return visit;
@@ -113,6 +121,8 @@ async function getVisit(id, transaction) {
 async function updateVisit(id, payload, actorUserId, transaction) {
   const visit = await getVisit(id, transaction);
   const previousStatus = visit.status;
+  const previousScheduledAt = visit.scheduledAt ? new Date(visit.scheduledAt).getTime() : null;
+  const previousAgent = visit.agentUserId || null;
   const { scheduledAt, status, feedback, agentUserId } = payload;
   if (scheduledAt !== undefined) visit.scheduledAt = scheduledAt;
   if (status !== undefined) {
@@ -140,14 +150,31 @@ async function updateVisit(id, payload, actorUserId, transaction) {
         aggregateType: 'Visit',
         aggregateId: visit.id,
         eventType: 'crm.visit.completed',
-        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId },
+        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId, ...visitPayload(visit, await propertyTitleOf(visit, transaction)) },
         idempotencyKey: `crm.visit.completed:${visit.id}`,
       },
       transaction
     );
+  } else if (visit.status !== 'DONE') {
+    await publishVisitCalendarChange(visit, { previousStatus, previousScheduledAt, previousAgent }, transaction);
   }
 
   return visit;
+}
+
+async function propertyTitleOf(visit, transaction) {
+  const property = await Property.findByPk(visit.propertyId, { transaction });
+  return property ? property.title : null;
+}
+
+/** M9-D802: o que mudou na visita vira o evento do Calendário (cancelada, reagendada, agendada de novo); sem mudança relevante não publica. */
+async function publishVisitCalendarChange(visit, previous, transaction) {
+  const rescheduled = (visit.scheduledAt ? new Date(visit.scheduledAt).getTime() : null) !== previous.previousScheduledAt || (visit.agentUserId || null) !== previous.previousAgent;
+  if (CLOSED_WITHOUT_VISIT.includes(visit.status)) {
+    if (!CLOSED_WITHOUT_VISIT.includes(previous.previousStatus)) await publishVisitCancelled(visit, await propertyTitleOf(visit, transaction), transaction);
+  } else if (OPEN_STATUSES.includes(visit.status) && (!OPEN_STATUSES.includes(previous.previousStatus) || rescheduled)) {
+    await publishVisitScheduled(visit, await propertyTitleOf(visit, transaction), OPEN_STATUSES.includes(previous.previousStatus), transaction);
+  }
 }
 
 async function deleteVisit(id, actorUserId, transaction) {
@@ -155,6 +182,7 @@ async function deleteVisit(id, actorUserId, transaction) {
   visit.deletedBy = actorUserId || null;
   await visit.save({ transaction });
   await visit.destroy({ transaction });
+  await publishVisitCancelled(visit, await propertyTitleOf(visit, transaction), transaction);
   return { id };
 }
 

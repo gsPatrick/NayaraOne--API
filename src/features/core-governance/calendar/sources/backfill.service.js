@@ -4,6 +4,7 @@ const { KIND, CANCEL, SOURCE_KINDS } = require('./sources.constants');
 const { getSetting } = require('../../../../features/settings/settings.service');
 const settings = require('../calendar.settings');
 const { upsertItem, closeExpiredItems, cancelStaleItems } = require('../calendar.projection.store');
+const { announceStatusChange } = require('../projector/projector.apply');
 const queries = require('./backfill.queries');
 const construction = require('./construction.source');
 const guarantee = require('./guarantee.source');
@@ -62,6 +63,8 @@ async function runBackfill(tenant, transaction, now = new Date()) {
   const expired = await closeExpiredItems(tenant, KIND.PROJECT_WARRANTY, now, transaction);
   const keep = [...items.map((item) => item.sourceId), ...keepWarranty];
   const cancelled = await cancelStaleItems(tenant, STALE_KINDS, keep, STALE_REASON, transaction);
+  for (const row of expired) await announceStatusChange(tenant, row, 'DONE', transaction);
+  for (const row of cancelled) await announceStatusChange(tenant, row, 'CANCELLED', transaction);
   return { upserted: items.length, warrantyClosed: expired.length, cancelled: cancelled.length };
 }
 

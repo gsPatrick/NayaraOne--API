@@ -525,6 +525,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `DELETE` | `/api/v1/people/:id` | `people:delete` | não |
 | `GET` | `/api/v1/people/:id` | `people:read` | não |
 | `PATCH` | `/api/v1/people/:id` | `people:update` | não |
+| `PATCH` | `/api/v1/maintenance-orders/:id/schedule` | `inventory:update` | não |
 | `GET` | `/api/v1/people/duplicates` | `people:read` | não |
 | `GET` | `/api/v1/people` | `people:read` | não |
 | `POST` | `/api/v1/people` | `people:create` | não |
@@ -555,6 +556,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/procurement/purchase-requests/:id/quotations` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/purchase-requests/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/purchase-requests` | `procurement:read` | não |
+| `PATCH` | `/api/v1/tasks/:id` | `crm:tasks:create` | não |
 | `POST` | `/api/v1/procurement/purchase-requests` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/quotations/:id/compare` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/quotations/:id/offers` | `procurement:create` | não |
@@ -596,6 +598,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/radar` | `radar:create` | não |
 | `DELETE` | `/api/v1/roles/:id` | `roles:delete` | sim |
 | `GET` | `/api/v1/roles/:id` | `roles:read` | não |
+| `POST` | `/api/v1/procurement/insurance-renewal-tasks/:id/complete` | `procurement:approve` | não |
 | `PATCH` | `/api/v1/roles/:id` | `roles:update` | sim |
 | `GET` | `/api/v1/roles` | `roles:read` | não |
 | `POST` | `/api/v1/roles` | `roles:create` | sim |
