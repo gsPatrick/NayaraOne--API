@@ -70,7 +70,7 @@ async function seedMetric(t, code, opts = {}) {
     const base = {
       metricId: ids.metricId, metricVersionId: ids.metricVersionId, groupId: t.groupId, companyId: t.companyId, scopeType: 'COMPANY', scopeId: t.companyId,
       periodStart: '2026-10-01', periodEnd: AS_OF, asOfDate: AS_OF, status: result.status,
-      sourceSnapshotAt: opts.never ? null : opts.stale ? '2026-10-26T12:00:00Z' : NOW.toISOString(), sourceRefs, calcHash: calcHash({ code, result }),
+      sourceSnapshotAt: opts.never ? null : opts.stale ? (typeof opts.stale === 'string' ? opts.stale : '2026-10-26T12:00:00Z') : NOW.toISOString(), sourceRefs, calcHash: calcHash({ code, result }),
     };
     await store.recordSnapshot({ ...base, dimensionKey: '', valueNumeric: result.value }, tx);
     for (const d of result.dimensions || []) await store.recordSnapshot({ ...base, dimensionKey: d.key, valueNumeric: d.value }, tx);

@@ -12,6 +12,7 @@ const { openDashboard, publishDashboardVersion } = require('./dashboard.service'
 const { resolveQueryPeriod } = require('../metrics/query.period');
 const { DASHBOARD_PARAMS, assertKnownParams } = require('../metrics/query.params');
 const { resolveCompanyScope } = require('../security');
+const { applyHealthThresholds } = require('./health/health.apply');
 
 const ctxOf = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId, actorUserId: req.auth.userId, permissions: req.auth.permissions });
 
@@ -24,6 +25,10 @@ function registerDashboardRoutes(router) {
       return openDashboard(ctxOf(req), req.params.code, { ip: req.ip, route: 'GET /analytics/dashboards/:code', asOfDate, period, block: typeof req.query.bloco === 'string' ? req.query.bloco : null }, tx);
     });
     return success(res, { data });
+  }));
+  router.post('/analytics/dashboards/health/thresholds', requireAnalyticsPermission(P.MANAGE), catchAsync(async (req, res) => { // M9-D686: limiar mudou = nova versão do painel
+    const data = await req.withTenantTransaction((tx) => applyHealthThresholds(ctxOf(req), tx));
+    return success(res, { statusCode: data.changed ? 201 : 200, data });
   }));
   router.post('/analytics/dashboards', requireAnalyticsPermission(P.MANAGE), catchAsync(async (req, res) => {
     const data = await req.withTenantTransaction((tx) => publishDashboardVersion(ctxOf(req), req.body, tx));

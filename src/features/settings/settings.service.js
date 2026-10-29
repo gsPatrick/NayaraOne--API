@@ -74,6 +74,7 @@ const { RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA } = require('../../features/analyti
 const { RENTAL_CARE_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoAtendimentoKpi.settings');
 const { COMMAND_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/commandEvents.settings');
 const { CENTRO_SETTINGS_SCHEMA } = require('../analytics/centroSettings'); // M9-D685
+const { HEALTH_SETTINGS_SCHEMA: SAUDE_GERAL_SETTINGS_SCHEMA } = require('../analytics/healthSettings'); // M9-D686
 const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
 const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
 const { IA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/iaKpi.settings');
@@ -323,6 +324,7 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D710 — fatos do dia do Centro de Comando: janela em horas, valor relevante de pagamento e owner dos três indicadores.
   ...COMMAND_SETTINGS_SCHEMA,
   ...CENTRO_SETTINGS_SCHEMA, // M9-D685
+  ...SAUDE_GERAL_SETTINGS_SCHEMA, // M9-D686
   // Marco 9, M9-D628 — read models de Tecnologia e IA: histórico em dias, sondas ligadas, intervalo das sondas e retenção dos sinais técnicos.
   ...TECH_SETTINGS_SCHEMA,
   // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.

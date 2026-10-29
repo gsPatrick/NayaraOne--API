@@ -19,11 +19,13 @@ const { composeWidgets, toWidgetView } = require('./dashboard.compose');
 const clock = require('../metrics/clock');
 const { defaultPeriodOf, periodView } = require('../metrics/query.period');
 const { decorateCommandCenter } = require('./command/commandCenter.service');
+const { decorateHealth } = require('./health/health.service');
 
 const notFound = () => AppError.notFound('Painel não encontrado.', 'ANALYTICS_DASHBOARD_NOT_FOUND');
 const CODE_RE = /^[a-z][a-z0-9_]*$/;
 const PUBLISH_SCOPES = ['COMPANY', 'GROUP'];
 const COMMAND_CENTER = 'command_center';
+const HEALTH = 'health';
 
 function toView(dash, widgets) {
   return {
@@ -38,6 +40,7 @@ async function toOpenView(ctx, dash, asOfDate, period, transaction, extra = {}) 
   const { widgets } = await store.getDashboardWithWidgets(dash.id, transaction);
   const composed = await composeWidgets(ctx, widgets, asOfDate, transaction, period);
   const view = { ...toView(dash, []), widgets: composed.widgets, asOfDate, period: periodView(period, asOfDate), generatedAt: clock.now().toISOString(), quality: composed.quality };
+  if (dash.dashboard_code === HEALTH) return { ...view, ...await decorateHealth(ctx, composed, { asOfDate }, transaction) }; // M9-D686: uma linha por área com o semáforo
   if (dash.dashboard_code !== COMMAND_CENTER) return view;
   return { ...view, ...await decorateCommandCenter(ctx, composed, { asOfDate, route: extra.route, ip: extra.ip, block: extra.block }, transaction) }; // M9-D685: os 6 blocos e o briefing
 }
