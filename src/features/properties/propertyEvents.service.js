@@ -87,7 +87,28 @@ async function publishPropertyUpdated(property, transaction) {
   );
 }
 
+// M9-D409: imóvel vendido ou alugado (availabilityStatus passou a SOLD / RENTED). O payload não leva comprador, locatário nem valor.
+function publishPropertyAvailabilityEvent(eventType, property, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: property.groupId,
+      companyId: property.companyId,
+      aggregateType: 'Property',
+      aggregateId: property.id,
+      eventType,
+      payload: { id: property.id, availabilityStatus: property.availabilityStatus },
+      idempotencyKey: `${eventType}:${property.id}:${Date.now()}`,
+    },
+    transaction
+  );
+}
+
+const publishPropertySold = (property, transaction) => publishPropertyAvailabilityEvent('property.sold', property, transaction);
+const publishPropertyRented = (property, transaction) => publishPropertyAvailabilityEvent('property.rented', property, transaction);
+
 module.exports = {
+  publishPropertySold,
+  publishPropertyRented,
   publishPropertyCreated,
   publishPropertyOfferCreated,
   publishPropertyPublished,

@@ -18,6 +18,9 @@ const sameTx = (t) => (fn) => fn(t);
 async function seedProperty(t, tenant, price = 780000) {
   const prop = await fx.makeProperty(t, tenant);
   await fx.makeSaleOffer(t, tenant, prop.id, price);
+  // M9-D409: NEW_PROPERTY exige ao menos uma foto autorizada.
+  await fx.q(t, `INSERT INTO real_estate.property_media (id, group_id, company_id, property_id, media_type, storage_key, position, quality_status)
+    VALUES (gen_random_uuid(), :g, :c, :p, 'PHOTO', :k, 1, 'APPROVED')`, { g: tenant.groupId, c: tenant.companyId, p: prop.id, k: `qa-m9/${uid()}` });
   return prop;
 }
 

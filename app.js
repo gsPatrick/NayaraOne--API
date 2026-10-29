@@ -12,6 +12,7 @@ const { requestLoggerMiddleware, metricsRecorderMiddleware } = require('./src/mi
 const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecycleJob');
+const { startMarketingContentTypesJob } = require('./src/engines/jobs/marketingContentTypesJob');
 const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
 const { startOutboxDispatcherJob } = require('./src/engines/jobs/outboxDispatcherJob');
 const { startLegalDeadlineAlertJob } = require('./src/engines/jobs/legalDeadlineAlertJob');
@@ -136,6 +137,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !
 // Ciclo de vida das campanhas de Marketing (M9-D412): inicia, encerra e dispara os steps, a cada minuto.
 if (process.env.NODE_ENV !== 'test' && process.env.CAMPAIGN_LIFECYCLE_JOB_DISABLED !== 'true') {
   startCampaignLifecycleJob();
+}
+
+// Rascunhos dos tipos de conteúdo do Marketing (M9-D409): aniversário diário (08:00 de Brasília) e marco público das obras.
+if (process.env.NODE_ENV !== 'test' && process.env.MARKETING_CONTENT_TYPES_JOB_DISABLED !== 'true') {
+  startMarketingContentTypesJob();
 }
 
 // Varredura diária do Calendário nas fontes de obras e garantias (M9-D803), na hora configurada (padrão 06:00 de Brasília).

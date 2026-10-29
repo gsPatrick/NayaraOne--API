@@ -9,9 +9,9 @@ const { contentInvalid } = require('./pipeline.errors');
  * M9-D406 funções 1 e 2 — fatos e rascunho.
  * buildFactsFromReadModel lê SOMENTE o PublicPropertyReadModel (M9-D403, via currentSource) e devolve { facts, factsHash, sourceVersion }.
  */
-async function buildFactsFromReadModel(sourceType, sourceId, tenant, transaction) {
+async function buildFactsFromReadModel(sourceType, sourceId, tenant, transaction, contentType = null) {
   if (!sourceType || !sourceId) return { facts: {}, factsHash: null, sourceVersion: null };
-  const current = await loadCurrentSource(sourceType, sourceId, tenant, transaction);
+  const current = await loadCurrentSource(sourceType, sourceId, tenant, transaction, contentType);
   if (!current) throw contentInvalid('Tipo de fonte não suportado para conteúdo.', { sourceType });
   return { facts: current.facts, factsHash: hashFacts(current.facts), sourceVersion: current.version };
 }

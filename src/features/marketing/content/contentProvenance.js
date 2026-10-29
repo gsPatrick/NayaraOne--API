@@ -26,7 +26,7 @@ async function sourceFromProperty(propertyId, tenant, transaction) {
 
 /**
  * Cria o item e a versão 1 na mesma transação, ligando a versão corrente (a FK dela é adiada até o fim da transação). `extra`
- * (campaignId, updatesContentItemId, template, autopublishClass) é opcional e repassado como veio.
+ * (campaignId, updatesContentItemId, template, autopublishClass, triggerEventId) é opcional e repassado como veio.
  */
 async function createContentWithProvenance(input, tenant, actorUserId, transaction) {
   const { type, title, source, bodyJson, generation, extra = {} } = input;
@@ -36,15 +36,15 @@ async function createContentWithProvenance(input, tenant, actorUserId, transacti
 
   const [item] = await run(
     `INSERT INTO marketing.content_items (group_id, company_id, type, title, status, source_entity_type, source_entity_id, source_version,
-        nay_run_id, campaign_id, updates_content_item_id, autopublish_class, created_by, updated_by)
+        nay_run_id, campaign_id, updates_content_item_id, autopublish_class, trigger_event_id, created_by, updated_by)
      VALUES (:groupId, :companyId, :type, :title, 'DRAFT', :sourceType, :sourceId, :sourceVersion, :nayRunId, :campaignId, :updatesId,
-        :autopublish, :actor, :actor) RETURNING *`,
+        :autopublish, :triggerEventId, :actor, :actor) RETURNING *`,
     {
       groupId: tenant.groupId, companyId: tenant.companyId, type, title,
       sourceType: source ? source.entityType : null, sourceId: source ? source.entityId : null,
       sourceVersion: source && source.version !== undefined ? source.version : null,
       nayRunId, campaignId: extra.campaignId || null, updatesId: extra.updatesContentItemId || null,
-      autopublish: extra.autopublishClass || null, actor: actorUserId || null,
+      autopublish: extra.autopublishClass || null, triggerEventId: extra.triggerEventId || null, actor: actorUserId || null,
     }
   );
   const [version] = await run(

@@ -113,7 +113,7 @@ test('rotas_de_conteudo_percorrem_o_pipeline_recusam_pulo_e_isolam_empresas', { 
   assert.equal(unknown.body.error.code, 'MKT_VALIDATION');
 
   // NAY indisponível: 503, e o conteúdo FICA em DRAFT para a redação manual (o id volta nos detalhes).
-  const nayDown = await call('redator', 'POST', '/marketing/content', { type: 'INSTITUTIONAL', title: 'QA-M9 D406 sem NAY' });
+  const nayDown = await call('redator', 'POST', '/marketing/content', { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D406 sem NAY', tema: 'Financiamento', fontes: ['https://exemplo.test/fonte'] });
   assert.equal(nayDown.status, 503, JSON.stringify(nayDown.body));
   assert.equal(nayDown.body.error.code, 'MKT_NAY_UNAVAILABLE');
   const draftId = nayDown.body.error.details.contentItemId;

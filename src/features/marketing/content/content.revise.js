@@ -35,7 +35,7 @@ async function draftText({ input, facts, type, transaction }) {
  */
 async function reviseDraft({ tenant, actor, item, version, input }, transaction) {
   if (!REVISABLE.includes(item.status)) throw contentInvalid('Só é possível revisar conteúdo em rascunho ou com validação reprovada.', { status: item.status });
-  const source = item.source_entity_type ? await buildFactsFromReadModel(item.source_entity_type, item.source_entity_id, tenant, transaction) : null;
+  const source = item.source_entity_type ? await buildFactsFromReadModel(item.source_entity_type, item.source_entity_id, tenant, transaction, item.type) : null;
   const facts = source ? source.facts : (version.facts_snapshot_json || {});
   const drafted = await draftText({ input, facts, type: item.type, transaction });
   if (drafted.nayError && input.texto === undefined && !item.source_entity_type) throw drafted.nayError;

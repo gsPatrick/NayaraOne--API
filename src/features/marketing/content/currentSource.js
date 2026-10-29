@@ -3,16 +3,19 @@
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const { loadPublicProperty, loadPublicConstruction } = require('./publicReadModel');
+const { projectPropertyFacts, loadPersonFacts } = require('./types/facts');
 
 /**
  * M9-D405 — leitura da fonte AGORA (sempre pelos read models públicos da M9-D403, nunca pelas tabelas de origem) e leitura do que o
- * item guardou (versão da fonte e hash dos fatos da versão corrente).
+ * item guardou (versão da fonte e hash dos fatos da versão corrente). `contentType` (M9-D409) projeta os fatos do tipo: SOLD_RENTED sem
+ * valores e a pessoa (aniversário e pós-venda) pelos fatos de relacionamento.
  */
-async function loadCurrentSource(entityType, entityId, tenant, transaction) {
+async function loadCurrentSource(entityType, entityId, tenant, transaction, contentType = null) {
   if (entityType === 'property') {
     const model = await loadPublicProperty({ propertyId: entityId }, tenant, transaction);
-    return { version: model.sourceVersion, facts: model.payload };
+    return { version: model.sourceVersion, facts: await projectPropertyFacts(contentType, model.payload, entityId, tenant, transaction) };
   }
+  if (entityType === 'person') return loadPersonFacts(contentType, entityId, tenant, transaction);
   if (entityType === 'construction') {
     const model = await loadPublicConstruction({ projectId: entityId }, tenant, transaction);
     return { version: null, facts: model.payload };

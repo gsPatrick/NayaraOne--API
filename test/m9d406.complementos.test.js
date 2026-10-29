@@ -44,10 +44,13 @@ test('compliance_redige_dado_pessoal_em_nova_versao_e_registra_o_que_removeu', a
 
 test('autopublicacao_so_por_classe_registrada_e_marca_approved_by_do_sistema', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const humano = await run(t, { type: 'SOLD_RENTED', title: 'QA-M9 sem classe', texto: 'Vendido.' });
+    const sold = await fx.seedProperty(t, tenant); // M9-D409: SOLD_RENTED nasce de um imóvel vendido
+    await fx.q(t, "UPDATE real_estate.properties SET availability_status = 'SOLD' WHERE id = :p", { p: sold.id });
+    const fonte = { sourceEntityType: 'property', sourceEntityId: sold.id };
+    const humano = await run(t, { type: 'SOLD_RENTED', title: 'QA-M9 sem classe', texto: 'Vendido.', ...fonte });
     assert.equal(humano.content.status, 'PENDING_APPROVAL');
     policy.registerApprovalPolicy(async () => ({ autopublish: true, classId: 'SOLD_RENTED+SITE', channels: ['SITE'] }));
-    const auto = await run(t, { type: 'SOLD_RENTED', title: 'QA-M9 com classe', texto: 'Vendido.' });
+    const auto = await run(t, { type: 'SOLD_RENTED', title: 'QA-M9 com classe', texto: 'Vendido.', ...fonte });
     assert.equal(auto.content.status, 'APPROVED');
     assert.equal(auto.content.currentVersion.approvedBy, 'SYSTEM_AUTOPUBLISH:SOLD_RENTED+SITE');
     assert.match(auto.content.currentVersion.approvedHash, /^[0-9a-f]{64}$/);
@@ -95,7 +98,7 @@ test('conteudo_de_outra_empresa_nao_aparece_nem_aprova', async () => {
 test('corpo_das_rotas_recusa_campo_desconhecido_e_dado_invalido', () => {
   const bad = (fn, body) => assert.throws(() => fn(body), (e) => e.statusCode === 400 && e.code === 'MKT_VALIDATION');
   bad(parseCreateBody, { type: 'NEW_PROPERTY', sourceEntityType: 'property', sourceEntityId: fx.uid(), status: 'APPROVED' });
-  bad(parseCreateBody, { type: 'INVENTADO', title: 'x' });
+  assert.throws(() => parseCreateBody({ type: 'INVENTADO', title: 'x' }), (e) => e.statusCode === 400 && e.code === 'MKT_CONTENT_TYPE_INVALID'); // M9-D409
   bad(parseCreateBody, { type: 'NEW_PROPERTY', sourceEntityType: 'property' });
   bad(parseCreateBody, { type: 'INSTITUTIONAL', title: 'x', texto: '   ' });
   bad(parseScheduleBody, { channels: ['SITE'], when: 'x', jobs: [] });

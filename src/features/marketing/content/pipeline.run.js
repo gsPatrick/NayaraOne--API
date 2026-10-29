@@ -7,6 +7,7 @@ const { brandingStep } = require('./step.branding');
 const { complianceStep } = require('./step.compliance');
 const { approvalStep } = require('./step.approval');
 const { prepareSchedule, scheduleStep } = require('./step.schedule');
+const { getDefinition, assertChannelsAllowed } = require('./types/validate');
 
 /** Os passos do pipeline, cada um em UMA transação do chamador (o executeStep trava o item e é idempotente). */
 const runFactualCheck = (ctx, t) => executeStep('factual', { ...ctx, input: null }, t, factualStep);
@@ -20,6 +21,8 @@ const requestApprovalIfRequired = (ctx, t) => executeStep('approval', { ...ctx, 
 /** schedulePublication(contentItem, channels, when) — Guia §6, função 7. Valida antecedência antes de qualquer escrita. */
 async function schedulePublication(ctx, t) {
   const prepared = await prepareSchedule(ctx.tenant, { channels: ctx.channels, when: ctx.when }, t, ctx.now);
+  const item = await repo.lockItem(ctx.itemId, t);
+  if (item) assertChannelsAllowed(getDefinition(item.type), prepared.channels); // M9-D409: canal permitido para o tipo
   const input = { channels: prepared.channels, when: prepared.when.toISOString() };
   const result = await executeStep('schedule', { ...ctx, input }, t, (step) => scheduleStep(step, prepared));
   if (result.replay && result.versionId) result.jobs = (await repo.listJobs(result.versionId, t)).map((j) => ({ id: j.id, channel: j.channel, status: j.status, replay: true }));

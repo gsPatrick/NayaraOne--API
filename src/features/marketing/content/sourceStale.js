@@ -19,7 +19,7 @@ const PRE_PUBLISHING_STATUSES = Object.freeze([
 async function currentSourceOf(item, tenant, transaction) {
   if (!item.source_entity_type || !item.source_entity_id) return null;
   try {
-    return await loadCurrentSource(item.source_entity_type, item.source_entity_id, tenant, transaction);
+    return await loadCurrentSource(item.source_entity_type, item.source_entity_id, tenant, transaction, item.type);
   } catch (err) {
     if (err.code === 'MKT_SOURCE_NOT_FOUND') return null; // fonte retirada do público: não há "nova versão" para comparar
     throw err;

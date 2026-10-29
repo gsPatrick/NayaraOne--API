@@ -3,7 +3,7 @@
 const { Op } = require('sequelize');
 const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { publishPropertyCreated, publishPropertyUpdated } = require('./propertyEvents.service');
+const { publishPropertyCreated, publishPropertyUpdated, publishPropertyPublished, publishPropertySold, publishPropertyRented } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 
@@ -141,6 +141,7 @@ async function createProperty(payload, actorUserId, transaction) {
   );
 
   await publishPropertyCreated(property, transaction);
+  if (property.publicationStatus === 'PUBLISHED') await publishPropertyPublished(property, transaction); // M9-D409
 
   await registrarAuditoria(
     {
@@ -342,6 +343,12 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
   property.updatedBy = actorUserId || null;
   await property.save({ transaction });
   await publishPropertyUpdated(property, transaction);
+  // M9-D409: as transições que geram rascunho de Marketing (publicado, vendido, alugado) saem como evento próprio.
+  if (property.publicationStatus === 'PUBLISHED' && beforeJson.publicationStatus !== 'PUBLISHED') await publishPropertyPublished(property, transaction);
+  if (property.availabilityStatus !== beforeJson.availabilityStatus) {
+    if (property.availabilityStatus === 'SOLD') await publishPropertySold(property, transaction);
+    if (property.availabilityStatus === 'RENTED') await publishPropertyRented(property, transaction);
+  }
 
   await registrarAuditoria(
     {

@@ -15,7 +15,7 @@ const entry = (aggregateType, aggregateField, producer, required, fields, keyFie
 const EVENT_CATALOG = Object.freeze({
   'marketing.content.created': entry('MarketingContent', 'contentId', 'M9-D406',
     ['contentId', 'type', 'sourceEntity', 'versionNo', 'createdBy'],
-    { contentId: 'uuid', type: 'code', sourceEntity: 'ref', versionNo: 'int', createdBy: 'uuid' }, ['versionNo']),
+    { contentId: 'uuid', type: 'code', sourceEntity: 'ref', versionNo: 'int', createdBy: 'nullableUuid' }, ['versionNo']),
   'marketing.content.approved': entry('MarketingContent', 'contentId', 'M9-D408',
     ['contentId', 'versionNo', 'approvedBy', 'autopublished'],
     { contentId: 'uuid', versionNo: 'int', approvedBy: 'uuid', autopublished: 'boolean' }, ['versionNo']),
@@ -36,7 +36,7 @@ const EVENT_CATALOG = Object.freeze({
   'automation.run.blocked': entry('AutomationRun', 'runId', 'M9-D414',
     ['runId', 'blockedReason'], { runId: 'uuid', blockedReason: 'code' }),
   'customer.opted_out': entry('Person', 'personId', 'M9-D419',
-    ['personId', 'channel', 'purpose', 'source'], { personId: 'uuid', channel: 'code', purpose: 'code', source: 'code' }, ['channel', 'purpose']),
+    ['personId', 'channel', 'purpose', 'source'], { personId: 'uuid', channel: 'code', purpose: 'code', source: 'code', occurredAt: 'iso' }, ['channel', 'purpose']),
   'review.requested': entry('ReviewRequest', 'reviewRequestId', 'M9-D424',
     ['reviewRequestId', 'personId', 'channel'], { reviewRequestId: 'uuid', personId: 'uuid', channel: 'code' }),
   'attribution.recorded': entry('AttributionEvent', 'eventId', 'M9-D431',

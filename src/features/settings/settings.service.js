@@ -12,6 +12,7 @@ const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
 const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../features/marketing/content/publicFields.settings');
 const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/template.settings');
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
+const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
@@ -135,6 +136,8 @@ const SETTINGS_SCHEMA = {
   ...CAMPAIGN_SETTINGS_SCHEMA,
   // Marco 9, M9-D406 — antecedência mínima do agendamento de conteúdo do Marketing.
   ...PIPELINE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D409 — tipos de conteúdo: hora do aniversário, casas do percentual, fotos mínimas, tipos com rascunho automático, finalidade do pós-venda e varredura de obras.
+  ...TYPES_SETTINGS_SCHEMA,
   // Marco 9, M9-D407 — validador factual: tolerância de área, dicionário de características e telefones da empresa.
   ...FACTUAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o

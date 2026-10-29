@@ -28,6 +28,7 @@ function isSummary(v) {
 /** Validadores de tipo de campo; cada um recebe o valor e devolve boolean. */
 const CHECKS = Object.freeze({
   uuid: (v) => typeof v === 'string' && UUID.test(v),
+  nullableUuid: (v) => v === null || (typeof v === 'string' && UUID.test(v)), // M9-D409: rascunho de sistema (gatilho) não tem pessoa autora
   int: isInt,
   code: isCode,
   nullableCode: (v) => v === null || isCode(v),

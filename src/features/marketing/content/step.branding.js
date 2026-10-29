@@ -3,6 +3,7 @@
 const repo = require('./pipeline.repository');
 const { sha256, canonicalJson } = require('./sourceStamp');
 const { variableMissing, contentInvalid } = require('./pipeline.errors');
+const { DEFINITIONS } = require('./types/definitions');
 
 const ALIASES = Object.freeze({ preco: ['precoVenda', 'precoLocacao'] });
 const NBSP = new RegExp(String.fromCharCode(92) + 'u00a0|' + String.fromCharCode(92) + 'u202f', 'g');
@@ -35,15 +36,17 @@ function renderTemplate(template, ctx) {
   return rendered;
 }
 
-/** Resolve o template: o pedido (PUBLISHED mais recente do código ou id) ou o que a versão já usa. Nenhum: sem marca. */
-async function resolveTemplate(version, input, transaction) {
+/** Resolve o template: o pedido (PUBLISHED mais recente do código ou id), o que a versão já usa ou o padrão do tipo. Nenhum: sem marca. */
+async function resolveTemplate(version, input, transaction, item) {
   if (input.templateId || input.templateCode) {
     const template = await repo.findPublishedTemplate({ templateId: input.templateId, code: input.templateCode }, transaction);
     if (!template) throw contentInvalid('Template não encontrado ou não publicado.', { templateId: input.templateId, templateCode: input.templateCode });
     return template;
   }
   if (version.template_id) return repo.findPublishedTemplate({ templateId: version.template_id, anyStatus: true }, transaction);
-  return null;
+  const definition = item && DEFINITIONS[item.type];
+  // M9-D409: sem pedido nem template anterior, vale o template padrão do tipo SE ele estiver publicado (senão, sem molde).
+  return definition ? repo.findPublishedTemplate({ code: definition.defaultTemplateCode }, transaction) : null;
 }
 
 /**
@@ -52,7 +55,7 @@ async function resolveTemplate(version, input, transaction) {
  * Sem template, o passo conclui sem criar versão (o conteúdo segue sem molde).
  */
 async function brandingStep({ item, version, tenant, actor, transaction }, input) {
-  const template = await resolveTemplate(version, input || {}, transaction);
+  const template = await resolveTemplate(version, input || {}, transaction, item);
   if (!template) return { ok: true, detalhes: { semTemplate: true } };
   const body = version.body_json;
   const facts = version.facts_snapshot_json || {};
