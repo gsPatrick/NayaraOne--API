@@ -7,6 +7,7 @@ const { radarMatches } = require('./radar.services');
 const { financeHealth, financePayments } = require('./finance.services');
 const { constructionProjects, legalContracts, legalDrafts, correspondentCases } = require('./operations.services');
 const { knowledge } = require('./knowledge.services');
+const { analyticsBi } = require('./analytics.services');
 
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
@@ -18,6 +19,7 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     legalContracts: legalContracts(transaction),
     correspondentCases: correspondentCases(transaction, scope),
     knowledge: knowledge(transaction, scope),
+    analyticsBi: analyticsBi(transaction, scope), // M9-D695: leitura do BI pela NAY Diretoria (catálogo fechado, sem SQL)
   };
   if (includeWrite) {
     services.crmTasks = crmTasks(transaction, scope);

@@ -44,6 +44,7 @@ const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-model
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
 const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
+const { NAY_TOOLS_SETTINGS_SCHEMA } = require('../../features/analytics/nayToolsSettings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 
 /**
@@ -232,6 +233,8 @@ const SETTINGS_SCHEMA = {
   ...QUALITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
   ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,
+  // Marco 9, M9-D695 — ferramentas da NAY Diretoria no BI: tamanho máximo das listas devolvidas.
+  ...NAY_TOOLS_SETTINGS_SCHEMA,
   // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
   ...SECURITY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).

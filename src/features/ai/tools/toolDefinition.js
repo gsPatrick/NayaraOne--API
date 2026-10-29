@@ -6,6 +6,7 @@
 const AppError = require('../../../utils/AppError');
 const { RISK_LEVELS, HIGH_RISK, TOOL_NAME_RE } = require('../agents/agents.constants');
 const { schemaWellFormed } = require('./outputSchema');
+const { assertNoFreeQuery } = require('../../analytics/briefs/nayTools.guard');
 
 const CATEGORIES = Object.freeze(['READ', 'WRITE']);
 const DOMAINS = Object.freeze(['FINANCIAL', 'LEGAL', 'BANKING', 'PERMISSION', 'PUBLICATION', 'OTHER']);
@@ -68,6 +69,7 @@ function deepFreeze(valor) {
 function validateDefinition(def, permissionCodes) {
   if (!isObject(def)) throw invalid(null, 'definition', 'definicao_nao_e_objeto');
   checkShape(def);
+  assertNoFreeQuery(def); // M9-D695: ferramenta do BI (analytics.*) com consulta livre: 422 ANALYTICS_AI_TOOL_FREE_QUERY_FORBIDDEN
   checkPolicy(def, permissionCodes);
   const copia = {};
   for (const field of REQUIRED_FIELDS) {

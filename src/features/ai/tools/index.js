@@ -8,8 +8,9 @@ const { createToolCallRecorder } = require('./toolCallRecorder');
 const { createToolCallStore } = require('./toolCallStore');
 const { settleProposedToolCall } = require('./toolCallProposals');
 const { listToolCallsByRun } = require('./toolCallReader');
+const nayDiretoria = require('./nayDiretoriaRegistry');
 
 module.exports = {
   ToolRegistry, initToolRegistry, getToolRegistry, buildDefaultRegistry, loadPermissionCodes, sanitizeModelToolCall, pruneOutput,
-  createToolCallRecorder, createToolCallStore, settleProposedToolCall, listToolCallsByRun,
+  createToolCallRecorder, createToolCallStore, settleProposedToolCall, listToolCallsByRun, ...nayDiretoria,
 };
