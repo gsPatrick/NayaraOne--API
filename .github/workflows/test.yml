@@ -415,11 +415,6 @@ jobs:
         run: npm ci --prefix front-checkout
       - name: Esteira do BI, etapas 1 a 11
         run: node scripts/analytics/ci/run.js --fase pr --saida docs/evidencias/ci/bi-pipeline
-      # M9-D704: a suíte adversarial inteira (os 15 testes nomeados do Caderno §21 e a suíte que vigia nomes, skip/only, os 10 testes primeiro do
-      # Guia e a mutação) como etapa PRÓPRIA, em banco descartável. Sem skip: o arquivo é lido por scripts/analytics/ci/gates/suiteAdversarial.js.
-      - name: Suíte adversarial do BI (M9-D704)
-        run: |
-          node scripts/withDisposableDb.js -- env LOG_LEVEL=info bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && node --test --test-concurrency=1 test/marco9/analytics/m9d704.adversarial.test.js test/marco9/analytics/m9d704.suite.test.js"
       - name: Resumo da esteira
         if: always()
         run: |
@@ -431,6 +426,31 @@ jobs:
           name: bi-pipeline-${{ github.sha }}
           path: docs/evidencias/ci/bi-pipeline
           retention-days: 90
+
+  # M9-D704: a suíte adversarial inteira (os 15 testes nomeados do Caderno §21 e a suíte que vigia nomes, skip/only, os 10 testes primeiro do Guia e a
+  # mutação) como JOB PRÓPRIO, independente da esteira (sem `needs`): roda mesmo quando uma etapa da bi-pipeline reprova e dá o seu próprio resultado
+  # no GitHub. Em banco descartável; sem skip (o arquivo é lido por scripts/analytics/ci/gates/suiteAdversarial.js).
+  bi-adversarial:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Suíte adversarial do BI (M9-D704)
+        run: |
+          node scripts/withDisposableDb.js -- env LOG_LEVEL=info bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && node --test --test-concurrency=1 test/marco9/analytics/m9d704.adversarial.test.js test/marco9/analytics/m9d704.suite.test.js"
 
   # Etapas 12 a 14 (DEV, LAB e reconciliação com aceite dos owners): só na promoção, depois do deploy no DEV (que é decisão do Patrick: o pipeline só
   # prepara). Sem DEV_API_BASE_URL e DEV_SMOKE_TOKEN a etapa 12 reprova e a promoção fica bloqueada; ambiente PRODUCAO exige aceite de todas as métricas.

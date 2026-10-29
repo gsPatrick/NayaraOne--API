@@ -100,3 +100,17 @@ test('m9d705 o workflow faz checkout do Front, roda as guardas 1 e 5 e o pipelin
   assert.doesNotMatch(est, /skip:\s*!HAS_FRONT\s*&&\s*'/, 'regra 1 e regra 5 do Front não podem ficar puladas no CI');
   assert.match(est, /process\.env\.CI/);
 });
+
+test('m9d705 a suíte adversarial do BI é job próprio do CI, que roda mesmo com a esteira reprovada', () => {
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'test.yml'), 'utf8');
+  const jobs = wf.slice(wf.indexOf('\njobs:')).split(/\n(?= {2}[A-Za-z0-9_-]+:\n)/); // um bloco por job (dois espaços de recuo)
+  const comEtapa = jobs.filter((j) => j.includes('name: Suíte adversarial do BI (M9-D704)'));
+  assert.equal(comEtapa.length, 1, 'a etapa existe em exatamente um job');
+  const job = comEtapa[0];
+  assert.match(job, /^\s*bi-adversarial:/, 'fora do job bi-pipeline: a etapa 7 vermelha não pode impedir a suíte');
+  assert.doesNotMatch(job, /\n {4}needs:/, 'sem needs: não espera nem depende de outro job');
+  assert.doesNotMatch(job, /analytics\/ci\/run\.js/, 'o job não roda a esteira');
+  assert.match(job, /m9d704\.adversarial\.test\.js/);
+  assert.match(job, /m9d704\.suite\.test\.js/);
+  assert.doesNotMatch(job, /--test-skip|--test-only/);
+});
