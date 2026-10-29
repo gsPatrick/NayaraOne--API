@@ -21,7 +21,7 @@ async function setRolePermission(roleName, code, granted) {
     SELECT gen_random_uuid(), r.id, p.id, now(), now() FROM core.roles r CROSS JOIN core.permissions p WHERE r.name = $1 AND p.code = $2`, [roleName, code]);
 }
 
-/** Remove a política e os pedidos das duas empresas (os testes que usam commit real limpam o que criaram). */
+/** Remove a política das duas empresas. A auditoria (audit.audit_log) é append-only e não se apaga: os testes de contagem medem a diferença contra o que já existia. */
 async function cleanDlp() {
   await adminQuery('DELETE FROM governance.dlp_policies');
 }

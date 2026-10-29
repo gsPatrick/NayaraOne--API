@@ -56,13 +56,16 @@ test('m9d820 alteração exige permissão dlp:admin e audita antes e depois', { 
 
 test('m9d820 PUT com o mesmo conteúdo não altera nada nem audita', { skip: skip() }, async () => {
   await run(async (tx) => {
+    const countAudits = async () => (await env.auditRows(tenants.A, 'governance.dlp_policy.changed', tx)).length;
+    const base = await countAudits();
     await put(tx, 'LOW', 'PRINT', { requireAudit: true });
+    assert.equal((await countAudits()) - base, 1, 'a primeira mudança audita uma vez');
     const first = await service.getPolicy(tenants.A, 'LOW', 'PRINT', tx);
     const again = await put(tx, 'LOW', 'PRINT', { requireAudit: true });
     assert.equal(again.updatedAt.getTime(), first.updatedAt.getTime(), 'a linha não foi regravada');
-    assert.equal((await env.auditRows(tenants.A, 'governance.dlp_policy.changed', tx)).length, 1);
+    assert.equal((await countAudits()) - base, 1, 'a repetição não audita de novo');
     await put(tx, 'LOW', 'PRINT', {});
-    assert.equal((await env.auditRows(tenants.A, 'governance.dlp_policy.changed', tx)).length, 1, 'corpo vazio também não audita');
+    assert.equal((await countAudits()) - base, 1, 'corpo vazio também não audita');
   });
 });
 
@@ -87,6 +90,8 @@ test('m9d820 duas edições simultâneas da mesma linha terminam coerentes (trav
   const { withTenantTransaction } = require('../../testHelpers');
   const A = tenants.A;
   await withTenantTransaction(A, (tx) => service.listPolicies(A, tx));
+  const countAudits = async () => (await env.adminQuery("SELECT count(*)::int AS n FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.dlp_policy.changed'", [A.companyId])).rows[0].n;
+  const base = await countAudits();
   try {
     await Promise.all([
       withTenantTransaction(A, (tx) => service.updatePolicy(A, env.actorOf(A), 'LOW', 'COPY', { requireAudit: true }, tx)),
@@ -94,8 +99,7 @@ test('m9d820 duas edições simultâneas da mesma linha terminam coerentes (trav
     ]);
     const row = await withTenantTransaction(A, (tx) => service.getPolicy(A, 'LOW', 'COPY', tx));
     assert.deepEqual([row.requireAudit, row.requireMask], [true, true], 'nenhuma das duas edições se perde');
-    const audits = await env.adminQuery("SELECT count(*)::int AS n FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.dlp_policy.changed'", [A.companyId]);
-    assert.equal(audits.rows[0].n, 2);
+    assert.equal((await countAudits()) - base, 2);
   } finally {
     await env.adminQuery("DELETE FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.dlp_policy.changed'", [A.companyId]).catch(() => {});
     await env.adminQuery('DELETE FROM governance.dlp_policies WHERE company_id = $1', [A.companyId]);
