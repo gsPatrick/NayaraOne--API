@@ -12,6 +12,7 @@ const { assertCanRead } = require('./registry.permission');
 const { findDefinition } = require('./registry.read');
 const { getFormulaCatalog } = require('./formulaCatalog');
 const { recalculate } = require('./reproduction');
+const { natureLabel } = require('./registry.natures');
 
 const notAvailable = () => AppError.notFound('Não há registro desse indicador nessa data.', 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 
@@ -36,6 +37,7 @@ async function readMetricAsOf(ctx, { metricCode, scopeType, scopeId, asOfDate, d
     version: version.version,
     formulaId: version.formula_id,
     valueNature: version.value_nature,
+    valueNatureLabel: natureLabel(version.value_nature),
     asOfDate,
     revisionNo: snapshot.revision_no,
     calcHash: snapshot.calc_hash,
