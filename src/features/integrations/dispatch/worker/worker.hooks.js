@@ -11,13 +11,19 @@
 const preflights = [];
 const observers = [];
 let failureHandler = null;
+const cycleSteps = [];
 
 const registerPreflight = (fn) => { preflights.push(fn); return () => { const i = preflights.indexOf(fn); if (i >= 0) preflights.splice(i, 1); }; };
 const registerCallObserver = (fn) => { observers.push(fn); return () => { const i = observers.indexOf(fn); if (i >= 0) observers.splice(i, 1); }; };
 const registerFailureHandler = (fn) => { failureHandler = fn; };
+/** Passo que roda no início de cada rodada da empresa, antes de pegar os envios vencidos: `(ctx, { now }, transaction)`. */
+const registerDispatchCycleStep = (fn) => { cycleSteps.push(fn); return () => { const i = cycleSteps.indexOf(fn); if (i >= 0) cycleSteps.splice(i, 1); }; };
 
 const getPreflights = () => [...preflights];
 const getCallObservers = () => [...observers];
 const getFailureHandler = () => failureHandler;
+const getDispatchCycleSteps = () => [...cycleSteps];
 
-module.exports = { registerPreflight, registerCallObserver, registerFailureHandler, getPreflights, getCallObservers, getFailureHandler };
+module.exports = {
+  registerPreflight, registerCallObserver, registerFailureHandler, registerDispatchCycleStep, getPreflights, getCallObservers, getFailureHandler, getDispatchCycleSteps,
+};

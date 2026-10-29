@@ -68,7 +68,7 @@ function instalar(Classe) {
   adapterRegistry.unregister(info.providerCode());
   adapterRegistry.register(Classe);
 }
-const restaurar = () => { ['bank-sandbox', 'messaging-sandbox', 'portal-sandbox'].forEach((c) => adapterRegistry.unregister(c)); return registerBuiltInAdapters(); };
+const restaurar = () => { ['bank-sandbox', 'messaging-sandbox', 'portal-sandbox', 'analytics-sandbox'].forEach((c) => adapterRegistry.unregister(c)); return registerBuiltInAdapters(); };
 
 const erros = (tenant, connectionId, errorCode) => comTenant(tenant, async (t) => (await sequelize.query(
   'SELECT * FROM integration.integration_errors WHERE connection_id = :c AND error_code = :k ORDER BY created_at', { replacements: { c: connectionId, k: errorCode }, transaction: t },

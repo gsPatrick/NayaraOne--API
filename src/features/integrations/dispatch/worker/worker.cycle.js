@@ -1,11 +1,13 @@
 'use strict';
 
 const logger = require('../../../../utils/logger');
+const { sequelize } = require('../../../../models');
 const { claimDue } = require('../dispatch.claim');
 const { recoverStaleSending } = require('../dispatch.stale');
 const { readWorkerParams } = require('./worker.params');
 const { tenantTx } = require('./tenantTx');
 const { processClaimed } = require('./worker.process');
+const { getDispatchCycleSteps } = require('./worker.hooks');
 
 /**
  * Uma rodada do worker para UMA empresa (M9-D214 3.2): recupera SENDING órfão, pega até `worker_batch_size` envios vencidos com
@@ -14,6 +16,9 @@ const { processClaimed } = require('./worker.process');
 async function runDispatchCycle(ctx, { now = new Date(), limit } = {}) {
   const claimed = await tenantTx(ctx, async (transaction) => {
     const params = await readWorkerParams(ctx, transaction);
+    for (const step of getDispatchCycleSteps()) {
+      try { await sequelize.transaction({ transaction }, (savepoint) => step(ctx, { now }, savepoint)); } catch (err) { logger.error({ err: err.message }, 'Passo da rodada do worker falhou; a rodada segue.'); }
+    }
     await recoverStaleSending(ctx, transaction);
     const pegos = await claimDue(ctx, limit || params.batchSize, transaction);
     return pegos.map((d) => d.id);

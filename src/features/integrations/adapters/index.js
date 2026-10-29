@@ -13,17 +13,22 @@ const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
 const { registerAiAdapters } = require('../../ai/providers/builtIn');
 const { MessagingSandboxAdapter } = require('../providers/messaging/sandbox/messaging-sandbox.adapter');
 const { PortalSandboxAdapter } = require('../providers/portal/sandbox/portal-sandbox.adapter');
+const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/analytics-sandbox.adapter');
+const { installAnalytics } = require('../analytics');
+const { registerAiContingency } = require('../providers/ai/ai.degrade');
 
 const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxContractAdapter,
   SignatureClicksignContractAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
-  MessagingSandboxAdapter, PortalSandboxAdapter,
+  MessagingSandboxAdapter, PortalSandboxAdapter, AnalyticsSandboxAdapter,
 ]);
 
 /** Registra todos; contrato inválido lança 500 INTEGRATION_ADAPTER_CONTRACT_INVALID (o boot não segue). Devolve a lista registrada. */
 function registerBuiltInAdapters() {
   BUILT_IN_ADAPTERS.forEach((A) => registry.register(A));
   registerAiAdapters(); // sandbox e fornecedores de modelo (M9-D011), pelo ProviderRegistry
+  installAnalytics(); // descarte de métricas vencidas na rodada do worker (M9-D243)
+  registerAiContingency(); // IA fora: modo determinístico (M9-D243)
   return registry.list();
 }
 

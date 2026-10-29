@@ -24,6 +24,11 @@ const expor = (nome, carregar) => {
 
 expor('IntegrationAdapter', () => require('./registry/IntegrationAdapter').IntegrationAdapter);
 expor('AiAdapter', () => require('./providers/ai/ai.port').AiAdapter);
+expor('AnalyticsAdapter', () => require('./providers/analytics/analytics.port').AnalyticsAdapter);
+expor('analytics', () => require('./analytics'));
+expor('resolveAiMode', () => require('./providers/ai/ai.degrade').resolveAiMode);
+expor('withAiFallback', () => require('./providers/ai/ai.degrade').withAiFallback);
+expor('getAiContingencyCount', () => require('./providers/ai/ai.degrade').getAiContingencyCount);
 expor('classifyHttpError', () => require('./registry/classifyHttpError').classifyHttpError);
 expor('listConnections', () => require('./registry/connections.service').listConnections);
 expor('getServerEnvironment', () => require('./registry/registry.helpers').getServerEnvironment);

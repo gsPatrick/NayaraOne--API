@@ -27,6 +27,8 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   'integration.dispatch.worker_interval_s': { type: 'integer', min: 1, max: 3600 },
   'integration.dispatch.worker_batch_size': { type: 'integer', min: 1, max: 500 },
   'integration.dispatch.blocked_recheck_s': { type: 'integer', min: 5, max: 86400 },
+  // M9-D243 3.1 (INT-P090): segundos que uma métrica ou evento de analytics espera para sair; passado o prazo é descartado, sem afetar o negócio.
+  'integration.analytics.drop_after_s': { type: 'integer', min: 1, max: 86400 },
 });
 
 module.exports = { DISPATCH_SETTINGS_SCHEMA };
