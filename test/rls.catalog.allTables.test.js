@@ -260,3 +260,20 @@ test('M9-D205: integration.dispatches tem RLS, FORCE RLS, a política tenant_iso
   assert.equal(fn.length, 1, 'integration.purge_dispatches não existe');
   assert.equal(fn[0].prosecdef, true, 'a função de retenção precisa ser SECURITY DEFINER');
 });
+
+// M9-D014: ai.budgets (orçamento da NAY) e ai.budget_alerts (um alerta por limiar e período) com RLS, FORCE RLS e a política tenant_isolation.
+test('M9-D014: ai.budgets e ai.budget_alerts têm RLS, FORCE RLS e a política tenant_isolation', async () => {
+  for (const tabela of ['budgets', 'budget_alerts']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT array_agg(p.polname::text) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'ai' AND c.relname = :tabela`,
+      { replacements: { tabela } }
+    );
+    assert.equal(rows.length, 1, `ai.${tabela} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `RLS em ai.${tabela}`);
+    assert.equal(rows[0].relforcerowsecurity, true, `FORCE RLS em ai.${tabela}`);
+    assert.deepEqual(rows[0].policies, ['tenant_isolation']);
+  }
+});

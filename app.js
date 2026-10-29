@@ -34,6 +34,7 @@ const { startCorrespondentStatusPollJob } = require('./src/engines/jobs/correspo
 const { startBankPaymentReconciliationJob } = require('./src/engines/jobs/bankPaymentReconciliationJob');
 const { startIntegrationHealthAggregateJob } = require('./src/engines/jobs/integrationHealthAggregateJob');
 const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
+const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
 const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
@@ -269,6 +270,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.BANK_PAYMENT_RECONCILIATION_J
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_JOB_DISABLED !== 'true') {
   startIntegrationHealthAggregateJob();
   startAiRetentionJob();
+  startAiBudgetPeriodJob();
 }
 
 module.exports = app;

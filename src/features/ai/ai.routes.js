@@ -13,6 +13,7 @@ const { registerRunRoutes } = require('./orchestrator/runs/runs.routes');
 const { registerKnowledgeRoutes } = require('./knowledge/knowledge.routes');
 const { registerToolRoutes } = require('./tools/tools.routes');
 const { registerServiceIdentityRoutes } = require('./serviceIdentities/serviceIdentities.routes');
+const { registerBudgetRoutes } = require('./budgets/budgets.routes');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -41,6 +42,8 @@ registerKnowledgeRoutes(router);
 registerToolRoutes(router);
 // Identidades de serviço da NAY, só leitura (M9-D017): /ai/service-identities.
 registerServiceIdentityRoutes(router);
+// Orçamento de uso da NAY (M9-D014): GET/POST /ai/budgets e PUT /ai/budgets/:id.
+registerBudgetRoutes(router);
 
 router.post('/ai/runs', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('runs')));
 router.post('/ai/agents/:code/chat', requirePermission('ai:use'), aiGate(), (req, res, next) => next(aiNotAvailable('chat')));
