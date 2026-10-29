@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { IntegrationConnection, IntegrationProvider } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const registry = require('../../integrations/registry/registry.service');
@@ -20,11 +21,15 @@ async function ensureFinancingConnection(ctx, correspondentCode, transaction) {
   const ativa = await IntegrationConnection.findOne({ where: { companyId: ctx.companyId, providerCode, environment, status: 'ACTIVE' }, order: [['created_at', 'ASC']], transaction });
   if (ativa) return ativa;
   // Integração parada de propósito (pausada ou com credencial recusada) não ganha uma irmã automática: a pessoa decide em Integrações.
-  const existente = await IntegrationConnection.findOne({ where: { companyId: ctx.companyId, providerCode, environment, status: ['PAUSED', 'AUTH_FAILED'] }, transaction });
-  if (existente || environment === 'PRODUCTION') throw notFound();
+  const existentes = await IntegrationConnection.findAll({ where: { companyId: ctx.companyId, providerCode, environment }, order: [['created_at', 'ASC']], transaction });
+  if (environment === 'PRODUCTION' || existentes.some((c) => ['PAUSED', 'AUTH_FAILED'].includes(c.status))) throw notFound();
   const provider = await IntegrationProvider.findByPk(providerCode, { transaction });
   if (!provider || provider.domain !== 'FINANCING' || !(provider.sandboxAvailable === true || providerCode === 'financing-manual')) throw notFound();
-  const criada = await registry.createConnection({ providerCode, environment, label: `Correspondente: ${providerCode} (${ctx.companyId.slice(0, 8)})` }, ctx, transaction);
+  // Rascunho do mesmo fornecedor é reaproveitado (DI-D240-1); desativada (DISABLED é final) não bloqueia: nasce outra, com rótulo que não colide.
+  const rascunho = existentes.find((c) => c.status === 'DRAFT');
+  if (rascunho) return transitionConnection(rascunho.id, 'ACTIVE', ctx, transaction);
+  const sufixo = existentes.length ? ` #${existentes.length + 1}-${crypto.randomBytes(3).toString('hex')}` : '';
+  const criada = await registry.createConnection({ providerCode, environment, label: `Correspondente: ${providerCode} (${ctx.companyId.slice(0, 8)})${sufixo}` }, ctx, transaction);
   return transitionConnection(criada.id, 'ACTIVE', ctx, transaction);
 }
 

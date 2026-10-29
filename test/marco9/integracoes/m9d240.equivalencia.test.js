@@ -53,6 +53,8 @@ test('financiamento_bateria_correspondente_inalterada_verde', async () => {
 
 test('financiamento_provider_accounts_via_registry', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
+    // Isola o estado deixado por outros testes no mesmo banco (DI-D240-10): com mais de uma connection do fornecedor, só uma pode estar ACTIVE, e é ela que o resolvedor devolve.
+    await IntegrationConnection.update({ status: 'DISABLED' }, { where: { companyId: tenant.companyId, providerCode: 'financing-sandbox', status: ['ACTIVE', 'DRAFT', 'PAUSED', 'AUTH_FAILED'] }, transaction: t });
     const conta = await accounts.registerProviderAccount({ groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', label: `Conta D240 ${uniqueSuffix()}`, secretRef: 'vault:nayara/fin/sandbox' }, tenant.userId, t);
     const connection = await IntegrationConnection.findByPk(conta.id, { transaction: t });
     assert.ok(connection, 'a conta é uma connection do registro');
