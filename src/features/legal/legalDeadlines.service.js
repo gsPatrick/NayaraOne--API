@@ -3,7 +3,7 @@
 const { LegalDeadline, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { getLegalCase } = require('./legalCases.service');
+const { getLegalCase, getLegalCaseForUpdate } = require('./legalCases.service');
 const { publishLegalDeadlineCreated } = require('./legalEvents.service');
 const { assertCriticalDeadlineAccountability, normalizeNote } = require('./legalDeadlineAccountability');
 const { normalizeOptionalText, requireText } = require('./legalText');
@@ -84,7 +84,11 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
 
   // Auditoria da cliente (Marco 5): prazo CRITICAL exige responsavel efetivo e destino de
   // escalonamento desde a criacao, nao so quando ja esta vencido.
-  if (criticality === 'CRITICAL') assertCriticalDeadlineAccountability({ responsibleUserId }, legalCase);
+  // Lock do processo (FOR UPDATE) e releitura: serializa com a remocao de responsavel/escalonamento.
+  if (criticality === 'CRITICAL') {
+    const lockedCase = await getLegalCaseForUpdate(legalCaseId, transaction);
+    assertCriticalDeadlineAccountability({ responsibleUserId }, lockedCase);
+  }
 
   const deadline = await LegalDeadline.create(
     {
@@ -226,7 +230,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // PENDING; o criterio de responsavel efetivo + destino de escalonamento e refeito aqui, para
   // nao existir prazo CRITICAL pendente sem ninguem avisado.
   if (reopening && deadline.criticality === 'CRITICAL') {
-    const legalCase = await getLegalCase(deadline.legalCaseId, transaction);
+    const legalCase = await getLegalCaseForUpdate(deadline.legalCaseId, transaction);
     assertCriticalDeadlineAccountability(deadline, legalCase);
   }
   if (reopening || dueAtChanged) {

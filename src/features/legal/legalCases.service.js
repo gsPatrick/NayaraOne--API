@@ -122,6 +122,16 @@ async function getLegalCase(id, transaction) {
 }
 
 /**
+ * Le o processo com FOR UPDATE: serializa quem mexe em responsavel/escalonamento do processo e quem
+ * cria/reabre prazo CRITICAL pendente (que depende deles). Ordem de lock unica: processo primeiro.
+ */
+async function getLegalCaseForUpdate(id, transaction) {
+  const legalCase = await LegalCase.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!legalCase) throw AppError.notFound('Processo jurídico não encontrado.', 'LEGAL_CASE_NOT_FOUND');
+  return legalCase;
+}
+
+/**
  * assertNotOnLegalHold — gap real (auditoria Nayara, §16/JUR-010/011): um processo em legal
  * hold não pode ter status/fase alterados (é exatamente o que a retenção legal existe para
  * impedir — mudar o estado do processo durante uma disputa/investigação, mesmo sem apagar
@@ -184,7 +194,7 @@ async function setLegalHold(id, payload, actorUserId, transaction) {
 }
 
 async function updateLegalCase(id, payload, actorUserId, transaction) {
-  const legalCase = await getLegalCase(id, transaction);
+  const legalCase = await getLegalCaseForUpdate(id, transaction);
   const beforeJson = legalCase.toJSON();
   const { status, summary, responsibleUserId, escalationUserId, phase } = payload;
   // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
@@ -340,6 +350,7 @@ async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
 }
 
 module.exports = {
+  getLegalCaseForUpdate,
   CASE_RISK_LEVELS,
   createLegalCase,
   listLegalCases,
