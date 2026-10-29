@@ -35,8 +35,8 @@ async function latestSnapshots(companyId, transaction) {
   return rows;
 }
 
-/** Métricas CRITICAL com freshness STALE ou EXPIRED agora: [{ metricCode, domain, state, ageMinutes, maxStalenessMinutes, ... }]. */
-async function collectCriticalStaleness(scope, transaction, { now = clock.now() } = {}) {
+/** Todas as métricas CRITICAL com snapshot e a freshness de cada uma agora (FRESH, STALE, EXPIRED ou UNKNOWN): [{ metricCode, domain, state, ageMinutes, ... }]. */
+async function collectCriticalFreshness(scope, transaction, { now = clock.now() } = {}) {
   const params = await readFreshnessParams(scope, transaction);
   const out = [];
   for (const row of await latestSnapshots(scope.companyId, transaction)) {
@@ -44,7 +44,6 @@ async function collectCriticalStaleness(scope, transaction, { now = clock.now() 
       asOfDate: row.asOfDate, sourceSnapshotAt: row.sourceSnapshotAt, refreshedAt: row.refreshedAt,
       maxStalenessMinutes: maxStalenessOf(row.refreshPolicy, row.domain, params), factor: params.factor, now,
     });
-    if (freshness.state !== STATES.STALE && freshness.state !== STATES.EXPIRED) continue;
     out.push({
       type: EVENT_TYPE, companyId: scope.companyId, groupId: scope.groupId || null, metricCode: row.metricCode, metricName: row.name, domain: row.domain,
       snapshotId: row.snapshotId, state: freshness.state, ageMinutes: freshness.ageMinutes, maxStalenessMinutes: freshness.maxStalenessMinutes,
@@ -54,20 +53,30 @@ async function collectCriticalStaleness(scope, transaction, { now = clock.now() 
   return out;
 }
 
+const isStale = (item) => item.state === STATES.STALE || item.state === STATES.EXPIRED;
+
+/** Métricas CRITICAL com freshness STALE ou EXPIRED agora. */
+async function collectCriticalStaleness(scope, transaction, options = {}) {
+  return (await collectCriticalFreshness(scope, transaction, options)).filter(isStale);
+}
+
+/** Publica o alerta técnico de UMA métrica crítica vencida (log estruturado e assinantes). */
+function publishStaleness(item) {
+  logger.warn({ event: EVENT_TYPE, ...item }, '[analytics] métrica crítica com dado desatualizado');
+  for (const fn of [...listeners]) {
+    try {
+      fn(item);
+    } catch (err) {
+      logger.error({ event: 'analytics.freshness.listener_failed', err }, '[analytics] assinante do alerta de freshness falhou');
+    }
+  }
+}
+
 /** Publica o alerta técnico de cada métrica crítica vencida e devolve a lista. */
 async function signalCriticalStaleness(scope, transaction, options = {}) {
   const items = await collectCriticalStaleness(scope, transaction, options);
-  for (const item of items) {
-    logger.warn({ event: EVENT_TYPE, ...item }, '[analytics] métrica crítica com dado desatualizado');
-    for (const fn of [...listeners]) {
-      try {
-        fn(item);
-      } catch (err) {
-        logger.error({ event: 'analytics.freshness.listener_failed', err }, '[analytics] assinante do alerta de freshness falhou');
-      }
-    }
-  }
+  items.forEach(publishStaleness);
   return items;
 }
 
-module.exports = { EVENT_TYPE, onFreshnessStale, collectCriticalStaleness, signalCriticalStaleness };
+module.exports = { EVENT_TYPE, onFreshnessStale, collectCriticalFreshness, collectCriticalStaleness, publishStaleness, signalCriticalStaleness };

@@ -56,6 +56,7 @@ const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/mat
 const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
 const { NAY_TOOLS_SETTINGS_SCHEMA } = require('../../features/analytics/nayToolsSettings');
 const { SNAPSHOT_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/snapshots.settings');
+const { BI_ALERT_SETTINGS_SCHEMA } = require('../../features/analytics/alerts/engine.settings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 
 /**
@@ -263,6 +264,8 @@ const SETTINGS_SCHEMA = {
   ...NAY_TOOLS_SETTINGS_SCHEMA,
   // Marco 9, M9-D609 — snapshot diário do BI: hora de execução (padrão 00:30 de São Paulo) e limite de dias do catch-up.
   ...SNAPSHOT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D691 — alert engine: cooldown por severidade, avaliações para resolver, intervalo, owner reserva e os alertas semente.
+  ...BI_ALERT_SETTINGS_SCHEMA,
   // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
   ...SECURITY_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
