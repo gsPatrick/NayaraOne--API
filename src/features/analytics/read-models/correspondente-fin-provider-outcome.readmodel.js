@@ -9,6 +9,7 @@
  */
 const { sequelize } = require('../../../models');
 const { registerReadModel } = require('./readModel.registry');
+const clock = require('../metrics/clock');
 const { OUTCOME_EVENTS } = require('./juridico.events');
 const { BUSINESS_TIMEZONE, businessDateKey } = require('../../../utils/businessDate');
 
@@ -24,7 +25,7 @@ async function aggregateKey(event, { transaction }) {
   const [rows] = await sequelize.query(`WITH d AS (${DECISIONS}) SELECT to_char((decided_at AT TIME ZONE :tz)::date, 'YYYY-MM') AS month FROM d WHERE financing_case_id = :caseId`, {
     replacements: { companyId: event.companyId, caseId: payload.id, tz: BUSINESS_TIMEZONE }, transaction,
   });
-  return { period_month: rows.length ? rows[0].month : businessDateKey(event.occurredAt || new Date()).slice(0, 7) };
+  return { period_month: rows.length ? rows[0].month : businessDateKey(event.occurredAt || clock.now()).slice(0, 7) };
 }
 
 async function recompute({ companyId, key, transaction }) {
