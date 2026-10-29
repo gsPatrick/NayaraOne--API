@@ -62,6 +62,7 @@ const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridicoCorrespondenteKpi.settings');
 const { SUPPORT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/atendimentoKpi.settings');
+const { MKT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingKpi.settings');
 const { RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoPrazosKpi.settings');
 const { COMMAND_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/commandEvents.settings');
 const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
@@ -292,6 +293,8 @@ const SETTINGS_SCHEMA = {
   ...JUR_COR_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D672 — KPIs de Atendimento: owner de cada um, horas e severidades do SLA por prioridade e limite de reclamações sem motivo.
   ...SUPPORT_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D670 / M9-D671 — KPIs de Marketing no BI: owner de cada um, janela da frequência e limites de qualidade.
+  ...MKT_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D641 — KPIs de prazos da Locação: owner de cada um e tipos de garantia que não têm vencimento.
   ...RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D710 — fatos do dia do Centro de Comando: janela em horas, valor relevante de pagamento e owner dos três indicadores.

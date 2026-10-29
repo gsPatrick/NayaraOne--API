@@ -9,6 +9,7 @@
  *
  * O worker (M9-D607) chama `recompute` com o ESTADO atual da fonte (nunca delta), idempotente por sourceEventId; a agenda reconfere o que
  * muda sem evento; o rebuild (M9-D608) enumera todos os agregados das fontes. Só os serviços de métrica leem estas tabelas (M9-D613).
+ * M9-D670 e M9-D671 acrescentam rm_mkt_campaign_month e rm_mkt_optout_month (marketingKpi.*.js), por mês.
  * Eventos: catálogo do Marketing (M9-D434), crm.feedback_case.* e o status de entrega de crm.messages (crm.interaction.recorded e
  * crm.message.status_changed). Cada responsabilidade fica em seu arquivo marketingAtendimento.*.js.
  */
@@ -37,5 +38,7 @@ function register(m) {
 }
 
 const defs = MODELS.map(register);
+require('./marketingKpi.campaignMonth'); // M9-D670: custo, leads e atribuição por campanha e mês
+require('./marketingKpi.optoutMonth'); // M9-D671: contatos alcançados e pedidos de saída por mês e canal
 
 module.exports = { defs, MODELS };

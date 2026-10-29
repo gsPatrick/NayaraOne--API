@@ -9,6 +9,7 @@ const snapshotProvider = require('./finance.snapshotProvider');
 const obras = require('./obras'); // M9-D650 / M9-D651: KPIs de Obras
 const crm = require('./crm'); // M9-D630 / M9-D631: KPIs do funil comercial
 const legalCor = require('./legalCor'); // M9-D660 / M9-D661: KPIs do Jurídico e do Correspondente Bancário
+const marketing = require('./marketing'); // M9-D670 / M9-D671: KPIs de Marketing
 const atendimento = require('./atendimento'); // M9-D672: KPIs de Atendimento (reviews, satisfação, reclamações e SLA)
 const locacaoPrazos = require('./locacao-prazos'); // M9-D641: KPIs de prazos da Locação (garantias, obrigações, vistorias e chaves)
 const centroComando = require('./centro-comando'); // M9-D710: KPIs de fatos do dia do Centro de Comando (contratos assinados, oportunidades ganhas, pagamentos liquidados)
@@ -24,6 +25,7 @@ estoque.registerProvider();
 
 module.exports = { KPI_DEFINITIONS, ensureFinanceKpisPublished, materializeFinanceKpis, financeKpiCorrections, installFinanceKpis: listener.install, ...crm.api, ...obras.api, obraPerdasKpis: obraPerdas, installObraPerdasKpis: obraPerdas.install, estoqueKpis: estoque, installEstoqueKpis: estoque.install };
 Object.assign(module.exports, legalCor); // M9-D660 / M9-D661
+Object.assign(module.exports, marketing); // M9-D670 / M9-D671
 Object.assign(module.exports, atendimento); // M9-D672
 Object.assign(module.exports, locacaoPrazos); // M9-D641
 Object.assign(module.exports, tecnologia); // M9-D680

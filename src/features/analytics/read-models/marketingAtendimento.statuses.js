@@ -7,6 +7,7 @@
  */
 const DELIVERED_STATUSES = Object.freeze(['DELIVERED', 'READ']);
 const FAILED_STATUSES = Object.freeze(['FAILED', 'UNDELIVERED', 'BOUNCED']);
+const FINAL_DELIVERY_STATUSES = Object.freeze([...DELIVERED_STATUSES, ...FAILED_STATUSES]); // M9-D671: a mensagem que ainda não chegou a nenhum destes está "sem status de entrega"
 const COUNTED_STATUSES = Object.freeze(['SENT', 'DELIVERED', 'READ', 'UNKNOWN']);
 
 const FREQUENCY_CAP_KEY = 'marketing.frequency_cap.global';
@@ -26,4 +27,4 @@ async function readFrequencyCap(scope, transaction) {
   return parseCap(raw) || parseCap(FREQUENCY_CAP_DEFAULT);
 }
 
-module.exports = { DELIVERED_STATUSES, FAILED_STATUSES, COUNTED_STATUSES, FREQUENCY_CAP_KEY, FREQUENCY_CAP_DEFAULT, parseCap, readFrequencyCap };
+module.exports = { DELIVERED_STATUSES, FAILED_STATUSES, FINAL_DELIVERY_STATUSES, COUNTED_STATUSES, FREQUENCY_CAP_KEY, FREQUENCY_CAP_DEFAULT, parseCap, readFrequencyCap };

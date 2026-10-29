@@ -17,6 +17,7 @@ require('./sourceSpecs.obras.custo'); // origem dos KPIs de avanço, custo e mar
 require('./sourceSpecs.obras.operacao'); // origem dos KPIs de atrasos, medições e não conformidades das obras (M9-D651)
 require('./sourceSpecs.legal'); // origem dos KPIs do Jurídico (M9-D660)
 require('./sourceSpecs.correspondent'); // origem dos KPIs do Correspondente Bancário (M9-D661)
+require('./sourceSpecs.marketing'); // origem dos KPIs de Marketing (M9-D670 e M9-D671)
 require('./sourceSpecs.estoque'); // origem dos KPIs de Estoque e Patrimônio (M9-D653)
 require('./sourceSpecs.obraCustos'); // origem do desperdício, custo pós-obra e recorrência (M9-D652)
 require('./sourceSpecs.support'); // origem dos KPIs de Atendimento (M9-D672)

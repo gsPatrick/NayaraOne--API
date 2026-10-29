@@ -45,6 +45,8 @@ require('./rm_mkt_delivery.checks');
 require('./rm_mkt_frequency.checks');
 require('./rm_mkt_reviews.checks');
 require('./rm_mkt_automation.checks');
+require('./rm_mkt_campaign_month.checks'); // M9-D670
+require('./rm_mkt_optout_month.checks'); // M9-D671
 require('./rm_support_satisfaction.checks');
 require('./rm_support_complaints.checks');
 require('./rm_support_sla.checks');
