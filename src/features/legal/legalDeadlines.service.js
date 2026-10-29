@@ -185,6 +185,13 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // seja: um prazo reaberto ficava, na prática, sem alerta e sem escalonamento para sempre.
   // Agora, reabrir (status -> PENDING) ou mudar dueAt reseta o ciclo de alerta.
   const reopening = status !== undefined && status === 'PENDING' && deadline.status !== 'PENDING';
+  // Auditoria da cliente (Marco 5, contorno): reabrir um prazo CRITICAL concluido o devolve a
+  // PENDING; o criterio de responsavel efetivo + destino de escalonamento e refeito aqui, para
+  // nao existir prazo CRITICAL pendente sem ninguem avisado.
+  if (reopening && deadline.criticality === 'CRITICAL') {
+    const legalCase = await getLegalCase(deadline.legalCaseId, transaction);
+    assertCriticalDeadlineAccountability(deadline, legalCase);
+  }
   if (reopening || dueAtChanged) {
     deadline.lastAlertedSeverity = null;
     deadline.firstOverdueAlertedAt = null;
