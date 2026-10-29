@@ -30,8 +30,11 @@ async function independent(env, spec, companyId) {
   const sign = spec.valueSign;
   const period = spec.columns && spec.columns.period;
   const value = spec.valueColumn ? (sign ? `CASE WHEN "${sign.column}" IN (${sign.negative.map((n) => `'${n}'`).join(',')}) THEN -"${spec.valueColumn}" ELSE "${spec.valueColumn}" END` : `"${spec.valueColumn}"`) : null;
-  const [[r]] = await env.admin.query(`SELECT count(*)::int AS n${value ? `, COALESCE(SUM(${value}), 0)::text AS total` : ''} FROM ${spec.table} WHERE "${spec.companyColumn || 'company_id'}" = :c${period ? ` AND "${period}" < :to` : ''}`,
-    { replacements: { c: companyId, to: PERIOD_TO } });
+  // origens que dividem uma tabela entre vários KPIs (rm_command_events: um tipo de fato por KPI) restringem a consulta pelos mesmos predicados do detalhe (alias t)
+  const preds = (spec.predicates || []).map((p) => p({ equals: {} }));
+  const extra = preds.map((p) => ` AND ${p.sql}`).join('');
+  const [[r]] = await env.admin.query(`SELECT count(*)::int AS n${value ? `, COALESCE(SUM(${value}), 0)::text AS total` : ''} FROM ${spec.table} t WHERE t."${spec.companyColumn || 'company_id'}" = :c${period ? ` AND t."${period}" < :to` : ''}${extra}`,
+    { replacements: Object.assign({ c: companyId, to: PERIOD_TO }, ...preds.map((p) => p.replacements)) });
   return r;
 }
 

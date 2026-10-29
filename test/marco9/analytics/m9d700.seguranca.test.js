@@ -116,9 +116,13 @@ test('m9d700 RLS nas tabelas e read models de analytics (duas empresas)', async 
     await inTx(A(), { writer: true }, async (tx) => {
       const [[sel]] = await sequelize.query(`SELECT count(*)::int AS n FROM analytics.${t.tabela} WHERE company_id = :b`, { replacements: { b: B().companyId }, transaction: tx });
       assert.equal(sel.n, 0, `analytics.${t.tabela}: A viu ${sel.n} linha(s) de B (admin vê ${doAdmin.n})`);
-      if (t.tabela !== 'access_log') {
+      // tabela sem o privilégio (ex.: rm_applied_events, sem UPDATE por desenho da M9-D607) recusa a operação antes do RLS: não há o que atingir
+      const [[priv]] = await env.admin.query("SELECT has_table_privilege('nayara_runtime', :t, 'UPDATE') AS upd, has_table_privilege('nayara_runtime', :t, 'DELETE') AS del", { replacements: { t: `analytics.${t.tabela}` } });
+      if (t.tabela !== 'access_log' && priv.upd) {
         const [, upd] = await sequelize.query(`UPDATE analytics.${t.tabela} SET company_id = company_id WHERE company_id = :b`, { replacements: { b: B().companyId }, transaction: tx });
         assert.equal(upd.rowCount ?? 0, 0, `analytics.${t.tabela}: UPDATE atingiu linhas de B`);
+      }
+      if (t.tabela !== 'access_log' && priv.del) {
         const [, del] = await sequelize.query(`DELETE FROM analytics.${t.tabela} WHERE company_id = :b`, { replacements: { b: B().companyId }, transaction: tx });
         assert.equal(del.rowCount ?? 0, 0, `analytics.${t.tabela}: DELETE atingiu linhas de B`);
       }
