@@ -671,3 +671,13 @@ test('M9-D830: bcp_sectors tem RLS, FORCE RLS e a política de leitura', async (
   const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.bcp_sectors', 'SELECT') AS sel WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
   if (grants.length) assert.equal(grants[0].sel, true, 'SELECT ao role de runtime');
 });
+
+// M9-D831: as operações manuais de contingência (governance.manual_operations) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT ao role de runtime.
+test('M9-D831: manual_operations tem RLS, FORCE RLS e a política tenant_isolation', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'manual_operations'`);
+  assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies]), [['manual_operations', true, true, 1]]);
+  const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.manual_operations', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
+  if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao role de runtime');
+});
