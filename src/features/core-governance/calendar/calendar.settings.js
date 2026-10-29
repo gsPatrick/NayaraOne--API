@@ -1,6 +1,7 @@
 'use strict';
 
 const { SOURCE_TYPES, SEVERITIES } = require('./calendar.constants');
+const { SOURCE_KINDS } = require('./sources/sources.constants');
 
 /**
  * Parâmetros do calendário (aba Governança em /painel/configuracoes). Padrão = valor inicial do catálogo parametros.csv.
@@ -18,12 +19,15 @@ const DURATION_KEY = 'governanca.calendario.duracao_padrao_min';
 // M9-D803: prazo da garantia da obra entregue (project.warranty_started) e hora da varredura diária das fontes.
 const WARRANTY_MONTHS_KEY = 'governanca.calendario.garantia_obra_meses';
 const BACKFILL_HOUR_KEY = 'governanca.calendario.varredura_hora';
+// M9-D803 (reabertura): permissão extra por tipo de item (`source_kind`) dentro de uma origem; ex.: GUARANTEE mistura fiança (jurídico) e garantia de obra.
+const KIND_PERMISSION_KEY = 'governanca.calendario.permissao_por_tipo_origem';
 
 const CALENDAR_SETTING_DEFAULTS = Object.freeze({
   [SEVERITY_KEY]: 'LEGAL_DEADLINE=CRITICAL, FISCAL=CRITICAL, BILLING=WARNING, GUARANTEE=WARNING',
   [PERMISSION_KEY]: 'CRM_TASK=crm:tasks:read, VISIT=crm:visits:read, LEGAL_DEADLINE=legal:read, RENEWAL=procurement:read|legal:read, '
     + 'GUARANTEE=legal:read|construction:read, BILLING=billing:read, CONSTRUCTION=construction:read, MAINTENANCE=construction:read, '
     + 'FISCAL=correspondent:fiscal, COMMITMENT=governance:calendar:read',
+  [KIND_PERMISSION_KEY]: 'LEGAL_GUARANTEE=legal:read, WARRANTY_CASE=construction:read, PROJECT_WARRANTY=construction:read',
   [WINDOW_DAYS_KEY]: 30,
   [PAGE_SIZE_KEY]: 50,
   [DURATION_KEY]: 60,
@@ -63,15 +67,29 @@ function parsePermissionMap(text) {
   return Object.keys(parsed).length ? parsed : parse(CALENDAR_SETTING_DEFAULTS[PERMISSION_KEY]);
 }
 
+/** { TIPO_DO_ITEM: ['perm'] }; só restringe os tipos listados (tipo fora da lista segue a regra da origem); texto vazio volta ao padrão. */
+function parseKindPermissionMap(text) {
+  const parse = (value) => {
+    const map = {};
+    for (const [kind, perms] of parsePairs(value)) {
+      const list = perms.split('|').map((p) => p.trim()).filter(Boolean);
+      if (SOURCE_KINDS.includes(kind) && list.length) map[kind] = list;
+    }
+    return map;
+  };
+  const parsed = parse(text);
+  return Object.keys(parsed).length ? parsed : parse(CALENDAR_SETTING_DEFAULTS[KIND_PERMISSION_KEY]);
+}
+
 /** Validador do dicionário de configurações: recusa texto fora do formato "FONTE=valor". */
-function validatePairs(allowedValue, label) {
+function validatePairs(allowedValue, label, allowedKeys = SOURCE_TYPES) {
   return (key, value) => {
     const { govError } = require('../governance.errors');
     const pairs = parsePairs(value);
     const bad = pairs.length === 0 || value.split(',').filter((p) => p.trim()).length !== pairs.length
-      || pairs.some(([source, v]) => !SOURCE_TYPES.includes(source) || !allowedValue(v));
+      || pairs.some(([source, v]) => !allowedKeys.includes(source) || !allowedValue(v));
     if (bad) {
-      throw govError(400, 'VALIDATION_ERROR', `O valor de "${key}" deve seguir o formato FONTE=${label}, separado por vírgula, com fontes entre: ${SOURCE_TYPES.join(', ')}.`, { key, value });
+      throw govError(400, 'VALIDATION_ERROR', `O valor de "${key}" deve seguir o formato FONTE=${label}, separado por vírgula, com itens entre: ${allowedKeys.join(', ')}.`, { key, value });
     }
   };
 }
@@ -79,6 +97,7 @@ function validatePairs(allowedValue, label) {
 const CALENDAR_SETTINGS_SCHEMA = {
   [SEVERITY_KEY]: { type: 'string', validate: validatePairs((v) => SEVERITIES.includes(v.toUpperCase()), 'NIVEL (INFO, WARNING ou CRITICAL)') },
   [PERMISSION_KEY]: { type: 'string', validate: validatePairs((v) => v.split('|').every((p) => /^[a-z][a-z0-9:_-]*$/i.test(p.trim()) && p.trim()), 'permissão (várias com |)') },
+  [KIND_PERMISSION_KEY]: { type: 'string', validate: validatePairs((v) => v.split('|').every((p) => /^[a-z][a-z0-9:_-]*$/i.test(p.trim()) && p.trim()), 'permissão (várias com |)', SOURCE_KINDS) },
   [WINDOW_DAYS_KEY]: { type: 'integer', min: 1, max: 366 },
   [PAGE_SIZE_KEY]: { type: 'integer', min: 1, max: 200 },
   [DURATION_KEY]: { type: 'integer', min: 1, max: 1440 },
@@ -87,6 +106,6 @@ const CALENDAR_SETTINGS_SCHEMA = {
 };
 
 module.exports = {
-  SEVERITY_KEY, PERMISSION_KEY, WINDOW_DAYS_KEY, PAGE_SIZE_KEY, DURATION_KEY, WARRANTY_MONTHS_KEY, BACKFILL_HOUR_KEY,
-  CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA, parsePairs, parseSeverityMap, parsePermissionMap,
+  SEVERITY_KEY, PERMISSION_KEY, WINDOW_DAYS_KEY, PAGE_SIZE_KEY, DURATION_KEY, WARRANTY_MONTHS_KEY, BACKFILL_HOUR_KEY, KIND_PERMISSION_KEY, SOURCE_KINDS,
+  CALENDAR_SETTING_DEFAULTS, CALENDAR_SETTINGS_SCHEMA, parsePairs, parseSeverityMap, parsePermissionMap, parseKindPermissionMap,
 };

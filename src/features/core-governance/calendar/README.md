@@ -17,7 +17,7 @@ Calendário unificado: uma agenda única, sem ser nova fonte de verdade. `calend
 ## Eventos
 - `calendar.item.updated` é publicado pelo projetor (M9-D802) ao gravar o item; M9-D801 não publica evento.
 
-## Fontes de obras e garantias (M9-D803)
+### Fontes de obras e garantias (M9-D803)
 - `sources/` (funções puras, sem banco): `mapSourceEvent(event, {companyId, severityMap})` devolve `{ items, transitions }`. `items` são rascunhos para `upsertItem`; `transitions` são fechamentos (`DONE` ou `CANCELLED` com `cancelReason`) que o projetor aplica pela matriz de M9-D802. Item com `preserveStatus` (escalonamento de caso em garantia) só sobe a severidade: o projetor não reabre item fechado. Evento de outra empresa: `GOV_CALENDAR_TENANT_MISMATCH`; tipo sem origem: `GOV_CALENDAR_EVENT_UNKNOWN`.
 - CONSTRUCTION (`source_kind` STAGE ou PROJECT): `project.stage.updated` (novo), `project.stage.completed`, `project.created|started|delivered|closed`, `construction.project.status_changed`, `project.schedule.updated` (novo, DI-D803-3). GUARANTEE (`source_kind` LEGAL_GUARANTEE, WARRANTY_CASE ou PROJECT_WARRANTY): `legal.guarantee.created|updated|ended|replaced`, `warranty.case.opened|escalated|closed`, `project.warranty_started` (agora com `warrantyEndsAt`). Os publicadores novos estão em `features/construction/constructionCalendarEvents.service.js` e `features/legal/legalCalendarEvents.service.js`.
 - `calendarBackfillJob` (`src/engines/jobs`): varredura diária por empresa na hora de `governanca.calendario.varredura_hora` (padrão 6, America/Sao_Paulo) que traz os registros abertos já existentes (idempotente), fecha `PROJECT_WARRANTY` vencido lendo só `calendar_items` e cancela (`SOURCE_NOT_OPEN`) item aberto cuja origem não está mais aberta. Desligar no processo: `CALENDAR_BACKFILL_JOB_DISABLED=true`.
@@ -31,6 +31,7 @@ Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametr
 - `governanca.modulos.calendar.habilitado` (padrão ligado).
 - `governanca.calendario.severidade_por_fonte`: `FONTE=NIVEL` (padrão: LEGAL_DEADLINE e FISCAL = CRITICAL; BILLING e GUARANTEE = WARNING; demais INFO). Lido ao projetar o compromisso e pelo projetor.
 - `governanca.calendario.permissao_por_fonte`: permissão do módulo de origem por tipo (`|` = qualquer uma). Lido a cada `GET /calendar`.
+- `governanca.calendario.permissao_por_tipo_origem` (`LEGAL_GUARANTEE=legal:read, WARRANTY_CASE=construction:read, PROJECT_WARRANTY=construction:read`): permissão extra por tipo de item (`source_kind`) dentro da origem; a origem GUARANTEE mistura fiança (jurídico) e garantia de obra (obras), e quem só tem uma das permissões não vê o tipo da outra. Tipo fora da lista segue só a regra da origem.
 - `governanca.calendario.janela_padrao_dias` (30) e `governanca.calendario.tamanho_pagina_padrao` (50): consulta sem filtros.
 - `governanca.calendario.duracao_padrao_min` (60): fim de compromisso sem `endsAt`; M9-D802 usa o mesmo valor para visita e manutenção.
 

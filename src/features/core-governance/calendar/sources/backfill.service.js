@@ -1,5 +1,6 @@
 'use strict';
 
+const { KIND, CANCEL, SOURCE_KINDS } = require('./sources.constants');
 const { getSetting } = require('../../../../features/settings/settings.service');
 const settings = require('../calendar.settings');
 const { upsertItem, closeExpiredItems, cancelStaleItems } = require('../calendar.projection.store');
@@ -15,8 +16,8 @@ const { dateKeyInZone, addMonthsToDateKey, dueFromDateValue } = require('./time'
  *  1. fecha (DONE) o item PROJECT_WARRANTY cujo fim da garantia já passou, lendo só `calendar_items`;
  *  2. cancela o item aberto cuja origem não está mais aberta (obra cancelada, etapa/garantia/caso encerrado ou excluído).
  */
-const STALE_KINDS = ['STAGE', 'PROJECT', 'LEGAL_GUARANTEE', 'WARRANTY_CASE', 'PROJECT_WARRANTY'];
-const STALE_REASON = 'SOURCE_NOT_OPEN';
+const STALE_KINDS = SOURCE_KINDS;
+const STALE_REASON = CANCEL.SOURCE_NOT_OPEN;
 
 async function readContext(tenant, transaction) {
   const severityMap = settings.parseSeverityMap(await getSetting(settings.SEVERITY_KEY, tenant, transaction, settings.CALENDAR_SETTING_DEFAULTS[settings.SEVERITY_KEY]));
@@ -58,7 +59,7 @@ async function runBackfill(tenant, transaction, now = new Date()) {
   for (const item of items) {
     await upsertItem(tenant, item, transaction);
   }
-  const expired = await closeExpiredItems(tenant, 'PROJECT_WARRANTY', now, transaction);
+  const expired = await closeExpiredItems(tenant, KIND.PROJECT_WARRANTY, now, transaction);
   const keep = [...items.map((item) => item.sourceId), ...keepWarranty];
   const cancelled = await cancelStaleItems(tenant, STALE_KINDS, keep, STALE_REASON, transaction);
   return { upserted: items.length, warrantyClosed: expired.length, cancelled: cancelled.length };

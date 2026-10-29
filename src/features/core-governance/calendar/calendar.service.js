@@ -4,7 +4,7 @@ const { getSetting } = require('../../../features/settings/settings.service');
 const settings = require('./calendar.settings');
 const { TIMEZONE } = require('./calendar.constants');
 const { parseListQuery } = require('./calendar.query');
-const { allowedSourceTypes } = require('./calendar.visibility');
+const { allowedSourceTypes, deniedSourceKinds } = require('./calendar.visibility');
 const repository = require('./calendar.repository');
 const { presentItem, iso } = require('./calendar.presenter');
 
@@ -21,7 +21,9 @@ async function listCalendar(tenant, { permissions, query, now = new Date() }, tr
   const filters = parseListQuery(query, { now, windowDays, defaultPageSize });
   const permissionMap = settings.parsePermissionMap(await read(settings.PERMISSION_KEY, tenant, transaction));
   const allowed = allowedSourceTypes(permissions, permissionMap);
-  const { rows, total } = await repository.listItems(filters, allowed, tenant, transaction);
+  const kindMap = settings.parseKindPermissionMap(await read(settings.KIND_PERMISSION_KEY, tenant, transaction));
+  const denied = deniedSourceKinds(permissions, kindMap);
+  const { rows, total } = await repository.listItems(filters, allowed, tenant, transaction, denied);
   return {
     items: rows.map((row) => presentItem(row, now)),
     pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.max(1, Math.ceil(total / filters.pageSize)) },

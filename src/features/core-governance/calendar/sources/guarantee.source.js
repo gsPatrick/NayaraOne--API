@@ -1,5 +1,6 @@
 'use strict';
 
+const { KIND, CANCEL } = require('./sources.constants');
 const { dueFromDateValue } = require('./time');
 const { projectWarrantySourceId } = require('./ids');
 const { clipTitle, emptyResult, transition, itemDraft } = require('./draft');
@@ -17,13 +18,13 @@ const projectLink = (projectId) => `/painel/obras/${projectId}`;
 function legalGuaranteeResult(data, ctx) {
   const out = emptyResult();
   if (data.status === 'RELEASED') { out.transitions.push(transition(SOURCE, data.id, 'DONE')); return out; }
-  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', 'SOURCE_CANCELLED')); return out; }
+  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', CANCEL.SOURCE_CANCELLED)); return out; }
   const dueAt = dueFromDateValue(data.endsAt);
-  if (!dueAt) { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', 'NO_DUE_DATE')); return out; }
+  if (!dueAt) { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', CANCEL.NO_DUE_DATE)); return out; }
   out.items.push(itemDraft(ctx, {
     sourceType: SOURCE,
     sourceId: data.id,
-    sourceKind: 'LEGAL_GUARANTEE',
+    sourceKind: KIND.LEGAL_GUARANTEE,
     title: clipTitle(`Fim da garantia ${data.guaranteeType || ''} do contrato ${data.contractNumber || data.contractId || ''}`, 'Fim da garantia do contrato'),
     ownerUserId: data.ownerUserId || null,
     dueAt,
@@ -36,11 +37,11 @@ function legalGuaranteeResult(data, ctx) {
 function warrantyCaseResult(data, ctx) {
   const out = emptyResult();
   const dueAt = dueFromDateValue(data.warrantyDeadlineAt, { dateOnly: false });
-  if (!dueAt) { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', 'NO_DUE_DATE')); return out; }
+  if (!dueAt) { out.transitions.push(transition(SOURCE, data.id, 'CANCELLED', CANCEL.NO_DUE_DATE)); return out; }
   out.items.push(itemDraft(ctx, {
     sourceType: SOURCE,
     sourceId: data.id,
-    sourceKind: 'WARRANTY_CASE',
+    sourceKind: KIND.WARRANTY_CASE,
     title: clipTitle(`Prazo de garantia do chamado: ${data.description || ''}`, 'Prazo de garantia do chamado'),
     ownerUserId: data.responsibleUserId || null,
     dueAt,
@@ -56,11 +57,11 @@ function projectWarrantyResult(data, ctx) {
   const out = emptyResult();
   const sourceId = projectWarrantySourceId(data.projectId);
   const dueAt = dueFromDateValue(data.warrantyEndsAt);
-  if (!dueAt) { out.transitions.push(transition(SOURCE, sourceId, 'CANCELLED', 'NO_DUE_DATE')); return out; }
+  if (!dueAt) { out.transitions.push(transition(SOURCE, sourceId, 'CANCELLED', CANCEL.NO_DUE_DATE)); return out; }
   out.items.push(itemDraft(ctx, {
     sourceType: SOURCE,
     sourceId,
-    sourceKind: 'PROJECT_WARRANTY',
+    sourceKind: KIND.PROJECT_WARRANTY,
     title: clipTitle(`Fim da garantia da obra ${data.name || ''}`, 'Fim da garantia da obra'),
     ownerUserId: data.responsibleUserId || null,
     dueAt,
@@ -86,7 +87,7 @@ const EVENT_MAPPERS = {
   'legal.guarantee.ended': (p) => {
     const out = emptyResult();
     const cancelled = p.reason === 'DELETED' || p.reason === 'CANCELLED';
-    out.transitions.push(cancelled ? transition(SOURCE, p.id, 'CANCELLED', p.reason === 'DELETED' ? 'SOURCE_DELETED' : 'SOURCE_CANCELLED') : transition(SOURCE, p.id, 'DONE'));
+    out.transitions.push(cancelled ? transition(SOURCE, p.id, 'CANCELLED', p.reason === 'DELETED' ? CANCEL.SOURCE_DELETED : CANCEL.SOURCE_CANCELLED) : transition(SOURCE, p.id, 'DONE'));
     return out;
   },
   'warranty.case.opened': (p, ctx) => warrantyCaseResult(p, ctx),

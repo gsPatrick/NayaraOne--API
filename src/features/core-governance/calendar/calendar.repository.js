@@ -5,12 +5,17 @@ const { sequelize } = require('../../../models');
 
 /**
  * Leitura de governance.calendar_items. A RLS já isola a empresa; o filtro por company_id é explícito de qualquer forma.
- * `allowedSources` é a visibilidade por origem (já calculada); lista vazia = nada visível.
+ * `allowedSources` é a visibilidade por origem (já calculada); lista vazia = nada visível. `deniedKinds` são os tipos de item
+ * (`source_kind`) ocultos dentro de uma origem visível (M9-D803: fiança x garantia de obra).
  * Ordenação: due_at crescente, desempate por id. "Vencido" não existe aqui (é derivado na apresentação).
  */
-function buildWhere(filters, allowedSources, companyId) {
+function buildWhere(filters, allowedSources, companyId, deniedKinds = []) {
   const where = ['company_id = :companyId', 'source_type = ANY(ARRAY[:allowed]::varchar[])', 'due_at >= :from', 'date_trunc(\'second\', due_at) <= :to'];
   const replacements = { companyId, allowed: allowedSources, from: filters.from, to: filters.to };
+  if (deniedKinds.length) {
+    where.push('(source_kind IS NULL OR source_kind <> ALL(ARRAY[:deniedKinds]::varchar[]))');
+    replacements.deniedKinds = deniedKinds;
+  }
   if (filters.sourceTypes.length) {
     where.push('source_type = ANY(ARRAY[:sourceTypes]::varchar[])');
     replacements.sourceTypes = filters.sourceTypes;
@@ -26,9 +31,9 @@ function buildWhere(filters, allowedSources, companyId) {
   return { sql: where.join(' AND '), replacements };
 }
 
-async function listItems(filters, allowedSources, tenant, transaction) {
+async function listItems(filters, allowedSources, tenant, transaction, deniedKinds = []) {
   if (!allowedSources.length) return { rows: [], total: 0 };
-  const { sql, replacements } = buildWhere(filters, allowedSources, tenant.companyId);
+  const { sql, replacements } = buildWhere(filters, allowedSources, tenant.companyId, deniedKinds);
   const [{ total }] = await sequelize.query(`SELECT count(*)::int AS total FROM governance.calendar_items WHERE ${sql}`, { type: QueryTypes.SELECT, replacements, transaction });
   const rows = await sequelize.query(
     `SELECT * FROM governance.calendar_items WHERE ${sql} ORDER BY due_at ASC, id ASC LIMIT :limit OFFSET :offset`,

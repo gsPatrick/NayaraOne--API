@@ -1,5 +1,6 @@
 'use strict';
 
+const { CANCEL } = require('./sources.constants');
 const { dueFromDateValue } = require('./time');
 const { clipTitle, emptyResult, transition, itemDraft } = require('./draft');
 
@@ -18,9 +19,9 @@ const projectLink = (projectId) => `/painel/obras/${projectId}`;
 function stageResult(data, ctx) {
   const out = emptyResult();
   if (data.status === 'DONE') { out.transitions.push(transition(SOURCE, data.stageId, 'DONE')); return out; }
-  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.stageId, 'CANCELLED', 'SOURCE_CANCELLED')); return out; }
+  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.stageId, 'CANCELLED', CANCEL.SOURCE_CANCELLED)); return out; }
   const dueAt = dueFromDateValue(data.endsAt, { dateOnly: false });
-  if (!dueAt) { out.transitions.push(transition(SOURCE, data.stageId, 'CANCELLED', 'NO_DUE_DATE')); return out; }
+  if (!dueAt) { out.transitions.push(transition(SOURCE, data.stageId, 'CANCELLED', CANCEL.NO_DUE_DATE)); return out; }
   out.items.push(itemDraft(ctx, {
     sourceType: SOURCE,
     sourceId: data.stageId,
@@ -36,10 +37,10 @@ function stageResult(data, ctx) {
 /** data: { projectId, name, endsAtPlanned, status, responsibleUserId }; prazo da obra vence às 23:59:59 de Brasília. */
 function projectResult(data, ctx) {
   const out = emptyResult();
-  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.projectId, 'CANCELLED', 'SOURCE_CANCELLED')); return out; }
+  if (data.status === 'CANCELLED') { out.transitions.push(transition(SOURCE, data.projectId, 'CANCELLED', CANCEL.SOURCE_CANCELLED)); return out; }
   if (PROJECT_DONE.has(data.status)) { out.transitions.push(transition(SOURCE, data.projectId, 'DONE')); return out; }
   const dueAt = dueFromDateValue(data.endsAtPlanned);
-  if (!dueAt) { out.transitions.push(transition(SOURCE, data.projectId, 'CANCELLED', 'NO_DUE_DATE')); return out; }
+  if (!dueAt) { out.transitions.push(transition(SOURCE, data.projectId, 'CANCELLED', CANCEL.NO_DUE_DATE)); return out; }
   out.items.push(itemDraft(ctx, {
     sourceType: SOURCE,
     sourceId: data.projectId,

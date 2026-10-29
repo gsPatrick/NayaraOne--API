@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const { mapSourceEvent, SOURCE_EVENT_TYPES } = require('../../../src/features/core-governance/calendar/sources');
 const { endOfDayInZone, addMonthsToDateKey } = require('../../../src/features/core-governance/calendar/sources/time');
 const { projectWarrantySourceId } = require('../../../src/features/core-governance/calendar/sources/ids');
-const { allowedSourceTypes } = require('../../../src/features/core-governance/calendar/calendar.visibility');
+const { allowedSourceTypes, deniedSourceKinds } = require('../../../src/features/core-governance/calendar/calendar.visibility');
 const settings = require('../../../src/features/core-governance/calendar/calendar.settings');
 const { isValidDeepLink } = require('../../../src/features/core-governance/calendar/calendar.deeplinks');
 
@@ -111,13 +111,18 @@ test('m9d803 evento de outra empresa é descartado e tipo desconhecido vai para 
   assert.ok(SOURCE_EVENT_TYPES.includes('legal.guarantee.ended') && SOURCE_EVENT_TYPES.includes('project.stage.updated'));
 });
 
-test('m9d803 usuário sem permissão de obras não vê item CONSTRUCTION', () => {
+test('m9d803 usuário sem permissão de obras não vê item CONSTRUCTION nem garantia de obra', () => {
   const map = settings.parsePermissionMap(settings.CALENDAR_SETTING_DEFAULTS[settings.PERMISSION_KEY]);
+  const kinds = settings.parseKindPermissionMap(settings.CALENDAR_SETTING_DEFAULTS[settings.KIND_PERMISSION_KEY]);
   const juridico = allowedSourceTypes(['legal:read'], map);
   assert.ok(!juridico.includes('CONSTRUCTION'));
-  assert.ok(juridico.includes('GUARANTEE'), 'legal:read basta para GUARANTEE');
+  assert.ok(juridico.includes('GUARANTEE'), 'legal:read abre a origem GUARANTEE');
+  assert.deepEqual(deniedSourceKinds(['legal:read'], kinds).sort(), ['PROJECT_WARRANTY', 'WARRANTY_CASE'], 'só jurídico não vê dados de obra');
   const obras = allowedSourceTypes(['construction:read'], map);
   assert.ok(obras.includes('CONSTRUCTION') && obras.includes('GUARANTEE'));
+  assert.deepEqual(deniedSourceKinds(['construction:read'], kinds), ['LEGAL_GUARANTEE'], 'só obras não vê fiança de contrato');
+  assert.deepEqual(deniedSourceKinds(['legal:read', 'construction:read'], kinds), []);
+  assert.deepEqual(settings.parseKindPermissionMap('LEGAL_GUARANTEE=legal:read|finance:read, XPTO=a'), { LEGAL_GUARANTEE: ['legal:read', 'finance:read'] });
 });
 
 test('m9d803 legal.guarantee.ended fecha o item e warranty.case.escalated só sobe a severidade', () => {

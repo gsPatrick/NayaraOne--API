@@ -11,4 +11,14 @@ function allowedSourceTypes(permissions, permissionMap) {
   return SOURCE_TYPES.filter((source) => (permissionMap[source] || []).some((code) => has.has(code)));
 }
 
-module.exports = { allowedSourceTypes };
+/**
+ * Tipos de item (`source_kind`) que o usuário NÃO pode ver mesmo vendo a origem: a origem GUARANTEE mistura fiança de contrato
+ * (jurídico) e garantia de obra (obras). O mapa traz, por tipo, as permissões aceitas (qualquer uma basta); tipo fora do mapa
+ * segue só a regra da origem.
+ */
+function deniedSourceKinds(permissions, kindPermissionMap) {
+  const has = new Set(permissions || []);
+  return Object.entries(kindPermissionMap || {}).filter(([, codes]) => !codes.some((code) => has.has(code))).map(([kind]) => kind);
+}
+
+module.exports = { allowedSourceTypes, deniedSourceKinds };
