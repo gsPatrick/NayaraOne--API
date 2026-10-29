@@ -12,8 +12,8 @@ const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Trechos de SQL: dia ('YYYY-MM-DD') e mês ('YYYY-MM') de SP de uma coluna timestamptz. Use sempre com a replacement :tz. */
-const sqlDay = (col) => `to_char((${col} AT TIME ZONE :tz), 'YYYY-MM-DD')`;
-const sqlMonth = (col) => `to_char((${col} AT TIME ZONE :tz), 'YYYY-MM')`;
+const sqlDay = (col) => `to_char(((${col}) AT TIME ZONE :tz), 'YYYY-MM-DD')`;
+const sqlMonth = (col) => `to_char(((${col}) AT TIME ZONE :tz), 'YYYY-MM')`; // parênteses internos: col pode ser expressão (a + b * interval), em que AT TIME ZONE pegaria só o último termo
 const TZ = { tz: BUSINESS_TIMEZONE };
 
 const dayKey = (value) => (value ? businessDateKey(value) : null);
