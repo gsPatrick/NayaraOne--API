@@ -60,3 +60,4 @@ require('./rm_tech_auth_failures.checks'); // M9-D628
 require('./rm_ai_cost.checks'); // M9-D628
 require('./rm_ai_quality.checks'); // M9-D628
 require('./rm_ai_tool_calls.checks'); // M9-D628
+require('./rm_decision_queue.checks'); // M9-D709

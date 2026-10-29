@@ -51,6 +51,7 @@ const { CRM_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/crmKpi.set
 const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/financeResults.settings');
 const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
 const { QUERY_SETTINGS_SCHEMA } = require('../analytics/metrics/query.settings');
+const { DECISAO_FILA_SETTINGS_SCHEMA } = require('../analytics/read-models/decisaoFilaKpi.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/imoveisKpi.settings');
 const { CORRETORES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/corretoresKpi.settings');
@@ -272,6 +273,8 @@ const SETTINGS_SCHEMA = {
   ...LOAD_SETTINGS_SCHEMA,
   // Marco 9, M9-D702 — API de métricas: quantas linhas da decomposição por dimensão a resposta traz.
   ...QUERY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D709 — fila de decisão do Centro de Comando: owner de cada KPI e idade a partir da qual o item pendente é "envelhecido".
+  ...DECISAO_FILA_SETTINGS_SCHEMA,
   // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
   // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
   ...CASH_SETTINGS_SCHEMA,

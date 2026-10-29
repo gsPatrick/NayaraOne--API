@@ -29,6 +29,7 @@ require('./obras-estoque-patrimonio-pos-obra.readmodel'); // M9-D618: Obras, Est
 require('./juridico-correspondente.readmodel'); // M9-D619: Jurídico e Correspondente Bancário
 require('./marketing-atendimento.readmodel'); // M9-D627: Marketing e Atendimento/Satisfação
 require('./tecnologia-seguranca-ia.readmodel'); // M9-D628: Tecnologia, Integrações, Segurança e IA
+require('./decisao-fila.readmodel'); // M9-D709: fila de decisão do Centro de Comando
 require('./command-events.readmodel'); // M9-D710: fatos do dia do Centro de Comando (contratos assinados, oportunidades ganhas, pagamentos liquidados)
 
 module.exports = {
@@ -45,6 +46,7 @@ module.exports = {
   onBatchFlushed,
   readAggregate,
   readIntercompanyPairs: require('./intercompany.read').readIntercompanyPairs, // M9-D625
+  listDecisionQueue: require('./decisao-fila.list').listDecisionQueue, // M9-D709: fila de decisão do Centro de Comando
   assertReadModelTable,
   rebuildReadModel,
   onRebuildChecks,

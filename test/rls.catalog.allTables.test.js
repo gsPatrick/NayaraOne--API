@@ -585,3 +585,11 @@ test('M9-D670/M9-D671: rm_mkt_campaign_month e rm_mkt_optout_month têm RLS, FOR
     assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
   }
 });
+
+// M9-D709: read model da fila de decisão do Centro de Comando com RLS + FORCE RLS e 4 políticas.
+test('M9-D709: rm_decision_queue tem RLS, FORCE RLS e 4 políticas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_decision_queue'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
+});
