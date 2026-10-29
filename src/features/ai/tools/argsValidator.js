@@ -35,6 +35,8 @@ function criarAjv() {
       return true;
     },
   });
+  // sensitive (M9-D006): marca o campo que nunca é gravado em ai.tool_calls (só o hash dos argumentos); aqui é só anotação do schema.
+  ajv.addKeyword('sensitive', { metaSchema: { type: 'boolean' } });
   return ajv;
 }
 

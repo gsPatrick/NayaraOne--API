@@ -27,7 +27,7 @@ function tabela(registry, nome) {
  * `argsLimits` ({ stringMax, arrayMax }) é opcional: sem ele, os limites da empresa (ia.tool.*) são lidos com a `transaction` do
  * tenant (M9-D018). Os argumentos são validados contra o inputSchema da tool ANTES de qualquer proposta ou execução.
  */
-async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction, argsLimits, transaction, untrustedTexts, actorTexts, trustedValues, injectionLimits } = {}) {
+async function executeTool({ registry, toolName, input, contextParts, recorder, proposeAction, argsLimits, transaction, untrustedTexts, actorTexts, trustedValues, injectionLimits, seq, idempotencyKey } = {}) {
   if (!recorder || typeof recorder.record !== 'function') {
     throw AppError.internal('Executor de tools sem registro de auditoria.', 'AI_AUDIT_RECORDER_REQUIRED');
   }
@@ -44,6 +44,9 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
   };
 
   const tool = tabela(registry, toolName);
+  // M9-D006: o recorder real registra a chamada ANTES de executar; a mesma chamada repetida (replay) devolve o resultado anterior.
+  const claim = typeof recorder.claim === 'function' ? await recorder.claim({ toolName, tool, args: input, seq, idempotencyKey }) : null;
+  if (claim && claim.replayed) return claim.outcome;
   if (!tool) return bloquear(capacidadeNegada('tool_nao_registrada', { tool: toolName, reason: 'tool_nao_registrada' }), 'tool_nao_registrada');
   if (typeof tool.execute !== 'function') return bloquear(capacidadeNegada('tool_sem_execute', { tool: toolName, reason: 'tool_sem_execute' }), 'tool_sem_execute');
 
@@ -99,7 +102,7 @@ async function executeTool({ registry, toolName, input, contextParts, recorder, 
     // a tool engoliu o erro: o pedido de capacidade proibida continua valendo como bloqueio
     return bloquear(capacidadeNegada(tentativas[0].capability, { path: tentativas[0].path }), tentativas[0].capability);
   }
-  await recorder.record({ ...base(), status: 'SUCCEEDED', ...marca });
+  await recorder.record({ ...base(), status: 'SUCCEEDED', output: saida, ...marca });
   return { status: 'SUCCEEDED', output: saida };
 }
 
