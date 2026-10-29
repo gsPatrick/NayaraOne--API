@@ -5,7 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { spawn } = require('child_process');
-const { sequelize, carregarTenants, conexaoAtiva, limparCircuito, linha, errosCircuito, health } = require('../_helpers/m9d217Env');
+const { sequelize, carregarTenants, conexaoAtiva, limparCircuito, desativarConexoesDeTeste, linha, errosCircuito, health } = require('../_helpers/m9d217Env');
 
 const FILHO = path.join(__dirname, '..', '_helpers', 'circuitChild.js');
 let tenant;
@@ -20,7 +20,7 @@ const filho = (modo, id, n = 0) => new Promise((resolve, reject) => {
 });
 
 before(async () => { ({ tenant } = await carregarTenants()); await limparCircuito(tenant); });
-after(async () => { await limparCircuito(tenant); await sequelize.close(); });
+after(async () => { await limparCircuito(tenant); await desativarConexoesDeTeste(tenant); await sequelize.close(); });
 
 test('circuito_estado_compartilhado_entre_instancias', async () => {
   const c = await conexaoAtiva(tenant, 'MESSAGING');

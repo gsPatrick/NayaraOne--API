@@ -4,7 +4,7 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparCircuito, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito,
+  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparCircuito, desativarConexoesDeTeste, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito,
 } = require('../_helpers/m9d217Env');
 const registry = require('../../../src/features/integrations/registry/registry.service');
 const { mergeCircuitPolicy } = require('../../../src/features/integrations/health/circuitPolicy');
@@ -15,7 +15,7 @@ const passado = (s) => new Date(Date.now() - s * 1000);
 
 before(async () => { ({ tenant } = await carregarTenants()); });
 beforeEach(async () => { await limparCircuito(tenant); c = await conexaoAtiva(tenant, 'MESSAGING'); });
-after(async () => { await limparCircuito(tenant); await sequelize.close(); });
+after(async () => { await limparCircuito(tenant); await desativarConexoesDeTeste(tenant); await sequelize.close(); });
 
 test('circuito_abre_apos_limiar_consecutivo', async () => {
   await falhar(tenant, c.id, 4);

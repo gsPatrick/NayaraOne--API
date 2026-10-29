@@ -8,7 +8,7 @@ const {
   sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparPendentes, enfileirar, tentativas, instalar, restaurar, forcar, ler, dispatch,
 } = require('../_helpers/m9d214Env');
 const { mensagemProgramavel, erroHttp } = require('../_helpers/m9d214Scripted');
-const { linha, forcarCircuito, errosCircuito, limparCircuito, admitir, breaker, comConexao } = require('../_helpers/m9d217Env');
+const { linha, forcarCircuito, errosCircuito, limparCircuito, desativarConexoesDeTeste, admitir, breaker, comConexao } = require('../_helpers/m9d217Env');
 const { registerContingencyHandler, clearContingencyHandlers } = require('../../../src/features/integrations/providers/contingency.registry');
 
 let tenant;
@@ -27,7 +27,7 @@ beforeEach(async () => {
   await limparCircuito(tenant);
   msg = await conexaoAtiva(tenant, 'MESSAGING');
 });
-after(async () => { clearContingencyHandlers(); await limparCircuito(tenant); restaurar(); await sequelize.close(); });
+after(async () => { clearContingencyHandlers(); await limparCircuito(tenant); await desativarConexoesDeTeste(tenant); restaurar(); await sequelize.close(); });
 
 test('circuito_aciona_fallback_na_abertura', async () => {
   const chamadas = [];

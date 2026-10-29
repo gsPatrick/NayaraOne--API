@@ -31,6 +31,14 @@ const errosCircuito = (tenant, id) => comTenant(tenant, async (t) => (await sequ
 
 const limparCircuito = (tenant) => limparConfig(tenant, CHAVES);
 
+/**
+ * Tira de cena as connections de teste que o arquivo deixou ativas (rótulo "QA-M9"): a connection ativa de um fornecedor é a que a API
+ * administrativa e os testes seguintes enxergam, e cada arquivo cria as suas.
+ */
+const desativarConexoesDeTeste = (tenant) => comTenant(tenant, (t) => sequelize.query(
+  "UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND label LIKE 'QA-M9%' AND status IN ('ACTIVE', 'PAUSED', 'AUTH_FAILED')", { replacements: { c: tenant.companyId }, transaction: t },
+));
+
 module.exports = {
-  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparConfig, limparCircuito, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito, comConexao, breaker, health,
+  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, config, limparConfig, limparCircuito, desativarConexoesDeTeste, admitir, resultado, falhar, linha, forcarCircuito, errosCircuito, comConexao, breaker, health,
 };
