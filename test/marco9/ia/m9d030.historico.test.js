@@ -25,6 +25,7 @@ test('m9d030_chat_historico_so_como_entrada_ultimas_n_mensagens_redigidas', asyn
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const { registry, pedidos } = espiaRegistry();
     const c = await H.cenario(tenantA, tx, { agentOver: { limits: { max_runs_por_minuto_usuario: 100 } }, deps: { registry } });
+    const memoriasAntes = (await H.q('SELECT count(*)::int AS n FROM ai.memories WHERE company_id = :c', { c: tenantA.companyId }, tx))[0].n;
     await definirParametro(tenantA, 'ia.chat.max_mensagens', 2, tx);
     const um = await conversar(c, 'Primeira pergunta sobre aluguel [[RESPOSTA:Resposta da primeira.]]');
     const conversa = um.conversationId;
@@ -39,7 +40,7 @@ test('m9d030_chat_historico_so_como_entrada_ultimas_n_mensagens_redigidas', asyn
     assert.ok(!prompt.includes('529.982.247-25'), 'o histórico entra redigido');
     assert.match(prompt, /REDIGIDO/);
     // Sem memória: nada foi gravado em ai.memories e o histórico não é tabela nova (é a entrada dos runs da conversa).
-    assert.equal((await H.q('SELECT count(*)::int AS n FROM ai.memories WHERE company_id = :c', { c: tenantA.companyId }, tx))[0].n, 0);
+    assert.equal((await H.q('SELECT count(*)::int AS n FROM ai.memories WHERE company_id = :c', { c: tenantA.companyId }, tx))[0].n, memoriasAntes);
     assert.equal((await H.q('SELECT count(*)::int AS n FROM ai.ai_runs WHERE conversation_id = :id', { id: conversa }, tx))[0].n, 4);
     await definirParametro(tenantA, 'ia.chat.max_mensagens', 0, tx);
     pedidos.length = 0;

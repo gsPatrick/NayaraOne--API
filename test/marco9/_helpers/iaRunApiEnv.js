@@ -15,16 +15,16 @@ const LEITURA_CRM = ['crm:opportunities:read', 'people:read', 'radar:read'];
 const PERFIS = ['CI GESTOR', 'CI CHECKER', 'CI MAKER', 'CI LEITURA'];
 const POLITICA = { capability: 'chat', maxOutputTokens: 800, cacheableTaskTypes: [] };
 
-/** Perfis: gestor (tudo da NAY + CRM), checker (corretor: ai:use e ai:read + CRM), maker (ai:use e ai:read, sem CRM), leitura (só ai:use). */
+/** Perfis: gestor (tudo da NAY + CRM), checker (corretor: ai:use e ai:read + CRM, sem ai:approve), maker (ai:use, ai:read e ai:evaluate, sem CRM), leitura (só ai:use). */
 async function subir(porta) {
   await admin(
     `DELETE FROM core.role_permissions rp USING core.roles r, core.permissions p
       WHERE rp.role_id = r.id AND rp.permission_id = p.id AND r.name = ANY($1::text[]) AND (p.code LIKE 'ai:%' OR p.code = ANY($2::text[]))`,
-    [PERFIS, [...LEITURA_CRM, 'crm:tasks:create']]
+    [PERFIS, [...LEITURA_CRM, 'crm:tasks:create', 'legal:read']]
   );
   await grant('CI GESTOR', ['ai:admin', 'ai:use', 'ai:read', 'ai:audit', 'ai:budget', 'ai:evaluate', 'settings:read', 'settings:update', 'crm:tasks:create', ...LEITURA_CRM]);
-  await grant('CI CHECKER', ['ai:use', 'ai:read', ...LEITURA_CRM]);
-  await grant('CI MAKER', ['ai:use', 'ai:read']);
+  await grant('CI CHECKER', ['ai:use', 'ai:read', 'legal:read', ...LEITURA_CRM]);
+  await grant('CI MAKER', ['ai:use', 'ai:read', 'ai:evaluate']);
   await grant('CI LEITURA', ['ai:use']);
   const env = await startHttpEnv(porta, [['A', 'gestor'], ['A', 'checker'], ['A', 'maker'], ['A', 'leitura'], ['B', 'gestor']]);
   const gestor = await usuario('A', 'gestor');
@@ -54,12 +54,15 @@ const LINHAS_TOOL = {
 };
 
 /** Versão ATIVA da empresa criada por SQL (DRAFT, allowlist, HOMOLOGATED, ACTIVE), com o orçamento mensal pela rota. */
-async function agenteAtivo(env, tenant, { code = codigoNovo(), tools = ['crm.getOpportunity'], limits = { max_runs_por_minuto_usuario: 200 }, systemPolicy = 'Cite as fontes.', limit = '500.00', orcamento = true } = {}) {
+async function agenteAtivo(env, tenant, { code = codigoNovo(), tools = ['crm.getOpportunity'], dataScopes = [], limits = { max_runs_por_minuto_usuario: 200 }, systemPolicy = 'Cite as fontes.', limit = '500.00', orcamento = true } = {}) {
   const id = crypto.randomUUID();
+  // Num cluster compartilhado por vários arquivos, o código pode já ter versão da empresa: aposenta as vivas e segue a numeração.
+  await admin("UPDATE ai.agents SET status = 'RETIRED', retired_at = now() WHERE company_id = $1 AND code = $2 AND status IN ('ACTIVE', 'HOMOLOGATED')", [tenant.companyId, code]);
+  const versao = Number((await admin('SELECT coalesce(max(version), 0) + 1 AS v FROM ai.agents WHERE company_id = $1 AND code = $2', [tenant.companyId, code])).rows[0].v);
   await admin(
     `INSERT INTO ai.agents (id, group_id, company_id, code, version, status, purpose, system_policy, model_policy, data_scopes, limits, criticality, enabled, config_hash)
-     VALUES ($1, $2, $3, $4, 1, 'DRAFT', 'Agente de teste da M9-D030.', $5, $6::jsonb, '[]'::jsonb, $7::jsonb, 'NON_CRITICAL', false, $8)`,
-    [id, tenant.groupId, tenant.companyId, code, systemPolicy, JSON.stringify(POLITICA), JSON.stringify(limits), crypto.randomBytes(32).toString('hex')]
+     VALUES ($1, $2, $3, $4, $10, 'DRAFT', 'Agente de teste da M9-D030.', $5, $6::jsonb, $9::jsonb, $7::jsonb, 'NON_CRITICAL', false, $8)`,
+    [id, tenant.groupId, tenant.companyId, code, systemPolicy, JSON.stringify(POLITICA), JSON.stringify(limits), crypto.randomBytes(32).toString('hex'), JSON.stringify(dataScopes), versao]
   );
   for (const nome of tools) {
     const l = LINHAS_TOOL[nome];
@@ -72,7 +75,8 @@ async function agenteAtivo(env, tenant, { code = codigoNovo(), tools = ['crm.get
   await admin("UPDATE ai.agents SET status = 'ACTIVE', enabled = true, activated_by = $2, activated_at = now() WHERE id = $1", [id, tenant.userId]);
   if (orcamento) {
     const r = await env.call('POST', '/ai/budgets', env.tokens['A:gestor'], { agentCode: code, limitAmount: limit });
-    assert.equal(r.status, 201, JSON.stringify(r.body));
+    // Outro arquivo do mesmo cluster pode já ter aberto o orçamento deste agente no mês: ele serve.
+    assert.ok(r.status === 201 || (r.status === 409 && r.body.error.code === 'AI_BUDGET_EXISTS'), JSON.stringify(r.body));
   }
   return code;
 }
