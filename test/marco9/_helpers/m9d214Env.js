@@ -60,7 +60,18 @@ function instalar(Classe) {
 }
 const restaurar = () => { ['bank-sandbox', 'messaging-sandbox', 'portal-sandbox'].forEach((c) => adapterRegistry.unregister(c)); return registerBuiltInAdapters(); };
 
+const erros = (tenant, connectionId, errorCode) => comTenant(tenant, async (t) => (await sequelize.query(
+  'SELECT * FROM integration.integration_errors WHERE connection_id = :c AND error_code = :k ORDER BY created_at', { replacements: { c: connectionId, k: errorCode }, transaction: t },
+))[0]);
+
+/** Roda uma rodada do worker e depois deixa o envio vencido de novo (para encadear tentativas sem esperar o relógio). */
+async function rodarEVencer(tenant, id, now = new Date()) {
+  const resumo = await dispatch.runDispatchCycle(ctxDe(tenant), { now });
+  await forcar(tenant, id, "next_attempt_at = now() - interval '1 second'");
+  return resumo;
+}
+
 module.exports = {
-  sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparPendentes, enfileirar, pagamento, tentativas, eventos, config, limparConfig,
+  erros, rodarEVencer, sequelize, comTenant, carregarTenants, ctxDe, conexaoAtiva, limparPendentes, enfileirar, pagamento, tentativas, eventos, config, limparConfig,
   instalar, restaurar, forcar, ler, uniqueSuffix, dispatch, adapterRegistry,
 };

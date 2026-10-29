@@ -44,6 +44,8 @@ async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
     throw err;
   }
   await auditar(ctx, c, antes, serializeConnection(c), `Integração "${c.label}": status ${de} -> ${toStatus}.`, transaction);
+  // M9-D216: test-connection verde reativa a connection e os envios parados por recusa de credencial voltam sem gastar tentativa.
+  if (de === 'AUTH_FAILED' && toStatus === 'ACTIVE') await require('../dispatch/retry/retry.resume').resumeAuthFailedDispatches(ctx, c.id, transaction);
   return c;
 }
 

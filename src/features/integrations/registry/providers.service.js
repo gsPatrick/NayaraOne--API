@@ -8,6 +8,7 @@ const { CRITICALITIES, PROVIDER_STATUSES, ANTES_CRIACAO, CODE_RE } = require('./
 const { ctxOk, texto, comPlataforma } = require('./registry.helpers');
 const { recusarSegredo } = require('./registry.segredo');
 const { assertDomain, assertCapabilitiesForDomain } = require('../providers/catalog.validate');
+const { validatePolicyJson } = require('../dispatch/retry/retry.limits');
 
 /** Catálogo global de fornecedores (`integration.providers`, M9-D200). */
 
@@ -40,6 +41,7 @@ function validarProvider(p, { parcial = false } = {}) {
         throw AppError.badRequest(`O campo "${campo}" deve ser um objeto.`, 'VALIDATION_ERROR');
       }
       if (campo === 'defaultPolicyJson' && acharSegredo(p[campo])) throw recusarSegredo();
+      if (campo === 'defaultPolicyJson') validatePolicyJson(p[campo]);
       saida[campo] = p[campo];
     }
   }

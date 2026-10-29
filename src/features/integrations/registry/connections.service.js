@@ -11,6 +11,7 @@ const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registr
 const { validarSecretRefDaConexao } = require('../secrets/secretRefRules');
 const { exigirMfaSegredoBank } = require('../secrets/secretPolicy');
 const { validarRegrasIA, exigirSegredoParaAtivarIA } = require('./connections.aiRules');
+const { validatePolicyJson } = require('../dispatch/retry/retry.limits');
 
 /** Conexões de cada empresa com cada fornecedor, por ambiente (`integration.connections`). */
 
@@ -58,6 +59,7 @@ async function createConnection(payload, ctx, transaction, opts = {}) {
   const label = texto(p.label, 'nome', 80, { obrigatorio: true });
   const configJson = p.configJson ?? {};
   const policyJson = p.policyJson ?? {};
+  validatePolicyJson(policyJson);
   conferirConfigContraSchema(provider, configJson);
   validarRegrasIA(provider, configJson, null, ctx);
   const apiVersion = texto(p.apiVersion, 'versão da API', 16);
@@ -136,7 +138,7 @@ async function updateConnection(id, patch, ctx, transaction, opts = {}) {
   const provider = await carregarProvider(c.providerCode, transaction);
   if (p.label !== undefined) c.label = texto(p.label, 'nome', 80, { obrigatorio: true });
   if (p.configJson !== undefined) { conferirConfigContraSchema(provider, p.configJson); validarRegrasIA(provider, p.configJson, c.configJson, ctx); c.configJson = p.configJson; }
-  if (p.policyJson !== undefined) c.policyJson = p.policyJson;
+  if (p.policyJson !== undefined) { validatePolicyJson(p.policyJson); c.policyJson = p.policyJson; }
   if (p.apiVersion !== undefined) { const v = texto(p.apiVersion, 'versão da API', 16); conferirVersao(provider, v); c.apiVersion = v; }
   if (p.secretRef !== undefined) {
     const novoRef = texto(p.secretRef, 'referência do cofre', 160);

@@ -9,7 +9,15 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   // INT-P013: dias até o conteúdo enviado virar só o hash.
   'integration.dispatch.payload_retention_days': { type: 'integer', min: 1, max: 3650 },
   // INT-P004: tentativas máximas de um envio novo (o retry humano soma 3).
-  'integration.retry.max_attempts': { type: 'integer', min: 1, max: 50 },
+  'integration.retry.max_attempts': { type: 'integer', min: 1, max: 20 },
+  // M9-D216 3.2: atraso da nova tentativa de erro transitório (base * fator^(n-1), no máximo o teto, com jitter para mais ou para menos),
+  // espera máxima atendida em 429 e quantos adiamentos seguidos por limite do fornecedor valem antes de contar como falha.
+  'integration.retry.base_delay_ms': { type: 'integer', min: 100, max: 3600000 },
+  'integration.retry.factor': { type: 'integer', min: 1, max: 10 },
+  'integration.retry.cap_delay_ms': { type: 'integer', min: 1000, max: 86400000 },
+  'integration.retry.jitter_pct': { type: 'integer', min: 0, max: 50 },
+  'integration.retry.rate_limit_max_wait_s': { type: 'integer', min: 1, max: 86400 },
+  'integration.retry.rate_limit_max_deferrals': { type: 'integer', min: 1, max: 10000 },
   // M9-D214 3.2: de quantos em quantos segundos o worker de envios roda, quantos envios pega por rodada e quanto espera antes de
   // reconferir uma conexão parada (PAUSED, DISABLED, AUTH_FAILED ou sem adaptador) sem gastar tentativa.
   'integration.dispatch.worker_interval_s': { type: 'integer', min: 1, max: 3600 },

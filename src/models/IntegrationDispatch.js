@@ -39,6 +39,7 @@ module.exports = (sequelize) => sequelize.define(
     fieldsDropped: { type: DataTypes.INTEGER, allowNull: true, field: 'fields_dropped' },
     confirmationMode: { type: DataTypes.STRING(12), allowNull: true, field: 'confirmation_mode' },
     externalStatus: { type: DataTypes.STRING(64), allowNull: true, field: 'external_status' },
+    authRenewals: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 0, field: 'auth_renewals' },
     essential: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     submittedAt: { type: DataTypes.DATE, allowNull: true, field: 'submitted_at' },
     createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },

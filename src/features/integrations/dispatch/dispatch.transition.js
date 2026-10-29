@@ -8,7 +8,7 @@ const { auditarMudanca, visao } = require('./dispatch.audit');
 const { ERROR_CLASSES, HUMAN_RETRY_EXTRA_ATTEMPTS } = require('./dispatch.constants');
 
 /** Campos que quem transiciona pode informar (o conteúdo aprovado nunca está aqui). */
-const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus'];
+const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus', 'authRenewals'];
 
 function pickPatch(patch) {
   const out = {};
@@ -47,7 +47,7 @@ async function transitionDispatch(ctx, id, to, patch, opts, transaction) {
 
 /** Mesma regra, para quem já tem a linha travada (claim, recuperador). */
 async function applyTransition(ctx, row, to, patch, opts, transaction) {
-  if (refusalReason(row.status, to, { criticalityOp: row.criticalityOp, humanRetry: opts.humanRetry, reconciled: opts.reconciled })) throw invalidTransition(row.status, to);
+  if (refusalReason(row.status, to, { criticalityOp: row.criticalityOp, humanRetry: opts.humanRetry, reconciled: opts.reconciled, authRecovery: opts.authRecovery })) throw invalidTransition(row.status, to);
   const antes = visao(row);
   try {
     await row.update({ ...pickPatch(patch), ...sideEffects(row, to, opts), status: to }, { transaction });
