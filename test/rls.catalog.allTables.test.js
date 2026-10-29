@@ -661,3 +661,13 @@ test('M9-D824: access_signals, access_anomalies e user_dlp_state têm RLS, FORCE
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
   }
 });
+
+// M9-D830: o catálogo de setores do BCP (governance.bcp_sectors) é igual para toda empresa (só leitura): RLS + FORCE RLS, a política de leitura e SELECT ao role de runtime.
+test('M9-D830: bcp_sectors tem RLS, FORCE RLS e a política de leitura', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'bcp_sectors_read') AS named
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'bcp_sectors'`);
+  assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies, r.named]), [['bcp_sectors', true, true, 1, 1]]);
+  const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.bcp_sectors', 'SELECT') AS sel WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
+  if (grants.length) assert.equal(grants[0].sel, true, 'SELECT ao role de runtime');
+});
