@@ -63,4 +63,4 @@ function parseChatBody(agentCode, raw, purpose) {
   };
 }
 
-module.exports = { parseRunBody, parseChatBody, INPUT_MAX };
+module.exports = { parseRunBody, parseChatBody, parseInput, parseKey, INPUT_MAX };

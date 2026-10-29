@@ -5,6 +5,7 @@ const { initToolRegistry } = require('../tools');
 const { parseRunBody, parseChatBody } = require('./runApi.validation');
 const { readRunApiParams } = require('./runApi.params');
 const { resolveConversation, chatPurpose } = require('./conversation');
+const { isAtendimento, executeChannelRequest } = require('./atendimentoChannel');
 
 /** O que o orquestrador precisa saber da pessoa (nunca vem do corpo do pedido). */
 const authOf = (auth) => ({
@@ -18,6 +19,8 @@ const authOf = (auth) => ({
  */
 async function executeRequest({ kind, agentCode, body }, auth, transaction, deps = {}) {
   const who = authOf(auth);
+  // Chat do NAY_ATENDIMENTO: é o do canal externo (identidade de serviço e contato resolvidos pelo servidor), não o de uma pessoa.
+  if (kind === 'CHAT' && isAtendimento(agentCode)) return { ...(await executeChannelRequest({ body }, who, transaction, deps)), params: await readRunApiParams(who, transaction) };
   const parsed = kind === 'CHAT' ? parseChatBody(agentCode, body, chatPurpose(agentCode)) : parseRunBody(body);
   const params = await readRunApiParams(who, transaction);
   let conversationId = null;
