@@ -121,3 +121,37 @@ test('Mesma classe nos vizinhos: descricao, origem e motivo so com invisivel/nao
     assert.equal(changed.description, 'Descricao nova');
   });
 });
+
+// Auditoria: caracteres que renderizam em branco mas nao sao Cc/Cf/Z (Braille em branco, fillers etc.).
+const EM_BRANCO_FORA_DE_CCCFZ = [
+  '⠀', 'ᅟ', 'ᅠ', 'ㅤ', 'ﾠ', '឴', '឵', '͏', '؜',
+  '\u{1D159}', '᠋', '᠌', '᠍', '᠏', '\u{E0020}', '\u{E0100}', '\u{E0001}', '️',
+];
+
+test('Nota feita so de caractere em branco fora de Cc/Cf/Z (U+2800, fillers Hangul/Khmer, U+034F, U+061C, U+1D159...): recusada (422)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { d } = await pending(transaction);
+    for (const c of EM_BRANCO_FORA_DE_CCCFZ) {
+      for (const nota of [c, `${c}${c}`, ` ${c} \n${c}`]) {
+        await assert.rejects(
+          () => legalDeadlinesService.updateLegalDeadline(d.id, { status: 'DONE', conclusionNote: nota }, tenant.userId, transaction),
+          expectCode('LEGAL_DEADLINE_CONCLUSION_PROOF_REQUIRED', 422),
+          `U+${c.codePointAt(0).toString(16)}`
+        );
+      }
+    }
+    assert.equal((await LegalDeadline.findByPk(d.id, { transaction })).status, 'PENDING');
+  });
+});
+
+test('Positivo: nota com texto visivel cercada de U+2800/fillers e aceita e aparada; descricao so de U+2800 e recusada (400)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { d, legalCase } = await pending(transaction);
+    const done = await legalDeadlinesService.updateLegalDeadline(d.id, { status: 'DONE', conclusionNote: '⠀ㅤ Peticao protocolada. ᅟ⠀' }, tenant.userId, transaction);
+    assert.equal(done.conclusionNote, 'Peticao protocolada.');
+    await assert.rejects(
+      () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: '⠀⠀', dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, transaction),
+      expectCode('LEGAL_DEADLINE_VALIDATION', 400)
+    );
+  });
+});

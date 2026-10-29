@@ -9,8 +9,14 @@ const AppError = require('../../utils/AppError');
  * U+200C-200F, U+00AD, U+2060-2064, U+FEFF, U+180E, U+202A-202E...), separadores/espacos
  * Unicode (Z: U+00A0, U+2000-200A, U+3000...), preenchedores que renderizam em branco
  * (U+034F, U+115F, U+1160, U+3164, U+FFA0) e seletores de variacao (U+FE00-FE0F).
+ * Tambem entram os que renderizam em branco fora de Cc/Cf/Z: Braille em branco (U+2800), fillers
+ * Hangul (U+115F, U+1160, U+3164, U+FFA0), vogais Khmer inerentes (U+17B4-17B5), marca de letra
+ * arabe (U+061C), U+1D159 (nota musical nula), alem de tudo que o Unicode marca como
+ * Default_Ignorable_Code_Point (tags U+E0000-E007F, seletores U+E0100-E01EF, U+180B-180F...).
  */
-const INVISIBLE_CLASS = '[\\p{Cc}\\p{Cf}\\p{Z}\\u034F\\u115F\\u1160\\u3164\\uFFA0\\p{Variation_Selector}]';
+const INVISIBLE_CLASS =
+  '[\\p{Cc}\\p{Cf}\\p{Z}\\p{Variation_Selector}\\p{Default_Ignorable_Code_Point}' +
+  '\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u2800\\u3164\\uFFA0\\u{1D159}\\u{1D173}-\\u{1D17A}]';
 const INVISIBLE_ALL = new RegExp(INVISIBLE_CLASS, 'gu');
 const INVISIBLE_EDGES = new RegExp(`^${INVISIBLE_CLASS}+|${INVISIBLE_CLASS}+$`, 'gu');
 
