@@ -26,6 +26,8 @@ function computeSeverity(deadline, now = new Date()) {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Valores que o prazo realmente assume (computeSeverity, job de alerta e reabertura usam so estes).
+const DEADLINE_STATUSES = ['PENDING', 'DONE'];
 const DEADLINE_CRITICALITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 function assertValidDate(value, field) {
@@ -149,7 +151,16 @@ async function getLegalDeadline(id, transaction) {
 async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   const deadline = await getLegalDeadline(id, transaction);
   const beforeJson = deadline.toJSON();
-  const { status, dueAt, conclusionEvidenceFileId, conclusionNote } = payload;
+  const { dueAt, conclusionEvidenceFileId, conclusionNote } = payload;
+  // Auditoria da cliente (Marco 5, item 3): o status e normalizado (caixa/espacos) e validado
+  // contra a lista do modelo; assim "done" vira DONE e exige a prova, e valor desconhecido e recusado.
+  let status;
+  if (payload.status !== undefined) {
+    status = normalizeOptionalText(payload.status, 'status')?.toUpperCase();
+    if (!DEADLINE_STATUSES.includes(status)) {
+      throw AppError.badRequest(`"status" deve ser um de: ${DEADLINE_STATUSES.join(', ')}.`, 'LEGAL_DEADLINE_VALIDATION');
+    }
+  }
   const description = payload.description !== undefined ? requireText(payload.description, 'description', { max: 255 }) : undefined;
   if (dueAt !== undefined) assertValidDate(dueAt, 'dueAt');
   if (conclusionEvidenceFileId !== undefined && conclusionEvidenceFileId !== null && !UUID_RE.test(String(conclusionEvidenceFileId))) {
@@ -250,4 +261,4 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   return deadline;
 }
 
-module.exports = { DEADLINE_CRITICALITIES, createLegalDeadline, listLegalDeadlines, getLegalDeadline, updateLegalDeadline, computeSeverity };
+module.exports = { DEADLINE_STATUSES, DEADLINE_CRITICALITIES, createLegalDeadline, listLegalDeadlines, getLegalDeadline, updateLegalDeadline, computeSeverity };
