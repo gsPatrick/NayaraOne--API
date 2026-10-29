@@ -5,7 +5,8 @@
  * os itens abaixo do mínimo, as rupturas e as perdas dos últimos 30 dias, mais os itens sem mínimo e sem custo médio (o KPI marca DEGRADED, M9-D653).
  * Entram os itens ativos dos tipos do parâmetro analytics.estoque.tipos_item (padrão CONSUMABLE; ferramentas e patrimônio estão em rm_tool_assets).
  * Abaixo do mínimo = saldo total < mínimo; ruptura = item com mínimo definido e saldo <= 0. Perda = caso de perda decidido como perda (APPROVED) na
- * janela de 30 dias (data-base inclusive, SP), pelo custo do movimento de baixa, ou o estimado se a baixa não tem custo. Depende do relógio.
+ * janela de 30 dias (data-base inclusive, SP), pelo custo do movimento de baixa, ou o estimado se a baixa não tem custo; também guarda quantas foram
+ * decididas, quantas ficaram sem valor nenhum (o KPI marca DEGRADED, M9-D653) e quantos casos seguem abertos. Depende do relógio.
  */
 const { sequelize } = require('../../../models');
 const { registerReadModel } = require('./readModel.registry');
@@ -31,10 +32,14 @@ async function recompute({ companyId, groupId, asOfDate, transaction }) {
     { replacements: { companyId, types }, transaction }
   );
   const [[loss]] = await sequelize.query(
-    `SELECT ROUND(COALESCE(SUM(COALESCE(mv.total_cost, lc.estimated_cost, 0)), 0), 2)::text AS losses_30d
-       FROM inventory.loss_cases lc LEFT JOIN inventory.inventory_movements mv ON mv.id = lc.resulting_movement_id AND mv.company_id = :companyId
-      WHERE lc.company_id = :companyId AND lc.status = 'APPROVED' AND lc.decided_at IS NOT NULL
-        AND (lc.decided_at AT TIME ZONE :tz)::date BETWEEN CAST(:asOf AS date) - 29 AND CAST(:asOf AS date)`,
+    `WITH decided AS (
+       SELECT COALESCE(mv.total_cost, lc.estimated_cost) AS value
+         FROM inventory.loss_cases lc LEFT JOIN inventory.inventory_movements mv ON mv.id = lc.resulting_movement_id AND mv.company_id = :companyId
+        WHERE lc.company_id = :companyId AND lc.status = 'APPROVED' AND lc.decided_at IS NOT NULL
+          AND (lc.decided_at AT TIME ZONE :tz)::date BETWEEN CAST(:asOf AS date) - 29 AND CAST(:asOf AS date))
+     SELECT ROUND(COALESCE(SUM(value), 0), 2)::text AS losses_30d, (count(*))::int AS losses_30d_count, (count(*) FILTER (WHERE value IS NULL))::int AS losses_without_value,
+            (SELECT count(*)::int FROM inventory.loss_cases WHERE company_id = :companyId AND status = 'OPEN') AS losses_open
+       FROM decided`,
     { replacements: { companyId, asOf: asOfDate, tz: BUSINESS_TIMEZONE }, transaction }
   );
   return { fields: { ...stock, ...loss } };
