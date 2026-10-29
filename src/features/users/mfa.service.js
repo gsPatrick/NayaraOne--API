@@ -375,7 +375,10 @@ async function disableMfa(userId, code, actorContext, transaction) {
 async function hasRecentMfa(userId, transaction) {
   const stepUp = await MfaStepUp.findOne({ where: { userId }, transaction });
   if (!stepUp) return false;
-  return stepUp.expiresAt.getTime() > Date.now();
+  if (stepUp.expiresAt.getTime() <= Date.now()) return false;
+  // M9-D824: anomalia de acesso em massa aberta ou confirmada invalida o MFA verificado antes da detecção (a sessão continua; pede-se MFA novo). require tardio (ciclo).
+  const { isMfaVoided } = require('../core-governance/dlp/userState.repository');
+  return !(await isMfaVoided(userId, stepUp.verifiedAt, new Date(), transaction));
 }
 
 /**
