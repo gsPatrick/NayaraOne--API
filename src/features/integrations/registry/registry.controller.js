@@ -4,7 +4,7 @@ const catchAsync = require('../../../utils/catchAsync');
 const { success } = require('../../../utils/httpResponse');
 const service = require('./registry.service');
 
-const ctxDe = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId });
+const ctxDe = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId, permissions: req.auth.permissions });
 
 const listProviders = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) => service.listProviders({ domain: req.query.domain, status: req.query.status }, t));

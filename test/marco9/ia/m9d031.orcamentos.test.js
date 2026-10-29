@@ -94,19 +94,19 @@ test('m9d031_evaluations_run_202_e_leitura', { skip: SKIP }, async () => {
 test('m9d031_evaluations_sem_provider_real_por_padrao', { skip: SKIP }, async () => {
   const code = codigoNovo();
   assert.equal((await env.call('POST', `/ai/agents/${code}/versions`, T('A:gestor'), CORPO_AGENTE)).status, 201);
-  const recusado = await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anthropic' });
+  const recusado = await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anbtech' });
   assert.equal(recusado.status, 409); assert.equal(recusado.body.error.code, 'AI_REAL_PROVIDER_EVAL_DISABLED');
   assert.equal(recusado.body.error.message, 'Avaliações usam o provedor de testes nesta empresa.');
   // o provedor de testes pode ser pedido explicitamente
   const sandbox = await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'ai-sandbox' });
   assert.equal(sandbox.status, 202);
   assert.equal((await esperar(sandbox.body.data.evaluationRunId)).body.data.providerCode, 'ai-sandbox');
-  // com o parâmetro ligado, o provedor real ainda precisa estar registrado (a conta real é configuração, D011)
+  // com o parâmetro ligado, o provedor real ainda precisa estar registrado (a conta real é configuração, D011); 'anbtech' não é adapter nenhum
   assert.equal((await env.call('PUT', `/settings/${REAL}`, T('A:gestor'), { value: true })).status, 200);
-  const semAdapter = await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anthropic' });
+  const semAdapter = await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anbtech' });
   assert.equal(semAdapter.status, 404); assert.equal(semAdapter.body.error.code, 'AI_PROVIDER_NOT_FOUND');
   assert.equal((await env.call('PUT', `/settings/${REAL}`, T('A:gestor'), { value: false })).status, 200);
-  assert.equal((await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anthropic' })).status, 409);
+  assert.equal((await env.call('POST', '/ai/evaluations/run', T('A:gestor'), { agentCode: code, suite: 'golden', providerCode: 'anbtech' })).status, 409);
 });
 
 test('m9d031_permissoes_por_rota: orçamentos e avaliações', { skip: SKIP }, async () => {

@@ -41,6 +41,15 @@ const EXISTING_PROVIDERS = Object.freeze([
   },
 ]);
 
-const SEED_PROVIDERS = Object.freeze([...SANDBOX_PROVIDERS, ...EXISTING_PROVIDERS]);
+/** Fornecedores reais de modelo de IA (M9-D011). Nascem sem conexão: só valem com conexão ACTIVE, que exige a referência do segredo. */
+const aiReal = (code, displayName, capabilities) => ({
+  code, displayName, domain: 'AI', capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.AI, sandboxAvailable: false,
+});
+const AI_REAL_PROVIDERS = Object.freeze([
+  aiReal('anthropic', 'Modelos de IA — Anthropic', ['generate']),
+  aiReal('openai', 'Modelos de IA — OpenAI', ['generate', 'embed']),
+]);
 
-module.exports = { SANDBOX_PROVIDERS, EXISTING_PROVIDERS, SEED_PROVIDERS };
+const SEED_PROVIDERS = Object.freeze([...SANDBOX_PROVIDERS, ...EXISTING_PROVIDERS, ...AI_REAL_PROVIDERS]);
+
+module.exports = { SANDBOX_PROVIDERS, EXISTING_PROVIDERS, AI_REAL_PROVIDERS, SEED_PROVIDERS };

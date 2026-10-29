@@ -11,8 +11,8 @@ const claimsIn = (text) => splitSentences(text).filter((s) => extractEntities(s)
  * GROUNDING: a resposta do modelo passa pelo GroundingValidator (M9-D025); mede-se a fração das afirmações factuais que ficam com
  * fonte válida (uma unidade por afirmação). O caso passa só se todas ficam.
  */
-function evaluateGrounding(caseDef, env) {
-  const out = callModel(env, caseDef.input);
+async function evaluateGrounding(caseDef, env) {
+  const out = await callModel(env, caseDef.input);
   const claims = claimsIn(out.text);
   let result;
   try {
@@ -29,8 +29,8 @@ function evaluateGrounding(caseDef, env) {
 }
 
 /** HALLUCINATION: sem fonte suficiente o resultado tem de ser a insuficiência (ou o bloqueio), nunca o dado inventado. */
-function evaluateHallucination(caseDef, env) {
-  const out = callModel(env, caseDef.input);
+async function evaluateHallucination(caseDef, env) {
+  const out = await callModel(env, caseDef.input);
   let status;
   let answer = '';
   try {

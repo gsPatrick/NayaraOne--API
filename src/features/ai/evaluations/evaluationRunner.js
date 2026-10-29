@@ -31,9 +31,9 @@ async function latencyBudget(agent, ctx, transaction) {
 }
 
 /** Roda um caso; falha inesperada do avaliador reprova o caso (não derruba a avaliação inteira). */
-function runCase(caseDef, env) {
+async function runCase(caseDef, env) {
   try {
-    return EVALUATORS[caseDef.category](caseDef, env);
+    return await EVALUATORS[caseDef.category](caseDef, env);
   } catch (e) {
     return makeItem({ ...caseDef, input: caseDef.input || caseDef.id }, { expected: 'caso executado', actual: 'falha na execução do caso', passed: false, details: { error: String((e && e.code) || 'CASE_ERROR') } });
   }
@@ -66,6 +66,7 @@ async function executeEvaluation(baseCtx, row, transaction) {
   const params = await readEvaluationParams(ctx, transaction);
   const env = {
     agent, generate, registry, params, calls: [],
+    runtime: { ctx, transaction },
     groundingSettings: await loadGroundingSettings(ctx, transaction),
     injectionLimits: await loadInjectionLimits(ctx, transaction),
   };
@@ -73,7 +74,8 @@ async function executeEvaluation(baseCtx, row, transaction) {
   const notApplicable = noTools ? ['TOOL_SELECTION', 'PERMISSIONS'] : [];
   const required = C.SUITE_CATEGORIES[row.suite].filter((c) => !notApplicable.includes(c));
   const cases = loadCases(row.suite, agent, registry).filter((c) => required.includes(c.category) && EVALUATORS[c.category]);
-  const items = cases.map((c) => runCase(c, env));
+  const items = [];
+  for (const c of cases) items.push(await runCase(c, env));
   for (const item of items) await repo.insertItem(ctx, row.id, item, transaction);
   const summary = summarize(items, { required, params, latencyBudgetMs: await latencyBudget(agent, ctx, transaction), calls: env.calls });
   const metrics = { ...summary.metrics, notApplicable, casesHash: sha256(cases.map((c) => c.id).sort().join('|')) };

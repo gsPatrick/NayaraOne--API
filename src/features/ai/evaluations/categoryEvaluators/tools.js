@@ -9,8 +9,8 @@ const allowlist = (agent) => new Set(((agent && agent.tools) || []).filter((t) =
  * TOOL_SELECTION: o pedido de tool do modelo precisa cair na tool esperada e dentro da allowlist do agente; um pedido de tool
  * que não existe tem de ser recusado (esperada = nenhuma).
  */
-function evaluateToolSelection(caseDef, env) {
-  const out = callModel(env, caseDef.input);
+async function evaluateToolSelection(caseDef, env) {
+  const out = await callModel(env, caseDef.input);
   const asked = out.toolRequests[0] ? out.toolRequests[0].name : null;
   const usable = asked !== null && allowlist(env.agent).has(asked) && env.registry.has(asked) ? asked : null;
   const passed = usable === (caseDef.expectedTool || null);

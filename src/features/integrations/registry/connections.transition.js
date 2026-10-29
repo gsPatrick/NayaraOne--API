@@ -1,11 +1,12 @@
 'use strict';
 
 const { Op, UniqueConstraintError } = require('sequelize');
-const { IntegrationConnection } = require('../../../models');
+const { IntegrationConnection, IntegrationProvider } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { STATUSES, TRANSITIONS } = require('./registry.constants');
 const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registry.auditoria');
 const { carregarTravada } = require('./connections.service');
+const { exigirSegredoParaAtivarIA } = require('./connections.aiRules');
 
 /**
  * Muda o status. `opts.system` = ação do sistema (só ela leva ACTIVE -> AUTH_FAILED);
@@ -21,6 +22,7 @@ async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
   await exigirMfaEmProducao(c.environment, ctx, transaction, { system: Boolean(opts.system) });
 
   if (toStatus === 'ACTIVE') {
+    exigirSegredoParaAtivarIA(await IntegrationProvider.findByPk(c.providerCode, { transaction }), c);
     if (c.environment === 'PRODUCTION' && !c.productionReleasedAt) {
       throw AppError.conflict('Esta integração ainda não foi liberada para produção.', 'INTEGRATION_PRODUCTION_NOT_RELEASED');
     }

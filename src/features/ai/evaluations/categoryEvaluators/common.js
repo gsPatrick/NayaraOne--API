@@ -8,9 +8,12 @@ const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex'
 const summary = (t) => redactText(String(t === undefined || t === null ? '' : t)).slice(0, SUMMARY_MAX);
 const micros6 = (m) => `${Math.floor(m / 1000000)}.${String(m % 1000000).padStart(6, '0')}`;
 
-/** Chama o modelo registrado para a avaliação e guarda custo e latência da chamada (alimentam COST e LATENCY). */
-function callModel(env, input) {
-  const out = env.generate({ system: env.agent.systemPolicy || '', messages: [{ role: 'user', content: input }] });
+/**
+ * Chama o modelo registrado para a avaliação e guarda custo e latência da chamada (alimentam COST e LATENCY). O provider pode
+ * ser síncrono (sandbox) ou assíncrono (adapter real, M9-D011); recebe também o contexto da execução (`env.runtime`).
+ */
+async function callModel(env, input) {
+  const out = await env.generate({ system: env.agent.systemPolicy || '', messages: [{ role: 'user', content: input }] }, env.runtime);
   env.calls.push({ costMicros: out.costMicros, latencyMs: out.latencyMs, modelCode: out.modelCode || null });
   return out;
 }

@@ -10,6 +10,7 @@ const { conferirSemSegredo } = require('./registry.segredo');
 const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registry.auditoria');
 const { validarSecretRefDaConexao } = require('../secrets/secretRefRules');
 const { exigirMfaSegredoBank } = require('../secrets/secretPolicy');
+const { validarRegrasIA, exigirSegredoParaAtivarIA } = require('./connections.aiRules');
 
 /** Conexões de cada empresa com cada fornecedor, por ambiente (`integration.connections`). */
 
@@ -58,6 +59,7 @@ async function createConnection(payload, ctx, transaction, opts = {}) {
   const configJson = p.configJson ?? {};
   const policyJson = p.policyJson ?? {};
   conferirConfigContraSchema(provider, configJson);
+  validarRegrasIA(provider, configJson, null, ctx);
   const apiVersion = texto(p.apiVersion, 'versão da API', 16);
   conferirVersao(provider, apiVersion);
   const secretRef = texto(p.secretRef, 'referência do cofre', 160);
@@ -133,7 +135,7 @@ async function updateConnection(id, patch, ctx, transaction, opts = {}) {
   const antes = serializeConnection(c);
   const provider = await carregarProvider(c.providerCode, transaction);
   if (p.label !== undefined) c.label = texto(p.label, 'nome', 80, { obrigatorio: true });
-  if (p.configJson !== undefined) { conferirConfigContraSchema(provider, p.configJson); c.configJson = p.configJson; }
+  if (p.configJson !== undefined) { conferirConfigContraSchema(provider, p.configJson); validarRegrasIA(provider, p.configJson, c.configJson, ctx); c.configJson = p.configJson; }
   if (p.policyJson !== undefined) c.policyJson = p.policyJson;
   if (p.apiVersion !== undefined) { const v = texto(p.apiVersion, 'versão da API', 16); conferirVersao(provider, v); c.apiVersion = v; }
   if (p.secretRef !== undefined) {
@@ -148,6 +150,7 @@ async function updateConnection(id, patch, ctx, transaction, opts = {}) {
   if (await rotuloEmUso(c, transaction)) {
     throw AppError.conflict('Já existe uma integração deste fornecedor, neste ambiente, com este nome.', 'INTEGRATION_CONNECTION_DUPLICATE_LABEL');
   }
+  if (c.status === 'ACTIVE') exigirSegredoParaAtivarIA(provider, c);
   c.updatedBy = ctx.userId || null;
   try {
     await c.save({ transaction });
