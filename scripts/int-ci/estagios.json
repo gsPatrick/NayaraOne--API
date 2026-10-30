@@ -65,7 +65,8 @@
           "testes": [
             "test/marco9/integracoes/m9d211.*.test.js",
             "test/marco9/integracoes/m9d212.*.test.js",
-            "test/marco9/integracoes/m9d213.*.test.js"
+            "test/marco9/integracoes/m9d213.*.test.js",
+            "test/marco9/integracoes/m9d251.webhook.test.js"
           ]
         }
       ]
@@ -96,7 +97,9 @@
           "testes": [
             "test/marco9/integracoes/m9d216.*.test.js",
             "test/marco9/integracoes/m9d217.*.test.js",
-            "test/marco9/integracoes/m9d218.*.test.js"
+            "test/marco9/integracoes/m9d218.*.test.js",
+            "test/marco9/integracoes/m9d251.saida.test.js",
+            "test/marco9/integracoes/m9d251.circuito.test.js"
           ]
         }
       ]
@@ -154,7 +157,10 @@
             "m9d217.",
             "m9d218.",
             "m9d222.",
-            "m9d245."
+            "m9d245.",
+            "m9d251.webhook.",
+            "m9d251.saida.",
+            "m9d251.circuito."
           ]
         },
         [

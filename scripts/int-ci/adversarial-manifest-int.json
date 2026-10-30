@@ -1,0 +1,20 @@
+{
+  "descricao": "Manifesto dos testes adversariais das integrações (M9-D251 e M9-D252, livro seção 19 e DoD seção 20): os 15 itens do livro e os 18 nomes de teste que os provam (11 da parte 1, 7 da parte 2). scripts/checkAdversarialNames.js confere que cada nome existe em algum arquivo de teste.",
+  "itens": [
+    { "n": 1, "titulo": "Webhook falso, duplicado e replay", "parte": 1, "testes": ["adv_webhook_falso_assinatura_invalida_401", "adv_webhook_duplicado_nao_reprocessa", "adv_webhook_replay_fora_da_janela_401"] },
+    { "n": 2, "titulo": "Payload gigante e inválido", "parte": 1, "testes": ["adv_payload_gigante_413_sem_estourar_memoria", "adv_payload_invalido_vai_para_dlq_sem_retry"] },
+    { "n": 3, "titulo": "Timeout outbound", "parte": 1, "testes": ["adv_timeout_outbound_vira_unknown_e_reconcilia"] },
+    { "n": 4, "titulo": "429", "parte": 1, "testes": ["adv_429_respeita_retry_after_sem_contar_falha"] },
+    { "n": 5, "titulo": "401", "parte": 1, "testes": ["adv_401_nao_entra_em_loop_e_pausa_connection"] },
+    { "n": 6, "titulo": "Circuit breaker", "parte": 1, "testes": ["adv_circuit_breaker_abre_e_nao_essenciais_nao_chamam"] },
+    { "n": 7, "titulo": "Provider fora", "parte": 1, "testes": ["adv_provider_fora_aciona_contingencia_sem_corromper_dominio"] },
+    { "n": 8, "titulo": "Status externo fora de ordem", "parte": 1, "testes": ["adv_status_externo_fora_de_ordem_nao_regride"] },
+    { "n": 9, "titulo": "Secret em log", "parte": 2, "testes": ["adv_secret_em_log_canario_nao_aparece"] },
+    { "n": 10, "titulo": "SSRF por URL", "parte": 2, "testes": ["adv_ssrf_url_interna_bloqueada"] },
+    { "n": 11, "titulo": "Portal recebe campo interno", "parte": 2, "testes": ["adv_portal_recebe_campo_interno_canario_ausente"] },
+    { "n": 12, "titulo": "Post duplicado", "parte": 2, "testes": ["adv_post_duplicado_nao_ocorre_em_retry_e_timeout"] },
+    { "n": 13, "titulo": "Pagamento com timeout não duplica", "parte": 2, "testes": ["adv_pagamento_timeout_nao_duplica"] },
+    { "n": 14, "titulo": "Provider swap com teste de contrato", "parte": 2, "testes": ["adv_provider_swap_mesmo_resultado_contract"] },
+    { "n": 15, "titulo": "Sync com cursor retomado sem perda", "parte": 2, "testes": ["adv_sync_cursor_retomado_sem_perda_e_sem_duplicata"] }
+  ]
+}
