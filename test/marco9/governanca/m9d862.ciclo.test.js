@@ -93,7 +93,7 @@ test('m9d862 detector com erro registra falha e não cria nem resolve finding fa
 });
 
 test('m9d862 os cinco jobs rodam às 03:00 e a fila no intervalo, com limiares e horários configuráveis', () => {
-  assert.deepEqual(DETECTORS.map((d) => d.code).sort(), ['AI_MODEL_COST', 'EGRESS', 'LOG_VOLUME', 'ORPHAN_STORAGE', 'QUEUE_BACKLOG']);
+  assert.deepEqual(DETECTORS.map((d) => d.detector).sort(), ['AI_MODEL_COST', 'EGRESS', 'LOG_VOLUME', 'ORPHAN_STORAGE', 'QUEUE_BACKLOG']);
   const tenant = { companyId: 'c1' };
   const params = { detectorHour: 3, queueInterval: 5 };
   const daily = byCode('EGRESS');

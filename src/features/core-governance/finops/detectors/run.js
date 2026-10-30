@@ -18,13 +18,13 @@ async function runDetector(tenant, detector, now, transaction, { detect } = {}) 
     const params = await readDetectorParams(tenant, sp);
     const ref = detector.scope === 'day' ? previousDay(dayKey(now)) : now;
     const found = await (detect || detector.detect)(tenant, ref, params, sp);
-    summary = await findings.reconcile(tenant, detector.code, found, now, sp);
+    summary = await findings.reconcile(tenant, detector.detector, found, now, sp);
     return found.length;
   }, transaction, now);
-  return { ...result, detector: detector.code, ...summary };
+  return { ...result, detector: detector.detector, ...summary };
 }
 
-const byCode = (code) => DETECTORS.find((d) => d.code === code);
+const byCode = (code) => DETECTORS.find((d) => d.detector === code);
 const bySchedule = (schedule) => DETECTORS.filter((d) => d.schedule === schedule);
 
 /** Roda os detectores de uma rodada (`daily` ou `queue`) da empresa. */

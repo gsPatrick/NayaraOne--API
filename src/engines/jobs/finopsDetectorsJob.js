@@ -20,18 +20,18 @@ const lastRun = new Map();
 /** Esta empresa deve rodar este detector agora? Diário: na hora configurada e uma vez por dia; fila: passado o intervalo desde a última execução. */
 function isDue(detector, tenant, params, now, force) {
   if (force) return true;
-  const key = `${detector.code}:${tenant.companyId}`;
+  const key = `${detector.detector}:${tenant.companyId}`;
   const last = lastRun.get(key);
   if (detector.schedule === 'queue') return !last || now.getTime() - last.at >= params.queueInterval * 60000;
   return hourInSaoPaulo(now) === params.detectorHour && (!last || last.day !== dateKeyInZone(now));
 }
 
 async function runDetectorJob(detector, now = new Date(), { force = false } = {}) {
-  return runForEachCompany(`finopsDetector.${detector.code}`, async (tenant, transaction) => {
+  return runForEachCompany(`finopsDetector.${detector.detector}`, async (tenant, transaction) => {
     const params = await readDetectorParams(tenant, transaction);
     if (!isDue(detector, tenant, params, now, force)) return null;
     const result = await runDetector(tenant, detector, now, transaction);
-    lastRun.set(`${detector.code}:${tenant.companyId}`, { at: now.getTime(), day: dateKeyInZone(now) });
+    lastRun.set(`${detector.detector}:${tenant.companyId}`, { at: now.getTime(), day: dateKeyInZone(now) });
     return result;
   }, 'finops');
 }
@@ -41,7 +41,7 @@ const runAllDetectorJobs = (now = new Date(), opts = {}) => Promise.all(DETECTOR
 
 function startFinopsDetectorsJob({ intervalMs = CHECK_INTERVAL_MS } = {}) {
   const timers = DETECTORS.map((detector) => {
-    const tick = () => runDetectorJob(detector).catch((err) => logger.error({ detector: detector.code, err: err.message }, 'finopsDetectorsJob.failed'));
+    const tick = () => runDetectorJob(detector).catch((err) => logger.error({ detector: detector.detector, err: err.message }, 'finopsDetectorsJob.failed'));
     tick();
     return setInterval(tick, intervalMs);
   });
