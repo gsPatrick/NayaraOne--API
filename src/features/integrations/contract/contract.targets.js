@@ -12,7 +12,7 @@ const FIRST = Object.freeze(['messaging-sandbox']);
 
 /** Famílias de adapter que ainda não têm fixtures: a suíte delas entra no sprint da demanda indicada (a lista só encolhe). Casa pelo prefixo do código do fornecedor. */
 const PENDING_BY_DEMAND = Object.freeze({
-  'financing-': 'M9-D240', 'signature-': 'M9-D236', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
+  'signature-': 'M9-D236', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
   'storage-': 'M9-D242', 'identity-': 'M9-D242', 'ai-': 'M9-D011', anthropic: 'M9-D011', openai: 'M9-D011',
 });
 

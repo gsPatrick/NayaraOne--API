@@ -1,0 +1,55 @@
+{
+  "provider": "financing-sandbox",
+  "apiVersion": "v1",
+  "description": "Promotora de financiamento de laboratório: simula, recebe o caso (idempotente pela chave de submissão), responde o andamento por tempo decorrido, aceita documento e avaliação e valida o webhook por HMAC-SHA256.",
+  "requests": {
+    "simulate": {
+      "amount": 300000,
+      "termMonths": 360
+    },
+    "submitCase": {
+      "caseRef": "caso-contrato-001",
+      "amount": 300000,
+      "proponent": {
+        "ref": "proponente-contrato-001"
+      }
+    },
+    "getCaseStatus": {
+      "externalResourceIdFrom": "submitCase"
+    },
+    "uploadDocument": {
+      "caseRef": "caso-contrato-001",
+      "documentRef": "documento-contrato-001"
+    },
+    "requestAppraisal": {
+      "caseRef": "caso-contrato-001",
+      "referenceValue": 450000
+    },
+    "verifyWebhook": {
+      "rawBody": "{\"id\":\"evt-contrato-001\"}",
+      "headers": {}
+    },
+    "cancelCase": {
+      "externalResourceIdFrom": "submitCase"
+    }
+  },
+  "noResourceId": [
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "RECEIVED": "SUBMITTED",
+    "SUBMITTED": "SUBMITTED",
+    "ANALYSIS": "UNDER_ANALYSIS",
+    "UNDER_ANALYSIS": "UNDER_ANALYSIS",
+    "DOC_PENDING": "PENDING_CUSTOMER",
+    "APPROVED": "APPROVED",
+    "DENIED": "REJECTED",
+    "CONTRACTED": "COMPLETED",
+    "PROPERTY_PENDING": "PENDING_PROPERTY",
+    "CONTRACTING": "CONTRACTING",
+    "CANCELED": "CANCELED",
+    "CANCELLED": "CANCELED"
+  },
+  "unknownStatus": "em_comite_do_banco",
+  "renewal": false
+}

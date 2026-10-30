@@ -75,8 +75,8 @@ test('catalogo_seed_14_dominios', async () => {
       assert.equal(p.criticality, criticidade, `${code} criticidade`);
       assert.equal(p.status, 'ACTIVE');
       assert.equal(p.sandboxAvailable, true);
-      // Operações extras que a demanda dona do port implementa sobre a tabela do livro (financiamento: verifyWebhook; armazenamento: URL assinada da M9-D242; identidade: JWKS da M9-D242).
-      const EXTRAS = { FINANCING: ['verifyWebhook'], STORAGE: ['getSignedUrl'], IDENTITY: ['listJwks'] };
+      // Operações extras que a demanda dona do port implementa sobre a tabela do livro (financiamento: verifyWebhook e cancelCase, a compensação do envio do caso da M9-D240; armazenamento: URL assinada da M9-D242; identidade: JWKS da M9-D242).
+      const EXTRAS = { FINANCING: ['verifyWebhook', 'cancelCase'], STORAGE: ['getSignedUrl'], IDENTITY: ['listJwks'] };
       const esperado = [...capabilities, ...(EXTRAS[domain] || [])];
       assert.deepEqual(ordenado(p.capabilities), ordenado(esperado), `${code} capabilities`);
     }

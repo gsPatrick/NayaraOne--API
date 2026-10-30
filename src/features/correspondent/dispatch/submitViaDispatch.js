@@ -160,5 +160,6 @@ function requestAppraisalViaDispatch({ appraisal, financingCase, ...resto }) {
 }
 
 require('./financing.contingency').installFinancingContingency(); // M9-D228: promotora fora além do prazo da fila segue pelo fluxo manual
+require('./financing.react').installFinancingReactions(); // M9-D220: a submissão muda por evento interno do envio e o caso confirmado tarde vira cancelamento compensatório
 
 module.exports = { submitViaDispatch, requestAppraisalViaDispatch };

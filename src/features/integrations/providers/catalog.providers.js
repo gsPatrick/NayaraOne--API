@@ -21,7 +21,7 @@ const SANDBOX_PROVIDERS = Object.freeze([
   sandbox('BANK', 'bank-sandbox', 'Bancos, extratos e pagamentos — sandbox', ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']),
   sandbox('INSURANCE', 'insurance-sandbox', 'Seguradoras e garantias — sandbox', ['quote', 'propose', 'getPolicy', 'getStatus', 'submitClaim', 'verifyWebhook']),
   // O sandbox de financiamento já verificava o webhook (assinatura HMAC) antes do catálogo: mantém verifyWebhook (DI-D201-3).
-  sandbox('FINANCING', 'financing-sandbox', 'Financiamento e promotoras — sandbox', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook']),
+  sandbox('FINANCING', 'financing-sandbox', 'Financiamento e promotoras — sandbox', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook', 'cancelCase']),
   sandbox('FISCAL', 'fiscal-sandbox', 'NFS-e e fiscal — sandbox', ['issueNfse', 'getNfseStatus', 'cancelNfse']),
   sandbox('SOCIAL', 'social-sandbox', 'Redes sociais e publicação — sandbox', ['publishPost', 'getPostStatus', 'deletePost']),
   sandbox('STORAGE', 'storage-sandbox', 'Armazenamento de objetos — sandbox', ['putObject', 'getObject', 'deleteObject', 'headObject', 'getSignedUrl']),
@@ -34,7 +34,7 @@ const SANDBOX_PROVIDERS = Object.freeze([
 const EXISTING_PROVIDERS = Object.freeze([
   {
     code: 'financing-manual', displayName: 'Financiamento — fluxo manual assistido', domain: 'FINANCING',
-    capabilities: ['submitCase', 'getCaseStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.FINANCING, sandboxAvailable: false,
+    capabilities: ['submitCase', 'getCaseStatus', 'cancelCase'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.FINANCING, sandboxAvailable: false,
   },
   {
     code: 'signature-clicksign', displayName: 'Assinatura digital — Clicksign', domain: 'SIGNATURE',

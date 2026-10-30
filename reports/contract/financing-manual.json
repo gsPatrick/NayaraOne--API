@@ -1,0 +1,91 @@
+{
+  "provider": "financing-manual",
+  "domain": "FINANCING",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T14:55:24.509Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "submitCase",
+    "getCaseStatus",
+    "cancelCase"
+  ],
+  "adapterHash": "f327abee7cfb691aab9d914cfc2fb9b8fe06649e199ae04c5a40373930d7264f",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 67,
+  "passed": 67,
+  "status": "PASSED",
+  "errors": []
+}

@@ -264,6 +264,11 @@ class ManualWorkflowFinancingProviderAdapter {
     };
   }
 
+  // Cancelar um caso do fluxo manual é só fechar a tarefa da pessoa: não há API do outro lado.
+  async cancelCase(externalId) {
+    return { externalId, canceled: true, raw: { manual: true } };
+  }
+
   async uploadDocument() {
     throw AppError.internal(
       'Provider de workflow manual não aceita upload de documento automatizado.',

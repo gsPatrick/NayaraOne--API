@@ -1,0 +1,28 @@
+{
+  "provider": "financing-manual",
+  "apiVersion": "v1",
+  "description": "Promotora sem API: o caso vira tarefa para uma pessoa (PENDING_MANUAL_ACTION) e o status só avança por ação humana; nenhuma chamada de rede.",
+  "requests": {
+    "submitCase": {
+      "caseRef": "caso-contrato-001",
+      "amount": 300000,
+      "proponent": {
+        "ref": "proponente-contrato-001"
+      }
+    },
+    "getCaseStatus": {
+      "externalResourceIdFrom": "submitCase"
+    },
+    "cancelCase": {
+      "externalResourceIdFrom": "submitCase"
+    }
+  },
+  "noResourceId": [],
+  "statuses": {
+    "PENDING_MANUAL_ACTION": "PENDING_MANUAL_ACTION",
+    "COMPLETED": "COMPLETED",
+    "CANCELED": "CANCELED"
+  },
+  "unknownStatus": "em_atendimento_humano",
+  "renewal": false
+}
