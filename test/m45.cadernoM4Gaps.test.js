@@ -234,32 +234,16 @@ test('M45-M4-05 exportação financeira: acima do limite é recusada inteira (nu
   });
 });
 
-test('M45-M4-06 exportação financeira via HTTP real: sem finance:read 403, sem MFA 403 MFA_REQUIRED_NOT_ENABLED, MFA sem verificação recente 403 MFA_STEP_UP_REQUIRED, com MFA recente 200 text/csv', async () => {
+test('M45-M4-06 exportação financeira via HTTP real: a rota antiga responde 410 GOV_EXPORT_MOVED (sem finance:read, 403); MFA, finalidade e expiração são do POST /exports (M9-D822)', async () => {
   const month = '1901-01';
   const call = async (token) => fetch(`${baseUrl}/finance/exports/entries?competenceMonth=${month}`, { headers: { Authorization: `Bearer ${token}` } });
 
   const noPerm = await call(tokenFor(mfaUser.id, ['legal:read']));
   assert.equal(noPerm.status, 403);
 
-  const noMfaUser = await User.create({ email: `m45-m4-nomfa-${uniqueSuffix()}@nayaraone.dev`, name: 'M45 M4 sem MFA', passwordHash: 'x', status: 'ACTIVE' });
-  const noMfa = await call(tokenFor(noMfaUser.id, ['finance:read']));
-  assert.equal(noMfa.status, 403);
-  const noMfaBody = await noMfa.json();
-  assert.equal(noMfaBody.error.code, 'MFA_REQUIRED_NOT_ENABLED');
-
-  // MFA habilitado, mas sem verificação recente (step-up): recusado com MFA_STEP_UP_REQUIRED.
-  const staleUser = await User.create({ email: `m45-m4-stale-${uniqueSuffix()}@nayaraone.dev`, name: 'M45 M4 MFA sem step-up', passwordHash: 'x', status: 'ACTIVE', mfaEnabled: true, mfaMethod: 'TOTP' });
-  await withTenantTransaction(tenant, (t) => MfaCredential.create(T({ userId: staleUser.id, secretEncrypted: encryptSecret('JBSWY3DPEHPK3PXP'), enabled: true, confirmedAt: new Date(), recoveryCodesHash: [] }), { transaction: t }));
-  const stale = await call(tokenFor(staleUser.id, ['finance:read']));
-  assert.equal(stale.status, 403);
-  assert.equal((await stale.json()).error.code, 'MFA_STEP_UP_REQUIRED');
-
-  const ok = await call(tokenFor(mfaUser.id, ['finance:read']));
-  assert.equal(ok.status, 200);
-  assert.match(ok.headers.get('content-type'), /text\/csv/);
-  assert.match(ok.headers.get('x-export-sha256'), /^[0-9a-f]{64}$/);
-  const body = await ok.text();
-  assert.ok(body.startsWith('id;competenceMonth;nature'), body.slice(0, 60));
+  const moved = await call(tokenFor(mfaUser.id, ['finance:read']));
+  assert.equal(moved.status, 410);
+  assert.equal((await moved.json()).error.code, 'GOV_EXPORT_MOVED');
 });
 
 test('M45-M4-07 §5 tabelas do caderno: ledger, entry_installments, security_deposits, accounts_chart e closing_periods existem, seguem a RLS e são somente leitura', async () => {
