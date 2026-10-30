@@ -13,11 +13,12 @@ const { normalizeRecipients } = require('./email.recipients');
 const { readEmailParams, PADROES } = require('./email.params');
 const { syncFailedMessages } = require('./email.sync');
 const { EMAIL_SETTINGS_SCHEMA } = require('./email.settings');
+const inbound = require('./inbound');
 const { STATUSES } = require('./email.constants');
 
 installEmailBinder();
 installEmailEvents();
 
 module.exports = {
-  sendEmail, validateAttachments, normalizeRecipients, readEmailParams, EMAIL_PADROES: PADROES, syncFailedMessages, applyEmailEvent, EMAIL_SETTINGS_SCHEMA, EMAIL_STATUSES: STATUSES,
+  sendEmail, validateAttachments, normalizeRecipients, readEmailParams, EMAIL_PADROES: PADROES, syncFailedMessages, applyEmailEvent, EMAIL_SETTINGS_SCHEMA, EMAIL_STATUSES: STATUSES, inbound,
 };

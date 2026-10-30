@@ -22,6 +22,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/catalog` | `integration:read` | não |
 | `GET` | `/api/v1/admin/integrations/contingency` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/email/inbound/:id/link` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/email/inbound/:id` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/email/inbound` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/registry/connections/:id/swap` | `integration:manage` | não |
 | `POST` | `/api/v1/admin/integrations/contingency/dispatches/:id/switch` | `integration:manage` | sim |
 | `GET` | `/api/v1/admin/integrations` | `integration:read` | não |

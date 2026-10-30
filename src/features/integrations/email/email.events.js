@@ -6,6 +6,7 @@ const { redactFreeText } = require('../../../shared/redaction');
 const { recordError } = require('../errors');
 const { registerDomainHandler } = require('../webhooks/worker/worker.handlers');
 const { EVENT_STATUSES } = require('./email.constants');
+const { applyInboundEvent } = require('./inbound/inbound.event');
 
 /** Erro de integração do evento recusado, SEM o conteúdo (só ids e códigos). */
 const refuse = (ctx, row, { code, message, severity }, transaction) => recordError(ctx, {
@@ -34,6 +35,7 @@ const reasonOf = (priv) => (priv && priv.reason ? String(redactFreeText(String(p
  */
 async function applyEmailEvent(ctx, row, ev, transaction) {
   const kind = ev.data && ev.data.kind;
+  if (kind === 'INBOUND') return applyInboundEvent(ctx, row, ev, transaction); // M9-D235: e-mail recebido entra no pipeline de malware e dado pessoal
   if (!EVENT_STATUSES.includes(kind)) return { applied: false };
   const message = await findMessage(ctx, row, ev.data.externalMessageId, transaction);
   if (!message) {

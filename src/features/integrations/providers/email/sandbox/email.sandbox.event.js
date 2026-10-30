@@ -17,4 +17,19 @@ function emailEvent({ kind, messageId, reason = null, occurredAt = null }) {
   };
 }
 
-module.exports = { emailEvent, KINDS };
+/**
+ * Mensagem RECEBIDA (M9-D235): o conteúdo vai só em `private` (o tratador do domínio o lê na mesma transação; nunca vai ao outbox, que leva só o identificador). Sem recurso nem status:
+ * a ordem dos estados e a ligação a envio não se aplicam a e-mail recebido.
+ */
+function emailReceivedEvent(msg) {
+  return {
+    eventType: 'integration.email.inbound',
+    resourceRef: null,
+    externalStatus: null,
+    idempotencyKey: null,
+    data: { kind: 'INBOUND', externalMessageId: msg.id },
+    private: { from: msg.from || null, to: msg.to || [], subject: msg.subject || '', text: msg.text || '', inReplyTo: msg.inReplyTo || null, references: msg.references || null, attachments: msg.attachments || [] },
+  };
+}
+
+module.exports = { emailEvent, emailReceivedEvent, KINDS };

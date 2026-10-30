@@ -31,6 +31,16 @@ function setDelivery(connectionId, id, status) {
   return m;
 }
 
-const reset = () => messages.clear();
+/** Caixa de entrada do laboratório (M9-D235): mensagens que o provedor teria recebido, lidas por cursor (posição na lista). */
+const inbound = new Map();
+const injectInbound = (connectionId, msg) => { const l = inbound.get(connectionId) || []; l.push(msg); inbound.set(connectionId, l); return l.length; };
+function listInbound(connectionId, cursor, pageSize) {
+  const lista = inbound.get(connectionId) || [];
+  const de = Math.max(0, Number.parseInt(cursor, 10) || 0);
+  const ate = Math.min(lista.length, de + Math.max(1, Number(pageSize) || 50));
+  return { items: lista.slice(de, ate).map((m) => ({ externalMessageId: m.id, ...m })), nextCursor: String(ate), done: ate >= lista.length };
+}
 
-module.exports = { send, findById, findByKey, setDelivery, erroHttp, reset };
+const reset = () => { messages.clear(); inbound.clear(); };
+
+module.exports = { send, findById, findByKey, setDelivery, injectInbound, listInbound, erroHttp, reset };

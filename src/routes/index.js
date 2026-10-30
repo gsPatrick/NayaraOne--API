@@ -29,6 +29,7 @@ const integrationRegistryRouter = require('../features/integrations/registry/reg
 require('../features/integrations/errors'); // liga o repórter de credencial vencida (M9-D207)
 const integrationErrorsRouter = require('../features/integrations/errors/errors.routes');
 const integrationAdminRouter = require('../features/integrations/admin/admin.routes');
+const emailInboundRouter = require('../features/integrations/email/inbound/inbound.routes');
 const integrationActionsRouter = require('../features/integrations/admin/actions/actions.routes');
 const integrationContingencyRouter = require('../features/integrations/contingency/contingency.routes');
 const { catalogRouter: integrationCatalogRouter } = require('../features/integrations');
@@ -137,6 +138,7 @@ router.use('/v1', integrationErrorsRouter);
 router.use('/v1', integrationContingencyRouter);
 router.use('/v1', integrationActionsRouter);
 router.use('/v1', integrationAdminRouter);
+router.use('/v1', emailInboundRouter);
 router.use('/v1', integrationCatalogRouter);
 router.use('/v1', auditRouter);
 router.use('/v1', billingRouter);

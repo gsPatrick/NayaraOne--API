@@ -791,6 +791,19 @@ test('M9-D234: email_messages e email_message_events têm RLS, FORCE RLS e polí
   if (grants.length) assert.deepEqual([grants[0].msg_upd, grants[0].ev_ins], [true, true], 'GRANT ao role de runtime');
 });
 
+// M9-D235: o e-mail recebido e os seus anexos são da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime.
+test('M9-D235: email_inbound_messages e email_inbound_attachments têm RLS, FORCE RLS e política por empresa', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS tenant_policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'integration' AND c.relname IN ('email_inbound_messages', 'email_inbound_attachments') ORDER BY 1`);
+  assert.equal(rows.length, 2, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.tenant_policies], [true, true, 1], `RLS, FORCE e política por empresa em integration.${r.relname}`);
+  const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'integration.email_inbound_messages', 'UPDATE') AS msg_upd,
+      has_table_privilege('nayara_runtime', 'integration.email_inbound_attachments', 'INSERT') AS att_ins
+    WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grants.length) assert.deepEqual([grants[0].msg_upd, grants[0].att_ins], [true, true], 'GRANT ao role de runtime');
+});
+
 // M9-D238: a versão da apólice (imutável) e a tarefa do fluxo manual de seguro são da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime; a versão só se acrescenta.
 test('M9-D238: insurance_policy_versions e insurance_manual_tasks têm RLS, FORCE RLS e política por empresa', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,

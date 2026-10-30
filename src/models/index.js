@@ -212,6 +212,8 @@ const modelDefiners = {
   IntegrationDispatch: require('./IntegrationDispatch'),
   EmailMessage: require('./EmailMessage'),
   EmailMessageEvent: require('./EmailMessageEvent'),
+  EmailInboundMessage: require('./EmailInboundMessage'),
+  EmailInboundAttachment: require('./EmailInboundAttachment'),
   SitePage: require('./SitePage'),
   FileQuarantine: require('./FileQuarantine'),
   CrmChannel: require('./CrmChannel'),

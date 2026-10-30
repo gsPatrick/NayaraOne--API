@@ -68,6 +68,7 @@ const { startIntegrationDispatchWorkerJob } = require('./src/engines/jobs/integr
 const { startIntegrationWebhookWorkerJob } = require('./src/engines/jobs/integrationWebhookWorkerJob');
 const { startIntegrationReconcileJob } = require('./src/engines/jobs/integrationReconcileJob');
 const { startIntegrationSyncJob } = require('./src/engines/jobs/integrationSyncJob');
+const { startEmailInboundPollJob } = require('./src/engines/jobs/emailInboundPollJob');
 const { startPortalUnpublishReconcileJob } = require('./src/engines/jobs/portalUnpublishReconcileJob');
 const { startIntegrationDispatchOrphanJob } = require('./src/engines/jobs/integrationDispatchOrphanJob');
 
@@ -419,6 +420,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RECONCILE_JOB_DIS
 // Marco 9, M9-D232 — leitura do status dos anúncios nos portais (fluxo portal.listing_status) a cada integration.portal.reconcile_interval_min.
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_SYNC_JOB_DISABLED !== 'true') {
   startIntegrationSyncJob();
+  startEmailInboundPollJob();
   startPortalUnpublishReconcileJob(); // M9-D233: confere as remoções de anúncio que o portal ainda não confirmou
 }
 
