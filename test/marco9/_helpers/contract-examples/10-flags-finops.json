@@ -6,6 +6,19 @@
     {"op": "GET /feature-flags", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
     {"op": "GET /finops/health", "kind": "positive", "name": "saúde de custo", "as": "gestor", "expect": 200},
     {"op": "GET /finops/health", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
-    {"op": "GET /finops/health", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403}
+    {"op": "GET /finops/health", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "GET /finops/budgets", "kind": "positive", "name": "lista os orçamentos", "as": "gestor", "expect": 200},
+    {"op": "GET /finops/budgets", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /finops/budgets", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "POST /finops/budgets", "kind": "positive", "name": "cria o orçamento do ambiente", "as": "gestor", "expect": 201, "body": {"environment": "DEV", "domain": "PLATFORM", "amountCents": 300000, "ownerUserId": "${userId}"}, "capture": {"budgetId": "body.data.id"}},
+    {"op": "POST /finops/budgets", "kind": "negative", "name": "escopo repetido", "as": "gestor", "expect": 409, "body": {"environment": "DEV", "domain": "PLATFORM", "amountCents": 300000, "ownerUserId": "${userId}"}},
+    {"op": "POST /finops/budgets", "kind": "negative", "name": "orçamento zero", "as": "gestor", "expect": 422, "body": {"environment": "HOMOLOG", "domain": "PLATFORM", "amountCents": 0, "ownerUserId": "${userId}"}},
+    {"op": "POST /finops/budgets", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "body": {}},
+    {"op": "POST /finops/budgets", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "body": {}},
+    {"op": "PATCH /finops/budgets/{id}", "kind": "positive", "name": "altera o valor", "as": "gestor", "expect": 200, "params": {"id": "${budgetId}"}, "body": {"amountCents": 400000}},
+    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "valor zero", "as": "gestor", "expect": 422, "params": {"id": "${budgetId}"}, "body": {"amountCents": 0}},
+    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "orçamento inexistente", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}, "body": {"amountCents": 100}},
+    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${budgetId}"}, "body": {}},
+    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${budgetId}"}, "body": {}}
   ]
 }

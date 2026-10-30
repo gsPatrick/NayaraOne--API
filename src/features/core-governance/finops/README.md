@@ -6,17 +6,22 @@ FinOps: coletores de custo, orçamento por ambiente e domínio, alertas 50/75/90
 ## Tabelas
 `governance.cost_ledger` (livro-razão em centavos inteiros; ESTIMATED x BILLED; CHARGE x CREDIT; unicidade com empresa e domínio; `superseded_by`), `cost_read_model` (agregado por dia, ambiente, domínio, categoria e tipo; não conta linha substituída), `cost_accruals` (uso por hora antes de virar linha; frações de centavo em escala 1e6) e `cost_collector_runs` (último sucesso e última falha por coletor). RLS pelo grupo no ledger e no read model (empresa nula = custo compartilhado, só administrador vê), pela empresa nas demais. Migrations 20260101000860 a 862.
 
+M9-D861: `governance.budgets` (orçamento mensal por empresa, ambiente e domínio ou PLATFORM, em centavos inteiros, único por escopo) e `governance.budget_alerts` (um registro por limiar 50/75/90/100 disparado, UNIQUE por orçamento, mês e limiar; `seq` guarda a ordem). RLS + FORCE pela empresa. Migrations 20260101000816 e 817.
+
 Antes (alicerce): nenhuma. O alicerce cria o schema `governance` e a função `governance.apply_tenant_rls(regclass)`, que toda tabela do módulo chama na sua migration (faixa 20260101000800 a 20260101000869 no bloco E) para ganhar RLS + FORCE RLS, política `tenant_isolation` e GRANT protegido por existência do role `nayara_runtime`. Colunas padrão: `id uuid`, `group_id`, `company_id`, `created_at`, `updated_at`.
 
 ## Rotas e permissões
-- `GET /finops/health` devolve `custos.estimado` e `custos.faturado` (séries separadas, cada uma com o seu total; nunca total misto) e `coletores`. Exige `governance:finops:read` e o módulo ligado para a empresa (esqueleto do alicerce: devolve o estado do módulo). Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`.
+- `GET /finops/health` devolve `custos.estimado` e `custos.faturado` (séries separadas, cada uma com o seu total; nunca total misto) e `coletores`. Traz também `orcamentos` (M9-D861): cada orçamento do mês com as duas séries lado a lado (`consumo.estimado` e `consumo.faturado`, cada uma com o seu total), a série-base do percentual, o percentual e os limiares disparados. Exige `governance:finops:read` e o módulo ligado para a empresa. Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`.
+- `GET /finops/budgets` (leitura), `POST /finops/budgets` e `PATCH /finops/budgets/:id` (`governance:finops:manage`): orçamento por ambiente e domínio. Erros: 422 `GOV_BUDGET_AMOUNT_INVALID` (valor zero, negativo ou fracionado), 422 `GOV_BUDGET_OWNER_REQUIRED` / `GOV_BUDGET_OWNER_INVALID`, 422 `GOV_BUDGET_SCOPE_INVALID`, 409 `GOV_BUDGET_DUPLICATE`, 404 `GOV_BUDGET_NOT_FOUND`.
 - Corpo de erro único: `{success:false,error:{code,message,details?,traceId}}` (traceId dentro de `error`).
 
 ## Eventos
-- `finops.budget.threshold` (publicado pelo serviço do módulo via `publishGovernanceEvent`, na mesma transação, com `idempotencyKey`).
+- `finops.budget.threshold` (M9-D861; publicado via `publishGovernanceEvent`, na mesma transação do alerta, com `idempotencyKey` `finops.budget.threshold:<orçamento>:<mês>:<limiar>`). Carga: `budgetId, environment, domain, threshold, percent, consumedCents, budgetCents` e, a mais, `periodStart, series, estimatedCents, billedCents`. O alerta 100 só publica o evento e avisa o responsável: a política de degradação (M9-D863) é quem consome o evento; nada aqui desliga serviço.
 
 ## Jobs e horários
 `finopsCollectJob` (M9-D860): a cada 10 minutos fecha as horas encerradas de IA, mensageria e egress (uma linha inteira por hora, half-even) e importa fatura se houver fonte; uma vez por dia, em `governanca.finops.storage_hora` (02:00 de Brasília), mede o armazenamento do dia anterior (arquivos por tipo, bucket e logs). `FINOPS_COLLECT_JOB_DISABLED=true` desliga no processo. Ganchos: fim de execução da NAY (runLifecycle), envio confirmado (dispatch.transition) e contador de bytes de download (middleware `egressMeterMiddleware`).
+
+Orçamentos (M9-D861): sem job próprio. A avaliação roda a CADA gravação do ledger (coleta horária, diária ou fatura), na mesma transação, para os meses tocados (`budgets/budget.evaluate.js`, gancho em `ledger.service.js`), com `FOR UPDATE` do orçamento. Mês aberto (ou fechado sem fatura): percentual sobre a série ESTIMATED e dispara os limiares; mês fechado com fatura BILLED: percentual FINAL sobre a série BILLED, sem disparar. Estimado e faturado nunca são somados.
 
 Antes: nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela demanda dona e listados aqui com horário e parâmetro que o controla.
 

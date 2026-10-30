@@ -912,3 +912,17 @@ test('M9-D860: tabelas do FinOps têm RLS, FORCE RLS, política tenant_isolation
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
   }
 });
+
+// M9-D861: orçamentos e alertas de orçamento do FinOps (RLS pela empresa, FORCE, política e GRANT ao runtime).
+test('M9-D861: budgets e budget_alerts têm RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const tables = ['budgets', 'budget_alerts'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const t of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${t}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
+  }
+});

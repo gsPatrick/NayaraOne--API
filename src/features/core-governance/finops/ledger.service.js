@@ -7,6 +7,7 @@ const { readFinopsParams } = require('./finops.params');
 const { normalizeLine } = require('./ledger.validate');
 const repo = require('./ledger.repository');
 const readModel = require('./costReadModel');
+const { evaluateForPeriods } = require('./budgets/budget.evaluate');
 const E = require('./finops.errors');
 
 /** Domínios aceitos: os do cadastro de dados mestres (D804, configurável) mais PLATFORM. */
@@ -42,6 +43,8 @@ async function recordLines(tenant, lines, transaction) {
     }
   }
   await readModel.refreshForPeriods(tenant, touched, transaction);
+  // M9-D861: a cada gravação do ledger (coleta ou fatura) os orçamentos dos meses tocados são reavaliados, na mesma transação.
+  await evaluateForPeriods(tenant, touched, transaction);
   return out;
 }
 

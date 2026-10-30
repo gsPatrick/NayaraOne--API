@@ -4902,6 +4902,173 @@ paths:
               $ref: '#/components/headers/XRateLimitReset'
       x-permissions:
         - governance:finops:read
+  /finops/budgets/{id}:
+    patch:
+      operationId: patchFinopsBudgetsId
+      summary: PATCH /finops/budgets/{id}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Orçamento não encontrado.
+          x-error-code: GOV_BUDGET_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: O orçamento deve ser maior que zero.
+          x-error-code: GOV_BUDGET_AMOUNT_INVALID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-permissions:
+        - governance:finops:manage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /finops/budgets:
+    get:
+      operationId: getFinopsBudgets
+      summary: GET /finops/budgets
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-permissions:
+        - governance:finops:read
+    post:
+      operationId: postFinopsBudgets
+      summary: POST /finops/budgets
+      responses:
+        '201':
+          description: Criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Já existe orçamento para este escopo.
+          x-error-code: GOV_BUDGET_DUPLICATE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: O orçamento deve ser maior que zero.
+          x-error-code: GOV_BUDGET_AMOUNT_INVALID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-permissions:
+        - governance:finops:manage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
   /legal/contracts/{id}/timeline:
     get:
       operationId: getLegalContractsIdTimeline

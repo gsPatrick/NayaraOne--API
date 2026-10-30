@@ -43,6 +43,12 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_BCP_REFERENCE_DUPLICATE` | 409 | Este número de formulário já foi registrado. | bcp | 1.0.0 | não |
 | `GOV_BCP_REFERENCE_INVALID` | 422 | O número do formulário é inválido para este setor. | bcp | 1.0.0 | não |
 | `GOV_BCP_SECTOR_FORBIDDEN` | 403 | Você não pode <valor> deste setor. | bcp | 1.0.0 | não |
+| `GOV_BUDGET_AMOUNT_INVALID` | 422 | O orçamento deve ser maior que zero. | finops | 1.3.0 | não |
+| `GOV_BUDGET_DUPLICATE` | 409 | Já existe orçamento para este escopo. | finops | 1.3.0 | não |
+| `GOV_BUDGET_NOT_FOUND` | 404 | Orçamento não encontrado. | finops | 1.3.0 | não |
+| `GOV_BUDGET_OWNER_INVALID` | 422 | O responsável deve ser uma pessoa ativa desta empresa. | finops | 1.3.0 | não |
+| `GOV_BUDGET_OWNER_REQUIRED` | 422 | Informe o responsável pelo orçamento. | finops | 1.3.0 | não |
+| `GOV_BUDGET_SCOPE_INVALID` | 422 | O ambiente ou o domínio do orçamento não é válido. | finops | 1.3.0 | não |
 | `GOV_BULK_FILTER_INVALID` | 400 | Filtro inválido. | data-quality | 1.0.0 | não |
 | `GOV_BULK_TOO_LARGE` | 422 | O lote excede o limite de registros. | data-quality | 1.0.0 | não |
 | `GOV_CALENDAR_EVENT_UNKNOWN` | 422 | Tipo de evento sem origem conhecida no calendário. | calendar | 1.0.0 | não |
@@ -97,6 +103,11 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_EXTERNAL_LEAD_DUPLICATE` | 409 | Já existe um cadastro com este documento ou contato. | api-governance | 1.0.0 | não |
 | `GOV_EXTERNAL_LEAD_INVALID` | 422 | Dados do lead inválidos. | api-governance | 1.0.0 | não |
 | `GOV_EXTERNAL_ROUTE_WITHOUT_SCOPE` | 500 | Rota externa sem scope declarado. | api-governance | 1.0.0 | não |
+| `GOV_FINOPS_AMOUNT_INVALID` | 422 | O valor do custo não pode ser negativo. | finops | 1.3.0 | não |
+| `GOV_FINOPS_COLLECTOR_FAILED` | 500 | O coletor de custo "<valor>" falhou; nenhum valor foi gravado e o último sucesso continua exibido. | finops | 1.3.0 | não |
+| `GOV_FINOPS_INVOICE_INVALID` | 422 | A fatura de custo não é válida. | finops | 1.3.0 | não |
+| `GOV_FINOPS_LINE_INVALID` | 422 | A linha de custo não é válida. | finops | 1.3.0 | não |
+| `GOV_FINOPS_PERIOD_OPEN` | 422 | A fatura só pode ser importada para um período já fechado. | finops | 1.3.0 | não |
 | `GOV_IDEMPOTENCY_KEY_INVALID` | 400 | A chave de idempotência deve ter de 8 a 128 caracteres. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REQUIRED` | 400 | Envie o cabeçalho Idempotency-Key. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REUSED` | 422 | Esta chave de idempotência já foi usada com outra requisição. | api-governance | 1.0.0 | não |
