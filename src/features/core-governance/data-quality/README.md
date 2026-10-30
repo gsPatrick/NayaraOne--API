@@ -56,6 +56,10 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 
 ### Retenção de dados (M9-D911, código em `data-quality/retention.*`)
 `GET|PUT /retention/policies` (cinco elementos do livro em toda política: prazo, gatilho, base legal, disposição e exceções com `LEGAL_HOLD`), `POST /retention/dry-run` (simulação que não altera dado), `GET /retention/runs[/:id]` e `POST /retention/runs/:id/apply` (linha 10 da D852: nível 3, MFA, Idempotency-Key, código da rodada; `GET /retention/runs/:id/impact`). Os tipos de dado governados ficam em `retention.targets.js`; o `retentionJob` simula todo dia e só aplica sozinho as políticas `auto_apply` (integração, via `integration.purge_expired()`). Sintoma de aplicação parada: rodada em `FAILED`; chamar o apply de novo retoma só os lotes pendentes.
+
+### Registro de classificação de dados (M9-D910, código em `data-quality/classification.*`)
+`GET /data-classification?schema=&table=&classification=` (leitura com `governance:data-quality:read`, paginada) e `PUT /data-classification` (`governance:classification:manage`, audita antes e depois, 422 `GOV_CLASS_RETENTION_REQUIRED` sem política de retenção, 404 se a coluna não existe). Uma linha por (empresa, schema, tabela, coluna) com os 7 atributos do livro. O inventário versionado `docs/governance/data-classification.json` lista as colunas e os ajustes manuais; `npm run check:classification` (e o passo da esteira) reprova coluna nova sem entrada (`GOV_CLASSIFICATION_MISSING`) e `npm run sync:classification` o atualiza. Coluna sem linha no registro vale a classe padrão `governanca.dlp.classificacao_padrao` com máscara PARTIAL e gera finding. O resolvedor de classe do guard de DLP (`dlp/classification.resolver.js`) e a máscara da anonimização da retenção (`maskSpecFor`) leem este registro (`classification.wiring.js`). Parâmetros: `governanca.dados.classificacao.palavras_restritas`, `.palavras_altas` e `.pagina_tamanho`.
+
 ### Parâmetros da retenção (M9-D911, código em `data-quality/retention.*`)
 | Chave | Padrão | O que controla |
 |---|---|---|
@@ -72,6 +76,9 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 | `governanca.retencao.job_hora` e `governanca.retencao.job_minuto` | 3 e 30 | horário do job (Brasília) |
 | `governanca.retencao.pagina_tamanho` | 50 | itens por página das consultas |
 | `governanca.retencao.integracao_automatica` | ligado | liga o alvo de integração da retenção (calendário de descarte das tabelas de integração, `retention.integration.js`) |
+| `governanca.dados.classificacao.palavras_restritas` | cpf, cnpj, rg, passport, bank, account, pix, password, secret, token, mfa | palavras (nome da coluna, palavra inteira) que classificam como RESTRICTED no registro de classificação (M9-D910) |
+| `governanca.dados.classificacao.palavras_altas` | email, phone, birth, address, salary, income, name | palavras que classificam como HIGH (M9-D910) |
+| `governanca.dados.classificacao.pagina_tamanho` | 50 | itens por página da consulta `GET /data-classification` |
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).

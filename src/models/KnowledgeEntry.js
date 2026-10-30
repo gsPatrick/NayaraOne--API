@@ -1,6 +1,7 @@
 'use strict';
 
 const { DataTypes } = require('sequelize');
+const dataClassification = require('../shared/data-classification/scale');
 
 /**
  * KnowledgeEntry — tabela "ai"."knowledge_entries"
@@ -51,11 +52,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'origin',
       },
+      // M9-D910: o banco guarda a escala nova (LOW..RESTRICTED); o módulo de IA ainda lê e escreve PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED, então o modelo traduz nos dois sentidos.
       classification: {
         type: DataTypes.STRING(16),
         allowNull: false,
-        defaultValue: 'INTERNAL',
+        defaultValue: 'MEDIUM',
         field: 'classification',
+        ...dataClassification.attributeOptions({ legacyView: true }),
       },
       validFrom: {
         type: DataTypes.DATE,

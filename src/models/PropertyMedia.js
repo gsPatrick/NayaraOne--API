@@ -1,6 +1,7 @@
 'use strict';
 
 const { DataTypes } = require('sequelize');
+const dataClassification = require('../shared/data-classification/scale');
 
 /**
  * PropertyMedia — tabela "real_estate"."property_media"
@@ -69,6 +70,8 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(30),
         allowNull: true,
         field: 'classification',
+        comment: 'LOW|MEDIUM|HIGH|RESTRICTED (M9-D910); LOW = antigo PUBLIC: é a mídia que pode ir ao portal.',
+        ...dataClassification.attributeOptions(),
       },
       qualityStatus: {
         type: DataTypes.STRING(30),

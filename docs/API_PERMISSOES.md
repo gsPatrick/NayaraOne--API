@@ -273,6 +273,31 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
 | `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
 | `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
+| `GET` | `/api/v1/data-classification/legacy-review` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
+| `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
+| `governance:data-quality:read` | LOW | `GET /api/v1/data-classification/legacy-review`, `GET /api/v1/data-classification`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
+| `governance:classification:manage` | HIGH | `PUT /api/v1/data-classification` |
+| `POST` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
+| `PUT` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
+| `POST` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
+| `PUT` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
+| `GET` | `/api/v1/data-lineage` | `governance:lineage:manage` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
+| `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/domains` | `governance:data-quality:read` | não |
+| `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality` | `governance:data-quality:read` | não |
+| `POST` | `/api/v1/dlp/anomalies/:id/review` | `governance:dlp:admin` | não |
+| `GET` | `/api/v1/dlp/anomalies` | `governance:dlp:admin` | não |
+| `PUT` | `/api/v1/dlp/policies/:classification/:action` | `governance:dlp:admin` | não |
+| `GET` | `/api/v1/dlp/policies` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/dlp/share-links/:id/impact` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
 | `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
 | `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
@@ -780,15 +805,6 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/health/db` | público (saúde do serviço) | não |
 | `POST` | `/api/v1/legal/webhooks/clicksign` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/v1/ping` | público (saúde do serviço) | não |
-| `POST` | `/api/v1/procurement/webhooks/insurance` | público; autenticidade pela assinatura do provider | não |
-| `GET` | `/api/v1/public/share/:token` | só login | não |
-| `POST` | `/api/v1/users/me/mfa/confirm` | só login (o próprio usuário) | não |
-| `POST` | `/api/v1/users/me/mfa/disable` | só login (o próprio usuário) | não |
-| `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |
-| `POST` | `/api/v1/users/me/mfa/verify` | só login (o próprio usuário) | não |
-| `GET` | `/api/version` | público (saúde do serviço) | não |
-| `governance:data-quality:read` | LOW | `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality` |
-| `governance:data-quality:manage` | MEDIUM | `POST /api/v1/data-quality/queue/:id/decision`, `PUT /api/v1/data-quality/domains/:code/assignments` |
 ## Catálogo de permissões de governança (governance:*)
 
 Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda não foi ligada por uma demanda do bloco.
@@ -796,34 +812,30 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | Permissão | Risco | Rotas que a exigem |
 |---|---|---|
 | `governance:calendar:read` | LOW | `GET /api/v1/calendar/commitments/:id`, `PATCH /api/v1/calendar/commitments/:id`, `POST /api/v1/calendar/commitments`, `DELETE /api/v1/calendar/items/:id`, `PATCH /api/v1/calendar/items/:id`, `PUT /api/v1/calendar/items/:id`, `GET /api/v1/calendar` |
-| `governance:data-quality:read` | LOW | `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
 | `governance:data-quality:manage` | MEDIUM | `PUT /api/v1/data-quality/domains/:code/assignments`, `POST /api/v1/data-quality/queue/:id/decision` |
 | `governance:data-quality:bulk` | CRITICAL | `GET /api/v1/data-quality/bulk-changes/:id`, `POST /api/v1/data-quality/bulk-changes/impact`, `GET /api/v1/data-quality/bulk-changes`, `POST /api/v1/data-quality/bulk-changes` |
 | `governance:lineage:manage` | HIGH | `POST /api/v1/data-lineage/edges`, `PUT /api/v1/data-lineage/edges`, `POST /api/v1/data-lineage/nodes`, `PUT /api/v1/data-lineage/nodes`, `GET /api/v1/data-lineage` |
-| `governance:dlp:export` | MEDIUM | `GET /api/v1/dlp/policies`, `POST /api/v1/dlp/share-links/:id/revoke`, `GET /api/v1/dlp/share-links`, `POST /api/v1/dlp/share-links`, `GET /api/v1/exports/:id/download`, `GET /api/v1/exports/:id`, `GET /api/v1/exports/catalog`, `POST /api/v1/exports` |
+| `governance:dlp:export` | MEDIUM | `GET /api/v1/dlp/policies`, `GET /api/v1/dlp/share-links/:id/impact`, `POST /api/v1/dlp/share-links/:id/revoke`, `GET /api/v1/dlp/share-links`, `POST /api/v1/dlp/share-links`, `GET /api/v1/exports/:id/download`, `GET /api/v1/exports/:id`, `GET /api/v1/exports/catalog`, `POST /api/v1/exports` |
 | `governance:dlp:admin` | CRITICAL | `POST /api/v1/dlp/anomalies/:id/review`, `GET /api/v1/dlp/anomalies`, `PUT /api/v1/dlp/policies/:classification/:action`, `GET /api/v1/dlp` |
 | `governance:dlp:view-restricted` | CRITICAL | nenhuma ainda |
 | `governance:bcp:record` | MEDIUM | `GET /api/v1/bcp/form-templates/:sector/:formType/print`, `GET /api/v1/bcp/form-templates`, `PATCH /api/v1/bcp/manual-operations/:id`, `GET /api/v1/bcp/manual-operations`, `POST /api/v1/bcp/manual-operations`, `GET /api/v1/bcp` |
 | `governance:bcp:import` | HIGH | `POST /api/v1/bcp/manual-operations/import`, `GET /api/v1/bcp/reconciliations` |
 | `governance:bcp:approve` | CRITICAL | `POST /api/v1/bcp/reconciliations/:id/decide` |
 | `governance:api:read` | LOW | `GET /api/v1/api-governance/clients`, `GET /api/v1/api-governance/consumers`, `GET /api/v1/api-governance/deprecations` |
-| `governance:api:manage` | HIGH | `POST /api/v1/api-governance/clients/:id/revoke`, `POST /api/v1/api-governance/clients`, `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
-| `governance:finops:read` | LOW | `GET /api/v1/finops/health` |
-| `governance:finops:manage` | HIGH | nenhuma ainda |
+| `governance:api:manage` | HIGH | `GET /api/v1/api-governance/clients/:id/impact`, `POST /api/v1/api-governance/clients/:id/revoke`, `POST /api/v1/api-governance/clients/impact`, `POST /api/v1/api-governance/clients`, `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
+| `governance:finops:read` | LOW | `GET /api/v1/finops/budgets`, `GET /api/v1/finops/degradation-policies`, `GET /api/v1/finops/health` |
+| `governance:finops:manage` | HIGH | `PATCH /api/v1/finops/budgets/:id`, `POST /api/v1/finops/budgets`, `PUT /api/v1/finops/degradation-policies` |
 | `governance:flags:manage` | CRITICAL | `POST /api/v1/feature-flags/impact`, `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags` |
 | `governance:migration:run` | CRITICAL | nenhuma ainda |
 | `governance:migration:admin` | CRITICAL | nenhuma ainda |
-| `governance:classification:manage` | HIGH | nenhuma ainda |
-| `governance:retention:manage` | HIGH | nenhuma ainda |
+| `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
 | `governance:legal-hold:manage` | CRITICAL | nenhuma ainda |
 
-| `POST` | `/api/v1/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
-| `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
-| `GET` | `/api/t/:shortCode` | só login | não |
-| `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
-| `GET` | `/api/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
-| `GET` | `/api/t/:shortCode` | só login | não |
-| `GET` | `/api/v1/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
-| `POST` | `/api/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
-| `POST` | `/api/v1/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
-| `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
+| `POST` | `/api/v1/procurement/webhooks/insurance` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/v1/public/share/:token` | só login | não |
+| `POST` | `/api/v1/users/me/mfa/confirm` | só login (o próprio usuário) | não |
+| `POST` | `/api/v1/users/me/mfa/disable` | só login (o próprio usuário) | não |
+| `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |
+| `POST` | `/api/v1/users/me/mfa/verify` | só login (o próprio usuário) | não |
+| `GET` | `/api/version` | público (saúde do serviço) | não |
+| `POST` | `/api/webhooks/:provider/:channel` | público; autenticidade pela assinatura do provider | não |

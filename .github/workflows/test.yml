@@ -273,6 +273,13 @@ jobs:
           # maker/checker/leitura. Provado por test/ciTwoTenantsProfiles.test.js.
           node scripts/seed-ci-two-tenants.js
 
+      # M9-D910: coluna de negócio sem classificação reprova o build (GOV_CLASSIFICATION_MISSING). Confere o catálogo do banco migrado com docs/governance/data-classification.json;
+      # corrigir com npm run sync:classification (a coluna nova entra com a classificação automática, revista no diff).
+      - name: Cobertura da classificação de dados (M9-D910)
+        env:
+          DATABASE_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
+        run: node scripts/checkClassificationCoverage.js
+
       # GAP REAL CORRIGIDO (auditoria de entrega Marco 6/7, 08/10/2026): o schema "procurement"
       # (migration 20260101000267, Compras/Seguros) nunca estava nesta lista — toda a suíte de
       # procurement/insurance falharia aqui com "permission denied for schema procurement" por

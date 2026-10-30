@@ -28,6 +28,7 @@ async function editPolicy(tenant, code, changes) {
 
 /** Zera o estado da retenção da empresa (políticas, rodadas e itens); o arquivo de retenção é só de acréscimo e não se apaga. */
 async function resetRetention(tenant) {
+  await adminQuery('DELETE FROM governance.data_classification_registry WHERE company_id = $1', [tenant.companyId]);
   await adminQuery('DELETE FROM governance.retention_runs WHERE company_id = $1', [tenant.companyId]);
   await adminQuery('DELETE FROM governance.retention_policies WHERE company_id = $1', [tenant.companyId]);
 }

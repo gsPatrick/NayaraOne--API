@@ -55,6 +55,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_CALENDAR_RANGE_INVALID` | 400 | A data inicial deve ser anterior à final. | calendar | 1.0.0 | não |
 | `GOV_CALENDAR_SOURCE_INVALID` | 400 | Tipo de origem inválido. | calendar | 1.0.0 | não |
 | `GOV_CALENDAR_TENANT_MISMATCH` | 403 | O evento pertence a outra empresa e foi descartado. | calendar | 1.0.0 | não |
+| `GOV_CLASSIFICATION_MISSING` | 422 | A coluna não tem classificação no registro; vale a classe padrão. | data-quality | 1.3.0 | não |
+| `GOV_CLASS_RETENTION_REQUIRED` | 422 | Informe a política de retenção. | data-quality | 1.3.0 | não |
 | `GOV_CLIENT_DISABLED` | 401 | Esta credencial está desativada. | api-governance | 1.0.0 | não |
 | `GOV_CODIGO_FORA_DO_PADRAO` | 500 | Código de erro fora do padrão GOV_ (o código original vai em details.codigoOriginal). | core-governance | 1.0.0 | não |
 | `GOV_COMMITMENT_INVALID` | 400 | O fim do compromisso deve ser após o início. | calendar | 1.0.0 | não |

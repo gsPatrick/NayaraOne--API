@@ -58,7 +58,7 @@ const documentAmount = (documents, type) => {
 };
 
 /** Só arquivo PUBLIC e CLEAN entra; foto REJECTED fica de fora (DI-D231-3). Devolve os ids dos arquivos, na ordem do cadastro. */
-const publicMedia = (media, cleanKeys, types) => media.filter((m) => types.includes(m.mediaType) && m.classification === 'PUBLIC' && m.qualityStatus !== 'REJECTED' && cleanKeys.has(m.storageKey));
+const publicMedia = (media, cleanKeys, types) => media.filter((m) => types.includes(m.mediaType) && m.classification === 'LOW' && m.qualityStatus !== 'REJECTED' && cleanKeys.has(m.storageKey));
 
 const httpsUrl = (value) => (typeof value === 'string' && /^https:\/\/[^\s]+$/i.test(value.trim()) ? value.trim() : null);
 

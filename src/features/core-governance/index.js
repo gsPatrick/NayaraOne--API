@@ -19,6 +19,7 @@ const GOVERNANCE_PREFIXES = Object.freeze([
   ...GOVERNANCE_MODULES.map((mod) => mod.prefix),
   '/exports',
   '/retention',
+  '/data-classification',
   '/governance',
 ]);
 

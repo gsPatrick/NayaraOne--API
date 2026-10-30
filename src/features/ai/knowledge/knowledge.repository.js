@@ -1,6 +1,7 @@
 'use strict';
 
 const { KnowledgeEntry } = require('../../../models');
+const dataClassification = require('../../../shared/data-classification/scale');
 const { acquireFactKeyLock } = require('../readmodels/knowledgeSupport.readmodel');
 
 /** Acesso a ai.knowledge_entries pelos modelos. Sempre dentro da transação do tenant (RLS FORCE decide o que a empresa enxerga). */
@@ -14,7 +15,9 @@ function findById(ctx, id, transaction, { lock = false } = {}) {
 }
 
 function list(ctx, filters, transaction) {
-  return KnowledgeEntry.findAll({ where: { ...own(ctx), ...filters }, order: [['factKey', 'ASC'], ['version', 'DESC']], transaction });
+  // M9-D910: o banco guarda a escala nova (LOW..RESTRICTED); o filtro do módulo de IA ainda vem como PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED.
+  const where = { ...own(ctx), ...filters, ...(filters && filters.classification ? { classification: dataClassification.normalize(filters.classification) } : {}) };
+  return KnowledgeEntry.findAll({ where, order: [['factKey', 'ASC'], ['version', 'DESC']], transaction });
 }
 
 async function nextVersion(ctx, factKey, transaction) {

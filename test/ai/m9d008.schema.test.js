@@ -18,7 +18,7 @@ async function inserir(tx, fk, over = {}) {
   await run(
     `INSERT INTO ai.knowledge_entries (id, group_id, company_id, subject_type, fact_key, fact_value_json, classification, version, title, content_hash, created_by)
      VALUES (:id, :g, :c, 'politica', :fk, '{"a":1}'::jsonb, :cls, :v, 'T', repeat('b', 64), :by)`,
-    { id, g: tenantA.groupId, c: tenantA.companyId, fk, cls: over.cls || 'INTERNAL', v: over.version || 1, by: over.by || null }, tx
+    { id, g: tenantA.groupId, c: tenantA.companyId, fk, cls: over.cls || 'MEDIUM', v: over.version || 1, by: over.by || null }, tx
   );
   return id;
 }

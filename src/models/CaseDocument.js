@@ -1,6 +1,7 @@
 'use strict';
 
 const { DataTypes } = require('sequelize');
+const dataClassification = require('../shared/data-classification/scale');
 const { encryptNote, decryptNote } = require('../utils/caseDocumentCrypto');
 
 /**
@@ -20,7 +21,7 @@ module.exports = (sequelize) => {
       requirementId: { type: DataTypes.UUID, allowNull: false, field: 'requirement_id' },
       fileId: { type: DataTypes.UUID, allowNull: false, field: 'file_id' },
       version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
-      classification: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'RESTRICTED' },
+      classification: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'RESTRICTED', ...dataClassification.attributeOptions() },
       supersededAt: { type: DataTypes.DATE, allowNull: true, field: 'superseded_at' },
       expiresAt: { type: DataTypes.DATE, allowNull: true, field: 'expires_at' },
       uploadedBy: { type: DataTypes.UUID, allowNull: true, field: 'uploaded_by' },

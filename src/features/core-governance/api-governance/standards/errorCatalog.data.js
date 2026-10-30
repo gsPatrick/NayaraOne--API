@@ -10,12 +10,15 @@ function readData() {
   try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (_e) { return { codes: {} }; }
 }
 
-const entriesFromData = (data = readData()) => Object.entries(data.codes).sort(([a], [b]) => a.localeCompare(b)).map(([code, e]) => ({
+// Ordem por unidade de código (a mesma do banco com COLLATE "C" e do glibc nos nomes do catálogo): localeCompare põe GOV_CLASS_... antes de GOV_CLASSIFICATION_..., o oposto da tabela governance.error_catalog.
+const byCode = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+const entriesFromData = (data = readData()) => Object.entries(data.codes).sort(([a], [b]) => byCode(a, b)).map(([code, e]) => ({
   code, status: e.status, message: e.message, module: e.module, since: e.since, deprecated: Boolean(e.deprecated),
 }));
 
 function writeData(data) {
-  const sorted = { codes: Object.fromEntries(Object.entries(data.codes).sort(([a], [b]) => a.localeCompare(b))) };
+  const sorted = { codes: Object.fromEntries(Object.entries(data.codes).sort(([a], [b]) => byCode(a, b))) };
   fs.writeFileSync(FILE, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
