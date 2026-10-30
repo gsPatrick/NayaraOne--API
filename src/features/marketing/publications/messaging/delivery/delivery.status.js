@@ -5,6 +5,7 @@ const { updateMessageStatus } = require('../../../../crm/messages.service');
 const { messagingStatus: { shouldApply } } = require('../../../../integrations');
 const { automatic } = require('../../../suppression');
 const { audit } = require('../message/message.persist');
+const { notifyDelivery } = require('./delivery.listeners');
 
 /**
  * M9-D429 regra 6 — status de entrega do WhatsApp e do e-mail aplicado à mensagem do CRM. SENT é só "aceita pelo provedor"; DELIVERED e READ (ou
@@ -42,6 +43,7 @@ async function applyDeliveryStatus({ tenant, channel, providerRef, status }, tra
     if (next === 'FAILED') await Message.update({ failureReason: REASON[raw] || REASON.FAILED }, { where: { id: message.id }, transaction });
     await audit(tenant, 'marketing.message.delivery_status', 'Message', message.id, { from: current, to: next, providerStatus: raw },
       `Status de entrega ${current} -> ${next} por evidência do canal (${raw}).`, transaction);
+    await notifyDelivery({ tenant, messageId: message.id, status: next }, transaction); // M9-D424: o pedido de avaliação acompanha a entrega da sua mensagem
   }
   const suppressor = SUPPRESSION_OF[raw];
   let suppressed = false;

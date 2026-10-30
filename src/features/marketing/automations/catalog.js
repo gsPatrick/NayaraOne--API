@@ -20,6 +20,7 @@ const TRIGGER_EVENTS = Object.freeze([
   'crm.visit.completed', 'crm.proposal.created', 'crm.proposal.status_changed', 'crm.interaction.recorded',
   'crm.cart.viewed', 'crm.cart.property_clicked',
   'crm.feedback_case.created', 'crm.feedback_case.escalated', 'crm.feedback_case.resolved',
+  'crm.satisfaction.recorded',
   'property.created', 'property.published', 'property.updated', 'property.price.changed', 'property.offer.created',
   'radar.matched',
   'contract.activated', 'contract.terminated', 'keys.delivered', 'lease.guarantee.expiring', 'rent.adjusted',

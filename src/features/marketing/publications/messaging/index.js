@@ -3,6 +3,7 @@
 const { sendMarketingMessage } = require('./message/message.send');
 const { applyDeliveryStatus, STATUS_MAP } = require('./delivery/delivery.status');
 const { installDeliveryHook } = require('./delivery/delivery.hook');
+const { registerDeliveryListener } = require('./delivery/delivery.listeners');
 const { previewSafe, previewSensitive, REDACTED } = require('./preview/preview.safe');
 const { readPreviewConfig, PREVIEW_SETTINGS_SCHEMA, PREVIEW_SETTING_DEFAULTS } = require('./preview/preview.settings');
 const { sendStep, buildMessagingCampaignPort, installCampaignSendPort } = require('./campaign/campaign.port');
@@ -14,6 +15,6 @@ installDeliveryHook(); // status de entrega do webhook dos canais -> mensagem do
 
 /** Mensagem direta do Marketing (WhatsApp e e-mail) sobre o ChannelAdapter da M9-D430 (M9-D429). */
 module.exports = {
-  sendMarketingMessage, applyDeliveryStatus, STATUS_MAP, previewSafe, previewSensitive, REDACTED, readPreviewConfig, PREVIEW_SETTINGS_SCHEMA, PREVIEW_SETTING_DEFAULTS,
+  sendMarketingMessage, applyDeliveryStatus, registerDeliveryListener, STATUS_MAP, previewSafe, previewSensitive, REDACTED, readPreviewConfig, PREVIEW_SETTINGS_SCHEMA, PREVIEW_SETTING_DEFAULTS,
   sendStep, buildMessagingCampaignPort, installCampaignSendPort, signUnsubscribeToken, verifyUnsubscribeToken, unsubscribeByToken, publicRouter,
 };

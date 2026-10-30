@@ -9,4 +9,6 @@ const runner = require('./runner'); // M9-D414: automation runner (9 passos, aç
 
 const seeds = require('./seeds'); // M9-D422: automações prontas (pós-chaves, locação) ligadas ao runner pelas portas dele
 
-module.exports = { router, service, cadence, policy, runner, seeds };
+const reviews = require('./reviews'); // M9-D424: pedido de avaliação (serviço, retorno da plataforma e acompanhamento da entrega)
+
+module.exports = { router, service, cadence, policy, runner, seeds, reviews };

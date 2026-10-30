@@ -7,7 +7,7 @@ const { EXECUTORS } = require('./executors');
 const timeoutAfter = (ms) => new Promise((_, reject) => { setTimeout(() => reject(Object.assign(new Error('timeout'), { actionTimeout: true })), ms).unref(); });
 
 /**
- * Executa UMA ação (passo 7) num savepoint, com o tempo máximo do parâmetro. Sucesso: OK, SKIPPED ou UNKNOWN conforme o executor. Erro: FAILED com MKT_ACTION_FAILED
+ * Executa UMA ação (passo 7) num savepoint, com o tempo máximo do parâmetro. Sucesso: OK, SKIPPED, SCHEDULED (com `dueAt`: a ação espera um horário e o executor das ações adiadas a retoma) ou UNKNOWN conforme o executor. Erro: FAILED com MKT_ACTION_FAILED
  * (as escritas parciais da ação são desfeitas). Estouro de tempo: UNKNOWN com MKT_ACTION_UNKNOWN (o destino pode ter agido; nada é repetido às cegas).
  */
 async function executeOne(ctx, entry, def) {
@@ -17,7 +17,7 @@ async function executeOne(ctx, entry, def) {
     const result = await sequelize.transaction({ transaction: ctx.transaction }, (savepoint) => Promise.race([
       executor({ ...actionCtx, transaction: savepoint }), timeoutAfter(ctx.params.actionTimeoutS * 1000),
     ]));
-    return { ...entry, status: result.status, provider_ref: result.providerRef || null, error_code: result.errorCode || null, ...(result.detail ? { detail: String(result.detail).slice(0, 200) } : {}) };
+    return { ...entry, status: result.status, provider_ref: result.providerRef || null, error_code: result.errorCode || null, ...(result.dueAt ? { due_at: new Date(result.dueAt).toISOString() } : {}), ...(result.detail ? { detail: String(result.detail).slice(0, 200) } : {}) };
   } catch (err) {
     if (err.actionTimeout) return { ...entry, status: 'UNKNOWN', error_code: 'MKT_ACTION_UNKNOWN', detail: 'tempo esgotado' };
     logger.warn({ type: entry.type, err: err.message, code: err.code }, 'marketing.runner.action_failed');

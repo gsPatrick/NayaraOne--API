@@ -133,9 +133,10 @@ test('correlation_id_propagado: run, eventos, tarefa e auditoria da falha levam 
 
 test('falha_na_segunda_acao_replay_nao_repete_a_primeira: run FAILED, auditoria interna e nenhum evento fora do catalogo', async () => {
   await inTx(async (t) => {
+    env.runner.reviewPort.clearReviewRequester(); // a M9-D424 registra o serviço de avaliação ao carregar o Marketing: o teste força o estado sem serviço registrado
     const person = await env.readyPerson(t, tenant);
     await env.publishedFlow(t, tenant, { actions: [env.TASK({ title: 'Primeira tarefa QA-M9' }), { actionType: 'REQUEST_REVIEW' }] });
-    const out = await env.run(t, tenant, env.eventFor(tenant, person)); // o serviço de avaliação (M9-D424) ainda não está registrado: a segunda ação falha
+    const out = await env.run(t, tenant, env.eventFor(tenant, person)); // sem o serviço de avaliação registrado a segunda ação falha
     const row = await env.runRow(t, out.runs[0].runId);
     assert.equal(row.status, 'FAILED');
     assert.deepEqual(row.actions_result.map((a) => a.status), ['OK', 'FAILED']);

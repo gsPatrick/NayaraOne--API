@@ -19,6 +19,8 @@ automations.runner.registerRunnerPorts({ canSend: suppression.canSend, sendMessa
  * automations, publications, tracking, suppression), cada uma com service, controller, routes e index. Nenhuma área importa a
  * outra por caminho interno: só pelo index.js. As integrações ficam nos adapters já definidos (M9-D200). Rotas em /marketing/*.
  */
+automations.reviews.registerTrackingLinkPort(tracking.service.createTrackingLink); // M9-D424: o link da avaliação é rastreável (M9-D431)
+publications.messaging.registerDeliveryListener(automations.reviews.onDeliveryStatus); // M9-D424: o pedido acompanha a entrega da mensagem
 automations.seeds.registerUrlGuard(tracking.urls.assertAllowedUrl); // a regra única de URL externa (M9-D433) para o link de pesquisa e de avaliação
 
 const areas = { content, campaigns, automations, publications, tracking, suppression };
