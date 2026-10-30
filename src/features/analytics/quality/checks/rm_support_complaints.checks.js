@@ -6,5 +6,5 @@ const { declareDomainChecks } = require('./domain.declare');
 declareDomainChecks({
   model: 'rm_support_complaints', short: 'support_complaints', domain: 'SUPPORT', metrics: ['sup.complaints_by_reason'],
   completeness: { field: 'feedback_type', sql: `SELECT count(*)::int AS total, count(*) FILTER (WHERE type IS NULL)::int AS nulls FROM crm.feedback_cases WHERE company_id = :companyId AND deleted_at IS NULL` },
-  invariant: { rule: 'cada motivo guardado tem ao menos uma reclamação', violation: `count < 1` },
+  invariant: { rule: 'contagem de reclamações não negativa (motivo que perdeu todos os casos por reclassificação fica com zero, válido)', violation: `count < 0` },
 });
