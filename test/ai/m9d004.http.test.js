@@ -11,7 +11,10 @@ const { Client } = require('pg');
 
 const DISPOSABLE = process.env.DISPOSABLE_DB === '1' && Boolean(process.env.DATABASE_ADMIN_URL);
 const SKIP = DISPOSABLE ? false : 'precisa do cluster descartável (node scripts/withDisposableDb.js)';
-const CODE = 'QA_M9_HTTP';
+// Código e chave de idempotência únicos por execução: o teste se repete no mesmo banco sem cair em replay (200).
+const RUN_ID = require('node:crypto').randomBytes(4).toString('hex').toUpperCase();
+const CODE = `QA_M9_HTTP_${RUN_ID}`;
+const IDEM_KEY = `qa-m9-http-${RUN_ID}`;
 const tokens = {};
 let baseUrl;
 let appLoaded = false;
@@ -95,11 +98,11 @@ test('m9d004_http_ciclo_criar_homologar_ativar_e_listar', { skip: SKIP }, async 
   const off = await call('PUT', '/settings/ia.agente.avaliacao_verde_obrigatoria', tokens['A:gestor'], { value: false });
   assert.equal(off.status, 200, JSON.stringify(off.body));
 
-  const criada = await call('POST', `/ai/agents/${CODE}/versions`, tokens['A:gestor'], NOVA, { 'Idempotency-Key': 'qa-m9-http-1' });
+  const criada = await call('POST', `/ai/agents/${CODE}/versions`, tokens['A:gestor'], NOVA, { 'Idempotency-Key': IDEM_KEY });
   assert.equal(criada.status, 201, JSON.stringify(criada.body));
   assert.equal(criada.body.data.status, 'DRAFT');
   assert.equal(criada.body.data.version, 1);
-  const repetida = await call('POST', `/ai/agents/${CODE}/versions`, tokens['A:gestor'], NOVA, { 'Idempotency-Key': 'qa-m9-http-1' });
+  const repetida = await call('POST', `/ai/agents/${CODE}/versions`, tokens['A:gestor'], NOVA, { 'Idempotency-Key': IDEM_KEY });
   assert.equal(repetida.status, 200);
   assert.equal(repetida.body.data.id, criada.body.data.id);
 
