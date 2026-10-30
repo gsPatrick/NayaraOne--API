@@ -102,14 +102,14 @@ test('backoff_usa_um_valor_por_retentativa_e_breaker_aberto_nao_conta_tentativa'
     const [conn] = await env.fx.q(t, "SELECT id, group_id AS \"groupId\", company_id AS \"companyId\", provider_code AS \"providerCode\" FROM integration.connections WHERE company_id = :c AND provider_code = 'site-sandbox' AND status = 'ACTIVE' LIMIT 1", { c: ctx.tenant.companyId });
     const { ensureCurrentRow } = require('../../../src/features/integrations/health/healthStore');
     await ensureCurrentRow(conn, new Date(), t);
-    await env.fx.q(t, "UPDATE integration.provider_health SET circuit_state = 'OPEN', circuit_opened_at = now(), circuit_cooldown_s = 600, last_sample_at = now() WHERE connection_id = :id AND window_minutes = 0", { id: conn.id });
+    await env.fx.q(t, "UPDATE integration.provider_health SET circuit_state = 'OPEN', circuit_opened_at = now(), circuit_cooldown_s = 86400, last_sample_at = now() WHERE connection_id = :id AND window_minutes = 0", { id: conn.id });
     for (let i = 1; i <= 4; i += 1) {
       await env.cycle(t, ctx, { now: env.seconds(s.now, 60 + i * 400), scenarios: { SITE: 'HTTP_5XX' } });
     }
     job = await env.job(t, s.jobId);
     assert.equal(job.status, 'PENDING', 'com o breaker aberto o job fica PENDING, nunca FAILED');
     assert.equal(job.attempts, 1, 'o breaker aberto não chama o adapter e não incrementa attempts');
-    assert.equal(job.last_error_code, 'MKT_CHANNEL_CONNECTION_INACTIVE');
+    assert.equal(job.last_error_code, 'MKT_CHANNEL_CIRCUIT_OPEN', 'M9-D442: o worker consulta o circuit breaker (cooldown de um dia, ainda aberto) em vez de tratar a conexão como inativa');
     await env.fx.q(t, "UPDATE integration.provider_health SET circuit_state = 'CLOSED', circuit_opened_at = NULL WHERE connection_id = :id AND window_minutes = 0", { id: conn.id });
     await env.cycle(t, ctx, { now: env.seconds(s.now, 5000), scenarios: { SITE: 'OK' } });
     assert.equal((await env.job(t, s.jobId)).status, 'PUBLISHED', 'fechado o breaker, o job segue');

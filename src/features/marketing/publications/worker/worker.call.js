@@ -31,7 +31,7 @@ async function sendJob({ tenant, job, timeoutS, transaction, scenarioFor }) {
   const operation = CHANNEL_META[job.channel].operation;
   const scenario = scenarioFor ? scenarioFor(job) : undefined;
   const media = mediaOf(version);
-  const adapter = { [operation]: (payload) => sendToChannel(job.channel, payload, { tenant, transaction, idempotencyKey: job.idempotency_key, campaignId: job.campaign_id, ...(scenario ? { scenario } : {}), ...(media ? { media } : {}) }) };
+  const adapter = { [operation]: (payload) => sendToChannel(job.channel, payload, { tenant, transaction, idempotencyKey: job.idempotency_key, campaignId: job.campaign_id, circuit: job.circuit || null, ...(scenario ? { scenario } : {}), ...(media ? { media } : {}) }) };
   const outcome = await withTimeout(
     content.adapterGate.deliverToAdapter(adapter, operation, buildPayload(version), { policy: addressPolicyOf(version), tenant, transaction }),
     timeoutS * 1000

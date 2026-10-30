@@ -87,7 +87,7 @@ async function resumeExisting(ctx, row, rebuild) {
   }
   if ((await killBlock(ctx, row.channel)).blocked) return view(row, { replayed: true, blocked: true, reason: KILL.reason, code: KILL.code }); // fica como estava (QUEUED/UNKNOWN) e sai depois da reativação
   const message = await rebuild();
-  const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
+  const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, now: ctx.now, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
   return view(await moveOutbound(row, { ...out, providerRef: result.providerRef }, transaction), { replayed: true, sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox });
 }
@@ -131,7 +131,7 @@ async function sendMarketingMessage(ctx, rawInput) {
   }
   if (!message.to) return blockedResult({ reason: 'NO_ADDRESS', code: 'MKT_NO_ADDRESS', message: 'A pessoa não tem endereço de contato utilizável neste canal.' }, input, tenant, transaction);
 
-  const result = await sendToChannel(input.channel, message, { tenant, transaction, idempotencyKey: input.actionKey, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
+  const result = await sendToChannel(input.channel, message, { tenant, transaction, idempotencyKey: input.actionKey, now, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
   const row = await recordOutbound({ tenant, input, message: { subject: message.subject, text: message.text }, ...out, providerRef: result.providerRef }, transaction);
   await audit(tenant, 'marketing.message.sent', 'Message', row.id, { channel: input.channel, purpose: input.purpose, status: out.status, sandbox: result.sandbox, decision: result.contingency && result.contingency.action },

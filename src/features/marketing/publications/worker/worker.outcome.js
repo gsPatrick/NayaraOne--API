@@ -6,6 +6,7 @@ const { transition, emitCompleted, emitFailed } = require('./worker.record');
 const { statusKind, providerStatusOf } = require('./worker.status');
 const { backoffFor } = require('./worker.settings');
 const security = require('../../security');
+const circuit = require('../adapters/circuit.gate');
 
 const addSeconds = (date, s) => new Date(date.getTime() + s * 1000);
 const messageOf = { MKT_PROVIDER_AUTH_FAILED: 'O provedor recusou a credencial; reconecte a conta.', MKT_PROVIDER_REJECTED: 'A rede recusou o conteúdo.', MKT_PUBLICATION_RETRIES_EXHAUSTED: 'As tentativas de publicação acabaram.', MKT_PUBLICATION_ADAPTER_EXCEPTION: 'Falha inesperada ao falar com o canal.', MKT_CAPABILITY_VIOLATION: 'O conteúdo excede um limite da rede escolhida.' };
@@ -66,6 +67,8 @@ async function retryOrFail(ctx, job, code, { retryAfterMs = 0, response = {} } =
 async function applyResult(ctx, job, result) {
   const response = redactedResponse(result);
   if (result.unknown) return markUnknown(ctx, job, { code: (result.error && result.error.code) || 'UNKNOWN_RESPONSE', response });
+  // Mesma chave de idempotência (DUPLICATE_KEY): o canal devolve o post ORIGINAL e avisa que é repetição. Não é recusa: o post existe, sem segundo post (M9-D442).
+  if (result.duplicate && result.providerRef) return acceptPost(ctx, job, { providerRef: result.providerRef, status: result.status, externalUrl: result.externalUrl, response });
   if (result.status === 'REJECTED') return failDefinitive(ctx, job, 'MKT_PROVIDER_REJECTED', { providerStatus: 'REJECTED', response });
   const error = result.error;
   if (error && error.class === 'AUTH') {
@@ -84,7 +87,7 @@ async function applyResult(ctx, job, result) {
  * Aplica o que o envio devolveu. O job é relido com trava: só vale se ainda for a MESMA tentativa em RUNNING (se a varredura de recuperação o levou a UNKNOWN
  * enquanto o envio demorava, o resultado tardio é descartado e a reconciliação resolve pelo canal).
  */
-async function applySend(ctx, claimed, sent) {
+async function applyLocked(ctx, claimed, sent) {
   const job = await repo.lockById(claimed.id, ctx.transaction);
   if (!job || job.status !== 'RUNNING' || job.attempts !== claimed.attempts) return { skipped: true };
   if (sent.kind === 'RELEASE') return release(ctx, job, sent.code);
@@ -93,6 +96,13 @@ async function applySend(ctx, claimed, sent) {
   if (sent.kind === 'DEFINITIVE') return failDefinitive(ctx, job, sent.code);
   if (sent.kind === 'NOT_SENT') return retryOrFail(ctx, job, sent.code);
   return applyResult(ctx, job, sent.result);
+}
+
+/** Aplica o envio e devolve o resultado ao circuit breaker da conexão (também quando o resultado tardio é descartado: a vaga de teste do circuito não pode ficar presa). */
+async function applySend(ctx, claimed, sent) {
+  const applied = await applyLocked(ctx, claimed, sent);
+  await circuit.report(claimed.circuit, sent, { tenant: ctx.tenant, transaction: ctx.transaction, now: ctx.now });
+  return applied;
 }
 
 module.exports = { applySend, applyResult, acceptPost, failDefinitive, markUnknown, retryOrFail, release };

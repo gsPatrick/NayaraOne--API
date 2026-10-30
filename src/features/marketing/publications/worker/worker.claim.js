@@ -3,19 +3,28 @@
 const { isOutboundBlocked } = require('../../killswitch.state');
 const { resolveChannelConnection } = require('../schedule/schedule.connection');
 const { cancelPendingDispatches, isSocial } = require('../schedule/schedule.social');
-const { getCurrentHealth } = require('../../../integrations/health/healthQuery');
 const repo = require('./worker.repository');
 const { checkApproval } = require('./worker.content');
 const { transition } = require('./worker.record');
+const circuit = require('../adapters/circuit.gate');
+const { isChannelReleased } = require('../adapters/release/channelAccess');
 
-/** A conexão do canal ainda atende? Recusa (409) ou circuito aberto: o job não é enviado agora e não gasta tentativa (o circuit breaker é do framework de Integrações). */
-async function connectionBlocker(ctx, job) {
+/**
+ * A conexão do canal ainda atende? Devolve { blocker } (recusa 409 ou circuito aberto: o job não é enviado agora e não gasta tentativa) ou { circuit: { connectionId, probe } }.
+ * O circuit breaker é o do framework de Integrações (M9-D217): aberto dentro do cooldown segura; vencido o cooldown, meia-abre e deixa passar só as chamadas de teste (M9-D442).
+ */
+async function connectionGate(ctx, job) {
   try {
-    const connection = await resolveChannelConnection({ tenant: ctx.tenant, actor: null, channel: job.channel, transaction: ctx.transaction });
-    const health = await getCurrentHealth(connection.id, { groupId: ctx.tenant.groupId, companyId: ctx.tenant.companyId, userId: null }, ctx.transaction);
-    return health.circuitState === 'OPEN' ? 'MKT_CHANNEL_CIRCUIT_OPEN' : null;
+    const connection = await resolveChannelConnection({ tenant: ctx.tenant, actor: null, channel: job.channel, transaction: ctx.transaction, circuitAware: true });
+    const gateCtx = { tenant: ctx.tenant, transaction: ctx.transaction, now: ctx.now };
+    if (await circuit.coolingDown(connection.id, gateCtx)) return { blocker: 'MKT_CHANNEL_CIRCUIT_OPEN' };
+    // No sandbox o circuito é admitido aqui (vaga de teste na meia-abertura) e o resultado volta em applySend; em produção o cliente HTTP do bloco B admite na chamada.
+    if (await isChannelReleased(job.channel, ctx.tenant, ctx.transaction)) return { circuit: null };
+    const verdict = await circuit.admit(connection.id, gateCtx);
+    if (!verdict.allowed) return { blocker: 'MKT_CHANNEL_CIRCUIT_OPEN' };
+    return { circuit: { connectionId: connection.id, probe: verdict.probe } };
   } catch (err) {
-    if (err && err.code === 'MKT_CHANNEL_CONNECTION_INACTIVE') return err.code;
+    if (err && err.code === 'MKT_CHANNEL_CONNECTION_INACTIVE') return { blocker: err.code };
     throw err;
   }
 }
@@ -48,12 +57,12 @@ async function claimDue(ctx) {
       if (blocked.blocked) { skipped.killSwitch += 1; continue; }
       const approval = await checkApproval(job, ctx.transaction);
       if (!approval.ok) { await cancelInvalidated(ctx, job, approval.reason); skipped.cancelled += 1; continue; }
-      const blocker = await connectionBlocker(ctx, job);
-      if (blocker) { await noteBlock(job, blocker, ctx.transaction); skipped.connection += 1; continue; }
+      const gate = await connectionGate(ctx, job);
+      if (gate.blocker) { await noteBlock(job, gate.blocker, ctx.transaction); skipped.connection += 1; continue; }
       if (isSocial(job.channel) && job.connection_id) await cancelPendingDispatches({ tenant: ctx.tenant, actor: null, job: { ...job, content_version_id: job.content_version_id }, itemId: job.item_id }, ctx.transaction);
       await repo.patch(job.id, { status: 'RUNNING', attempts: job.attempts + 1, startedAt: ctx.now, nextAttemptAt: null, lastErrorCode: null }, ctx.transaction);
       ctx.touched.add(job.item_id);
-      claimed.push({ ...job, status: 'RUNNING', attempts: job.attempts + 1, started_at: ctx.now });
+      claimed.push({ ...job, status: 'RUNNING', attempts: job.attempts + 1, started_at: ctx.now, circuit: gate.circuit });
     }
     const last = rows[rows.length - 1];
     if (rows.length < ctx.params.batch) break;

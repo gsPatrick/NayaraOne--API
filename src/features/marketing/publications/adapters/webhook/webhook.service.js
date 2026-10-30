@@ -32,17 +32,23 @@ async function receiveChannelWebhook({ channel: channelName, provider, token, he
     if (err.code === 'MKT_WEBHOOK_SIGNATURE_INVALID') await recordSignatureFailure(conn, { provider: providerCode, channel: token, rawBody, ip, reason: secrets.length ? 'assinatura diferente' : 'segredo do webhook não configurado' });
     throw err;
   }
-  return withTenant(conn, async (transaction) => {
-    const params = await readWebhookParams({ groupId: conn.groupId, companyId: conn.companyId }, transaction);
-    assertFreshTimestamp(event.timestamp, params.timestampToleranceS);
-    if (!event.eventId || event.eventId.length > 160) throw webhookPayloadInvalid({ motivo: 'o evento não traz identificador' });
-    const ctx = { groupId: conn.groupId, companyId: conn.companyId, userId: null };
-    const saved = await persistAccepted(ctx, conn, {
-      provider: providerCode, channel: String(token), rawBody, body: event.data, headers, eventId: event.eventId, eventType: event.eventType, maxStoredBytes: params.maxBodyBytes,
-    }, transaction);
-    if (saved.status === 'accepted') await runWebhookEventHooks({ tenant: { groupId: conn.groupId, companyId: conn.companyId }, channel, event }, transaction); // M9-D429: status de entrega
-    return { status: saved.status, eventId: saved.eventId };
-  });
+  return withTenant(conn, (transaction) => ingestChannelEvent({ conn, provider: providerCode, token, channel, event, headers, rawBody }, transaction));
 }
 
-module.exports = { receiveChannelWebhook };
+/**
+ * Segunda metade do recebimento, depois da assinatura conferida (M9-D442 a reaproveita no failure drill, na transação do ensaio): janela de tempo contra replay, evento gravado na
+ * caixa de entrada do framework (duplicado não grava de novo) e, só para evento NOVO, os ganchos do canal (status de entrega, M9-D429). `runHooks` é injetável só para o ensaio contar.
+ */
+async function ingestChannelEvent({ conn, provider, token, channel, event, headers, rawBody }, transaction, { runHooks = runWebhookEventHooks } = {}) {
+  const params = await readWebhookParams({ groupId: conn.groupId, companyId: conn.companyId }, transaction);
+  assertFreshTimestamp(event.timestamp, params.timestampToleranceS);
+  if (!event.eventId || event.eventId.length > 160) throw webhookPayloadInvalid({ motivo: 'o evento não traz identificador' });
+  const ctx = { groupId: conn.groupId, companyId: conn.companyId, userId: null };
+  const saved = await persistAccepted(ctx, conn, {
+    provider, channel: String(token), rawBody, body: event.data, headers, eventId: event.eventId, eventType: event.eventType, maxStoredBytes: params.maxBodyBytes,
+  }, transaction);
+  if (saved.status === 'accepted') await runHooks({ tenant: { groupId: conn.groupId, companyId: conn.companyId }, channel, event }, transaction); // M9-D429: status de entrega
+  return { status: saved.status, eventId: saved.eventId };
+}
+
+module.exports = { receiveChannelWebhook, ingestChannelEvent };

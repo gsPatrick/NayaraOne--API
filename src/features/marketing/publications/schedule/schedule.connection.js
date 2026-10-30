@@ -13,7 +13,7 @@ const { assertNetworkAuthorized } = require('../adapters/social');
  * health checks seguidos falhos), o agendamento é recusado com 409 MKT_CHANNEL_CONNECTION_INACTIVE. UNKNOWN e DEGRADED não bloqueiam: conexão nova ainda
  * não tem amostra e degradada ainda atende (a contingência do canal decide no envio, M9-D430).
  */
-async function resolveChannelConnection({ tenant, actor, channel, transaction }) {
+async function resolveChannelConnection({ tenant, actor, channel, transaction, circuitAware = false }) {
   const meta = CHANNEL_META[channel];
   const ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: actor || null };
   let connection = null;
@@ -26,7 +26,9 @@ async function resolveChannelConnection({ tenant, actor, channel, transaction })
   }
   if (!connection) throw channelConnectionInactive({ channel, reason: 'NO_ACTIVE_CONNECTION' });
   const health = await getCurrentHealth(connection.id, ctx, transaction);
-  if (health.healthStatus === 'DOWN') {
+  // circuitAware (worker, M9-D442): com o circuito OPEN/HALF_OPEN quem decide é o circuit breaker (admitCall: cooldown e meia-abertura), não esta recusa; senão o circuito nunca meia-abriria.
+  const circuitDecides = circuitAware && ['OPEN', 'HALF_OPEN'].includes(health.circuitState);
+  if (health.healthStatus === 'DOWN' && !circuitDecides) {
     throw channelConnectionInactive({ channel, reason: 'UNHEALTHY', connectionId: connection.id, healthStatus: health.healthStatus, circuitState: health.circuitState });
   }
   await assertNetworkAuthorized({ tenant, channel, connection }, transaction); // M9-D428: rede com token recusado precisa ser reautorizada (409 MKT_PROVIDER_AUTH_FAILED)

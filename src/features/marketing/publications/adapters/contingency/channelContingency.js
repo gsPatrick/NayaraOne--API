@@ -56,7 +56,8 @@ function decideOnResult(channelName, result, options = {}) {
   const klass = result.error && result.error.class;
   const retry = NEVER_RETRY.includes(klass) ? 'NONE' : plan.retry;
   if (result.unknown) return unknownDecision(plan, base);
-  if (plan.queue) return options.queueExpired ? { ...base, action: 'CANCEL_QUEUED', state: 'CANCELLED' } : { ...base, action: 'QUEUE', state: 'QUEUED', retry };
+  // Fila é para o canal fora do ar; credencial recusada ou revogada e pedido inválido (NEVER_RETRY) não esperam em fila: a mensagem falha de vez (M9-D442).
+  if (plan.queue && !NEVER_RETRY.includes(klass)) return options.queueExpired ? { ...base, action: 'CANCEL_QUEUED', state: 'CANCELLED' } : { ...base, action: 'QUEUE', state: 'QUEUED', retry };
   if (plan.keepInternal) return { ...base, action: 'KEEP_INTERNAL', state: 'PENDING_SYNC', keepInternal: true, reprocess: true, retry };
   if (plan.isolated) return { ...base, action: 'ISOLATE_AND_RETRY', state: 'FAILED', retry };
   return { ...base, action: 'RETRY_BY_CLASS', state: 'FAILED', retry };
