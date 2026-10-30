@@ -14,6 +14,7 @@ const { sequelize } = require('../../../../models');
 const store = require('../../metricStore.service');
 const clock = require('../clock');
 const { getFormulaCatalog } = require('../formulaCatalog');
+const { runFormula } = require('../formulaRun');
 const { calcHash } = require('../calcHash');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { publishMetric } = require('../registry.service');
@@ -66,7 +67,7 @@ function createKpiGroup(group) {
       const item = built[def.metricCode];
       const published = item && await publishedVersion(def.metricCode, scope.companyId, transaction);
       if (!published) continue;
-      const result = catalog.get(def.metricCode).compute(item.inputs, item.params || {});
+      const result = runFormula(catalog.get(def.metricCode), item.inputs, item.params || {});
       const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: item.filter, unit: published.unit }, transaction);
       const base = {
         metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,

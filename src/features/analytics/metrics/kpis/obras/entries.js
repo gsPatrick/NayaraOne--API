@@ -6,6 +6,7 @@
  * sourceRefs (M9-D611) ficam no snapshot. KPI sem base no read model (nenhuma obra) não gera entrada: nada é inventado.
  */
 const { getFormulaCatalog } = require('../../formulaCatalog');
+const { runFormula } = require('../../formulaRun');
 const { calcHash } = require('../../calcHash');
 const { buildSourceRefs } = require('../../sourceRefs.build');
 const { P } = require('../../../security/permissionCatalog');
@@ -26,7 +27,7 @@ async function buildObraKpiEntries(scope, asOfDate, transaction) {
     if (!published) continue;
     const loaded = await loadObraInput(def.metricCode, scope, asOfDate, transaction);
     if (!loaded) continue;
-    const result = catalog.get(def.formulaId).compute(loaded.input, loaded.params);
+    const result = runFormula(catalog.get(def.formulaId), loaded.input, loaded.params);
     const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: sourceFilter(def.metricCode, asOfDate), unit: published.unit }, transaction);
     const base = {
       metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,

@@ -7,6 +7,7 @@
  * de 15 min, M9-D607) e regra de qualidade. Versão 1; os três são CRITICAL (tabela da M9-D712) e nascem com drill-down. A necessidade para respirar é composta:
  * herda a qualidade de caixa livre, contas a pagar em 30 dias e contas a pagar vencidas (componente que só existe aqui, sem métrica própria).
  */
+const { runFormula } = require('../formulaRun');
 const { readOverdueBandLimits } = require('../../read-models/financeDelinquency.settings');
 require('../sourceSpecs.finance.delinquency');
 
@@ -45,8 +46,8 @@ const dayOf = (row) => row.overdue_receivables_detail || {};
 /** Os componentes da necessidade são calculados pelas fórmulas de cada um (caixa livre e contas a pagar em 30 dias) e a conta de vencidas pelo mesmo critério de vencimento. */
 function breathingComponents(row, asOfDate, settings) {
   const cash = require('./finance.cash').INPUTS['fin.free_cash'](row, asOfDate);
-  const freeCash = require('../formulas/finFreeCash').compute(cash, { tolerance: settings.cashTolerance });
-  const p30 = require('../formulas/finPayables30d').compute(require('./finance.horizon').INPUTS['fin.payables_30d'](row, asOfDate));
+  const freeCash = runFormula(require('../formulas/finFreeCash'), cash, { tolerance: settings.cashTolerance });
+  const p30 = runFormula(require('../formulas/finPayables30d'), require('./finance.horizon').INPUTS['fin.payables_30d'](row, asOfDate));
   const withoutDue = Number(row.payables_without_due_date || 0);
   return {
     freeCash: component(freeCash.value, freeCash.status), payables30d: component(p30.value, p30.status),

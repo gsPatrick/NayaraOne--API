@@ -7,6 +7,7 @@
  */
 const { sequelize } = require('../../../../models');
 const { getFormulaCatalog } = require('../formulaCatalog');
+const { runFormula } = require('../formulaRun');
 const { calcHash } = require('../calcHash');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { readCrmKpiParams } = require('../../read-models/crmKpi.settings');
@@ -45,7 +46,7 @@ async function buildCrmKpiEntries(scope, asOfDate, transaction) {
     if (!published) continue;
     const inputs = INPUTS[def.metricCode](rows);
     const params = PARAMS[def.metricCode](settings);
-    const result = catalog.get(def.metricCode).compute(inputs, params);
+    const result = runFormula(catalog.get(def.metricCode), inputs, params);
     const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: filters.byCode[def.metricCode], unit: published.unit }, transaction);
     const base = {
       metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,
