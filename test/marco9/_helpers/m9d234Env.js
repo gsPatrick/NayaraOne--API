@@ -40,8 +40,16 @@ function enviarEmail(tenant, extra = {}) {
   }, t));
 }
 
-/** Uma rodada do worker de envios (chama o provedor). */
-const rodarEnvios = (tenant) => runDispatchCycle(ctxDe(tenant));
+/** Rodadas do worker de envios (chama o provedor) até a fila vencida esvaziar: outros testes do mesmo banco deixam envios na fila, e cada rodada pega no máximo `worker_batch_size`. */
+async function rodarEnvios(tenant) {
+  let total = { claimed: 0, sent: 0 };
+  for (let i = 0; i < 30; i += 1) {
+    const r = await runDispatchCycle(ctxDe(tenant));  
+    total = { claimed: total.claimed + r.claimed, sent: total.sent + r.sent };
+    if (r.claimed === 0) break;
+  }
+  return total;
+}
 const mensagem = async (tenant, id) => (await sql(tenant, 'SELECT * FROM integration.email_messages WHERE id = :id', { id }))[0];
 const eventosDe = (tenant, id) => sql(tenant, 'SELECT * FROM integration.email_message_events WHERE message_id = :id ORDER BY created_at, id', { id });
 const envio = async (tenant, id) => (await sql(tenant, 'SELECT * FROM integration.dispatches WHERE id = :id', { id }))[0];
