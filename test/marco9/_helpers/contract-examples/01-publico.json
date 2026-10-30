@@ -2,6 +2,8 @@
   "area": "publico",
   "examples": [
     {"op": "POST /auth/login", "kind": "positive", "name": "login com e-mail e senha do perfil de leitura", "as": "anon", "expect": 200, "body": {"email": "${loginEmail}", "password": "${loginPassword}"}},
-    {"op": "POST /auth/login", "kind": "negative", "name": "corpo vazio", "as": "anon", "expect": 400, "body": {}}
+    {"op": "POST /auth/login", "kind": "negative", "name": "corpo vazio", "as": "anon", "expect": 400, "body": {}},
+    {"op": "GET /public/properties/{publicId}", "kind": "positive", "name": "página pública de imóvel publicado, sem login", "as": "anon", "expect": 200, "seed": "publishedProperty", "params": {"publicId": "${publicPropertyId}"}},
+    {"op": "GET /public/properties/{publicId}", "kind": "negative", "name": "identificador público inexistente", "as": "anon", "expect": 404, "params": {"publicId": "${uuid}"}}
   ]
 }

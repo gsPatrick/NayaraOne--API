@@ -1,7 +1,7 @@
 'use strict';
 
 // Dados de partida dos exemplos do contract test (M9-D842, não é teste): o exemplo nomeia o preparo em "seed" e as variáveis devolvidas ficam à disposição dos exemplos seguintes.
-const seeds = { ...require('./m9d842SeedBcp'), ...require('./m9d842SeedData'), ...require('./m9d842SeedLegal') };
+const seeds = { ...require('./m9d842SeedBcp'), ...require('./m9d842SeedData'), ...require('./m9d842SeedLegal'), ...require('./m9d842SeedPublic'), ...require('./m9d842SeedFlags') };
 
 /** Roda os preparos pedidos pelo exemplo (nome ou lista de nomes) e devolve as variáveis novas. */
 async function runSeeds(example, vars, ctx) {
