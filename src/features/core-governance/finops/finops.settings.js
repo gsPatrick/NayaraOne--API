@@ -2,6 +2,7 @@
 
 const { toScaled } = require('./money');
 const { ENVIRONMENTS } = require('./finops.constants');
+const { DETECTOR_SETTING_DEFAULTS, DETECTOR_SETTINGS_SCHEMA } = require('./detectors/detectors.settings');
 
 /**
  * Parâmetros do FinOps (M9-D860; aba Governança em /painel/configuracoes; catálogo em Maturacao/demandas/parametros.csv).
@@ -25,6 +26,7 @@ const DEFAULT_PRICES = '{"whatsapp":5,"email":0,"sms":0,"storage_gb_mes":10,"log
 
 const FINOPS_SETTING_DEFAULTS = Object.freeze({
   [KEYS.currency]: 'BRL', [KEYS.environment]: 'PROD', [KEYS.prices]: DEFAULT_PRICES, [KEYS.gbBase]: 1024, [KEYS.storageHour]: 2, [KEYS.windowDays]: 30,
+  ...DETECTOR_SETTING_DEFAULTS, // M9-D862: limiares e horários dos detectores de desperdício (detectors/detectors.settings.js)
 });
 
 /** Texto JSON -> { chave: BigInt na escala 1e6 }; null se não for objeto com preços decimais não negativos. */
@@ -58,6 +60,7 @@ const FINOPS_SETTINGS_SCHEMA = {
   [KEYS.gbBase]: { type: 'integer', min: 1000, max: 1024, validate: validateGbBase },
   [KEYS.storageHour]: { type: 'integer', min: 0, max: 23 },
   [KEYS.windowDays]: { type: 'integer', min: 1, max: 365 },
+  ...DETECTOR_SETTINGS_SCHEMA,
 };
 
 module.exports = { KEYS, FINOPS_SETTING_DEFAULTS, FINOPS_SETTINGS_SCHEMA, DEFAULT_PRICES, parsePrices };

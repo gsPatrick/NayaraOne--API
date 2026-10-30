@@ -27,9 +27,12 @@ function directoryBytes(root) {
   return total;
 }
 
-/** Bytes no bucket (o armazenamento físico dos binários: UPLOADS_DIR ou uploads/), custo compartilhado. Sem a pasta, não há o que medir: nada é gravado. */
+/** Raiz do bucket (o armazenamento físico dos binários): UPLOADS_DIR ou uploads/. Lida a cada chamada (os detectores da M9-D862 usam a mesma raiz). */
+const uploadsRoot = () => (process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(__dirname, '..', '..', '..', '..', '..', 'uploads'));
+
+/** Bytes no bucket, custo compartilhado. Sem a pasta, não há o que medir: nada é gravado. */
 function bucketBytes() {
-  const root = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(__dirname, '..', '..', '..', '..', '..', 'uploads');
+  const root = uploadsRoot();
   if (!fs.existsSync(root)) return [];
   return [{ service: 'bucket', companyId: null, bytes: directoryBytes(root), unit: 'storage' }];
 }
@@ -45,4 +48,4 @@ async function measureAll(tenant, dayKey, transaction) {
   return [...await filesByType(tenant, transaction), ...bucketBytes(), ...logBytes(dayKey)];
 }
 
-module.exports = { measureAll, filesByType, bucketBytes, logBytes };
+module.exports = { measureAll, filesByType, bucketBytes, logBytes, uploadsRoot };

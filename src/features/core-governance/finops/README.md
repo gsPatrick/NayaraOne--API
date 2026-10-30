@@ -8,10 +8,13 @@ FinOps: coletores de custo, orçamento por ambiente e domínio, alertas 50/75/90
 
 M9-D861: `governance.budgets` (orçamento mensal por empresa, ambiente e domínio ou PLATFORM, em centavos inteiros, único por escopo) e `governance.budget_alerts` (um registro por limiar 50/75/90/100 disparado, UNIQUE por orçamento, mês e limiar; `seq` guarda a ordem). RLS + FORCE pela empresa. Migrations 20260101000816 e 817.
 
+M9-D862: `governance.finops_findings` (achados dos detectores: `detector`, `subject`, `evidence` jsonb, `estimated_waste_cents`, `status` OPEN|RESOLVED, `first_seen_at`, `last_seen_at`; índice único parcial `(company_id, detector, subject) WHERE status = 'OPEN'`). RLS + FORCE pela empresa. Migration 20260101000818.
+
 Antes (alicerce): nenhuma. O alicerce cria o schema `governance` e a função `governance.apply_tenant_rls(regclass)`, que toda tabela do módulo chama na sua migration (faixa 20260101000800 a 20260101000869 no bloco E) para ganhar RLS + FORCE RLS, política `tenant_isolation` e GRANT protegido por existência do role `nayara_runtime`. Colunas padrão: `id uuid`, `group_id`, `company_id`, `created_at`, `updated_at`.
 
 ## Rotas e permissões
 - `GET /finops/health` devolve `custos.estimado` e `custos.faturado` (séries separadas, cada uma com o seu total; nunca total misto) e `coletores`. Traz também `orcamentos` (M9-D861): cada orçamento do mês com as duas séries lado a lado (`consumo.estimado` e `consumo.faturado`, cada uma com o seu total), a série-base do percentual, o percentual e os limiares disparados. Exige `governance:finops:read` e o módulo ligado para a empresa. Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`.
+- `GET /finops/health` também traz `achados` (findings abertos dos cinco detectores, com a evidência e o desperdício estimado em centavos) e `detectores` (última execução e falhas de cada um).
 - `GET /finops/budgets` (leitura), `POST /finops/budgets` e `PATCH /finops/budgets/:id` (`governance:finops:manage`): orçamento por ambiente e domínio. Erros: 422 `GOV_BUDGET_AMOUNT_INVALID` (valor zero, negativo ou fracionado), 422 `GOV_BUDGET_OWNER_REQUIRED` / `GOV_BUDGET_OWNER_INVALID`, 422 `GOV_BUDGET_SCOPE_INVALID`, 409 `GOV_BUDGET_DUPLICATE`, 404 `GOV_BUDGET_NOT_FOUND`.
 - Corpo de erro único: `{success:false,error:{code,message,details?,traceId}}` (traceId dentro de `error`).
 
@@ -23,11 +26,14 @@ Antes (alicerce): nenhuma. O alicerce cria o schema `governance` e a função `g
 
 Orçamentos (M9-D861): sem job próprio. A avaliação roda a CADA gravação do ledger (coleta horária, diária ou fatura), na mesma transação, para os meses tocados (`budgets/budget.evaluate.js`, gancho em `ledger.service.js`), com `FOR UPDATE` do orçamento. Mês aberto (ou fechado sem fatura): percentual sobre a série ESTIMATED e dispara os limiares; mês fechado com fatura BILLED: percentual FINAL sobre a série BILLED, sem disparar. Estimado e faturado nunca são somados.
 
+Detectores de desperdício (M9-D862), cinco jobs em `src/engines/jobs/finopsDetectorsJob.js`, um por detector (nome de rodada próprio), todos só de leitura: storage órfão, logs excessivos, modelo de IA caro e egress anormal rodam uma vez por dia em `governanca.finops.detectores_hora` (03:00 de Brasília) e olham o dia fechado anterior; fila acumulada roda a cada `governanca.finops.fila_intervalo_min` (5 min). Cada um concilia os achados (abre, atualiza `last_seen_at`, resolve sozinho quando a condição some; idempotente por detector e assunto) e registra a execução em `cost_collector_runs` com nome `det_*`; detector que falha não cria nem resolve achado. `FINOPS_DETECTORS_JOB_DISABLED=true` desliga no processo.
+
 Antes: nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela demanda dona e listados aqui com horário e parâmetro que o controla.
 
 ## Parâmetros
 - `governanca.modulos.finops.habilitado` (booleano, padrão ligado): o administrador liga ou desliga o módulo para a empresa em Configurações > Governança.
 - M9-D860: `governanca.finops.moeda`, `.ambiente`, `.precos` (JSON de centavos por unidade), `.gb_base`, `.storage_hora`, `.janela_dias`.
+- M9-D862 (`detectors/detectors.settings.js`): `governanca.finops.orfao_dias` (30), `.log_x_media` (3), `.egress_x_media` (3), `.media_dias` (14), `.fila_max` (5000), `.fila_antigos_min` (50), `.fila_idade_min` (30), `.fila_intervalo_min` (5), `.ia_custo_chamada_centavos` (50), `.detectores_hora` (3). Os preços do GB vêm de `governanca.finops.precos`.
 - Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
 
 ## Decisões (ADR)
