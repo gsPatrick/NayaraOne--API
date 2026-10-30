@@ -3,11 +3,10 @@
 const E = require('./agents.errors');
 const { resolveLimits } = require('./agentLimits');
 const { runStamp, assertToolAllowed } = require('./agentResolver.service');
-const { defaultRunRateLimiter } = require('./RunRateLimiter');
 
 /**
  * Guarda de UM run: allowlist e teto de tool calls, teto de tokens acumulados e taxa por usuário. O orquestrador (D020) cria um
- * por run, chama `assertRate` ao abrir, `beforeToolCall` antes de cada tool, `beforeModelCall` antes de cada chamada ao
+ * por run, chama `assertRateCount` ao abrir, `beforeToolCall` antes de cada tool, `beforeModelCall` antes de cada chamada ao
  * modelo e `recordUsage` depois dela. Estouro de tool: 422 AI_TOOL_LIMIT_EXCEEDED (run BLOCKED, TOOL_LIMIT); de tokens: 422
  * AI_TOKEN_LIMIT_EXCEEDED (run FAILED); de taxa: 429 AI_RATE_LIMITED. O motivo do run segue em `error.details`.
  */
@@ -26,10 +25,6 @@ class AgentRunGuard {
 
   stamp() {
     return runStamp(this.agent);
-  }
-
-  assertRate(limiter = defaultRunRateLimiter, now = Date.now()) {
-    limiter.assertAllowed({ key: `${this.ctx.companyId}:${this.ctx.userId}`, limit: this.limits.maxRunsPorMinutoUsuario, now });
   }
 
   /** Taxa por pessoa em contador de banco (DI-D004-7): `recent` é quantos runs da pessoa começaram no último minuto (ai.ai_runs). */

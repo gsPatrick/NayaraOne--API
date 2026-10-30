@@ -93,11 +93,9 @@ test('m9d004_limite_da_versao_vence_o_parametro_da_empresa', async () => {
   });
 });
 
-test('m9d004_taxa_por_usuario_devolve_429', async () => {
-  const limiter = new agents.RunRateLimiter();
-  const t0 = 1_000_000;
-  for (let i = 0; i < 10; i += 1) limiter.assertAllowed({ key: 'u1', limit: 10, now: t0 + i });
-  assert.throws(() => limiter.assertAllowed({ key: 'u1', limit: 10, now: t0 + 20 }), (e) => e.statusCode === 429 && e.code === 'AI_RATE_LIMITED');
-  limiter.assertAllowed({ key: 'u2', limit: 10, now: t0 + 20 }); // outro usuário não é afetado
-  limiter.assertAllowed({ key: 'u1', limit: 10, now: t0 + 61_000 }); // a janela de um minuto passou
+test('m9d004_taxa_por_usuario_devolve_429', () => {
+  // DI-IA-LEVE-5: a taxa vale pelo contador de banco (runs recentes da pessoa); o limitador em memória saiu.
+  const guarda = new agents.AgentRunGuard({ code: 'X' }, { companyId: 'c', userId: 'u1' }, { maxRunsPorMinutoUsuario: 10 });
+  guarda.assertRateCount(9);
+  assert.throws(() => guarda.assertRateCount(10), (e) => e.statusCode === 429 && e.code === 'AI_RATE_LIMITED');
 });

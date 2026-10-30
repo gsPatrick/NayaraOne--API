@@ -6,7 +6,6 @@ const resolver = require('./agentResolver.service');
 const { computeConfigHash } = require('./agentConfigHash');
 const { resolveLimits } = require('./agentLimits');
 const { AgentRunGuard } = require('./AgentRunGuard');
-const { RunRateLimiter, defaultRunRateLimiter } = require('./RunRateLimiter');
 
 /** Agentes versionados da NAY (M9-D004): registro de versões, ciclo de vida, resolução da versão ativa, allowlist e limites do run. */
 module.exports = {
@@ -16,8 +15,6 @@ module.exports = {
   computeConfigHash,
   resolveLimits,
   AgentRunGuard,
-  RunRateLimiter,
-  defaultRunRateLimiter,
 };
 
 require('./builtin'); // registra a fronteira, os resolvedores e os números dos agentes do livro (M9-D037 em diante)
