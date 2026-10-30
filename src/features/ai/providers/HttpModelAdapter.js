@@ -3,6 +3,7 @@
 const { AIProviderAdapter } = require('./AIProviderAdapter');
 const { AiProviderError } = require('./providers.errors');
 const { modelProblems } = require('./providers.models');
+const { assertBaseUrlAllowed } = require('./baseUrl.policy');
 
 /** Linha de config_json.models -> linha do catálogo (maxInput/maxOutput viram maxInputTokens/maxOutputTokens). */
 function fromConfig(m) {
@@ -30,7 +31,13 @@ class HttpModelAdapter extends AIProviderAdapter {
 
   config() { return (this.ctx && this.ctx.connection && this.ctx.connection.config) || {}; }
 
-  baseUrl() { return String(this.config().baseUrl || this.defaultBaseUrl()).replace(/\/+$/, ''); }
+  baseUrl() {
+    const custom = this.config().baseUrl;
+    if (custom) {
+      assertBaseUrlAllowed({ baseUrl: String(custom), defaultBaseUrl: this.defaultBaseUrl(), egressHosts: (this.ctx && this.ctx.policy && this.ctx.policy.egressHosts) || [], providerCode: this.providerCode() });
+    }
+    return String(custom || this.defaultBaseUrl()).replace(/\/+$/, '');
+  }
 
   models() {
     const lista = Array.isArray(this.config().models) ? this.config().models : [];
