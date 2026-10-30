@@ -51,8 +51,9 @@ test('email_envio_registra_message_id', async () => {
   const outra = await env.enviarEmail(tenant);
   await assert.rejects(env.sql(tenant, 'UPDATE integration.email_messages SET external_message_id = :x WHERE id = :id', { x: m.external_message_id, id: outra.message.id }), /email_messages_provider_id_uidx|duplicate key/);
   // Mesma chave de idempotência: a mesma mensagem, sem segundo envio.
-  const repetido = await env.enviarEmail(tenant, { idempotencyKey: `qa-m9-d234-repetida` });
-  const repetido2 = await env.enviarEmail(tenant, { idempotencyKey: `qa-m9-d234-repetida`, to: [repetido.message.toAddresses[0]] });
+  const chaveRepetida = `qa-m9-d234-repetida-${env.uniqueSuffix()}`;
+  const repetido = await env.enviarEmail(tenant, { idempotencyKey: chaveRepetida });
+  const repetido2 = await env.enviarEmail(tenant, { idempotencyKey: chaveRepetida, to: [repetido.message.toAddresses[0]] });
   assert.equal(repetido2.replay, true);
   assert.equal(repetido2.message.id, repetido.message.id);
   assert.equal(repetido2.dispatchId, repetido.dispatchId);
