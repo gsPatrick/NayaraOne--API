@@ -12,11 +12,11 @@ const MAX_REASON = 500;
 
 /**
  * Motivo pelo qual o job não pode ser cancelado (null = pode). PENDING cancela; UNKNOWN só depois da reconciliação (M9-D411: resultado
- * RECONCILED_NOT_FOUND gravado, ou seja, conferido na rede que o post não existe); RUNNING, PUBLISHED, FAILED e CANCELLED nunca.
+ * RECONCILED_NOT_FOUND gravado, ou seja, conferido na rede que o post não existe) ou depois do alerta crítico de UNKNOWN escalado (decisão humana); RUNNING, PUBLISHED, FAILED e CANCELLED nunca.
  */
 async function refusalOf(job, transaction) {
   if (job.status === 'PENDING') return null;
-  if (job.status === 'UNKNOWN') return (await jobs.hasReconciliation(job.id, transaction)) ? null : 'UNKNOWN_NOT_RECONCILED';
+  if (job.status === 'UNKNOWN') return job.escalated_at || (await jobs.hasReconciliation(job.id, transaction)) ? null : 'UNKNOWN_NOT_RECONCILED';
   return `STATUS_${job.status}`;
 }
 

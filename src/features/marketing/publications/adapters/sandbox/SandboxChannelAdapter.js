@@ -41,8 +41,11 @@ class SandboxChannelAdapter extends ChannelAdapter {
   }
 
   success(operation, key, record, extra = {}) {
-    return this.result(operation, key, { status: record.status, providerRef: record.providerRef, ...extra });
+    return this.result(operation, key, { status: record.status, providerRef: record.providerRef, externalUrl: this.urlOf(record.providerRef), ...extra });
   }
+
+  /** Endereço fictício (domínio .invalid, nunca resolve) do post simulado: o simulado não se confunde com um link real. */
+  urlOf(providerRef) { return `https://sandbox.invalid/${this.channel.toLowerCase()}/${providerRef}`; }
 
   async execute(operation, payload, options = {}) {
     this.assertSupports(operation);
@@ -94,12 +97,12 @@ class SandboxChannelAdapter extends ChannelAdapter {
   async findByIdempotencyKey(key) {
     if (store.isRevoked(this.scope, this.channel)) return { found: false, sandbox: true, error: { class: 'AUTH', code: 'AUTH_REVOKED', httpStatus: 401 } };
     const record = store.getRecord(this.scope, this.channel, key);
-    return record ? { found: true, providerRef: record.providerRef, status: record.status, sandbox: true } : { found: false, sandbox: true };
+    return record ? { found: true, providerRef: record.providerRef, status: record.status, externalUrl: this.urlOf(record.providerRef), sandbox: true } : { found: false, sandbox: true };
   }
 
   async getStatus(providerRef) {
     const record = store.findByRef(this.scope, this.channel, providerRef);
-    return record ? { found: true, providerRef, status: CHANNEL_META[this.channel].finalStatus, sandbox: true } : { found: false, providerRef, sandbox: true };
+    return record ? { found: true, providerRef, status: CHANNEL_META[this.channel].finalStatus, externalUrl: this.urlOf(providerRef), sandbox: true } : { found: false, providerRef, sandbox: true };
   }
 
   async getMetrics(providerRef) {

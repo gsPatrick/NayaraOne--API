@@ -15,6 +15,7 @@ const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecy
 const { startMarketingContentTypesJob } = require('./src/engines/jobs/marketingContentTypesJob');
 const { startAutomationRunnerJob } = require('./src/engines/jobs/automationRunnerJob');
 const { startAutomationDueJob } = require('./src/engines/jobs/automationDueJob');
+const { startPublicationWorkerJob } = require('./src/engines/jobs/publicationWorkerJob');
 const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
 const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJob');
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
@@ -205,6 +206,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.MARKETING_CONTENT_TYPES_JOB_D
 if (process.env.NODE_ENV !== 'test' && process.env.AUTOMATION_RUNNER_JOBS_DISABLED !== 'true') {
   startAutomationRunnerJob();
   startAutomationDueJob();
+}
+
+// Worker de publicação do Marketing (M9-D411): publica os jobs vencidos, reconcilia o que ficou sem resposta e coleta métricas, no intervalo da empresa (marketing.worker.intervalo_s).
+if (process.env.NODE_ENV !== 'test' && process.env.PUBLICATION_WORKER_JOB_DISABLED !== 'true') {
+  startPublicationWorkerJob();
 }
 
 // Varredura diária do Calendário nas fontes de obras e garantias (M9-D803), na hora configurada (padrão 06:00 de Brasília).

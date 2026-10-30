@@ -40,6 +40,14 @@ async function cancelSocialDispatches({ tenant, actor, job, itemId }, transactio
   if (!isSocial(job.channel) || !job.connection_id) return [];
   const shared = (await jobs.statusesOfVersion(job.content_version_id, transaction)).some((j) => j.id !== job.id && j.connection_id === job.connection_id && jobs.ACTIVE.includes(j.status));
   if (shared) return [];
+  return cancelPendingDispatches({ tenant, actor, job, itemId }, transaction);
+}
+
+/**
+ * Cancela os envios PENDING ou esperando nova tentativa da conexão do job para esta versão, sem olhar se outro job usa a mesma conexão. O worker de publicação
+ * (M9-D411) usa direto: cada job é enviado por ele pelo canal, então o envio da rede criado no agendamento (só a porta de aprovação) sai de cena e o post não duplica.
+ */
+async function cancelPendingDispatches({ tenant, actor, job, itemId }, transaction) {
   const { applyTransition } = require('../../../integrations/dispatch/dispatch.transition');
   const { parseContentRef } = require('../../../integrations/social');
   const rows = await IntegrationDispatch.findAll({
@@ -57,4 +65,4 @@ async function cancelSocialDispatches({ tenant, actor, job, itemId }, transactio
   return cancelled;
 }
 
-module.exports = { enqueueSocial, cancelSocialDispatches, isSocial, SYSTEM_APPROVER };
+module.exports = { enqueueSocial, cancelSocialDispatches, cancelPendingDispatches, isSocial, SYSTEM_APPROVER };

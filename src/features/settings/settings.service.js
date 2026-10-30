@@ -16,6 +16,7 @@ const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/t
 const { TRACKING_SETTINGS_SCHEMA } = require('../../features/marketing/tracking/tracking.settings');
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
 const { SCHEDULE_SETTINGS_SCHEMA } = require('../../features/marketing/publications/schedule/schedule.settings');
+const { WORKER_SETTINGS_SCHEMA } = require('../../features/marketing/publications/worker/worker.settings');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
@@ -227,6 +228,8 @@ const SETTINGS_SCHEMA = {
   ...PIPELINE_SETTINGS_SCHEMA,
   // Marco 9, M9-D410 — paginação da listagem de publicações (padrão e máximo).
   ...SCHEDULE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D411 — worker de publicação: intervalo, lote, espera das retentativas, tentativas, reconciliação, limite do UNKNOWN, tempo do adapter e dias das métricas.
+  ...WORKER_SETTINGS_SCHEMA,
   // Marco 9, M9-D408 — classes de conteúdo da NAY autorizadas a sair sem aprovação humana (escrita exige marketing:automation:manage).
   ...AUTOPUBLISH_SETTINGS_SCHEMA,
   // Marco 9, M9-D414 — runner de automações: tempo máximo de cada ação e ordem dos canais automáticos.

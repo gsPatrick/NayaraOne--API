@@ -7,6 +7,14 @@ const { endpointsFor } = require('./real.endpoints');
 const { assertReleaseProof } = require('../release/releaseProof');
 const { verifyAndParseWebhook } = require('../webhook/webhook.parse');
 
+/** Endereço público do post informado pelo canal (`url` ou `permalink`), só se for http(s); senão null. */
+const urlOf = (body) => {
+  const url = body && (body.url || body.permalink);
+  return typeof url === 'string' && /^https?:\/\/\S+$/i.test(url) ? url : null;
+};
+
+const urlField = (body) => (urlOf(body) ? { externalUrl: urlOf(body) } : {});
+
 /** O corpo da resposta, quando for JSON; senão objeto vazio. */
 async function bodyOf(response) {
   try { const parsed = await response.json(); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; }
@@ -66,7 +74,7 @@ class RealChannelAdapter extends ChannelAdapter {
       const ref = body.id || body.providerRef || null;
       if (!ref) return this.result(operation, key, { status: 'UNKNOWN', unknown: true, error: { class: 'UNKNOWN', code: 'NO_REFERENCE', httpStatus: response.status, message: 'O canal respondeu sem identificador: confirme antes de repetir.' } });
       this.log('response', { operation, status: body.status, providerRef: ref });
-      return this.result(operation, key, { status: String(body.status || (operation === 'send' ? 'SENT' : 'PUBLISHED')).toUpperCase(), providerRef: String(ref) });
+      return this.result(operation, key, { status: String(body.status || (operation === 'send' ? 'SENT' : 'PUBLISHED')).toUpperCase(), providerRef: String(ref), ...urlField(body) });
     }
     const classified = this.classifyError(response);
     this.log('response', { operation, errorCode: classified.code });
@@ -83,13 +91,13 @@ class RealChannelAdapter extends ChannelAdapter {
     const { response, body } = await this.read(this.endpoints().byKey(key));
     const item = Array.isArray(body.items) ? body.items[0] : null;
     if (response.status === 404 || !item) return { found: false, sandbox: false };
-    return { found: true, providerRef: String(item.id), status: String(item.status || '').toUpperCase(), sandbox: false };
+    return { found: true, providerRef: String(item.id), status: String(item.status || '').toUpperCase(), ...urlField(item), sandbox: false };
   }
 
   async getStatus(providerRef) {
     const { response, body } = await this.read(this.endpoints().item(providerRef));
     if (response.status === 404) return { found: false, providerRef, sandbox: false };
-    return { found: true, providerRef, status: String(body.status || '').toUpperCase(), sandbox: false };
+    return { found: true, providerRef, status: String(body.status || '').toUpperCase(), ...urlField(body), sandbox: false };
   }
 
   async getMetrics(providerRef) {

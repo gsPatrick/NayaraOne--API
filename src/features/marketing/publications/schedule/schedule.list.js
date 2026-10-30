@@ -32,6 +32,15 @@ function formatLocal(date, zone) {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${match && match[1] ? match[1] : 'Z'}`;
 }
 
+/** Métricas do último resultado: a coleta do worker (M9-D411) guarda os números em `metrics_json.metrics`; o resultado antigo guarda o objeto direto. */
+const metricsOf = (r) => (r.outcome === 'METRICS' ? (r.metrics_json || {}).metrics || {} : r.metrics_json || {});
+
+/** "Publicado" só quando o canal confirmou que está no ar (M9-D411 item 8): job PUBLISHED. Post aceito e ainda em processamento aparece como "Em processamento no canal". */
+function displayStatusOf(r) {
+  if (r.status === 'RUNNING' && r.provider_status) return 'Em processamento no canal';
+  return { PENDING: 'Agendado', RUNNING: 'Publicando', PUBLISHED: 'Publicado', FAILED: 'Falhou', UNKNOWN: 'Sem confirmação', CANCELLED: 'Cancelado' }[r.status] || r.status;
+}
+
 /**
  * GET /marketing/publications?status=&channel=&from=&to=&page=&pageSize= (M9-D410 item 5): paginada (padrão e máximo vêm dos parâmetros da empresa),
  * ordenada por scheduled_at, com externalPostId, externalUrl e métricas do último resultado. `from`/`to` limitam scheduled_at.
@@ -57,12 +66,12 @@ async function listPublications(tenant, query, transaction) {
   const run = (sql) => sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
   const [{ total }] = await run(`SELECT count(*)::int AS total FROM marketing.publication_jobs j WHERE ${where}`);
   const rows = await run(
-    `SELECT j.id, j.channel, j.status, j.scheduled_at, j.attempts, j.external_post_id, j.last_error_code, j.content_version_id, v.content_item_id, i.title,
-            r.external_url, r.metrics_json
+    `SELECT j.id, j.channel, j.status, j.scheduled_at, j.attempts, j.external_post_id, j.last_error_code, j.content_version_id, v.content_item_id, i.title, j.provider_status, j.external_url AS job_url, j.escalated_at,
+            r.external_url, r.metrics_json, r.outcome
        FROM marketing.publication_jobs j
        JOIN marketing.content_versions v ON v.id = j.content_version_id AND v.company_id = j.company_id
        JOIN marketing.content_items i ON i.id = v.content_item_id AND i.company_id = v.company_id
-       LEFT JOIN LATERAL (SELECT external_url, metrics_json FROM marketing.publication_results pr WHERE pr.job_id = j.id AND pr.company_id = j.company_id
+       LEFT JOIN LATERAL (SELECT external_url, metrics_json, outcome FROM marketing.publication_results pr WHERE pr.job_id = j.id AND pr.company_id = j.company_id
                            ORDER BY pr.attempt_no DESC, pr.occurred_at DESC LIMIT 1) r ON true
       WHERE ${where} ORDER BY j.scheduled_at, j.id LIMIT :limit OFFSET :offset`
   );
@@ -71,7 +80,8 @@ async function listPublications(tenant, query, transaction) {
     items: rows.map((r) => ({
       id: r.id, contentItemId: r.content_item_id, contentVersionId: r.content_version_id, title: r.title, channel: r.channel, status: r.status,
       scheduledAt: new Date(r.scheduled_at).toISOString(), scheduledAtLocal: formatLocal(new Date(r.scheduled_at), zone), timeZone: zone, attempts: r.attempts,
-      externalPostId: r.external_post_id, externalUrl: r.external_url || null, metrics: r.metrics_json || {}, lastErrorCode: r.last_error_code,
+      externalPostId: r.external_post_id, externalUrl: r.job_url || r.external_url || null, metrics: metricsOf(r), lastErrorCode: r.last_error_code,
+      providerStatus: r.provider_status || null, displayStatus: displayStatusOf(r), needsDecision: Boolean(r.escalated_at && r.status === 'UNKNOWN'),
     })),
     pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
   };

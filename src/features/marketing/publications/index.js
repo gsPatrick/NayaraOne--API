@@ -6,6 +6,7 @@ const service = require('./publications.service');
 const adapters = require('./adapters');
 const seo = require('./seo');
 const messaging = require('./messaging');
+const worker = require('./worker');
 const content = require('../content');
 
 // M9-D410: o passo de agendamento do pipeline de conteúdo cria os jobs por esta porta.
@@ -22,4 +23,4 @@ publicRouter.use(adapters.publicRouter);
 publicRouter.use(seo.publicRouter);
 publicRouter.use(messaging.publicRouter);
 
-module.exports = { router, service, adapters, seo, messaging, publicRouter, installCampaignSendPort: messaging.installCampaignSendPort };
+module.exports = { router, service, adapters, seo, messaging, worker, publicRouter, installCampaignSendPort: messaging.installCampaignSendPort };

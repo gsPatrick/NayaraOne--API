@@ -18,4 +18,6 @@ const publicReadModel = require('./publicReadModel');
 const factual = { validateAgainstFacts: require('./pipeline.factualPort').validateAgainstFacts, readFactualConfig: require('./factual/settings').readFactualConfig };
 // M9-D410: a área de publicações registra aqui o agendamento dos jobs (porta), sem a área de conteúdo importá-la.
 const schedulePort = require('./pipeline.schedulePort');
-module.exports = { router, service, approval, publicReadModel, factual, schedulePort };
+// M9-D411: a segunda barreira (deliverToAdapter, M9-D403) é usada pelo worker de publicação, que a importa pela fachada.
+const adapterGate = require('./adapterGate');
+module.exports = { router, service, approval, publicReadModel, factual, schedulePort, adapterGate };

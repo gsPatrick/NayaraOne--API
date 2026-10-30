@@ -40,7 +40,7 @@ async function revive(jobId, values, actor, transaction) {
 }
 
 const lockJob = async (jobId, transaction) => (await run(
-  `SELECT j.id, j.content_version_id, j.channel, j.connection_id, j.status, j.scheduled_at, j.external_post_id, v.content_item_id
+  `SELECT j.id, j.content_version_id, j.channel, j.connection_id, j.status, j.scheduled_at, j.external_post_id, j.escalated_at, v.content_item_id
      FROM marketing.publication_jobs j JOIN marketing.content_versions v ON v.id = j.content_version_id AND v.company_id = j.company_id
     WHERE j.id = :jobId AND j.deleted_at IS NULL FOR UPDATE OF j`, { jobId }, transaction
 ))[0] || null;
