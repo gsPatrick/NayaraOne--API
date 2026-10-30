@@ -133,20 +133,11 @@ async function pipeline(state) {
  * run gravado na mesma transação (o chamador a confirma e responde o HTTP do erro). Sem `purpose` (400), taxa por pessoa (429),
  * chave de idempotência com outro pedido (409) e chamada de dentro de uma tool (409) lançam antes de existir run.
  */
-async function executeRun(rawInput, auth, transaction, rawDeps) {
+async function executeRun(rawInput, auth, transaction, rawDeps, preOpened = null) {
   assertNotInsideRun();
   return runGuarded(async () => {
     const deps = resolveDeps(rawDeps);
-    const trace = createTrace({ correlationId: rawInput && rawInput.correlationId, onSpan: deps.onSpan, clock: deps.clock });
-    const ctx = { groupId: auth.groupId, companyId: auth.companyId, userId: auth.userId, permissions: auth.permissions || [] };
-    const parsed = await trace.span(1, 'receber', async () => parseRunInput(rawInput));
-    const opened = await trace.span(2, 'resolver_agente', async () => {
-      const resolved = await resolveAgent(parsed, ctx, transaction);
-      const guard = resolved.agent ? await AgentRunGuard.create(resolved.agent, ctx, transaction) : null;
-      const open = (t) => openRun(parsed, resolved.agent, guard, ctx, t);
-      return { ...resolved, guard, ...(await (deps.openTransaction ? deps.openTransaction(open) : open(transaction))) };
-    });
-    trace.setRunId(opened.run.id);
+    const { trace, ctx, parsed, opened } = preOpened || await openRunPhase(rawInput, auth, transaction, deps);
     if (opened.replay) return replayOutcome(ctx, opened.run, transaction, trace.spans);
     if (opened.error) return closeWithoutAgent(ctx, opened, transaction, trace);
     const params = await readFlowParams(ctx, transaction);
@@ -159,6 +150,25 @@ async function executeRun(rawInput, auth, transaction, rawDeps) {
   });
 }
 
+/**
+ * Passos 1 e 2 (receber, resolver o agente) e a abertura do run, SEM executar nada: o chamador do HTTP faz isto numa transação própria,
+ * confirma (o run já fica visível a quem o consulta, resposta 202) e só então abre a transação da execução. Assim cada pedido segura uma
+ * conexão por vez (antes eram duas ao mesmo tempo e uma rajada acima do pool travava a API). A taxa por pessoa é contada sob trava.
+ * Devolve o que `executeRun(..., preOpened)` precisa para seguir do passo 3 em diante.
+ */
+async function openRunPhase(rawInput, auth, transaction, deps) {
+  const trace = createTrace({ correlationId: rawInput && rawInput.correlationId, onSpan: deps.onSpan, clock: deps.clock });
+  const ctx = { groupId: auth.groupId, companyId: auth.companyId, userId: auth.userId, permissions: auth.permissions || [] };
+  const parsed = await trace.span(1, 'receber', async () => parseRunInput(rawInput));
+  const opened = await trace.span(2, 'resolver_agente', async () => {
+    const resolved = await resolveAgent(parsed, ctx, transaction);
+    const guard = resolved.agent ? await AgentRunGuard.create(resolved.agent, ctx, transaction) : null;
+    return { ...resolved, guard, ...(await openRun(parsed, resolved.agent, guard, ctx, transaction)) };
+  });
+  trace.setRunId(opened.run.id);
+  return { trace, ctx, parsed, opened };
+}
+
 /** Agente inexistente ou sem versão ativa: o run (aberto sem carimbo) termina FAILED com 404/409. */
 async function closeWithoutAgent(ctx, opened, transaction, trace) {
   const final = finalStateOf(opened.error);
@@ -166,4 +176,4 @@ async function closeWithoutAgent(ctx, opened, transaction, trace) {
   return failureOutcome(opened.run.id, opened.error, final, { trace: trace.spans });
 }
 
-module.exports = { executeRun, newState };
+module.exports = { executeRun, openRunPhase, newState };

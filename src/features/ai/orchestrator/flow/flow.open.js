@@ -3,7 +3,7 @@
 const agents = require('../../agents');
 const agentsRepo = require('../../agents/agents.repository');
 const { normalizeCode } = require('../../agents/agents.validation');
-const { countRecentRuns } = require('../../readmodels/runSupport.readmodel');
+const { countRecentRuns, acquireRateLock } = require('../../readmodels/runSupport.readmodel');
 const { WINDOW_MS } = require('../../agents/RunRateLimiter');
 const runs = require('../runs');
 const E = require('./flow.errors');
@@ -28,7 +28,10 @@ async function resolveAgent(parsed, ctx, transaction) {
 }
 
 async function openRun(parsed, agent, guard, ctx, transaction) {
-  if (agent) guard.assertRateCount(await countRecentRuns(ctx.companyId, ctx.userId, WINDOW_MS / 1000, transaction, agent.code));
+  if (agent) {
+    await acquireRateLock(ctx.companyId, ctx.userId, agent.code, transaction); // contar e inserir sem outro pedido da mesma pessoa no meio (rajada)
+    guard.assertRateCount(await countRecentRuns(ctx.companyId, ctx.userId, WINDOW_MS / 1000, transaction, agent.code));
+  }
   return runs.startRun(ctx, {
     stamp: agent ? agents.runStamp(agent) : { agentCode: parsed.agentCode.toUpperCase().slice(0, 60) || 'DESCONHECIDO' },
     purpose: parsed.purpose,

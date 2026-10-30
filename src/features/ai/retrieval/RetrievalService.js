@@ -14,11 +14,12 @@ const { INSUFFICIENT_MESSAGE } = require('./retrieval.constants');
 const { factsOfChunks, conflictsOf } = require('./retrieval.conflicts');
 const { recordNotVigent } = require('./retrieval.notVigent');
 
+// Padrão do parâmetro ia.rag.consulta_max_caracteres (retrieval.settings); o valor da empresa chega por `params.queryMax`.
 const QUERY_MAX = 2000;
 
-function parseQuery(query) {
+function parseQuery(query, max = QUERY_MAX) {
   const text = typeof query === 'string' ? query.replace(/\s+/g, ' ').trim() : '';
-  if (!text || text.length > QUERY_MAX) throw E.searchInvalid('Informe o que você quer consultar.');
+  if (!text || text.length > max) throw E.searchInvalid('Informe o que você quer consultar.');
   return text;
 }
 
@@ -54,8 +55,8 @@ class RetrievalService {
     V.ctxOk(ctx);
     const opts = { ...optsIn, now: optsIn.now || new Date() };
     if (opts.companyId && opts.companyId !== ctx.companyId) throw E.crossCompany();
-    const text = parseQuery(query);
     const params = await readRagParams(ctx, transaction);
+    const text = parseQuery(query, params.queryMax);
     const args = await this.searchArgs(ctx, text, opts, params, transaction);
     const found = await searchCandidates(args, transaction);
     const allowed = await allowedSources(ctx, found, allowedClassifications(ctx, opts), transaction, opts.now);
@@ -95,7 +96,7 @@ class RetrievalService {
   async explain(ctx, query, opts = {}, transaction = opts.transaction) {
     V.ctxOk(ctx);
     const params = await readRagParams(ctx, transaction);
-    return explainCandidates(await this.searchArgs(ctx, parseQuery(query), opts, params, transaction), transaction);
+    return explainCandidates(await this.searchArgs(ctx, parseQuery(query, params.queryMax), opts, params, transaction), transaction);
   }
 
   toItem(c, row) {

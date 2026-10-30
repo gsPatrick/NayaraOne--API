@@ -1,6 +1,8 @@
 'use strict';
 
-const { executeRun } = require('./flow/flow.run');
+const { executeRun, openRunPhase } = require('./flow/flow.run');
+const { resolveDeps } = require('./flow/flow.deps');
+const { assertNotInsideRun } = require('./flow/flow.reentrancy');
 
 /**
  * AiOrchestrator (M9-D020) — o maestro do run da NAY: recebe a pessoa, a finalidade e o pedido; resolve a versão do agente, o modelo
@@ -18,9 +20,18 @@ class AiOrchestrator {
     this.deps = deps;
   }
 
-  /** @param {RunInput} input @param {RunAuth} auth @param {any} transaction */
-  run(input, auth, transaction) {
-    return executeRun(input, auth, transaction, this.deps);
+  /**
+   * @param {RunInput} input @param {RunAuth} auth @param {any} transaction
+   * @param {object} [opened] o que `open` devolveu: o run já aberto (e confirmado) numa transação anterior; sem ele o run nasce em `transaction`.
+   */
+  run(input, auth, transaction, opened = null) {
+    return executeRun(input, auth, transaction, this.deps, opened);
+  }
+
+  /** Abre o run (passos 1 e 2 e a taxa por pessoa) em `transaction`, sem executar. Quem chama confirma a transação e depois chama `run(..., opened)`. */
+  open(input, auth, transaction) {
+    assertNotInsideRun();
+    return openRunPhase(input, auth, transaction, resolveDeps(this.deps));
   }
 }
 

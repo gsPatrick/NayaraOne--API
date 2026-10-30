@@ -3,14 +3,15 @@
 const E = require('./runApi.errors');
 const orchestratorErrors = require('../orchestrator/flow/flow.errors');
 
+// Padrão do parâmetro ia.run.entrada_max_caracteres (runApi.settings); o valor da empresa chega a cada pedido por `inputMax`.
 const INPUT_MAX = 8000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TASK_TYPE = /^[a-z][a-z0-9_]{1,59}$/;
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** Texto do pedido: string não vazia (depois de aparar) com até 8.000 caracteres; o texto vai como veio, sem aparar. */
-function parseInput(value) {
-  if (typeof value !== 'string' || !value.trim() || value.length > INPUT_MAX) throw E.inputInvalid();
+/** Texto do pedido: string não vazia (depois de aparar) com até `max` caracteres (parâmetro da empresa; padrão 8.000); o texto vai como veio, sem aparar. */
+function parseInput(value, max = INPUT_MAX) {
+  if (typeof value !== 'string' || !value.trim() || value.length > max) throw E.inputInvalid();
   return value;
 }
 
@@ -44,21 +45,21 @@ function parseConversationId(value) {
 const body = (raw) => (isObject(raw) ? raw : {});
 
 /** POST /ai/runs: finalidade primeiro (sem ela nem o run nasce), depois o agente e o pedido. */
-function parseRunBody(raw) {
+function parseRunBody(raw, inputMax = INPUT_MAX) {
   const b = body(raw);
   if (typeof b.purpose !== 'string' || !b.purpose.trim()) throw orchestratorErrors.purposeRequired();
   if (typeof b.agentCode !== 'string' || !b.agentCode.trim()) throw E.inputInvalid('Informe o código do agente.');
   return {
-    agentCode: b.agentCode.trim(), purpose: b.purpose.trim(), input: parseInput(b.input), subject: parseContext(b.context),
+    agentCode: b.agentCode.trim(), purpose: b.purpose.trim(), input: parseInput(b.input, inputMax), subject: parseContext(b.context),
     idempotencyKey: parseKey(b.idempotencyKey), taskType: parseTaskType(b.taskType), conversationId: null,
   };
 }
 
 /** POST /ai/agents/:code/chat: a finalidade é a do próprio chat (a rota a monta); o pedido vem em `message`. */
-function parseChatBody(agentCode, raw, purpose) {
+function parseChatBody(agentCode, raw, purpose, inputMax = INPUT_MAX) {
   const b = body(raw);
   return {
-    agentCode, purpose, input: parseInput(b.message), subject: parseContext(b.context), idempotencyKey: parseKey(b.idempotencyKey),
+    agentCode, purpose, input: parseInput(b.message, inputMax), subject: parseContext(b.context), idempotencyKey: parseKey(b.idempotencyKey),
     taskType: parseTaskType(b.taskType), conversationId: parseConversationId(b.conversationId),
   };
 }

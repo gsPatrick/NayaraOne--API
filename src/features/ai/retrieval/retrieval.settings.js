@@ -6,6 +6,7 @@
  * documento de segredos, o segundo o tamanho do lote enviado ao provider de vetores. M9-D024: `ia.rag.conflito.marcador` é a palavra que
  * abre a linha em que um documento declara o valor de um fato ("Fato: chave = valor"), `ia.rag.nao_vigentes_registrar_max` quantas fontes
  * não vigentes que casaram com a pergunta o run registra (0 = nenhuma) e `ia.rag.vigencia.intervalo_horas` o intervalo do job que marca vencidas.
+ * `ia.rag.consulta_max_caracteres` é o tamanho máximo do texto de uma busca (a pergunta vai para a busca por palavras e por vetor).
  */
 const RAG_KEYS = Object.freeze({
   indexRestricted: 'ia.rag.indexar_restricted',
@@ -20,6 +21,7 @@ const RAG_KEYS = Object.freeze({
   factMarker: 'ia.rag.conflito.marcador',
   nonVigentMax: 'ia.rag.nao_vigentes_registrar_max',
   expiryHours: 'ia.rag.vigencia.intervalo_horas',
+  queryMax: 'ia.rag.consulta_max_caracteres',
 });
 
 const RAG_SETTING_DEFAULTS = Object.freeze({
@@ -35,6 +37,7 @@ const RAG_SETTING_DEFAULTS = Object.freeze({
   [RAG_KEYS.factMarker]: 'Fato',
   [RAG_KEYS.nonVigentMax]: 5,
   [RAG_KEYS.expiryHours]: 24,
+  [RAG_KEYS.queryMax]: 2000,
 });
 
 const RAG_SETTINGS_SCHEMA = {
@@ -50,6 +53,7 @@ const RAG_SETTINGS_SCHEMA = {
   [RAG_KEYS.factMarker]: { type: 'string' },
   [RAG_KEYS.nonVigentMax]: { type: 'integer', min: 0, max: 50 },
   [RAG_KEYS.expiryHours]: { type: 'integer', min: 1, max: 168 },
+  [RAG_KEYS.queryMax]: { type: 'integer', min: 1, max: 20000 },
 };
 
 module.exports = { RAG_KEYS, RAG_SETTING_DEFAULTS, RAG_SETTINGS_SCHEMA };

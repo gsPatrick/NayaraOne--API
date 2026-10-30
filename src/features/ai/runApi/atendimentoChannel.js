@@ -5,7 +5,7 @@
 // partir do endereço do canal. O corpo nunca traz o id do contato (`externalContactId` enviado é ignorado) e o modelo também não o informa.
 const { Op } = require('sequelize');
 const { PersonContact } = require('../../../models');
-const { atendimentoChat, AGENT_CODE } = require('../agents/nay_atendimento');
+const { prepareAtendimentoChat, AGENT_CODE } = require('../agents/nay_atendimento');
 const { initToolRegistry } = require('../tools');
 const E = require('./runApi.errors');
 const { parseInput, parseKey } = require('./runApi.validation');
@@ -18,7 +18,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const isAtendimento = (agentCode) => String(agentCode || '').trim().toUpperCase() === AGENT_CODE;
 
 /** Corpo do canal: `message`, `idempotencyKey?` e `channel?: { type, address }` (de onde o servidor resolve o contato). */
-function parseChannelBody(raw) {
+function parseChannelBody(raw, inputMax) {
   const b = isObject(raw) ? raw : {};
   let channel = null;
   if (b.channel !== undefined && b.channel !== null) {
@@ -29,7 +29,7 @@ function parseChannelBody(raw) {
     }
     channel = { type, address };
   }
-  return { message: parseInput(b.message), idempotencyKey: parseKey(b.idempotencyKey), channel };
+  return { message: parseInput(b.message, inputMax), idempotencyKey: parseKey(b.idempotencyKey), channel };
 }
 
 /** Telefone só com dígitos; e-mail sem caixa. */
@@ -50,15 +50,15 @@ async function resolveChannelContact(channel, transaction) {
   return people.length === 1 ? people[0] : null;
 }
 
-/** Executa a mensagem do canal e devolve o mesmo formato de `executeRequest` (`outcome` do orquestrador; sem conversa nem histórico). */
-async function executeChannelRequest({ body }, auth, transaction, deps = {}) {
-  const parsed = parseChannelBody(body);
+/** Só o preparo do canal: o pedido e a identidade de serviço, sem executar (a rota abre o run e depois executa em outra transação). */
+async function prepareChannelRequest({ body }, auth, transaction, deps = {}, inputMax) {
+  const parsed = parseChannelBody(body, inputMax);
   const externalContactId = await resolveChannelContact(parsed.channel, transaction);
   const toolRegistry = deps.toolRegistry || await initToolRegistry();
-  const outcome = await atendimentoChat({
+  const prepared = await prepareAtendimentoChat({
     groupId: auth.groupId, companyId: auth.companyId, message: parsed.message, externalContactId, idempotencyKey: parsed.idempotencyKey,
-  }, transaction, { ...deps, toolRegistry });
-  return { outcome, conversationId: null };
+  }, transaction);
+  return { ...prepared, deps: { ...deps, toolRegistry } };
 }
 
-module.exports = { isAtendimento, executeChannelRequest, resolveChannelContact, parseChannelBody };
+module.exports = { isAtendimento, prepareChannelRequest, resolveChannelContact, parseChannelBody };

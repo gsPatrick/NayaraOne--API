@@ -19,10 +19,15 @@ async function buildDefaultRegistry(permissionCodes) {
   return registry;
 }
 
-/** Monta (uma vez) o registro do processo. `force` refaz. */
+let montagem = null;
+
+/** Monta (uma vez) o registro do processo; pedidos simultâneos esperam a mesma montagem (ela lê o catálogo de permissões no banco). `force` refaz. */
 async function initToolRegistry({ force = false, permissionCodes } = {}) {
-  if (!registro || force) registro = await buildDefaultRegistry(permissionCodes);
-  return registro;
+  if (registro && !force) return registro;
+  if (!montagem || force) {
+    montagem = buildDefaultRegistry(permissionCodes).then((novo) => { registro = novo; return novo; }).finally(() => { montagem = null; });
+  }
+  return montagem;
 }
 
 function getToolRegistry() {

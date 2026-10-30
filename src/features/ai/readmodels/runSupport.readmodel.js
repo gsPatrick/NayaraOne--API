@@ -12,6 +12,14 @@ async function acquireRunKeyLock(companyId, idempotencyKey, transaction) {
 }
 
 /**
+ * Trava da taxa por pessoa e agente (M9-D020, rajada): os pedidos simultâneos da mesma pessoa para o mesmo agente passam um de cada vez pela
+ * contagem e pela abertura do run; sem ela todos contam o mesmo número e furam o limite. Vale até o fim da transação de abertura.
+ */
+async function acquireRateLock(companyId, userId, agentCode, transaction) {
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))', { replacements: { key: `ai.rate:${companyId}:${userId}:${agentCode}` }, transaction });
+}
+
+/**
  * Runs da pessoa que começaram nos últimos `windowSeconds` (contador de banco da taxa por pessoa, M9-D020). Com `agentName`, só os do agente
  * (a taxa é por usuário E agente, M9-D030). Sob RLS do tenant.
  */
@@ -24,4 +32,4 @@ async function countRecentRuns(companyId, userId, windowSeconds, transaction, ag
   return rows[0].n;
 }
 
-module.exports = { acquireRunKeyLock, countRecentRuns };
+module.exports = { acquireRunKeyLock, acquireRateLock, countRecentRuns };

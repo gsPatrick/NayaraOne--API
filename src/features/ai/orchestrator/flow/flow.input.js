@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const E = require('./flow.errors');
 
+// Teto técnico contra abuso (igual ao máximo do parâmetro ia.run.entrada_max_caracteres); o limite da empresa é conferido na rota, antes de existir run.
 const INPUT_MAX = 100000;
 const DEFAULT_TASK = 'consulta';
 
