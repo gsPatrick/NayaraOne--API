@@ -294,6 +294,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   const parte3 = require(path.resolve(__dirname, '../migrations/20260101000754-marketing-campaign-lifecycle.js')); // M9-D412
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
+  const partes = [parte2, parte3];
   try {
     const inicial = await contagem();
     assert.equal(inicial, 6);
@@ -312,12 +313,12 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     assert.equal(await contagem(), 0);
     await migration.up(qi);
     assert.equal(await contagem(), inicial);
-    await parte2.up(qi);
-    await parte3.up(qi);
-    // O down da parte 1 derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, gatilhos, funções):
-    // recompõe o banco na ordem, para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
-    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
   } finally {
+    // Recompõe o banco na ordem MESMO se uma asserção falhar: o down da parte 1 derruba as tabelas com tudo que as migrations
+    // posteriores acrescentaram (colunas, gatilhos, funções); sem isso um defeito aqui deixaria o schema pela metade para os outros testes.
+    await migration.up(qi);
+    for (const parte of partes) await parte.up(qi);
+    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
     await admin.close();
   }
 });

@@ -7,9 +7,13 @@
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/aiHttpEnv');
+const { removeCommittedContent } = require('../_helpers/mktContentCleanup');
 
 let ctx; let sequelize;
+const criados = [];
 after(async () => {
+  // Os rascunhos foram COMMITADOS: remove-os para não contaminar os testes de schema que contam linhas por empresa.
+  await removeCommittedContent(criados).catch(() => {});
   if (sequelize) await sequelize.close().catch(() => {});
   if (ctx) setTimeout(() => process.exit(0), 300);
 });
@@ -28,7 +32,9 @@ async function committedDraft(extraFacts) {
   const row = (await env.admin(
     'SELECT m.group_id, m.company_id, u.id AS user_id FROM core.user_memberships m JOIN core.users u ON u.id = m.user_id WHERE u.email = $1', [emailFor('A', 'leitura')])).rows[0];
   const tenant = { groupId: row.group_id, companyId: row.company_id, userId: row.user_id };
-  return withTenantTransaction(tenant, (t) => draftWithFacts(t, tenant, 'Rascunho.', extraFacts));
+  const draft = await withTenantTransaction(tenant, (t) => draftWithFacts(t, tenant, 'Rascunho.', extraFacts));
+  criados.push(draft.itemId);
+  return draft;
 }
 
 const post = (itemId, texto) => ctx.call('POST', '/marketing/content', ctx.tokens['A:leitura'], { contentItemId: itemId, texto });
