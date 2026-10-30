@@ -73,6 +73,7 @@ const CASE_TYPE_TITLES = {
   BANK_CONFIRMATION_UNDER_REVIEW: 'Confirmação do banco em revisão manual',
   POST_CLOSING_BANK_CONFIRMATION: 'Confirmação do banco após o fechamento',
   BANK_UNREACHABLE: 'Banco indisponível no envio',
+  BANK_PAYMENT_UNRESOLVED: 'Ordem de pagamento sem resposta conclusiva do banco',
 };
 
 function caseTypeTitle(caseType) {

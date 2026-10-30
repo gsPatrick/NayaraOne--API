@@ -12,7 +12,7 @@ const FIRST = Object.freeze(['messaging-sandbox']);
 
 /** Famílias de adapter que ainda não têm fixtures: a suíte delas entra no sprint da demanda indicada (a lista só encolhe). Casa pelo prefixo do código do fornecedor. */
 const PENDING_BY_DEMAND = Object.freeze({
-  'financing-': 'M9-D240', 'bank-': 'M9-D237', 'signature-': 'M9-D236', 'insurance-': 'M9-D238', 'fiscal-': 'M9-D241', 'portal-': 'M9-D232', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
+  'financing-': 'M9-D240', 'signature-': 'M9-D236', 'insurance-': 'M9-D238', 'fiscal-': 'M9-D241', 'portal-': 'M9-D232', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
   'email-': 'M9-D234', 'storage-': 'M9-D242', 'identity-': 'M9-D242', 'ai-': 'M9-D011', anthropic: 'M9-D011', openai: 'M9-D011',
 });
 const pendingDemand = (code) => { const k = Object.keys(PENDING_BY_DEMAND).find((p) => code === p || code.startsWith(p)); return k ? PENDING_BY_DEMAND[k] : null; };

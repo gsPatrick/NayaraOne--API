@@ -2,6 +2,7 @@
 
 const { classifyDispatchError } = require('../dispatch/retry/retry.classify');
 const { invoke } = require('../registry/adapterInvoke');
+const { doubleMeta } = require('./doubles');
 
 /** Contexto do adapter nos contract tests: connection de laboratório, prazos curtos da política e leitor de segredo falso (nenhum segredo real). */
 function buildContext({ providerCode, version, timeoutMs, healthTimeoutMs, config = {} }) {
@@ -25,6 +26,7 @@ const opClassOf = (adapter, op) => opDef(adapter, op).opClass;
  * operação (`externalResourceIdFrom`), a outra roda antes (com chave própria). Devolve a resposta normalizada.
  */
 async function callOp(adapter, fixture, op, state, { key = nextKey(op), tenant = null } = {}) {
+  const extraMeta = doubleMeta(fixture.legacyDouble);
   const modelo = fixture.requests[op];
   const pedido = { ...modelo };
   if (modelo.externalResourceIdFrom) {
@@ -35,7 +37,8 @@ async function callOp(adapter, fixture, op, state, { key = nextKey(op), tenant =
     }
     pedido.externalResourceId = state[modelo.externalResourceIdFrom].externalResourceId;
   }
-  return invoke(adapter, op, pedido, { tenant, meta: { idempotencyKey: key } });
+  // Duplo do fluxo manual: empresa e transação de mentira que o adapter exige (vale também para os cenários de falha).
+  return invoke(adapter, op, pedido, { tenant, meta: { idempotencyKey: key, ...(extraMeta || {}) } });
 }
 
 /** Classe do erro como o Dispatch Service decide: o `classifyError` do adapter mais a tabela única da M9-D216. */

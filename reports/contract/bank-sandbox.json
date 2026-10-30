@@ -1,0 +1,92 @@
+{
+  "provider": "bank-sandbox",
+  "domain": "BANK",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T09:54:06.927Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "submitPayment",
+    "getPaymentStatus",
+    "getStatement",
+    "verifyWebhook"
+  ],
+  "adapterHash": "e6d0cc4d965df60eb8e9aa70fbde8b81078ce4544e17220261c10b7b1e997665",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 11,
+      "passed": 11,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 88,
+  "passed": 88,
+  "status": "PASSED",
+  "errors": []
+}

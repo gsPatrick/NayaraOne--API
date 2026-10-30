@@ -1,0 +1,40 @@
+{
+  "provider": "bank-santander",
+  "apiVersion": "v1",
+  "description": "Santander sob o contrato do port BankAdapter, contra o objeto antigo duplo de laboratório (mTLS e OAuth2 não saem em teste de contrato; sem rede e sem credencial).",
+  "requests": {
+    "submitPayment": {
+      "kind": "PIX",
+      "amount": "150.00",
+      "payee": {
+        "name": "Favorecido de laboratório",
+        "pixKey": "favorecido@qa-m9.test"
+      }
+    },
+    "getPaymentStatus": {
+      "externalResourceIdFrom": "submitPayment"
+    },
+    "getStatement": {},
+    "verifyWebhook": {
+      "rawBody": "{}",
+      "headers": {}
+    }
+  },
+  "noResourceId": [
+    "getStatement",
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "PENDING_EXTERNAL": "PENDING",
+    "PROCESSING": "PENDING",
+    "CONFIRMED": "PAID",
+    "SETTLED": "PAID",
+    "REJECTED": "FAILED",
+    "CANCELED": "FAILED",
+    "EXPIRED": "FAILED",
+    "RETURNED": "RETURNED"
+  },
+  "unknownStatus": "em_analise_do_banco",
+  "renewal": false,
+  "legacyDouble": "bank-santander"
+}

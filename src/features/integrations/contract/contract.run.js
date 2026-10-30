@@ -5,6 +5,7 @@ const { loadFixture, fixturesDigestInput } = require('./contract.fixtures');
 const { buildContext } = require('./contract.runtime');
 const transport = require('./contract.scenarios.transport');
 const data = require('./contract.scenarios.data');
+const { loadDouble } = require('./doubles');
 
 const SCENARIOS = Object.freeze([
   [1, 'auth', transport.auth], [2, 'happy path', transport.happyPath], [3, 'timeout', transport.timeout], [4, '4xx', transport.client4xx], [5, '5xx', transport.server5xx],
@@ -39,6 +40,8 @@ async function runSuite(target, { timeoutMs } = {}) {
     capabilities.filter((c) => typeof adapterBase[c] !== 'function').forEach((capability) => errors.push({ code: 'CONTRACT_CAPABILITY_NOT_IMPLEMENTED', version, capability, message: 'Capacidade declarada sem operação implementada no adapter.' }));
     const prazo = timeoutMs || fixture.timeoutMs || DEFAULT_TIMEOUT_MS;
     const adapter = new target.AdapterClass(buildContext({ providerCode: target.providerCode, version, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS }));
+    const dub = loadDouble(fixture.legacyDouble);
+    if (dub) adapter.legacyInstance = dub.legacy;
     const state = {};
     for (const [, , fn] of SCENARIOS) {
       const lista = await fn({ adapter, fixture, ops, state, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS });

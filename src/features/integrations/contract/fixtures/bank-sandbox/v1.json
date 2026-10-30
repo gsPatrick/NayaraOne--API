@@ -1,0 +1,39 @@
+{
+  "provider": "bank-sandbox",
+  "apiVersion": "v1",
+  "description": "Banco de laboratório: a ordem de pagamento nasce pendente e só a consulta de status final a confirma (o HTTP 200 não paga).",
+  "requests": {
+    "submitPayment": {
+      "kind": "PIX",
+      "amount": "150.00",
+      "payee": {
+        "name": "Favorecido de laboratório",
+        "pixKey": "favorecido@qa-m9.test"
+      }
+    },
+    "getPaymentStatus": {
+      "externalResourceIdFrom": "submitPayment"
+    },
+    "getStatement": {},
+    "verifyWebhook": {
+      "rawBody": "{}",
+      "headers": {}
+    }
+  },
+  "noResourceId": [
+    "getStatement",
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "PENDING_EXTERNAL": "PENDING",
+    "PROCESSING": "PENDING",
+    "CONFIRMED": "PAID",
+    "SETTLED": "PAID",
+    "REJECTED": "FAILED",
+    "CANCELED": "FAILED",
+    "EXPIRED": "FAILED",
+    "RETURNED": "RETURNED"
+  },
+  "unknownStatus": "em_analise_do_banco",
+  "renewal": false
+}
