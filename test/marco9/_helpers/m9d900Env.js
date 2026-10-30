@@ -52,6 +52,17 @@ function fakeLegacy() {
 /** Pessoa canônica válida (CPF gerado). */
 const personRecord = (extra = {}) => ({ legalName: `QA-M9 Cliente ${base.suffix()}`, personType: 'PF', taxId: base.cpf(), ...extra });
 
+/** CNPJ válido (dígitos verificadores calculados) e distinto a cada chamada, para o teste não colidir com pessoa deixada por execução anterior. */
+function cnpj() {
+  const d = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).concat([0, 0, 0, 1]);
+  for (const len of [12, 13]) {
+    const w = len === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = d.slice(0, len).reduce((a, n, i) => a + n * w[i], 0) % 11;
+    d.push(sum < 2 ? 0 : 11 - sum);
+  }
+  return d.join('');
+}
+
 /** Cria a fonte da empresa (com commit) e registra o conector falso sob um nome exclusivo. Devolve { system, fake, source(), dispose() }. */
 async function installSource(tenant, { mode = 'CDC', entity = 'PERSON', columnMap = {}, system = sysName() } = {}) {
   const fake = fakeLegacy();
@@ -76,4 +87,4 @@ const batchesOf = (system) => q('SELECT * FROM governance.mig_batches WHERE sour
 const recordsOf = (system) => q('SELECT * FROM governance.mig_records WHERE source_system = $1 ORDER BY source_key', [system]);
 const keysOf = (system) => q("SELECT idempotency_key FROM governance.mig_event_keys WHERE idempotency_key LIKE $1 ORDER BY 1", [`${system}:%`]);
 
-module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, installSource, run, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };
+module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, cnpj, installSource, run, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };

@@ -50,7 +50,7 @@ test('m9d900 toda fonte semeada tem destino, modo válido e motivo da escolha', 
 
 test('m9d900 SUPPLIER entra como pessoa com o papel de fornecedor e PROPERTY como imóvel', { skip: skip() }, async () => {
   const supplier = await env.installSource(A(), { mode: 'CDC', entity: 'SUPPLIER' });
-  supplier.fake.event('F1', 'I', 1, env.personRecord({ personType: 'PJ', taxId: '11222333000181', legalName: 'QA-M9 Fornecedor Legado' }));
+  supplier.fake.event('F1', 'I', 1, env.personRecord({ personType: 'PJ', taxId: env.cnpj(), legalName: 'QA-M9 Fornecedor Legado' }));
   const property = await env.installSource(A(), { mode: 'CDC', entity: 'PROPERTY' });
   property.fake.event('I-100', 'I', 1, { internalCode: `LEG-${env.suffix()}`, title: 'QA-M9 Casa do legado', propertyType: 'RESIDENTIAL', city: 'Curitiba', areaTotalM2: '120.5' });
   property.fake.event('I-101', 'I', 2, { internalCode: '', title: 'sem código' });
