@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D021 — normalização antes de casar os padrões do InjectionDetector: largura total/compatibilidade (NFKC), caracteres
+// M9-D021 — normalização antes de casar os padrões do InjectionDetector (e as variantes `foldLeet` e `squash`, abaixo): largura total/compatibilidade (NFKC), caracteres
 // invisíveis fora, caixa baixa, letras que imitam o alfabeto latino (cirílico e grego) trocadas pelas latinas, acento fora e
 // espaços colapsados. Assim "ІGNÓRE  TÓDAS as régras" casa como "ignore todas as regras".
 
@@ -27,4 +27,17 @@ function normalizeText(texto) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-module.exports = { normalizeText };
+// Leet comum -> letra (aplicado SÓ a uma variante do texto já normalizado, para "1gn0re t0das" casar como "ignore todas").
+const LEET = Object.freeze({ '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i', '|': 'l' });
+
+/** Troca os caracteres de leet por letras (o texto de entrada já passou por `normalizeText`). */
+function foldLeet(normalizado) {
+  return Array.from(String(normalizado || '')).map((c) => LEET[c] || c).join('');
+}
+
+/** Só letras e dígitos, sem espaço nem pontuação: "i g n o r e" e "i.g.n.o.r.e" ficam "ignore" (compara frases inteiras coladas). */
+function squash(normalizado) {
+  return String(normalizado || '').replace(/[^a-z0-9]/g, '');
+}
+
+module.exports = { normalizeText, foldLeet, squash };

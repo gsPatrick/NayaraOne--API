@@ -11,23 +11,30 @@ const BASE_PATTERNS = Object.freeze([
   /\bsenhas?\b/, /\bpasswords?\b/, /\btokens?\b/, /\bapi[ _-]?keys?\b/, /\bsecrets?\b/, /(?:^|[^a-z0-9])\.env\b/,
   /\bconnection[ _-]?strings?\b/, /\bstrings? de conexao\b/, /\bcredenciais?\b/, /\bcredentials?\b/,
   /\bchaves? (?:d[aeo] api|secretas?|privadas?|do cofre|de acesso ao sistema)\b/,
+  // Paráfrases e outras línguas (M9-D021, achado M-2): acesso/senha do banco, chave do provedor, espanhol e francês.
+  /\bacesso (?:a[o]?|d[oa]s?) (?:banco|base) de dados\b/, /\bacesso d[oa] banco\b/, /\bchaves? (?:d[oa] )?provider\b/, /\bchaves? d[oa] provedor de (?:ia|modelos?|inteligencia)\b/, /\bchaves? d[aeo] api d[oa]s? (?:provedor|provider|fornecedor)(?:es)?\b/, /\bvariaveis? de ambiente\b/,
+  /\bcontrasenas?\b/, /\bclaves? (?:secretas?|privadas?|de api|del proveedor)\b/, /\bcredenciales\b/,
+  /\bmots? de passe\b/, /\bcles? (?:secretes?|privees?|d api|du fournisseur)\b/, /\bidentifiants\b/,
 ]);
 
 // Mesma normalização do detector de injeção (homóglifos, caracteres invisíveis, hifenização de PDF): o red-team da M9-D046 achou o pedido em cirílico passando.
-const { normalizeText: normalize } = require('../security/textNormalizer');
+const { normalizeText: normalize, foldLeet } = require('../security/textNormalizer');
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** @returns {{ blocked: boolean, term: string|null }} o termo que caracterizou o pedido (para a trilha), sem o texto inteiro. */
 function detectSecretRequest(texto, { extraTerms = [] } = {}) {
-  const t = normalize(texto);
-  if (!t) return { blocked: false, term: null };
-  for (const re of BASE_PATTERNS) {
-    const m = re.exec(t);
-    if (m) return { blocked: true, term: m[0].trim() };
-  }
-  for (const extra of extraTerms) {
-    const termo = normalize(extra);
-    if (termo && new RegExp(`(?:^|[^a-z0-9])${escape(termo)}(?![a-z0-9])`).test(t)) return { blocked: true, term: termo };
+  const base = normalize(texto);
+  if (!base) return { blocked: false, term: null };
+  // O texto também é conferido com o leet desfeito ("s3nh4" é "senha").
+  for (const t of new Set([base, foldLeet(base)])) {
+    for (const re of BASE_PATTERNS) {
+      const m = re.exec(t);
+      if (m) return { blocked: true, term: m[0].trim() };
+    }
+    for (const extra of extraTerms) {
+      const termo = normalize(extra);
+      if (termo && new RegExp(`(?:^|[^a-z0-9])${escape(termo)}(?![a-z0-9])`).test(t)) return { blocked: true, term: termo };
+    }
   }
   return { blocked: false, term: null };
 }

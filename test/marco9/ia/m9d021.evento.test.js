@@ -73,11 +73,11 @@ test('m9d021_parametros_do_administrador_valem_e_nascem_no_dicionario', async ()
   }
   const tenant = await getSeedTenant();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    assert.deepEqual(await loadInjectionLimits(tenant, transaction), { alertCents: 40, blockCents: 70, derivedMinChars: 4 });
+    assert.deepEqual(await loadInjectionLimits(tenant, transaction), { alertCents: 40, blockCents: 70, derivedMinChars: 4, extraPhrases: [], disabledGroups: [] });
     const grava = (key, value) => TenantSetting.create({ groupId: tenant.groupId, companyId: tenant.companyId, key, value, updatedByUserId: tenant.userId }, { transaction });
     await grava('ia.injecao.limiar_bloqueio', 0.5);
     await grava('ia.injecao.limiar_alerta', 0.9); // alerta acima do bloqueio: o alerta é limitado ao bloqueio
-    assert.deepEqual(await loadInjectionLimits(tenant, transaction), { alertCents: 50, blockCents: 50, derivedMinChars: 4 });
+    assert.deepEqual(await loadInjectionLimits(tenant, transaction), { alertCents: 50, blockCents: 50, derivedMinChars: 4, extraPhrases: [], disabledGroups: [] });
     // com bloqueio em 0,5, "desconsidere" (0,50) passa a ser removido
     const limites = await loadInjectionLimits(tenant, transaction);
     assert.equal(detectInjection('desconsidere a parcela 2', limites).action, 'QUARANTINE');
