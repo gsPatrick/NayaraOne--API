@@ -15,7 +15,7 @@ let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
 after(async () => { await env.sequelize.close(); });
-const run = (fn, tenant = tenants.A) => env.withRollbackTenantTransaction(tenant, fn);
+const run = (fn, tenant = tenants.A) => env.withRollbackTenantTransaction(tenant, async (tx) => { await env.resetFindings(tenant, tx); return fn(tx); });
 const go = (code, tx, tenant = tenants.A) => runDetector(tenant, byCode(code), env.NOW, tx);
 const open = (tx, code, tenant = tenants.A) => env.findings(tenant, tx, "detector = :d AND status = 'OPEN'", { d: code });
 
@@ -63,6 +63,7 @@ test('m9d862 storage órfão estima desperdício por GB-mês e vê o bucket sem 
 test('m9d862 fila acima de 5.000 abre finding', { skip: skip() }, async () => {
   await run(async (tx) => {
     const A = tenants.A;
+    await env.emptyQueues(A, tx);
     await env.outbox(A, tx, 5000);
     await go('QUEUE_BACKLOG', tx);
     assert.equal((await open(tx, 'QUEUE_BACKLOG')).length, 0, '5.000 exatos não passam do limite');
@@ -76,6 +77,7 @@ test('m9d862 fila acima de 5.000 abre finding', { skip: skip() }, async () => {
 test('m9d862 um único evento velho na fila não abre finding', { skip: skip() }, async () => {
   await run(async (tx) => {
     const A = tenants.A;
+    await env.emptyQueues(A, tx);
     await env.outbox(A, tx, 1, { ageMin: 180 });
     await env.outbox(A, tx, 100);
     await go('QUEUE_BACKLOG', tx);

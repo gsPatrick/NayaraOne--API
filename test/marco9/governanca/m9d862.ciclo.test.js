@@ -15,7 +15,7 @@ let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
 after(async () => { await env.sequelize.close(); });
-const run = (fn, tenant = tenants.A) => env.withRollbackTenantTransaction(tenant, fn);
+const run = (fn, tenant = tenants.A) => env.withRollbackTenantTransaction(tenant, async (tx) => { await env.resetFindings(tenant, tx); return fn(tx); });
 const go = (code, tx, now = env.NOW, tenant = tenants.A) => runDetector(tenant, byCode(code), now, tx);
 const all = (tx) => env.findings(tenants.A, tx);
 

@@ -37,6 +37,16 @@ async function outbox(tenant, tx, n, { status = 'PENDING', ageMin = 1 } = {}) {
   { g: tenant.groupId, c: tenant.companyId, n, status, at: new Date(NOW.getTime() - ageMin * 60000) });
 }
 
+/** Esvazia a fila PENDING da empresa DENTRO da transação do teste (reverte no rollback): resto de outros arquivos no mesmo banco não entra na contagem do limite. */
+async function emptyQueues(tenant, tx) {
+  for (const table of ['integration.outbox_events', 'integration.dispatches']) {
+    await q(tx, `UPDATE ${table} SET status = 'SENT' WHERE company_id = :c AND status = 'PENDING'`, { c: tenant.companyId });
+  }
+}
+
+/** Remove, dentro da transação do teste, os findings da empresa deixados por outros arquivos (o http grava de verdade), para o ciclo abrir/atualizar partir do zero. */
+const resetFindings = (tenant, tx) => q(tx, 'DELETE FROM governance.finops_findings WHERE company_id = :c', { c: tenant.companyId });
+
 /** Série de volume no ledger: um valor por dia (mais antigo primeiro), terminando em `lastDay`. */
 async function volumes(tenant, tx, spec, values, lastDay = DAY) {
   const lines = values.map((v, i) => base.dayLine(tenant, shiftDay(lastDay, -(values.length - 1 - i)), {
@@ -71,4 +81,4 @@ function bucket(tenant) {
   return { root, put, cleanup };
 }
 
-module.exports = { ...base, NOW, DAY, daysAgo, file, link, outbox, volumes, aiRuns, findings, params, bucket, q, sequelize };
+module.exports = { ...base, NOW, DAY, daysAgo, file, link, outbox, emptyQueues, resetFindings, volumes, aiRuns, findings, params, bucket, q, sequelize };
