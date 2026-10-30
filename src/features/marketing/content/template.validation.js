@@ -4,6 +4,7 @@ const { TEMPLATE_CHANNELS, TEMPLATE_KINDS, TEMPLATE_STATUSES } = require('./temp
 const { invalidInput } = require('./template.errors');
 const { normalizeVariableDefs } = require('./template.variables');
 const { normalizeBrandTokens } = require('./template.brandTokens');
+const { assertKnownBodyFields } = require('../marketing.body');
 
 const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const MAX_BODY = 20000;
@@ -15,6 +16,7 @@ const isUuid = (v) => typeof v === 'string' && UUID_RE.test(v);
 /** Valida o corpo do POST /marketing/templates. `inherited` traz tipo e canal da última versão do mesmo código (se houver). */
 function parseCreateInput(input, inherited) {
   const src = input && typeof input === 'object' ? input : {};
+  assertKnownBodyFields(src, ['code', 'kind', 'channel', 'body', 'variables', 'brandTokens', 'officialTemplateRef']); // M9-D435
   const code = typeof src.code === 'string' ? src.code.trim() : '';
   if (!CODE_RE.test(code)) throw invalidInput('Informe o código do template (letras, números, ponto, hífen e sublinhado, até 80 caracteres).');
   const kind = src.kind === undefined && inherited ? inherited.kind : src.kind;
@@ -33,14 +35,15 @@ function parseCreateInput(input, inherited) {
 }
 
 /** Filtros e paginação do GET /marketing/templates. */
-function parseListFilters(raw) {
+function parseListFilters(raw, limits = { standard: 50, max: 200 }) {
   const f = raw || {};
   if (f.status && !TEMPLATE_STATUSES.includes(f.status)) throw invalidInput(`O status deve ser um de: ${TEMPLATE_STATUSES.join(', ')}.`);
   if (f.channel && !TEMPLATE_CHANNELS.includes(f.channel)) throw invalidInput(`O canal deve ser um de: ${TEMPLATE_CHANNELS.join(', ')}.`);
   const page = f.page === undefined ? 1 : Number(f.page);
-  const pageSize = f.pageSize === undefined ? 20 : Number(f.pageSize);
+  const requested = f.pageSize === undefined ? limits.standard : Number(f.pageSize);
   if (!Number.isInteger(page) || page < 1) throw invalidInput('A página deve ser um inteiro maior que zero.');
-  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw invalidInput('O tamanho da página deve ser de 1 a 100.');
+  if (!Number.isInteger(requested) || requested < 1) throw invalidInput('O tamanho da página deve ser um inteiro maior que zero.');
+  const pageSize = Math.min(requested, limits.max); // como a lista de publicações: acima do máximo vale o máximo
   return { code: f.code || null, status: f.status || null, channel: f.channel || null, page, pageSize };
 }
 

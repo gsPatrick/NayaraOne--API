@@ -4,6 +4,7 @@ const { CHANNELS } = require('./publications/adapters/channels');
 const { SCOPES } = require('./killswitch.constants');
 const { readReasonMin } = require('./killswitch.settings');
 const errors = require('./killswitch.errors');
+const { assertKnownBodyFields } = require('./marketing.body');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
@@ -15,6 +16,7 @@ const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
  */
 async function parseChange(body, tenant, transaction) {
   const b = isObject(body) ? body : {};
+  assertKnownBodyFields(b, ['scope', 'targetId', 'active', 'reason', 'compromised', 'confirmation']); // M9-D435: campo desconhecido é 400 MKT_VALIDATION
   const scope = typeof b.scope === 'string' ? b.scope.trim().toUpperCase() : '';
   if (!SCOPES[scope]) throw errors.inputInvalid({ field: 'scope', allowed: Object.keys(SCOPES) });
   if (typeof b.active !== 'boolean') throw errors.inputInvalid({ field: 'active' });

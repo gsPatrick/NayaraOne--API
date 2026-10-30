@@ -4,6 +4,7 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const repo = require('./template.repository');
 const { computeTemplateContentHash } = require('./template.hash');
 const { parseCreateInput, parseListFilters, isUuid } = require('./template.validation');
+const { readPageLimits } = require('../marketing.pagination');
 const { assertLogoMatchesFile } = require('./template.brandTokens');
 const { assertNoUnknownVariables } = require('./template.variables');
 const { readOfficialChannels } = require('./template.settings');
@@ -73,7 +74,7 @@ async function publishTemplate(tenant, actorUserId, templateId, transaction) {
 
 /** Lista por código, com o histórico de versões (mais nova primeiro) e a versão vigente (PUBLISHED). Paginada por código. */
 async function listTemplates(tenant, rawFilters, transaction) {
-  const filters = parseListFilters(rawFilters);
+  const filters = parseListFilters(rawFilters, await readPageLimits(tenant, transaction)); // M9-D435: mesma paginação das publicações (parâmetros da empresa)
   const total = await repo.countCodes(filters, transaction);
   const codes = await repo.pageOfCodes(filters, filters.pageSize, (filters.page - 1) * filters.pageSize, transaction);
   const versions = await repo.versionsOfCodes(codes, filters, transaction);

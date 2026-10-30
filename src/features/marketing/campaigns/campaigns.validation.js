@@ -4,6 +4,9 @@ const { METRICS, CHANNELS } = require('./campaigns.constants');
 const { validation } = require('./campaigns.errors');
 const { parseAudiences } = require('./audience.validation');
 const { parseSteps } = require('./steps.validation');
+const { assertKnownBodyFields } = require('../marketing.body');
+
+const BODY_FIELDS = Object.freeze(['campaignId', 'schedule', 'code', 'name', 'objective', 'objectiveMetric', 'targetValue', 'budgetAmount', 'budgetJustification', 'channels', 'startsAt', 'endsAt', 'ownerUserId', 'audiences', 'steps']);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
@@ -41,6 +44,7 @@ function channels(value) {
 function parseBody(raw) {
   const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
   if (!body) throw validation('Envie o corpo da campanha em JSON.');
+  assertKnownBodyFields(body, BODY_FIELDS); // M9-D435: campo desconhecido é 400 MKT_VALIDATION
   if (!absent(body.campaignId) && !isUuid(body.campaignId)) throw validation('O campo "campaignId" deve ser um identificador válido.', { field: 'campaignId' });
   if (!absent(body.schedule) && typeof body.schedule !== 'boolean') throw validation('O campo "schedule" deve ser verdadeiro ou falso.', { field: 'schedule' });
   const metric = text(body.objectiveMetric, 'objectiveMetric', 16);
