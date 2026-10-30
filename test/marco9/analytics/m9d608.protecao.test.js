@@ -8,7 +8,7 @@ const env608 = require('../_helpers/m9d608Env');
 const readModels = require('../../../src/features/analytics/read-models');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 
-const { addSource, applyCommitted, tableRows, ctxFor, lastRefresh, shadowExists } = env608;
+const { addSource, applyCommitted, tableRows, ctxFor, lastRefresh, shadowExists, shadowOf } = env608;
 let env;
 
 before(async () => {
@@ -87,7 +87,7 @@ test('m9d608 check de qualidade falho aborta e preserva o atual', async () => {
     off();
   }
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].shadowTable, `${env.model}__rebuild`);
+  assert.equal(calls[0].shadowTable, shadowOf(env));
   assert.equal(calls[0].rows, 1, 'o check enxergou a tabela sombra já preenchida');
   assert.deepEqual(await tableRows(env, env.tenantA), before1, 'a tabela atual ficou como estava');
   assert.equal(await shadowExists(env), false);
@@ -159,10 +159,10 @@ test('m9d608 tabela sombra tem a estrutura da atual, RLS forçada e isolamento p
     reason: 'inspeção da sombra',
     hooks: {
       afterShadow: async () => {
-        const [[rls]] = await env.admin.query(`SELECT relrowsecurity AS enabled, relforcerowsecurity AS forced FROM pg_class WHERE oid = to_regclass('analytics.${env.model}__rebuild')`);
-        const [pol] = await env.admin.query(`SELECT cmd FROM pg_policies WHERE schemaname = 'analytics' AND tablename = '${env.model}__rebuild' ORDER BY cmd`);
-        const [[idx]] = await env.admin.query(`SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname = 'analytics' AND tablename = '${env.model}__rebuild'`);
-        const other = await env608.inTx(env.tenantB, {}, async (tx) => (await tx.sequelize.query(`SELECT count(*)::int AS n FROM analytics.${env.model}__rebuild`, { transaction: tx }))[0][0].n);
+        const [[rls]] = await env.admin.query(`SELECT relrowsecurity AS enabled, relforcerowsecurity AS forced FROM pg_class WHERE oid = to_regclass('analytics.${shadowOf(env)}')`);
+        const [pol] = await env.admin.query(`SELECT cmd FROM pg_policies WHERE schemaname = 'analytics' AND tablename = '${shadowOf(env)}' ORDER BY cmd`);
+        const [[idx]] = await env.admin.query(`SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname = 'analytics' AND tablename = '${shadowOf(env)}'`);
+        const other = await env608.inTx(env.tenantB, {}, async (tx) => (await tx.sequelize.query(`SELECT count(*)::int AS n FROM analytics.${shadowOf(env)}`, { transaction: tx }))[0][0].n);
         seen = { rls, policies: pol.map((p) => p.cmd), indexes: idx.n, otherTenantRows: other };
       },
     },
@@ -171,7 +171,7 @@ test('m9d608 tabela sombra tem a estrutura da atual, RLS forçada e isolamento p
   assert.deepEqual(seen.policies, ['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
   assert.ok(seen.indexes >= 1, 'índice único (company_id, chave) copiado');
   assert.equal(seen.otherTenantRows, 0, 'outra empresa não enxerga a sombra');
-  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('rm_applied_events')"), /inválido para reconstrução/);
-  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('core_companies')"), /inválido para reconstrução/);
-  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('rm_nao_existe_mesmo')"), /inexistente/);
+  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('rm_applied_events', '00000000-0000-0000-0000-000000000001')"), /inválido para reconstrução/);
+  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('core_companies', '00000000-0000-0000-0000-000000000001')"), /inválido para reconstrução/);
+  await assert.rejects(env.admin.query("SELECT analytics.rebuild_shadow_create('rm_nao_existe_mesmo', '00000000-0000-0000-0000-000000000001')"), /inexistente/);
 });

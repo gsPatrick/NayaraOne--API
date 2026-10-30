@@ -75,7 +75,9 @@ async function lastRefresh(env, tenant) {
   return row || null;
 }
 
-const shadowExists = async (env) => (await env.admin.query(`SELECT to_regclass('analytics.${env.model}__rebuild') AS t`))[0][0].t !== null;
+/** Nome da tabela sombra de uma empresa (M9-D608 L-2: uma por empresa e modelo). */
+const shadowOf = (env, tenant = env.tenantA) => `${env.model}__rb${tenant.companyId.replace(/-/g, '').slice(0, 8)}`;
+const shadowExists = async (env, tenant = env.tenantA) => (await env.admin.query(`SELECT to_regclass('analytics.${shadowOf(env, tenant)}') AS t`))[0][0].t !== null;
 
 async function teardown(env) {
   readModels.unregisterReadModel(env.model);
@@ -87,9 +89,9 @@ async function teardown(env) {
     await env.admin.query("DELETE FROM integration.outbox_events WHERE event_type = 'analytics.read_model.rebuilt' AND payload_json->>'readModel' = :m", { replacements: { m: env.model }, transaction });
     await env.admin.query("DELETE FROM core.tenant_settings WHERE key LIKE 'analytics.rebuild.%'", { transaction });
   });
-  await env.admin.query(`DROP TABLE IF EXISTS analytics.${env.model}__rebuild, analytics.${env.model}, analytics.${env.source}, analytics.${env.readModel}`);
+  await env.admin.query(`DROP TABLE IF EXISTS analytics.${shadowOf(env, env.tenantA)}, analytics.${shadowOf(env, env.tenantB)}, analytics.${env.model}, analytics.${env.source}, analytics.${env.readModel}`);
   await env.admin.close();
   await sequelize.close();
 }
 
-module.exports = { setup, teardown, addSource, makeEvent, applyCommitted, tableRows, ctxFor, lastRefresh, shadowExists, inTx: sup.inTx, sfx: sup.sfx, sequelize };
+module.exports = { setup, teardown, addSource, makeEvent, applyCommitted, tableRows, ctxFor, lastRefresh, shadowExists, shadowOf, inTx: sup.inTx, sfx: sup.sfx, sequelize };

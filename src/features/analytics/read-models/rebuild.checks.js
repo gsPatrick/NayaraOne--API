@@ -24,7 +24,7 @@ async function runRebuildChecks({ def, scope, refreshId }, transaction) {
   const results = [];
   for (const fn of executors) {
     try {
-      results.push(...(await fn({ readModel: def.name, ...scope, shadowTable: shadowName(def.name), refreshId, transaction })) || []);
+      results.push(...(await fn({ readModel: def.name, ...scope, shadowTable: shadowName(def.name, scope.companyId), refreshId, transaction })) || []);
     } catch (err) {
       results.push({ checkCode: 'rebuild_check_execution', checkType: 'CONSISTENCY', status: 'ERROR', severity: 'CRITICAL', expected: {}, observed: { error: String(err.message || err).slice(0, 500) } });
     }

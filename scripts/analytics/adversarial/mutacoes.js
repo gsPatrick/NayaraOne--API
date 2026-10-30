@@ -34,7 +34,7 @@ const MUTACOES = [
   { adv: 12, arquivo: 'scripts/analytics/load/verdict.js', protecao: 'o limite de degradação do OLTP (percentual ou piso) reprova o BI que degrada o fluxo operacional',
     de: 'return { pass: withinPct || withinFloor, byFloor: !withinPct && withinFloor };', para: 'return { pass: false, byFloor: false };' },
   { adv: 13, arquivo: `${F}/read-models/rebuild.swap.js`, protecao: 'o rebuild troca a tabela atual pelo conteúdo reconstruído da fonte (sombra)',
-    de: 'SELECT ${columns} FROM ${T(shadowName(def.name))} WHERE company_id = :companyId', para: 'SELECT ${columns} FROM ${T(shadowName(def.name))} WHERE company_id = :companyId AND false' },
+    de: 'SELECT ${columns} FROM ${T(shadowName(def.name, scope.companyId))} WHERE company_id = :companyId', para: 'SELECT ${columns} FROM ${T(shadowName(def.name, scope.companyId))} WHERE company_id = :companyId AND false' },
   { adv: 14, arquivo: `${F}/metrics/period.js`, protecao: 'o dia do período começa à 00:00 de São Paulo, não de UTC',
     de: 'return startOfBusinessDay(new Date(Date.UTC(y, m - 1, d, 12)), extraDays);', para: 'return new Date(Date.UTC(y, m - 1, d + extraDays));' },
   { adv: 15, arquivo: `${F}/metrics/formulas/money.js`, protecao: 'arredondamento meio para cima, único para todo o BI',

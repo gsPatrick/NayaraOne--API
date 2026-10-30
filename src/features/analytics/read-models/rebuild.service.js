@@ -67,7 +67,7 @@ async function phaseOne(def, scope, ctx, refreshId) {
   return tenantTx(scope, ctx.actorUserId, REPEATABLE_READ, async (transaction) => {
     const [[snap]] = await sequelize.query('SELECT pg_current_snapshot()::text AS text, clock_timestamp() AS at', { transaction });
     await enableAnalyticsWriter(transaction);
-    await createShadow(def.name, transaction);
+    await createShadow(def.name, scope.companyId, transaction);
     const filled = await fillShadow(def, scope, { snapshotAt: snap.at, now: clock.now(), asOfDate: clock.businessToday() }, transaction);
     const quality = await runRebuildChecks({ def, scope, refreshId }, transaction);
     const diff = await compareWithShadow(def, scope.companyId, transaction);
@@ -91,7 +91,7 @@ async function phaseTwo(def, scope, ctx, refreshId, built, params) {
       snapshotText: built.snapshotText, snapshotAt: built.snapshotAt, windowMinutes: params.reapplyWindowMinutes, asOfDate: clock.businessToday(), now: clock.now(),
     }, transaction);
     const snapshots = await applyCorrections(def, scope, built.snapshotAt, transaction);
-    await dropShadow(def.name, transaction);
+    await dropShadow(def.name, scope.companyId, transaction);
     const diff = { ...built.diff, reapplied: swap.reapplied, snapshotsRevised: snapshots.revised };
     const done = await closeRebuild(refreshId, scope, { status: 'SUCCEEDED', rowsUpserted: built.rows, sourceSnapshotAt: built.snapshotAt }, diff, transaction);
     await registrarAuditoria({
@@ -112,7 +112,7 @@ async function phaseTwo(def, scope, ctx, refreshId, built, params) {
 /** Falha: descarta a sombra e fecha o diário como FAILED (cada passo em transação própria; falha de limpeza só vai para o log). */
 async function abandon(def, scope, ctx, refreshId, error, diff) {
   try {
-    await tenantTx(scope, ctx.actorUserId, READ_COMMITTED, (transaction) => dropShadow(def.name, transaction));
+    await tenantTx(scope, ctx.actorUserId, READ_COMMITTED, (transaction) => dropShadow(def.name, scope.companyId, transaction));
   } catch (err) {
     logger.error({ event: 'analytics.read_model.rebuild_cleanup_failed', readModel: def.name, err }, '[analytics] não foi possível descartar a tabela sombra');
   }
@@ -160,8 +160,8 @@ async function rebuildReadModel(ctx, { model, companyId, hooks = {} }) {
   const params = await assertCompany(scope, ctx.actorUserId);
   if (!params.enabled) throw errors.disabled();
   return sequelize.transaction(READ_COMMITTED, async (lockTx) => {
-    const [[lock]] = await sequelize.query('SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0)) AS ok', { replacements: { key: `analytics.rebuild|${def.name}` }, transaction: lockTx });
-    if (!lock.ok) throw errors.inProgress(); // um rebuild por read model de cada vez (a sombra é uma por modelo)
+    const [[lock]] = await sequelize.query('SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0)) AS ok', { replacements: { key: `analytics.rebuild|${def.name}|${scope.companyId}` }, transaction: lockTx });
+    if (!lock.ok) throw errors.inProgress(); // um rebuild por empresa e read model de cada vez (a sombra é uma por empresa e modelo)
     return runLocked(def, scope, ctx, params, hooks);
   });
 }

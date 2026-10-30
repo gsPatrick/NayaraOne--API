@@ -36,7 +36,7 @@ async function replaceRows(def, scope, transaction) {
   const columns = await columnsOf(def.name, transaction);
   await sequelize.query(`DELETE FROM ${T(def.name)} WHERE company_id = :companyId`, { replacements: scope, transaction });
   await sequelize.query(
-    `INSERT INTO ${T(def.name)} (${columns}) SELECT ${columns} FROM ${T(shadowName(def.name))} WHERE company_id = :companyId`,
+    `INSERT INTO ${T(def.name)} (${columns}) SELECT ${columns} FROM ${T(shadowName(def.name, scope.companyId))} WHERE company_id = :companyId`,
     { replacements: scope, transaction }
   );
 }
@@ -53,7 +53,7 @@ async function swapShadow(def, scope, ctx, transaction) {
   await sequelize.query('DELETE FROM analytics.rm_stale_aggregates WHERE read_model = :model AND company_id = :companyId AND marked_at <= CAST(:snapshotAt AS timestamptz)', {
     replacements: { model: def.name, companyId: scope.companyId, snapshotAt: ctx.snapshotAt }, transaction,
   });
-  await sequelize.query(`DELETE FROM ${T(shadowName(def.name))} WHERE company_id = :companyId`, { replacements: scope, transaction });
+  await sequelize.query(`DELETE FROM ${T(shadowName(def.name, scope.companyId))} WHERE company_id = :companyId`, { replacements: scope, transaction });
   return { reapplied: touched.length };
 }
 

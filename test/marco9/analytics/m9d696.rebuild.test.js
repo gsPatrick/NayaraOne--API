@@ -8,7 +8,7 @@ const env608 = require('../_helpers/m9d608Env');
 const readModels = require('../../../src/features/analytics/read-models');
 const quality = require('../../../src/features/analytics/quality');
 
-const { addSource, applyCommitted, tableRows, ctxFor, shadowExists } = env608;
+const { addSource, applyCommitted, tableRows, ctxFor, shadowExists, shadowOf } = env608;
 let env;
 let buggy = false;
 
@@ -51,7 +51,7 @@ test('m9d696 check roda sobre a tabela sombra do rebuild', async () => {
   assert.equal(rows.length, 2, 'os dois checks do catálogo rodaram no rebuild');
   assert.ok(rows.every((r) => r.trigger === 'REBUILD' && r.status === 'PASSED' && r.refresh_id === out.refreshId));
   const rec = rows.find((r) => r.check_code === 'soma_saldos');
-  assert.equal(rec.observed.table, `${env.model}__rebuild`, 'lido da sombra, não da tabela atual');
+  assert.equal(rec.observed.table, shadowOf(env), 'lido da sombra, não da tabela atual');
   assert.deepEqual(await tableRows(env, env.tenantA), before1);
 });
 

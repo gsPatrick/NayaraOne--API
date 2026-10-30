@@ -32,7 +32,7 @@ async function diffByKey(def, companyId, transaction) {
     `SELECT count(*) FILTER (WHERE l.k IS NULL)::int AS added,
             count(*) FILTER (WHERE s.k IS NULL)::int AS removed,
             count(*) FILTER (WHERE l.k IS NOT NULL AND s.k IS NOT NULL AND l.c <> s.c)::int AS changed
-       FROM (${side(def.name, 'a')}) l FULL JOIN (${side(shadowName(def.name), 'b')}) s ON l.k = s.k`,
+       FROM (${side(def.name, 'a')}) l FULL JOIN (${side(shadowName(def.name, companyId), 'b')}) s ON l.k = s.k`,
     { replacements: { companyId }, transaction }
   );
   return row;
@@ -41,7 +41,7 @@ async function diffByKey(def, companyId, transaction) {
 /** Diferença completa entre atual e sombra. `different` é verdadeiro se qualquer linha entra, sai ou muda. */
 async function compareWithShadow(def, companyId, transaction) {
   const before = await tableStats(def.name, companyId, transaction);
-  const after = await tableStats(shadowName(def.name), companyId, transaction);
+  const after = await tableStats(shadowName(def.name, companyId), companyId, transaction);
   const delta = await diffByKey(def, companyId, transaction);
   return { before, after, ...delta, different: before.hash !== after.hash || before.rows !== after.rows };
 }
