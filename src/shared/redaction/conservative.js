@@ -10,6 +10,8 @@ const CONSERVATIVE_SECRET_PATTERNS = Object.freeze([
   /\bBearer\s+[A-Za-z0-9._~+/=-]{20,}/i,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/,
   /\b(?:sk|pk|rk)[-_](?:live|test)?[-_]?[A-Za-z0-9]{20,}\b/,
+  /\bsk-(?:(?:ant|proj|svcacct|admin|or-v1)-)?[A-Za-z0-9_-]{16,}/,
+  /\b(?:gsk_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{30,}|xai-[A-Za-z0-9]{20,}|pplx-[A-Za-z0-9]{20,})/,
   /\bgh[pousr]_[A-Za-z0-9]{30,}\b/,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/,
   /\bAIza[0-9A-Za-z_-]{30,}\b/,

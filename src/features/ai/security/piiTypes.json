@@ -15,7 +15,7 @@
     { "tipo": "agencia", "fonte": ["agencyLabeled"], "reversivel": true },
     { "tipo": "pix", "fonte": ["pixLabeled"], "reversivel": true },
     { "tipo": "boleto", "fonte": ["boletoFormatted", "boletoDigits"], "reversivel": true },
-    { "tipo": "token", "fonte": ["pem", "jwt", "bearer", "awsKey", "providerKey", "slackToken", "githubToken", "openAiKey", "assignment", "keywordValue"], "reversivel": false },
+    { "tipo": "token", "fonte": ["pem", "jwt", "bearer", "awsKey", "providerKey", "slackToken", "githubToken", "openAiKey", "googleKey", "modelProviderKey", "assignment", "keywordValue"], "reversivel": false },
     { "tipo": "senha", "fonte": ["connectionPassword", "assignment", "keywordValue"], "reversivel": false },
     { "tipo": "segredo", "fonte": ["chave sensível por nome"], "reversivel": false },
     { "tipo": "restrito", "fonte": ["classificação RESTRICTED"], "reversivel": false }

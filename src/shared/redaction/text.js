@@ -42,6 +42,8 @@ const SECRET_RULES = [
   () => [rx('slackToken'), null, REDACTED],
   () => [rx('githubToken'), null, REDACTED],
   () => [rx('openAiKey', 'gi'), null, REDACTED],
+  () => [rx('googleKey'), null, REDACTED],
+  () => [rx('modelProviderKey'), null, REDACTED],
 ];
 
 const PII_RULES = [

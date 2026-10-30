@@ -20,7 +20,11 @@ const SOURCES = Object.freeze({
   providerKey: '\\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]+',
   slackToken: '\\bxox[baprs]-[A-Za-z0-9-]+',
   githubToken: '\\bghp_[A-Za-z0-9]{20,}',
-  openAiKey: '\\bsk-[a-z0-9]{12,}',
+  // Chaves de provedor de modelo (M9-D027): OpenAI (sk-..., sk-proj-..., sk-svcacct-...), Anthropic (sk-ant-api03-...), OpenRouter (sk-or-v1-...),
+  // Google (AIza...), Groq (gsk_...), Hugging Face (hf_...), xAI (xai-...) e Perplexity (pplx-...). O hífen e o sublinhado fazem parte da chave.
+  openAiKey: '\\bsk-(?:(?:ant|proj|svcacct|admin|or-v1)-)?[A-Za-z0-9_-]{12,}',
+  googleKey: '\\bAIza[0-9A-Za-z_-]{35}',
+  modelProviderKey: '\\b(?:gsk_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{30,}|xai-[A-Za-z0-9]{20,}|pplx-[A-Za-z0-9]{20,})',
   cpfFormatted: '(?<![\\w.])\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}(?![\\w])',
   cpfBare: '(?<![\\w.-])\\d{11}(?![\\w.-])',
   cnpjFormatted: '(?<![\\w.])\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}(?![\\w])',

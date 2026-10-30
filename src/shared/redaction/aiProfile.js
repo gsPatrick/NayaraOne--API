@@ -36,6 +36,8 @@ const RULES = [
   ['slackToken', 'g', null, 'token', 0],
   ['githubToken', 'g', null, 'token', 0],
   ['openAiKey', 'gi', null, 'token', 0],
+  ['googleKey', 'g', null, 'token', 0],
+  ['modelProviderKey', 'g', null, 'token', 0],
   ['pixLabeled', 'gi', (m) => /[\d@]/.test(m[2]), 'pix', 2],
   ['boletoFormatted', 'g', null, 'boleto', 0],
   ['boletoDigits', 'g', null, 'boleto', 0],

@@ -14,13 +14,14 @@ function looksLikeEmbeddedSecret(value) {
     || /:\/\/[^/\s]*:[^@\s]*@/.test(text)
     || new RegExp(`^${SOURCES.jwt}$`).test(text)
     || /^(sk|pk|rk)_(live|test)_/i.test(text)
+    || ['openAiKey', 'googleKey', 'modelProviderKey'].some((name) => new RegExp(`^${SOURCES[name]}$`).test(text))
     || EMBEDDED_SECRET_NAMES.some((name) => rx(name, '').test(text));
 }
 
 /** Texto com segredo reconhecível (Bearer, JWT, PEM, chave de API), em qualquer posição. */
 function containsSecretLike(value) {
   const text = String(value || '');
-  return ['bearer', 'jwt', 'pemHeader', 'openAiKey'].some((name) => rx(name, 'i').test(text));
+  return ['bearer', 'jwt', 'pemHeader', 'openAiKey', 'googleKey', 'modelProviderKey'].some((name) => rx(name, 'i').test(text));
 }
 
 const containsEmail = (value) => rx('emailLoose', '').test(String(value || ''));
