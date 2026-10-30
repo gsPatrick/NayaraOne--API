@@ -4,8 +4,20 @@ const { InvoiceRequest } = require('../../../../models');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { transitionDispatch } = require('../../../integrations/dispatch/dispatch.transition');
 const { sanitizeProviderMessage } = require('../../sanitizeProviderMessage');
-const { callNfse, findDispatch } = require('./nfse.call');
+const { callNfse, enqueueNfse, findDispatch } = require('./nfse.call');
 const { issueDomainObject } = require('./nfse.domain');
+const { installNfseReactions } = require('./nfse.react');
+
+installNfseReactions(); // M9-D220: o estado da nota muda por evento interno do envio, e a emissão tardia vira cancelamento compensatório
+
+/** Pedido de emissão ao Dispatch Service: conteúdo do domínio e chave de idempotência (= o RPS). */
+const issueEnqueueArgs = (a, invoice) => ({
+  ctx: a.ctx, connection: a.connection, operation: 'issueNfse', aggregateId: invoice.id,
+  payload: issueDomainObject({ invoice, rps: a.rps, amount: a.amount, description: a.description, fiscal: a.fiscal, takerTaxId: a.takerTaxId, takerName: a.takerName }), idempotencyKey: a.rps.key,
+});
+
+/** Cria o envio da emissão na transação em que a nota nasce (M9-D220: o pedido ao emissor e o dado do domínio são confirmados ou desfeitos juntos). `a`: ctx, connection, rps, amount, description, fiscal, takerTaxId, takerName. */
+const enqueueIssue = (a, invoice, transaction) => enqueueNfse({ ...issueEnqueueArgs(a, invoice), transaction });
 
 /**
  * Emissão da nota pelo Dispatch Service (M9-D241 3.2): conteúdo minimizado, chave = RPS, chamada feita pelo worker de envios (circuito, cota e nova tentativa do framework) e o
@@ -15,12 +27,12 @@ const { issueDomainObject } = require('./nfse.domain');
  * timeoutMs, withTimeout, NfseTimeoutError, runOwn(fn) e appendEvent(row, rawStatus, normalizedStatus, tx, note) do serviço do Fiscal.
  */
 async function issueViaDispatch(a) {
-  const { ctx, connection, invoiceRequest, rps, transaction } = a;
+  const { ctx, invoiceRequest, transaction } = a;
   let saida;
   try {
     saida = await callNfse({
-      ctx, connection, operation: 'issueNfse', aggregateId: invoiceRequest.id, payload: issueDomainObject({ invoice: invoiceRequest, rps, amount: a.amount, description: a.description, fiscal: a.fiscal, takerTaxId: a.takerTaxId, takerName: a.takerName }),
-      idempotencyKey: rps.key, transaction, useOwn: a.useOwn, timeoutMs: a.timeoutMs, withTimeout: a.withTimeout,
+      ...issueEnqueueArgs(a, invoiceRequest), dispatch: a.dispatchId ? await findDispatch(ctx, a.dispatchId, transaction) : undefined,
+      transaction, useOwn: a.useOwn, timeoutMs: a.timeoutMs, withTimeout: a.withTimeout,
     });
   } catch (err) {
     saida = { state: 'UNCERTAIN', dispatch: null, response: null, error: err };
@@ -61,4 +73,4 @@ async function issueViaDispatch(a) {
   return saida;
 }
 
-module.exports = { issueViaDispatch };
+module.exports = { issueViaDispatch, enqueueIssue };

@@ -1,0 +1,42 @@
+{
+  "provider": "fiscal-sandbox",
+  "apiVersion": "v1",
+  "description": "Emissor de NFS-e de laboratório: a emissão responde SUBMITTED (em processamento), idempotente pelo RPS; a nota só fica autorizada na consulta.",
+  "requests": {
+    "issueNfse": {
+      "rps": {
+        "series": "A",
+        "number": 1
+      },
+      "amount": "1500.00",
+      "service": {
+        "code": "1.01",
+        "description": "Serviço de laboratório"
+      },
+      "taxes": {
+        "issRatePct": 5
+      },
+      "taker": {
+        "document": "00000000000",
+        "name": "Tomador de laboratório"
+      }
+    },
+    "getNfseStatus": {
+      "externalResourceIdFrom": "issueNfse"
+    },
+    "cancelNfse": {
+      "externalResourceIdFrom": "issueNfse"
+    }
+  },
+  "statuses": {
+    "SUBMITTED": "PROCESSING",
+    "PROCESSING": "PROCESSING",
+    "AUTHORIZED": "AUTHORIZED",
+    "ISSUED": "AUTHORIZED",
+    "REJECTED": "REJECTED",
+    "CANCELED": "CANCELED",
+    "CANCELLED": "CANCELED"
+  },
+  "unknownStatus": "em_fila_da_prefeitura",
+  "renewal": false
+}

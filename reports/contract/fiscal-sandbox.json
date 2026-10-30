@@ -1,0 +1,91 @@
+{
+  "provider": "fiscal-sandbox",
+  "domain": "FISCAL",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T09:54:07.707Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "issueNfse",
+    "getNfseStatus",
+    "cancelNfse"
+  ],
+  "adapterHash": "52d0c2e7edffc1a919244d5e341c6735224aad2cb17ebc16b4730abc8f737187",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 10,
+      "passed": 10,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 71,
+  "passed": 71,
+  "status": "PASSED",
+  "errors": []
+}

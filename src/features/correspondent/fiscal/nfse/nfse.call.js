@@ -26,6 +26,14 @@ registerCallObserver(({ dispatch, error, response }) => {
 const runnerOf = (ctx, transaction, useOwn) => (fn) => (useOwn || !transaction ? tenantTx(ctx, fn) : sequelize.transaction({ transaction }, fn));
 const findDispatch = (ctx, id, t) => IntegrationDispatch.findOne({ where: { id, companyId: ctx.companyId }, transaction: t });
 
+/** Cria o envio no Dispatch Service (`enqueue`, conteúdo minimizado) NA transação informada: o envio nasce junto com o dado do domínio (M9-D220 3.1 item 3). Devolve a linha do envio. */
+async function enqueueNfse({ ctx, connection, operation, aggregateId, payload, idempotencyKey, transaction }) {
+  const { dispatch } = await dispatchService.enqueue({
+    companyId: ctx.companyId, connectionId: connection.id, operation, aggregateType: 'InvoiceRequest', aggregateId, payload, idempotencyKey, userId: ctx.userId || null, transaction,
+  });
+  return dispatch;
+}
+
 /**
  * callNfse — o pedido ao emissor pelo Dispatch Service (M9-D241 3.2): `enqueue` com o conteúdo minimizado e a chave informada, e a chamada feita pelo worker de envios (circuito, cota e
  * nova tentativa do framework), esperando no máximo o tempo do Fiscal (`withTimeout`). Devolve { dispatch, response, state }: state OK (o emissor respondeu), UNCERTAIN (tempo esgotado ou
@@ -35,10 +43,8 @@ const findDispatch = (ctx, id, t) => IntegrationDispatch.findOne({ where: { id, 
 async function callNfse(args) {
   const { ctx, connection, operation, aggregateId, payload, idempotencyKey, transaction, useOwn, timeoutMs, withTimeout } = args;
   const run = runnerOf(ctx, transaction, useOwn);
-  const { dispatch: criado } = await run((t) => dispatchService.enqueue({
-    companyId: ctx.companyId, connectionId: connection.id, operation, aggregateType: 'InvoiceRequest', aggregateId, payload, idempotencyKey, userId: ctx.userId || null, transaction: t,
-  }));
-  let dispatch = criado;
+  // O envio da emissão já pode ter nascido junto com a nota, na mesma transação (M9-D220: `args.dispatch`); os demais pedidos nascem aqui.
+  let dispatch = args.dispatch || await run((t) => enqueueNfse({ ctx, connection, operation, aggregateId, payload, idempotencyKey, transaction: t }));
   if (['PENDING', 'RETRY_WAIT'].includes(dispatch.status)) {
     await run((t) => transitionDispatch(ctx, dispatch.id, 'SENDING', {}, { motivo: 'Envio pego pelo fluxo de NFS-e do Correspondente.' }, t));
     let r;
@@ -67,4 +73,4 @@ async function callNfse(args) {
 /** Falha do emissor como erro de negócio, sem expor o corpo da resposta. */
 const issuerQueryFailed = () => AppError.unprocessable('O emissor não respondeu a tempo. A nota continua como está; tente consultar de novo.', 'NFSE_ISSUER_QUERY_FAILED');
 
-module.exports = { callNfse, issuerQueryFailed, findDispatch };
+module.exports = { callNfse, enqueueNfse, issuerQueryFailed, findDispatch };

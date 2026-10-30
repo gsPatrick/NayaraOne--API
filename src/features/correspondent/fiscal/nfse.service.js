@@ -6,7 +6,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { ensureFiscalConnection, adapterVersionOf } = require('./nfse/nfse.connection');
 const { allocateRps } = require('./nfse/nfse.rps');
-const { issueViaDispatch } = require('./nfse/nfse.issue');
+const { issueViaDispatch, enqueueIssue } = require('./nfse/nfse.issue');
 const { queryInvoiceStatus, lookupIssuance, settleIssuanceDispatch, finishIssuanceDispatch, cancelAtIssuer } = require('./nfse/nfse.ops');
 const { storeInvoiceFiles } = require('./nfse/nfse.files');
 const { readNfseParams } = require('./nfse/nfse.params');
@@ -76,7 +76,8 @@ async function runOwnTx(groupId, companyId, fn) {
     return fn(ownTx);
   });
 }
-const useOwnTx = () => process.env.NODE_ENV !== 'test';
+// `NFSE_FORCE_OWN_TX=1` liga o caminho de produção (transação própria) também no teste, para provar que a nota e o envio ao emissor nascem na mesma transação (M9-D220).
+const useOwnTx = () => process.env.NODE_ENV !== 'test' || process.env.NFSE_FORCE_OWN_TX === '1';
 
 /**
  * requestInvoice — Marco 8 Fase 12. Emite uma NFS-e para uma origem genérica (ex: uma comissão
@@ -172,15 +173,19 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
     attemptNumber: attempt, amount, description, rpsSeries: r.series, rpsNumber: r.number, issuerKey: r.key, createdBy: actorUserId || null, updatedBy: actorUserId || null,
   });
   let invoiceRequest;
+  let issueDispatchId = null;
   try {
     if (useOwnTx()) {
-      const createdId = await runOwnTx(groupId, companyId, async (ownTx) => {
+      const criada = await runOwnTx(groupId, companyId, async (ownTx) => {
         rps = await allocateRps(ctx, rpsSeries, ownTx);
         const created = await InvoiceRequest.create(valuesWith(rps), { transaction: ownTx });
         await appendInvoiceEvent(created, 'REQUESTED', 'REQUESTED', ownTx);
-        return created.id;
+        // M9-D220: o pedido ao emissor nasce na MESMA transação da nota (os dois são confirmados juntos; nunca há nota REQUESTED sem o envio que a leva ao emissor).
+        const envio = await enqueueIssue({ ctx, connection, rps, amount, description, fiscal, takerTaxId, takerName }, created, ownTx);
+        return { id: created.id, dispatchId: envio.id };
       });
-      invoiceRequest = await InvoiceRequest.findByPk(createdId, { transaction });
+      issueDispatchId = criada.dispatchId;
+      invoiceRequest = await InvoiceRequest.findByPk(criada.id, { transaction });
     } else {
       // Savepoint: dois pedidos simultâneos para a mesma origem não deixam a transação abortada (e o número do RPS volta junto).
       invoiceRequest = await sequelize.transaction({ transaction }, async (savepoint) => {
@@ -199,7 +204,7 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
 
   // O pedido ao emissor entra pelo Dispatch Service (M9-D241 3.2); ver nfse/nfse.issue.js. Resposta incerta vira UNKNOWN, nunca reenvio cego.
   await issueViaDispatch({
-    ctx, connection, invoiceRequest, rps, amount, description, fiscal, takerTaxId, takerName, actorUserId, transaction, useOwn: useOwnTx(), timeoutMs: NFSE_TIMEOUT_MS, withTimeout, NfseTimeoutError,
+    ctx, connection, invoiceRequest, rps, amount, description, fiscal, takerTaxId, takerName, actorUserId, transaction, dispatchId: issueDispatchId, useOwn: useOwnTx(), timeoutMs: NFSE_TIMEOUT_MS, withTimeout, NfseTimeoutError,
     runOwn: (fn) => runOwnTx(groupId, companyId, fn), appendEvent: appendInvoiceEvent,
   });
 

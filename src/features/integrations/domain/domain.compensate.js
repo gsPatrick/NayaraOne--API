@@ -13,9 +13,10 @@ const COMPENSATIONS = Object.freeze({
 /**
  * compensateDispatch — desfaz por regra de negócio uma operação que o fornecedor JÁ aceitou (ex.: despublicar o anúncio depois da venda): cria um NOVO envio com a operação
  * compensatória sobre o mesmo recurso externo e a mesma connection, na transação do domínio. O envio original nunca é alterado nem apagado (é a prova do que aconteceu). A chave de
- * idempotência é derivada do original: pedir duas vezes devolve o mesmo envio de compensação. Devolve { dispatch, created }.
+ * idempotência é derivada do original: pedir duas vezes devolve o mesmo envio de compensação. `payload` leva o que a operação compensatória exige além do id externo (ex.: o motivo do
+ * cancelamento fiscal). Devolve { dispatch, created }.
  */
-async function compensateDispatch(ctx, dispatchId, { userId = null, transaction }) {
+async function compensateDispatch(ctx, dispatchId, { userId = null, transaction, payload = {} }) {
   const original = await IntegrationDispatch.findOne({ where: { id: dispatchId, companyId: ctx.companyId }, transaction });
   if (!original) throw AppError.notFound('Envio não encontrado.', 'INTEGRATION_DISPATCH_NOT_FOUND');
   const operation = COMPENSATIONS[original.operation];
@@ -25,7 +26,7 @@ async function compensateDispatch(ctx, dispatchId, { userId = null, transaction 
   }
   const r = await dispatchService.enqueue({
     companyId: ctx.companyId, connectionId: original.connectionId, operation, aggregateType: original.aggregateType, aggregateId: original.aggregateId,
-    payload: { externalResourceId: original.externalResourceId }, idempotencyKey: `compensate:${original.id}`, userId, transaction,
+    payload: { ...payload, externalResourceId: original.externalResourceId }, idempotencyKey: `compensate:${original.id}`, userId, transaction,
   });
   if (r.created) {
     await registrarAuditoria({
