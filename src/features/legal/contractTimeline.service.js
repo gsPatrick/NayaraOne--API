@@ -28,6 +28,12 @@ function createdAtOf(record) {
   return record.createdAt || record.get('created_at') || null;
 }
 
+// M9-D809 (AUD-017): `overdueSince` é DATEONLY (AAAA-MM-DD) e o contrato OpenAPI declara `occurredAt` como date-time. A data vira o início desse dia em Brasília (UTC-3).
+function dateOnlyToDateTime(value) {
+  if (!value) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(`${value}T00:00:00-03:00`).toISOString() : value;
+}
+
 function toTime(value) {
   return value ? new Date(value).getTime() : 0;
 }
@@ -70,7 +76,7 @@ async function getContractTimeline(contractId, transaction) {
   for (const collectionCase of collectionCases) {
     items.push({
       type: TYPES.DELINQUENCY,
-      occurredAt: collectionCase.overdueSince || createdAtOf(collectionCase),
+      occurredAt: dateOnlyToDateTime(collectionCase.overdueSince) || createdAtOf(collectionCase),
       referenceId: collectionCase.id,
       summary: `Inadimplência (${collectionCase.status}): saldo em atraso de ${collectionCase.currentBalance}, desde ${collectionCase.overdueSince}`,
     });

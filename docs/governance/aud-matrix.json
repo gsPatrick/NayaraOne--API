@@ -1,0 +1,77 @@
+{
+  "descricao": "Matriz de fechamento AUD-013 a AUD-020 (M9-D809): um achado, uma demanda de origem, o controle do Marco 9, o teste nomeado de regressão e o critério binário. AUD-018 a AUD-020 seguem o padrão de AUD-013 a AUD-017 (o texto literal deles não existe no projeto; regra inferida na seção 3.3 da demanda): se o texto real for outro, só a linha muda. `pendencia` diz o que a linha ainda não prova e de qual demanda posterior depende.",
+  "linhas": [
+    {
+      "aud_id": "AUD-013",
+      "achado": "Vistoria concluída/assinada ainda oferece anexar foto ou vídeo (JUR-007, vistoria assinada é imutável)",
+      "demanda_origem": "M5-D028",
+      "controle_m9": "M9-D842 (contract test) e M9-D840 (breaking change)",
+      "teste": "m9d809 AUD-013 anexar mídia em vistoria assinada devolve 409 e o contrato OpenAPI documenta o 409",
+      "criterio": "a rota responde 409 e o 409 consta no contrato público",
+      "pendencia": null
+    },
+    {
+      "aud_id": "AUD-014",
+      "achado": "Garantia sem rastreio/histórico (JUR-006, garantia rastreável)",
+      "demanda_origem": "demandas de garantia do Marco 5",
+      "controle_m9": "M9-D803 (calendário GUARANTEE)",
+      "teste": "m9d809 AUD-014 garantia substituída mantém histórico e o vencimento aparece no calendário",
+      "criterio": "histórico preservado e item GUARANTEE aberto para a garantia vigente",
+      "pendencia": null
+    },
+    {
+      "aud_id": "AUD-015",
+      "achado": "Só 4 tipos de contrato; a cliente cobrou os 12 (JUR-003)",
+      "demanda_origem": "M5-D001",
+      "controle_m9": "M9-D840 (enum fechado no contrato)",
+      "teste": "m9d809 AUD-015 o contrato OpenAPI lista os 12 tipos de contrato e remover um é breaking change",
+      "criterio": "enum com os 12 tipos e lint reprova remoção",
+      "pendencia": null
+    },
+    {
+      "aud_id": "AUD-016",
+      "achado": "Pacote de evidência não reunia todos os anexos (JUR-010, cadeia de custódia)",
+      "demanda_origem": "M5-D040 e M5-D046",
+      "controle_m9": "M9-D920 (anexos herdam classificação) e M9-D822 (download com guard)",
+      "teste": "m9d809 AUD-016 anexo RESTRICTED do dossiê exige MFA e justificativa para baixar",
+      "criterio": "download RESTRICTED recusa sem MFA e gera export_job",
+      "pendencia": "A rota de download do anexo do dossiê (GET /files/:id/content e a exportação do dossiê) ainda não chama o guard da DLP: isso é a herança de classificação da M9-D920. O teste prova o guard da M9-D821/D822 sobre o anexo (kind DOWNLOAD)."
+    },
+    {
+      "aud_id": "AUD-017",
+      "achado": "Sem linha do tempo consolidada do contrato (JUR-012)",
+      "demanda_origem": "M5-D043",
+      "controle_m9": "M9-D842 (contract test da timeline)",
+      "teste": "m9d809 AUD-017 a timeline do contrato reúne aditivo, notificação e inadimplência e segue o esquema do contrato",
+      "criterio": "resposta válida contra o OpenAPI com os três tipos de evento",
+      "pendencia": null
+    },
+    {
+      "aud_id": "AUD-018",
+      "achado": "Exclusão destrutiva de prova ou documento jurídico (JUR-011, \"Processos, contratos, assinaturas, vistorias e provas críticas não são apagados\")",
+      "demanda_origem": "M5-D045, M5-D034 e M5-D039",
+      "controle_m9": "M9-D912 (legal hold prevalece no descarte) e M9-D852 (inventário de ações destrutivas sem rota de exclusão física desses recursos)",
+      "teste": "m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma rota de exclusão física dele existe no inventário",
+      "criterio": "registro de contrato, assinatura, vistoria ou prova crítica aparece em `blocked_by_hold` e o inventário de ações destrutivas de M9-D852 não lista rota de exclusão física desses recursos",
+      "pendencia": "A metade do descarte (retention apply pulando o registro em `blocked_by_hold`) depende da M9-D911/M9-D912, que ainda não foram entregues. O teste prova a metade que existe: nenhuma rota nem serviço de exclusão física e o inventário da M9-D852."
+    },
+    {
+      "aud_id": "AUD-019",
+      "achado": "Contrato misturado entre empresas (JUR-013, \"Contrato pertence à empresa correta e não mistura documentos/financeiro\")",
+      "demanda_origem": "M5-D007 e M5-D001",
+      "controle_m9": "M9-D800 (RLS FORCE nas tabelas de governança) e M9-D822 (download com guard)",
+      "teste": "m9d809 AUD-019 usuário da empresa A não lê nem baixa anexo de contrato da empresa B",
+      "criterio": "a leitura e o download do anexo da empresa B pela empresa A devolvem 404 e zero linhas",
+      "pendencia": null
+    },
+    {
+      "aud_id": "AUD-020",
+      "achado": "Contrato, assinatura, chave e prazo sem evento (JUR-014, \"Evento como integração\")",
+      "demanda_origem": "M5-D042",
+      "controle_m9": "M9-D802 (projetor do calendário consome os eventos) e M9-D803 (fontes de obras e garantias)",
+      "teste": "m9d809 AUD-020 evento de contrato assinado, chaves entregues e prazo gera item de calendário uma única vez, mesmo em replay",
+      "criterio": "um evento de cada tipo cria exatamente um item e o replay não duplica",
+      "pendencia": "No livro as chaves entregues (`keys.delivered`) não são fonte do calendário: o evento é publicado uma vez e o replay não cria item; o contrato assinado (renovação) e o prazo criam um item cada. Se a auditora quiser um item de calendário para a entrega de chaves, é demanda nova (DI-D809-2)."
+    }
+  ]
+}
