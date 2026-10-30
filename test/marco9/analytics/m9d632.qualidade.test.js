@@ -5,6 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sc = require('../_helpers/m9d632Scenario');
+const { storedDimension } = require('../_helpers/biStoredSnapshot');
 
 const { src } = sc;
 let env;
@@ -69,7 +70,8 @@ test('m9d632 prop.without_sale_by_period fica DEGRADED com valor nulo quando a r
   const bad = await run('prop.without_sale_by_period', 'rm_property_portfolio');
   assert.equal(bad.status, 'DEGRADED');
   assert.ok(isNull(bad.value));
-  assert.equal(Number((await sc.readKpi(env.cX, 'prop.without_sale_by_period', { dimensionKey: 'sem_data' })).value), 1, 'o imóvel é contado em "Sem data"');
+  assert.ok(isNull((await sc.readKpi(env.cX, 'prop.without_sale_by_period', { dimensionKey: 'sem_data' })).value), 'a API nunca devolve número de KPI DEGRADED, nem o de uma dimensão (M9-D697)');
+  assert.equal(Number(await storedDimension(env, env.cX, 'prop.without_sale_by_period', 'sem_data', sc.TODAY)), 1, 'o snapshot gravado conta o imóvel em "Sem data"');
   await wipe(['real_estate.property_offers', 'real_estate.properties']);
 });
 
