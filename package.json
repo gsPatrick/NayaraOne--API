@@ -32,6 +32,7 @@
     "guard:sprint-gates": "node scripts/analytics/checkSprintGates.js",
     "guard:ai-sprint": "node scripts/ai-sprint-gate.js",
     "dod:bi": "node scripts/analytics/checkDod.js",
+    "dod:integracoes": "node scripts/integrationDod.js",
     "check:lineage": "node scripts/checkLineageCoverage.js",
     "sync:lineage": "node scripts/withDisposableDb.js -- node scripts/syncLineageRegistry.js",
     "scan:secrets": "node scripts/secretScan.js",
