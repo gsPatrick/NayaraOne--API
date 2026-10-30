@@ -25,6 +25,8 @@ function renderizar(resultado) {
   const err = [];
   for (const p of resultado.perguntas) {
     out.push(`${p.texto} ${p.resposta}`);
+    // A condição do livro (homologação por provider) sai sempre, também quando a resposta é NÃO.
+    if (p.condicao && !p.ok) out.push(`  Condição: ${p.condicao}`);
     for (const v of p.verificacoes) {
       out.push(`  ${v.ok ? 'OK   ' : 'FALTA'} ${v.nome}`);
       v.detalhes.slice(0, 20).forEach((d) => out.push(`         - ${d}`));

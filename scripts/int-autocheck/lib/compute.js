@@ -24,7 +24,7 @@ function compute({ escopo = 'integracoes', ambiente } = {}) {
   const perguntas = esc.perguntas.map((n) => {
     const verificacoes = CALCULO[n](amb, esc);
     const ok = verificacoes.every((v) => v.ok);
-    return { n, texto: PERGUNTAS[n].texto, ok, resposta: ok ? respostaSim(n, esc, amb) : 'NÃO.', verificacoes };
+    return { n, texto: PERGUNTAS[n].texto, ok, resposta: ok ? respostaSim(n, esc, amb) : 'NÃO.', verificacoes, ...(n === 2 ? { condicao: condicao(amb) } : {}) };
   });
   return { escopo: esc.nome, titulo: esc.titulo, ok: perguntas.every((p) => p.ok), perguntas };
 }

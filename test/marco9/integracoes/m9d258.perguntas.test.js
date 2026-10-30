@@ -82,6 +82,7 @@ test('autocheck_blindado_nao_quando_adversarial_ou_guarda_vermelho', () => {
   arq[3] = [arq[3][0], 'fail'];
   const adv = rodar({ relatorioOffline: () => relatorio });
   assert.equal(pergunta(adv, 2).ok, false);
+  assert.match(renderizar(adv).stdout, /Está blindado\? NÃO\.\n {2}Condição: condicionado a homologação por provider: 2 de 14 famílias .*homologação pendente: email-sandbox, site-sandbox\n/, 'a condição sai também na resposta NÃO');
   assert.ok(pergunta(adv, 2).verificacoes[0].detalhes[0].includes(`${arq[3][0]} vermelho`));
   assert.match(renderizar(adv).stderr, /INTEGRATION_DOD_AUTOCHECK_FAILED Não está blindado: os 18 testes adversariais do manifesto \(D251\/D252\) vermelho\./);
   assert.equal(renderizar(adv).code, 1);

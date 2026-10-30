@@ -20,6 +20,15 @@ const estado = (c, consultado, liberados) => ({
   liberados: [...liberados].sort(), naoLiberados: c.codigos.filter((p) => !liberados.has(p)),
 });
 
+/** Empresas do banco descartável, lidas com o usuário dono do cluster (DATABASE_ADMIN_URL do withDisposableDb): o usuário do runtime só enxerga a empresa do contexto (RLS). */
+async function empresasDoCluster() {
+  const url = process.env.DATABASE_ADMIN_URL;
+  if (!url || !LOOPBACK.has(new URL(url).hostname)) return null;
+  const { Sequelize } = require('sequelize');
+  const admin = new Sequelize(url, { dialect: 'postgres', logging: false });
+  try { return await admin.query('SELECT id, group_id FROM core.companies', { type: 'SELECT' }); } finally { await admin.close().catch(() => {}); }
+}
+
 async function consultarPortao(base) {
   const c = catalogo(base);
   if (process.env.DISPOSABLE_DB !== '1') return estado(c, false, new Set());
@@ -28,7 +37,8 @@ async function consultarPortao(base) {
   const { listReleaseStates } = require(path.join(base, 'src/features/integrations/registry/releaseGate'));
   const liberados = new Set();
   try {
-    const empresas = await sequelize.query('SELECT id, group_id FROM core.companies', { type: 'SELECT' });
+    const empresas = await empresasDoCluster();
+    if (!empresas) return estado(c, false, new Set());
     for (const e of empresas) {
       await sequelize.transaction(async (transaction) => {
         await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: e.group_id }, transaction });
@@ -39,8 +49,6 @@ async function consultarPortao(base) {
     }
   } catch (err) {
     return estado(c, false, new Set());
-  } finally {
-    await sequelize.close().catch(() => {});
   }
   return estado(c, true, liberados);
 }
