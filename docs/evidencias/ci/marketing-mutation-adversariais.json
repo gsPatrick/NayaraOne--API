@@ -1,0 +1,87 @@
+{
+  "grupo": "adversariais",
+  "geradoEm": "2026-10-30T21:24:17.610Z",
+  "resultado": "TODAS_MORTAS",
+  "mutacoes": [
+    {
+      "id": "adv_01",
+      "teste": "adv_01_opt_out_recebe_automacao_bloqueado.test.js",
+      "mutacao": "canSend deixa de barrar a supressão e o opt-out",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  + actual - expected"
+    },
+    {
+      "id": "adv_02a",
+      "teste": "adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js",
+      "mutacao": "a chave da run passa a ser diferente a cada chamada",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: uma única tarefa"
+    },
+    {
+      "id": "adv_02b",
+      "teste": "adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js",
+      "mutacao": "o agendamento deixa de reaproveitar o job da mesma chave",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "Error [AppError]: Já existe uma publicação ativa desta versão neste canal.\n      at mktError (/private/var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/mkt-mutacao-yh3giJ/src/features/marketing/marketi"
+    },
+    {
+      "id": "adv_03",
+      "teste": "adv_03_imovel_sem_dado_ia_nao_inventa.test.js",
+      "mutacao": "o validador factual deixa de apontar dado inexistente",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: a área citada não existe no cadastro\n      at /private/var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/mkt-mutacao-Ud0Frv/test/marco9/marketing/adversarial/adv_03_imove"
+    },
+    {
+      "id": "adv_04",
+      "teste": "adv_04_ocorrencia_interna_nao_entra_em_conteudo.test.js",
+      "mutacao": "a segunda barreira entrega o payload sem sanitizar",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: o canal não recebe a chave"
+    },
+    {
+      "id": "adv_05a",
+      "teste": "adv_05_template_muda_apos_approval_invalida.test.js",
+      "mutacao": "a aprovação nunca é considerada invalidada ao agendar",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "TypeError: Cannot read properties of undefined (reading 'statusCode')\n      at /private/var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/mkt-mutacao-1RCFWh/test/marco9/marketing/adversarial/adv_05_temp"
+    },
+    {
+      "id": "adv_05b",
+      "teste": "adv_05_template_muda_apos_approval_invalida.test.js",
+      "mutacao": "o worker deixa de conferir a versão corrente e o hash aprovado",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: job cancelado\n  + actual - expected"
+    },
+    {
+      "id": "adv_06",
+      "teste": "adv_06_frequency_cap_excedido_bloqueia.test.js",
+      "mutacao": "o frequency cap nunca bloqueia",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
+    },
+    {
+      "id": "adv_07",
+      "teste": "adv_07_kill_switch_ativo_nenhuma_acao_outbound.test.js",
+      "mutacao": "o kill switch nunca bloqueia",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected"
+    },
+    {
+      "id": "adv_08",
+      "teste": "adv_08_provider_timeout_nao_duplica_post.test.js",
+      "mutacao": "o timeout volta o job a PENDING (retry cego) em vez de UNKNOWN",
+      "reprovou": true,
+      "falhas": 1,
+      "motivo": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  + actual - expected"
+    }
+  ]
+}

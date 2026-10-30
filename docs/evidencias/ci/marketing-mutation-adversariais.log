@@ -1,0 +1,12 @@
+controle: a cópia sem mutação passa (1 teste(s)).
+MORTA    adv_01 (adv_01_opt_out_recebe_automacao_bloqueado.test.js): canSend deixa de barrar a supressão e o opt-out -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:]
+MORTA    adv_02a (adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js): a chave da run passa a ser diferente a cada chamada -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: uma única tarefa]
+MORTA    adv_02b (adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js): o agendamento deixa de reaproveitar o job da mesma chave -> 1 teste(s) reprovado(s) [Error [AppError]: Já existe uma publicação ativa desta versão neste canal.]
+MORTA    adv_03 (adv_03_imovel_sem_dado_ia_nao_inventa.test.js): o validador factual deixa de apontar dado inexistente -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a área citada não existe no cadastro]
+MORTA    adv_04 (adv_04_ocorrencia_interna_nao_entra_em_conteudo.test.js): a segunda barreira entrega o payload sem sanitizar -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: o canal não recebe a chave]
+MORTA    adv_05a (adv_05_template_muda_apos_approval_invalida.test.js): a aprovação nunca é considerada invalidada ao agendar -> 1 teste(s) reprovado(s) [TypeError: Cannot read properties of undefined (reading 'statusCode')]
+MORTA    adv_05b (adv_05_template_muda_apos_approval_invalida.test.js): o worker deixa de conferir a versão corrente e o hash aprovado -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: job cancelado]
+MORTA    adv_06 (adv_06_frequency_cap_excedido_bloqueia.test.js): o frequency cap nunca bloqueia -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:]
+MORTA    adv_07 (adv_07_kill_switch_ativo_nenhuma_acao_outbound.test.js): o kill switch nunca bloqueia -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:]
+MORTA    adv_08 (adv_08_provider_timeout_nao_duplica_post.test.js): o timeout volta o job a PENDING (retry cego) em vez de UNKNOWN -> 1 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:]
+MUTATION CHECK: as 10 mutações foram detectadas.

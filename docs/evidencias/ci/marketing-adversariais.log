@@ -1,0 +1,27 @@
+✔ adv_01_opt_out_recebe_automacao_bloqueado (181.440125ms)
+(node:81976) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ adv_02_mesmo_evento_2x_uma_mensagem_ou_post: evento repetido e vindo de duas conexões gera 1 run e 1 mensagem (565.3745ms)
+✔ adv_02_mesmo_evento_2x_uma_mensagem_ou_post: o mesmo post agendado duas vezes gera 1 job e 1 post no sandbox (463.244333ms)
+✔ adv_03_imovel_sem_dado_ia_nao_inventa (488.339834ms)
+✔ adv_04_ocorrencia_interna_nao_entra_em_conteudo: payload da NAY, texto, fatos e entrega ao canal (415.357625ms)
+✔ adv_04_ocorrencia_interna_nao_entra_em_conteudo: texto de saída que cita a ocorrência é reprovado (68.934667ms)
+(node:82299) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ adv_05_template_muda_apos_approval_invalida: tentar agendar recusa, volta a PENDING_APPROVAL e cancela os jobs (427.107333ms)
+✔ adv_05_template_muda_apos_approval_invalida: o job já agendado é cancelado e nada é publicado (249.064125ms)
+✔ adv_06_frequency_cap_excedido_bloqueia (217.087458ms)
+(node:82388) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ adv_07_kill_switch_ativo_nenhuma_acao_outbound: lead novo, publicação agendada e step de campanha (1062.434334ms)
+(node:82543) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ adv_08_provider_timeout_nao_duplica_post (790.572459ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22993.904625
