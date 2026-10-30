@@ -68,7 +68,7 @@ async function seedRule(env, tenant, { op = '<', limit = 50000, published = true
     { replacements: { g: tenant.groupId, c: tenant.companyId, code } });
   const [[version]] = await env.admin.query(
     `INSERT INTO core.rule_versions (id, group_id, company_id, rule_id, version_number, condition_ast_json, content_hash, action_json, effective_from, status)
-     VALUES (gen_random_uuid(), :g, :c, :r, 1, CAST(:ast AS jsonb), :h, '{}', now() - interval '1 day', :s) RETURNING id`,
+     VALUES (gen_random_uuid(), :g, :c, :r, 1, CAST(:ast AS jsonb), :h, '{}', TIMESTAMPTZ '2020-01-01T00:00:00Z', :s) RETURNING id`,
     { replacements: { g: tenant.groupId, c: tenant.companyId, r: rule.id, ast: JSON.stringify({ fact: 'value', op, value: limit }), h: sha(code), s: published ? 'PUBLISHED' : 'DRAFT' } });
   await env.admin.query(
     "INSERT INTO core.rule_scopes (id, group_id, company_id, rule_version_id, scope_type, scope_ref_id, precedence) VALUES (gen_random_uuid(), :g, :c, :v, 'GLOBAL', NULL, 7)",
