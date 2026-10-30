@@ -1,0 +1,4 @@
+{
+  "descricao": "Exceções aprovadas das guardas do 'Não improvisar' (M9-D257). A lista COMEÇA VAZIA e adicionar um item exige a aprovação do Patrick registrada no próprio item: { rule, file, line (opcional), reason, approvedBy }. Item sem approvedBy reprova a esteira.",
+  "excecoes": []
+}

@@ -20,6 +20,11 @@
         [
           "npm",
           "run",
+          "guard:nao-improvisar"
+        ],
+        [
+          "npm",
+          "run",
           "guard:file-size"
         ]
       ]
