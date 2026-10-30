@@ -71,4 +71,4 @@ async function assertLocalLoginAllowed(tenant, access, transaction) {
   return { allowed: true, viaFallback: true, reason: estado.reason };
 }
 
-module.exports = { verifyToken, assertLocalLoginAllowed, ensureIdentityRegistered };
+module.exports = { verifyToken, assertLocalLoginAllowed, ensureIdentityRegistered, localAdapterFor: localAdapter };

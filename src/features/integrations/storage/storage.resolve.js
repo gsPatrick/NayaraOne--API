@@ -31,9 +31,16 @@ const builtinCtx = (providerCode) => Object.freeze({
  * Qual armazenamento a empresa usa (M9-D242): a connection ACTIVE da família STORAGE (a mais antiga, ou a do driver padrão se houver mais de uma); sem nenhuma, o driver
  * embutido configurado em `integration.storage.default_provider` (padrão: o disco do servidor, o que o sistema já usava). Devolve { adapter, ctx, connection, params }.
  */
-async function resolveStorage(tenant, transaction) {
+async function resolveStorage(tenant, transaction, target = null) {
   ensureStorageRegistered();
   const params = await readStorageParams(tenant, transaction);
+  // Objeto já gravado: vai ao driver que o gravou (a connection, mesmo parada pela troca de fornecedor, ou o driver embutido), nunca ao que está ativo hoje.
+  if (target && (target.connectionId || target.providerCode)) {
+    const pinned = target.connectionId ? await IntegrationConnection.findOne({ where: { id: target.connectionId, companyId: tenant.companyId }, transaction }) : null;
+    if (pinned) return { adapter: await adapterRegistry.resolve(pinned, tenant, transaction), connection: pinned, params };
+    const adapter = adapterRegistry.instantiate(target.providerCode || 'storage-local-disk');
+    if (adapter) { adapter.ctx = builtinCtx(adapter.providerCode()); return { adapter, connection: null, params }; }
+  }
   const codes = await storageCodes(transaction);
   const ativas = await IntegrationConnection.findAll({
     where: { companyId: tenant.companyId, environment: getServerEnvironment(), status: 'ACTIVE', providerCode: codes }, order: [['created_at', 'ASC'], ['id', 'ASC']], transaction,

@@ -13,6 +13,10 @@ const storage = require('../../../src/features/integrations/storage');
 const diskStorage = require('../../../src/utils/diskStorage');
 const { verifySandboxUrl } = require('../../../src/features/integrations/providers/storage/storage.signedUrl');
 const sbxStore = require('../../../src/features/integrations/providers/storage/sandbox/storage.sandbox.store');
+const authService = require('../../../src/features/auth/auth.service');
+const identity = require('../../../src/features/integrations/identity');
+const registry = require('../../../src/features/integrations/registry/registry.service');
+const { swapProvider } = require('../../../src/features/integrations/swap');
 
 const { sequelize, comTenant } = env;
 let tenant;
@@ -30,7 +34,7 @@ before(async () => { ({ tenant, outro } = await env.carregarTenants()); storage.
 beforeEach(async () => { await env.limparConfig(tenant, KEYS); await env.semConexoes(tenant, 'STORAGE'); });
 after(async () => { await env.limparConfig(tenant, KEYS); await env.semConexoes(tenant, 'STORAGE'); await sequelize.close(); });
 
-test('arquivos_e_login_regressao_verde_upload_e_download_pelo_port_no_disco_local', async () => {
+test('arquivos_pelo_port_gravam_cifrado_no_layout_de_sempre_e_bloqueiam_adulteracao', async () => {
   const file = await enviar();
   assert.ok(file.storageKey.startsWith(`contracts/${tenant.groupId}/`), 'o storageKey continua sendo o caminho relativo de sempre (o controle de acesso por categoria depende dele)');
   const emDisco = path.join(diskStorage.UPLOADS_ROOT, file.storageKey);
@@ -142,4 +146,38 @@ test('arquivos_rollback_remove_o_objeto_orfao', async () => {
   }).catch(async (err) => { for (const l of err.limpezas) await l(); throw err; }), /falha depois do upload/);
   assert.ok(!fs.existsSync(path.join(diskStorage.UPLOADS_ROOT, storageKey)), 'a compensação apagou o objeto e o hash dele');
   assert.ok(!fs.existsSync(`${path.join(diskStorage.UPLOADS_ROOT, storageKey)}.meta`));
+});
+
+test('arquivos_e_login_regressao_verde', async () => {
+  // Arquivos: o envio e o download do serviço de arquivos passam pelo port e devolvem o conteúdo original.
+  const file = await enviar();
+  assert.deepEqual((await baixar(file.id)).content, PDF);
+  assert.equal(file.scanStatus, 'CLEAN');
+  // Login: o login local de sempre (sem provedor externo) entrega tokens que o adapter identity-local valida.
+  assert.ok(process.env.CI_TENANT_USERS_PASSWORD, 'o teste precisa do seed de dois tenants');
+  const ciA = await env242.tenantCiA();
+  const sessao = await authService.login({ email: ciA.email, password: ciA.password, companyId: ciA.companyId });
+  assert.ok(sessao.accessToken && sessao.refreshToken);
+  const v = await comTenant(ciA, (t) => identity.verifyToken(ciA, sessao.accessToken, t));
+  assert.equal(v.provider, 'identity-local');
+  assert.equal(v.subject, ciA.userId);
+  // Sessão revogada pelo adapter: o token deixa de valer na mesma hora.
+  await comTenant(ciA, (t) => require('../../../src/features/integrations/registry/adapterInvoke').invoke(
+    require('../../../src/features/integrations/identity/identity.service').localAdapterFor(), 'revokeSession', { sessionId: sessao.sessionId }, { meta: { transaction: t } },
+  ));
+  await assert.rejects(comTenant(ciA, (t) => identity.verifyToken(ciA, sessao.accessToken, t)), (e) => e.code === 'INTEGRATION_IDENTITY_TOKEN_INVALID');
+});
+
+test('storage_troca_de_driver_pela_suite_de_troca_d221', async () => {
+  // A empresa grava no sandbox; a troca de fornecedor (D221) leva a connection ativa para o disco local sem tocar o domínio de arquivos.
+  const origem = await env.conexaoDe(tenant, 'storage-sandbox');
+  const destino = await comTenant(tenant, (t) => registry.createConnection({ providerCode: 'storage-local-disk', environment: 'SANDBOX', label: `QA-M9 ${env.uniqueSuffix()}` }, env.ctxDe(tenant), t));
+  const antes = await enviar();
+  assert.ok(!fs.existsSync(path.join(diskStorage.UPLOADS_ROOT, antes.storageKey)), 'antes da troca o arquivo está no sandbox');
+  const r = await comTenant(tenant, (t) => swapProvider(env.ctxDe(tenant), { fromConnectionId: origem.id, toConnectionId: destino.id }, t));
+  assert.ok(r);
+  const depois = await enviar();
+  assert.ok(fs.existsSync(path.join(diskStorage.UPLOADS_ROOT, depois.storageKey)), 'depois da troca o arquivo novo vai ao disco local');
+  assert.deepEqual((await baixar(depois.id)).content, PDF);
+  assert.deepEqual((await baixar(antes.id)).content, PDF, 'o arquivo gravado antes continua legível (o driver antigo segue disponível enquanto a troca drena)');
 });

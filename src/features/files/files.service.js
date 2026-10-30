@@ -156,11 +156,11 @@ async function uploadFile(payload, actorUserId, transaction) {
   const storageKey = `${resolveCategory(category)}/${groupId}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
   const tenant = { groupId, companyId, userId: actorUserId || null };
   const objectKey = storage.buildKey(companyId, storageKey);
-  await storage.putObject(tenant, { key: objectKey, body: buffer, contentType: mimeType, sha256: checksumSha256, metadata: { category: resolveCategory(category) } }, transaction);
+  const gravado = await storage.putObject(tenant, { key: objectKey, body: buffer, contentType: mimeType, sha256: checksumSha256, metadata: { category: resolveCategory(category) } }, transaction);
   // O binário já está gravado antes do registro no banco: se a transação voltar (por este ou por um passo
   // seguinte da requisição), o arquivo cifrado órfão é removido.
   if (transaction) {
-    const limpar = await storage.prepareRollbackCleanup(tenant, objectKey, transaction);
+    const limpar = await storage.prepareRollbackCleanup(tenant, objectKey, transaction, { providerCode: gravado.providerCode, connectionId: gravado.connectionId });
     transaction.afterRollbackCleanups = [...(transaction.afterRollbackCleanups || []), limpar];
   }
 
@@ -174,6 +174,8 @@ async function uploadFile(payload, actorUserId, transaction) {
       sizeBytes: buffer.length,
       checksumSha256,
       encryptedAtRest: true,
+      storageProvider: gravado.providerCode,
+      storageConnectionId: gravado.connectionId,
       scanStatus: 'CLEAN',
       scannedAt: new Date(),
       uploadedByUserId: actorUserId || null,
@@ -263,7 +265,8 @@ async function getFileContent(id, transaction, actorUserId, preloadedMetadata) {
     try {
       const lido = await storage.getObject(
         { groupId: metadata.groupId, companyId: metadata.companyId, userId: actorUserId || null },
-        { key: storage.buildKey(metadata.companyId, metadata.storageKey), expectEncrypted: Boolean(metadata.encryptedAtRest) },
+        // Arquivo sem driver gravado (anterior à D242) está no disco local, único armazenamento que existia.
+        { key: storage.buildKey(metadata.companyId, metadata.storageKey), expectEncrypted: Boolean(metadata.encryptedAtRest), providerCode: metadata.storageProvider || 'storage-local-disk', connectionId: metadata.storageConnectionId || undefined },
         transaction
       );
       content = lido.buffer;

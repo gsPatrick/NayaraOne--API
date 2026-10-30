@@ -65,6 +65,9 @@ module.exports = (sequelize) => {
       // Resultado do antivírus no envio (CLEAN) e quando rodou (migration 642).
       scanStatus: { type: DataTypes.STRING(16), allowNull: true, field: 'scan_status' },
       classification: { type: DataTypes.STRING(12), allowNull: true, field: 'classification' },
+      // Onde o objeto foi gravado (M9-D242, migration 690): o fornecedor de armazenamento e a connection da empresa; nulos = disco local (arquivo anterior à D242).
+      storageProvider: { type: DataTypes.STRING(48), allowNull: true, field: 'storage_provider' },
+      storageConnectionId: { type: DataTypes.UUID, allowNull: true, field: 'storage_connection_id' },
       scannedAt: { type: DataTypes.DATE, allowNull: true, field: 'scanned_at' },
       // STOPGAP (ver migration 20260101000173) — binário guardado direto no Postgres enquanto
       // não existe storage de objetos real. Nunca incluído em queries por padrão
