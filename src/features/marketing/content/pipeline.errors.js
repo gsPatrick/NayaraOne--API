@@ -24,6 +24,8 @@ function factCheckFailed(findings, details) {
   // M9-D427: blog educativo sem fonte (ou parágrafo factual sem referência) e blog abaixo da qualidade mínima têm código próprio.
   if (findings.some((f) => f.code === 'MKT_BLOG_SOURCES_REQUIRED')) return blogSourcesRequired(body);
   if (findings.some((f) => f.code === 'MKT_BLOG_QUALITY_FAILED')) return blogQualityFailed(body);
+  if (reasons.has('INTERNAL_REFERENCE')) return mktError(422, 'MKT_INTERNAL_REFERENCE', 'O texto cita ocorrência ou anotação interna, que não pode ir a canal público.', body);
+  if (reasons.has('URL_NOT_ALLOWED')) return mktError(422, 'MKT_URL_NOT_ALLOWED', 'URL externa não permitida.', body);
   if (reasons.has('INJECTION')) return mktError(422, 'MKT_INJECTION_SUSPECT', 'Há instrução suspeita no texto de origem; revisão humana necessária.', body);
   if (reasons.has('MISMATCH') || reasons.has('UNEXPLAINED') || !reasons.has('MISSING')) {
     return mktError(422, 'MKT_FACT_MISMATCH', 'O texto afirma algo diferente do cadastro do imóvel.', body);

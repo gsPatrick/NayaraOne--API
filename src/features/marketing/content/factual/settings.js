@@ -15,6 +15,7 @@ const { fold } = require('./text');
 const TOLERANCE_KEY = 'marketing.factual.tolerancia_area_m2';
 const DICTIONARY_KEY = 'marketing.factual.dicionario_features';
 const PHONES_KEY = 'marketing.factual.telefones_empresa';
+const INTERNAL_TERMS_KEY = 'marketing.factual.termos_internos';
 
 const DEFAULT_DICTIONARY = [
   'piscina: piscinas',
@@ -31,7 +32,11 @@ const DEFAULT_DICTIONARY = [
   'vaga coberta: vagas cobertas, garagem coberta',
 ].join('; ');
 
-const FACTUAL_SETTING_DEFAULTS = Object.freeze({ [TOLERANCE_KEY]: 0, [DICTIONARY_KEY]: DEFAULT_DICTIONARY, [PHONES_KEY]: 'nenhum' });
+const DEFAULT_INTERNAL_TERMS = 'ocorrência, reclamação, anotação interna, observação interna, nota interna, caso aberto, não conformidade';
+const FACTUAL_SETTING_DEFAULTS = Object.freeze({ [TOLERANCE_KEY]: 0, [DICTIONARY_KEY]: DEFAULT_DICTIONARY, [PHONES_KEY]: 'nenhum', [INTERNAL_TERMS_KEY]: DEFAULT_INTERNAL_TERMS });
+
+/** "ocorrência, Reclamação" -> ['ocorrência','reclamação'] (minúsculas, sem vazios nem repetidos). */
+const parseTerms = (text) => [...new Set(String(text || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
 
 const invalid = (key, message, extra) => AppError.badRequest(`O valor de "${key}" ${message}`, 'SETTING_INVALID_VALUE', { key, ...extra });
 
@@ -56,6 +61,7 @@ function parsePhones(text) {
 }
 
 const FACTUAL_SETTINGS_SCHEMA = {
+  [INTERNAL_TERMS_KEY]: { type: 'string', validate: (key, value) => { if (parseTerms(value).length === 0 || String(value).length > 1000) throw invalid(key, 'deve ter ao menos um termo, separados por vírgula (até 1000 caracteres).'); } },
   [TOLERANCE_KEY]: { type: 'integer', min: 0, max: 1000 },
   [DICTIONARY_KEY]: { type: 'string', validate: (key, value) => { parseDictionary(value, key); } },
   [PHONES_KEY]: {
@@ -79,9 +85,10 @@ async function readFactualConfig(tenant, transaction) {
     toleranciaAreaM2: Number.isFinite(tolerance) && tolerance >= 0 ? tolerance : FACTUAL_SETTING_DEFAULTS[TOLERANCE_KEY],
     featureGroups,
     telefonesEmpresa: parsePhones(await getSetting(PHONES_KEY, tenant, transaction, FACTUAL_SETTING_DEFAULTS[PHONES_KEY])),
+    termosInternos: parseTerms(await getSetting(INTERNAL_TERMS_KEY, tenant, transaction, DEFAULT_INTERNAL_TERMS)),
   };
 }
 
 module.exports = {
-  TOLERANCE_KEY, DICTIONARY_KEY, PHONES_KEY, DEFAULT_DICTIONARY, FACTUAL_SETTING_DEFAULTS, FACTUAL_SETTINGS_SCHEMA, parseDictionary, parsePhones, readFactualConfig,
+  TOLERANCE_KEY, DICTIONARY_KEY, PHONES_KEY, INTERNAL_TERMS_KEY, DEFAULT_INTERNAL_TERMS, parseTerms, DEFAULT_DICTIONARY, FACTUAL_SETTING_DEFAULTS, FACTUAL_SETTINGS_SCHEMA, parseDictionary, parsePhones, readFactualConfig,
 };

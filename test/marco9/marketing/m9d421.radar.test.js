@@ -14,12 +14,14 @@ before(async () => { ({ tenantA: A } = await env.prepararTenants()); offVault = 
 after(async () => { offVault(); await sequelize.close(); });
 afterEach(() => agenda.reset());
 
+const { allowTestUrls } = require('../_helpers/mktUrlPolicy');
 const CODE = 'RADAR-NOVO-IMOVEL';
 const inRollback = (fn) => env.withRollbackTenantTransaction(A, fn);
 const radarMessages = async (t, personId) => (await env.outbound(t, personId)).filter((m) => m.purpose === 'RADAR');
 
 /** Empresa pronta: base do endereço público do site (o link rastreável precisa dela) e a automação instalada. */
 async function ready(t) {
+  await allowTestUrls(t, A); // M9-D433: allowlist de URL externa por parâmetro
   await env.setParam(t, A, 'marketing.seo.url_base', 'https://www.exemplo.com.br');
   await env.setParam(t, A, 'marketing.review.url_base_rastreio', 'https://api.exemplo.com.br');
   await env.install(t, A, CODE);

@@ -88,6 +88,7 @@ class SandboxChannelAdapter extends ChannelAdapter {
       case 'HTTP_429': return this.failure(operation, key, 'FAILED', 429, 'HTTP_429', 'Limite de chamadas do canal atingido.', { retryAfterMs: this.retryAfterMs });
       case 'HTTP_5XX': return this.failure(operation, key, 'FAILED', 503, 'HTTP_503', 'Canal indisponível.');
       case 'AUTH_REVOKED': store.revoke(this.scope, this.channel); return this.revokedResult(operation, key);
+      case 'AUTH_EXPIRED': return this.failure(operation, key, 'FAILED', 401, 'AUTH_EXPIRED', 'Credencial do canal expirada.');
       case 'REJECTED': return this.failure(operation, key, 'REJECTED', 422, 'REJECTED', 'O canal recusou o conteúdo.');
       case 'DUPLICATE_KEY': keep(); return this.replay(operation, key, record, true);
       default: throw invalid('Cenário de teste desconhecido.', { campo: 'scenario' });

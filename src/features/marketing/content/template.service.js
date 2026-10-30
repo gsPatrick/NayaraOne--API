@@ -8,6 +8,7 @@ const { readPageLimits } = require('../marketing.pagination');
 const { assertLogoMatchesFile } = require('./template.brandTokens');
 const { assertNoUnknownVariables } = require('./template.variables');
 const { readOfficialChannels } = require('./template.settings');
+const security = require('../security');
 const { templateNotFound, templateVersionOutdated, officialRefRequired } = require('./template.errors');
 
 const ENTITY = 'marketing.template';
@@ -21,6 +22,7 @@ async function createTemplate(tenant, actorUserId, input, transaction) {
   const codeProbe = input && typeof input.code === 'string' ? input.code.trim() : '';
   const inherited = codeProbe ? await repo.latestVersion(codeProbe, transaction) : null;
   const data = parseCreateInput(input, inherited);
+  await security.assertUrlsAllowed(data.body, { tenant, transaction }); // M9-D433: a mesma regra de URL externa do link rastreável
   await assertLogoMatchesFile(data.brandTokens, transaction);
   await repo.lockCode(tenant.companyId, data.code, transaction);
   const latest = await repo.latestVersion(data.code, transaction);

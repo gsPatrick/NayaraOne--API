@@ -47,14 +47,14 @@ async function scheduleDraft(row, ctx, transaction) {
   await stepsService.assertStepsApproved(steps, tenant, transaction);
 
   const recipients = await audienceRepo.countDistinctPersons(audiences, tenant, now, transaction);
-  await assertMassSendAllowed({ recipients, permissions, tenant, transaction });
+  const mass = await assertMassSendAllowed({ recipients, permissions, tenant, transaction });
 
   const frozen = await audienceService.freezeAll(row.id, tenant, actor, now, transaction);
   await stepsRepo.scheduleSteps(row.id, tenant, actor, transaction);
-  const updated = await campaignRepo.update(row.id, { status: 'SCHEDULED' }, actor, transaction);
+  const updated = await campaignRepo.update(row.id, { status: 'SCHEDULED', ...(mass.massConfirmed ? { massConfirmedBy: actor, massConfirmedAt: now } : {}) }, actor, transaction);
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: actor, action: 'marketing.campaign.schedule', entityType: 'marketing.campaign',
-    entityId: row.id, beforeJson: { status: row.status }, afterJson: { status: 'SCHEDULED', audienceSize: frozen, steps: steps.length, startsAt: updated.starts_at, endsAt: updated.ends_at },
+    entityId: row.id, beforeJson: { status: row.status }, afterJson: { status: 'SCHEDULED', massConfirmed: mass.massConfirmed, audienceSize: frozen, steps: steps.length, startsAt: updated.starts_at, endsAt: updated.ends_at },
     reason: `Campanha ${row.code} agendada com ${frozen} destinatário(s) e ${steps.length} step(s).`,
   }, transaction);
   return { row: updated, audienceSize: frozen };

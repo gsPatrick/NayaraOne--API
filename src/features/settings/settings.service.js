@@ -20,6 +20,7 @@ const { WORKER_SETTINGS_SCHEMA } = require('../../features/marketing/publication
 const { LEAD_PARAMS_SCHEMA } = require('../../features/marketing/automations/leadParams');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
+const { URL_SETTINGS_SCHEMA } = require('../../features/marketing/security/url.settings');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
@@ -254,6 +255,8 @@ const SETTINGS_SCHEMA = {
   ...SUPPRESSION_SETTINGS_SCHEMA,
   // Marco 9, M9-D427 — SEO do site (política de página vendida/removida, dias, URL base) e blog educativo (fontes permitidas, mínimo de palavras, aviso de IA).
   ...SEO_SETTINGS_SCHEMA,
+  // Marco 9, M9-D433 — URL externa: domínios extras, encurtadores, saltos, tamanho, verificação de destino e espera.
+  ...URL_SETTINGS_SCHEMA,
   ...BLOG_SETTINGS_SCHEMA,
   // Marco 9, M9-D429 — preview sem dado sensível (tamanho, dicionários, número de contrato, texto seguro) e endereço do descadastro do e-mail.
   ...PREVIEW_SETTINGS_SCHEMA,

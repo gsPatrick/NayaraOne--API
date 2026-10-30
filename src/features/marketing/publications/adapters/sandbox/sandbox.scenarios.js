@@ -6,6 +6,8 @@ const { invalid } = require('../channel.errors');
 
 /** Os 10 cenários injetáveis do sandbox (M9-D430 3.3). Sem flag de cenário, vale OK. */
 const SCENARIOS = Object.freeze(['OK', 'TIMEOUT', 'UNKNOWN_BUT_PUBLISHED', 'UNKNOWN_NOT_PUBLISHED', 'HTTP_429', 'HTTP_5XX', 'AUTH_REVOKED', 'REJECTED', 'DUPLICATE_KEY', 'SLOW']);
+/** Cenário extra de teste (fora dos 10 do livro): credencial EXPIRADA (401 sem revogação). Só a revogação informada pelo provedor (AUTH_REVOKED) marca conta comprometida (M9-D433). */
+const EXTRA_SCENARIOS = Object.freeze(['AUTH_EXPIRED']);
 const HEADER = 'x-mkt-sandbox-scenario';
 
 /** Cenário pedido: opção `scenario` ou cabeçalho de teste; desconhecido é 422. */
@@ -14,7 +16,7 @@ function pickScenario({ scenario, headers } = {}) {
   const chosen = scenario || fromHeader || null;
   if (chosen === null) return null;
   const name = String(chosen).toUpperCase();
-  if (!SCENARIOS.includes(name)) throw invalid('Cenário de teste desconhecido.', { campo: 'scenario', validos: SCENARIOS });
+  if (!SCENARIOS.includes(name) && !EXTRA_SCENARIOS.includes(name)) throw invalid('Cenário de teste desconhecido.', { campo: 'scenario', validos: SCENARIOS });
   return name;
 }
 
@@ -23,4 +25,4 @@ const sha256 = (text) => crypto.createHash('sha256').update(text, 'utf8').digest
 const payloadHash = (channel, operation, payload) => sha256(`${channel}|${operation}|${canonicalize(payload)}`);
 const refOf = (channel, key, hash) => `sbx-${channel.toLowerCase()}-${sha256(`${key}|${hash}`).slice(0, 16)}`;
 
-module.exports = { SCENARIOS, HEADER, pickScenario, payloadHash, refOf, sha256 };
+module.exports = { SCENARIOS, EXTRA_SCENARIOS, HEADER, pickScenario, payloadHash, refOf, sha256 };

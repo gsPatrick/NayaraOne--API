@@ -62,7 +62,7 @@ test('status_real_live_so_apos_confirmacao: PROCESSING nao e publicado, LIVE e',
 test('token_expirado_marca_a_rede_como_precisando_de_reautorizacao_sem_parar_as_outras', async () => {
   await env.withRollbackTenantTransaction(ctx.tenant, async (t) => {
     const s = await scheduledReel(t, ['TIKTOK', 'LINKEDIN']);
-    await env.cycle(t, ctx, { now: s.now, scenarios: { TIKTOK: 'AUTH_REVOKED' } });
+    await env.cycle(t, ctx, { now: s.now, scenarios: { TIKTOK: 'AUTH_EXPIRED' } }); // expirada, não revogada: a revogação pelo provedor é conta comprometida (M9-D433)
     const tiktok = await env.job(t, byChannel(s, 'TIKTOK'));
     assert.deepEqual([tiktok.status, tiktok.last_error_code], ['FAILED', 'MKT_PROVIDER_AUTH_FAILED']);
     assert.equal((await env.job(t, byChannel(s, 'LINKEDIN'))).status, 'RUNNING', 'a outra rede não é afetada');

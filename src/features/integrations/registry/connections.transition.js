@@ -8,6 +8,13 @@ const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registr
 const { carregarTravada } = require('./connections.service');
 const { exigirSegredoParaAtivarIA } = require('./connections.aiRules');
 
+/** Houve rotação de credencial DEPOIS de a conexão ser marcada como comprometida? (reativação exige nova credencial no cofre, M9-D433) */
+function rotatedAfterCompromise(c) {
+  const mark = c.policyJson && c.policyJson.compromised && c.policyJson.compromised.at;
+  const rotated = c.lastSecretRotationAt ? new Date(c.lastSecretRotationAt).getTime() : null;
+  return Boolean(mark && rotated && rotated > new Date(mark).getTime());
+}
+
 /**
  * Muda o status. `opts.system` = ação do sistema (só ela leva ACTIVE -> AUTH_FAILED);
  * `opts.testConnectionOk` = test-connection verde (só ele leva AUTH_FAILED -> ACTIVE, D250).
@@ -19,6 +26,10 @@ async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
   if (!STATUSES.includes(toStatus) || !(TRANSITIONS[de] || []).includes(toStatus)) throw invalida();
   if (toStatus === 'AUTH_FAILED' && !opts.system) throw invalida();
   if (de === 'AUTH_FAILED' && toStatus === 'ACTIVE' && !opts.testConnectionOk) throw invalida();
+  if (toStatus === 'COMPROMISED' && !opts.system) throw invalida(); // M9-D433: quem marca é o tratamento de conta comprometida, nunca a transição manual comum
+  if (de === 'COMPROMISED' && toStatus === 'ACTIVE' && !rotatedAfterCompromise(c)) {
+    throw AppError.conflict('A conexão foi marcada como comprometida: cadastre uma nova credencial no cofre antes de reativar.', 'INTEGRATION_CONNECTION_REAUTH_REQUIRED');
+  }
   await exigirMfaEmProducao(c.environment, ctx, transaction, { system: Boolean(opts.system) });
 
   if (toStatus === 'ACTIVE') {
@@ -34,6 +45,7 @@ async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
     if (outra) throw AppError.conflict('Já existe uma integração ativa deste fornecedor neste ambiente.', 'INTEGRATION_CONNECTION_DUPLICATE_ACTIVE');
   }
   const antes = serializeConnection(c);
+  if (toStatus === 'COMPROMISED') c.policyJson = { ...(c.policyJson || {}), compromised: { at: new Date().toISOString(), reason: String(opts.reason || '').slice(0, 500) } };
   c.status = toStatus;
   c.updatedBy = ctx.userId || null;
   try {

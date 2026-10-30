@@ -5,6 +5,7 @@ const results = require('./worker.results');
 const { transition, emitCompleted, emitFailed } = require('./worker.record');
 const { statusKind, providerStatusOf } = require('./worker.status');
 const { backoffFor } = require('./worker.settings');
+const security = require('../../security');
 
 const addSeconds = (date, s) => new Date(date.getTime() + s * 1000);
 const messageOf = { MKT_PROVIDER_AUTH_FAILED: 'O provedor recusou a credencial; reconecte a conta.', MKT_PROVIDER_REJECTED: 'A rede recusou o conteúdo.', MKT_PUBLICATION_RETRIES_EXHAUSTED: 'As tentativas de publicação acabaram.', MKT_PUBLICATION_ADAPTER_EXCEPTION: 'Falha inesperada ao falar com o canal.', MKT_CAPABILITY_VIOLATION: 'O conteúdo excede um limite da rede escolhida.' };
@@ -62,12 +63,16 @@ async function retryOrFail(ctx, job, code, { retryAfterMs = 0, response = {} } =
 }
 
 /** Resposta do adapter -> destino do job. UNKNOWN antes de tudo; depois recusa/credencial (definitivas), falha transitória explícita (5xx, 429) e sucesso. */
-function applyResult(ctx, job, result) {
+async function applyResult(ctx, job, result) {
   const response = redactedResponse(result);
   if (result.unknown) return markUnknown(ctx, job, { code: (result.error && result.error.code) || 'UNKNOWN_RESPONSE', response });
   if (result.status === 'REJECTED') return failDefinitive(ctx, job, 'MKT_PROVIDER_REJECTED', { providerStatus: 'REJECTED', response });
   const error = result.error;
-  if (error && error.class === 'AUTH') return failDefinitive(ctx, job, 'MKT_PROVIDER_AUTH_FAILED', { response });
+  if (error && error.class === 'AUTH') {
+    // Credencial REVOGADA pelo provedor = conta comprometida (M9-D433): revoga, marca a conexão e trava o canal na mesma transação; o job falha como credencial recusada.
+    if (security.isAuthRevoked(error)) await security.reportAuthRevoked({ tenant: ctx.tenant, channel: job.channel, transaction: ctx.transaction, now: ctx.now });
+    return failDefinitive(ctx, job, 'MKT_PROVIDER_AUTH_FAILED', { response });
+  }
   if (error && error.class === 'VALIDATION') return failDefinitive(ctx, job, 'MKT_PROVIDER_REJECTED', { response });
   const noRetry = result.contingency && result.contingency.retry === 'NONE'; // decideOnResult (M9-D430): repetir não adianta para esta classe de erro
   if (error && ['TRANSIENT', 'RATE_LIMIT'].includes(error.class) && error.httpStatus && !noRetry) return retryOrFail(ctx, job, error.code || 'HTTP_5XX', { retryAfterMs: error.retryAfterMs, response });

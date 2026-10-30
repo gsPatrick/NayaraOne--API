@@ -44,5 +44,7 @@ expor('MESSAGING_EVENT_KINDS', () => require('./providers/messaging/messaging.ev
 expor('catalogRouter', () => require('./providers/catalog.routes'));
 expor('CATALOG_SETTINGS_SCHEMA', () => require('./providers/catalog.settings').CATALOG_SETTINGS_SCHEMA);
 expor('catalogLegacy', () => require('./providers/catalog.legacy'));
+expor('compromiseDomainConnections', () => require('./registry/connections.compromise').compromiseDomainConnections); // M9-D433: conta comprometida
+expor('urlProbe', () => require('./http/ssrf/ssrfProbe')); // M9-D433: destino público e redirecionamento (Marketing)
 
 module.exports = api;

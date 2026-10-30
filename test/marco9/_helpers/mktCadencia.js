@@ -6,6 +6,7 @@ const { installSeed } = require('../../../src/features/marketing/automations/see
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { useTempSecretStore } = require('./mktSecretStore');
 
+const { allowTestUrls } = require('./mktUrlPolicy');
 const { q, uid } = env;
 const base = (tenant) => ({ g: tenant.groupId, c: tenant.companyId });
 const survey = 'https://pesquisa.exemplo.com.br/satisfacao';
@@ -13,6 +14,7 @@ const ISO = (date) => new Date(date).toISOString();
 
 /** Pessoa só com e-mail (o canal automático cai nele) e OPT_IN em POS_VENDA, ou sem consentimento nenhum. */
 async function person(t, tenant, { optIn = true, link = true } = {}) {
+  await allowTestUrls(t, tenant); // M9-D433
   if (link) await upsertSetting('marketing.pos_chaves.link_pesquisa', survey, tenant, tenant.userId, t);
   await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', tenant, tenant.userId, t); // e-mail de marketing exige o descadastro
   return env.readyPerson(t, tenant, { phone: null, optIn: optIn ? ['POS_VENDA'] : [] });

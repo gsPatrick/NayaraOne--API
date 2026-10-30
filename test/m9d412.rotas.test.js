@@ -174,7 +174,9 @@ test('rotas_de_campanha_exigem_permissao_agendam_e_isolam_empresas', { skip: !DI
   assert.equal(JSON.stringify(got.body).includes(ids.personA), false, 'a consulta não expõe pessoas');
   for (const route of [`/marketing/campaigns/${id}/audience`, `/marketing/campaigns/${id}/export`, '/marketing/campaigns/export']) {
     const r = await call('gestorA', 'GET', route);
-    assert.ok([404, 405].includes(r.status), `${route}: ${r.status}`);
+    // M9-D433: o que parece exportação é recusado com 403 MKT_EXPORT_FORBIDDEN; o resto não tem rota (404/405).
+    const exporta = /export/.test(route);
+    assert.ok(exporta ? r.status === 403 && r.body.error.code === 'MKT_EXPORT_FORBIDDEN' : [404, 405].includes(r.status), `${route}: ${r.status}`);
   }
 
   // ciclo completo por HTTP: 34 visitas válidas, custo de 9.180,00 e o job de ciclo de vida no fim da campanha (relógio injetado)

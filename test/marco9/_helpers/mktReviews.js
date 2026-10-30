@@ -8,12 +8,14 @@ const { publishDomainEvent } = require('../../../src/engines/events/outbox');
 const { createFeedbackCase } = require('../../../src/features/crm/feedbackCases.service');
 const { useTempSecretStore } = require('./mktSecretStore');
 
+const { allowTestUrls } = require('./mktUrlPolicy');
 const { q, uid } = env;
 const REVIEW_URL = 'https://g.page/r/imobiliaria-exemplo/review';
 const LINK_BASE = 'https://api.exemplo.test';
 
 /** Parâmetros do pedido de avaliação e o descadastro do e-mail; `over` troca ou remove (null) um deles. */
 async function configure(t, tenant, over = {}) {
+  await allowTestUrls(t, tenant); // M9-D433: a allowlist de URL externa vem do parâmetro da empresa
   const values = { 'marketing.review.url_avaliacao': REVIEW_URL, 'marketing.review.url_base_rastreio': LINK_BASE, 'marketing.email.url_descadastro': 'https://www.exemplo.test/descadastro?t={token}', ...over };
   for (const [key, value] of Object.entries(values)) if (value !== null) await upsertSetting(key, value, tenant, tenant.userId, t);
 }

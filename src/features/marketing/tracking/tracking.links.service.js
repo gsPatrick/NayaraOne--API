@@ -51,7 +51,7 @@ const dto = (row) => ({
  * POST /marketing/tracking-links — gera o código curto (8 caracteres sem ambiguidade, UNIQUE), valida a URL de destino, completa as
  * UTMs (origem = canal, mídia pelo canal, campanha = código da campanha) e assina `short_code + target_url` com a chave do cofre.
  */
-async function createTrackingLink({ tenant, actor, input }, transaction) {
+async function createTrackingLink({ tenant, actor, input, system = false }, transaction) {
   const data = parseInput(input);
   let campaign = null;
   if (data.campaignId) {
@@ -59,7 +59,7 @@ async function createTrackingLink({ tenant, actor, input }, transaction) {
     if (!campaign) throw notFound('Campanha não encontrada.');
   }
   if (data.contentItemId && !(await repo.contentItemExists(data.contentItemId, transaction))) throw notFound('Conteúdo não encontrado.');
-  const targetUrl = await assertAllowedUrl(data.targetUrl, { tenant, transaction });
+  const targetUrl = await assertAllowedUrl(data.targetUrl, { tenant, transaction, origin: system ? 'SYSTEM' : 'USER' }); // `system` só vem de código do servidor (automações), nunca do corpo do pedido
   const utm = {
     utmSource: data.utmSource || data.channel.toLowerCase(),
     utmMedium: data.utmMedium || MEDIUM_BY_CHANNEL[data.channel] || 'social',

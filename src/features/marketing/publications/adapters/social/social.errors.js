@@ -17,7 +17,7 @@ const UNAVAILABLE_CODE = 'MKT_PROVIDER_UNAVAILABLE';
 function normalizeResultError(result) {
   const error = result && result.error;
   if (!error) return result;
-  if (error.class === 'AUTH') return { ...result, error: { ...error, code: AUTH_CODE } };
+  if (error.class === 'AUTH') return { ...result, error: { ...error, code: AUTH_CODE, providerCode: error.providerCode || error.code } }; // o código original (ex.: AUTH_REVOKED) segue em providerCode (M9-D433)
   if (['TRANSIENT', 'RATE_LIMIT'].includes(error.class)) return { ...result, error: { ...error, code: UNAVAILABLE_CODE } };
   return result;
 }

@@ -35,6 +35,19 @@ function mktMassLimitExceeded(details) {
   return mktError(422, 'MKT_MASS_LIMIT_EXCEEDED', 'O número de destinatários excede o limite permitido.', details);
 }
 
+/** Segurança e antifraude (M9-D433). */
+function mktUrlNotAllowed(details) {
+  return mktError(422, 'MKT_URL_NOT_ALLOWED', 'URL externa não permitida.', details);
+}
+
+function mktExportForbidden(details) {
+  return mktError(403, 'MKT_EXPORT_FORBIDDEN', 'Exportar lista de destinatários não é permitido.', details);
+}
+
+function mktChannelCompromised(details) {
+  return mktError(423, 'MKT_CHANNEL_COMPROMISED', 'O canal está bloqueado por suspeita de comprometimento.', details);
+}
+
 function mktSourceStale(details) {
   return mktError(409, 'MKT_SOURCE_STALE', 'Os dados do imóvel mudaram; gere o conteúdo novamente.', details);
 }
@@ -57,5 +70,5 @@ function mktNotImplemented(owner) {
 
 module.exports = {
   MKT_PREFIX, PLATFORM_CODES, isAllowedCode, mktError, mktForbidden, mktMassPermissionRequired, mktMassLimitExceeded, mktNotImplemented,
-  mktSourceStale, mktContentVersionImmutable, mktNayRunRequired, mktNayModelRequired,
+  mktUrlNotAllowed, mktExportForbidden, mktChannelCompromised, mktSourceStale, mktContentVersionImmutable, mktNayRunRequired, mktNayModelRequired,
 };

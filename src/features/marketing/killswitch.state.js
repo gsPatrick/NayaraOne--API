@@ -7,6 +7,7 @@ const logger = require('../../utils/logger');
 const flagsResolve = require('../core-governance/feature-flags/flags.resolve');
 const { GLOBAL_KEY, channelKey, BLOCK_REASONS } = require('./killswitch.constants');
 const errors = require('./killswitch.errors');
+const { mktChannelCompromised } = require('./marketing.errors');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const q = (sql, transaction, replacements) => sequelize.query(sql, { type: QueryTypes.SELECT, transaction, replacements });
@@ -48,10 +49,25 @@ async function readKillState(tenant, { channel, campaignId, automationId } = {},
   }
 }
 
+/** O canal ligado foi acionado como conta comprometida (último acionamento com a origem COMPROMISED_ACCOUNT)? Devolve o canal ou null. Erro de leitura = não. */
+async function compromisedChannel(tenant, active, transaction) {
+  const target = (active.find((a) => a.scope === 'CHANNEL') || {}).target;
+  if (!target) return null;
+  try {
+    const last = await require('./killswitch.log').lastActivation(tenant, 'CHANNEL', target, transaction);
+    return last && last.source === 'COMPROMISED_ACCOUNT' ? target : null;
+  } catch (err) { return null; }
+}
+
 /** Ação de saída automática (mensagem, post, e-mail, publicação): lança 423 MKT_KILL_SWITCH_ACTIVE se QUALQUER escopo aplicável estiver ligado ou o estado não puder ser lido. */
 async function assertOutboundAllowed(tenant, scopeCtx, transaction) {
   const state = await readKillState(tenant, scopeCtx, transaction);
-  if (state.blocked) throw errors.outboundBlocked({ blockedBy: state.active, unreadable: state.unreadable });
+  if (state.blocked) {
+    // Canal travado por conta comprometida (M9-D433): 423 próprio, para a pessoa saber que a reativação exige nova credencial.
+    const compromised = await compromisedChannel(tenant, state.active, transaction);
+    if (compromised) throw mktChannelCompromised({ blockedBy: state.active, channel: compromised });
+    throw errors.outboundBlocked({ blockedBy: state.active, unreadable: state.unreadable });
+  }
   return state;
 }
 

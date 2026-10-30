@@ -12,7 +12,7 @@ const { registerSocialKillSwitchCheck } = require('./killswitch.social');
 const constants = require('./killswitch.constants');
 const { KILLSWITCH_SETTINGS_SCHEMA, KILLSWITCH_SETTING_DEFAULTS } = require('./killswitch.settings');
 require('./killswitch.probe');
-const { provisionKillSwitches } = require('./killswitch.provision');
+const { provisionKillSwitches, responsibleFor } = require('./killswitch.provision');
 
 registerSocialKillSwitchCheck();
 
@@ -22,6 +22,7 @@ registerSocialKillSwitchCheck();
  */
 module.exports = {
   router,
+  responsibleFor,
   ...state,
   ...hooks,
   ensureKillSwitches: registry.ensureAll,

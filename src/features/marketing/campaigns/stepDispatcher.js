@@ -12,6 +12,7 @@ const { isOutboundBlocked } = require('../killswitch.state');
 const { readRecipientBatch } = require('./campaigns.settings');
 const { STEP_CONTENT_STATUSES } = require('./campaigns.constants');
 const { checkApproval } = require('../content').approval;
+const { massStepReason } = require('./massStep.guard');
 
 /** action_key = sha256(campaign_id:step_id:person_id): ocupa o lugar da chave de run da M9-D415 (step de campanha não tem run). */
 const actionKeyOf = (campaignId, stepId, personId) => crypto.createHash('sha256').update(`${campaignId}:${stepId}:${personId}`).digest('hex');
@@ -91,9 +92,9 @@ async function processStep(port, stepId, tenant, now, transaction, totals) {
   if (!guard.allowed) { totals.blocked += 1; return; }
   // Kill switch global ou do canal do step (M9-D425): o step continua SCHEDULED, sem nada apagado, e sai no ciclo seguinte à reativação. Estado ilegível também segura.
   if ((await isOutboundBlocked(tenant, { channel: step.channel, campaignId: step.campaign_id }, transaction)).blocked) { totals.blocked += 1; return; }
-  const [campaign] = await run('SELECT id, code, channels FROM marketing.campaigns WHERE id = :id AND company_id = :companyId', { id: step.campaign_id, companyId: tenant.companyId }, transaction);
+  const [campaign] = await run('SELECT id, code, channels, mass_confirmed_by FROM marketing.campaigns WHERE id = :id AND company_id = :companyId', { id: step.campaign_id, companyId: tenant.companyId }, transaction);
 
-  const reason = await skipReasonOf(step, tenant, transaction);
+  const reason = await massStepReason(campaign, tenant, transaction) || await skipReasonOf(step, tenant, transaction); // M9-D433: o teto de massa vale a cada step
   if (reason) {
     await stepsRepo.setStepStatus(step.id, 'SKIPPED', reason, transaction);
     await registrarAuditoria({
