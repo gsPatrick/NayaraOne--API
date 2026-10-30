@@ -10,3 +10,7 @@ npm-debug.log*
 backups/
 scratchpad/
 .claude/
+# Execução offline da suíte das integrações (M9-D258): gerada pela esteira, nunca versionada.
+reports/int-ci/
+reports/offline-run.json
+reports/offline-run-ia.json

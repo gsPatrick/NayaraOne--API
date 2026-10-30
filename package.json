@@ -37,6 +37,7 @@
     "marketing:drill": "node scripts/withDisposableDb.js -- env LOG_LEVEL=error CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c 'node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/marketingDrill.js \"$@\"' drill",
     "dod:bi": "node scripts/analytics/checkDod.js",
     "dod:integracoes": "node scripts/integrationDod.js",
+    "autocheck:integracoes": "node scripts/integrationAutocheck.js",
     "check:lineage": "node scripts/checkLineageCoverage.js",
     "check:classification": "node scripts/withDisposableDb.js -- node scripts/checkClassificationCoverage.js",
     "sync:flags": "node scripts/syncFlagsRegistry.js",

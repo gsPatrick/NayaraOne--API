@@ -83,6 +83,10 @@ function commitAtual() {
 async function main() {
   const a = argumentos(process.argv.slice(2));
   const etapas = E.carregar(a.etapas);
+  // Os JUnit e o registro de conexões externas (M9-D258) são de UMA execução das etapas de teste: quem começa na etapa 3 ou antes zera os da execução anterior.
+  const pasta = path.join(E.ROOT, E.RELATORIOS);
+  if (a.de <= 3) fs.rmSync(pasta, { recursive: true, force: true });
+  fs.mkdirSync(pasta, { recursive: true });
   const saida = escritor(a.log);
   const relatorio = { commit: commitAtual(), inicio: new Date().toISOString(), modo: a.release ? 'release' : 'pull-request', provider: process.env.INT_CI_PROVIDER || null, etapas: [] };
   let vermelho = false;

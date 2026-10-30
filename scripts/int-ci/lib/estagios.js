@@ -16,6 +16,8 @@ const ETAPAS_DO_LIVRO = Object.freeze([
   [8, 'SSRF tests'], [9, 'provider sandbox'], [10, 'DEV'], [11, 'LAB'], [12, 'failure drill'], [13, 'production approval'],
 ]);
 const ULTIMA_DE_PR = 9;
+const RELATORIOS = 'reports/int-ci';
+const GUARDA = 'scripts/int-ci/offlineGuard.js';
 const CODIGO_FALHA = 'INTEGRATION_CI_STAGE_FAILED';
 const MENSAGEM_FALHA = 'Etapa do pipeline de integrações falhou.';
 
@@ -59,7 +61,12 @@ function comandosDaEtapa(etapa, raiz = ROOT) {
       // `excluir`: prefixos de nome de arquivo que outra etapa já roda (a etapa 9 pega o resto da pasta, inclusive suítes que entrarem depois).
       const arquivos = [...new Set(c.testes.flatMap((p) => expandir(p, raiz)))].filter((f) => !(c.excluir || []).some((prefixo) => path.posix.basename(f).startsWith(prefixo)));
       if (!arquivos.length) throw new EsteiraInvalida(`etapa ${etapa.numero}: nenhum arquivo de teste para ${c.testes.join(', ')}`);
-      saida.push({ argv: ['node', '--test', '--test-concurrency=1', '--test-reporter=spec', ...arquivos], env: { NODE_ENV: 'test', ...(c.env || {}) } });
+      // JUnit por comando e registro de conexões externas: a autochecagem (M9-D258) só dá "verde" ao que está no relatório consolidado de reports/offline-run.json.
+      const junit = `${RELATORIOS}/etapa-${etapa.numero}-${saida.length}.xml`;
+      saida.push({
+        argv: ['node', '--test', '--test-concurrency=1', '--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${junit}`, `--require=./${GUARDA}`, ...arquivos],
+        env: { NODE_ENV: 'test', INT_OFFLINE_LOG: `${RELATORIOS}/chamadas-externas.log`, ...(c.env || {}) },
+      });
     } else {
       saida.push({ argv: c.argv, env: c.env || {} });
     }
@@ -75,4 +82,4 @@ function carregar(arquivo) {
   return etapas;
 }
 
-module.exports = { ROOT, ETAPAS_DO_LIVRO, ULTIMA_DE_PR, CODIGO_FALHA, MENSAGEM_FALHA, EsteiraInvalida, problemasDaDefinicao, expandir, comandosDaEtapa, carregar };
+module.exports = { ROOT, RELATORIOS, ETAPAS_DO_LIVRO, ULTIMA_DE_PR, CODIGO_FALHA, MENSAGEM_FALHA, EsteiraInvalida, problemasDaDefinicao, expandir, comandosDaEtapa, carregar };
