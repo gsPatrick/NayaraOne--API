@@ -2,7 +2,7 @@
 
 const { createTriggeredDraft } = require('./triggers.create');
 const { listBirthdays, listPublicConstructions } = require('./queries');
-const { readBirthdayTime } = require('./settings');
+const { readBirthdayTime } = require('./types.settings');
 const { companyTimeZone, localParts, isLeapYear, minutesOf } = require('./localTime');
 
 /**

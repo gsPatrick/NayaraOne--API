@@ -1,7 +1,7 @@
 'use strict';
 
 const { resolveConsent } = require('../../../people/personConsents.service');
-const { readPostSalePurpose } = require('./settings');
+const { readPostSalePurpose } = require('./types.settings');
 const { DEFINITIONS } = require('./definitions');
 
 /**

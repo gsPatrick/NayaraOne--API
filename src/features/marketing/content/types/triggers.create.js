@@ -7,7 +7,7 @@ const { DEFINITIONS } = require('./definitions');
 const { loadTypeSource } = require('./source');
 const { buildTriggeredText } = require('./texts');
 const { reductionPercent, currentPriceOf } = require('./priceReduction');
-const { readAutoDraftTypes, readPercentDecimals } = require('./settings');
+const { readAutoDraftTypes, readPercentDecimals } = require('./types.settings');
 
 /**
  * M9-D409 — rascunho nascido de gatilho (evento do outbox ou job). Regras: só RASCUNHO (nunca publicação); idempotente por

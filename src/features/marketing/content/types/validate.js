@@ -3,7 +3,7 @@
 const { DEFINITIONS, SOURCE_ENTITY_OF_LOADER } = require('./definitions');
 const { typeInvalid, requiredField, channelNotAllowed, sourceNotEligible } = require('./errors');
 const { reductionPercent, currentPriceOf } = require('./priceReduction');
-const { readMinPhotos } = require('./settings');
+const { readMinPhotos } = require('./types.settings');
 const { readPropertyStatus } = require('./queries');
 const { hasPostSaleConsent } = require('./consent');
 const { contentInvalid } = require('../pipeline.errors');

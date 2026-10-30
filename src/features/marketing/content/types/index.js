@@ -6,7 +6,7 @@ const { reductionPercent } = require('./priceReduction');
 const { createTriggeredDraft } = require('./triggers.create');
 const { runBirthdayDrafts, runConstructionDrafts } = require('./scheduled');
 const consumers = require('./triggers.consumers');
-const { TYPES_SETTINGS_SCHEMA, TYPES_SETTING_DEFAULTS, readConstructionScanMinutes } = require('./settings');
+const { TYPES_SETTINGS_SCHEMA, TYPES_SETTING_DEFAULTS, readConstructionScanMinutes } = require('./types.settings');
 
 /** Os 10 tipos de conteúdo do Marketing (M9-D409): definições, validação, gatilhos e rotinas diárias. */
 module.exports = {
