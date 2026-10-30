@@ -90,7 +90,7 @@ test('campos_minimos_por_tipo_sao_conferidos', () => {
   assert.deepEqual(missingFields(campaign, { campaignId: 'c', channels: ['EMAIL'], templateCode: 'T' }, {}, 1).input, []);
   assert.deepEqual(missingFields(types.getDefinition('INSTITUTIONAL'), { title: ' ' }, {}, 1).input, ['title', 'texto']);
   assert.deepEqual(missingFields(types.getDefinition('EDUCATIONAL_BLOG'), { tema: 'x', fontes: [] }, {}, 1).input, ['fontes']);
-  assert.deepEqual(missingFields(types.getDefinition('VIDEO_REEL'), { texto: 'roteiro' }, {}, 1).input, ['midiaId']);
+  assert.deepEqual(missingFields(types.getDefinition('VIDEO_REEL'), { texto: 'roteiro' }, {}, 1).input, ['midiaId|montagem']); // M9-D426: mídia pronta ou montagem
 });
 
 // 3 (parte pura: fatos e texto; a parte com banco está em m9d409.tipos.test.js)

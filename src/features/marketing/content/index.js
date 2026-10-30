@@ -5,12 +5,14 @@ const contentRoutes = require('./content.routes');
 const templateRoutes = require('./template.routes');
 const service = require('./content.service');
 const approval = require('./approval.guard');
+const video = require('./video');
 require('./registerConsumers'); // M9-D405: consumidores property.updated / property.price.changed
 
 // A área "content" também serve os templates (I3): as duas famílias de rota ficam no mesmo router da área.
 const router = Router();
 router.use(contentRoutes);
 router.use(templateRoutes);
+router.use(video.router); // M9-D426: POST /marketing/media/:id/authorize (rota I9 da M9-D435)
 
 // `approval` é a interface que as outras áreas usam para conferir a aprovação (ex.: campanhas, M9-D412).
 // M9-D427: `publicReadModel` e `factual` são a interface que a área de publicações usa para a página pública (SEO) sem importar caminho interno.
@@ -20,4 +22,4 @@ const factual = { validateAgainstFacts: require('./pipeline.factualPort').valida
 const schedulePort = require('./pipeline.schedulePort');
 // M9-D411: a segunda barreira (deliverToAdapter, M9-D403) é usada pelo worker de publicação, que a importa pela fachada.
 const adapterGate = require('./adapterGate');
-module.exports = { router, service, approval, publicReadModel, factual, schedulePort, adapterGate };
+module.exports = { router, service, approval, publicReadModel, factual, schedulePort, adapterGate, video };

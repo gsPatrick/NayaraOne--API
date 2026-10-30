@@ -4,6 +4,7 @@ const { validateAgainstFacts } = require('./pipeline.factualPort');
 const { readFactualConfig } = require('./factual/settings');
 const { companyDateParts } = require('./pipeline.time');
 const { checkBlog, readBlogConfig } = require('./blog');
+const video = require('./video');
 
 /** Blog educativo (M9-D427): fontes, parágrafos factuais com referência e qualidade mínima, sobre o texto e as fontes da versão corrente. */
 async function blogFindings({ item, version, tenant, transaction }) {
@@ -20,7 +21,9 @@ async function blogFindings({ item, version, tenant, transaction }) {
  * M9-D427: o blog educativo soma os checks de fonte e de qualidade (findings com `code` MKT_BLOG_*).
  */
 async function factualStep({ item, version, tenant, transaction, now }) {
-  const text = version.body_json && typeof version.body_json.texto === 'string' ? version.body_json.texto : '';
+  const body = version.body_json || {};
+  // M9-D426: legenda, roteiro e descrição do reel passam juntos pelo validador factual (preço divergente ou endereço restrito em qualquer um reprova).
+  const text = item && video.isVideo(item.type) ? video.videoTexts(body).join('\n') : (typeof body.texto === 'string' ? body.texto : '');
   const config = await readFactualConfig(tenant, transaction);
   const options = { ...config, contentDate: await companyDateParts(now || new Date(), tenant, transaction) };
   const result = validateAgainstFacts(text, version.facts_snapshot_json || {}, options);

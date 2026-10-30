@@ -11,6 +11,7 @@ const { readPercentDecimals } = require('./types/types.settings');
 const { draftText } = require('./content.revise');
 const { newCheck } = require('./pipeline.core');
 const repo = require('./pipeline.repository');
+const video = require('./video');
 
 const ENTITY = 'MarketingContentItem';
 
@@ -38,8 +39,12 @@ async function createContent({ tenant, actor, input }, transaction) {
   const facts = source ? source.facts : {};
   const decimals = await readPercentDecimals(tenant, transaction);
   await assertCreatable(def, input, facts, { tenant, transaction, decimals });
+  const media = video.isVideo(input.type) ? await video.prepareVideoMedia({ tenant, actor, input }, transaction) : null; // M9-D426: mídia autorizada antes da NAY
   const drafted = await draftText({ input, facts: draftFactsFor(def.type, input, facts, decimals), type: input.type, transaction });
-  const body = { texto: drafted.text, ...bodyExtras(input), ...(drafted.nayError ? { erro: 'MKT_NAY_UNAVAILABLE' } : {}) };
+  const extras = bodyExtras(input);
+  const body = media
+    ? { ...extras, ...(await video.buildVideoBody({ tenant, media, texto: drafted.text, ...(await video.draftVideoCopy({ input, facts })) }, transaction)), ...(drafted.nayError ? { erro: 'MKT_NAY_UNAVAILABLE' } : {}) }
+    : { texto: drafted.text, ...extras, ...(drafted.nayError ? { erro: 'MKT_NAY_UNAVAILABLE' } : {}) };
   const { item, version } = await createContentWithProvenance({
     type: input.type,
     title: titleOf(input, facts),

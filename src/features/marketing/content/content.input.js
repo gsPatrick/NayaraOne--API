@@ -8,7 +8,7 @@ const CONTENT_TYPES = Object.freeze([
   'NEW_PROPERTY', 'PRICE_REDUCTION', 'SOLD_RENTED', 'NAYARA_CONSTRUCTION', 'INSTITUTIONAL', 'EDUCATIONAL_BLOG',
   'POST_SALE', 'BIRTHDAY_RELATIONSHIP', 'SEGMENTED_CAMPAIGN', 'VIDEO_REEL',
 ]);
-const CREATE_FIELDS = ['contentItemId', 'type', 'title', 'sourceEntityType', 'sourceEntityId', 'texto', 'templateId', 'templateCode', 'variables', 'campaignId', 'channels', 'tema', 'fontes', 'midiaId'];
+const CREATE_FIELDS = ['contentItemId', 'type', 'title', 'sourceEntityType', 'sourceEntityId', 'texto', 'templateId', 'templateCode', 'variables', 'campaignId', 'channels', 'tema', 'fontes', 'midiaId', 'montagem', 'roteiro', 'descricao'];
 const SCHEDULE_FIELDS = ['channels', 'when'];
 const APPROVE_FIELDS = ['decision', 'reason'];
 
@@ -53,6 +53,9 @@ function parseCreateBody(body) {
     campaignId: optionalString(body, 'campaignId', 40),
     tema: optionalString(body, 'tema', 300),
     midiaId: optionalString(body, 'midiaId', 120),
+    roteiro: optionalString(body, 'roteiro', 20000),
+    descricao: optionalString(body, 'descricao', 20000),
+    montagem: body.montagem, // M9-D426: conferida por inteiro na montagem do reel (video.assemble)
     channels: body.channels,
     fontes: body.fontes,
     variables: body.variables,

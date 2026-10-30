@@ -10,6 +10,7 @@ const { sequelize } = require('../../../src/models');
 const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { prepararTenants } = require('../../helpers/marketingExecucao');
 const env = require('../_helpers/mktTipos');
+const midiaEnv = require('../_helpers/mktMidia');
 const service = require('../../../src/features/marketing/content/content.service');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { validateAgainstFacts } = require('../../../src/features/marketing/content/pipeline.factualPort');
@@ -40,6 +41,7 @@ test('dez_conteudos_um_por_tipo_em_DRAFT_com_fonte_e_versao', async () => {
     await env.keyDelivery(t, tenant, { personId: person });
     const project = await env.publicConstruction(t, tenant);
     const campaignId = await env.campaign(t, tenant);
+    const midia = await midiaEnv.authorizedFile(t, tenant); // M9-D426: o reel só nasce de mídia autorizada
 
     const inputs = {
       NEW_PROPERTY: { sourceEntityType: 'property', sourceEntityId: prop.propertyId, texto: 'Novo imóvel no Jardim Europa.' },
@@ -51,7 +53,7 @@ test('dez_conteudos_um_por_tipo_em_DRAFT_com_fonte_e_versao', async () => {
       POST_SALE: { sourceEntityType: 'person', sourceEntityId: person, texto: 'Parabéns pelas chaves!' },
       BIRTHDAY_RELATIONSHIP: { sourceEntityType: 'person', sourceEntityId: person, texto: 'Feliz aniversário!' },
       SEGMENTED_CAMPAIGN: { campaignId, channels: ['WHATSAPP'], templateCode: 'CAMPANHA_X', title: 'Campanha de relacionamento', texto: 'Mensagem da campanha.' },
-      VIDEO_REEL: { midiaId: 'midia-autorizada-001', title: 'Reel do apto', texto: 'Roteiro: abertura, sala, varanda.' },
+      VIDEO_REEL: { midiaId: midia.id, title: 'Reel do apto', texto: 'Roteiro: abertura, sala, varanda.' },
     };
     for (const [type, input] of Object.entries(inputs)) {
       const out = await create(t, { type, ...input });
@@ -93,6 +95,7 @@ test('campo_minimo_ausente_devolve_422_MKT_CONTENT_REQUIRED_FIELD_em_cada_tipo',
     await reject(create(t, { type: 'EDUCATIONAL_BLOG', tema: 'Sem fontes', texto: 'x' }), 422, 'MKT_BLOG_SOURCES_REQUIRED'); // M9-D427: blog sem fonte tem o código próprio
     await reject(create(t, { type: 'EDUCATIONAL_BLOG', texto: 'x', fontes: ['https://www.ibge.gov.br/x | 2026-10-12'] }), 422, REQUIRED); // sem tema continua sendo campo obrigatório
     await reject(create(t, { type: 'VIDEO_REEL', title: 'Sem mídia', texto: 'roteiro' }), 422, REQUIRED);
+    await reject(create(t, { type: 'VIDEO_REEL', title: 'Mídia solta', midiaId: 'midia-autorizada-001', texto: 'roteiro' }), 422, 'MKT_MEDIA_NOT_AUTHORIZED'); // M9-D426
     await reject(create(t, { type: 'SEGMENTED_CAMPAIGN', title: 'Sem público', channels: ['EMAIL'], templateCode: 'X' }), 422, REQUIRED);
     await reject(create(t, { type: 'BIRTHDAY_RELATIONSHIP', title: 'Sem pessoa' }), 422, REQUIRED);
     await reject(create(t, { type: 'POST_SALE', sourceEntityType: 'property', sourceEntityId: comFoto.propertyId }), 422, REQUIRED); // fonte do tipo errado

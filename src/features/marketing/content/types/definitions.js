@@ -63,7 +63,8 @@ const DEFINITIONS = Object.freeze({
   }),
   VIDEO_REEL: def({
     type: 'VIDEO_REEL', sourceLoader: 'none', sanitizerProfile: 'human', defaultTemplateCode: 'VIDEO_REEL_DEFAULT',
-    requiredFields: { input: ['midiaId', 'texto'], facts: [] }, allowedChannels: ['INSTAGRAM', 'FACEBOOK', 'TIKTOK', 'YOUTUBE', 'LINKEDIN', 'SITE'], trigger: 'manual ou NAY',
+    requiredFields: { input: ['midiaId|montagem'], facts: [] }, allowedChannels: ['INSTAGRAM', 'FACEBOOK', 'TIKTOK', 'YOUTUBE', 'LINKEDIN', 'SITE'], trigger: 'manual ou NAY',
+    optionalSource: 'property', // M9-D426: o reel pode nascer de um imóvel (fatos para a NAY e para o validador factual)
   }),
 });
 

@@ -58,7 +58,7 @@ async function assertSourceEligible(def, input, facts, { tenant, transaction, de
  */
 async function assertCreatable(def, input, facts, { tenant, transaction, decimals }) {
   const expected = SOURCE_ENTITY_OF_LOADER[def.sourceLoader];
-  if (expected === null && input.sourceEntityType) throw contentInvalid('Este tipo de conteúdo não usa fonte de dados.', { type: def.type });
+  if (expected === null && input.sourceEntityType && input.sourceEntityType !== def.optionalSource) throw contentInvalid('Este tipo de conteúdo não usa fonte de dados.', { type: def.type });
   const minPhotos = await readMinPhotos(tenant, transaction);
   const missing = missingFields(def, input, facts, minPhotos);
   if (expected && input.sourceEntityType !== expected) missing.input.unshift('sourceEntityType');
