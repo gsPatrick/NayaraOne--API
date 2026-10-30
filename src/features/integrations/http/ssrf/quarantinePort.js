@@ -11,10 +11,13 @@ let sink = null;
 const registerQuarantineSink = (fn) => { sink = typeof fn === 'function' ? fn : null; };
 const hasQuarantineSink = () => sink !== null;
 
-/** Entrega { buffer, contentType, sha256, origin } à quarentena e devolve o selo que acompanha o conteúdo. */
-async function deliverToQuarantine(item) {
+/**
+ * Entrega { buffer, contentType, sha256, origin } à quarentena e devolve o selo que acompanha o conteúdo. `context` ({ tenant, transaction, connection }, M9-D247) diz de qual empresa e em
+ * qual transação o conteúdo entra em files.quarantine.
+ */
+async function deliverToQuarantine(item, context = {}) {
   let ref = null;
-  if (sink) ref = await sink(item);
+  if (sink) ref = await sink(item, context);
   return Object.freeze({ status: 'QUARANTINED', released: false, ref: ref ?? null, sink: sink ? 'registered' : 'none' });
 }
 

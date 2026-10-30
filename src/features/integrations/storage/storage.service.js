@@ -11,13 +11,18 @@ const { clampTtl } = require('../providers/storage/storage.signedUrl');
 const { resolveStorage } = require('./storage.resolve');
 
 /** Quem pode remover objeto (M9-D242 3.1): a retenção de dados e a compensação de uma gravação desfeita; nenhum usuário nem módulo de negócio. */
-const DELETE_PURPOSES = Object.freeze(['RETENTION', 'ROLLBACK_CLEANUP']);
+const DELETE_PURPOSES = Object.freeze(['RETENTION', 'ROLLBACK_CLEANUP', 'QUARANTINE_DISCARD']);
+
+/** Área de quarentena (M9-D247): company/<id>/quarantine/... só o pipeline da quarentena lê, grava e descarta (`quarantineAccess`); URL assinada nunca. */
+const inQuarantine = (key) => String(key).split('/')[2] === 'quarantine';
+const quarantined = () => new AppError('O arquivo ainda está em verificação de segurança.', 423, 'INTEGRATION_FILE_QUARANTINED');
 
 const unsupported = () => AppError.unprocessable('Operação não suportada por este fornecedor.', 'INTEGRATION_CAPABILITY_UNSUPPORTED');
 
 /** Chama a operação do adapter da empresa depois de conferir a capability, o pedido contra o schema do port e a chave contra a empresa. */
 async function run(tenant, operation, request, transaction, target = null) {
   assertCompanyKey(tenant.companyId, request.key); // o isolamento por empresa vem antes de qualquer outra regra
+  if (inQuarantine(request.key) && (operation === 'getSignedUrl' || request.quarantineAccess !== true)) throw quarantined();
   const { adapter, params } = await resolveStorage(tenant, transaction, target);
   if (!adapter.supports(operation)) throw unsupported();
   const pedido = { ...request, companyId: tenant.companyId };
@@ -32,10 +37,11 @@ const audit = (tenant, action, key, reason, transaction) => registrarAuditoria({
 }, transaction);
 
 /** Grava o objeto no armazenamento da empresa. `body`: Buffer, texto ou stream. O hash informado é conferido (422 INTEGRATION_STORAGE_SHA256_MISMATCH). Devolve { key, sha256, sizeBytes, providerCode, connectionId }: onde gravou, para a leitura voltar ao mesmo driver. */
-async function putObject(tenant, { key, body, contentType, sha256, metadata }, transaction) {
+async function putObject(tenant, { key, body, contentType, sha256, metadata, quarantineAccess }, transaction) {
   const { params, adapter, connection } = await resolveStorage(tenant, transaction);
   const buffer = await toBuffer(body, params.maxObjectBytes);
   assertCompanyKey(tenant.companyId, key);
+  if (inQuarantine(key) && quarantineAccess !== true) throw quarantined();
   const pedido = { key, body: buffer, contentType, sha256, metadata, maxBytes: params.maxObjectBytes, companyId: tenant.companyId };
   const problemas = validar(adapter.constructor.operations.putObject.inputSchema, pedido);
   if (problemas.length) throw requestInvalid('putObject', problemas);
@@ -44,15 +50,15 @@ async function putObject(tenant, { key, body, contentType, sha256, metadata }, t
 }
 
 /** Lê o objeto como Buffer, conferindo o hash (o gravado e, se informado, `expectedSha256`). `sensitive` registra o acesso na auditoria. */
-async function getObject(tenant, { key, expectedSha256, expectEncrypted, sensitive, providerCode, connectionId }, transaction) {
-  const { resposta } = await run(tenant, 'getObject', { key, expectedSha256, expectEncrypted }, transaction, { providerCode, connectionId });
+async function getObject(tenant, { key, expectedSha256, expectEncrypted, sensitive, providerCode, connectionId, quarantineAccess }, transaction) {
+  const { resposta } = await run(tenant, 'getObject', { key, expectedSha256, expectEncrypted, quarantineAccess }, transaction, { providerCode, connectionId });
   if (sensitive) await audit(tenant, 'integration.storage.read_sensitive', key, 'Leitura de objeto sensível.', transaction);
   const buffer = await toBuffer(resposta.stream);
   return { buffer, contentType: resposta.contentType || null, sha256: resposta.sha256 || null, sizeBytes: buffer.length, encryptedAtRest: Boolean(resposta.encryptedAtRest) };
 }
 
-const headObject = async (tenant, { key, providerCode, connectionId }, transaction) => {
-  const { resposta } = await run(tenant, 'headObject', { key }, transaction, { providerCode, connectionId });
+const headObject = async (tenant, { key, providerCode, connectionId, quarantineAccess }, transaction) => {
+  const { resposta } = await run(tenant, 'headObject', { key, quarantineAccess }, transaction, { providerCode, connectionId });
   return { sizeBytes: resposta.sizeBytes, contentType: resposta.contentType || null, sha256: resposta.sha256 || null };
 };
 
@@ -68,7 +74,7 @@ async function getSignedUrl(tenant, { key, ttlSeconds, method, sensitive, provid
 /** Remove o objeto. Só com `purpose` RETENTION (módulo de retenção) ou ROLLBACK_CLEANUP; qualquer outro: 403 INTEGRATION_STORAGE_DELETE_FORBIDDEN. */
 async function deleteObject(tenant, { key, purpose, providerCode, connectionId }, transaction) {
   if (!DELETE_PURPOSES.includes(purpose)) throw deleteForbidden();
-  await run(tenant, 'deleteObject', { key }, transaction, { providerCode, connectionId });
+  await run(tenant, 'deleteObject', { key, quarantineAccess: purpose === 'QUARANTINE_DISCARD' }, transaction, { providerCode, connectionId });
   return { key, deleted: true };
 }
 

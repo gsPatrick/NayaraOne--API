@@ -48,6 +48,7 @@ function registerBuiltInAdapters() {
   installAnalytics(); // descarte de métricas vencidas na rodada do worker (M9-D243)
   registerAiContingency(); // IA fora: modo determinístico (M9-D243)
   require('../email'); // M9-D234: identificador da mensagem no envio, falha definitiva e eventos do provedor (entregue, bounce, reclamação)
+  require('../../files/quarantine'); // M9-D247: destino real da quarentena dos downloads por URL e verificação dos uploads externos na rodada do worker
   require('../site'); // M9-D259: páginas do site (reações ao envio confirmado ou falho, webhook do site, consulta de status na rodada do worker e dados da reconciliação)
   require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
   installContingency(); // contingência das famílias e passo da rodada do worker (M9-D226)

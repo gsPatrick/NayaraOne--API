@@ -58,7 +58,7 @@ async function fetchExternalUrl(url, opts = {}) {
     const params = emTeste() && opts._params ? { ...lidos, ...opts._params } : lidos;
     const { r, hostname } = await buscar(url, flow, params, opts);
     const sha256 = crypto.createHash('sha256').update(r.buffer).digest('hex');
-    const quarantine = await deliverToQuarantine({ buffer: r.buffer, contentType: r.contentType, sha256, origin: { flow: flow.code, host: hostname } });
+    const quarantine = await deliverToQuarantine({ buffer: r.buffer, contentType: r.contentType, sha256, origin: { flow: flow.code, host: hostname } }, { tenant: opts.tenant, transaction: opts.transaction, connection: opts.connection });
     return { buffer: r.buffer, contentType: r.contentType, bytes: r.buffer.length, sha256, host: hostname, quarantine };
   } catch (err) {
     if (err.code === 'INTEGRATION_SSRF_BLOCKED') await auditBlock(err, { flow: opts.flow, tenant: opts.tenant, transaction: opts.transaction, connection: opts.connection });

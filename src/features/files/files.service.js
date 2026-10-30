@@ -35,7 +35,7 @@ const ALLOWED_MIME_TYPES = [
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'video/mp4', 'video/quicktime', 'video/webm',
-  'audio/mpeg', 'audio/mp4', 'audio/webm',
+  'audio/mpeg', 'audio/mp4', 'audio/webm', 'audio/ogg', 'audio/wav', 'audio/amr', // ogg/amr: nota de voz de mensageria; wav (M9-D247)
   'text/csv', // exportação do BI (M9-D701): texto sem script, servido sempre como anexo
 ];
 
@@ -59,6 +59,9 @@ const SIGNATURES = {
   'audio/mpeg': [(b) => b.slice(0, 3).toString('latin1') === 'ID3', (b) => b[0] === 0xff && (b[1] & 0xe0) === 0xe0],
   'audio/mp4': [(b) => b.slice(4, 8).toString('latin1') === 'ftyp'],
   'audio/webm': [(b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3],
+  'audio/ogg': [(b) => b.slice(0, 4).toString('latin1') === 'OggS'],
+  'audio/wav': [(b) => b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WAVE'],
+  'audio/amr': [(b) => b.slice(0, 5).toString('latin1') === '#!AMR'],
 };
 
 function matchesDeclaredType(buffer, mimeType) {

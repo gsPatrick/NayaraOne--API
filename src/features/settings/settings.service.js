@@ -41,6 +41,7 @@ const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settin
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
 const { SITE_SETTINGS_SCHEMA } = require('../integrations/site/site.settings');
+const { QUARANTINE_SETTINGS_SCHEMA } = require('../files/quarantine/quarantine.settings');
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
@@ -269,6 +270,8 @@ const SETTINGS_SCHEMA = {
   ...IDENTITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D259 — páginas do site: idioma padrão da página publicada.
   ...SITE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D247 — quarentena de uploads externos: tamanho máximo, prazo, razão e profundidade do arquivo compactado e tipos aceitos.
+  ...QUARANTINE_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D238 — seguradoras: marcos de vencimento, cotação de renovação e prazo da tarefa manual.

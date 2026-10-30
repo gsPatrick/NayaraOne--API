@@ -213,6 +213,7 @@ const modelDefiners = {
   EmailMessage: require('./EmailMessage'),
   EmailMessageEvent: require('./EmailMessageEvent'),
   SitePage: require('./SitePage'),
+  FileQuarantine: require('./FileQuarantine'),
   InsurancePolicyVersion: require('./InsurancePolicyVersion'),
   InsuranceManualTask: require('./InsuranceManualTask'),
   DomainEvent: require('./DomainEvent'),
