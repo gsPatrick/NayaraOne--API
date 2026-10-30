@@ -29,7 +29,7 @@ async function adminCleanup(itemId) {
 
 test('duas_conexoes_agendando_simultaneamente', { skip: SKIP }, async () => {
   const tx = (fn) => withTenantTransaction(ctx.tenant, fn);
-  const created = await tx(async (t) => env.pendingItem(t, ctx));
+  const created = await tx((t) => env.pendingInstitutional(t, ctx));
   const itemId = created.itemId;
   try {
     await tx((t) => env.service.approve({ tenant: ctx.tenant, actor: ctx.reviewer, itemId, input: {} }, t));

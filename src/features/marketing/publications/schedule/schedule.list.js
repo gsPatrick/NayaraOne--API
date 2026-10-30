@@ -29,7 +29,7 @@ function formatLocal(date, zone) {
   const p = Object.fromEntries(get({ year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).map((x) => [x.type, x.value]));
   const offset = (get({ timeZoneName: 'longOffset' }).find((x) => x.type === 'timeZoneName') || {}).value || 'GMT';
   const match = /GMT([+-]\d{2}:\d{2})?/.exec(offset);
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${match && match[1] ? match[1] : '+00:00'}`;
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${match && match[1] ? match[1] : 'Z'}`;
 }
 
 /**

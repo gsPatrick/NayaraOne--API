@@ -51,12 +51,11 @@ test('autopublicacao_so_por_classe_registrada_e_marca_approved_by_do_sistema', a
     assert.equal(humano.content.status, 'PENDING_APPROVAL');
     policy.registerApprovalPolicy(async () => ({ autopublish: true, classId: 'SOLD_RENTED+SITE', channels: ['SITE'] }));
     const auto = await run(t, { type: 'SOLD_RENTED', title: 'QA-M9 com classe', texto: 'Vendido.', ...fonte });
-    assert.equal(auto.content.status, 'APPROVED');
+    assert.equal(auto.content.status, 'SCHEDULED'); // M9-D408: a classe autorizada aprova e agenda sozinha
     assert.equal(auto.content.currentVersion.approvedBy, 'SYSTEM_AUTOPUBLISH:SOLD_RENTED+SITE');
     assert.match(auto.content.currentVersion.approvedHash, /^[0-9a-f]{64}$/);
-    // e o agendamento aceita (aprovação íntegra)
-    const out = await service.schedule({ tenant, actor: reviewer, itemId: auto.content.id, channels: ['SITE'], when: fx.inHours(1).toISOString() }, t);
-    assert.equal(out.status, 'SCHEDULED');
+    // e o agendamento humano de outro horário no mesmo canal é recusado (um só job ativo por versão e canal, M9-D410)
+    await assert.rejects(service.schedule({ tenant, actor: reviewer, itemId: auto.content.id, channels: ['SITE'], when: fx.inHours(5).toISOString() }, t), (e) => e.code === 'MKT_JOB_ALREADY_ACTIVE');
   });
 });
 

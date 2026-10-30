@@ -21,6 +21,7 @@ function titleOf(input, facts) {
 
 /** Campos próprios de alguns tipos que viajam no corpo da versão (tema e fontes do blog, mídia do vídeo). */
 const bodyExtras = (input) => ({
+  ...(Array.isArray(input.channels) && input.channels.length > 0 ? { canais: [...new Set(input.channels.map((c) => String(c).trim().toUpperCase()))] } : {}), // canais pretendidos (M9-D408)
   ...(input.tema ? { tema: input.tema } : {}),
   ...(Array.isArray(input.fontes) ? { fontes: input.fontes } : {}),
   ...(input.midiaId ? { midiaId: input.midiaId } : {}),

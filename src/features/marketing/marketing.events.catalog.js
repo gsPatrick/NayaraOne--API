@@ -18,7 +18,7 @@ const EVENT_CATALOG = Object.freeze({
     { contentId: 'uuid', type: 'code', sourceEntity: 'ref', versionNo: 'int', createdBy: 'nullableUuid' }, ['versionNo']),
   'marketing.content.approved': entry('MarketingContent', 'contentId', 'M9-D408',
     ['contentId', 'versionNo', 'approvedBy', 'autopublished'],
-    { contentId: 'uuid', versionNo: 'int', approvedBy: 'uuid', autopublished: 'boolean' }, ['versionNo']),
+    { contentId: 'uuid', versionNo: 'int', approvedBy: 'nullableUuid', autopublished: 'boolean' }, ['versionNo']),
   'marketing.publication.completed': entry('MarketingPublication', 'jobId', 'M9-D411',
     ['jobId', 'contentId', 'channel', 'externalPostId', 'externalUrl'],
     { jobId: 'uuid', contentId: 'uuid', channel: 'code', externalPostId: 'nullableCode', externalUrl: 'nullableUrl' }),

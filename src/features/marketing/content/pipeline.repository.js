@@ -79,6 +79,12 @@ async function setApprover(versionId, approvedBy, actor, transaction) {
     { versionId, approvedBy, actor: actor || null }, transaction);
 }
 
+/** Classe de autopublicação do item (M9-D408); null limpa. */
+async function setAutopublishClass(itemId, classId, actor, transaction) {
+  await run('UPDATE marketing.content_items SET autopublish_class = :classId, updated_by = :actor, updated_at = now() WHERE id = :itemId RETURNING id',
+    { itemId, classId, actor: actor || null }, transaction);
+}
+
 /** Template PUBLISHED (o mais novo do código) ou, com anyStatus, o id exato mesmo aposentado (conteúdo que já o usava). */
 async function findPublishedTemplate({ templateId, code, anyStatus = false }, transaction) {
   const where = templateId ? 'id = :key' : 'code = :key';
@@ -96,5 +102,5 @@ async function listJobs(versionId, transaction) {
 }
 
 module.exports = {
-  lockItem, findVersion, insertNextVersion, setSource, setStatus, writeCheck, setApprover, findPublishedTemplate, listJobs,
+  lockItem, findVersion, insertNextVersion, setSource, setStatus, writeCheck, setApprover, setAutopublishClass, findPublishedTemplate, listJobs,
 };

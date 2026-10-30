@@ -6,6 +6,7 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { isAiSettingKey } = require('../../features/ai/ai.settings');
 const { requireTemplateManageToAddPublicFields } = require('../../features/marketing/content/publicFields.settings');
 const { requireAutomationManageForCadence } = require('../../features/marketing/automations/cadence/cadence.guard');
+const { requireAutomationManageForAutopublish } = require('../../features/marketing/content/autopublish.guard');
 const { isSloSettingKey } = require('../../features/integrations/health/slo');
 const settingsController = require('./settings.controller');
 
@@ -22,6 +23,6 @@ const requireIntegrationManageForSlo = (req, res, next) => (isSloSettingKey(req.
 settingsRouter.get('/settings', requirePermission('settings:read'), settingsController.listSettings);
 settingsRouter.get('/settings/integrations/status', requirePermission('settings:read'), settingsController.getIntegrationsStatus);
 settingsRouter.get('/settings/:key', requirePermission('settings:read'), settingsController.getSetting);
-settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, settingsController.upsertSetting);
+settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
 
 module.exports = settingsRouter;

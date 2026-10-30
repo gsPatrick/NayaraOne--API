@@ -31,6 +31,12 @@ async function pendingItem(t, env, { channels, type = 'NEW_PROPERTY', textFor } 
   return { itemId: out.content.id, status: out.content.status, propertyId: prop.id, templateId: tpl.id, versionId: out.content.currentVersion.id };
 }
 
+/** Institucional escrito à mão até PENDING_APPROVAL: sem imóvel nem template, para os testes que fazem COMMIT real e limpam depois. */
+async function pendingInstitutional(t, env, title = 'QA-M9 institucional') {
+  const out = await service.createAndRun({ tenant: env.tenant, actor: env.tenant.userId, input: { type: 'INSTITUTIONAL', title, texto: 'Somos uma imobiliária de Salvador.' } }, fx.sameTx(t));
+  return { itemId: out.content.id, status: out.content.status, versionId: out.content.currentVersion.id };
+}
+
 /** Conteúdo aprovado por outra pessoa (status APPROVED). */
 async function approvedItem(t, env, opts) {
   const item = await pendingItem(t, env, opts);
@@ -42,4 +48,4 @@ const schedule = (t, env, itemId, body, now) => service.schedule({ tenant: env.t
 const inMinutes = (m, from = new Date()) => new Date(from.getTime() + m * 60000);
 const rejectsCode = (promise, status, code) => require('node:assert/strict').rejects(promise, (e) => e.statusCode === status && e.code === code, `esperava ${status} ${code}`);
 
-module.exports = { setup, reset, pendingItem, approvedItem, schedule, inMinutes, rejectsCode, fx, service, withRollbackTenantTransaction };
+module.exports = { setup, reset, pendingItem, pendingInstitutional, approvedItem, schedule, inMinutes, rejectsCode, fx, service, withRollbackTenantTransaction };

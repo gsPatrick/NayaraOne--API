@@ -10,6 +10,7 @@ const { prepareSchedule, scheduleStep, scheduleMore } = require('./step.schedule
 const { getDefinition, assertChannelsAllowed } = require('./types/validate');
 const { assertSchedulingNotPaused } = require('../degradation.guard');
 const { contentNotApproved } = require('./pipeline.errors');
+const { finishAutopublish } = require('./autopublish.finish');
 
 /** Os passos do pipeline, cada um em UMA transação do chamador (o executeStep trava o item e é idempotente). */
 const runFactualCheck = (ctx, t) => executeStep('factual', { ...ctx, input: null }, t, factualStep);
@@ -18,7 +19,17 @@ const applyTemplate = (ctx, t) => {
   return executeStep('branding', { ...ctx, input }, t, (step) => brandingStep(step, input));
 };
 const applyCompliance = (ctx, t) => executeStep('compliance', { ...ctx, input: null }, t, complianceStep);
-const requestApprovalIfRequired = (ctx, t) => executeStep('approval', { ...ctx, input: null }, t, approvalStep);
+
+/**
+ * requestApprovalIfRequired (função 6): PENDING_APPROVAL, ou APPROVED quando uma classe autoriza (M9-D408); nesse caso emite o evento e agenda sozinha
+ * logo depois, na mesma transação. Repetir o passo (replay) não agenda nem emite de novo.
+ */
+async function requestApprovalIfRequired(ctx, t) {
+  const result = await executeStep('approval', { ...ctx, input: null }, t, approvalStep);
+  const detail = result.step && result.step.detalhes;
+  if (result.replay || result.status !== 'APPROVED' || !detail || detail.autopublished !== true) return result;
+  return finishAutopublish(ctx, result, t, schedulePublication);
+}
 
 /** Estados em que o item ainda não foi aprovado: agendar é 409 MKT_CONTENT_NOT_APPROVED (M9-D410). */
 const NOT_APPROVED = Object.freeze(['DRAFT', 'FACT_CHECK_FAILED', 'FACT_CHECKED', 'BRANDED', 'COMPLIANCE_CHECKED', 'PENDING_APPROVAL']);
