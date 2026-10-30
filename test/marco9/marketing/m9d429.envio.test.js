@@ -37,7 +37,7 @@ test('opt_out_e_suppression_antes_de_enviar', async () => {
       assert.equal(await byKey(t, A, input.actionKey), undefined, 'bloqueado: nenhuma mensagem sai nem é gravada como enviada');
     }
     assert.equal(adapters.sandboxRecordCount(A.companyId, 'EMAIL'), 0, 'o canal nem foi chamado');
-    const audits = await env.q(t, "SELECT action, after_json FROM audit.audit_log WHERE company_id = :c AND action = 'marketing.message.blocked' ORDER BY created_at", { c: A.companyId });
+    const audits = await env.q(t, "SELECT action, after_json FROM audit.audit_log WHERE company_id = :c AND action = 'marketing.message.blocked' AND entity_id IN (:ids) ORDER BY created_at, id", { c: A.companyId, ids: [suppressed, optedOut, noConsent] }); // só as três pessoas deste teste: auditorias commitadas por outros testes não entram
     assert.equal(audits.length, 3, 'a razão do bloqueio é gravada');
     assert.deepEqual(audits.map((a) => a.after_json.reason), ['SUPPRESSED', 'OPT_OUT', 'NO_CONSENT']);
     // a supressão é avaliada NA HORA do envio: quem pediu para sair depois de a mensagem ser montada também é barrado
