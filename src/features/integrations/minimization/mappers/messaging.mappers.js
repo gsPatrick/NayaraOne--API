@@ -32,7 +32,21 @@ module.exports = {
         { name: 'subject', classification: 'PUBLIC', freeText: true, required: true },
         { name: 'body', classification: 'PUBLIC', freeText: true, required: true },
         { name: 'attachmentRef', classification: 'PUBLIC', classificationFrom: 'attachmentClassification', personalData: true },
-      ],
+        // M9-D234: cópia, cópia oculta, resposta, versão HTML e anexos (referência do arquivo, sem o conteúdo; a classificação do documento manda em cada anexo).
+        { name: 'cc', classification: 'PERSONAL' },
+        { name: 'bcc', classification: 'PERSONAL' },
+        { name: 'replyTo', classification: 'PERSONAL' },
+        { name: 'bodyHtml', classification: 'PUBLIC', freeText: true },
+        {
+          name: 'attachments',
+          classification: 'PUBLIC',
+          items: [
+            { name: 'fileId', classification: 'PUBLIC', classificationFrom: 'classification', personalData: true, required: true },
+            { name: 'fileName', classification: 'INTERNAL' },
+            { name: 'mimeType', classification: 'INTERNAL' },
+            { name: 'sizeBytes', classification: 'INTERNAL' },
+            { name: 'sha256', classification: 'INTERNAL' },
+          ],
     }),
   },
 };

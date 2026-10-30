@@ -2,6 +2,7 @@
 
 const { RECONCILE_SETTINGS_SCHEMA } = require('./reconcile/reconcile.settings');
 const { SOCIAL_SETTINGS_SCHEMA } = require('../social/social.settings');
+const { EMAIL_SETTINGS_SCHEMA } = require('../email/email.settings');
 
 /** Parâmetros dos envios (M9-D205): só o dicionário de SETTINGS_SCHEMA; a leitura está em dispatch.params.js. */
 const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
@@ -36,6 +37,8 @@ const DISPATCH_SETTINGS_SCHEMA = Object.freeze({
   ...RECONCILE_SETTINGS_SCHEMA,
   // M9-D239: redes sociais (janela de dias para achar o post duplicado e política de publicação automática).
   ...SOCIAL_SETTINGS_SCHEMA,
+  // M9-D234: e-mail de saída (limite e tipos de anexo, teto de classificação, destinatários).
+  ...EMAIL_SETTINGS_SCHEMA,
 });
 
 module.exports = { DISPATCH_SETTINGS_SCHEMA };

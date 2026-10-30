@@ -208,6 +208,8 @@ const modelDefiners = {
   IntegrationSyncCursor: require('./IntegrationSyncCursor'),
   IntegrationWebhookInbox: require('./IntegrationWebhookInbox'),
   IntegrationDispatch: require('./IntegrationDispatch'),
+  EmailMessage: require('./EmailMessage'),
+  EmailMessageEvent: require('./EmailMessageEvent'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
   AiAgent: require('./AiAgent'),
