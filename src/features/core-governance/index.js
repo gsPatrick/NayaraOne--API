@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { errorEnvelope } = require('./governance.errors');
 const { GOVERNANCE_MODULES } = require('./governance.settings');
 const permissionsRouter = require('./governance.permissions.routes');
+const { router: migrationRouter } = require('../migration-v2'); // M9-D900: POST /migration/runs (fora das 8 pastas de módulo: é a feature migration-v2)
 
 /**
  * core-governance — camada única de governança operacional do Marco 9 (Caderno, Guia do Marcelo §2). Oito módulos, um por
@@ -22,12 +23,14 @@ const GOVERNANCE_PREFIXES = Object.freeze([
   '/data-classification',
   '/governance',
 ]);
+  '/migration',
 
 const router = Router();
 router.use(GOVERNANCE_PREFIXES, errorEnvelope);
 for (const mod of GOVERNANCE_MODULES) router.use(modules[mod.code].router);
 router.use(permissionsRouter);
 
+router.use(migrationRouter);
 // M9-D825: política de VIEW aplicada na resposta das rotas de pessoas, imóveis, fornecedores, contratos, financeiro e arquivos (montada em src/routes/index.js).
 const { viewPolicyRouter } = require('./dlp/view.routes');
 

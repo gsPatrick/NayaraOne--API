@@ -21,6 +21,7 @@ const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJ
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
 const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
+const { startMigrationRunJob } = require('./src/engines/jobs/migrationRunJob');
 const { startRetentionJob } = require('./src/engines/jobs/retentionJob');
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
@@ -232,6 +233,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISAB
   startIdempotencyCleanupJob();
 }
 // Deprecação de API (M9-D841): avaliação diária às 07:00 de Brasília (vira SUNSET e publica api.consumer.deprecation_due).
+// Retomada das execuções QUEUED da migração v2 (M9-D900): confere a cada minuto; MIGRATION_RUN_JOB_DISABLED=true desliga no processo.
+if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_RUN_JOB_DISABLED !== 'true') {
+  startMigrationRunJob();
+}
+
 if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {
   startApiDeprecationJob();
 }
