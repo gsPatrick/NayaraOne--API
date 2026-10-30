@@ -1,0 +1,50 @@
+{
+  "provider": "portal-zap-sandbox",
+  "apiVersion": "v1",
+  "description": "Portal A de laboratório (mapping 1.2.0: finalidade VENDA vira SALE; vídeo, tour virtual e destaque) (a publicação responde com o id do anúncio; o status do anúncio só vem da consulta).",
+  "requests": {
+    "publishListing": {
+      "listingRef": "imovel-contrato-001",
+      "title": "Apartamento de contrato",
+      "description_public": "Imóvel de laboratório sem dado real.",
+      "purpose": "VENDA",
+      "type": "APARTMENT",
+      "price_public": "850000.00",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "parking_spots": 1,
+      "city": "Cidade QA",
+      "state": "SP"
+    },
+    "updateListing": {
+      "listingRef": "imovel-contrato-001",
+      "title": "Apartamento de contrato (atualizado)",
+      "description_public": "Imóvel de laboratório sem dado real.",
+      "purpose": "VENDA",
+      "type": "APARTMENT",
+      "price_public": "850000.00",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "parking_spots": 1,
+      "city": "Cidade QA",
+      "state": "SP",
+      "externalResourceIdFrom": "publishListing"
+    },
+    "unpublishListing": {
+      "externalResourceIdFrom": "publishListing"
+    },
+    "getListingStatus": {
+      "externalResourceIdFrom": "publishListing"
+    }
+  },
+  "statuses": {
+    "PUBLISHED": "PUBLISHED",
+    "ACTIVE": "PUBLISHED",
+    "UPDATED": "UPDATED",
+    "REMOVED": "UNPUBLISHED",
+    "UNPUBLISHED": "UNPUBLISHED",
+    "REJECTED": "REJECTED"
+  },
+  "unknownStatus": "em_moderacao",
+  "renewal": false
+}

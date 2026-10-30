@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { IntegrationDispatch } = require('../../../models');
 const { publishDomainEvent } = require('../../../engines/events/outbox');
 const { resolveDispatchByEvent } = require('../dispatch/reconcile');
@@ -18,6 +19,15 @@ function nextStatus(current, external) {
 const lastPublishDispatch = (ctx, listingId, transaction) => IntegrationDispatch.findOne({
   where: { companyId: ctx.companyId, aggregateType: LISTING_AGGREGATE, aggregateId: listingId, operation: ['publishListing', 'updateListing'] }, order: [['created_at', 'DESC']], transaction,
 });
+
+/** `properties.portal_listing.status_changed` na transação de quem mudou o estado (M9-D232 3.4). `key` distingue a mudança (a reação ao envio usa o id do envio, e o evento sai uma vez). */
+async function publishStatusChanged(ctx, listing, { from, to, rejectionReason }, key, transaction) {
+  return publishDomainEvent({
+    groupId: ctx.groupId, companyId: ctx.companyId, aggregateType: 'Property', aggregateId: listing.propertyId, eventType: EVENT_STATUS_CHANGED,
+    payload: { propertyId: listing.propertyId, listingId: listing.id, connectionId: listing.connectionId, externalListingId: listing.externalListingId || null, from, to, rejectionReason: rejectionReason || null },
+    idempotencyKey: `${EVENT_STATUS_CHANGED}:${listing.id}:${from}:${to}:${crypto.createHash('sha256').update(String(key)).digest('hex').slice(0, 16)}`, // até 128 caracteres
+  }, transaction);
+}
 
 /**
  * Aplica o estado que o portal informou (consulta de status ou webhook assinado, mesma regra de ordem): atualiza o anúncio, grava a reprovação em português e,
@@ -43,14 +53,8 @@ async function applyExternalListingStatus(ctx, listing, external, transaction) {
       await resolveDispatchByEvent(ctx, { providerCode: envio.providerCode, idempotencyKey: envio.idempotencyKey, status: s === 'UPDATED' ? 'PUBLISHED' : s, source: 'STATUS_QUERY' }, {}, transaction);
     }
   }
-  if (to !== from) {
-    await publishDomainEvent({
-      groupId: ctx.groupId, companyId: ctx.companyId, aggregateType: 'Property', aggregateId: listing.propertyId, eventType: EVENT_STATUS_CHANGED,
-      payload: { propertyId: listing.propertyId, listingId: listing.id, connectionId: listing.connectionId, externalListingId: listing.externalListingId || null, from, to, rejectionReason: to === 'REJECTED' ? patch.rejectionReason : null },
-      idempotencyKey: `${EVENT_STATUS_CHANGED}:${listing.id}:${from}:${to}:${Date.now()}`,
-    }, transaction);
-  }
+  if (to !== from) await publishStatusChanged(ctx, listing, { from, to, rejectionReason: to === 'REJECTED' ? patch.rejectionReason : null }, `${Date.now()}`, transaction);
   return { changed: to !== from, from, to };
 }
 
-module.exports = { applyExternalListingStatus, nextStatus, lastPublishDispatch };
+module.exports = { applyExternalListingStatus, nextStatus, lastPublishDispatch, publishStatusChanged };

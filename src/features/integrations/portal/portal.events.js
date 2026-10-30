@@ -6,6 +6,7 @@ const { registerEventConsumer } = require('../../../engines/events/consumers');
 const adapterRegistry = require('../registry/adapterRegistry');
 const { registerDomainHandler } = require('../webhooks/worker/worker.handlers');
 const { applyExternalListingStatus } = require('./portal.status');
+const { installPortalReactions } = require('./portal.react');
 const { publishToPortals } = require('./portal.publish');
 const { unpublishFromPortals } = require('./portal.unpublish');
 
@@ -50,6 +51,7 @@ function installPortalEvents() {
   registerEventConsumer('property.public.changed', NAME, onPublicChanged);
   registerEventConsumer('property.public.unpublish', `${NAME}.unpublish`, onPublicUnpublish);
   registerDomainHandler('PORTAL', onPortalWebhook);
+  installPortalReactions(); // M9-D220: a reação ao envio confirmado ou falho (e a compensação)
 }
 
 module.exports = { installPortalEvents, onPublicChanged, onPublicUnpublish, onPortalWebhook, NAME };

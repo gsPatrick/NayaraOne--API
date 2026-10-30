@@ -1,6 +1,7 @@
 'use strict';
 
-const { sequelize, IntegrationConnection, IntegrationProvider } = require('../../../models');
+const { Op } = require('sequelize');
+const { sequelize, IntegrationConnection, IntegrationProvider, IntegrationDispatch } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
@@ -37,6 +38,13 @@ const toItem = (con, listing, extra = {}) => ({
   statusMessage: STATUS_MESSAGES[listing.status] || null, lastError: listing.lastError || null, ...extra,
 });
 
+/** Chave do pedido ao portal: `portal:<operação>:<anúncio>:<hash>`, com sufixo só depois de envio recusado por inteiro (FAILED ou CANCELLED), para o anúncio em ERROR poder ser publicado de novo com o mesmo conteúdo (M9-D220). */
+async function dispatchKey(ctx, listing, operation, hash, transaction) {
+  const base = `portal:${operation}:${listing.id}:${hash.slice(0, 24)}`;
+  const falhas = await IntegrationDispatch.count({ where: { companyId: ctx.companyId, aggregateType: 'PortalListing', aggregateId: listing.id, operation, idempotencyKey: { [Op.like]: `${base}%` }, status: ['FAILED', 'CANCELLED'] }, transaction });
+  return falhas === 0 ? base : `${base}:r${falhas}`;
+}
+
 /** Publica (ou atualiza) o imóvel em UM portal. Recusa internamente o que falta (sem chamar o portal), compara o hash e cria o envio só quando o conteúdo mudou. */
 async function publishOne(ctx, con, propertyId, readModel, transaction) {
   const adapter = adapterRegistry.instantiate(con.providerCode);
@@ -58,7 +66,7 @@ async function publishOne(ctx, con, propertyId, readModel, transaction) {
 
   const operation = listing.externalListingId && ['PUBLISHING', 'PUBLISHED', 'ERROR', 'REJECTED'].includes(listing.status) ? 'updateListing' : 'publishListing';
   const { dispatch } = await createPropertyPublicationDispatch(ctx, {
-    connectionId: con.id, propertyId, operation, idempotencyKey: `portal:${operation}:${listing.id}:${hash.slice(0, 24)}`, externalResourceId: listing.externalListingId || undefined,
+    connectionId: con.id, propertyId, operation, idempotencyKey: await dispatchKey(ctx, listing, operation, hash, transaction), externalResourceId: listing.externalListingId || undefined,
     aggregateType: 'PortalListing', aggregateId: listing.id,
   }, transaction);
   await listing.update({ status: 'PUBLISHING', payloadHash: hash, mappingVersion: version, fieldsDropped: mapped.fieldsDropped, rejectionReason: null, lastError: null }, { transaction });

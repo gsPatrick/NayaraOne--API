@@ -1,0 +1,48 @@
+{
+  "provider": "portal-sandbox",
+  "apiVersion": "v1",
+  "description": "Portal de laboratório genérico (a publicação responde com o id do anúncio; o status do anúncio só vem da consulta).",
+  "requests": {
+    "publishListing": {
+      "listingRef": "imovel-contrato-001",
+      "title": "Apartamento de contrato",
+      "description_public": "Imóvel de laboratório sem dado real.",
+      "purpose": "VENDA",
+      "type": "APARTMENT",
+      "price_public": "850000.00",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "parking_spots": 1,
+      "city": "Cidade QA",
+      "state": "SP"
+    },
+    "updateListing": {
+      "listingRef": "imovel-contrato-001",
+      "title": "Apartamento de contrato (atualizado)",
+      "description_public": "Imóvel de laboratório sem dado real.",
+      "purpose": "VENDA",
+      "type": "APARTMENT",
+      "price_public": "850000.00",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "parking_spots": 1,
+      "city": "Cidade QA",
+      "state": "SP",
+      "externalResourceIdFrom": "publishListing"
+    },
+    "unpublishListing": {
+      "externalResourceIdFrom": "publishListing"
+    },
+    "getListingStatus": {
+      "externalResourceIdFrom": "publishListing"
+    }
+  },
+  "statuses": {
+    "PUBLISHED": "PUBLISHED",
+    "UPDATED": "UPDATED",
+    "UNPUBLISHED": "UNPUBLISHED",
+    "REJECTED": "REJECTED"
+  },
+  "unknownStatus": "em_moderacao",
+  "renewal": false
+}

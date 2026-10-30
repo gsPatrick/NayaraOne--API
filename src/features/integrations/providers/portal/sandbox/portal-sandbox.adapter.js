@@ -27,6 +27,8 @@ class PortalSandboxAdapter extends PortalAdapter {
   /** Esquema do evento de status (M9-D213 3.3). */
   webhookSchemas() { return statusEventSchemas(); }
 
+  /** O id do anúncio sai do `listingRef`: publicar a mesma referência duas vezes devolve o mesmo anúncio (M9-D222 cenário 7). */
+  supportsIdempotency(operation) { return operation === 'publishListing'; }
 
   async healthCheck() { return { ok: true, latencyMs: 0, detail: 'Sandbox local: não faz chamada externa.' }; }
 
