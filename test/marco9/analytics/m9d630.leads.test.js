@@ -6,6 +6,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const kit = require('../_helpers/crmKpiEnv');
 const { leadsFromSource } = require('../_helpers/crmOracle630');
+const { storedDimension } = require('../_helpers/biStoredSnapshot');
 
 const { src, at, TODAY } = kit;
 let env;
@@ -74,7 +75,8 @@ test('m9d630 crm.leads_by_origin fica DEGRADED com valor nulo quando a regra de 
   const kpi = await kit.readKpi(t, 'crm.leads_by_origin');
   assert.equal(kpi.status, 'DEGRADED');
   assert.equal(kpi.value, null, 'nunca um número enganoso');
-  assert.equal(Number(await kit.dimension(t, 'crm.leads_by_origin', 'origem:NAO_INFORMADA')), 2, 'a origem vazia aparece como NAO_INFORMADA');
+  assert.equal(await kit.dimension(t, 'crm.leads_by_origin', 'origem:NAO_INFORMADA'), null, 'a API nunca devolve número de KPI DEGRADED, nem o de uma dimensão (M9-D697)');
+  assert.equal(Number(await storedDimension(env, t, 'crm.leads_by_origin', 'origem:NAO_INFORMADA', TODAY)), 2, 'o snapshot gravado guarda a origem vazia como NAO_INFORMADA, com a contagem verdadeira');
 });
 
 test('m9d630 o limite de origem vazia é parâmetro do administrador (analytics.qualidade.max_origem_vazia_pct)', async () => {
@@ -87,4 +89,15 @@ test('m9d630 o limite de origem vazia é parâmetro do administrador (analytics.
   await kit.setSetting(env, t, 'analytics.qualidade.max_origem_vazia_pct', 10);
   await kit.kpis(t);
   assert.equal((await kit.readKpi(t, 'crm.leads_by_origin')).status, 'DEGRADED', 'baixando o limite para 10% volta a DEGRADED');
+});
+
+test('m9d630 a contagem de leads da data-base é a mesma com o relógio às 23:30 e às 00:30 de São Paulo (UTC já no dia seguinte)', async () => {
+  const t = env.cX;
+  const before = (await kit.kpis(t)).kpis['crm.leads_by_origin'];
+  for (const instant of ['2026-10-29T02:30:00Z', '2026-10-29T03:30:00Z']) {
+    kit.registry.clock.setClock(() => new Date(instant));
+    const now = (await kit.kpis(t, TODAY)).kpis['crm.leads_by_origin'];
+    assert.deepEqual([now.status, now.value], [before.status, before.value], `data-base ${TODAY} calculada com o relógio em ${instant}`);
+  }
+  kit.registry.clock.setClock(() => kit.NOW);
 });
