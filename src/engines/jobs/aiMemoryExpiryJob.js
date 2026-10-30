@@ -1,8 +1,7 @@
 'use strict';
 
 const { sequelize, Group, Company } = require('../../models');
-const { MemoryService } = require('../../features/ai/memory');
-const { readMemoryParams } = require('../../features/ai/memory/memory.params');
+const { MemoryService, readMemoryParams } = require('../../features/ai/memory');
 const { safeLogger } = require('../../features/ai/audit');
 
 /**

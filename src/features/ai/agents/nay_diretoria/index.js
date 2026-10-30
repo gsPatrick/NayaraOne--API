@@ -28,4 +28,7 @@ function registerNayDiretoria() {
   registerDiretoriaNumbers();
 }
 
-module.exports = { ...policy, GOLDEN_CASES: CASES, RULE_TASKS: RESOLVERS, DIRETORIA_SETTING_DEFAULTS, DIRETORIA_SETTINGS_SCHEMA, registerNayDiretoria };
+// Carga tardia: o runner importa o orquestrador, que por sua vez carrega os agentes (evita o ciclo).
+const createBriefAgentRunner = (...args) => require('./diretoria.briefRunner').createBriefAgentRunner(...args);
+
+module.exports = { ...policy, GOLDEN_CASES: CASES, RULE_TASKS: RESOLVERS, DIRETORIA_SETTING_DEFAULTS, DIRETORIA_SETTINGS_SCHEMA, registerNayDiretoria, createBriefAgentRunner };

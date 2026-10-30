@@ -1,8 +1,7 @@
 'use strict';
 
 const { sequelize, Group, Company } = require('../../models');
-const { rolloverCompany } = require('../../features/ai/budgets');
-const { monthPeriodOf } = require('../../features/ai/budgets/budgets.period');
+const { rolloverCompany, monthPeriodOf } = require('../../features/ai/budgets');
 const { safeLogger } = require('../../features/ai/audit');
 
 /**

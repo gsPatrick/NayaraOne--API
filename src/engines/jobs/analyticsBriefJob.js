@@ -5,9 +5,8 @@ const logger = require('../../utils/logger');
 const clock = require('../../features/analytics/metrics/clock');
 const { inCompany } = require('../../features/analytics/companyTx');
 const briefs = require('../../features/analytics/briefs');
-const { isAiEnabled, isAgentEnabled } = require('../../features/ai/aiGate.middleware');
-const { createBriefAgentRunner } = require('../../features/ai/agents/nay_diretoria/diretoria.briefRunner');
-const { CODE: AGENT_CODE } = require('../../features/ai/agents/nay_diretoria/diretoria.policy');
+const { isAiEnabled, isAgentEnabled } = require('../../features/ai');
+const { createBriefAgentRunner, CODE: AGENT_CODE } = require('../../features/ai/agents/nay_diretoria');
 
 /**
  * analyticsBriefJob (Marco 9, M9-D693 3.1): briefing executivo da NAY Diretoria. Todo dia a partir de `analytics.brief.hora_diario` (padrão 06:30 de
