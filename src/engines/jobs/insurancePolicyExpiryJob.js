@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const { sequelize, Group, Company, InsurancePolicy, Notification } = require('../../models');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 const { todayDateOnly, POLICY_STATUSES_ELIGIBLE_FOR_CLAIM } = require('../../features/procurement/insurance.service');
+const { publishExpired } = require('../../features/procurement/insurance/insurance.milestones');
 
 /**
  * insurancePolicyExpiryJob (Marco 7 — Insurance Hub, contrato Anexo I: "Apólice com ...
@@ -46,6 +47,7 @@ async function expireDuePolicies(transaction, now = new Date()) {
         const beforeJson = policy.toJSON();
         policy.status = 'EXPIRED';
         await policy.save({ transaction: nested });
+        await publishExpired(policy, nested); // M9-D238: `insurance.policy.expired` no dia seguinte ao fim da vigência, uma vez por apólice e vigência
 
         if (policy.createdBy) {
           // GAP REAL CORRIGIDO (auditoria contrato "Alertas: criticidade, responsável, canal e
@@ -84,7 +86,7 @@ async function expireDuePolicies(transaction, now = new Date()) {
       });
       if (didExpire) expired += 1;
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(`[InsurancePolicyExpiryJob] Falha ao expirar apólice ${candidate.id}: ${err.message}`);
     }
   }
@@ -119,7 +121,7 @@ async function runInsurancePolicyExpiryJob() {
         summary.expired += result.expired;
       } catch (err) {
         summary.errors += 1;
-        // eslint-disable-next-line no-console
+         
         console.error(
           `[InsurancePolicyExpiryJob] Falha ao processar empresa ${company.id} (grupo ${group.id}): ${err.message}`
         );
@@ -127,7 +129,7 @@ async function runInsurancePolicyExpiryJob() {
     }
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log(
     `[InsurancePolicyExpiryJob] Execução concluída — ${summary.groupsChecked} grupo(s), ${summary.companiesChecked} empresa(s), ` +
       `${summary.policiesChecked} apólice(s) verificada(s), ${summary.expired} expirada(s), ${summary.errors} erro(s).`
@@ -140,13 +142,13 @@ const DEFAULT_INTERVAL_MS = 60 * 60 * 1000; // 1 hora — mesmo intervalo do ale
 
 function startInsurancePolicyExpiryJob({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
   runInsurancePolicyExpiryJob().catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error('[InsurancePolicyExpiryJob] Falha na execução inicial:', err.message);
   });
 
   return setInterval(() => {
     runInsurancePolicyExpiryJob().catch((err) => {
-      // eslint-disable-next-line no-console
+       
       console.error('[InsurancePolicyExpiryJob] Falha na execução agendada:', err.message);
     });
   }, intervalMs);

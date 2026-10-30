@@ -20,10 +20,16 @@ const {
 const { publishRenewalUpserted, publishRenewalCancelled } = require('./insuranceCalendarEvents.service');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
-const { resolveInsuranceAdapter } = require('./adapters/resolveInsuranceAdapter');
+const { callInsurer, proposalKey } = require('./insurance/insurance.call');
+const { providerKeyOf } = require('./insurance/insurance.connection');
+const { publishQuoteReceived, publishPolicyIssued } = require('./insurance/insurance.events');
+const { installInsuranceEvents } = require('./insurance/insurance.webhook');
+const { quoteDomainObject, quoteFromResponse, proposeDomainObject, claimDomainObject, pendingTaskOf, providerResultOf } = require('./insurance/insurance.domain');
 const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
 const filesService = require('../files/files.service');
+
+installInsuranceEvents(); // M9-D238: o status da apólice que a seguradora informa por webhook assinado entra pelo worker da caixa de entrada
 
 // Insurance Hub (Marco 7, contrato 00000009 Anexo I — "COMPRAS/PROCUREMENT + SEGUROS"):
 // "policies, parties, coverages, installments, claims, claim_events, renewal_tasks,
@@ -233,9 +239,24 @@ async function quotePolicy(id, quoteRequest, actor, transaction) {
       'INSURANCE_POLICY_VALIDATION'
     );
   }
-  const adapter = await resolveInsuranceAdapter({ groupId: policy.groupId, companyId: policy.companyId }, transaction);
-  const quote = await adapter.quote(quoteRequest || {});
+  // M9-D238: o pedido de cotação entra pelo Dispatch Service (conteúdo minimizado, finalidade e hash gravados) e o worker de envios chama a seguradora; sem API, a cotação
+  // vira uma tarefa para uma pessoa e o resultado entra por applyQuoteResult, o mesmo caminho da resposta da API.
+  const ctx = { groupId: policy.groupId, companyId: policy.companyId, userId: actor.userId || null };
+  const pedido = quoteDomainObject(policy, quoteRequest);
+  const call = await callInsurer({ ctx, policy, operation: 'quote', domainObject: pedido, transaction });
+  if (call.source === 'MANUAL') {
+    policy.setDataValue('pendingTask', await pendingTaskOf(call.response, transaction));
+    return policy;
+  }
+  return applyQuoteResult(policy, quoteFromResponse(call.response), { actor, source: 'API', requestSnapshot: pedido }, transaction);
+}
 
+/**
+ * applyQuoteResult — aplica a cotação recebida à apólice (M9-D238 3.2): a mesma regra para a resposta da API e para a tarefa manual concluída. Valida o prêmio, grava o
+ * snapshot sem dado pessoal, leva a apólice a QUOTED, guarda o documento embutido da cotação (Yelum) e publica `insurance.quote.received` com a origem (API ou MANUAL).
+ * `quote`: premiumAmount, coverageSummary, raw, externalId. Cotação de renovação (policy já vigente) não passa por aqui: ver insurance.renewal.js.
+ */
+async function applyQuoteResult(policy, quote, { actor, source, requestSnapshot }, transaction) {
   const embeddedDoc = extractEmbeddedDocument(quote.raw);
   const rawForSnapshot = embeddedDoc && quote.raw?.Data
     ? { ...quote.raw, Data: { ...quote.raw.Data, File: '[ARMAZENADO_COMO_ARQUIVO]' } }
@@ -258,9 +279,11 @@ async function quotePolicy(id, quoteRequest, actor, transaction) {
   // mais sobrescrito por uma cotação.
   policy.quoteSnapshot = redactPii(rawForSnapshot);
   policy.premiumAmount = nextPremiumAmount;
+  if (requestSnapshot) policy.quoteRequestJson = requestSnapshot;
   policy.status = 'QUOTED';
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
+  await publishQuoteReceived(policy, { ref: quote.externalId || `${Date.now()}`, source, premiumAmount: nextPremiumAmount === null || nextPremiumAmount === undefined ? null : Number(nextPremiumAmount) }, transaction);
 
   if (embeddedDoc) {
     const file = await filesService.uploadFile(
@@ -443,20 +466,37 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     );
   }
 
-  const tenant = { groupId: policy.groupId, companyId: policy.companyId };
-  const idempotencyKey = `insurance-policy:${policy.id}`;
-  const adapter = await resolveInsuranceAdapter(tenant, transaction);
-  // REVISÃO MARCO 7 (19/10/2026, B7): gravava o provedor SELECIONADO nas configurações, mesmo
-  // quando a emissão tinha caído no sandbox. Agora grava quem emitiu de fato (o adapter usado).
-  const providerName = adapter.providerName;
-  const issued = await adapter.issuePolicy({ ...issueRequest, idempotencyKey });
+  // M9-D238: a proposta (DANGEROUS) entra pelo Dispatch Service com a chave `insurance-policy:{id}`: resposta incerta nunca repete às cegas e a mesma chave devolve o mesmo envio.
+  // REVISÃO MARCO 7 (19/10/2026, B7): grava quem emitiu de fato (a connection usada), não o provedor selecionado nas configurações.
+  const ctx = { groupId: policy.groupId, companyId: policy.companyId, userId: actor.userId || null };
+  const pedido = proposeDomainObject(policy, issueRequest, { effectiveDate: nextEffectiveDate, expiryDate: nextExpiryDate });
+  const call = await callInsurer({ ctx, policy, operation: 'propose', domainObject: pedido, idempotencyKey: await proposalKey(ctx, policy.id, transaction), transaction });
+  if (call.source === 'MANUAL') {
+    policy.setDataValue('pendingTask', await pendingTaskOf(call.response, transaction));
+    return policy;
+  }
+  if (call.uncertain) {
+    policy.setDataValue('providerResult', providerResultOf(call));
+    return policy;
+  }
+  const emitida = call.response.policy || {};
+  const issued = { externalId: call.response.externalResourceId, policyNumber: emitida.policyNumber || null, status: emitida.status || call.response.status };
+  return finalizeIssuance(policy, issued, { issueRequest, effectiveDate: nextEffectiveDate, expiryDate: nextExpiryDate, providerName: providerKeyOf(call.connection.providerCode), source: 'API', actor }, transaction);
+}
 
+/**
+ * finalizeIssuance — aplica a apólice emitida (M9-D238 3.2): a mesma regra para a resposta da API e para a tarefa manual (apólice anexada). Grava provider, número, status e
+ * vigência, o registro da submissão com a origem (API ou MANUAL), a tarefa de renovação, as parcelas, a auditoria e o evento `insurance.policy.issued`.
+ * `issued`: externalId, policyNumber, status (ACTIVE = vigente; outro = ISSUED).
+ */
+async function finalizeIssuance(policy, issued, { issueRequest, effectiveDate: nextEffectiveDate, expiryDate: nextExpiryDate, providerName, source, actor }, transaction) {
   const beforeJson = policy.toJSON();
   policy.provider = providerName;
   policy.externalPolicyNumber = issued.policyNumber || policy.externalPolicyNumber;
   policy.status = issued.status === 'ACTIVE' ? 'ACTIVE' : 'ISSUED';
   policy.effectiveDate = nextEffectiveDate;
   policy.expiryDate = nextExpiryDate;
+  policy.issueSource = source;
   policy.updatedBy = actor.userId || null;
   await policy.save({ transaction });
 
@@ -467,6 +507,7 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
       submissionType: 'ISSUE',
       externalSubmissionId: issued.externalId,
       status: issued.status,
+      source,
     },
     { transaction }
   );
@@ -509,6 +550,8 @@ async function issuePolicy(id, issueRequest, actor, transaction) {
     },
     transaction
   );
+
+  await publishPolicyIssued(policy, { source, policyNumber: policy.externalPolicyNumber }, transaction);
 
   policy.setDataValue('installments', installments);
   return policy;
@@ -881,14 +924,16 @@ async function submitClaim(claimId, actor, transaction) {
   }
   const policy = await InsurancePolicy.findOne({ where: { id: claim.policyId, groupId: claim.groupId, companyId: claim.companyId }, transaction });
 
-  const idempotencyKey = `insurance-claim:${claim.id}`;
-  const adapter = await resolveInsuranceAdapter({ groupId: claim.groupId, companyId: claim.companyId }, transaction);
-  const submitted = await adapter.submitClaim({
-    idempotencyKey,
-    externalPolicyNumber: policy?.externalPolicyNumber,
-    description: claim.description,
-    claimAmount: claim.claimAmount,
+  // M9-D238: o sinistro também entra pelo Dispatch Service (conteúdo minimizado) com a chave `insurance-claim:{id}`; o worker de envios chama a seguradora.
+  const ctx = { groupId: claim.groupId, companyId: claim.companyId, userId: actor.userId || null };
+  const call = await callInsurer({
+    ctx, policy: policy || { id: claim.policyId }, operation: 'submitClaim', domainObject: claimDomainObject(claim, policy), idempotencyKey: `insurance-claim:${claim.id}`, aggregate: { type: 'InsuranceClaim', id: claim.id }, transaction,
   });
+  if (call.uncertain) {
+    claim.setDataValue('providerResult', providerResultOf(call));
+    return claim;
+  }
+  const submitted = { externalId: call.response.externalResourceId, status: (call.response.raw && call.response.raw.status) || call.response.status };
 
   const beforeJson = claim.toJSON();
   claim.externalClaimId = submitted.externalId;
@@ -899,10 +944,11 @@ async function submitClaim(claimId, actor, transaction) {
   await InsuranceProviderSubmission.create(
     {
       groupId: claim.groupId, companyId: claim.companyId, claimId: claim.id,
-      provider: adapter.providerName,
+      provider: providerKeyOf(call.connection.providerCode),
       submissionType: 'CLAIM',
       externalSubmissionId: submitted.externalId,
       status: submitted.status,
+      source: call.source,
     },
     { transaction }
   );
@@ -1285,7 +1331,9 @@ module.exports = {
   POLICY_STATUSES_ELIGIBLE_FOR_CLAIM,
   createPolicy,
   quotePolicy,
+  applyQuoteResult,
   issuePolicy,
+  finalizeIssuance,
   cancelPolicy,
   openClaim,
   submitClaim,

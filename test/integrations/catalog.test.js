@@ -23,7 +23,7 @@ const LIVRO = {
   PORTAL: ['portal-sandbox', 'MEDIUM', ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']],
   SIGNATURE: ['signature-sandbox', 'CRITICAL', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook']],
   BANK: ['bank-sandbox', 'CRITICAL', ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']],
-  INSURANCE: ['insurance-sandbox', 'HIGH', ['quote', 'propose', 'getPolicy', 'getStatus']],
+  INSURANCE: ['insurance-sandbox', 'HIGH', ['quote', 'propose', 'getPolicy', 'getStatus', 'submitClaim', 'verifyWebhook']],
   FINANCING: ['financing-sandbox', 'CRITICAL', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal']],
   FISCAL: ['fiscal-sandbox', 'HIGH', ['issueNfse', 'getNfseStatus', 'cancelNfse']],
   SOCIAL: ['social-sandbox', 'LOW', ['publishPost', 'getPostStatus', 'deletePost']],

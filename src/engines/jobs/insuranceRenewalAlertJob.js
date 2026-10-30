@@ -2,6 +2,8 @@
 
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, InsuranceRenewalTask, InsurancePolicy, Notification } = require('../../models');
+const { publishDueMilestones } = require('../../features/procurement/insurance/insurance.milestones');
+const { todayDateOnly } = require('../../features/procurement/insurance.service');
 
 /**
  * insuranceRenewalAlertJob (Marco 7 — Insurance Hub, contrato Anexo I: "renovação alerta").
@@ -71,7 +73,7 @@ async function alertDueRenewals(transaction, now = new Date()) {
       });
       alerted += 1;
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(`[InsuranceRenewalAlertJob] Falha ao alertar tarefa ${task.id}: ${err.message}`);
     }
   }
@@ -83,7 +85,10 @@ async function processCompany(group, company) {
   return sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-    return alertDueRenewals(transaction);
+    const alertas = await alertDueRenewals(transaction);
+    // M9-D238: marcos de vencimento (`insurance.policy.expiring`) e cotação de renovação, na mesma rodada do alerta.
+    const marcos = await publishDueMilestones(transaction, todayDateOnly(new Date()));
+    return { ...alertas, milestones: marcos };
   });
 }
 
@@ -106,7 +111,7 @@ async function runInsuranceRenewalAlertJob() {
         summary.alerted += result.alerted;
       } catch (err) {
         summary.errors += 1;
-        // eslint-disable-next-line no-console
+         
         console.error(
           `[InsuranceRenewalAlertJob] Falha ao processar empresa ${company.id} (grupo ${group.id}): ${err.message}`
         );
@@ -114,7 +119,7 @@ async function runInsuranceRenewalAlertJob() {
     }
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log(
     `[InsuranceRenewalAlertJob] Execução concluída — ${summary.groupsChecked} grupo(s), ${summary.companiesChecked} empresa(s), ` +
       `${summary.tasksChecked} tarefa(s) verificada(s), ${summary.alerted} alertada(s), ${summary.errors} erro(s).`
@@ -127,13 +132,13 @@ const DEFAULT_INTERVAL_MS = 60 * 60 * 1000; // 1 hora — renovação é prazo d
 
 function startInsuranceRenewalAlertJob({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
   runInsuranceRenewalAlertJob().catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error('[InsuranceRenewalAlertJob] Falha na execução inicial:', err.message);
   });
 
   return setInterval(() => {
     runInsuranceRenewalAlertJob().catch((err) => {
-      // eslint-disable-next-line no-console
+       
       console.error('[InsuranceRenewalAlertJob] Falha na execução agendada:', err.message);
     });
   }, intervalMs);

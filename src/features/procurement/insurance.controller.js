@@ -4,10 +4,12 @@ const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
-const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
+const { getSetting } = require('../settings/settings.service');
 const service = require('./insurance.service');
 const renewalService = require('./insuranceRenewal.service');
 const { assertSandboxAllowed } = require('./adapters/resolveInsuranceAdapter');
+const { resolveInsuranceWebhookSecret } = require('./insurance/insurance.secrets');
+const manualController = require('./insurance/insurance.manual.controller');
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 37, 2026-10-05): insurancePublicWebhook
 // nunca validava assinatura nenhuma — qualquer requisição que conhecesse (ou adivinhasse) o
@@ -73,7 +75,7 @@ const quotePolicy = catchAsync(async (req, res) => {
 
 const issuePolicy = catchAsync(async (req, res) => {
   const policy = await req.withTenantTransaction((t) => service.issuePolicy(req.params.id, req.body, actorWithTenant(req), t));
-  return success(res, { data: policy });
+  return success(res, { statusCode: policy.get('providerResult') ? 202 : 200, data: policy }); // 202: resposta incerta da seguradora (M9-D238), pedido gravado para reconciliar
 });
 
 const completeRenewalTask = catchAsync(async (req, res) => {
@@ -93,7 +95,7 @@ const openClaim = catchAsync(async (req, res) => {
 
 const submitClaim = catchAsync(async (req, res) => {
   const claim = await req.withTenantTransaction((t) => service.submitClaim(req.params.id, actorWithTenant(req), t));
-  return success(res, { data: claim });
+  return success(res, { statusCode: claim.get('providerResult') ? 202 : 200, data: claim });
 });
 
 const attachPolicyDocument = catchAsync(async (req, res) => {
@@ -158,7 +160,8 @@ async function processInsuranceWebhook(body, rawBody, headers, transaction) {
   await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: submission.companyId }, transaction });
 
   const tenant = { groupId: submission.groupId, companyId: submission.companyId };
-  const webhookSecret = await getDecryptedSetting('procurement.insurance_webhook_secret', tenant, transaction, null);
+  // M9-D238: o segredo HMAC vem do cofre de segredos (SecretStore); o valor antigo de tenant_settings migra sozinho no primeiro webhook e deixa de existir lá.
+  const { secret: webhookSecret } = await resolveInsuranceWebhookSecret({ tenant, transaction });
   const isValid = verifyInsuranceWebhookSignature(rawBody, headers, webhookSecret);
   if (!isValid) {
     throw AppError.unauthorized(
@@ -189,4 +192,5 @@ module.exports = {
   listPolicyInstallments, payPolicyInstallment,
   verifyInsuranceWebhookSignature,
   processInsuranceWebhook,
+  ...manualController,
 };

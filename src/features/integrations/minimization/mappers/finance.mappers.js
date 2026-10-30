@@ -61,17 +61,6 @@ module.exports = {
       fields: [{ name: 'propertyValue', classification: 'INTERNAL', required: true }, { name: 'downPayment', classification: 'INTERNAL' }, { name: 'termMonths', classification: 'INTERNAL' }],
     }),
   },
-  insurance: {
-    quote: defineMapper({
-      purpose: 'INSURANCE_QUOTE',
-      fields: [
-        { name: 'insuredName', classification: 'PERSONAL', required: true },
-        { name: 'insuredDocument', classification: 'PERSONAL', required: true },
-        { name: 'insuredAmount', classification: 'INTERNAL' },
-        { name: 'propertyType', classification: 'INTERNAL' },
-      ],
-    }),
-  },
   fiscal: {
     issueNfse: defineMapper({
       purpose: 'FISCAL_ISSUANCE',

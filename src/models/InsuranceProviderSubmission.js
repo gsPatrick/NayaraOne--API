@@ -21,6 +21,7 @@ module.exports = (sequelize) => {
       submissionType: { type: DataTypes.STRING(16), allowNull: false, field: 'submission_type' },
       externalSubmissionId: { type: DataTypes.STRING(255), allowNull: false, field: 'external_submission_id' },
       status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'PENDING' },
+      source: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'API' },
     },
     {
       schema: 'procurement',

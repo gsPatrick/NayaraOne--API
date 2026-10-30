@@ -33,7 +33,7 @@ const OPERATION_POLICY = Object.freeze({
   PORTAL: Object.freeze({ publishListing: perigosa('getListingStatus'), updateListing: SAFE, unpublishListing: SAFE, getListingStatus: SAFE }),
   SIGNATURE: Object.freeze({ createEnvelope: perigosa('getEnvelope'), getEnvelope: ESSENCIAL, cancelEnvelope: SAFE, verifyWebhook: SAFE, downloadSigned: SAFE }),
   BANK: Object.freeze({ submitPayment: perigosa('getPaymentStatus'), getPaymentStatus: ESSENCIAL, getStatement: SAFE, verifyWebhook: SAFE }),
-  INSURANCE: Object.freeze({ quote: SAFE, propose: perigosa('getStatus'), getPolicy: SAFE, getStatus: SAFE }),
+  INSURANCE: Object.freeze({ quote: SAFE, propose: perigosa('getStatus'), getPolicy: SAFE, getStatus: SAFE, submitClaim: perigosa('getStatus'), verifyWebhook: SAFE }),
   FINANCING: Object.freeze({
     simulate: SAFE, submitCase: perigosa('getCaseStatus'), getCaseStatus: SAFE, uploadDocument: op('DANGEROUS'), requestAppraisal: perigosa('getCaseStatus'), verifyWebhook: SAFE, cancelCase: SAFE,
   }),

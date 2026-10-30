@@ -16,7 +16,7 @@ const DOMAIN_CAPABILITIES = Object.freeze({
   PORTAL: Object.freeze(['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']),
   SIGNATURE: Object.freeze(['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'verifyWebhook', 'downloadSigned']),
   BANK: Object.freeze(['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']),
-  INSURANCE: Object.freeze(['quote', 'propose', 'getPolicy', 'getStatus']),
+  INSURANCE: Object.freeze(['quote', 'propose', 'getPolicy', 'getStatus', 'submitClaim', 'verifyWebhook']),
   FINANCING: Object.freeze(['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook', 'cancelCase']),
   FISCAL: Object.freeze(['issueNfse', 'getNfseStatus', 'cancelNfse']),
   SOCIAL: Object.freeze(['publishPost', 'getPostStatus', 'deletePost', 'findPostByKey']),

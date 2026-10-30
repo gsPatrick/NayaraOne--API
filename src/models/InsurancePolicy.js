@@ -22,6 +22,9 @@ module.exports = (sequelize) => {
       effectiveDate: { type: DataTypes.DATEONLY, allowNull: true, field: 'effective_date' },
       expiryDate: { type: DataTypes.DATEONLY, allowNull: true, field: 'expiry_date' },
       quoteSnapshot: { type: DataTypes.JSONB, allowNull: true, field: 'quote_snapshot' },
+      // M9-D238: o pedido de cotação minimizado (a cotação de renovação repete o mesmo pedido) e a origem da emissão (API ou MANUAL).
+      quoteRequestJson: { type: DataTypes.JSONB, allowNull: true, field: 'quote_request_json' },
+      issueSource: { type: DataTypes.STRING(8), allowNull: true, field: 'issue_source' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

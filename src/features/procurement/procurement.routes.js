@@ -54,6 +54,12 @@ procurementRouter.post('/procurement/insurance-claims/:id/submit', requirePermis
 procurementRouter.post('/procurement/insurance-policies/:id/documents', requirePermission('procurement:create'), insuranceController.attachPolicyDocument);
 procurementRouter.get('/procurement/insurance-policies/:id/documents', requirePermission('procurement:read'), insuranceController.listPolicyDocuments);
 procurementRouter.get('/procurement/insurance-policies/:id/installments', requirePermission('procurement:read'), insuranceController.listPolicyInstallments);
+// M9-D238: tarefas do fluxo manual da seguradora (sem API) e versões do documento da apólice.
+procurementRouter.get('/procurement/insurance-tasks', requirePermission('procurement:read'), insuranceController.listInsuranceTasks);
+procurementRouter.post('/procurement/insurance-tasks/:id/complete', requirePermission('procurement:approve'), insuranceController.completeInsuranceTask);
+procurementRouter.post('/procurement/insurance-tasks/:id/cancel', requirePermission('procurement:approve'), insuranceController.cancelInsuranceTask);
+procurementRouter.get('/procurement/insurance-policies/:id/versions', requirePermission('procurement:read'), insuranceController.listPolicyVersions);
+procurementRouter.post('/procurement/insurance-policies/:id/versions', requirePermission('procurement:approve'), insuranceController.addPolicyVersion);
 procurementRouter.post('/procurement/insurance-installments/:installmentId/pay', requirePermission('procurement:approve'), insuranceController.payPolicyInstallment);
 
 module.exports = procurementRouter;

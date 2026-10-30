@@ -2,22 +2,25 @@
 
 const { InsuranceAdapter } = require('../../providers/insurance/insurance.port');
 const { SandboxInsuranceAdapter } = require('../../../procurement/adapters/InsuranceAdapter');
-const { wrapLegacy, mapFrom, COMPLETED } = require('../legacyWrap');
+const { wrapLegacy } = require('../legacyWrap');
+const { STATUS, CAPABILITIES_WEBHOOK, WEBHOOK } = require('./insurance.ops');
+const { SANDBOX_OPS, findByIdempotencyKey } = require('./insurance.sandbox');
 
-/** insurance-sandbox: cotação, apólice e sinistro simulados (sem rede). */
+/**
+ * insurance-sandbox: cotação, proposta, apólice e status simulados (sem rede). A proposta é idempotente pela chave, aceita falha injetada pela connection e responde à consulta
+ * pela chave; o webhook de status da apólice (HMAC-SHA256, cabeçalho x-webhook-signature) entra pela rota única de webhooks.
+ */
 const InsuranceSandboxContractAdapter = wrapLegacy({
   Port: InsuranceAdapter,
   className: 'InsuranceSandboxContractAdapter',
   code: 'insurance-sandbox',
-  capabilities: ['quote', 'propose', 'getPolicy', 'getStatus'],
+  capabilities: CAPABILITIES_WEBHOOK,
   makeLegacy: () => new SandboxInsuranceAdapter(),
-  mapper: mapFrom({ ACTIVE: 'ACTIVE', UNDER_REVIEW: 'UNDER_REVIEW', APPROVED: 'APPROVED', DENIED: 'DENIED', SETTLED: 'SETTLED', CANCELED: 'CANCELED', COMPLETED }),
-  ops: {
-    quote: async (l, req) => { const r = await l.quote(req); return { externalResourceId: r.externalId, status: COMPLETED, raw: r }; },
-    propose: async (l, req, self) => { const r = await l.issuePolicy(req); return { externalResourceId: r.externalId, status: self.normalizeStatus(r.status), raw: r }; },
-    getPolicy: async (l, req, self) => { const r = await l.getPolicyStatus(req.externalResourceId); return { externalResourceId: r.externalId ?? req.externalResourceId, status: self.normalizeStatus(r.status), raw: r.raw }; },
-    getStatus: async (l, req, self) => { const r = await l.getClaimStatus(req.externalResourceId); return { externalResourceId: r.externalId ?? req.externalResourceId, status: self.normalizeStatus(r.status), raw: r.raw }; },
-  },
+  mapper: STATUS,
+  ops: SANDBOX_OPS,
+  idempotentOps: ['propose'],
+  lookups: { findByIdempotencyKey },
+  ...WEBHOOK,
 });
 
 module.exports = { InsuranceSandboxContractAdapter };

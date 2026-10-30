@@ -60,7 +60,7 @@ test('verificador_registro_por_fornecedor', () => {
   const corpo = Buffer.from('{"event":{"name":"sign"}}');
   const clicksign = verifierFor('signature-clicksign').verify({ rawBody: corpo, headers: { 'content-hmac': `sha256=${hmac('k', corpo).toString('hex')}` }, secret: 'k' });
   assert.equal(clicksign.ok, true, 'o Clicksign assina no cabeçalho content-hmac');
-  ['analytics-sandbox', 'fiscal-sandbox', 'financing-manual', 'insurance-sandbox', 'inexistente'].forEach((p) => assert.equal(verifierFor(p), null, `${p}: sem verificador, a rota responde 501`));
+  ['analytics-sandbox', 'fiscal-sandbox', 'financing-manual', 'insurance-manual', 'insurance-junto-seguros', 'inexistente'].forEach((p) => assert.equal(verifierFor(p), null, `${p}: sem verificador, a rota responde 501`));
   const proprio = { name: 'proprio', verify: () => ({ ok: true, reason: null }) };
   registerVerifier('analytics-sandbox', proprio);
   assert.equal(verifierFor('analytics-sandbox'), proprio);
