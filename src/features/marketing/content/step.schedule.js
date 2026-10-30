@@ -7,9 +7,8 @@ const { TEMPLATE_CHANNELS } = require('./template.constants');
 const { parseWhen } = require('./pipeline.time');
 const { readMinLeadMinutes } = require('./pipeline.settings');
 const { scheduleTooSoon, contentInvalid } = require('./pipeline.errors');
-
-/** Chave de idempotência do job: pub:{versão}:{CANAL}:{instante}. Reagendar o mesmo canal no mesmo instante não duplica. */
-const jobKey = (versionId, channel, when) => `pub:${versionId}:${channel}:${when.toISOString()}`;
+const { loadLocked, readCheck } = require('./pipeline.core');
+const { getSchedulePort } = require('./pipeline.schedulePort');
 
 function normalizeChannels(channels) {
   const list = Array.isArray(channels) ? channels.map((c) => String(c).trim().toUpperCase()).filter(Boolean) : [];
@@ -31,26 +30,40 @@ async function prepareSchedule(tenant, input, transaction, now) {
   return { channels, when };
 }
 
+/** O serviço de jobs da área de publicações, entregue pela porta de agendamento (as áreas só se tocam pelo index, sem ciclo). */
+const publications = () => getSchedulePort();
+
 /**
- * M9-D406 função 7 — schedulePublication(contentItem, channels, when): confere a fonte (M9-D405) e a aprovação (M9-D404) e cria um
- * publication_job por canal com idempotency_key. Aprovação invalidada não lança aqui: o chamador confirma a invalidação (commit)
- * e só então responde o 409 (a transação com throw desfaria a própria invalidação).
+ * M9-D406 função 7 / M9-D410 — schedulePublication(contentItem, channels, when): confere a fonte (M9-D405) e a aprovação (M9-D404) e cria um
+ * publication_job por canal com idempotency_key, depois das pré-condições (kill switch, campos públicos, conexão do canal). Aprovação invalidada não
+ * lança aqui: o chamador confirma a invalidação (commit) e só então responde o 409 (a transação com throw desfaria a própria invalidação).
  */
 async function scheduleStep({ item, version, tenant, actor, transaction }, prepared) {
   await assertSourceFresh(item.id, tenant, transaction);
   const check = await guard.checkApproval(tenant, actor, item.id, transaction, { origin: 'SCHEDULE' });
   if (check.invalidated) return { abort: { approvalInvalidated: check } };
-  const jobs = [];
-  for (const channel of prepared.channels) {
-    jobs.push(await repo.insertJob(tenant, actor, {
-      versionId: version.id, channel, adapterCode: 'sandbox', idempotencyKey: jobKey(version.id, channel, prepared.when), scheduledAt: prepared.when,
-    }, transaction));
-  }
+  const jobs = await publications().scheduleJobs({ tenant, actor, item, version, prepared }, transaction);
   return {
     ok: true,
     detalhes: { when: prepared.when.toISOString(), channels: prepared.channels, jobIds: jobs.map((j) => j.id) },
-    extra: { jobs: jobs.map((j) => ({ id: j.id, channel: j.channel, status: j.status, replay: j.replay })) },
+    extra: { jobs },
   };
 }
 
-module.exports = { prepareSchedule, scheduleStep, jobKey };
+/**
+ * Item que já está SCHEDULED: acrescenta canal, repete o pedido (replay) ou recusa outro horário para o mesmo canal (409 MKT_JOB_ALREADY_ACTIVE). Mesmas
+ * conferências do primeiro agendamento. O item continua SCHEDULED.
+ */
+async function scheduleMore({ tenant, actor, itemId }, prepared, transaction) {
+  const { item, version } = await loadLocked(itemId, transaction);
+  await assertSourceFresh(item.id, tenant, transaction);
+  const check = await guard.checkApproval(tenant, actor, item.id, transaction, { origin: 'SCHEDULE' });
+  if (check.invalidated) {
+    const fresh = await repo.lockItem(item.id, transaction);
+    return { itemId: item.id, status: fresh.status, versionId: version.id, step: null, replay: false, approvalInvalidated: check };
+  }
+  const jobs = await publications().scheduleJobs({ tenant, actor, item, version, prepared }, transaction);
+  return { itemId: item.id, status: item.status, versionId: version.id, step: readCheck(version, 'schedule'), replay: jobs.every((j) => j.replay), jobs };
+}
+
+module.exports = { prepareSchedule, scheduleStep, scheduleMore };

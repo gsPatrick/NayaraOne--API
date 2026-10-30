@@ -180,7 +180,8 @@ test('publication_jobs_status_e_conexao_na_mesma_empresa', async () => {
     const sql = `INSERT INTO marketing.publication_jobs (group_id, company_id, content_version_id, channel, adapter_code, status, idempotency_key, scheduled_at, attempts)
       VALUES (:g, :c, :v, :ch, 'a', :st, :k, now(), :n)`;
     const r = (o) => ({ ...base(tenantA), v: versionId, ch: 'SITE', st: 'PENDING', k: `pub:${versionId}:SITE:${uid()}`, n: 0, ...o });
-    for (const st of ['PENDING', 'RUNNING', 'PUBLISHED', 'FAILED', 'UNKNOWN', 'CANCELLED']) await q(sql, r({ st }), tx);
+    const channels = ['SITE', 'EMAIL', 'PORTAL', 'TIKTOK', 'YOUTUBE', 'LINKEDIN']; // um job ativo por versão e canal (M9-D410): cada status em um canal
+    for (const [i, st] of ['PENDING', 'RUNNING', 'PUBLISHED', 'FAILED', 'UNKNOWN', 'CANCELLED'].entries()) await q(sql, r({ st, ch: channels[i], k: `pub:${versionId}:${channels[i]}:${uid()}` }), tx);
     await expectDbError(tx, sql, r({ st: 'DONE' }), /status/i);
     await expectDbError(tx, sql, r({ ch: 'SMS' }), /channel/i);
     await expectDbError(tx, sql, r({ n: -1 }), /attempts/i);

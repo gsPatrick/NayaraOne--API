@@ -69,12 +69,12 @@ async function insertNextVersion(t, tenant, itemId, templateRow, versionNo = 2) 
   return version.id;
 }
 
-async function insertJob(t, tenant, versionId, status = 'PENDING') {
+async function insertJob(t, tenant, versionId, status = 'PENDING', channel = 'INSTAGRAM') {
   const [job] = await q(
     t,
     `INSERT INTO marketing.publication_jobs (id, group_id, company_id, content_version_id, channel, adapter_code, status, idempotency_key, scheduled_at)
-     VALUES (gen_random_uuid(), :g, :c, :v, 'INSTAGRAM', 'sandbox', :s, :k, now() + interval '1 hour') RETURNING id`,
-    { g: tenant.groupId, c: tenant.companyId, v: versionId, s: status, k: `pub:${versionId}:INSTAGRAM:${uid().slice(0, 8)}` }
+     VALUES (gen_random_uuid(), :g, :c, :v, :ch, 'sandbox', :s, :k, now() + interval '1 hour') RETURNING id`,
+    { g: tenant.groupId, c: tenant.companyId, v: versionId, ch: channel, s: status, k: `pub:${versionId}:${channel}:${uid().slice(0, 8)}` }
   );
   return job.id;
 }

@@ -67,7 +67,7 @@ test('template_muda_apos_approval_invalida_aprovacao: hash diferente volta o ite
     });
     const content = await insertContent(t, tenant, { templateRow: tpl, approvedHash: hashDoTemplateAntigo, contentHash: sha('x') });
     const pending = await insertJob(t, tenant, content.versionId, 'PENDING');
-    const running = await insertJob(t, tenant, content.versionId, 'RUNNING');
+    const running = await insertJob(t, tenant, content.versionId, 'RUNNING', 'FACEBOOK'); // outro canal: só um job ativo por versão e canal (M9-D410)
     const check = await guard.checkApproval(tenant, tenant.userId, content.itemId, t, { origin: 'WORKER' });
     assert.equal(check.intact, false);
     assert.equal(check.invalidated, true);

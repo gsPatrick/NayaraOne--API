@@ -15,6 +15,7 @@ const { PUBLIC_FIELDS_SETTINGS_SCHEMA } = require('../../features/marketing/cont
 const { TEMPLATE_SETTINGS_SCHEMA } = require('../../features/marketing/content/template.settings');
 const { TRACKING_SETTINGS_SCHEMA } = require('../../features/marketing/tracking/tracking.settings');
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
+const { SCHEDULE_SETTINGS_SCHEMA } = require('../../features/marketing/publications/schedule/schedule.settings');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
@@ -221,6 +222,8 @@ const SETTINGS_SCHEMA = {
   ...SEGMENT_SETTINGS_SCHEMA,
   // Marco 9, M9-D406 — antecedência mínima do agendamento de conteúdo do Marketing.
   ...PIPELINE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D410 — paginação da listagem de publicações (padrão e máximo).
+  ...SCHEDULE_SETTINGS_SCHEMA,
   // Marco 9, M9-D409 — tipos de conteúdo: hora do aniversário, casas do percentual, fotos mínimas, tipos com rascunho automático, finalidade do pós-venda e varredura de obras.
   ...TYPES_SETTINGS_SCHEMA,
   // Marco 9, M9-D407 — validador factual: tolerância de área, dicionário de características e telefones da empresa.

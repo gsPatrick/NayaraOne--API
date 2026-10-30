@@ -16,4 +16,6 @@ router.use(templateRoutes);
 // M9-D427: `publicReadModel` e `factual` são a interface que a área de publicações usa para a página pública (SEO) sem importar caminho interno.
 const publicReadModel = require('./publicReadModel');
 const factual = { validateAgainstFacts: require('./pipeline.factualPort').validateAgainstFacts, readFactualConfig: require('./factual/settings').readFactualConfig };
-module.exports = { router, service, approval, publicReadModel, factual };
+// M9-D410: a área de publicações registra aqui o agendamento dos jobs (porta), sem a área de conteúdo importá-la.
+const schedulePort = require('./pipeline.schedulePort');
+module.exports = { router, service, approval, publicReadModel, factual, schedulePort };

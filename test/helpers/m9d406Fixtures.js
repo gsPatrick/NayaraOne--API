@@ -7,6 +7,7 @@ const fx = require('./m9d405Fixtures');
 const { templateInput } = require('./m9d404Fixtures');
 const templates = require('../../src/features/marketing/content/template.service');
 const nay = require('../../src/features/marketing/content/pipeline.nayPort');
+require('../../src/features/marketing/publications'); // M9-D410: registra a porta de agendamento dos jobs
 
 const uid = () => crypto.randomUUID();
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');

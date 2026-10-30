@@ -10,6 +10,7 @@ const scheduleTooSoon = (details) => mktError(422, 'MKT_SCHEDULE_TOO_SOON', 'O a
 const stepRequired = (details) => mktError(409, 'MKT_PIPELINE_STEP_REQUIRED', 'Conclua a validação anterior antes de continuar.', details);
 const contentNotFound = () => mktError(404, 'MKT_NOT_FOUND', 'Conteúdo não encontrado.');
 const contentInvalid = (message, details) => mktError(400, 'MKT_VALIDATION', message, details);
+const contentNotApproved = (details) => mktError(409, 'MKT_CONTENT_NOT_APPROVED', 'O conteúdo precisa estar aprovado para ser agendado.', details);
 const separationOfDuties = () => mktError(403, 'MKT_FORBIDDEN', 'Quem gerou o conteúdo não pode aprová-lo.', { reason: 'SEPARATION_OF_DUTIES' });
 const variableMissing = (names) => mktError(422, 'MKT_TEMPLATE_UNKNOWN_VARIABLE', 'O template usa uma variável sem valor.', { variables: names });
 
@@ -30,4 +31,4 @@ function factCheckFailed(findings, details) {
   return mktError(422, 'MKT_FACT_MISSING', 'O texto cita um dado que não existe no cadastro.', body);
 }
 
-module.exports = { factCheckFailed, nayUnavailable, scheduleTooSoon, stepRequired, contentNotFound, contentInvalid, separationOfDuties, variableMissing };
+module.exports = { factCheckFailed, nayUnavailable, scheduleTooSoon, stepRequired, contentNotFound, contentInvalid, contentNotApproved, separationOfDuties, variableMissing };

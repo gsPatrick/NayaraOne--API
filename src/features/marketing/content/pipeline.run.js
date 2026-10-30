@@ -6,9 +6,10 @@ const { factualStep } = require('./step.factual');
 const { brandingStep } = require('./step.branding');
 const { complianceStep } = require('./step.compliance');
 const { approvalStep } = require('./step.approval');
-const { prepareSchedule, scheduleStep } = require('./step.schedule');
+const { prepareSchedule, scheduleStep, scheduleMore } = require('./step.schedule');
 const { getDefinition, assertChannelsAllowed } = require('./types/validate');
 const { assertSchedulingNotPaused } = require('../degradation.guard');
+const { contentNotApproved } = require('./pipeline.errors');
 
 /** Os passos do pipeline, cada um em UMA transação do chamador (o executeStep trava o item e é idempotente). */
 const runFactualCheck = (ctx, t) => executeStep('factual', { ...ctx, input: null }, t, factualStep);
@@ -19,13 +20,20 @@ const applyTemplate = (ctx, t) => {
 const applyCompliance = (ctx, t) => executeStep('compliance', { ...ctx, input: null }, t, complianceStep);
 const requestApprovalIfRequired = (ctx, t) => executeStep('approval', { ...ctx, input: null }, t, approvalStep);
 
-/** schedulePublication(contentItem, channels, when) — Guia §6, função 7. Valida antecedência antes de qualquer escrita. */
+/** Estados em que o item ainda não foi aprovado: agendar é 409 MKT_CONTENT_NOT_APPROVED (M9-D410). */
+const NOT_APPROVED = Object.freeze(['DRAFT', 'FACT_CHECK_FAILED', 'FACT_CHECKED', 'BRANDED', 'COMPLIANCE_CHECKED', 'PENDING_APPROVAL']);
+
+/**
+ * schedulePublication(contentItem, channels, when) — Guia §6, função 7 (M9-D406/M9-D410). Valida antecedência e canais antes de qualquer escrita; item não aprovado: 409 MKT_CONTENT_NOT_APPROVED. Item APPROVED agenda pelo passo `schedule`; item já SCHEDULED aceita outro canal ou repete o pedido (replay).
+ */
 async function schedulePublication(ctx, t) {
   const current = await repo.lockItem(ctx.itemId, t);
   if (!current || !['SCHEDULED', 'PUBLISHING', 'PUBLISHED'].includes(current.status)) await assertSchedulingNotPaused(ctx.tenant, t); // M9-D863: passo PAUSE_MARKETING_CAMPAIGNS; o já agendado segue (replay)
   const prepared = await prepareSchedule(ctx.tenant, { channels: ctx.channels, when: ctx.when }, t, ctx.now);
   const item = await repo.lockItem(ctx.itemId, t);
   if (item) assertChannelsAllowed(getDefinition(item.type), prepared.channels); // M9-D409: canal permitido para o tipo
+  if (item && NOT_APPROVED.includes(item.status)) throw contentNotApproved({ contentItemId: item.id, status: item.status });
+  if (item && item.status === 'SCHEDULED') return scheduleMore(ctx, prepared, t);
   const input = { channels: prepared.channels, when: prepared.when.toISOString() };
   const result = await executeStep('schedule', { ...ctx, input }, t, (step) => scheduleStep(step, prepared));
   if (result.replay && result.versionId) result.jobs = (await repo.listJobs(result.versionId, t)).map((j) => ({ id: j.id, channel: j.channel, status: j.status, replay: true }));

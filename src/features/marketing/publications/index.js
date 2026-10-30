@@ -6,6 +6,10 @@ const service = require('./publications.service');
 const adapters = require('./adapters');
 const seo = require('./seo');
 const messaging = require('./messaging');
+const content = require('../content');
+
+// M9-D410: o passo de agendamento do pipeline de conteúdo cria os jobs por esta porta.
+content.schedulePort.registerSchedulePort({ scheduleJobs: service.scheduleJobs });
 
 // A área também serve a rota autenticada do sitemap (M9-D427).
 const router = Router();

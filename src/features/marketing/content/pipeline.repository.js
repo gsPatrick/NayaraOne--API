@@ -90,27 +90,11 @@ async function findPublishedTemplate({ templateId, code, anyStatus = false }, tr
   return row || null;
 }
 
-/** Cria o job da publicação; a chave de idempotência já existente devolve o job gravado (replay). */
-async function insertJob(tenant, actor, values, transaction) {
-  const [created] = await run(
-    `INSERT INTO marketing.publication_jobs (id, group_id, company_id, content_version_id, channel, adapter_code, status, idempotency_key,
-        scheduled_at, next_attempt_at, created_by, updated_by)
-     VALUES (gen_random_uuid(), :groupId, :companyId, :versionId, :channel, :adapter, 'PENDING', :key, :scheduledAt, :scheduledAt, :actor, :actor)
-     ON CONFLICT (company_id, idempotency_key) DO NOTHING RETURNING id, channel, scheduled_at, status`,
-    { groupId: tenant.groupId, companyId: tenant.companyId, versionId: values.versionId, channel: values.channel, adapter: values.adapterCode,
-      key: values.idempotencyKey, scheduledAt: values.scheduledAt, actor: actor || null }, transaction
-  );
-  if (created) return { ...created, replay: false };
-  const [existing] = await run('SELECT id, channel, scheduled_at, status FROM marketing.publication_jobs WHERE company_id = :companyId AND idempotency_key = :key',
-    { companyId: tenant.companyId, key: values.idempotencyKey }, transaction);
-  return { ...existing, replay: true };
-}
-
 async function listJobs(versionId, transaction) {
   return run('SELECT id, channel, status, scheduled_at, idempotency_key FROM marketing.publication_jobs WHERE content_version_id = :versionId AND deleted_at IS NULL ORDER BY channel',
     { versionId }, transaction);
 }
 
 module.exports = {
-  lockItem, findVersion, insertNextVersion, setSource, setStatus, writeCheck, setApprover, findPublishedTemplate, insertJob, listJobs,
+  lockItem, findVersion, insertNextVersion, setSource, setStatus, writeCheck, setApprover, findPublishedTemplate, listJobs,
 };

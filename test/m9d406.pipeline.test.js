@@ -95,7 +95,7 @@ test('nao_pula_etapa', async () => {
     const { itemId } = await service.createContent({ tenant, actor: tenant.userId, input: { type: 'INSTITUTIONAL', title: 'QA-M9 manual', texto: 'Texto institucional.' } }, t);
     await rejectsCode(service.applyTemplate({ tenant, actor: tenant.userId, itemId }, t), 409, 'MKT_PIPELINE_STEP_REQUIRED');
     await rejectsCode(service.requestApprovalIfRequired({ tenant, actor: tenant.userId, itemId }, t), 409, 'MKT_PIPELINE_STEP_REQUIRED');
-    await rejectsCode(schedule(t, itemId, { channels: ['SITE'], when: fx.inHours(2).toISOString() }), 409, 'MKT_PIPELINE_STEP_REQUIRED');
+    await rejectsCode(schedule(t, itemId, { channels: ['SITE'], when: fx.inHours(2).toISOString() }), 409, 'MKT_CONTENT_NOT_APPROVED'); // M9-D410: item não aprovado
     await rejectsCode(approve(t, itemId), 409, 'MKT_CONTENT_INVALID_TRANSITION');
     const row = await fx.loadItem(t, itemId);
     assert.equal(row.status, 'DRAFT');
