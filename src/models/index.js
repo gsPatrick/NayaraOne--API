@@ -212,6 +212,8 @@ const modelDefiners = {
   IntegrationDispatch: require('./IntegrationDispatch'),
   EmailMessage: require('./EmailMessage'),
   EmailMessageEvent: require('./EmailMessageEvent'),
+  InsurancePolicyVersion: require('./InsurancePolicyVersion'),
+  InsuranceManualTask: require('./InsuranceManualTask'),
   DomainEvent: require('./DomainEvent'),
   AiRun: require('./AiRun'),
   AiAgent: require('./AiAgent'),

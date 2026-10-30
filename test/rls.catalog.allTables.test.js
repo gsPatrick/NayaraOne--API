@@ -407,6 +407,23 @@ test('M9-D627: os 8 read models de Marketing e Atendimento têm RLS, FORCE RLS e
   }
 });
 
+// M9-D670 / M9-D671: read models mensais de Marketing no BI (campanha e mês; contatos e pedidos de saída) com RLS + FORCE RLS, 4 políticas e escrita só do worker.
+test('M9-D670/M9-D671: rm_mkt_campaign_month e rm_mkt_optout_month têm RLS, FORCE RLS e 4 políticas', async () => {
+  for (const table of ['rm_mkt_campaign_month', 'rm_mkt_optout_month']) {
+    const [rows] = await sequelize.query(
+      `SELECT c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'analytics' AND c.relname = :table`,
+      { replacements: { table } }
+    );
+    assert.equal(rows.length, 1, `analytics.${table} não existe`);
+    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
+    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
+    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
+  }
+});
+
 // M9-D618: read models de Obras, Estoque/Patrimônio e Pós-obra no BI com RLS + FORCE RLS e 4 políticas.
 test('M9-D618: os 9 read models de Obras, Estoque e Pós-obra têm RLS, FORCE RLS e 4 políticas', async () => {
   const tables = ['rm_project_progress', 'rm_project_cost', 'rm_project_delays', 'rm_project_measurements', 'rm_project_nonconformities', 'rm_project_waste', 'rm_postwork_cost', 'rm_inventory_health', 'rm_tool_assets'];
@@ -515,6 +532,14 @@ test('M9-D609: snapshot_job_runs tem RLS, FORCE RLS e 4 políticas', async () =>
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });
 
+// M9-D708: analytics.metric_acceptance (reconciliação e aceite dos KPIs pelo owner) com RLS, FORCE RLS e 3 políticas (leitura, inclusão e atualização; sem DELETE).
+test('M9-D708: metric_acceptance tem RLS, FORCE RLS e 3 políticas (sem DELETE)', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'metric_acceptance'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 3]);
+});
+
 // M9-D805: governance.review_queue_items (fila de merge e review de Person, Property e Supplier) com RLS + FORCE RLS e a política tenant_isolation.
 test('M9-D805: review_queue_items tem RLS, FORCE RLS e a política tenant_isolation', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
@@ -532,14 +557,6 @@ test('M9-D806: quality_rules, quality_scores e quality_issues têm RLS, FORCE RL
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
   assert.equal(rows.length, tables.length, 'as três tabelas existem');
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
-// M9-D708: analytics.metric_acceptance (reconciliação e aceite dos KPIs pelo owner) com RLS, FORCE RLS e 3 políticas (leitura, inclusão e atualização; sem DELETE).
-test('M9-D708: metric_acceptance tem RLS, FORCE RLS e 3 políticas (sem DELETE)', async () => {
-  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'metric_acceptance'`);
-  assert.equal(rows.length, 1, 'a tabela existe');
-  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 3]);
-});
-
 });
 
 // M9-D808: governance.bulk_changes e bulk_change_items (alteração em massa de dados mestres) com RLS + FORCE RLS e a política tenant_isolation.
@@ -569,35 +586,18 @@ test('M9-D628: rm_tech_* e rm_ai_* têm RLS, FORCE RLS e 4 políticas; tech_sign
   for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, r.relname === 'tech_signal_log' ? 3 : 4], r.relname);
 });
 
-// M9-D710: fatos do dia do Centro de Comando (contrato assinado, oportunidade ganha, pagamento liquidado) com RLS + FORCE RLS, 4 políticas e escrita só do worker.
-test('M9-D710: rm_command_events tem RLS, FORCE RLS e 4 políticas', async () => {
-  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_command_events'`);
-  assert.equal(rows.length, 1, 'a tabela existe');
-  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
-});
-
-// M9-D670 / M9-D671: read models mensais de Marketing no BI (campanha e mês; contatos e pedidos de saída) com RLS + FORCE RLS, 4 políticas e escrita só do worker.
-test('M9-D670/M9-D671: rm_mkt_campaign_month e rm_mkt_optout_month têm RLS, FORCE RLS e 4 políticas', async () => {
-  for (const table of ['rm_mkt_campaign_month', 'rm_mkt_optout_month']) {
-    const [rows] = await sequelize.query(
-      `SELECT c.relrowsecurity, c.relforcerowsecurity,
-              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
-       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'analytics' AND c.relname = :table`,
-      { replacements: { table } }
-    );
-    assert.equal(rows.length, 1, `analytics.${table} não existe`);
-    assert.equal(rows[0].relrowsecurity, true, `analytics.${table}: RLS`);
-    assert.equal(rows[0].relforcerowsecurity, true, `analytics.${table}: FORCE RLS`);
-    assert.equal(rows[0].policies, 4, `analytics.${table}: políticas`);
-  }
-});
-
 // M9-D709: read model da fila de decisão do Centro de Comando com RLS + FORCE RLS e 4 políticas.
 test('M9-D709: rm_decision_queue tem RLS, FORCE RLS e 4 políticas', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_decision_queue'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
+});
+
+// M9-D710: fatos do dia do Centro de Comando (contrato assinado, oportunidade ganha, pagamento liquidado) com RLS + FORCE RLS, 4 políticas e escrita só do worker.
+test('M9-D710: rm_command_events tem RLS, FORCE RLS e 4 políticas', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'analytics' AND c.relname = 'rm_command_events'`);
   assert.equal(rows.length, 1, 'a tabela existe');
   assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 4]);
 });
@@ -634,6 +634,20 @@ test('M9-D821: export_jobs tem RLS, FORCE RLS e a política tenant_isolation por
   if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao role de runtime');
 });
 
+// M9-D824: sinais de acesso, anomalias de acesso em massa e o estado de DLP do usuário (governance.*) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
+test('M9-D824: access_signals, access_anomalies e user_dlp_state têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
+  const tables = ['access_anomalies', 'access_signals', 'user_dlp_state'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const table of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});
+
 // M9-D823: os links externos (governance.share_links) são da EMPRESA: RLS + FORCE RLS, a política tenant_isolation e a de leitura por token (só a linha do hash da transação); o contador
 // de acessos públicos (governance.public_access_counters) não tem empresa (visitante anônimo): RLS + FORCE RLS com a política que só abre para o limitador. GRANT ao role de runtime.
 test('M9-D823: share_links e public_access_counters têm RLS, FORCE RLS e as políticas esperadas', async () => {
@@ -643,6 +657,20 @@ test('M9-D823: share_links e public_access_counters têm RLS, FORCE RLS e as pol
   assert.equal(rows.length, 2, 'as duas tabelas existem');
   assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies, r.named]), [['public_access_counters', true, true, 1, 1], ['share_links', true, true, 2, 2]]);
   for (const table of ['share_links', 'public_access_counters']) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
+  }
+});
+
+// M9-D832: a importação das operações manuais (governance.manual_operation_imports) e a conferência (governance.reconciliations) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
+test('M9-D832: manual_operation_imports e reconciliations têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
+  const tables = ['manual_operation_imports', 'reconciliations'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const table of tables) {
     const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
   }
@@ -662,34 +690,10 @@ test('M9-D834: bcp_form_templates tem RLS, FORCE RLS e a política de leitura', 
 test('M9-D830: bcp_sectors tem RLS, FORCE RLS e a política de leitura', async () => {
   const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
       (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'bcp_sectors_read') AS named
-// M9-D832: a importação das operações manuais (governance.manual_operation_imports) e a conferência (governance.reconciliations) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT.
-test('M9-D832: manual_operation_imports e reconciliations têm RLS, FORCE RLS e a política tenant_isolation por empresa', async () => {
-  const tables = ['manual_operation_imports', 'reconciliations'];
-  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
-      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
-  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
-  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
-  for (const table of tables) {
-    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${table}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
-    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao role de runtime em ${table}`);
-  }
-});
-
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'bcp_sectors'`);
   assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies, r.named]), [['bcp_sectors', true, true, 1, 1]]);
   const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.bcp_sectors', 'SELECT') AS sel WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
   if (grants.length) assert.equal(grants[0].sel, true, 'SELECT ao role de runtime');
-});
-
-// M9-D831: as operações manuais de contingência (governance.manual_operations) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT ao role de runtime.
-test('M9-D831: manual_operations tem RLS, FORCE RLS e a política tenant_isolation', async () => {
-  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
-      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'manual_operations'`);
-  assert.deepEqual(rows.map((r) => [r.relname, r.relrowsecurity, r.relforcerowsecurity, r.policies]), [['manual_operations', true, true, 1]]);
-  const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.manual_operations', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
-  if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao role de runtime');
 });
 
 // M9-D833: as conferências do pagamento emergencial (governance.manual_operation_checks) e a pendência de conciliação com o extrato (governance.bcp_payment_pendings) são da EMPRESA.
@@ -787,17 +791,20 @@ test('M9-D234: email_messages e email_message_events têm RLS, FORCE RLS e polí
   if (grants.length) assert.deepEqual([grants[0].msg_upd, grants[0].ev_ins], [true, true], 'GRANT ao role de runtime');
 });
 
-// M9-D232: real_estate.portal_listings (anúncio do imóvel em cada portal) com RLS, FORCE RLS, política por empresa e um anúncio ativo por (imóvel, portal).
-test('M9-D232: real_estate.portal_listings tem RLS, FORCE RLS, a política tenant_isolation e o índice único parcial (property_id, connection_id)', async () => {
-  const [rls] = await sequelize.query(`SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'real_estate' AND c.relname = 'portal_listings'`);
-  assert.equal(rls.length, 1, 'real_estate.portal_listings não existe');
-  assert.deepEqual([rls[0].rls, rls[0].force_rls], [true, true]);
-  const [pol] = await sequelize.query(`SELECT 1 FROM pg_policy p WHERE p.polname = 'tenant_isolation' AND p.polrelid = '"real_estate"."portal_listings"'::regclass`);
-  assert.equal(pol.length, 1, 'política tenant_isolation');
-  const [uniq] = await sequelize.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'real_estate' AND tablename = 'portal_listings' AND indexname = 'portal_listings_active_uidx'`);
-  assert.match(uniq[0].indexdef, /UNIQUE.*\(property_id, connection_id\).*superseded_at IS NULL/);
-  const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'real_estate.portal_listings', 'UPDATE') AS upd WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
-  if (grant.length) assert.equal(grant[0].upd, true, 'GRANT ao role de runtime');
+// M9-D238: a versão da apólice (imutável) e a tarefa do fluxo manual de seguro são da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime; a versão só se acrescenta.
+test('M9-D238: insurance_policy_versions e insurance_manual_tasks têm RLS, FORCE RLS e política por empresa', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS tenant_policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'procurement' AND c.relname IN ('insurance_policy_versions', 'insurance_manual_tasks') ORDER BY 1`);
+  assert.equal(rows.length, 2, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.tenant_policies], [true, true, 1], `RLS, FORCE e política por empresa em procurement.${r.relname}`);
+  const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'procurement.insurance_policy_versions', 'INSERT') AS ver_ins,
+      has_table_privilege('nayara_runtime', 'procurement.insurance_manual_tasks', 'UPDATE') AS task_upd
+    WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grants.length) assert.deepEqual([grants[0].ver_ins, grants[0].task_upd], [true, true], 'GRANT ao role de runtime');
+  // A versão é imutável pelo gatilho (o banco descartável concede tudo ao runtime; a migration só concede SELECT e INSERT).
+  const [gatilho] = await sequelize.query("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = 'procurement.insurance_policy_versions'::regclass AND tgname = 'insurance_policy_versions_immutable_trg' AND NOT tgisinternal");
+  assert.equal(gatilho[0].n, 1, 'gatilho de imutabilidade da versão');
 });
 
 // M9-D237: finance.bank_statement_entries (lançamentos do extrato bancário) com RLS, FORCE RLS, política por empresa e UNIQUE (connection_id, entry_id).
@@ -811,6 +818,19 @@ test('M9-D237: finance.bank_statement_entries tem RLS, FORCE RLS, a política te
   assert.match(uniq[0].indexdef, /UNIQUE.*\(connection_id, entry_id\)/);
   const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'finance.bank_statement_entries', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
   if (grant.length) assert.equal(grant[0].ins, true, 'GRANT ao role de runtime');
+});
+
+// M9-D232: real_estate.portal_listings (anúncio do imóvel em cada portal) com RLS, FORCE RLS, política por empresa e um anúncio ativo por (imóvel, portal).
+test('M9-D232: real_estate.portal_listings tem RLS, FORCE RLS, a política tenant_isolation e o índice único parcial (property_id, connection_id)', async () => {
+  const [rls] = await sequelize.query(`SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'real_estate' AND c.relname = 'portal_listings'`);
+  assert.equal(rls.length, 1, 'real_estate.portal_listings não existe');
+  assert.deepEqual([rls[0].rls, rls[0].force_rls], [true, true]);
+  const [pol] = await sequelize.query(`SELECT 1 FROM pg_policy p WHERE p.polname = 'tenant_isolation' AND p.polrelid = '"real_estate"."portal_listings"'::regclass`);
+  assert.equal(pol.length, 1, 'política tenant_isolation');
+  const [uniq] = await sequelize.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'real_estate' AND tablename = 'portal_listings' AND indexname = 'portal_listings_active_uidx'`);
+  assert.match(uniq[0].indexdef, /UNIQUE.*\(property_id, connection_id\).*superseded_at IS NULL/);
+  const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'real_estate.portal_listings', 'UPDATE') AS upd WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grant.length) assert.equal(grant[0].upd, true, 'GRANT ao role de runtime');
 });
 
 // M9-D241: o contador do RPS é da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime; o RPS é único por empresa e série; o XML e o PDF da nota apontam para `files`.
