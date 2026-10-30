@@ -82,7 +82,10 @@
             "test/integrations/dispatch/dispatch.core.test.js",
             "test/integrations/dispatch/dispatch.lifecycle.test.js",
             "test/marco9/integracoes/m9d214.*.test.js",
-            "test/marco9/integracoes/m9d215.*.test.js"
+            "test/marco9/integracoes/m9d215.*.test.js",
+            "test/marco9/integracoes/m9d252.post.test.js",
+            "test/marco9/integracoes/m9d252.pagamento.test.js",
+            "test/marco9/integracoes/m9d252.cursor.test.js"
           ]
         }
       ]
@@ -119,7 +122,9 @@
           "testes": [
             "test/integrations/redaction/redaction.canary.test.js",
             "test/integrations/redaction/redaction.library.test.js",
-            "test/integrations/redaction/redaction.scan.test.js"
+            "test/integrations/redaction/redaction.scan.test.js",
+            "test/marco9/integracoes/m9d252.segredo.test.js",
+            "test/marco9/integracoes/m9d252.portal.test.js"
           ]
         }
       ]
@@ -132,7 +137,8 @@
       "comandos": [
         {
           "testes": [
-            "test/marco9/integracoes/m9d245.*.test.js"
+            "test/marco9/integracoes/m9d245.*.test.js",
+            "test/marco9/integracoes/m9d252.ssrf.test.js"
           ]
         }
       ]
@@ -160,7 +166,13 @@
             "m9d245.",
             "m9d251.webhook.",
             "m9d251.saida.",
-            "m9d251.circuito."
+            "m9d251.circuito.",
+            "m9d252.post.",
+            "m9d252.pagamento.",
+            "m9d252.cursor.",
+            "m9d252.segredo.",
+            "m9d252.portal.",
+            "m9d252.ssrf."
           ]
         },
         [
