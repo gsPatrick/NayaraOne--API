@@ -3,6 +3,7 @@
 const { getSetting } = require('../../settings/settings.service');
 const { KEYS, RISK_LEVELS, FLAGS_SETTING_DEFAULTS: D } = require('./flags.settings');
 
+const intIn = (value, min, max, fallback) => (Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max ? Number(value) : fallback);
 const risk = (value, fallback) => (RISK_LEVELS.includes(value) ? value : fallback);
 
 /** Parâmetros efetivos do registro na empresa; valor inválido volta ao padrão (nunca valor fixo no código). */
@@ -15,6 +16,9 @@ async function readFlagsParams(tenant, transaction) {
     absorbedRisk: risk(await get(KEYS.absorbedRisk), D[KEYS.absorbedRisk]),
     switchRisk: risk(await get(KEYS.switchRisk), D[KEYS.switchRisk]),
     valueMax: Number.isInteger(max) && max >= 100 ? max : D[KEYS.valueMax],
+    expiryHour: intIn(await get(KEYS.expiryHour), 0, 23, D[KEYS.expiryHour]),
+    expiryMinute: intIn(await get(KEYS.expiryMinute), 0, 59, D[KEYS.expiryMinute]),
+    expiryReminderDaily: (await get(KEYS.expiryReminder)) !== false,
   };
 }
 

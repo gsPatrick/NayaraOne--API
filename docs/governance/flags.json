@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "generatedBy": "scripts/syncFlagsRegistry.js",
+  "flags": [
+    {
+      "key": "finops.degradation.defer_non_critical_jobs",
+      "domain": "finops",
+      "owner": "Financeiro",
+      "risk": "MEDIUM",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": false,
+      "probe": null,
+      "description": "Degradação por custo: adiar jobs de baixa prioridade.",
+      "seed": "finops.seed.js"
+    },
+    {
+      "key": "finops.degradation.limit_export_size",
+      "domain": "finops",
+      "owner": "Financeiro",
+      "risk": "MEDIUM",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": false,
+      "probe": null,
+      "description": "Degradação por custo: limitar o tamanho das exportações.",
+      "seed": "finops.seed.js"
+    },
+    {
+      "key": "finops.degradation.pause_marketing_campaigns",
+      "domain": "finops",
+      "owner": "Financeiro",
+      "risk": "MEDIUM",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": false,
+      "probe": null,
+      "description": "Degradação por custo: pausar novos agendamentos de Marketing.",
+      "seed": "finops.seed.js"
+    },
+    {
+      "key": "finops.degradation.reduce_log_level",
+      "domain": "finops",
+      "owner": "Financeiro",
+      "risk": "MEDIUM",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": false,
+      "probe": null,
+      "description": "Degradação por custo: reduzir o nível de log.",
+      "seed": "finops.seed.js"
+    },
+    {
+      "key": "finops.degradation.switch_ai_model_cheaper",
+      "domain": "finops",
+      "owner": "Financeiro",
+      "risk": "MEDIUM",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": false,
+      "probe": null,
+      "description": "Degradação por custo: usar o modelo de IA mais barato.",
+      "seed": "finops.seed.js"
+    }
+  ]
+}

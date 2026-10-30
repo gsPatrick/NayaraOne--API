@@ -179,6 +179,19 @@ jobs:
       - name: Portão de lineage (M9-D811)
         run: npm run check:lineage
 
+      # M9-D871: flag temporária vencida reprova o build. O arquivo docs/governance/flags.json é gerado dos seeds (sync:flags) antes do check; a saída JSON vai como artefato.
+      - name: Flags declaradas, geração do arquivo (M9-D871)
+        run: npm run sync:flags
+      - name: Flag temporária vencida (M9-D871)
+        run: npm run check:flags -- --out reports/flags-check.json
+      - name: Artefato do relatório de flags (M9-D871)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flags-check
+          path: reports/flags-check.json
+          if-no-files-found: ignore
+
       # M9-D840: contrato OpenAPI versionado. Em pull request compara com o contrato da branch principal (breaking change dentro da mesma major reprova); em push confere a cobertura das
       # rotas do escopo fechado (openapi/escopo.json) e a validade do arquivo.
       # M9-D843: todo código de erro de src/features/core-governance está no catálogo (errorCatalog.data.json / docs/ERROR_CODES.md), começa com GOV_ (fora da lista fechada) e o documento está atualizado.

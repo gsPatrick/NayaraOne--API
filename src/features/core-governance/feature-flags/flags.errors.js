@@ -14,5 +14,6 @@ const inputInvalid = (message, details) => govError(422, 'GOV_FLAG_INPUT_INVALID
 const reasonRequired = () => govError(422, 'GOV_FLAG_REASON_REQUIRED', 'Informe o motivo da alteração.');
 const expired = () => govError(422, 'GOV_FLAG_EXPIRED', 'A chave expirou: estenda a validade para uma data futura para reativá-la.');
 const sourceLocked = () => govError(422, 'GOV_FLAG_SOURCE_LOCKED', 'Esta configuração vem das Configurações da empresa: só valor, responsável, risco e descrição podem mudar aqui.');
+const expiryRequired = () => govError(422, 'GOV_FLAG_EXPIRY_REQUIRED', 'Flag temporária precisa de data de expiração.');
 
-module.exports = { ownerRequired, ownerInvalid, validityInvalid, valueInvalid, duplicate, versionConflict, notFound, inputInvalid, reasonRequired, expired, sourceLocked };
+module.exports = { expiryRequired, ownerRequired, ownerInvalid, validityInvalid, valueInvalid, duplicate, versionConflict, notFound, inputInvalid, reasonRequired, expired, sourceLocked };

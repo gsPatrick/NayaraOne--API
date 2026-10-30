@@ -110,4 +110,22 @@ async function candidates(tenant, key, transaction) {
   return out;
 }
 
-module.exports = { findById, findAnywhere, findBySlot, keyExistsInKind, insert, update, insertVersion, listVersions, list, candidates };
+/** Chaves temporárias ainda ACTIVE cujo fim da validade já passou (com trava de linha, para o job de expiração). */
+async function listDueForExpiry(tenant, now, transaction) {
+  const out = [];
+  for (const kind of Object.keys(TABLES)) {
+    out.push(...await q(`SELECT * FROM ${tableOf(kind)} WHERE company_id = :companyId AND temporary = true AND state = 'ACTIVE' AND valid_until < :now ORDER BY key FOR UPDATE`, transaction, { companyId: tenant.companyId, now }));
+  }
+  return out;
+}
+
+/** Chaves temporárias EXPIRED cujo fim já passou e que continuam no registro (alvo do lembrete diário). */
+async function listPastExpired(tenant, now, transaction) {
+  const out = [];
+  for (const kind of Object.keys(TABLES)) {
+    out.push(...await q(`SELECT * FROM ${tableOf(kind)} WHERE company_id = :companyId AND temporary = true AND state = 'EXPIRED' AND valid_until < :now ORDER BY key`, transaction, { companyId: tenant.companyId, now }));
+  }
+  return out;
+}
+
+module.exports = { listDueForExpiry, listPastExpired, findById, findAnywhere, findBySlot, keyExistsInKind, insert, update, insertVersion, listVersions, list, candidates };

@@ -113,6 +113,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FINOPS_PROD_PROTECTED` | 403 | O ambiente de produção não pode ser desligado por custo. | finops | 1.3.0 | não |
 | `GOV_FLAG_DUPLICATE` | 409 | Já existe uma chave igual neste escopo. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_EXPIRED` | 422 | A chave expirou: estenda a validade para uma data futura para reativá-la. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_EXPIRY_REQUIRED` | 422 | Flag temporária precisa de data de expiração. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_INPUT_INVALID` | 422 | Algum campo da chave é inválido. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_NOT_FOUND` | 404 | Chave não encontrada. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_OWNER_INVALID` | 422 | O responsável deve ser uma pessoa ativa desta empresa. | feature-flags | 1.3.0 | não |

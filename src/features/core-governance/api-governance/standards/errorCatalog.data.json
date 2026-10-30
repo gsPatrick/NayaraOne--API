@@ -749,6 +749,13 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_FLAG_EXPIRY_REQUIRED": {
+      "status": 422,
+      "message": "Flag temporária precisa de data de expiração.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_FLAG_INPUT_INVALID": {
       "status": 422,
       "message": "Algum campo da chave é inválido.",

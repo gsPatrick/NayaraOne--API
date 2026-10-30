@@ -968,3 +968,14 @@ test('M9-D870: feature_flags, config_entries e flag_versions têm RLS, FORCE RLS
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
   }
 });
+
+// M9-D871: registro dos alertas de flags (RLS pela empresa, FORCE, política e GRANT ao runtime).
+test('M9-D871: flag_alert_log tem RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname = 'flag_alert_log'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
+  const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.flag_alert_log', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
+  if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao runtime em governance.flag_alert_log');
+});

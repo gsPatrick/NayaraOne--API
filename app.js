@@ -21,6 +21,7 @@ const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJ
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
 const { startFinopsDegradationJob } = require('./src/engines/jobs/finopsDegradationJob');
+const { startFeatureFlagExpiryJob } = require('./src/engines/jobs/featureFlagExpiryJob');
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
@@ -254,6 +255,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_DETECTORS_JOB_DISABLED
 // Degradação por custo do FinOps (M9-D863): a cada hora (minuto 20) aplica no máximo um passo reversível e não crítico da política por orçamento; nunca desliga PROD.
 if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_DEGRADATION_JOB_DISABLED !== 'true') {
   startFinopsDegradationJob();
+}
+
+// Expiração das flags temporárias (M9-D871): uma vez por dia (06:30 de Brasília por padrão) passa a EXPIRED a flag temporária vencida e avisa o responsável.
+if (process.env.NODE_ENV !== 'test' && process.env.FEATURE_FLAG_EXPIRY_JOB_DISABLED !== 'true') {
+  startFeatureFlagExpiryJob();
 }
 
 // Exportações do DLP (M9-D822): a geração recolhe os pedidos aprovados que ficaram sem arquivo e a expiração apaga os arquivos vencidos (a cada 15 minutos por padrão).

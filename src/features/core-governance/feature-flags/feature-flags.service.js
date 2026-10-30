@@ -70,6 +70,7 @@ async function updateEntry(tenant, body, actorUserId, transaction, { now = new D
   const patch = parsePatch(b, row, tenant, params);
   const fromSettings = row.source === SOURCES.TENANT_SETTING;
   if (fromSettings && LOCKED_FOR_SETTINGS.some((field) => Object.prototype.hasOwnProperty.call(patch, field))) throw E.sourceLocked();
+  if (('temporary' in patch || 'validUntil' in patch) && ((patch.temporary === undefined ? row.temporary : patch.temporary) && !(patch.validUntil === undefined ? row.valid_until : patch.validUntil))) throw E.expiryRequired();
   const state = nextState(row, patch, now);
   const live = await liveOf(tenant, row, transaction);
   const current = { value: live === undefined ? row.value : live, ownerUserId: row.owner_user_id, scope: row.scope, scopeRef: row.scope_ref, risk: row.risk, validFrom: row.valid_from, validUntil: row.valid_until, temporary: row.temporary, description: row.description };

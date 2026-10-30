@@ -89,6 +89,7 @@ function parseCreate(body, tenant, params) {
   const { scope, scopeRef } = parseScope(b.scope, b.scopeRef, tenant);
   const { validFrom, validUntil } = parseValidity(b.validFrom, b.validUntil);
   for (const field of ['temporary', 'isKillSwitch']) if (b[field] !== undefined && typeof b[field] !== 'boolean') throw E.inputInvalid(`"${field}" deve ser verdadeiro ou falso.`, { field });
+  if (b.temporary === true && !validUntil) throw E.expiryRequired();
   return {
     key, kind, value, valueType, allowedValues, ownerUserId, scope, scopeRef, risk: parseRisk(b.risk, params.defaultRisk), validFrom, validUntil,
     temporary: Boolean(b.temporary), description: parseDescription(b.description), isKillSwitch: Boolean(b.isKillSwitch),

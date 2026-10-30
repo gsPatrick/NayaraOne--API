@@ -34,6 +34,8 @@
     "dod:bi": "node scripts/analytics/checkDod.js",
     "dod:integracoes": "node scripts/integrationDod.js",
     "check:lineage": "node scripts/checkLineageCoverage.js",
+    "sync:flags": "node scripts/syncFlagsRegistry.js",
+    "check:flags": "node scripts/checkFeatureFlags.js",
     "sync:lineage": "node scripts/withDisposableDb.js -- node scripts/syncLineageRegistry.js",
     "scan:secrets": "node scripts/secretScan.js",
     "lint:openapi": "node scripts/lintOpenapi.js",
