@@ -1,0 +1,8 @@
+Execução propositalmente vermelha: o teste adv_08_provider_timeout_nao_duplica_post foi REMOVIDO da cópia da API (suíte do estágio 8 menor, mas sem falha em nenhum dos testes que sobraram).
+$ node scripts/marketing/ci/executar.js --de 8 --ate 8
+# estágio 8: provider contract tests
+TESTE EXIGIDO AUSENTE: adv_08_provider_timeout_nao_duplica_post (o estágio 8 exige estes testes nos arquivos dos seus padrões; apagar ou renomear reprova a esteira).
+# estágio 8: provider contract tests => VERMELHO
+MKT_CI_STAGE_FAILED Um estágio do pipeline falhou; a entrega está bloqueada. (estágio 8: provider contract tests)
+# esteira do marketing: VERMELHO
+saída do processo: 1

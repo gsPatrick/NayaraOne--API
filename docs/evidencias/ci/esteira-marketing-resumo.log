@@ -1,0 +1,124 @@
+# estágio 1: lint
+$ npm run lint
+$ npm run guard:marketing
+$ npm run guard:file-size
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/guards/cada_guarda_reprova_quando_a_violacao_e_introduzida.test.js
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8722.824917
+# estágio 1: lint => VERDE
+# estágio 2: typecheck
+$ npm run typecheck:marketing
+$ node --test --test-concurrency=1 --test-reporter=spec test/marketing.publicFields.test.js test/marco9/marketing/m9d435.inventario.test.js test/m9d434.eventosMarketing.test.js
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9853.508875
+# estágio 2: typecheck => VERDE
+# estágio 3: migrations
+$ node scripts/marketing/ci/estagio3Migracoes.js
+[estagio 3] 561 migrations aplicadas em banco vazio (cluster descartável).
+[estagio 3] depois de aplicar: 27 tabelas marketing.* (as 15 do livro incluídas) com RLS FORCE, política e GRANT ao nayara_runtime.
+[estagio 3] migrations desfeitas até 20260101000884-marketing-campaigns-mass-confirmation.js (inclusive).
+[estagio 3] 72 migrations reaplicadas.
+[estagio 3] depois de desfazer e reaplicar: 27 tabelas marketing.* (as 15 do livro incluídas) com RLS FORCE, política e GRANT ao nayara_runtime.
+[estagio 3] migrations: OK
+# estágio 3: migrations => VERDE
+# estágio 4: automation idempotency
+$ node --test --test-concurrency=1 --test-reporter=spec test/marketing.idempotencia.chaves.test.js test/marketing.idempotencia.destinos.test.js test/marco9/marketing/m9d414.acoes.test.js test/marco9/marketing/m9d414.adiadas.test.js test/marco9/marketing/m9d414.bloqueios.test.js test/marco9/marketing/m9d414.concorrencia.test.js test/marco9/marketing/m9d414.consumidor.test.js test/marco9/marketing/m9d414.passos.test.js test/marco9/marketing/m9d410.concorrencia.test.js test/marco9/marketing/adversarial/adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js test/marco9/marketing/guards/guard_replay_is_safe.test.js
+ℹ tests 52
+ℹ suites 0
+ℹ pass 52
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31191.881625
+# estágio 4: automation idempotency => VERDE
+# estágio 5: consent/suppression tests
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d418.campanha.test.js test/marco9/marketing/m9d418.concorrencia.test.js test/marco9/marketing/m9d418.supressao.test.js test/marco9/marketing/m9d419.campanha.test.js test/marco9/marketing/m9d419.consumidor.test.js test/marco9/marketing/m9d419.evento.test.js test/marco9/marketing/m9d419.privacidade.test.js test/marco9/marketing/m9d419.segmento.test.js test/marco9/marketing/adversarial/adv_01_opt_out_recebe_automacao_bloqueado.test.js test/marco9/marketing/guards/guard_send_requires_cansend.test.js test/marco9/marketing/guards/guard_review_after_case_resolved.test.js
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17743.67075
+# estágio 5: consent/suppression tests => VERDE
+# estágio 6: factual grounding
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d407.http.test.js test/marco9/marketing/m9d407.injecao.test.js test/marco9/marketing/m9d407.pipeline.test.js test/marco9/marketing/m9d407.validador.test.js test/marco9/marketing/adversarial/adv_03_imovel_sem_dado_ia_nao_inventa.test.js test/marco9/marketing/guards/guard_ai_output_requires_factual_validation.test.js
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13391.672334
+# estágio 6: factual grounding => VERDE
+# estágio 7: public-field leakage tests
+$ node --test --test-concurrency=1 --test-reporter=spec test/marketing.publicFields.test.js test/marco9/marketing/m9d433.conteudo.test.js test/m9d404.aprovacao.test.js test/m9d404.rotas.test.js test/m9d404.templates.test.js test/marco9/marketing/adversarial/adv_04_ocorrencia_interna_nao_entra_em_conteudo.test.js test/marco9/marketing/adversarial/adv_05_template_muda_apos_approval_invalida.test.js test/marco9/marketing/adversarial/adv_13_endereco_restrito_payload_publico_sanitizado.test.js test/marco9/marketing/guards/guard_public_payload_only.test.js
+ℹ tests 48
+ℹ suites 0
+ℹ pass 48
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25061.576458
+# estágio 7: public-field leakage tests => VERDE
+# estágio 8: provider contract tests
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/channelAdapter.contract.test.js test/marco9/marketing/m9d428.adapters.test.js test/marco9/marketing/m9d428.capability.test.js test/marco9/marketing/m9d428.publicacao.test.js test/marco9/marketing/m9d430.contingencia.test.js test/marco9/marketing/m9d430.liberacao.test.js test/marco9/marketing/m9d430.real.test.js test/marco9/marketing/m9d430.sandbox.test.js test/marco9/marketing/m9d430.webhook.http.test.js test/marco9/marketing/adversarial/adv_08_provider_timeout_nao_duplica_post.test.js test/marco9/marketing/guards/guard_no_blind_retry.test.js
+ℹ tests 104
+ℹ suites 0
+ℹ pass 104
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27674.514125
+# estágio 8: provider contract tests => VERDE
+# estágio 9: frequency/quiet-hours
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d416.cap.test.js test/marco9/marketing/m9d416.concorrencia.test.js test/marco9/marketing/m9d416.condicoes.test.js test/marco9/marketing/m9d416.cooldown.test.js test/marco9/marketing/m9d418.canSend.test.js test/m9d417.cadenciaParametros.test.js test/m9d417.rotas.test.js test/marco9/marketing/adversarial/adv_06_frequency_cap_excedido_bloqueia.test.js test/marco9/marketing/guards/guard_no_hardcoded_cadence.test.js
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23565.055959
+# estágio 9: frequency/quiet-hours => VERDE
+# estágio 10: kill-switch
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d425.catalogo.test.js test/marco9/marketing/m9d425.escopos.test.js test/marco9/marketing/m9d425.falha.test.js test/marco9/marketing/m9d425.http.test.js test/marco9/marketing/m9d425.inventario.test.js test/marco9/marketing/m9d425.migracao.test.js test/marco9/marketing/m9d425.mudanca.test.js test/marco9/marketing/m9d425.social.test.js test/marco9/marketing/adversarial/adv_07_kill_switch_ativo_nenhuma_acao_outbound.test.js test/marco9/marketing/guards/guard_kill_switch_always_checked.test.js
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40504.928833
+# estágio 10: kill-switch => VERDE
+# estágio 11: tracking tests
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d431.atribuicao.test.js test/marco9/marketing/m9d431.fiacao.test.js test/marco9/marketing/m9d431.relatorio.test.js test/marco9/marketing/adversarial/adv_10_tracking_invalido_nao_atribui_venda.test.js
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10017.789333
+# estágio 11: tracking tests => VERDE
+# esteira do marketing: VERDE

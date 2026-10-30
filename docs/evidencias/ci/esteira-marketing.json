@@ -1,0 +1,85 @@
+{
+  "commit": "866ff1afd5be90af9135b53c978474439358e972",
+  "inicio": "2026-10-30T22:20:49.681Z",
+  "modo": "push",
+  "estagios": [
+    {
+      "numero": 1,
+      "nome": "lint",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 76200
+    },
+    {
+      "numero": 2,
+      "nome": "typecheck",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 15497
+    },
+    {
+      "numero": 3,
+      "nome": "migrations",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 67960
+    },
+    {
+      "numero": 4,
+      "nome": "automation idempotency",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 31283
+    },
+    {
+      "numero": 5,
+      "nome": "consent/suppression tests",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 17808
+    },
+    {
+      "numero": 6,
+      "nome": "factual grounding",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 13481
+    },
+    {
+      "numero": 7,
+      "nome": "public-field leakage tests",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 25176
+    },
+    {
+      "numero": 8,
+      "nome": "provider contract tests",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 27780
+    },
+    {
+      "numero": 9,
+      "nome": "frequency/quiet-hours",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 23673
+    },
+    {
+      "numero": 10,
+      "nome": "kill-switch",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 40602
+    },
+    {
+      "numero": 11,
+      "nome": "tracking tests",
+      "tipo": "push",
+      "status": "VERDE",
+      "duracaoMs": 10105
+    }
+  ],
+  "resultado": "VERDE"
+}

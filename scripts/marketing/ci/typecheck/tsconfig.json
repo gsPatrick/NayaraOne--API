@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "noResolve": true,
+    "types": []
+  },
+  "files": [
+    "globals.d.ts",
+    "../../../../src/features/marketing/security/publicPayload.js",
+    "../../../../src/features/marketing/automations/cadence/cadence.defaults.js",
+    "../../../../src/features/marketing/automations/cadence/cadence.parse.js",
+    "../../../../src/features/marketing/automations/cadence/frequencyCap.js",
+    "../../../../src/features/marketing/automations/cadence/zonedTime.js",
+    "../../../../src/features/marketing/publications/adapters/channels.js"
+  ]
+}

@@ -1,0 +1,102 @@
+name: Esteira do Marketing
+
+# M9-D438 (Guia seção 12): lint, typecheck, migrations, automation idempotency, consent/suppression tests, factual grounding, public-field leakage tests, provider contract tests,
+# frequency/quiet-hours, kill-switch e tracking tests (estágios 1 a 11: todo push e pull request); DEV, LAB e failure drills (estágios 12 a 14: branch de entrega `entrega/**`
+# ou tag `mkt-release-*`), nesta ordem, parando no primeiro estágio vermelho (um passo vermelho interrompe os seguintes). Banco: sempre o cluster descartável
+# (scripts/withDisposableDb.js), nunca o compartilhado, e relógio simulado nos testes. O CI NÃO faz deploy em produção. Endereços e credenciais de LAB ficam no cofre do CI (secrets).
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9, 'entrega/**']
+    tags: ['mkt-release-*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esteira-marketing:
+    name: Estágios 1 a 11
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: "Estágio 1: lint"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-1.log --de 1 --ate 1
+      - name: "Estágio 2: typecheck"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-2.log --de 2 --ate 2
+      - name: "Estágio 3: migrations"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-3.log --de 3 --ate 3
+      - name: "Estágio 4: automation idempotency"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-4.log --de 4 --ate 4
+      - name: "Estágio 5: consent/suppression tests"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-5.log --de 5 --ate 5
+      - name: "Estágio 6: factual grounding"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-6.log --de 6 --ate 6
+      - name: "Estágio 7: public-field leakage tests"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-7.log --de 7 --ate 7
+      - name: "Estágio 8: provider contract tests"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-8.log --de 8 --ate 8
+      - name: "Estágio 9: frequency/quiet-hours"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-9.log --de 9 --ate 9
+      - name: "Estágio 10: kill-switch"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-10.log --de 10 --ate 10
+      - name: "Estágio 11: tracking tests"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-11.log --de 11 --ate 11
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-marketing-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-marketing-*.log
+            docs/evidencias/ci/esteira-marketing-*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  entrega-marketing:
+    # Só em branch de entrega ou tag de release: DEV (banco descartável e as 10 APIs), LAB (suíte de contrato dos adapters em modo LAB) e failure drills (estágios 12 a 14).
+    if: ${{ startsWith(github.ref, 'refs/heads/entrega/') || startsWith(github.ref, 'refs/tags/mkt-release-') }}
+    name: Estágios 12 a 14
+    needs: esteira-marketing
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: "Estágio 12: DEV"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-12.log --entrega --de 12 --ate 12
+      - name: "Estágio 13: LAB"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-13.log --entrega --de 13 --ate 13
+      - name: "Estágio 14: failure drills"
+        run: bash scripts/ci-estagios-marketing.sh docs/evidencias/ci/esteira-marketing-14.log --entrega --de 14 --ate 14
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-marketing-entrega-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-marketing-*.log
+            docs/evidencias/ci/esteira-marketing-*.json
+          if-no-files-found: warn
+          retention-days: 90

@@ -1,0 +1,23 @@
+# estágio 8: provider contract tests
+TESTE EXIGIDO AUSENTE: adv_08_provider_timeout_nao_duplica_post (o estágio 8 exige estes testes nos arquivos dos seus padrões; apagar ou renomear reprova a esteira).
+# estágio 8: provider contract tests => VERMELHO
+MKT_CI_STAGE_FAILED Um estágio do pipeline falhou; a entrega está bloqueada. (estágio 8: provider contract tests)
+✔ workflow_tem_14_estagios_na_ordem: o arquivo de estágios e o workflow listam os 14 estágios do Guia §12 com os nomes e a ordem do livro (10.770792ms)
+✔ workflow_tem_14_estagios_na_ordem: reordenar, renomear, faltar estágio ou mudar o tipo é recusado antes de rodar qualquer comando (76.706167ms)
+✔ ci_falha_em_um_estagio_bloqueia_os_seguintes: o estágio vermelho interrompe os seguintes e imprime MKT_CI_STAGE_FAILED (282.761417ms)
+✔ ci_estagios_1_a_11_em_todo_push_e_12_a_14_em_entrega: sem opção rodam 1 a 11; com --entrega rodam 12 a 14 (1167.823333ms)
+✔ estagios_com_arquivos_de_teste_reais: cada estágio de 1 a 13 acha arquivos de teste nos padrões e todos os testes exigidos aparecem neles (24.450417ms)
+✔ esteira_fica_vermelha_ao_remover_um_teste_de_uma_suite: sem o adv_08 na cópia, o estágio 8 reprova antes de rodar qualquer comando (2934.149875ms)
+✔ estagio_14_sem_arquivo_de_drill_nao_fica_verde_em_silencio: padrão sem arquivo é esteira recusada (0.671042ms)
+✔ migrations_checam_rls_nas_15_tabelas: as 15 do livro (6 do núcleo e 9 da execução) estão na lista (0.963542ms)
+✔ migrations_checam_rls_nas_15_tabelas: sem FORCE, sem RLS, sem política, sem GRANT ou sem a tabela, o estágio acusa o problema com o nome da tabela (1.951292ms)
+✔ migrations_checam_rls_nas_15_tabelas: no banco descartável, as 15 passam e uma tabela nova sem FORCE reprova o estágio 3 (375.711ms)
+✔ banco_do_ci_e_descartavel: estágio de banco recusa rodar fora do banco descartável e o script do CI só usa o cluster descartável (1073.015542ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6289.554208
