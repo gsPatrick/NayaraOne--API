@@ -7,6 +7,7 @@
 const { sequelize } = require('../../../../models');
 const { getFormulaCatalog } = require('../formulaCatalog');
 const { calcHash } = require('../calcHash');
+const { runFormula } = require('../formulaRun');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { getSourceSpec } = require('../sourceRefs.spec');
 const { readStatementMaxAgeDays } = require('../../read-models/financeKpi.settings');
@@ -60,7 +61,7 @@ async function buildFinanceKpiEntries(scope, asOfDate, transaction) {
     const extra = EXTRAS[def.metricCode] ? await EXTRAS[def.metricCode](scope, asOfDate, transaction) : undefined; // M9-D623: a margem lê também os setores do mês
     const inputs = INPUTS[def.metricCode](row, asOfDate, extra, settings);
     const params = paramsOf(def.metricCode, settings);
-    const result = catalog.get(def.formulaId).compute(inputs, params);
+    const result = runFormula(catalog.get(def.formulaId), inputs, params);
     const built = await buildSourceRefs(sourceCtx, def.metricCode, sourceOptions(def, row, published), transaction);
     const sourceRefs = built.components ? built.components.flatMap((c) => c.sourceRefs.map((ref) => ({ ...ref, component: c.metricCode }))) : built.sourceRefs; // M9-D622: cada ref do composto leva o seu componente
     const base = {

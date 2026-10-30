@@ -87,8 +87,9 @@ function count(value) {
   return toString(make(d.n / unit, 0));
 }
 
-/** Percentual com 2 casas (12,35%). Denominador zero: { value: null, status: 'INCOMPLETE' }. */
+/** Percentual com 2 casas (12,35%). Base zero ou negativa não tem percentual que se possa ler: { value: null, status: 'INCOMPLETE' } (nunca 0 nem sinal trocado). */
 function percent(numerator, denominator) {
+  if (cmp(denominator, 0) < 0) return { value: null, status: 'INCOMPLETE' };
   const ratio = div(numerator, denominator);
   if (ratio === null) return { value: null, status: 'INCOMPLETE' };
   return { value: round(mul(ratio, 100), 2), status: 'OK' };

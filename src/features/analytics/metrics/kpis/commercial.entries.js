@@ -9,6 +9,7 @@
 const { sequelize } = require('../../../../models');
 const { getFormulaCatalog } = require('../formulaCatalog');
 const { calcHash } = require('../calcHash');
+const { runFormula } = require('../formulaRun');
 const clock = require('../clock');
 const { buildSourceRefs } = require('../sourceRefs.build');
 const { getReadModel } = require('../../read-models');
@@ -42,7 +43,7 @@ async function buildPackEntries(pack, scope, asOfDate, transaction, { only, isTo
     if (!published) continue;
     const inputs = pack.inputs[def.metricCode](rows, context);
     const params = pack.params[def.metricCode](context);
-    const result = catalog.get(def.metricCode).compute(inputs, params);
+    const result = runFormula(catalog.get(def.metricCode), inputs, params);
     const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: filters[def.metricCode], unit: published.unit }, transaction);
     const base = {
       metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,

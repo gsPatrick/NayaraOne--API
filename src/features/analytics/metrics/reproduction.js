@@ -5,9 +5,10 @@
  * mesmo valor e o mesmo calc_hash do snapshot. `recalculate` é pura (sem banco, relógio ou sorteio); `asOfDate` entra como parâmetro.
  */
 const { calcHash } = require('./calcHash');
+const { runFormula } = require('./formulaRun');
 
 function recalculate({ formula, metricCode, version, inputs, params = {}, asOfDate }) {
-  const result = formula.compute(inputs, { ...params, asOfDate });
+  const result = runFormula(formula, inputs, { ...params, asOfDate });
   return { value: result.value, details: result.details, calcHash: calcHash({ metricCode, version, inputs, params }) };
 }
 

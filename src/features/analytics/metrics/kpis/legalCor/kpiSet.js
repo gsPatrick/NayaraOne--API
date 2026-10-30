@@ -14,6 +14,7 @@ const store = require('../../../metricStore.service');
 const { publishMetric } = require('../../registry.service');
 const { getFormulaCatalog } = require('../../formulaCatalog');
 const { calcHash } = require('../../calcHash');
+const { runFormula } = require('../../formulaRun');
 const { buildSourceRefs } = require('../../sourceRefs.build');
 const clock = require('../../clock');
 const { registerSnapshotProvider } = require('../../snapshots.providers');
@@ -79,7 +80,7 @@ function createKpiSet(set) {
       if (!published || !snapshotAt) continue;
       const inputs = set.inputs[def.metricCode](rows, { asOfDate, settings });
       const params = set.params[def.metricCode] ? set.params[def.metricCode](settings) : {};
-      const result = catalog.get(def.metricCode).compute(inputs, params);
+      const result = runFormula(catalog.get(def.metricCode), inputs, params);
       const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: set.filterOf(def.metricCode, asOfDate, settings), unit: published.unit }, transaction);
       const base = {
         metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,
