@@ -13,6 +13,9 @@ const {
 } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 
+// Migrations posteriores que alteram as tabelas da parte 2 (D414 definição da automação; D431 atribuição e links).
+const POSTERIORES = ['20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js'];
+
 let tenantA;
 
 before(async () => {
@@ -91,6 +94,9 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
     assert.equal(await contagem(), 0);
     await migration.up(qi);
     assert.equal(await contagem(), 9);
+    // O down derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, checks, gatilhos): recompõe na ordem,
+    // para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
+    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
   } finally {
     await admin.close();
   }
