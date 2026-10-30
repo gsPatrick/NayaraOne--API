@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const casesController = require('./cases/financingCases.controller');
 const documentsController = require('./cases/caseDocuments.controller');
@@ -231,6 +231,7 @@ correspondentRouter.post(
 correspondentRouter.post(
   '/fiscal/invoices/:id/cancel',
   requirePermission('correspondent:fiscal'),
+  requireRecentMfa, // M9-D241 seção 6: cancelar nota fiscal exige MFA recente (e o motivo)
   fiscalController.cancelInvoice
 );
 correspondentRouter.get(

@@ -812,3 +812,18 @@ test('M9-D237: finance.bank_statement_entries tem RLS, FORCE RLS, a política te
   const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'finance.bank_statement_entries', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
   if (grant.length) assert.equal(grant[0].ins, true, 'GRANT ao role de runtime');
 });
+
+// M9-D241: o contador do RPS é da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime; o RPS é único por empresa e série; o XML e o PDF da nota apontam para `files`.
+test('M9-D241: nfse_rps_sequences tem RLS, FORCE RLS e política por empresa; RPS único; tax_documents aponta XML e PDF para files', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS tenant_policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'correspondent' AND c.relname = 'nfse_rps_sequences'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].tenant_policies], [true, true, 1]);
+  const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'correspondent.nfse_rps_sequences', 'UPDATE') AS upd WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grants.length) assert.equal(grants[0].upd, true, 'GRANT ao role de runtime');
+  const [indice] = await sequelize.query("SELECT indexdef FROM pg_indexes WHERE schemaname = 'correspondent' AND indexname = 'invoice_requests_rps_unique'");
+  assert.match(indice[0].indexdef, /UNIQUE.*\(company_id, rps_series, rps_number\)/, 'RPS único por empresa e série');
+  const [colunas] = await sequelize.query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'finance' AND table_name = 'tax_documents' AND column_name IN ('xml_file_id', 'pdf_file_id') ORDER BY 1");
+  assert.deepEqual(colunas.map((c) => c.column_name), ['pdf_file_id', 'xml_file_id']);
+});

@@ -76,6 +76,9 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'file_id',
       },
+      // M9-D241: o XML e o PDF oficiais da NFS-e também ficam em people.files, com o hash na linha do arquivo.
+      xmlFileId: { type: DataTypes.UUID, allowNull: true, field: 'xml_file_id' },
+      pdfFileId: { type: DataTypes.UUID, allowNull: true, field: 'pdf_file_id' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -25,6 +25,10 @@ const requestInvoice = catchAsync(async (req, res) => {
   );
   // Já existia um pedido em andamento para a origem: 200 (não 201) e a marca "reused" para a tela avisar.
   const reused = invoiceRequest.get('reused') === true;
+  // Recusa síncrona da prefeitura (M9-D241): a nota fica gravada como REJECTED (a transação já foi confirmada) e a resposta é 422; a correção é outra nota, com outro RPS.
+  if (!reused && invoiceRequest.status === 'REJECTED' && !invoiceRequest.externalId) {
+    throw AppError.unprocessable('A prefeitura recusou a nota: veja o motivo e emita novamente.', 'INTEGRATION_FISCAL_NFSE_REJECTED', { invoiceId: invoiceRequest.id, rpsNumber: invoiceRequest.rpsNumber, reason: invoiceRequest.rejectionReason });
+  }
   return success(res, { statusCode: reused ? 200 : 201, data: invoiceRequest, ...(reused ? { message: 'Já existia uma NFS-e em andamento para esta origem: ela foi reaproveitada.' } : {}) });
 });
 

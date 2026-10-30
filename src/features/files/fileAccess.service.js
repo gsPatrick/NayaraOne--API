@@ -45,6 +45,8 @@ const FILE_REFERENCES = [
   { table: 'legal.key_deliveries', column: 'photos_file_ids', kind: 'jsonb_array', permissions: ['legal:read'] },
   { table: 'finance.financial_entries', column: 'settlement_evidence_file_id', kind: 'uuid', permissions: ['finance:read'] },
   { table: 'finance.tax_documents', column: 'file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
+  { table: 'finance.tax_documents', column: 'xml_file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
+  { table: 'finance.tax_documents', column: 'pdf_file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
   { table: 'finance.utility_obligations', column: 'evidence_file_id', kind: 'uuid', permissions: ['billing:read'] },
   { table: 'finance.ownership_transfer_tasks', column: 'evidence_file_id', kind: 'uuid', permissions: ['billing:read'] },
   { table: 'inventory.inventory_movements', column: 'evidence_file_id', kind: 'uuid', permissions: ['inventory:read'] },

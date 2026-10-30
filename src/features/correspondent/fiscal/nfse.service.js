@@ -4,13 +4,18 @@ const crypto = require('crypto');
 const { sequelize, InvoiceRequest, InvoiceEvent, TaxDocument, CommissionEntitlement, FinancialEntry } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const { SandboxNfseAdapter } = require('../adapters/NfseAdapter');
+const { ensureFiscalConnection, adapterVersionOf } = require('./nfse/nfse.connection');
+const { allocateRps } = require('./nfse/nfse.rps');
+const { issueViaDispatch } = require('./nfse/nfse.issue');
+const { queryInvoiceStatus, lookupIssuance, settleIssuanceDispatch, finishIssuanceDispatch, cancelAtIssuer } = require('./nfse/nfse.ops');
+const { storeInvoiceFiles } = require('./nfse/nfse.files');
+const { readNfseParams } = require('./nfse/nfse.params');
+const { installNfseBinder } = require('./nfse/nfse.bind');
 const { reconcile, autoResolveIfOpen } = require('./reconciliation.service');
 const { getFiscalSettings } = require('../commissionSplit.service');
 const { isUuid, parseMoney, isValidTaxId, safeFileName } = require('./fiscalCommon');
-const { sanitizeProviderMessage } = require('../sanitizeProviderMessage');
 
-const adapter = new SandboxNfseAdapter();
+installNfseBinder(); // M9-D241: a resposta do emissor liga o pedido à nota e a reconciliação ganha o RPS
 
 // Mesma decisão de engenharia da Fase 5 (SUBMIT_TIMEOUT_MS): tempo máximo aguardando o
 // "provedor" de NFS-e antes de considerar a chamada ambígua (vira UNKNOWN, nunca reenvio cego).
@@ -29,17 +34,6 @@ function withTimeout(promise, ms) {
     timer = setTimeout(() => reject(new NfseTimeoutError()), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-// O emissor sandbox gera uma "nota" em memória: em produção isso viraria um documento fiscal falso
-// gravado como oficial. Enquanto não houver emissor real configurado, produção recusa emitir.
-function assertIssuerAllowed() {
-  if ((['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production') && typeof adapter.isSandbox === 'function' && adapter.isSandbox()) {
-    throw AppError.unprocessable(
-      'O emissor de NFS-e ainda não está configurado para produção. Configure o emissor oficial antes de emitir notas.',
-      'NFSE_ISSUER_NOT_CONFIGURED'
-    );
-  }
 }
 
 async function appendInvoiceEvent(invoiceRequest, rawStatus, normalizedStatus, transaction, note = null) {
@@ -91,7 +85,9 @@ const useOwnTx = () => process.env.NODE_ENV !== 'test';
  * em transação própria e registra cada transição em InvoiceEvent (append-only).
  */
 async function requestInvoice(payload, actorUserId, groupId, companyId, transaction) {
-  assertIssuerAllowed();
+  // M9-D241: o emissor é a connection de NFS-e da empresa (registro de integração); produção sem emissor oficial continua recusando (422 NFSE_ISSUER_NOT_CONFIGURED).
+  const ctx = { groupId, companyId, userId: actorUserId || null };
+  const connection = await ensureFiscalConnection(ctx, transaction);
   const sourceType = typeof payload?.sourceType === 'string' ? payload.sourceType.trim() : '';
   const sourceId = typeof payload?.sourceId === 'string' ? payload.sourceId.trim().toLowerCase() : '';
   const description = typeof payload?.description === 'string' ? payload.description.trim() : '';
@@ -165,27 +161,32 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
   const existing = await InvoiceRequest.findOne({ where: { companyId, sourceType, sourceId, status: OPEN_STATUSES }, transaction });
   if (existing) return reuse(existing);
 
-  // Chave de idempotência determinística pela origem e pelo número da tentativa (gravado na nota): se o emissor
-  // aceitar e o processo cair antes do commit, o retry usa a MESMA chave e o emissor devolve a mesma nota.
+  // O RPS é a chave natural da emissão (M9-D241): número único e crescente por empresa e série, gravado junto da nota; a chave de idempotência do envio sai dele. Se o emissor
+  // aceitar e o processo cair antes do commit, o retry usa o MESMO RPS e o emissor devolve a mesma nota. A correção de uma nota recusada é outra nota, com outro RPS.
   const attempt = await InvoiceRequest.count({ where: { companyId, sourceType, sourceId }, transaction });
-  const issuerKey = `nfse:${companyId}:${sourceType}:${sourceId}:n${attempt}`;
   const fiscal = await getFiscalSettings(groupId, companyId, actorUserId, transaction);
-  const createValues = {
-    groupId, companyId, sourceType, sourceId, status: 'REQUESTED', adapterVersion: adapter.version(),
-    attemptNumber: attempt, amount, description, createdBy: actorUserId || null, updatedBy: actorUserId || null,
-  };
+  const { rpsSeries } = await readNfseParams(ctx, transaction);
+  let rps = null;
+  const valuesWith = (r) => ({
+    groupId, companyId, sourceType, sourceId, status: 'REQUESTED', adapterVersion: adapterVersionOf(connection),
+    attemptNumber: attempt, amount, description, rpsSeries: r.series, rpsNumber: r.number, issuerKey: r.key, createdBy: actorUserId || null, updatedBy: actorUserId || null,
+  });
   let invoiceRequest;
   try {
     if (useOwnTx()) {
       const createdId = await runOwnTx(groupId, companyId, async (ownTx) => {
-        const created = await InvoiceRequest.create(createValues, { transaction: ownTx });
+        rps = await allocateRps(ctx, rpsSeries, ownTx);
+        const created = await InvoiceRequest.create(valuesWith(rps), { transaction: ownTx });
         await appendInvoiceEvent(created, 'REQUESTED', 'REQUESTED', ownTx);
         return created.id;
       });
       invoiceRequest = await InvoiceRequest.findByPk(createdId, { transaction });
     } else {
-      // Savepoint: dois pedidos simultâneos para a mesma origem não deixam a transação abortada.
-      invoiceRequest = await sequelize.transaction({ transaction }, (savepoint) => InvoiceRequest.create(createValues, { transaction: savepoint }));
+      // Savepoint: dois pedidos simultâneos para a mesma origem não deixam a transação abortada (e o número do RPS volta junto).
+      invoiceRequest = await sequelize.transaction({ transaction }, async (savepoint) => {
+        rps = await allocateRps(ctx, rpsSeries, savepoint);
+        return InvoiceRequest.create(valuesWith(rps), { transaction: savepoint });
+      });
       await appendInvoiceEvent(invoiceRequest, 'REQUESTED', 'REQUESTED', transaction);
     }
   } catch (err) {
@@ -196,54 +197,11 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
     throw err;
   }
 
-  // Só a chamada ao emissor é ambígua (timeout/erro vira UNKNOWN). Falha de banco depois dela sobe como erro.
-  let issuerResult = null;
-  let issuerError = null;
-  try {
-    issuerResult = await withTimeout(
-      adapter.requestInvoice({ idempotencyKey: issuerKey, amount, description, serviceCode: fiscal.nfseServiceCode || null, issRatePct: fiscal.nfseIssRatePct || null, takerTaxId, takerName }),
-      NFSE_TIMEOUT_MS
-    );
-  } catch (err) {
-    issuerError = err;
-  }
-  if (!issuerError && (!issuerResult || !issuerResult.externalId || String(issuerResult.externalId).length > 128)) {
-    issuerError = new Error('O emissor respondeu sem um identificador válido para a nota.');
-  }
-  if (!issuerError) {
-    const persist = async (tx) => {
-      const row = await InvoiceRequest.findByPk(invoiceRequest.id, { transaction: tx, lock: tx.LOCK.UPDATE });
-      row.status = issuerResult.status === 'AUTHORIZED' ? 'SUBMITTED' : (issuerResult.status || 'SUBMITTED');
-      row.externalId = String(issuerResult.externalId);
-      row.updatedBy = actorUserId || null;
-      await row.save({ transaction: tx });
-      await appendInvoiceEvent(row, issuerResult.status || 'SUBMITTED', row.status, tx);
-    };
-    // O id do emissor é gravado e confirmado na hora (transação própria): se a requisição voltar depois, a nota
-    // continua ligada ao pedido do emissor.
-    if (useOwnTx()) await runOwnTx(groupId, companyId, persist); else await persist(transaction);
-    await invoiceRequest.reload({ transaction });
-  } else {
-    const err = issuerError;
-    const persistUnknown = async (tx) => {
-      const row = await InvoiceRequest.findByPk(invoiceRequest.id, { transaction: tx, lock: tx.LOCK.UPDATE });
-      row.status = 'UNKNOWN';
-      await row.save({ transaction: tx });
-      await appendInvoiceEvent(row, 'UNKNOWN', null, tx, `Resposta incerta do emissor (${err instanceof NfseTimeoutError ? 'tempo esgotado' : 'erro'}).`);
-    };
-    if (useOwnTx()) await runOwnTx(groupId, companyId, persistUnknown); else await persistUnknown(transaction);
-    await invoiceRequest.reload({ transaction });
-    await registrarAuditoria(
-      {
-        groupId, companyId, actorUserId,
-        action: 'correspondent.nfse.unknown',
-        entityType: 'InvoiceRequest',
-        entityId: invoiceRequest.id,
-        reason: `Emissão de NFS-e ficou incerta (${err instanceof NfseTimeoutError ? 'tempo esgotado' : 'erro'}): ${sanitizeProviderMessage(err.message)}`,
-      },
-      transaction
-    );
-  }
+  // O pedido ao emissor entra pelo Dispatch Service (M9-D241 3.2); ver nfse/nfse.issue.js. Resposta incerta vira UNKNOWN, nunca reenvio cego.
+  await issueViaDispatch({
+    ctx, connection, invoiceRequest, rps, amount, description, fiscal, takerTaxId, takerName, actorUserId, transaction, useOwn: useOwnTx(), timeoutMs: NFSE_TIMEOUT_MS, withTimeout, NfseTimeoutError,
+    runOwn: (fn) => runOwnTx(groupId, companyId, fn), appendEvent: appendInvoiceEvent,
+  });
 
   await registrarAuditoria(
     {
@@ -265,6 +223,7 @@ async function requestInvoice(payload, actorUserId, groupId, companyId, transact
  * TaxDocument preservando o número oficial.
  */
 async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, companyId, transaction) {
+  const ctx = { groupId, companyId, userId: actorUserId || null };
   if (!isUuid(String(invoiceRequestId || ''))) {
     throw AppError.badRequest('Identificador de NFS-e inválido.', 'NFSE_VALIDATION');
   }
@@ -282,26 +241,18 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
     // Pedido que ficou sem id externo (a resposta do emissor se perdeu, ou a requisição caiu depois de ele aceitar):
     // consulta pela chave do pedido. Se o emissor tem o pedido, ele volta a andar; se confirma que NÃO tem, é
     // encerrado e uma nova emissão para a mesma origem fica liberada.
-    if (!['UNKNOWN', 'REQUESTED'].includes(preview.status) || typeof adapter.findInvoiceByKey !== 'function') {
+    if (!['UNKNOWN', 'REQUESTED'].includes(preview.status)) {
       throw AppError.badRequest('Pedido de NFS-e ainda não foi submetido ao emissor (sem id externo).', 'NFSE_NOT_SUBMITTED');
     }
-    try {
-      lookup = await withTimeout(adapter.findInvoiceByKey(`nfse:${companyId}:${preview.sourceType}:${preview.sourceId}:n${preview.attemptNumber}`), NFSE_TIMEOUT_MS);
-    } catch (err) {
-      throw AppError.unprocessable('Não foi possível consultar o emissor agora. Tente de novo em instantes.', 'NFSE_ISSUER_QUERY_FAILED');
-    }
+    // M9-D241: UNKNOWN consulta o emissor pelo RPS e pela chave antes de reemitir (nunca reenvio cego), sem alterar nada enquanto não houver resposta.
+    lookup = await lookupIssuance(ctx, preview, { transaction, timeoutMs: NFSE_TIMEOUT_MS, withTimeout });
   }
   const externalIdToQuery = preview.externalId || (lookup?.found ? lookup.externalId : null);
   let result = null;
   if (externalIdToQuery) {
-    try {
-      result = await withTimeout(
-        adapter.getInvoiceStatus(externalIdToQuery, { amount: preview.amount, description: preview.description }),
-        NFSE_TIMEOUT_MS
-      );
-    } catch (err) {
-      throw AppError.unprocessable('O emissor não respondeu a tempo. A nota continua como está; tente consultar de novo.', 'NFSE_ISSUER_QUERY_FAILED');
-    }
+    // A consulta de status também entra pelo Dispatch Service (SAFE); a nota achada pelo RPS ainda não tem o identificador gravado.
+    const nota = preview.externalId ? preview : { ...preview.get({ plain: true }), externalId: externalIdToQuery };
+    result = await queryInvoiceStatus(ctx, nota, { transaction, timeoutMs: NFSE_TIMEOUT_MS, withTimeout });
     if (!result || !result.status) {
       throw AppError.unprocessable('O emissor respondeu sem informar a situação da nota. Tente consultar de novo.', 'NFSE_ISSUER_QUERY_FAILED');
     }
@@ -318,7 +269,8 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
       invoiceRequest.status = 'SUBMITTED';
       invoiceRequest.updatedBy = actorUserId || null;
       await invoiceRequest.save({ transaction });
-      await appendInvoiceEvent(invoiceRequest, 'SUBMITTED', 'SUBMITTED', transaction, 'Pedido localizado no emissor pela chave do pedido.');
+      await appendInvoiceEvent(invoiceRequest, 'SUBMITTED', 'SUBMITTED', transaction, 'Pedido localizado no emissor pelo RPS e pela chave do pedido.');
+      await settleIssuanceDispatch(ctx, invoiceRequest, { found: true }, transaction);
     } else {
       // Mesma espera do envio de financiamento: dá tempo de uma resposta tardia do emissor chegar.
       const { peekEligibilityConfig } = require('../eligibility.service');
@@ -331,6 +283,7 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
       invoiceRequest.updatedBy = actorUserId || null;
       await invoiceRequest.save({ transaction });
       await appendInvoiceEvent(invoiceRequest, 'NOT_FOUND_AT_ISSUER', 'CANCELED', transaction, 'O emissor confirmou que não recebeu este pedido.');
+      await settleIssuanceDispatch(ctx, invoiceRequest, { found: false }, transaction);
       await registrarAuditoria(
         {
           groupId, companyId, actorUserId,
@@ -386,6 +339,7 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
   await invoiceRequest.save({ transaction });
   // Consultar de novo a mesma nota sem mudança não enche o histórico de eventos.
   if (statusChanged) await appendInvoiceEvent(invoiceRequest, rawStatus, result.status, transaction, result.status === 'REJECTED' ? invoiceRequest.rejectionReason : null);
+  await finishIssuanceDispatch(ctx, invoiceRequest, result, transaction); // M9-D241: o status final do emissor confirma (ou encerra) o envio da emissão
   if (wasAuthorized && result.status === 'CANCELED') {
     // O emissor cancelou uma nota já exportada: a exportação ganha o ajuste (como no cancelamento feito aqui).
     const { zeroOutExportedSource: zeroOut } = require('./accountingExport.service');
@@ -413,10 +367,14 @@ async function checkInvoiceStatus(invoiceRequestId, actorUserId, groupId, compan
     const existing = await TaxDocument.findOne({ where: { invoiceRequestId: invoiceRequest.id }, transaction });
     if (!existing) {
       const docs = result.documents || {};
+      // M9-D241: o XML e o PDF oficiais também ficam em `files`, cifrados e com o hash na linha do arquivo.
+      const arquivos = await storeInvoiceFiles({ groupId, companyId, documentNumber: result.officialNumber, documents: docs }, transaction);
       const taxDocument = await TaxDocument.create(
         {
           groupId, companyId,
           invoiceRequestId: invoiceRequest.id,
+          xmlFileId: arquivos.xmlFile ? arquivos.xmlFile.id : null,
+          pdfFileId: arquivos.pdfFile ? arquivos.pdfFile.id : null,
           documentType: 'NFSE',
           documentNumber: result.officialNumber,
           amount: invoiceRequest.amount,
@@ -484,9 +442,12 @@ async function cancelInvoice(invoiceRequestId, reasonText, actorUserId, groupId,
     }
   }
 
+  let cancelamento;
   try {
-    await withTimeout(adapter.cancelInvoice(preview.externalId), NFSE_TIMEOUT_MS);
+    // M9-D241: o cancelamento é DANGEROUS no Dispatch Service e só vale quando o emissor confirma o status CANCELED (consulta de status depois do pedido).
+    cancelamento = await cancelAtIssuer({ groupId, companyId, userId: actorUserId || null }, preview, reason, { transaction, timeoutMs: NFSE_TIMEOUT_MS, withTimeout });
   } catch (err) {
+    if (err && err.code === 'INTEGRATION_FISCAL_CANCEL_REASON_REQUIRED') throw err;
     // A requisição devolve erro e a transação volta: o rastro sobrevive ao rollback pelo middleware de tenant.
     if (transaction) {
       transaction.afterRollbackAudits = [...(transaction.afterRollbackAudits || []), { groupId, companyId, actorUserId, action: 'correspondent.nfse.cancel_no_response', entityType: 'InvoiceRequest', entityId: preview.id, reason: 'O emissor não respondeu ao cancelamento: a nota continua autorizada aqui, mas o emissor pode ter cancelado. Consulte o emissor antes de tentar de novo.' }];
@@ -497,6 +458,11 @@ async function cancelInvoice(invoiceRequestId, reasonText, actorUserId, groupId,
   if (invoiceRequest.status === 'CANCELED') return invoiceRequest; // outro clique já cancelou
   if (invoiceRequest.status !== 'AUTHORIZED') {
     throw AppError.conflict('Esta NFS-e mudou enquanto o cancelamento era feito. Atualize a tela.', 'NFSE_NOT_AUTHORIZED');
+  }
+  if (!cancelamento.canceled) {
+    // O emissor recebeu o pedido mas ainda não informa CANCELED: a nota segue autorizada aqui e a consulta de status conclui o cancelamento quando ele confirmar.
+    await appendInvoiceEvent(invoiceRequest, 'CANCEL_REQUESTED', 'AUTHORIZED', transaction, reason);
+    return invoiceRequest;
   }
   invoiceRequest.status = 'CANCELED';
   invoiceRequest.updatedBy = actorUserId || null;

@@ -37,7 +37,7 @@ const OPERATION_POLICY = Object.freeze({
   FINANCING: Object.freeze({
     simulate: SAFE, submitCase: perigosa('getCaseStatus'), getCaseStatus: SAFE, uploadDocument: op('DANGEROUS'), requestAppraisal: perigosa('getCaseStatus'), verifyWebhook: SAFE, cancelCase: SAFE,
   }),
-  FISCAL: Object.freeze({ issueNfse: perigosa('getNfseStatus'), getNfseStatus: SAFE, cancelNfse: SAFE }),
+  FISCAL: Object.freeze({ issueNfse: perigosa('getNfseStatus'), getNfseStatus: SAFE, cancelNfse: perigosa('getNfseStatus') }),
   SOCIAL: Object.freeze({ publishPost: perigosa('getPostStatus', { key: 'findPostByKey' }), getPostStatus: SAFE, deletePost: perigosa('getPostStatus', { key: null, reference: null }), findPostByKey: SAFE }),
   STORAGE: Object.freeze({ putObject: SAFE, getObject: SAFE, deleteObject: SAFE, headObject: SAFE, getSignedUrl: SAFE }),
   IDENTITY: Object.freeze({ verifyToken: SAFE, getUserInfo: SAFE, revokeSession: SAFE, listJwks: LEITURA_INOCUA }),

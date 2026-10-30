@@ -24,6 +24,11 @@ module.exports = (sequelize) => {
       description: { type: DataTypes.TEXT, allowNull: false },
       rejectionReason: { type: DataTypes.TEXT, allowNull: true, field: 'rejection_reason' },
       attemptNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'attempt_number' },
+      // M9-D241: RPS único (série e número), chave de idempotência do envio derivada dele e o envio da emissão no Dispatch Service.
+      rpsSeries: { type: DataTypes.STRING(8), allowNull: true, field: 'rps_series' },
+      rpsNumber: { type: DataTypes.BIGINT, allowNull: true, field: 'rps_number' },
+      issuerKey: { type: DataTypes.STRING(160), allowNull: true, field: 'issuer_key' },
+      dispatchId: { type: DataTypes.UUID, allowNull: true, field: 'dispatch_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

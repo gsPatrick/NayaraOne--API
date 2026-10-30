@@ -89,7 +89,7 @@ test('adapters_existentes_estendem_base_sem_regressao', async () => {
   assert.equal((await invoke(por('insurance-sandbox'), 'quote', { estimatedValue: 1000 })).status, 'COMPLETED');
   assert.equal((await invoke(por('insurance-sandbox'), 'propose', { idempotencyKey: 'p-1' })).status, 'ACTIVE');
   const nf = await invoke(por('fiscal-sandbox'), 'issueNfse', { idempotencyKey: 'n-1', serviceCode: '1.01' });
-  assert.equal(nf.status, 'PENDING');
+  assert.equal(nf.status, 'PROCESSING', 'a nota em processamento no emissor (estado do livro, M9-D241)');
   assert.equal((await invoke(por('fiscal-sandbox'), 'cancelNfse', { externalResourceId: nf.externalResourceId })).status, 'CANCELED');
   assert.equal((await invoke(por('bank-sandbox'), 'getStatement', {})).status, 'COMPLETED');
   // Erro do fornecedor classificado pelo adapter.

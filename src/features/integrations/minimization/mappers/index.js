@@ -4,7 +4,8 @@
 const portal = require('./portal.mappers');
 const site = require('./site.mappers');
 const { messaging, email } = require('./messaging.mappers');
-const { bank, signature, financing, fiscal } = require('./finance.mappers');
+const { bank, signature, financing } = require('./finance.mappers');
+const fiscal = require('./fiscal.mappers');
 const insurance = require('./insurance.mappers');
 const { social, analytics, ai } = require('./outbound.mappers');
 

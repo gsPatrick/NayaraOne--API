@@ -17,6 +17,8 @@ const PDFDocument = require('pdfkit');
 const AUTHORIZE_THRESHOLD_MS = 1500;
 // Só o sandbox: uma descrição com este marcador é recusada pelo emissor, para exercitar o estado REJECTED.
 const SANDBOX_REJECT_MARKER = '[sandbox:rejeitar]';
+// Só o sandbox (M9-D241): uma descrição com este marcador é recusada pelo emissor já no pedido (validação síncrona), com o motivo da prefeitura em português.
+const SANDBOX_REJECT_NOW_MARKER = '[sandbox:rejeitar-agora]';
 
 function escapeXml(value) {
   return String(value ?? '')
@@ -80,6 +82,10 @@ function buildNfsePdf({ officialNumber, verificationCode, amount, description, i
 // não cresce sem fim). Em produção o emissor oficial guarda isso; este mapa nunca é usado fora do ambiente de teste.
 const SANDBOX_REQUESTS = new Map();
 const SANDBOX_DETAILS = new Map();
+// RPS -> id externo (M9-D241: a consulta por RPS resolve o pedido que ficou incerto) e notas canceladas (a consulta de status passa a responder CANCELED).
+const SANDBOX_BY_RPS = new Map();
+const SANDBOX_CANCELED = new Set();
+const sandboxStats = { requests: 0 };
 const SANDBOX_MAX_ENTRIES = 5000;
 
 function remember(map, key, value) {
@@ -99,9 +105,14 @@ class SandboxNfseAdapter {
     // Idempotente pela chave: o mesmo pedido repetido (retry depois de uma queda) devolve a mesma nota, sem emitir outra.
     const known = req?.idempotencyKey ? SANDBOX_REQUESTS.get(String(req.idempotencyKey)) : null;
     if (known) return { externalId: known, status: 'SUBMITTED', raw: { sandbox: true, replayed: true } };
+    if (String(req?.description || '').includes(SANDBOX_REJECT_NOW_MARKER)) {
+      return { externalId: null, status: 'REJECTED', rejectionReason: 'CNPJ/CPF do tomador inválido para a prefeitura (marcador sandbox).', raw: { sandbox: true, rejected: true } };
+    }
+    sandboxStats.requests += 1;
     const submittedAt = Date.now();
     const externalId = `nfse-sandbox-${String(req?.idempotencyKey || submittedAt).replace(/[^A-Za-z0-9]/g, '').slice(-24)}-${submittedAt}`;
     if (req?.idempotencyKey) remember(SANDBOX_REQUESTS, String(req.idempotencyKey), externalId);
+    if (req?.rps) remember(SANDBOX_BY_RPS, String(req.rps), externalId);
     remember(SANDBOX_DETAILS, externalId, {
       serviceCode: req?.serviceCode || null,
       issRatePct: req?.issRatePct || null,
@@ -119,11 +130,20 @@ class SandboxNfseAdapter {
     return externalId ? { found: true, externalId } : { found: false };
   }
 
+  // Consulta pelo RPS (M9-D241): o número do RPS é a chave natural da emissão; serve para resolver o pedido que ficou incerto sem emitir de novo.
+  async findInvoiceByRps(rps) {
+    const externalId = SANDBOX_BY_RPS.get(String(rps || ''));
+    return externalId ? { found: true, externalId } : { found: false };
+  }
+
   isSandbox() {
     return true;
   }
 
   async getInvoiceStatus(externalId, context = {}) {
+    if (SANDBOX_CANCELED.has(String(externalId))) {
+      return { externalId, status: 'CANCELED', rawProviderStatus: 'CANCELED', officialNumber: null, documents: null, raw: { sandbox: true, canceled: true } };
+    }
     const match = /-(\d+)$/.exec(String(externalId || ''));
     const submittedAt = match ? Number(match[1]) : Date.now();
     const elapsed = Date.now() - submittedAt;
@@ -161,8 +181,11 @@ class SandboxNfseAdapter {
   }
 
   async cancelInvoice(externalId) {
+    SANDBOX_CANCELED.add(String(externalId));
     return { externalId, status: 'CANCELED', raw: { sandbox: true } };
   }
 }
 
-module.exports = { SandboxNfseAdapter, SANDBOX_REJECT_MARKER };
+const resetSandbox = () => { SANDBOX_REQUESTS.clear(); SANDBOX_DETAILS.clear(); SANDBOX_BY_RPS.clear(); SANDBOX_CANCELED.clear(); sandboxStats.requests = 0; };
+
+module.exports = { SandboxNfseAdapter, SANDBOX_REJECT_MARKER, SANDBOX_REJECT_NOW_MARKER, sandboxStats, resetSandbox };

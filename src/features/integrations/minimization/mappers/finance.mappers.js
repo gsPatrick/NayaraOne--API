@@ -61,15 +61,4 @@ module.exports = {
       fields: [{ name: 'propertyValue', classification: 'INTERNAL', required: true }, { name: 'downPayment', classification: 'INTERNAL' }, { name: 'termMonths', classification: 'INTERNAL' }],
     }),
   },
-  fiscal: {
-    issueNfse: defineMapper({
-      purpose: 'FISCAL_ISSUANCE',
-      fields: [
-        { name: 'takerName', classification: 'PERSONAL', required: true },
-        { name: 'takerDocument', classification: 'PERSONAL', required: true },
-        { name: 'serviceDescription', classification: 'INTERNAL', freeText: true },
-        { name: 'amount', classification: 'INTERNAL', required: true },
-      ],
-    }),
-  },
 };

@@ -365,7 +365,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/fiscal/export-batches` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/export-candidates` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/export-lines/:id/adjust` | `correspondent:fiscal` | não |
-| `POST` | `/api/v1/fiscal/invoices/:id/cancel` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/fiscal/invoices/:id/cancel` | `correspondent:fiscal` | sim |
 | `POST` | `/api/v1/fiscal/invoices/:id/check-status` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/invoices/:id/events` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/invoices/:id/pdf` | `correspondent:fiscal` | não |
