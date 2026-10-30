@@ -70,15 +70,16 @@ test('m9d910 isolamento entre grupos: o ajuste da empresa A não muda a B e a li
 });
 
 test('m9d910 coluna sem registro resolve a classe padrão HIGH com máscara PARTIAL e gera finding de cobertura (a classe padrão é o parâmetro governanca.dlp.classificacao_padrao)', { skip: env.skip() }, async () => {
-  const resolved = await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', 'qa_sem_registro_d910', tx));
+  const suffix = `d910_${Date.now()}`; // coluna nova a cada execução: o banco descartável guarda a auditoria entre execuções
+  const resolved = await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', `qa_sem_registro_${suffix}`, tx));
   assert.deepEqual([resolved.classification, resolved.masking, resolved.isDefault, resolved.finding.code], ['HIGH', 'PARTIAL', true, 'GOV_CLASSIFICATION_MISSING']);
-  const audits = await env.adminQuery("SELECT after_json FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.classification.coverage_finding' AND after_json->>'column' = 'people.persons.qa_sem_registro_d910'", [A().companyId]);
+  const audits = await env.adminQuery("SELECT after_json FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.classification.coverage_finding' AND after_json->>'column' = $2", [A().companyId, `people.persons.qa_sem_registro_${suffix}`]);
   assert.equal(audits.rowCount, 1, 'o finding foi registrado uma vez');
-  await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', 'qa_sem_registro_d910', tx));
-  assert.equal((await env.adminQuery("SELECT 1 FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.classification.coverage_finding' AND after_json->>'column' = 'people.persons.qa_sem_registro_d910'", [A().companyId])).rowCount, 1, 'sem inundar a auditoria');
+  await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', `qa_sem_registro_${suffix}`, tx));
+  assert.equal((await env.adminQuery("SELECT 1 FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.classification.coverage_finding' AND after_json->>'column' = $2", [A().companyId, `people.persons.qa_sem_registro_${suffix}`])).rowCount, 1, 'sem inundar a auditoria');
   await env.inTx(A(), (tx) => upsertSetting('governanca.dlp.classificacao_padrao', 'MEDIUM', A(), A().userId, tx));
   try {
-    const medium = await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', 'qa_sem_registro_d910_b', tx));
+    const medium = await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', `qa_sem_registro_${suffix}_b`, tx));
     assert.equal(medium.classification, 'MEDIUM');
   } finally { await env.adminQuery("DELETE FROM core.tenant_settings WHERE company_id = $1 AND key = 'governanca.dlp.classificacao_padrao'", [A().companyId]); }
   const technical = await env.inTx(A(), (tx) => env.classification.resolveColumn(A(), 'people', 'persons', 'created_at', tx));
