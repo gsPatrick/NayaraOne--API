@@ -9,8 +9,15 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('../_helpers/m9d861Http');
 
-before(async () => { await http.start(); });
-after(async () => { await http.stop(); });
+// Orçamentos têm escopo único por grupo e este arquivo grava de verdade (HTTP): limpa os dos dois grupos antes e depois para não colidir com outros arquivos nem deixar resto.
+async function clean() {
+  if (!http.state.tenants) return;
+  const groups = [http.state.tenants.A.groupId, http.state.tenants.B.groupId];
+  await http.adminQuery('DELETE FROM governance.budget_alerts WHERE budget_id IN (SELECT id FROM governance.budgets WHERE group_id = ANY($1::uuid[]))', [groups]);
+  await http.adminQuery('DELETE FROM governance.budgets WHERE group_id = ANY($1::uuid[])', [groups]);
+}
+before(async () => { await http.start(); await clean(); });
+after(async () => { await clean(); await http.stop(); });
 const skipReason = () => http.state.skip;
 
 test('m9d861 cadastro e alteração de orçamento pela API, com os erros do livro', async (t) => {

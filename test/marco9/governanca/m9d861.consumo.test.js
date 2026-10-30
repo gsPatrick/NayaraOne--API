@@ -25,6 +25,7 @@ test('m9d861 percentual é o piso de 100 x consumo / orçamento, em inteiros', (
 
 test('m9d861 consumo mostra faturado e estimado separados', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     await env.spend(A, tx, 100000, { category: 'STORAGE', service: 'arquivos' });
@@ -40,6 +41,7 @@ test('m9d861 consumo mostra faturado e estimado separados', { skip: skip() }, as
 
 test('m9d861 percentual usa só a série ESTIMATED no mês aberto e BILLED no fechado, sem total misto', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     // mês aberto: ESTIMATED R$ 1.600,00 (storage 1.000 + IA 600) = 53%, alerta 50

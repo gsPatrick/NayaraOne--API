@@ -18,6 +18,7 @@ const thresholds = (alerts) => alerts.map((a) => a.threshold);
 
 test('m9d861 FinOps budget alerta sem derrubar PROD', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     const before = (await env.sequelize.query("SELECT to_regclass('governance.degradation_actions') AS t", { type: 'SELECT', transaction: tx }))[0].t;
@@ -39,6 +40,7 @@ test('m9d861 FinOps budget alerta sem derrubar PROD', { skip: skip() }, async ()
 
 test('m9d861 salto de 40% para 93% dispara 50, 75 e 90 em ordem', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const budget = await env.mkBudget(tenants.A, tx);
     await env.spend(tenants.A, tx, 120000);
     assert.deepEqual(thresholds(await env.alertsOf(budget.id, tx)), [], '40% não dispara');
@@ -51,6 +53,7 @@ test('m9d861 salto de 40% para 93% dispara 50, 75 e 90 em ordem', { skip: skip()
 
 test('m9d861 limiar dispara uma vez por período', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     const line = env.dayLine(A, env.TODAY, { service: 'repete', sourceRef: 'COLETA-1', amountCents: 150000 });
@@ -66,6 +69,7 @@ test('m9d861 limiar dispara uma vez por período', { skip: skip() }, async () =>
 
 test('m9d861 novo mês reinicia alertas', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     await env.spend(A, tx, 160000, { day: env.PREV_MONTH_DAY });
@@ -79,6 +83,7 @@ test('m9d861 novo mês reinicia alertas', { skip: skip() }, async () => {
 
 test('m9d861 alterar orçamento não redispara limiar', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     const budget = await env.mkBudget(A, tx);
     await env.spend(A, tx, 160000);
@@ -97,6 +102,7 @@ test('m9d861 alterar orçamento não redispara limiar', { skip: skip() }, async 
 
 test('m9d861 orçamento zero recusado', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     for (const amountCents of [0, -5, 10.5, '1e3', null, undefined, 'abc']) assert.equal(await env.codeOf(env.mkBudget(A, tx, { amountCents })), 'GOV_BUDGET_AMOUNT_INVALID', String(amountCents));
     assert.equal(await env.codeOf(env.mkBudget(A, tx, { ownerUserId: undefined })), 'GOV_BUDGET_OWNER_REQUIRED');
@@ -110,6 +116,7 @@ test('m9d861 orçamento zero recusado', { skip: skip() }, async () => {
 
 test('m9d861 escopo duplicado é recusado e escopos diferentes convivem', { skip: skip() }, async () => {
   await run(async (tx) => {
+    await env.isolate(tenants.A, tx);
     const A = tenants.A;
     await env.mkBudget(A, tx);
     assert.equal(await env.codeOf(env.mkBudget(A, tx)), 'GOV_BUDGET_DUPLICATE');
