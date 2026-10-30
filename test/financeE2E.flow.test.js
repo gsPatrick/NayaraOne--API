@@ -111,7 +111,8 @@ test('Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledg
     // Replay do mesmo callback: nada novo (nenhum filho, mesma versão).
     const lockVersion = settled.lockVersion;
     const replay = await financeController.processBankPaymentWebhook({ body, rawBody, headers: { 'x-webhook-signature': signature } }, t);
-    assert.equal(replay.processed, true);
+    // M9-D237: o mesmo callback (mesmo corpo assinado) é o mesmo evento da caixa de entrada: ignorado como duplicado, sem reaplicar nada.
+    assert.deepEqual([replay.processed, replay.reason], [false, 'duplicate_event']);
     const afterReplay = await FinancialEntry.findByPk(entry.id, { transaction: t });
     assert.equal(afterReplay.lockVersion, lockVersion);
     assert.equal(await FinancialEntry.count({ where: { parentEntryId: entry.id }, transaction: t }), 0);

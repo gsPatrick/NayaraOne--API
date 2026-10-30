@@ -3,7 +3,9 @@
 const { PaymentIntent, BankAccount, BankPaymentProviderRouting, FinancialEntry, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { resolveBankAdapter } = require('./adapters/resolveBankAdapter');
+const bank = require('./bank');
+const { assertBankProviderReady } = require('./bank/bank.ready');
+const { resolveUncertainSubmission, queryPaymentStatus } = require('./bank/bank.uncertain');
 const { getPaymentIntentForUpdate, buildEntrySnapshot, computeSnapshotHash } = require('./paymentIntents.service');
 const { settleFinancialEntry } = require('./financialEntries.service');
 const { assertBankAccountEligibleForPayment } = require('./financeAntifraud.service');
@@ -28,6 +30,7 @@ const { createAnomalyCase } = require('./anomalyCases.service');
 //   B6 — confirmação não é recusada por controles de pré-pagamento (ver financialEntries).
 //   A2 — CONFIRMED para lançamento já liquidado vira anomalia (pagamento em dobro), não erro em loop.
 
+// M9-D237: o envio ao banco passa pelo Dispatch Service (finance/bank): HTTP 200/202 só envia (SUBMITTED), o status final assinado ou consultado confirma, e o valor confere em centavos.
 // ERROR não é final (costuma ser transitório). RETURNED é tratado à parte (devolução depois de pago).
 const FINAL_FAILURE_STATUSES = ['REJECTED', 'FAILED', 'CANCELLED', 'CANCELED', 'DENIED', 'EXPIRED'];
 const RETURNED_STATUSES = ['RETURNED', 'REVERSED', 'REFUNDED'];
@@ -79,8 +82,8 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
   if (paymentMethod === 'PIX' && !bankAccount.pixKey) {
     throw AppError.badRequest('A conta bancária de destino não tem chave PIX cadastrada.', 'FINANCE_BANK_PAYMENT_MISSING_PIX_KEY');
   }
-  // Resolve o adapter já aqui: configuração incompleta falha ANTES de qualquer estado mudar.
-  const adapter = await resolveBankAdapter({ groupId: intent.groupId, companyId: intent.companyId }, transaction);
+  // Confere o provedor já aqui: configuração incompleta falha ANTES de qualquer estado mudar.
+  await assertBankProviderReady({ groupId: intent.groupId, companyId: intent.companyId, userId: actor.userId || null }, transaction);
 
   const ownerPerson = bankAccount.ownerPersonId ? await Person.findByPk(bankAccount.ownerPersonId, { transaction }) : null;
   const beneficiarySnapshot = {
@@ -109,29 +112,14 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
     },
     transaction
   );
-  return { intent, adapter, request: buildSubmitRequest(intent) };
+  return { intent, request: bank.buildSubmitRequest(intent) };
 }
 
-function buildSubmitRequest(intent) {
-  return {
-    paymentMethod: intent.paymentMethod,
-    idempotencyKey: intent.idempotencyKey,
-    amount: intent.snapshotJson?.amount,
-    providerPayload: { amount: intent.snapshotJson?.amount, beneficiary: intent.beneficiarySnapshot },
-  };
-}
-
-/** Fase 2 — chamada ao banco, FORA de transação. Nunca lança: devolve o resultado. */
-async function callBankSubmit(adapter, request) {
-  try {
-    const submission = await adapter.submitPayment(request);
-    if (!submission || !submission.externalId) {
-      return { ok: false, error: 'Resposta do banco sem identificador do pagamento.' };
-    }
-    return { ok: true, externalId: submission.externalId, status: submission.status };
-  } catch (err) {
-    return { ok: false, error: err && err.message ? err.message : String(err) };
-  }
+/** Fase 2 — a ordem ao banco pelo Dispatch Service, FORA de transação (ou, com `transaction`, nela). Nunca lança: devolve { ok, externalId, status } | { deferred } | { ok:false, error }. */
+async function callBankSubmit(prepared, { transaction } = {}) {
+  const result = await bank.callBankSubmit({ intent: prepared.intent, transaction });
+  if (result.ok && !result.externalId) return { ok: false, error: 'Resposta do banco sem identificador do pagamento.' };
+  return result;
 }
 
 /** Fase 3 — grava o resultado da chamada. */
@@ -140,14 +128,16 @@ async function finalizeBankSubmission(id, result, actor, transaction) {
   if (intent.status !== 'SUBMITTING') return intent;
   const beforeJson = intent.toJSON();
   if (!result.ok) {
-    intent.externalStatus = 'UNCERTAIN';
-    intent.failureReason = `Resposta do banco incerta: ${result.error}. A intenção fica em envio incerto até a reconciliação consultar o banco.`;
+    intent.externalStatus = result.deferred ? 'QUEUED' : 'UNCERTAIN';
+    intent.failureReason = result.deferred
+      ? `Ordem reagendada: ${result.error} Nada foi enviado ao banco; o worker de envios repete sem duplicar (mesma chave de idempotência).`
+      : `Resposta do banco incerta: ${result.error}. A intenção fica em envio incerto até a reconciliação consultar o banco.`;
     intent.updatedBy = actor.userId || null;
     await intent.save({ transaction });
     await registrarAuditoria(
       {
         groupId: intent.groupId, companyId: intent.companyId, actorUserId: actor.userId,
-        action: 'finance.payment_intent.submission_uncertain', entityType: 'PaymentIntent', entityId: intent.id,
+        action: result.deferred ? 'finance.payment_intent.submission_deferred' : 'finance.payment_intent.submission_uncertain', entityType: 'PaymentIntent', entityId: intent.id,
         beforeJson, afterJson: intent.toJSON(), reason: intent.failureReason,
       },
       transaction
@@ -186,8 +176,8 @@ async function finalizeBankSubmission(id, result, actor, transaction) {
  * separadas (finance.controller.js), que é o caminho seguro contra queda entre banco e commit.
  */
 async function submitPaymentIntentToBank(id, paymentMethod, actor, transaction) {
-  const { adapter, request } = await prepareBankSubmission(id, paymentMethod, actor, transaction);
-  const result = await callBankSubmit(adapter, request);
+  const prepared = await prepareBankSubmission(id, paymentMethod, actor, transaction);
+  const result = await callBankSubmit(prepared, { transaction });
   return finalizeBankSubmission(id, result, actor, transaction);
 }
 
@@ -198,7 +188,8 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
     throw AppError.notFound('Nenhuma intenção de pagamento encontrada para este id externo.', 'FINANCE_BANK_PAYMENT_ROUTING_NOT_FOUND');
   }
   const intent = await getPaymentIntentForUpdate(routing.paymentIntentId, transaction);
-  const status = normalizeStatus(externalStatus);
+  const rawStatus = normalizeStatus(externalStatus);
+  const status = bank.isPaidStatus(rawStatus) ? 'CONFIRMED' : rawStatus; // PAID, SETTLED e COMPLETED são o mesmo "pago" para o Financeiro
   const beforeJson = intent.toJSON();
 
   if (intent.status === 'FAILED' && status === 'CONFIRMED') {
@@ -231,6 +222,15 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
     return intent;
   }
 
+  if (status === 'CONFIRMED') {
+    // M9-D237: o valor do status final precisa conferir com o aprovado (centavos); divergência não confirma e abre revisão humana (erro CRITICAL).
+    const check = await bank.checkAmount(intent, options.amount, transaction);
+    if (!check.ok) {
+      await bank.rejectByAmount(intent, check, options.source, transaction);
+      intent.bankMismatch = true;
+      return intent;
+    }
+  }
   intent.externalStatus = status;
   if (status === 'CONFIRMED') {
     const entry = await FinancialEntry.findByPk(intent.financialEntryId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
@@ -240,6 +240,7 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
       intent.executedAt = new Date();
       intent.uncertainSince = null;
       await intent.save({ transaction });
+      await bank.applyStatusToDispatch(intent, rawStatus, options.source, transaction);
       await openAnomaly(
         intent, 'DUPLICATE_SETTLEMENT', 'HIGH',
         `O banco confirmou o pagamento ${externalSubmissionId}, mas o lançamento já estava ${entry ? entry.status : 'inexistente'} — possível pagamento em dobro.`,
@@ -257,6 +258,7 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
     intent.executedAt = new Date();
     intent.uncertainSince = null;
     await intent.save({ transaction });
+    await bank.applyStatusToDispatch(intent, rawStatus, options.source, transaction);
     await registrarAuditoria(
       { groupId: intent.groupId, companyId: intent.companyId, actorUserId: null, action: 'finance.payment_intent.confirm_bank_payment', entityType: 'PaymentIntent', entityId: intent.id, beforeJson, afterJson: intent.toJSON(), reason: `Pagamento confirmado pelo ${options.sandbox ? 'provedor SANDBOX (simulação)' : 'banco'} — lançamento ${settled.id} liquidado.` },
       transaction
@@ -267,6 +269,7 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
     intent.uncertainSince = null;
     intent.failureReason = `Status retornado pelo banco: ${status}`;
     await intent.save({ transaction });
+    await bank.applyStatusToDispatch(intent, rawStatus, options.source, transaction);
     await registrarAuditoria(
       { groupId: intent.groupId, companyId: intent.companyId, actorUserId: null, action: 'finance.payment_intent.bank_payment_failed', entityType: 'PaymentIntent', entityId: intent.id, beforeJson, afterJson: intent.toJSON(), reason: `Pagamento recusado/falhou no banco — status "${status}".` },
       transaction
@@ -289,14 +292,12 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
 async function reconcilePaymentIntent(id, actor, transaction) {
   const intent = await getPaymentIntentForUpdate(id, transaction);
   if (!['SUBMITTING', 'SUBMITTED'].includes(intent.status)) return { intent, outcome: 'NOT_UNCERTAIN' };
-  const adapter = await resolveBankAdapter({ groupId: intent.groupId, companyId: intent.companyId }, transaction);
-  const sandbox = Boolean(adapter.isSandbox);
   intent.reconciliationAttempts = Number(intent.reconciliationAttempts || 0) + 1;
   intent.lastReconciledAt = new Date();
   await intent.save({ transaction });
 
   if (intent.status === 'SUBMITTING') {
-    const result = await callBankSubmit(adapter, buildSubmitRequest(intent));
+    const result = await resolveUncertainSubmission(intent, transaction);
     const updated = await finalizeBankSubmission(id, result, actor, transaction);
     if (updated.status !== 'SUBMITTED') return { intent: updated, outcome: 'STILL_UNCERTAIN' };
   }
@@ -316,12 +317,13 @@ async function reconcilePaymentIntent(id, actor, transaction) {
   }
   let statusResult;
   try {
-    statusResult = await adapter.getPaymentStatus(current.externalSubmissionId);
+    statusResult = await queryPaymentStatus(current, transaction);
   } catch (err) {
     return { intent: current, outcome: 'BANK_UNREACHABLE', error: err.message };
   }
-  const confirmed = await confirmBankPayment(current.externalSubmissionId, statusResult.status, transaction, { sandbox });
-  return { intent: confirmed, outcome: normalizeStatus(statusResult.status) };
+  const confirmed = await confirmBankPayment(current.externalSubmissionId, statusResult.status, transaction, { sandbox: statusResult.sandbox, amount: statusResult.amount, source: 'STATUS_QUERY' });
+  if (confirmed.bankMismatch) return { intent: confirmed, outcome: 'AMOUNT_MISMATCH', code: bank.MISMATCH_CODE };
+  return { intent: confirmed, outcome: bank.isPaidStatus(statusResult.status) ? 'CONFIRMED' : normalizeStatus(statusResult.status) };
 }
 
 /**

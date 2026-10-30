@@ -13,12 +13,18 @@ module.exports = {
       fields: [
         { name: 'amount', classification: 'INTERNAL', required: true },
         { name: 'currency', classification: 'PUBLIC' },
+        // M9-D237: forma de pagamento (BOLETO, PIX ou TED) e referência opaca da intenção; o favorecido leva também banco, agência e chave PIX (o que o banco exige para pagar).
+        { name: 'kind', from: 'paymentMethod', classification: 'INTERNAL' },
+        { name: 'reference', classification: 'INTERNAL' },
         {
           name: 'payee',
           from: 'beneficiary',
           classification: 'PERSONAL',
           required: true,
-          shape: [{ name: 'name', classification: 'PERSONAL' }, { name: 'document', classification: 'PERSONAL' }, { name: 'account', classification: 'PERSONAL' }],
+          shape: [
+            { name: 'name', classification: 'PERSONAL' }, { name: 'document', classification: 'PERSONAL' }, { name: 'account', classification: 'PERSONAL' },
+            { name: 'pixKey', classification: 'PERSONAL' }, { name: 'bankCode', classification: 'PERSONAL' }, { name: 'branch', classification: 'PERSONAL' },
+          ],
         },
         { name: 'dueDate', classification: 'INTERNAL' },
         { name: 'description', classification: 'INTERNAL', freeText: true },

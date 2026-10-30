@@ -16,6 +16,11 @@ function setBankAdapterOverrideForTests(adapter) {
   testOverride = adapter;
 }
 
+/** M9-D237: o objeto antigo que o adapter `bank-sandbox` do registro executa em teste (o override de teste), ou null. */
+function getBankLegacyOverride() {
+  return testOverride && process.env.NODE_ENV === 'test' ? testOverride : null;
+}
+
 async function resolveBankAdapter(tenant, transaction) {
   if (testOverride && process.env.NODE_ENV === 'test') return testOverride;
   const provider = await getSetting('finance.payment_provider', tenant, transaction, 'sandbox');
@@ -51,4 +56,4 @@ async function resolveBankAdapter(tenant, transaction) {
   return new SandboxBankAdapter();
 }
 
-module.exports = { resolveBankAdapter, setBankAdapterOverrideForTests };
+module.exports = { resolveBankAdapter, setBankAdapterOverrideForTests, getBankLegacyOverride };

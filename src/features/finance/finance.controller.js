@@ -1,10 +1,8 @@
 'use strict';
 
-const crypto = require('crypto');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
-const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const costCentersService = require('./costCenters.service');
 const resultCentersService = require('./resultCenters.service');
 const bankAccountsService = require('./bankAccounts.service');
@@ -410,17 +408,20 @@ const cancelPaymentIntent = catchAsync(async (req, res) => {
 // pagamento no banco sem registro local.
 const submitPaymentIntentToBank = catchAsync(async (req, res) => {
   const actor = { userId: req.auth.userId };
-  const { adapter, request } = await req.withTenantTransaction((t) =>
+  const prepared = await req.withTenantTransaction((t) =>
     bankPaymentsService.prepareBankSubmission(req.params.id, req.body.paymentMethod, actor, t)
   );
-  const result = await bankPaymentsService.callBankSubmit(adapter, request);
+  const result = await bankPaymentsService.callBankSubmit(prepared);
   const intent = await req.withTenantTransaction((t) => bankPaymentsService.finalizeBankSubmission(req.params.id, result, actor, t));
+  // M9-D237: banco indisponível (circuito aberto, cota ou espera): a ordem foi reagendada no worker, nada foi enviado e a resposta é 503.
+  if (result.deferred) throw new AppError(result.error, 503, result.code || 'INTEGRATION_CIRCUIT_OPEN');
   return success(res, { data: intent });
 });
 
 // B2 — consulta o banco para uma intenção incerta (o job faz o mesmo periodicamente).
 const reconcilePaymentIntent = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((t) => bankPaymentsService.reconcilePaymentIntent(req.params.id, { userId: req.auth.userId }, t));
+  if (result.outcome === 'AMOUNT_MISMATCH') throw AppError.conflict('O valor confirmado pelo banco difere do valor aprovado.', result.code); // o erro CRITICAL já foi gravado (commit acima)
   return success(res, { data: result });
 });
 
@@ -432,34 +433,8 @@ const resolveUncertainPaymentIntent = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
-// BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 38, 2026-10-05): mesma falha de
-// segurança já corrigida no webhook de seguro (R37, insurance.controller.js) — HMAC-SHA256 por
-// tenant, timing-safe, fail-closed quando há provider real configurado.
-const BANK_WEBHOOK_HEADER = 'x-webhook-signature';
-
-function computeHmacSha256Hex(secret, rawBody) {
-  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-}
-
-function verifyBankWebhookSignature(rawBody, headers, webhookSecret) {
-  if (!webhookSecret || !rawBody || rawBody.length === 0) return false;
-  const received = headers ? headers[BANK_WEBHOOK_HEADER] : null;
-  if (!received || typeof received !== 'string') return false;
-  const receivedHex = received.startsWith('sha256=') ? received.slice('sha256='.length) : received;
-
-  const expectedHex = computeHmacSha256Hex(webhookSecret, rawBody);
-
-  let expectedBuffer;
-  let receivedBuffer;
-  try {
-    expectedBuffer = Buffer.from(expectedHex, 'hex');
-    receivedBuffer = Buffer.from(receivedHex, 'hex');
-  } catch (err) {
-    return false;
-  }
-  if (expectedBuffer.length !== receivedBuffer.length) return false;
-  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-}
+// Webhook e assinatura HMAC do banco: finance/bank/bank.webhook.js (M9-D237).
+const { processBankPaymentWebhook: processWebhook, verifyBankWebhookSignature } = require('./bank/bank.webhook');
 
 // Webhook PÚBLICO (fora do authMiddleware/tenantMiddleware — ver finance.routes.js/routes/index.js,
 // mesmo padrão de clicksignPublicWebhook em legal.controller.js). O provedor bancário não tem
@@ -476,50 +451,12 @@ const bankPaymentPublicWebhook = catchAsync(async (req, res) => {
   const result = await sequelize.transaction((t) =>
     processBankPaymentWebhook({ body: req.body, rawBody: req.rawBody, headers: req.headers }, t)
   );
+  // M9-D237: valor diferente do aprovado não confirma; o erro CRITICAL já foi gravado (commit acima) e o banco recebe 409.
+  if (result.mismatch) throw AppError.conflict(result.message, result.code);
   return success(res, { data: result });
 });
 
-/**
- * processBankPaymentWebhook — corpo do webhook bancário público, recebendo a transação de fora
- * (o controller abre a dele; o teste E2E do Financeiro usa a transação com rollback). Resolve o
- * tenant pela tabela de roteamento, aplica SET LOCAL, confere a assinatura HMAC (sempre, também
- * em sandbox) e só então confirma o pagamento.
- */
-async function processBankPaymentWebhook({ body, rawBody, headers }, t) {
-  const { externalSubmissionId, status } = body || {};
-  const { sequelize, BankPaymentProviderRouting } = require('../../models');
-  {
-    // Resolve o tenant via routing table (sem RLS) ANTES de abrir qualquer SET LOCAL — mesma
-    // ordem de operações do webhook de assinatura.
-    const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId }, transaction: t });
-    if (!routing) {
-      // Mesmo padrão do webhook da Clicksign (legal.controller.js): 200 pra o provedor não
-      // ficar reenviando infinitamente, mas o motivo de não ter processado fica EXPLÍCITO no
-      // campo `reason` da resposta — nunca um "received: true" indistinguível de sucesso real.
-      return { received: true, processed: false, reason: 'unknown_routing' };
-    }
-    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: routing.groupId }, transaction: t });
-    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: routing.companyId }, transaction: t });
-
-    const tenant = { groupId: routing.groupId, companyId: routing.companyId };
-    // B5 (revisão independente): antes, em sandbox (o padrão) o webhook NÃO conferia assinatura —
-    // com o id externo previsível, qualquer pessoa marcava um pagamento como confirmado. Agora a
-    // assinatura HMAC é exigida SEMPRE (o sandbox usa o próprio segredo configurado); sem segredo
-    // configurado, falha fechado. Confirmação via sandbox é gravada como SANDBOX_CONFIRMED.
-    const providerName = await getSetting('finance.payment_provider', tenant, t, 'sandbox');
-    const webhookSecret = await getDecryptedSetting('finance.bank_payment_webhook_secret', tenant, t, null);
-    const isValid = verifyBankWebhookSignature(rawBody, headers, webhookSecret);
-    if (!isValid) {
-      throw AppError.unauthorized(
-        'Assinatura HMAC do webhook bancário ausente ou inválida.',
-        'BANK_PAYMENT_WEBHOOK_HMAC_INVALID'
-      );
-    }
-
-    await bankPaymentsService.confirmBankPayment(externalSubmissionId, status, t, { sandbox: providerName === 'sandbox' });
-    return { received: true, processed: true };
-  }
-}
+const processBankPaymentWebhook = (input, t) => processWebhook(input, t, { bankPaymentsService });
 
 // --- Intercompany transfers (M4-18) ---
 const createIntercompanyTransfer = catchAsync(async (req, res) => {

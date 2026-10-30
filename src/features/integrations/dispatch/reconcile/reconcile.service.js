@@ -2,7 +2,7 @@
 
 const { Op } = require('sequelize');
 const logger = require('../../../../utils/logger');
-const { IntegrationDispatch, IntegrationConnection } = require('../../../../models');
+const { sequelize, IntegrationDispatch, IntegrationConnection } = require('../../../../models');
 const adapterRegistry = require('../../registry/adapterRegistry');
 const { portOperation } = require('../enqueue/resolveTarget');
 const { tenantTx } = require('../worker/tenantTx');
@@ -40,8 +40,10 @@ async function resolveTools(ctx, row, transaction) {
  * CONFIRMED, FAILED ou SUBMITTED; "não existe" -> RETRY_WAIT com a mesma chave; inconclusivo -> segue UNKNOWN até esgotar as consultas.
  * Operação SAFE não consulta: repete com backoff. `opts.onlyIfDue`: o job só consulta quando a espera passou.
  */
-async function reconcileDispatch(ctx, id, { now = new Date(), onlyIfDue = false } = {}) {
-  return tenantTx(ctx, async (transaction) => {
+async function reconcileDispatch(ctx, id, { now = new Date(), onlyIfDue = false, transaction: outer = null } = {}) {
+  // Com `transaction` (M9-D237: pagamento dentro da transação do pedido) a consulta roda nela, em savepoint; sem, abre a sua.
+  const run = outer ? (_ctx, fn) => sequelize.transaction({ transaction: outer }, fn) : tenantTx;
+  return run(ctx, async (transaction) => {
     const row = await lockRow(ctx, id, transaction);
     if (!row || row.status !== 'UNKNOWN') return { skipped: true, status: row ? row.status : null };
     const params = await readReconcileParams(ctx, transaction);

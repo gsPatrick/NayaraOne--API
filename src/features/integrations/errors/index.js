@@ -4,6 +4,7 @@
 const { recordError } = require('./errors.record');
 const { listErrors } = require('./errors.list');
 const { resolveError } = require('./errors.resolve');
+const { registerResolveHandler } = require('./errors.hooks');
 const { recordUnknownWebhook } = require('./errors.unknownWebhook');
 const { migrateLegacyIntegrationErrors } = require('./errors.legacy');
 const { readErrorParams, PADROES } = require('./errors.params');
@@ -16,6 +17,6 @@ const { registerSecretIncidentReporter } = require('../secrets/secretIncidents')
 registerSecretIncidentReporter(reportarIncidenteDeCredencial);
 
 module.exports = {
-  recordError, listErrors, resolveError, recordUnknownWebhook, migrateLegacyIntegrationErrors,
+  recordError, listErrors, resolveError, registerResolveHandler, recordUnknownWebhook, migrateLegacyIntegrationErrors,
   readErrorParams, PADROES, severityFor, serializeError, sanitizeForError,
 };

@@ -16,7 +16,7 @@ const SANDBOX_HEALTH = async () => ({ ok: true, latencyMs: 0, detail: 'Sandbox l
  * `idempotentOps` (M9-D240): operações em que a chave de idempotência do envio chega em `meta.idempotencyKey` (4º argumento de `ops`); `lookups`: consultas de
  * reconciliação (M9-D215) `findByIdempotencyKey` etc., como `async (legacy, request, self) => ({ found, status, externalResourceId })`.
  */
-function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, makeLegacy, ops, mapper, health = SANDBOX_HEALTH, idempotentOps = [], lookups = {}, webhookHeader = 'x-webhook-signature', schemas = null, derivesEventId = false, toInternalEvent = null }) {
+function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, makeLegacy, ops, mapper, health = SANDBOX_HEALTH, idempotentOps = [], lookups = {}, webhookHeader = 'x-webhook-signature', schemas = null, derivesEventId = false, toInternalEvent = null, hosts = [] }) {
   const Adapter = class extends Port {
     providerCode() { return code; }
 
@@ -48,8 +48,12 @@ function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, ma
 
     toInternalEvent(payload, meta) { return toInternalEvent ? toInternalEvent(payload, meta) : super.toInternalEvent(payload, meta); }
 
-    async legacy(ctx) {
-      if (!this.legacyInstance) this.legacyInstance = await makeLegacy(ctx);
+    /** Hosts que o fornecedor pode receber (M9-D244): os que o adapter declara (padrão: nenhum). */
+    allowedHosts() { return [...hosts]; }
+
+    /** `meta` (M9-D237): dispatchId, chave de idempotência, transação e a empresa da chamada, para o adapter que lê a configuração da empresa ao montar o objeto antigo. */
+    async legacy(ctx, meta) {
+      if (!this.legacyInstance) this.legacyInstance = await makeLegacy(ctx, meta);
       return this.legacyInstance;
     }
 
@@ -62,12 +66,12 @@ function wrapLegacy({ Port, className, code, versions = ['v1'], capabilities, ma
   Object.defineProperty(Adapter, 'name', { value: className });
   capabilities.forEach((cap) => {
     Adapter.prototype[cap] = async function operacao(ctx, request, meta) {
-      const resposta = await ops[cap](await this.legacy(ctx), request, this, meta);
+      const resposta = await ops[cap](await this.legacy(ctx, meta), request, this, meta);
       return { externalRequestId: null, externalResourceId: null, ...resposta };
     };
   });
   Object.entries(lookups).forEach(([nome, fn]) => {
-    Adapter.prototype[nome] = async function consulta(ctx, request) { return fn(await this.legacy(ctx), request, this); };
+    Adapter.prototype[nome] = async function consulta(ctx, request, meta) { return fn(await this.legacy(ctx, meta), request, this); };
   });
   return Adapter;
 }

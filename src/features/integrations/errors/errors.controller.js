@@ -16,7 +16,7 @@ const list = catchAsync(async (req, res) => {
 });
 
 const resolve = catchAsync(async (req, res) => {
-  const row = await req.withTenantTransaction((t) => resolveError(req.params.id, { note: req.body?.note, outcome: req.body?.outcome }, ctxDe(req), t));
+  const row = await req.withTenantTransaction((t) => resolveError(req.params.id, { note: req.body?.note, outcome: req.body?.outcome, decision: req.body?.decision }, ctxDe(req), t));
   return success(res, { data: serializeError(row) });
 });
 

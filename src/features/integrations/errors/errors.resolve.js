@@ -4,15 +4,22 @@ const AppError = require('../../../utils/AppError');
 const { IntegrationError } = require('../../../models');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { CLOSED_STATUSES, NOTE_MIN, NOTE_MAX } = require('./errors.constants');
+const { getResolveHandler } = require('./errors.hooks');
+
+const DECISION_RE = /^[A-Z][A-Z_]{2,39}$/;
 
 const OUTCOMES = Object.freeze(['RESOLVED', 'IGNORED']);
 
 /**
  * resolveError — encerra um erro (RESOLVED) ou o descarta como ruído (IGNORED), sempre com nota de 3 a 500 caracteres.
  * Trava a linha com FOR UPDATE: de duas resoluções simultâneas uma vence e a outra recebe 409.
+ * `decision` (opcional): decisão humana entregue ao tratador registrado do código do erro (errors.hooks).
  * `opts.auditAction`/`opts.reason` deixam o Correspondente manter o texto da auditoria que já tinha.
  */
-async function resolveError(id, { note, outcome = 'RESOLVED' } = {}, ctx, transaction, opts = {}) {
+async function resolveError(id, { note, outcome = 'RESOLVED', decision } = {}, ctx, transaction, opts = {}) {
+  if (decision !== undefined && decision !== null && !DECISION_RE.test(String(decision))) {
+    throw AppError.badRequest('A decisão informada é inválida.', 'INTEGRATION_ERROR_INVALID');
+  }
   if (!OUTCOMES.includes(outcome)) {
     throw AppError.badRequest(`O desfecho deve ser um de: ${OUTCOMES.join(', ')}.`, 'INTEGRATION_ERROR_INVALID');
   }
@@ -45,6 +52,9 @@ async function resolveError(id, { note, outcome = 'RESOLVED' } = {}, ctx, transa
     },
     transaction
   );
+  // M9-D237: a decisão humana chega ao módulo dono do código do erro (por exemplo, o Financeiro rejeita o pagamento de valor divergente), na mesma transação.
+  const tratador = decision ? getResolveHandler(error.errorCode) : null;
+  if (tratador) await tratador({ error, decision: String(decision), ctx, transaction });
   return error;
 }
 

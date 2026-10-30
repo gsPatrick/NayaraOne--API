@@ -49,6 +49,9 @@ module.exports = (sequelize) => {
       uncertainSince: { type: DataTypes.DATE, allowNull: true, field: 'uncertain_since' },
       lastReconciledAt: { type: DataTypes.DATE, allowNull: true, field: 'last_reconciled_at' },
       reconciliationAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'reconciliation_attempts' },
+      // M9-D237: o pagamento casou com uma entrada do extrato (conciliado); não muda o estado da intenção.
+      reconciledAt: { type: DataTypes.DATE, allowNull: true, field: 'reconciled_at' },
+      reconciledEntryId: { type: DataTypes.UUID, allowNull: true, field: 'reconciled_entry_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

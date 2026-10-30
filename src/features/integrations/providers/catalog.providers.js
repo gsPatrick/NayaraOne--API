@@ -39,6 +39,11 @@ const EXISTING_PROVIDERS = Object.freeze([
     code: 'signature-clicksign', displayName: 'Assinatura digital — Clicksign', domain: 'SIGNATURE',
     capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
   },
+  // M9-D237: o Santander (PIX e boleto por mTLS) que já existia no Financeiro entra no catálogo com o contrato do port BankAdapter.
+  {
+    code: 'bank-santander', displayName: 'Banco — Santander (PIX e boleto)', domain: 'BANK',
+    capabilities: ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.BANK, sandboxAvailable: false,
+  },
   // M9-D236: ZapSign (adapter que já existia no Jurídico) entra no catálogo; e o segundo fornecedor de laboratório que prova a troca de provider (formato de webhook diferente).
   {
     code: 'signature-zapsign', displayName: 'Assinatura digital — ZapSign', domain: 'SIGNATURE',

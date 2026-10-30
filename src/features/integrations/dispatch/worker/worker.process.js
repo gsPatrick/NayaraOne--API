@@ -58,7 +58,7 @@ async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx) {
       return { failed: classification };
     }
     // `transaction`: adapters que precisam ler dados da empresa para montar o pedido (documento e contatos do Jurídico) o fazem na transação do worker, sob RLS (M9-D236).
-    const meta = { dispatchId: dispatch.id, attempt: dispatch.attempts, idempotencyKey: adapter.supportsIdempotency(dispatch.operation) ? dispatch.idempotencyKey : undefined, transaction };
+    const meta = { dispatchId: dispatch.id, attempt: dispatch.attempts, idempotencyKey: adapter.supportsIdempotency(dispatch.operation) ? dispatch.idempotencyKey : undefined, transaction, tenant: ctx };
     let normalized;
     let bruta = null;
     try {

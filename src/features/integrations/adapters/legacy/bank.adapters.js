@@ -2,22 +2,30 @@
 
 const { BankAdapter } = require('../../providers/bank/bank.port');
 const { SandboxBankAdapter } = require('../../../finance/adapters/BankAdapter');
-const { wrapLegacy, mapFrom, COMPLETED, verifyOp, hmacVerify } = require('../legacyWrap');
+const { getBankLegacyOverride } = require('../../../finance/adapters/resolveBankAdapter');
+const { wrapLegacy } = require('../legacyWrap');
+const { STATUS, OPS, CAPABILITIES } = require('./bank.ops');
 
-/** bank-sandbox: pagamento simulado (sem rede). O webhook usa o HMAC-SHA256 padrão das integrações. */
+/**
+ * Consulta pela chave de idempotência (M9-D215): o sandbox lembra as ordens recebidas. Adapter de teste sem a consulta e marcado `isSandbox` não tem estado externo: a
+ * ausência do registro é a resposta (a ordem pode sair de novo, com a MESMA chave).
+ */
+const findByIdempotencyKey = async (legacy, req) => {
+  if (typeof legacy.findByIdempotencyKey === 'function') return legacy.findByIdempotencyKey(req.idempotencyKey);
+  return { found: false };
+};
+
+/** bank-sandbox: pagamento simulado (sem rede). O webhook usa o HMAC-SHA256 padrão das integrações. Em teste, `setBankAdapterOverrideForTests` troca o objeto antigo. */
 const BankSandboxContractAdapter = wrapLegacy({
   Port: BankAdapter,
   className: 'BankSandboxContractAdapter',
   code: 'bank-sandbox',
-  capabilities: ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook'],
-  makeLegacy: () => new SandboxBankAdapter(),
-  mapper: mapFrom({ PENDING_EXTERNAL: 'PENDING', CONFIRMED: 'PAID', SETTLED: 'PAID', REJECTED: 'FAILED', FAILED: 'FAILED', COMPLETED, VALID: 'VALID', INVALID: 'INVALID' }),
-  ops: {
-    submitPayment: async (l, req, self) => { const r = await l.submitPayment({ ...req, idempotencyKey: req.idempotencyKey }); return { externalResourceId: r.externalId, status: self.normalizeStatus(r.status), raw: r.raw }; },
-    getPaymentStatus: async (l, req, self) => { const r = await l.getPaymentStatus(req.externalResourceId); return { externalResourceId: r.externalId, status: self.normalizeStatus(r.status), raw: r.raw }; },
-    getStatement: async (l, req) => { const r = await l.fetchTransactions(req.cursor); return { status: COMPLETED, raw: r }; },
-    verifyWebhook: verifyOp((l, req) => hmacVerify(req.rawBody, req.headers, req.secret)),
-  },
+  capabilities: CAPABILITIES,
+  makeLegacy: () => getBankLegacyOverride() || new SandboxBankAdapter(),
+  mapper: STATUS,
+  ops: OPS,
+  idempotentOps: ['submitPayment'],
+  lookups: { findByIdempotencyKey },
 });
 
 module.exports = { BankSandboxContractAdapter };

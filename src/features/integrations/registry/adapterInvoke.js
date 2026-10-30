@@ -23,7 +23,9 @@ async function invoke(adapter, operation, request, opts = {}) {
   if (pedido.length) throw requestInvalid(operation, pedido);
   let resposta;
   try {
-    resposta = await adapter[operation](adapter.ctx, request ?? {}, opts.meta);
+    // M9-D237: o adapter que lê a configuração da empresa para montar o objeto antigo recebe a empresa e a transação junto da meta do envio.
+    const meta = opts.tenant ? { tenant: opts.tenant, transaction: opts.transaction, ...(opts.meta || {}) } : opts.meta;
+    resposta = await adapter[operation](adapter.ctx, request ?? {}, meta);
   } catch (err) {
     if (err && err.code === 'INTEGRATION_STATUS_UNMAPPED' && opts.tenant) {
       await recordError(opts.tenant, {

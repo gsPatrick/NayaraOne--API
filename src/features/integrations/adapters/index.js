@@ -7,6 +7,7 @@
 const registry = require('../registry/adapterRegistry');
 const { FinancingSandboxContractAdapter, FinancingManualContractAdapter } = require('./legacy/financing.adapters');
 const { BankSandboxContractAdapter } = require('./legacy/bank.adapters');
+const { BankSantanderContractAdapter } = require('./legacy/bank.santander');
 const { SignatureClicksignContractAdapter, SignatureZapSignContractAdapter } = require('./legacy/signature.adapters');
 const { SignatureSandboxAdapter } = require('../providers/signature/sandbox/signature-sandbox.adapter');
 const { SignatureAltSandboxAdapter } = require('../providers/signature/sandbox/signature-alt-sandbox.adapter');
@@ -24,7 +25,7 @@ const { registerAiContingency } = require('../providers/ai/ai.degrade');
 const { installContingency } = require('../contingency');
 
 const BUILT_IN_ADAPTERS = Object.freeze([
-  FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxAdapter,
+  FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, BankSantanderContractAdapter, SignatureSandboxAdapter,
   SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
   MessagingSandboxAdapter, MessagingAltSandboxAdapter, PortalSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
 ]);
