@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "noResolve": true,
+    "types": []
+  },
+  "files": [
+    "globals.d.ts",
+    "../../../src/features/integrations/providers/ports/definePort.js",
+    "../../../src/features/integrations/providers/ports/index.js",
+    "../../../src/features/integrations/registry/adapterContract.js",
+    "../../../src/features/integrations/registry/adapterRegistry.js",
+    "../../../src/features/integrations/registry/classifyHttpError.js",
+    "../../../src/features/integrations/registry/adapterCtx.js",
+    "../../../src/features/integrations/registry/sandboxFaults.js",
+    "../../../src/features/integrations/registry/webhookVerifiers.js",
+    "../../../src/features/integrations/providers/messaging/messaging.port.js"
+  ]
+}

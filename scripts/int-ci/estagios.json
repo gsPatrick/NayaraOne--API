@@ -1,0 +1,218 @@
+{
+  "descricao": "Esteira de CI das integrações (M9-D254, Guia seção 11). Ordem e nomes são os do livro e são conferidos por scripts/int-ci/lib/estagios.js; este arquivo só diz o que cada etapa executa. `testes` = padrões de arquivo (todos entram, nenhum recorte). `banco: true` = só roda em banco descartável (DISPOSABLE_DB=1). Etapas 1 a 9: todo pull request e merge. Etapas 10 a 13: tag de release por provider (INT_CI_PROVIDER); a 13 nunca faz deploy.",
+  "linguagem": "javascript",
+  "etapas": [
+    {
+      "numero": 1,
+      "nome": "lint",
+      "tipo": "automatica",
+      "comandos": [
+        [
+          "npm",
+          "run",
+          "lint"
+        ],
+        [
+          "npm",
+          "run",
+          "guard:integration-boundaries"
+        ],
+        [
+          "npm",
+          "run",
+          "guard:file-size"
+        ]
+      ]
+    },
+    {
+      "numero": 2,
+      "nome": "typecheck",
+      "tipo": "automatica",
+      "comandos": [
+        [
+          "npm",
+          "run",
+          "typecheck"
+        ]
+      ]
+    },
+    {
+      "numero": 3,
+      "nome": "adapter contract tests",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/integrations/adapters/adapterContract.test.js",
+            "test/marco9/integracoes/m9d222.*.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 4,
+      "nome": "webhook security tests",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/marco9/integracoes/m9d211.*.test.js",
+            "test/marco9/integracoes/m9d212.*.test.js",
+            "test/marco9/integracoes/m9d213.*.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 5,
+      "nome": "dispatch idempotency",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/integrations/dispatch/dispatch.core.test.js",
+            "test/integrations/dispatch/dispatch.lifecycle.test.js",
+            "test/marco9/integracoes/m9d214.*.test.js",
+            "test/marco9/integracoes/m9d215.*.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 6,
+      "nome": "retry/circuit tests",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/marco9/integracoes/m9d216.*.test.js",
+            "test/marco9/integracoes/m9d217.*.test.js",
+            "test/marco9/integracoes/m9d218.*.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 7,
+      "nome": "secret/log scan",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        [
+          "npm",
+          "run",
+          "scan:secrets"
+        ],
+        {
+          "testes": [
+            "test/integrations/redaction/redaction.canary.test.js",
+            "test/integrations/redaction/redaction.library.test.js",
+            "test/integrations/redaction/redaction.scan.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 8,
+      "nome": "SSRF tests",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/marco9/integracoes/m9d245.*.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "numero": 9,
+      "nome": "provider sandbox",
+      "tipo": "automatica",
+      "banco": true,
+      "comandos": [
+        {
+          "testes": [
+            "test/marco9/integracoes/*.test.js"
+          ],
+          "excluir": [
+            "m9d211.",
+            "m9d212.",
+            "m9d213.",
+            "m9d214.",
+            "m9d215.",
+            "m9d216.",
+            "m9d217.",
+            "m9d218.",
+            "m9d222.",
+            "m9d245."
+          ]
+        },
+        [
+          "node",
+          "scripts/checkAdversarialNames.js"
+        ],
+        [
+          "node",
+          "scripts/integrationDod.js"
+        ]
+      ]
+    },
+    {
+      "numero": 10,
+      "nome": "DEV",
+      "tipo": "release",
+      "comandos": [
+        [
+          "node",
+          "scripts/int-ci/smoke.js",
+          "--ambiente",
+          "dev"
+        ]
+      ]
+    },
+    {
+      "numero": 11,
+      "nome": "LAB",
+      "tipo": "release",
+      "comandos": [
+        [
+          "node",
+          "scripts/int-ci/smoke.js",
+          "--ambiente",
+          "lab"
+        ],
+        [
+          "env",
+          "-u",
+          "CI",
+          "CONTRACT_MODE=live",
+          "node",
+          "scripts/contractReport.js",
+          "{provider}"
+        ]
+      ]
+    },
+    {
+      "numero": 12,
+      "nome": "failure drill",
+      "tipo": "release",
+      "comandos": [
+        [
+          "node",
+          "scripts/int-ci/drill.js"
+        ]
+      ]
+    },
+    {
+      "numero": 13,
+      "nome": "production approval",
+      "tipo": "release",
+      "comandos": []
+    }
+  ]
+}

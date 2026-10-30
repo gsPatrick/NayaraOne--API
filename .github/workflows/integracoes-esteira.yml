@@ -1,0 +1,115 @@
+name: Esteira das integracoes
+
+# M9-D254 (Guia seção 11): lint, typecheck, contract tests dos adapters, segurança de webhook, idempotência do envio, retry e circuito, varredura de segredo e log, SSRF e sandbox dos providers,
+# nesta ordem, parando na primeira etapa vermelha (etapas 1 a 9: todo pull request e todo merge; etapa vermelha bloqueia o merge pela proteção da branch). Em tag de release de UM provider
+# (int-release-<provider>-<n>) seguem DEV, LAB, failure drill e production approval (etapas 10 a 13). Banco: sempre o cluster descartável (scripts/withDisposableDb.js), nunca o compartilhado.
+# O CI NÃO faz push nem deploy em produção: a etapa 13 só habilita o botão de aprovação que o Patrick usa. Endereços e credenciais de DEV e LAB ficam no cofre do CI (secrets), nunca no repositório.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+    tags: ['int-release-*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esteira-integracoes:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Etapas 1 a 9 (param na primeira vermelha)
+        run: bash scripts/ci-estagios-integracoes.sh docs/evidencias/ci/esteira-integracoes.log
+      - name: Arquivar o log por etapa e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-integracoes-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-integracoes*.log
+            docs/evidencias/ci/esteira-integracoes*.json
+            reports/contract/*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  release-lab:
+    # Só em tag de release de um provider: DEV, LAB e failure drill (etapas 10 a 12).
+    if: ${{ startsWith(github.ref, 'refs/tags/int-release-') }}
+    needs: esteira-integracoes
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      INT_CI_DEV_URL: ${{ secrets.INT_CI_DEV_URL }}
+      INT_CI_DEV_TOKEN: ${{ secrets.INT_CI_DEV_TOKEN }}
+      INT_CI_LAB_URL: ${{ secrets.INT_CI_LAB_URL }}
+      INT_CI_LAB_TOKEN: ${{ secrets.INT_CI_LAB_TOKEN }}
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Provider da tag
+        run: echo "INT_CI_PROVIDER=$(echo "${GITHUB_REF_NAME}" | sed -E 's/^int-release-(.+)-[0-9]+$/\1/')" >> "$GITHUB_ENV"
+      - name: Deploy para DEV
+        run: curl -fsS -X POST "${{ secrets.INT_CI_DEV_DEPLOY_HOOK }}"
+      - name: Etapa 10 (DEV, smoke)
+        run: bash scripts/ci-estagios-integracoes.sh docs/evidencias/ci/esteira-integracoes-dev.log --release --de 10 --ate 10
+      - name: Deploy para LAB
+        run: curl -fsS -X POST "${{ secrets.INT_CI_LAB_DEPLOY_HOOK }}"
+      - name: Etapa 11 (LAB, contract tests em modo live)
+        run: bash scripts/ci-estagios-integracoes.sh docs/evidencias/ci/esteira-integracoes-lab.log --release --de 11 --ate 11
+      - name: Etapa 12 (failure drill)
+        run: bash scripts/ci-estagios-integracoes.sh docs/evidencias/ci/esteira-integracoes-drill.log --release --de 12 --ate 12
+      - name: Arquivar o log por etapa e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-integracoes-release-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-integracoes*.log
+            docs/evidencias/ci/esteira-integracoes*.json
+            docs/evidencias/contingencia/*.json
+            reports/contract/*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  aprovacao-humana:
+    # Etapa 13: o environment tem revisor obrigatório (o Patrick). Este job NÃO executa deploy: ele só registra o relatório da etapa 13 (AGUARDANDO_APROVACAO) e libera o botão
+    # de aprovação; a liberação do provider em produção e o deploy são feitos por ele, fora do CI.
+    if: ${{ startsWith(github.ref, 'refs/tags/int-release-') }}
+    needs: release-lab
+    runs-on: ubuntu-latest
+    environment: integracoes-aprovacao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Provider da tag
+        run: echo "INT_CI_PROVIDER=$(echo "${GITHUB_REF_NAME}" | sed -E 's/^int-release-(.+)-[0-9]+$/\1/')" >> "$GITHUB_ENV"
+      - name: Etapa 13 (production approval, aguarda a pessoa)
+        run: mkdir -p docs/evidencias/ci && node scripts/int-ci/executar.js --release --de 13 --ate 13 --relatorio docs/evidencias/ci/esteira-integracoes-aprovacao.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esteira-integracoes-aprovacao-${{ github.sha }}
+          path: docs/evidencias/ci/esteira-integracoes-aprovacao.json
+          retention-days: 90
