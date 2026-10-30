@@ -12,11 +12,14 @@ const LEGACY = [
   /^\/v1\/correspondent\/webhooks\/financing\/[^/]+\/?$/,
 ];
 
+// M9-D430: o webhook dos canais do Marketing também chega em corpo bruto (assinatura antes de ler o JSON); a rota é do Marketing, o corpo é do framework.
+const MARKETING = /^(?:\/v1)?\/marketing\/webhooks\/[^/]+\/?$/;
+
 const isFrameworkWebhookPath = (path, apiPrefix = '/api') => {
   const p = String(path || '');
   if (!p.startsWith(`${apiPrefix}/`)) return false;
   const resto = p.slice(apiPrefix.length);
-  return UNIVERSAL.test(resto) || LEGACY.some((re) => re.test(resto));
+  return UNIVERSAL.test(resto) || MARKETING.test(resto) || LEGACY.some((re) => re.test(resto));
 };
 
 module.exports = { isFrameworkWebhookPath };

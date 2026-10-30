@@ -742,3 +742,6 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:retention:manage` | HIGH | nenhuma ainda |
 | `governance:legal-hold:manage` | CRITICAL | nenhuma ainda |
 
+| `POST` | `/api/v1/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
+| `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/t/:shortCode` | só login | não |
