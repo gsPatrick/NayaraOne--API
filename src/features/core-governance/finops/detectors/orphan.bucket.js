@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { uploadsRoot } = require('../collectors/storage.measure');
-const { RESERVED_SUFFIX } = require('../../../integrations/providers/storage/storage.key');
+const { STORAGE_RESERVED_SUFFIX: RESERVED_SUFFIX } = require('../../../integrations');
 
 /**
  * Objetos do bucket da empresa (`<raiz>/company/<id>/...`) SEM linha em files, mais velhos que o corte (objeto recém-gravado pode ainda não ter a linha).

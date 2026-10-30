@@ -38,6 +38,7 @@ expor('webhooks', () => require('./webhooks'));
 expor('readCircuitState', () => require('./health').readCircuitState);
 expor('SignatureSandboxAdapter', () => require('./providers/signature/sandbox/signature-sandbox.adapter').SignatureSandboxAdapter);
 expor('SignatureAltSandboxAdapter', () => require('./providers/signature/sandbox/signature-alt-sandbox.adapter').SignatureAltSandboxAdapter);
+expor('STORAGE_RESERVED_SUFFIX', () => require('./providers/storage/storage.key').RESERVED_SUFFIX);
 expor('messagingStatus', () => require('./providers/messaging/messaging.status'));
 expor('MESSAGING_EVENT_KINDS', () => require('./providers/messaging/messaging.event').KINDS);
 expor('catalogRouter', () => require('./providers/catalog.routes'));
