@@ -238,7 +238,7 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError + o registrador de run por regra (M9-D005),
   // a única escrita é a auditoria da execução (recordRuleRun) e não usa SQL cru.
   const nay = fs.readFileSync(path.join(legalDir, 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../features/ai/orchestrator/runs', '../../utils/AppError']);
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../features/ai/orchestrator/runs', '../../utils/AppError'].sort());
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   const routeLines = fs.readFileSync(path.join(legalDir, 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
@@ -259,23 +259,31 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
     'createEvidencePackage deve receber (legalCaseId, manifestItems, actorUserId, transaction)'
   );
 
-  // Confirma, como já feito para o financeiro, que não existe integração real de IA/LLM em
-  // todo o backend — enquanto isso for verdade, "NAY jurídica" não tem como decidir/editar/criar
-  // nada sozinha, só pode resumir/ler o que um humano já decidiu pelas rotas normais.
+  // Invariante verdadeira desde o Marco 9 (a IA real existe em src/features/ai; a premissa "sem IA"
+  // caiu): código de provedor de IA nunca é chamado de dentro do módulo jurídico, e nada em
+  // src/features/ai cria/decide/muda status de contrato, processo ou dossiê direto: a escrita da NAY
+  // jurídica é só rascunho com aprovação humana (legal.draftContract exige requiresHumanApproval).
   const srcDir = path.join(__dirname, '..', 'src');
-  let hasAiIntegration = false;
-  const walk = (dir) => {
+  const strip = (c) => c.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const providerLeaks = [];
+  const aiLegalWriters = [];
+  const walk = (dir, fn) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.js')) {
-        const content = fs.readFileSync(full, 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        if (/openai|anthropic|@anthropic-ai/i.test(content)) hasAiIntegration = true;
-      }
+      if (entry.isDirectory()) walk(full, fn);
+      else if (entry.name.endsWith('.js')) fn(full, strip(fs.readFileSync(full, 'utf8')));
     }
   };
-  walk(srcDir);
-  assert.equal(hasAiIntegration, false, 'não deveria existir integração de IA real no backend ainda (infraestrutura é Marco 9).');
+  walk(legalDir, (full, content) => { if (/openai|anthropic|@anthropic-ai/i.test(content)) providerLeaks.push(path.relative(srcDir, full)); });
+  walk(path.join(srcDir, 'features', 'ai'), (full, content) => {
+    if (/\b(createLegalCase|setLegalHold|createEvidencePackage|updateContractStatus|transitionContract|approveContract|signContract)\b/.test(content)) aiLegalWriters.push(path.relative(srcDir, full));
+  });
+  assert.deepEqual(providerLeaks, [], 'provedor de IA não pode ser chamado de dentro do módulo jurídico.');
+  assert.deepEqual(aiLegalWriters, [], 'a NAY não pode criar/decidir/mudar status jurídico direto.');
+  const { INITIAL_DEFINITIONS } = require('../src/features/ai/tools/definitions');
+  for (const tool of INITIAL_DEFINITIONS.filter((t) => /^legal\./.test(t.name) && t.category !== 'READ')) {
+    assert.equal(tool.requiresHumanApproval, true, `${tool.name}: escrita jurídica da NAY exige aprovação humana.`);
+  }
 });
 
 // ---------------------------------------------------------------------------
