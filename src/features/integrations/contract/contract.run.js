@@ -6,6 +6,7 @@ const { buildContext } = require('./contract.runtime');
 const transport = require('./contract.scenarios.transport');
 const data = require('./contract.scenarios.data');
 const { loadDouble } = require('./doubles');
+const { AI_SCENARIOS, buildAiContext, isAiShape } = require('./ai');
 
 const SCENARIOS = Object.freeze([
   [1, 'auth', transport.auth], [2, 'happy path', transport.happyPath], [3, 'timeout', transport.timeout], [4, '4xx', transport.client4xx], [5, '5xx', transport.server5xx],
@@ -39,6 +40,15 @@ async function runSuite(target, { timeoutMs } = {}) {
     const ops = capabilities.filter((c) => !semCenario.includes(c) && typeof adapterBase[c] === 'function');
     capabilities.filter((c) => typeof adapterBase[c] !== 'function').forEach((capability) => errors.push({ code: 'CONTRACT_CAPABILITY_NOT_IMPLEMENTED', version, capability, message: 'Capacidade declarada sem operação implementada no adapter.' }));
     const prazo = timeoutMs || fixture.timeoutMs || DEFAULT_TIMEOUT_MS;
+    if (isAiShape(fixture)) {
+      // Adapter de modelo (M9-D011): a operação recebe só o pedido e devolve o formato rico; a falha entra no fornecedor falso e cada pedido ganha um adapter novo.
+      const make = (fault) => { const { ctx, calls } = buildAiContext({ providerCode: target.providerCode, version, fixture, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS, fault }); return { adapter: new target.AdapterClass(ctx), calls }; };
+      for (const [, , fn] of AI_SCENARIOS) {
+        const lista = await fn({ make, fixture, ops, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS });
+        resultados.push(...lista.map((r) => ({ ...r, version })));
+      }
+      continue;
+    }
     const dub = loadDouble(fixture.legacyDouble);
     const desfazer = dub && dub.setup ? dub.setup() : null;
     try {

@@ -1,0 +1,90 @@
+{
+  "provider": "openai",
+  "domain": "AI",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T14:50:36.935Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "generate",
+    "embed"
+  ],
+  "adapterHash": "1e53e9dd911d75435728e9ac5ebef9285666908570e9cca84199a30c01192e10",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 11,
+      "passed": 11,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 2,
+      "passed": 2,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 2,
+      "passed": 2,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 8,
+      "passed": 8,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 8,
+      "passed": 8,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 2,
+      "passed": 2,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 2,
+      "passed": 2,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    }
+  ],
+  "executions": 61,
+  "passed": 61,
+  "status": "PASSED",
+  "errors": []
+}

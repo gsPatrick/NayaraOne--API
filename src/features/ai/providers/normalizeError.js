@@ -19,7 +19,9 @@ function normalizeProviderError(errOrResponse, { providerCode, classify = classi
   if (code === 'CIRCUIT_OPEN' || code === 'INTEGRATION_CIRCUIT_OPEN') return new AiProviderError('UNAVAILABLE', { providerCode, upstreamCode: 'CIRCUIT_OPEN' });
   if (TIMEOUT_CODES.has(code) || e.name === 'AbortError') return new AiProviderError('TIMEOUT', { providerCode, upstreamCode: 'TIMEOUT' });
   const c = classify(e) || { class: 'UNKNOWN' };
-  const kind = CLASS_TO_KIND[c.class] || 'UNKNOWN';
+  let kind = CLASS_TO_KIND[c.class] || 'UNKNOWN';
+  // Recusa permanente do fornecedor (404, 409 e demais 4xx que nenhuma classe acima reconheceu) é pedido inválido: não se repete (livro D222, cenário 4xx).
+  if (kind === 'UNKNOWN' && upstreamStatus >= 400 && upstreamStatus < 500) kind = 'VALIDATION';
   return new AiProviderError(kind, { providerCode, upstreamStatus, upstreamCode: c.code, retryAfterMs: c.retryAfterMs });
 }
 

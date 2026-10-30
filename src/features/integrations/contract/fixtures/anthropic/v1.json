@@ -1,0 +1,105 @@
+{
+  "provider": "anthropic",
+  "apiVersion": "v1",
+  "shape": "ai-model",
+  "transport": "http",
+  "description": "API de mensagens da Anthropic sob o contrato do AIProviderAdapter, contra o fornecedor HTTP falso da fixture (sem rede e sem credencial).",
+  "models": [
+    {
+      "model": "contrato-gen",
+      "classe": "SMALL",
+      "generate": true,
+      "embed": false,
+      "transcribe": false,
+      "vision": false,
+      "structuredOutput": true,
+      "toolUse": true,
+      "maxInput": 100000,
+      "maxOutput": 2048,
+      "dataRetention": "30D",
+      "region": "US",
+      "pricePerMTokIn": 5,
+      "pricePerMTokOut": 15,
+      "p95LatencyMs": 800,
+      "safetyTier": 2
+    }
+  ],
+  "requests": {
+    "generate": {
+      "model": "contrato-gen",
+      "system": "Você é a NAY.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Olá, contrato."
+        }
+      ],
+      "maxOutputTokens": 256,
+      "temperature": 0,
+      "timeoutMs": 1500,
+      "correlationId": "contract-1",
+      "idempotencyKey": "contract-gen"
+    }
+  },
+  "wire": {
+    "generate": {
+      "path": "/v1/messages",
+      "ok": {
+        "id": "msg_contrato",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Resposta de contrato."
+          }
+        ],
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 120,
+          "output_tokens": 30
+        }
+      },
+      "mutations": {
+        "missing": "content",
+        "wrongType": "usage"
+      }
+    },
+    "health": {
+      "path": "/v1/models",
+      "ok": {
+        "data": []
+      }
+    }
+  },
+  "finishReasons": [
+    {
+      "set": {
+        "stop_reason": "max_tokens"
+      },
+      "expect": "length"
+    },
+    {
+      "set": {
+        "stop_reason": "tool_use"
+      },
+      "expect": "tool_calls"
+    },
+    {
+      "set": {
+        "stop_reason": "end_turn"
+      },
+      "expect": "stop"
+    }
+  ],
+  "statuses": {
+    "stop": "COMPLETED",
+    "end_turn": "COMPLETED",
+    "length": "COMPLETED",
+    "max_tokens": "COMPLETED",
+    "tool_calls": "COMPLETED",
+    "tool_use": "COMPLETED"
+  },
+  "unknownStatus": "fim_inedito_do_modelo",
+  "renewal": false
+}

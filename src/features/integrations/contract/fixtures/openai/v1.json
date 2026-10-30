@@ -1,0 +1,191 @@
+{
+  "provider": "openai",
+  "apiVersion": "v1",
+  "shape": "ai-model",
+  "transport": "http",
+  "description": "Chat completions e embeddings da OpenAI sob o contrato do AIProviderAdapter, contra o fornecedor HTTP falso da fixture (sem rede e sem credencial).",
+  "models": [
+    {
+      "model": "contrato-gen",
+      "classe": "SMALL",
+      "generate": true,
+      "embed": false,
+      "transcribe": false,
+      "vision": false,
+      "structuredOutput": true,
+      "toolUse": true,
+      "maxInput": 100000,
+      "maxOutput": 2048,
+      "dataRetention": "30D",
+      "region": "US",
+      "pricePerMTokIn": 5,
+      "pricePerMTokOut": 15,
+      "p95LatencyMs": 800,
+      "safetyTier": 2
+    },
+    {
+      "model": "contrato-emb",
+      "classe": "EMBEDDING",
+      "generate": false,
+      "embed": true,
+      "transcribe": false,
+      "vision": false,
+      "structuredOutput": false,
+      "toolUse": false,
+      "maxInput": 100000,
+      "maxOutput": 0,
+      "dataRetention": "30D",
+      "region": "US",
+      "pricePerMTokIn": 1,
+      "pricePerMTokOut": 0,
+      "p95LatencyMs": 800,
+      "safetyTier": 2
+    }
+  ],
+  "requests": {
+    "generate": {
+      "model": "contrato-gen",
+      "system": "Você é a NAY.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Olá, contrato."
+        }
+      ],
+      "maxOutputTokens": 256,
+      "temperature": 0,
+      "timeoutMs": 1500,
+      "correlationId": "contract-1",
+      "idempotencyKey": "contract-gen"
+    },
+    "embed": {
+      "model": "contrato-emb",
+      "inputs": [
+        "a",
+        "bb"
+      ],
+      "idempotencyKey": "contract-emb"
+    }
+  },
+  "wire": {
+    "generate": {
+      "path": "/v1/chat/completions",
+      "ok": {
+        "id": "chatcmpl_contrato",
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Resposta de contrato."
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 30
+        }
+      },
+      "mutations": {
+        "missing": "choices",
+        "wrongType": "usage"
+      }
+    },
+    "embed": {
+      "path": "/v1/embeddings",
+      "ok": {
+        "id": "emb_contrato",
+        "data": [
+          {
+            "index": 0,
+            "embedding": [
+              0.1,
+              0.2,
+              0.3
+            ]
+          },
+          {
+            "index": 1,
+            "embedding": [
+              0.2,
+              0.3,
+              0.4
+            ]
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 6
+        }
+      },
+      "mutations": {
+        "missing": "data",
+        "wrongType": "usage"
+      }
+    },
+    "health": {
+      "path": "/v1/models",
+      "ok": {
+        "data": []
+      }
+    }
+  },
+  "finishReasons": [
+    {
+      "set": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "message": {
+              "content": "x"
+            }
+          }
+        ]
+      },
+      "expect": "length"
+    },
+    {
+      "set": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "message": {
+              "content": null,
+              "tool_calls": [
+                {
+                  "function": {
+                    "name": "x",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": "tool_calls"
+    },
+    {
+      "set": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "content": "x"
+            }
+          }
+        ]
+      },
+      "expect": "stop"
+    }
+  ],
+  "statuses": {
+    "stop": "COMPLETED",
+    "end_turn": "COMPLETED",
+    "length": "COMPLETED",
+    "max_tokens": "COMPLETED",
+    "tool_calls": "COMPLETED",
+    "tool_use": "COMPLETED"
+  },
+  "unknownStatus": "fim_inedito_do_modelo",
+  "renewal": false
+}

@@ -1,0 +1,62 @@
+{
+  "provider": "ai-sandbox",
+  "apiVersion": "v1",
+  "shape": "ai-model",
+  "transport": "marker",
+  "description": "Provedor de modelo de laboratório: determinístico, sem rede; as falhas entram por marcador no texto do usuário (só em generate).",
+  "requests": {
+    "generate": {
+      "model": "sandbox-1",
+      "system": "Você é a NAY.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Olá, contrato."
+        }
+      ],
+      "maxOutputTokens": 256,
+      "temperature": 0,
+      "timeoutMs": 1500,
+      "correlationId": "contract-1",
+      "idempotencyKey": "contract-gen"
+    },
+    "embed": {
+      "model": "sandbox-embed-1",
+      "inputs": [
+        "a",
+        "bb"
+      ],
+      "idempotencyKey": "contract-emb"
+    },
+    "transcribe": {
+      "model": "sandbox-media-1",
+      "fileRef": "arquivo-contrato"
+    },
+    "analyzeImage": {
+      "model": "sandbox-media-1",
+      "imageRef": "imagem-contrato",
+      "prompt": "descreva"
+    }
+  },
+  "faultOps": [
+    "generate"
+  ],
+  "markers": {
+    "AUTH": "[[FALHA:AUTH]]",
+    "VALIDATION": "[[FALHA:VALIDATION]]",
+    "RATE_LIMIT": "[[FALHA:RATE_LIMIT]]",
+    "UNAVAILABLE": "[[FALHA:UNAVAILABLE]]",
+    "TIMEOUT": "[[FALHA:TIMEOUT]]",
+    "UNKNOWN": "[[FALHA:UNKNOWN]]"
+  },
+  "statuses": {
+    "stop": "COMPLETED",
+    "end_turn": "COMPLETED",
+    "length": "COMPLETED",
+    "max_tokens": "COMPLETED",
+    "tool_calls": "COMPLETED",
+    "tool_use": "COMPLETED"
+  },
+  "unknownStatus": "fim_inedito_do_modelo",
+  "renewal": false
+}
