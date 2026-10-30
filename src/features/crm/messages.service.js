@@ -6,6 +6,7 @@ const { canContact } = require('../people/personConsents.service');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 const { businessDateKey } = require('../../utils/businessDate');
+const { describeMedia } = require('./messaging/whatsapp.mediaView');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -24,7 +25,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey, connectionId, dispatchId, deliveryStatus } = payload;
+  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey, connectionId, dispatchId, deliveryStatus, conversationId, mediaQuarantineId } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -97,6 +98,9 @@ async function createMessage(payload, actorUserId, transaction) {
       connectionId: connectionId || null,
       dispatchId: dispatchId || null,
       deliveryStatus: deliveryStatus || null,
+      conversationId: conversationId || null,
+      mediaQuarantineId: mediaQuarantineId || null,
+      purpose: purpose && /^[A-Za-z0-9_]{2,40}$/.test(String(purpose)) ? String(purpose).toUpperCase() : null, // M9-D230: a finalidade fica na mensagem; o consentimento é conferido de novo no envio
       actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -127,7 +131,7 @@ async function listMessages(transaction, filters = {}) {
   const where = {};
   if (filters.personId) where.personId = filters.personId;
   if (filters.opportunityId) where.opportunityId = filters.opportunityId;
-  return Message.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return describeMedia(await Message.findAll({ where, order: [['created_at', 'DESC']], transaction }), transaction);
 }
 
 async function getMessage(id, transaction) {

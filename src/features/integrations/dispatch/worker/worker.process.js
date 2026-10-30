@@ -90,7 +90,7 @@ async function processClaimed(ctx, id, { now = new Date(), transaction = null, m
   // Com `transaction` (M9-D240: fluxo do Correspondente dentro da transação do pedido) as duas fases rodam nela; sem, cada fase abre a sua.
   const run = transaction ? (_ctx, fn) => sequelize.transaction({ transaction }, fn) : tenantTx; // savepoint: a falha de uma fase não aborta a transação do pedido
   const a = await phaseA(ctx, id, now, run);
-  if (a.skipped || a.deferred || a.failed) return a;
+  if (a.skipped || a.deferred || a.failed || a.cancelled) return a;
   return phaseB(ctx, id, a.attemptId, now, a.probe, run, maxCallMs);
 }
 

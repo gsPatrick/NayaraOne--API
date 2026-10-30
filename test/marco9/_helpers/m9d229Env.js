@@ -11,6 +11,10 @@ const peopleService = require('../../../src/features/people/people.service');
 const messaging = require('../../../src/features/crm/messaging');
 const { transitionConnection } = require('../../../src/features/integrations/registry/connections.transition');
 const store = require('../../../src/features/integrations/providers/messaging/sandbox/messaging.sandbox.store');
+const { abrirJanela } = require('./m9d230Janela');
+
+/** Modelo aprovado que os testes antigos da mensageria usam (M9-D230: só modelo aprovado no fornecedor sai). */
+const MODELOS_PADRAO = [{ name: 'boas_vindas', language: 'pt_BR', category: 'UTILITY', variables: 0, approved: true, approvedAt: '2026-01-01T00:00:00Z' }];
 
 const { comTenant, sql, ctxDe, uniqueSuffix } = env;
 
@@ -18,7 +22,7 @@ const { comTenant, sql, ctxDe, uniqueSuffix } = env;
 async function conectar(tenant, provider = 'messaging-sandbox', { config } = {}) {
   await sql(tenant, "UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND status = 'ACTIVE' AND provider_code LIKE 'messaging-%'", { c: tenant.companyId });
   const canal = await env.criarCanal(tenant, { provider });
-  if (config) await sql(tenant, 'UPDATE integration.connections SET config_json = CAST(:cfg AS jsonb) WHERE id = :id', { id: canal.conn.id, cfg: JSON.stringify(config) });
+  await sql(tenant, 'UPDATE integration.connections SET config_json = CAST(:cfg AS jsonb) WHERE id = :id', { id: canal.conn.id, cfg: JSON.stringify({ templates: MODELOS_PADRAO, ...(config || {}) }) });
   await comTenant(tenant, (t) => transitionConnection(canal.conn.id, 'ACTIVE', ctxDe(tenant), t));
   return canal;
 }
@@ -33,7 +37,12 @@ async function pessoa(tenant, phone = `+55119${String(Math.floor(Math.random() *
   return { id: p.id, phone };
 }
 
-const enviarMensagem = (tenant, input) => comTenant(tenant, (t) => messaging.sendMessage(ctxDe(tenant), input, tenant.userId, t));
+/** Envia pelo serviço do CRM. Texto e mídia precisam da janela de atendimento aberta (M9-D230): o apoio a abre, a menos que o teste peça `semJanela`. */
+async function enviarMensagem(tenant, input) {
+  const { semJanela, auth, ...pedido } = input;
+  if (pedido.kind !== 'template' && pedido.personId && !semJanela) await abrirJanela(tenant, pedido.personId, 1);
+  return comTenant(tenant, (t) => messaging.sendMessage(ctxDe(tenant), pedido, tenant.userId, t, auth ? { auth } : undefined));
+}
 const rodarEnvios = (tenant) => runDispatchCycle(ctxDe(tenant));
 const entregarEventos = (tenant) => dispatchPendingEventsForCompany({ id: tenant.groupId }, { id: tenant.companyId }, { limit: 1000 });
 const mensagem = async (tenant, id) => (await sql(tenant, 'SELECT * FROM crm.messages WHERE id = :id', { id }))[0];
@@ -60,5 +69,5 @@ const eventoStatus = (canal, messageId, interno) => (canal.provider === 'messagi
   : env.evento({ resourceId: messageId, status: interno }));
 
 module.exports = {
-  ...env, conectar, pausar, pessoa, enviarMensagem, rodarEnvios, entregarEventos, mensagem, mensagensDa, envioDe, refrescar, statusB, inboundA, inboundB, enviarB, postar, eventoStatus, store, messaging,
+  ...env, MODELOS_PADRAO, abrirJanela, conectar, pausar, pessoa, enviarMensagem, rodarEnvios, entregarEventos, mensagem, mensagensDa, envioDe, refrescar, statusB, inboundA, inboundB, enviarB, postar, eventoStatus, store, messaging,
 };

@@ -94,6 +94,10 @@ module.exports = (sequelize) => {
         field: 'delivery_status',
         comment: "M9-D229: QUEUED|SENT|DELIVERED|READ|FAILED, só por evidência (webhook ou consulta), nunca pelo HTTP 200 do envio",
       },
+      conversationId: { type: DataTypes.UUID, allowNull: true, field: 'conversation_id' },
+      mediaQuarantineId: { type: DataTypes.UUID, allowNull: true, field: 'media_quarantine_id' },
+      mediaState: { type: DataTypes.STRING(16), allowNull: true, field: 'media_state' },
+      failureReason: { type: DataTypes.STRING(240), allowNull: true, field: 'failure_reason' },
       actionKey: {
         type: DataTypes.STRING(64),
         allowNull: true,

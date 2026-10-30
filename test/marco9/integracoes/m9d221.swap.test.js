@@ -6,7 +6,7 @@ process.env.PORT = process.env.M9D221_SWAP_PORT || '21221';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const env = require('../_helpers/m9d229Env');
+const env = require('../_helpers/m9d230Env');
 const registry = require('../../../src/features/integrations/registry/registry.service');
 const { swapProvider } = require('../../../src/features/integrations/swap');
 
@@ -77,7 +77,8 @@ test('swap_no_meio_preserva_conversation_id', async () => {
   assert.equal(msgs.filter((m) => m.connection_id === antiga.conn.id).length, 10, 'o par antigo permanece como histórico');
   assert.ok(msgs.every((m) => m.person_id === p.id && m.external_message_id), 'ids internos intactos e todas aceitas');
   const conversas = await env.sql(tenant, "SELECT DISTINCT payload_snapshot->>'conversationId' AS c FROM integration.dispatches WHERE id IN (:ids)", { ids: msgs.map((m) => m.dispatch_id) });
-  assert.deepEqual(conversas.map((c) => c.c), [p.id], 'a conversa interna é a mesma antes e depois da troca');
+  const [conversa] = await env.sql(tenant, "SELECT id FROM crm.conversations WHERE person_id = :p AND channel = 'WHATSAPP'", { p: p.id });
+  assert.deepEqual(conversas.map((c) => c.c), [conversa.id], 'a conversa interna é a mesma antes e depois da troca');
   const [aud] = await env.sql(tenant, "SELECT count(*)::int AS n FROM audit.audit_log WHERE action = 'integration.provider.swap' AND entity_id = :id", { id: nova.conn.id });
   assert.equal(aud.n, 1, 'a troca fica na auditoria');
 });
@@ -125,12 +126,13 @@ test('swap_dominios_diferentes_recusado', async () => {
 test('swap_capability_ausente_degrada_declarado', async () => {
   const antiga = await env.conectar(tenant, 'messaging-sandbox');
   const p = await env.pessoa(tenant);
-  const comMidia = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: 'file:planta', caption: 'Planta', mediaClassification: 'PUBLIC' });
+  const planta = await env.arquivo(tenant);
+  const comMidia = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: planta.id, caption: 'Planta', auth: env.authDe(tenant) });
   assert.equal(comMidia.degraded, false);
   assert.equal(comMidia.operation, 'sendMedia');
   const nova = await env.criarCanal(tenant, { provider: 'messaging-alt-sandbox' });
   await trocar(antiga.conn.id, nova.conn.id);
-  const semMidia = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: 'file:planta', caption: 'Planta', mediaClassification: 'PUBLIC' });
+  const semMidia = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: planta.id, caption: 'Planta', auth: env.authDe(tenant) });
   assert.equal(semMidia.degraded, true, 'sem sendMedia o CRM envia texto com a referência');
   assert.equal(semMidia.operation, 'sendText');
   await env.rodarEnvios(tenant);

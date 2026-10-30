@@ -6,7 +6,7 @@ process.env.PORT = process.env.M9D229_FLUXO_PORT || '21291';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const env = require('../_helpers/m9d229Env');
+const env = require('../_helpers/m9d230Env');
 const { interactionsOf: interactionsOfBruto } = require('../../../src/features/ai/agents/nay_comercial/comercial.data');
 
 const interactionsOf = (linha) => interactionsOfBruto(linha, Date.now() + 1000);
@@ -149,7 +149,8 @@ test('messaging_telefone_invalido_e_capacidade_ausente_no_servico', async () => 
   assert.equal(depois.n, antes.n, 'telefone inválido não grava mensagem nem envio');
   // Fornecedor sem sendMedia: o domínio degrada de forma declarada para texto com a referência, nunca falha.
   await env.conectar(tenant, 'messaging-alt-sandbox');
-  const r = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: 'file:planta-001', caption: 'Planta do imóvel', mediaClassification: 'PUBLIC' });
+  const planta = await env.arquivo(tenant);
+  const r = await env.enviarMensagem(tenant, { kind: 'media', personId: p.id, to: p.phone, mediaRef: planta.id, caption: 'Planta do imóvel', auth: env.authDe(tenant) });
   assert.equal(r.degraded, true);
   assert.equal(r.operation, 'sendText');
   // Template no mesmo fornecedor é suportado; capability ausente de verdade (getStatus em connection sem a capability) é 422 do serviço de consulta.

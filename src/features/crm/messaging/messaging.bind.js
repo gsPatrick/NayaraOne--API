@@ -4,6 +4,7 @@ const { sequelize, Message } = require('../../../models');
 const { registerCallObserver } = require('../../integrations/dispatch/worker/worker.hooks');
 const { messagingStatus: { shouldApply, STATUS } } = require('../../integrations');
 const { updateMessageStatus } = require('../messages.service');
+const { PADRAO_ENTREGA } = require('./whatsapp.reasons');
 const { OPERATIONS } = require('./messaging.send');
 
 const SEND_OPERATIONS = Object.values(OPERATIONS);
@@ -19,7 +20,10 @@ async function bindSendResult({ dispatch, connection, response, transaction }) {
   if (!message || !externalId) return;
   await message.update({ externalMessageId: String(externalId).slice(0, 128), connectionId: connection.id }, { transaction });
   const proximo = response.status === STATUS.FAILED ? STATUS.FAILED : STATUS.SENT;
-  if (shouldApply(message.deliveryStatus, proximo)) await updateMessageStatus(message.id, proximo, null, transaction, { fromProvider: true });
+  if (shouldApply(message.deliveryStatus, proximo)) {
+    await updateMessageStatus(message.id, proximo, null, transaction, { fromProvider: true });
+    if (proximo === STATUS.FAILED) await Message.update({ failureReason: PADRAO_ENTREGA }, { where: { id: message.id }, transaction }); // 200 com status final "failed": FAILED com o motivo (M9-D230 3.4)
+  }
 }
 
 let installed = false;

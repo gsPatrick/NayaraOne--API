@@ -4,6 +4,7 @@ const { Message } = require('../../../models');
 const { registerDomainReaction } = require('../../integrations/domain');
 const { messagingStatus: { shouldApply, STATUS } } = require('../../integrations');
 const { updateMessageStatus } = require('../messages.service');
+const { reasonForDispatchFailure } = require('./whatsapp.reasons');
 
 const CONSUMER = 'crm.messaging.dispatch_failed';
 
@@ -19,6 +20,7 @@ async function onDispatchFailed(_ctx, event, transaction) {
   if (!message || !shouldApply(message.deliveryStatus, STATUS.FAILED)) return null;
   const antes = message.deliveryStatus;
   await updateMessageStatus(message.id, STATUS.FAILED, null, transaction, { fromProvider: true });
+  await Message.update({ failureReason: reasonForDispatchFailure(p) }, { where: { id: message.id }, transaction }); // M9-D230 3.4: o motivo em português
   return { entity: { type: 'Message', id: message.id }, before: { deliveryStatus: antes }, after: { deliveryStatus: STATUS.FAILED }, reason: `Envio ${p.dispatchId} falhou no fornecedor: a mensagem vai a FAILED.` };
 }
 

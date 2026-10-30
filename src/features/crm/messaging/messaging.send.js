@@ -9,6 +9,11 @@ const adapterRegistry = require('../../integrations/registry/adapterRegistry');
 const { createMessage } = require('../messages.service');
 const { readMessagingParams } = require('./messaging.params');
 const { assertE164 } = require('./messaging.phone');
+const { readWhatsappParams } = require('./whatsapp.params');
+const { assertConsent } = require('./whatsapp.consent');
+const { assertTemplate } = require('./whatsapp.templates');
+const { prepareOutboundMedia } = require('./whatsapp.media');
+const { ensureConversation, assertSessionWindow } = require('./whatsapp.conversation');
 
 const OPERATIONS = Object.freeze({ text: 'sendText', template: 'sendTemplate', media: 'sendMedia' });
 
@@ -31,11 +36,11 @@ function chooseOperation(connection, operation) {
   return { operation, degraded: false };
 }
 
-function buildPayload(input, operation, degraded, recipientName, conversationId) {
+function buildPayload(input, operation, degraded, recipientName, conversationId, media) {
   const base = { to: input.to, ...(recipientName ? { recipientName } : {}), ...(conversationId ? { conversationId } : {}) };
   if (operation === 'sendTemplate') return { ...base, templateName: input.templateName, ...(input.language ? { language: input.language } : {}), ...(input.templateVars ? { templateVars: input.templateVars } : {}) };
-  if (operation === 'sendMedia') return { ...base, mediaRef: input.mediaRef, mediaClassification: input.mediaClassification, ...(input.caption ? { caption: input.caption } : {}), ...(input.mimeType ? { mimeType: input.mimeType } : {}) };
-  const texto = degraded ? [input.caption, input.mediaRef].filter(Boolean).join('\n') : input.text;
+  if (operation === 'sendMedia') return { ...base, mediaRef: media.fileId, mediaClassification: media.classification, mimeType: media.mimeType, ...(input.caption ? { caption: input.caption } : {}) };
+  const texto = degraded ? [input.caption, `[arquivo: ${media.fileName}]`].filter(Boolean).join('\n') : input.text;
   return { ...base, text: texto };
 }
 
@@ -43,25 +48,33 @@ function buildPayload(input, operation, degraded, recipientName, conversationId)
  * sendMessage — o CRM pede "enviar mensagem a este contato" sem saber qual fornecedor há por baixo (M9-D229 3.2 item 1). Valida o telefone (E.164), resolve a connection da
  * família MESSAGING, grava a mensagem do CRM como `QUEUED` (opt-out e consentimento valem, como em toda mensagem) e enfileira o envio pelo Dispatch Service NA MESMA transação; quem
  * chama o fornecedor é o worker. A mensagem só avança para SENT quando o envio é aceito com o id do fornecedor e para DELIVERED/READ por webhook ou consulta de status.
- * `input`: kind (text|template|media), personId, opportunityId, to, text | templateName, language, templateVars | mediaRef, mimeType, caption, conversationId, purpose.
+ * `input`: kind (text|template|media), personId, opportunityId, to, text | templateName, language, templateVars | mediaRef (id do arquivo em files), caption, purpose.
+ * Regras do WhatsApp (M9-D230), todas antes de gravar ou enfileirar qualquer coisa: modelo aprovado e variáveis conferidas, consentimento do contato (403), janela de atendimento para texto e mídia (422)
+ * e mídia só de arquivo limpo, classificado, do tipo e do tamanho que o canal aceita. `opts.auth` é quem pede (acesso ao arquivo da mídia); sem ele vale a empresa sem permissões extras.
  */
-async function sendMessage(ctx, input, actorUserId, transaction) {
+async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const pedido = input || {};
   const operacaoPedida = checkInput(pedido);
   const params = await readMessagingParams(ctx, transaction);
+  const wa = await readWhatsappParams(ctx, transaction);
   const to = assertE164(pedido.to, params.countryCode);
   const connection = await resolveConnection({ companyId: ctx.companyId, domain: 'MESSAGING' }, transaction);
+  if (pedido.kind === 'template') assertTemplate(connection, pedido);
+  await assertConsent(pedido.personId || null, pedido.purpose, wa, transaction);
+  const conversa = pedido.personId ? await ensureConversation(ctx, pedido.personId, { connection, externalConversationId: to }, transaction) : null; // a conversa é da pessoa, não do fornecedor: sobrevive à troca de provider (M9-D221)
+  if (pedido.kind !== 'template') assertSessionWindow(conversa, wa);
+  const media = pedido.kind === 'media' ? await prepareOutboundMedia({ auth: (opts && opts.auth) || { ...ctx, userId: actorUserId || ctx.userId, permissions: [] }, fileId: pedido.mediaRef, params: wa, transaction }) : null;
   const { operation, degraded } = chooseOperation(connection, operacaoPedida);
   const pessoa = pedido.personId ? await Person.findByPk(pedido.personId, { transaction }) : null;
-  const conversationId = pedido.conversationId || pedido.personId || null; // a conversa é da pessoa, não do fornecedor: sobrevive à troca de provider (M9-D221)
-  const historico = pedido.kind === 'text' ? pedido.text : (pedido.kind === 'template' ? `[template ${pedido.templateName}]` : (pedido.caption || `[mídia ${pedido.mediaRef}]`));
+  const conversationId = conversa ? conversa.id : (pedido.conversationId || null);
+  const historico = pedido.kind === 'text' ? pedido.text : (pedido.kind === 'template' ? `[template ${pedido.templateName}]` : (pedido.caption || `[mídia ${media.fileName}]`));
   const message = await createMessage({
     groupId: ctx.groupId, companyId: ctx.companyId, personId: pedido.personId || null, opportunityId: pedido.opportunityId || null, channel: 'WHATSAPP', direction: 'OUTBOUND',
-    authorType: actorUserId ? 'EMPLOYEE' : 'NAY', authorUserId: actorUserId || null, body: historico, purpose: pedido.purpose || undefined, connectionId: connection.id, deliveryStatus: 'QUEUED',
+    authorType: actorUserId ? 'EMPLOYEE' : 'NAY', authorUserId: actorUserId || null, body: historico, purpose: pedido.purpose || undefined, connectionId: connection.id, deliveryStatus: 'QUEUED', conversationId,
   }, actorUserId, transaction);
   const { dispatch } = await dispatchService.enqueue({
     companyId: ctx.companyId, connectionId: connection.id, operation, aggregateType: 'Message', aggregateId: message.id,
-    payload: buildPayload({ ...pedido, to }, operation, degraded, pessoa ? (pessoa.preferredName || pessoa.legalName) : null, conversationId),
+    payload: buildPayload({ ...pedido, to }, operation, degraded, pessoa ? (pessoa.preferredName || pessoa.legalName) : null, conversationId, media),
     idempotencyKey: `crm-message:${message.id}`, userId: actorUserId || null, transaction,
   });
   await message.update({ dispatchId: dispatch.id }, { transaction });

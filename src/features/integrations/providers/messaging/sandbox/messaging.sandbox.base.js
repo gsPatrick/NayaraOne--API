@@ -5,6 +5,9 @@ const { classifyHttpError } = require('../../../registry/classifyHttpError');
 const { raiseFault, readWire, faultOf, erroHttp } = require('../../../registry/sandboxFaults');
 const store = require('./messaging.sandbox.store');
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const { signedMediaLink } = require('../messaging.mediaLink');
+
 /**
  * Base dos adapters de mensageria de laboratório (M9-D229 3.2 item 5): o mesmo comportamento de envio, entrega com atraso, idempotência e falhas injetadas
  * em dois vocabulários de fornecedor (`messaging-sandbox` e `messaging-alt-sandbox`). Quem herda declara só o que muda: código, prefixo dos ids, nomes dos campos
@@ -59,7 +62,12 @@ class MessagingSandboxBase extends MessagingAdapter {
 
   async sendTemplate(ctx, request, meta) { return this.send(ctx, request, meta, 'template', { templateName: request.templateName }); }
 
-  async sendMedia(ctx, request, meta) { return this.send(ctx, request, meta, 'media', { mediaRef: request.mediaRef }); }
+  /** A mídia vai por link assinado de curta duração, feito agora (M9-D230 3.3); o fornecedor recebe o link, nunca o arquivo. */
+  async sendMedia(ctx, request, meta) {
+    await raiseFault(ctx, request, 'write');
+    const mediaLink = UUID.test(String(request.mediaRef)) ? await signedMediaLink(meta, request.mediaRef) : null; // referência que não é arquivo do sistema segue sem link
+    return this.send(ctx, request, meta, 'media', { mediaRef: request.mediaRef, mediaLink });
+  }
 
   async getStatus(ctx, request) {
     const wire = this.wire();

@@ -9,6 +9,8 @@ const { reportDispatchError, publishFailed, MENSAGENS } = require('../retry/retr
  *  - { until, reason }: espera (conexão parada, cota, circuito, kill switch) e volta a RETRY_WAIT;
  *  - { unknown: true, reason } (M9-D215): operação perigosa que já tem id externo registrado NUNCA é enviada de novo; vai a UNKNOWN e a
  *    reconciliação consulta o fornecedor pelo id;
+ *  - { cancel: { code, message } } (M9-D230): o domínio deixou de poder enviar (o contato revogou o consentimento enquanto o envio esperava); o envio fecha em CANCELLED sem gastar
+ *    tentativa e sem nova tentativa (passa por RETRY_WAIT, que é o caminho da tabela de transições para CANCELLED);
  *  - { fail: { class, code, message } } (M9-D239): o conteúdo deixou de valer (aprovação invalidada, versão alterada); o envio fecha em
  *    FAILED com aviso ao domínio, sem nova tentativa.
  * Devolve o resultado que a rodada conta ({ deferred } ou { failed }).
@@ -18,6 +20,12 @@ async function applyVerdict(ctx, dispatch, verdict, transaction) {
     await applyTransition(ctx, dispatch, 'UNKNOWN', { lastErrorClass: 'UNKNOWN', lastErrorCode: String(verdict.reason).slice(0, 64) }, { refundAttempt: true, motivo: 'Operação perigosa com id externo registrado: consultar o fornecedor antes de qualquer repetição.' }, transaction);
     await reportDispatchError(ctx, dispatch, { errorClass: 'UNKNOWN', errorCode: String(verdict.reason).slice(0, 64), severity: 'CRITICAL', message: MENSAGENS.UNKNOWN }, transaction);
     return { deferred: verdict.reason };
+  }
+  if (verdict.cancel) {
+    const motivo = verdict.cancel.message || 'Envio cancelado antes da chamada.';
+    await deferDispatch(ctx, dispatch, new Date(), verdict.cancel.code, transaction);
+    await applyTransition(ctx, dispatch, 'CANCELLED', { nextAttemptAt: null }, { motivo }, transaction);
+    return { cancelled: verdict.cancel.code };
   }
   if (verdict.fail) {
     const f = verdict.fail;

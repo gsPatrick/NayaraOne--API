@@ -161,7 +161,7 @@ const createMessage = catchAsync(async (req, res) => {
 // M9-D229: envio de mensagem pelo fornecedor de mensageria (aceite 202; a entrega só avança por evidência do fornecedor) e consulta de status.
 const sendMessage = catchAsync(async (req, res) => {
   const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
-  const r = await req.withTenantTransaction((transaction) => messaging.sendMessage(ctx, req.body || {}, req.auth.userId, transaction));
+  const r = await req.withTenantTransaction((transaction) => messaging.sendMessage(ctx, req.body || {}, req.auth.userId, transaction, { auth: req.auth }));
   return success(res, { statusCode: 202, data: { messageId: r.message.id, dispatchId: r.dispatchId, status: r.status, operation: r.operation, degraded: r.degraded } });
 });
 

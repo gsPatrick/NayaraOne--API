@@ -871,3 +871,17 @@ test('M9-D247: files.quarantine tem RLS, FORCE RLS e política por empresa e GRA
     WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
   if (grants.length) assert.deepEqual([grants[0].upd, grants[0].ins], [true, true], 'GRANT ao role de runtime');
 });
+
+// M9-D230: a conversa, o canal e o par externo de atendimento (identificadores internos estáveis na troca de fornecedor) são da EMPRESA (tenant_isolation), com RLS + FORCE e GRANT ao runtime.
+test('M9-D230: crm.channels, crm.conversations e crm.conversation_links têm RLS, FORCE RLS e política por empresa e GRANT ao runtime', async () => {
+  for (const tabela of ['channels', 'conversations', 'conversation_links']) {
+    const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+        (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation' AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app.company_id%') AS tenant_policies
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'crm' AND c.relname = :t`, { replacements: { t: tabela } });
+    assert.equal(rows.length, 1, `a tabela crm.${tabela} existe`);
+    assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].tenant_policies], [true, true, 1], `RLS, FORCE e política por empresa em crm.${tabela}`);
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'crm.${tabela}', 'UPDATE') AS upd, has_table_privilege('nayara_runtime', 'crm.${tabela}', 'INSERT') AS ins
+      WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.deepEqual([grants[0].upd, grants[0].ins], [true, true], `GRANT ao role de runtime em crm.${tabela}`);
+  }
+});

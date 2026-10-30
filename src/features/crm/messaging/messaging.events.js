@@ -1,6 +1,6 @@
 'use strict';
 
-const { Message } = require('../../../models');
+const { Message, IntegrationConnection } = require('../../../models');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { registerDomainHandler } = require('../../integrations/webhooks/worker/worker.handlers');
 const { messagingStatus: { shouldApply }, MESSAGING_EVENT_KINDS: KINDS } = require('../../integrations');
@@ -8,6 +8,11 @@ const { createMessage, updateMessageStatus } = require('../messages.service');
 const { resolveSender } = require('./messaging.sender');
 const { assertE164 } = require('./messaging.phone');
 const { readMessagingParams } = require('./messaging.params');
+const { readWhatsappParams } = require('./whatsapp.params');
+const { ensureConversation, markInbound } = require('./whatsapp.conversation');
+const { applyKeywordOptOut } = require('./whatsapp.optout');
+const { receiveInboundMedia } = require('./whatsapp.inboundMedia');
+const { PADRAO_ENTREGA } = require('./whatsapp.reasons');
 
 const audit = (ctx, action, message, reason, extra, transaction) => registrarAuditoria({
   groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: null, action, entityType: 'Message', entityId: message.id, afterJson: extra || null, reason,
@@ -28,6 +33,7 @@ async function onStatus(ctx, row, ev, transaction) {
   if (!shouldApply(message.deliveryStatus, ev.internalStatus)) return { applied: false };
   const antes = message.deliveryStatus;
   await updateMessageStatus(message.id, ev.internalStatus, null, transaction, { fromProvider: true });
+  if (ev.internalStatus === 'FAILED') await Message.update({ failureReason: PADRAO_ENTREGA }, { where: { id: message.id }, transaction }); // M9-D230 3.4: falha sempre com o motivo em português
   await audit(ctx, 'crm.message.delivery_status', message, `Status de entrega ${antes} -> ${ev.internalStatus} por evidência do fornecedor.`, { antes, depois: ev.internalStatus }, transaction);
   return { applied: true };
 }
@@ -46,11 +52,19 @@ async function onInbound(ctx, row, ev, transaction) {
   }
   const from = assertE164(priv.from, params.countryCode);
   const quem = await resolveSender(ctx, { from, name: priv.name }, transaction);
+  const connection = await IntegrationConnection.findByPk(row.connectionId, { transaction });
+  const conversa = await ensureConversation(ctx, quem.personId, { connection, externalConversationId: from }, transaction);
+  await markInbound(conversa, new Date(), transaction); // o cliente escreveu: a janela de atendimento reabre
+  // Mídia recebida (M9-D230 3.3): buscada só pelo guarda SSRF e guardada em quarentena; sem como baixar com segurança, a interação mostra "mídia bloqueada".
+  const midia = priv.mediaRef ? await receiveInboundMedia(ctx, { url: priv.mediaRef, connection }, transaction) : null;
   const message = await createMessage({
     groupId: ctx.groupId, companyId: ctx.companyId, personId: quem.personId, opportunityId: quem.opportunityId, channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT',
-    body: priv.text || (priv.mediaRef ? `[mídia ${priv.mediaRef}]` : null), externalMessageId: ev.data.externalMessageId, connectionId: row.connectionId,
+    body: priv.text || (priv.mediaRef ? '[mídia recebida]' : null), externalMessageId: ev.data.externalMessageId, connectionId: row.connectionId, conversationId: conversa.id,
+    mediaQuarantineId: midia && midia.quarantineId ? midia.quarantineId : null,
   }, null, transaction);
-  await audit(ctx, 'crm.message.inbound', message, `Mensagem recebida registrada${quem.provisional ? ' (lead provisório criado)' : ''}.`, { provisional: quem.provisional }, transaction);
+  if (midia && !midia.quarantineId) await Message.update({ mediaState: 'BLOCKED' }, { where: { id: message.id }, transaction });
+  await audit(ctx, 'crm.message.inbound', message, `Mensagem recebida registrada${quem.provisional ? ' (lead provisório criado)' : ''}.`, { provisional: quem.provisional, media: midia ? (midia.quarantineId ? 'QUARANTINED' : midia.code) : null }, transaction);
+  await applyKeywordOptOut(ctx, { personId: quem.personId, text: priv.text, message, params: await readWhatsappParams(ctx, transaction) }, transaction);
   return { applied: true };
 }
 
