@@ -6,6 +6,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const references = require('./merge.references');
 const { resolveConflicts } = require('./merge.conflicts');
+const externalRefs = require('../../migration-v2/externalRefs.service');
 
 /**
  * Papéis que o absorvido tem e o sobrevivente já tem (a chave de person_roles é pessoa + papel + empresa, então o serviço de união não consegue
@@ -34,6 +35,9 @@ async function applyMerge(entityType, survivor, other, input, ctx) {
     ? await mergeProperties(survivor.id, other.id, ctx.actorUserId, ctx.transaction)
     : await mergePersons(survivor.id, other.id, ctx.actorUserId, ctx.transaction);
   const moved = await references.remapLeftovers(entityType, survivor.id, other.id, ctx.transaction);
+  // M9-D906: os códigos do sistema antigo do absorvido passam ao sobrevivente (fecha a vigência e abre outra; o histórico fica).
+  const legacyRefs = await externalRefs.repoint(ctx.tenant, { userId: ctx.actorUserId }, { fromEntityId: other.id, toEntityId: survivor.id }, ctx.transaction);
+  if (legacyRefs.length) moved['core.external_refs'] = legacyRefs.length;
   return { choices: resolution.choices, moved, remappedByModule: done.remappedReferences || {} };
 }
 

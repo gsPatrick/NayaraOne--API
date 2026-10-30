@@ -999,3 +999,14 @@ test('M9-D871: flag_alert_log tem RLS, FORCE RLS, política tenant_isolation e G
   const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'governance.flag_alert_log', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
   if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao runtime em governance.flag_alert_log');
 });
+
+// M9-D906: core.external_refs (IDs do sistema antigo com validade) tem RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime (o DELETE é barrado pelo gatilho; ver m9d906).
+test('M9-D906: external_refs tem RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const [rows] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'core' AND c.relname = 'external_refs'`);
+  assert.equal(rows.length, 1, 'a tabela existe');
+  assert.deepEqual([rows[0].relrowsecurity, rows[0].relforcerowsecurity, rows[0].policies], [true, true, 1]);
+  const [grants] = await sequelize.query("SELECT has_table_privilege('nayara_runtime', 'core.external_refs', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')");
+  if (grants.length) assert.equal(grants[0].ins, true, 'GRANT ao runtime em core.external_refs');
+});
