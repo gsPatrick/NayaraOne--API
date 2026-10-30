@@ -47,6 +47,8 @@ module.exports = {
             { name: 'sizeBytes', classification: 'INTERNAL' },
             { name: 'sha256', classification: 'INTERNAL' },
           ],
+        },
+      ],
     }),
   },
 };
