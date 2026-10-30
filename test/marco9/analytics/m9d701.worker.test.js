@@ -33,7 +33,8 @@ test('m9d701 export auditado (pedido, geração, download)', async () => {
   assert.equal(job.status, 'READY');
   assert.match(job.file_sha256, /^[0-9a-f]{64}$/);
   assert.equal(job.row_count, 4);
-  assert.ok(new Date(job.expires_at).getTime() > Date.now() + 23 * 3600000, 'validade padrão de 24 h');
+  const expiresIn = new Date(job.expires_at).getTime() - new Date(e.NOW).getTime(); // relógio fixo do teste (e.NOW), nunca o relógio da máquina
+  assert.equal(expiresIn, 24 * 3600000, 'validade padrão de 24 h contada do instante do pedido');
   const { link } = await download(id);
   assert.equal(link.fileSha256, job.file_sha256);
   assert.equal((await e.jobRow(env, id)).download_count, 1);

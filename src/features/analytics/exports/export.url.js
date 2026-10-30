@@ -2,19 +2,18 @@
 
 /**
  * M9-D701 (3.4) — endereço assinado de uso curto: `exp` (instante em segundos) e `sig` = HMAC-SHA256 de `jobId|usuário|exp`. A chave é derivada do segredo
- * de acesso (sem variável nova; sem segredo, aleatória do processo). O endereço só vale para o usuário que pediu a exportação e até `exp`
+ * de acesso (sem variável nova). Sem `JWT_ACCESS_SECRET` o endereço NÃO é assinado nem verificado: falha explícita (500 INTERNAL_ERROR, como o resto
+ * da API que exige o segredo), nunca uma chave aleatória do processo, que faria o link de uma instância não valer em outra. O endereço só vale para o usuário que pediu a exportação e até `exp`
  * (`analytics.export.url_minutos`, sem passar da validade do arquivo).
  */
 const crypto = require('node:crypto');
+const AppError = require('../../../utils/AppError');
 const { invalidLink } = require('./export.errors');
-
-let fallbackKey = null;
 
 function urlKey() {
   const secret = process.env.JWT_ACCESS_SECRET;
-  if (secret) return crypto.createHmac('sha256', secret).update('analytics.export.url').digest();
-  fallbackKey = fallbackKey || crypto.randomBytes(32);
-  return fallbackKey;
+  if (!secret) throw AppError.internal('Variável de ambiente obrigatória ausente: JWT_ACCESS_SECRET.', 'INTERNAL_ERROR');
+  return crypto.createHmac('sha256', secret).update('analytics.export.url').digest();
 }
 
 const signature = (jobId, userId, exp) => crypto.createHmac('sha256', urlKey()).update(`${jobId}|${userId}|${exp}`).digest('hex');
