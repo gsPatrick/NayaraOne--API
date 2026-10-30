@@ -26,6 +26,11 @@ module.exports = [
     sourceFiles: ['features/correspondent/adapters/NfseAdapter.js'],
   },
   {
+    code: 'governance.bcp_form_pdf', label: 'Formulário contingencial em PDF (BCP)', mode: 'WORKFLOW_DOCUMENT', onDemand: false,
+    reason: 'Folha em branco ou numerada para preenchimento no papel durante a contingência (M9-D811); não traz dado do cliente e é entregue pelo fluxo do BCP, não por POST /exports.',
+    sourceFiles: ['features/core-governance/bcp/formPrint.render.js'],
+  },
+  {
     code: 'analytics.bi_csv', label: 'Exportação do BI (CSV)', mode: 'DELEGATED', onDemand: false,
     reason: 'POST /analytics/exports (M9-D701): permissão do BI e do domínio, MFA no alto risco, validade do arquivo, endereço assinado e auditoria.',
     sourceFiles: ['features/analytics/exports/export.generate.js', 'features/analytics/exports/export.download.js'],
