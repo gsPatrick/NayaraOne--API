@@ -90,7 +90,8 @@ test('campo_minimo_ausente_devolve_422_MKT_CONTENT_REQUIRED_FIELD_em_cada_tipo',
     await reject(create(t, { type: 'NAYARA_CONSTRUCTION', sourceEntityType: 'construction', sourceEntityId: obraSemFoto }), 422, REQUIRED);
     await reject(create(t, { type: 'INSTITUTIONAL', title: 'Só título' }), 422, REQUIRED);
     await reject(create(t, { type: 'INSTITUTIONAL', texto: 'Só texto' }), 422, REQUIRED);
-    await reject(create(t, { type: 'EDUCATIONAL_BLOG', tema: 'Sem fontes', texto: 'x' }), 422, REQUIRED);
+    await reject(create(t, { type: 'EDUCATIONAL_BLOG', tema: 'Sem fontes', texto: 'x' }), 422, 'MKT_BLOG_SOURCES_REQUIRED'); // M9-D427: blog sem fonte tem o código próprio
+    await reject(create(t, { type: 'EDUCATIONAL_BLOG', texto: 'x', fontes: ['https://www.ibge.gov.br/x | 2026-10-12'] }), 422, REQUIRED); // sem tema continua sendo campo obrigatório
     await reject(create(t, { type: 'VIDEO_REEL', title: 'Sem mídia', texto: 'roteiro' }), 422, REQUIRED);
     await reject(create(t, { type: 'SEGMENTED_CAMPAIGN', title: 'Sem público', channels: ['EMAIL'], templateCode: 'X' }), 422, REQUIRED);
     await reject(create(t, { type: 'BIRTHDAY_RELATIONSHIP', title: 'Sem pessoa' }), 422, REQUIRED);

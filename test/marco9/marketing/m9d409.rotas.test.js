@@ -115,7 +115,7 @@ test('os_tipos_por_http_tipo_invalido_campo_minimo_canal_e_isolamento', { skip: 
   // Campo mínimo ausente: 422 MKT_CONTENT_REQUIRED_FIELD (institucional sem corpo; blog sem fontes; imóvel sem fonte)
   for (const body of [
     { type: 'INSTITUTIONAL', title: 'QA-M9 D409 sem corpo' },
-    { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D409 blog', tema: 'Financiamento' },
+    { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D409 blog sem tema', fontes: ['https://www.ibge.gov.br/x | 2026-10-12'] },
     { type: 'NEW_PROPERTY', title: 'QA-M9 D409 sem fonte' },
   ]) {
     const res = await call('redator', 'POST', '/marketing/content', body);
@@ -123,6 +123,11 @@ test('os_tipos_por_http_tipo_invalido_campo_minimo_canal_e_isolamento', { skip: 
     assert.equal(res.body.error.code, 'MKT_CONTENT_REQUIRED_FIELD');
     assert.equal(res.body.error.message, 'Faltam campos obrigatórios para este tipo de conteúdo.');
   }
+  // M9-D427: blog sem fontes tem o código próprio do livro
+  const semFontes = await call('redator', 'POST', '/marketing/content', { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D409 blog', tema: 'Financiamento' });
+  assert.equal(semFontes.status, 422, JSON.stringify(semFontes.body));
+  assert.equal(semFontes.body.error.code, 'MKT_BLOG_SOURCES_REQUIRED');
+  assert.equal(semFontes.body.error.message, 'O artigo precisa citar fontes permitidas.');
 
   // Canal não permitido para o tipo na criação (aniversário em rede social): 422 MKT_CONTENT_CHANNEL_NOT_ALLOWED
   const channel = await call('redator', 'POST', '/marketing/content', { type: 'SEGMENTED_CAMPAIGN', title: 'QA-M9 D409 campanha', campaignId: '00000000-0000-4000-8000-000000000001', channels: ['INSTAGRAM'], templateCode: 'X' });

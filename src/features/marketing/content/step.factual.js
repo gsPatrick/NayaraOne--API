@@ -3,20 +3,34 @@
 const { validateAgainstFacts } = require('./pipeline.factualPort');
 const { readFactualConfig } = require('./factual/settings');
 const { companyDateParts } = require('./pipeline.time');
+const { checkBlog, readBlogConfig } = require('./blog');
+
+/** Blog educativo (M9-D427): fontes, parágrafos factuais com referência e qualidade mínima, sobre o texto e as fontes da versão corrente. */
+async function blogFindings({ item, version, tenant, transaction }) {
+  if (!item || item.type !== 'EDUCATIONAL_BLOG') return { findings: [], sources: undefined };
+  const body = version.body_json || {};
+  const result = checkBlog({ texto: body.texto, fontes: body.fontes, nayGenerated: Boolean(version.model_name || version.nay_run_id) }, await readBlogConfig(tenant, transaction));
+  return { findings: result.findings, sources: result.sources };
+}
 
 /**
  * M9-D406 função 3 / M9-D407 — validação factual do texto da versão corrente contra os fatos gravados na própria versão. A
  * tolerância de área, o dicionário de características e os telefones da empresa vêm dos parâmetros da empresa; a data do conteúdo é
  * o dia de hoje no fuso da empresa. Ok leva a FACT_CHECKED; qualquer finding, a FACT_CHECK_FAILED com os findings gravados.
+ * M9-D427: o blog educativo soma os checks de fonte e de qualidade (findings com `code` MKT_BLOG_*).
  */
-async function factualStep({ version, tenant, transaction, now }) {
+async function factualStep({ item, version, tenant, transaction, now }) {
   const text = version.body_json && typeof version.body_json.texto === 'string' ? version.body_json.texto : '';
   const config = await readFactualConfig(tenant, transaction);
   const options = { ...config, contentDate: await companyDateParts(now || new Date(), tenant, transaction) };
   const result = validateAgainstFacts(text, version.facts_snapshot_json || {}, options);
-  const findings = Array.isArray(result.findings) ? result.findings : [];
-  const ok = Boolean(result.ok) && findings.length === 0;
-  return { ok, to: ok ? 'FACT_CHECKED' : 'FACT_CHECK_FAILED', detalhes: { findings } };
+  const blog = await blogFindings({ item, version, tenant, transaction });
+  const own = Array.isArray(result.findings) ? result.findings : [];
+  // Blog não tem imóvel como fonte: as comparações com o cadastro (preço, área, número solto) não se aplicam; a afirmação factual é controlada pela
+  // regra das fontes (parágrafo com número precisa de referência [n]). A suspeita de injeção continua valendo (DI-D427-6).
+  const findings = [...(blog.sources ? own.filter((f) => f.reason === 'INJECTION') : own), ...blog.findings];
+  const ok = findings.length === 0 && (blog.sources ? true : Boolean(result.ok));
+  return { ok, to: ok ? 'FACT_CHECKED' : 'FACT_CHECK_FAILED', detalhes: { findings, ...(blog.sources ? { fontes: blog.sources } : {}) } };
 }
 
 module.exports = { factualStep };

@@ -39,7 +39,9 @@ async function reviseDraft({ tenant, actor, item, version, input }, transaction)
   const facts = source ? source.facts : (version.facts_snapshot_json || {});
   const drafted = await draftText({ input, facts, type: item.type, transaction });
   if (drafted.nayError && input.texto === undefined && !item.source_entity_type) throw drafted.nayError;
-  const body = { texto: drafted.text, ...(drafted.nayError ? { erro: 'MKT_NAY_UNAVAILABLE' } : {}) };
+  // tema, fontes e mídia viajam de uma versão à outra (M9-D427: sem isto a revisão do blog perderia as fontes); a requisição pode trocá-los.
+  const carried = ['tema', 'fontes', 'midiaId'].reduce((acc, field) => ({ ...acc, ...(input[field] !== undefined ? { [field]: input[field] } : (version.body_json && version.body_json[field] !== undefined ? { [field]: version.body_json[field] } : {})) }), {});
+  const body = { texto: drafted.text, ...carried, ...(drafted.nayError ? { erro: 'MKT_NAY_UNAVAILABLE' } : {}) };
   const generation = drafted.generation ? normalizeGeneration(drafted.generation) : { modelName: null, nayRunId: null };
   const contentHash = sha256(canonicalJson({ body, facts }));
   if (item.status === 'DRAFT' && contentHash === version.content_hash) return { version, created: false, nayError: drafted.nayError };

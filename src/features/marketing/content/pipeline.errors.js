@@ -1,6 +1,7 @@
 'use strict';
 
 const { mktError } = require('../marketing.errors');
+const { blogSourcesRequired, blogQualityFailed } = require('./blog/blog.errors');
 
 /** Erros do pipeline de conteúdo (M9-D406). Mensagens em português; o detalhe técnico fica em details. */
 const nayUnavailable = (details) =>
@@ -19,6 +20,9 @@ const variableMissing = (names) => mktError(422, 'MKT_TEMPLATE_UNKNOWN_VARIABLE'
 function factCheckFailed(findings, details) {
   const reasons = new Set(findings.map((f) => f.reason));
   const body = { ...details, findings };
+  // M9-D427: blog educativo sem fonte (ou parágrafo factual sem referência) e blog abaixo da qualidade mínima têm código próprio.
+  if (findings.some((f) => f.code === 'MKT_BLOG_SOURCES_REQUIRED')) return blogSourcesRequired(body);
+  if (findings.some((f) => f.code === 'MKT_BLOG_QUALITY_FAILED')) return blogQualityFailed(body);
   if (reasons.has('INJECTION')) return mktError(422, 'MKT_INJECTION_SUSPECT', 'Há instrução suspeita no texto de origem; revisão humana necessária.', body);
   if (reasons.has('MISMATCH') || reasons.has('UNEXPLAINED') || !reasons.has('MISSING')) {
     return mktError(422, 'MKT_FACT_MISMATCH', 'O texto afirma algo diferente do cadastro do imóvel.', body);

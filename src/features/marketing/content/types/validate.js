@@ -7,6 +7,7 @@ const { readMinPhotos } = require('./types.settings');
 const { readPropertyStatus } = require('./queries');
 const { hasPostSaleConsent } = require('./consent');
 const { contentInvalid } = require('../pipeline.errors');
+const { blogSourcesRequired } = require('../blog/blog.errors');
 
 /** Definição do tipo; tipo inexistente: 400 MKT_CONTENT_TYPE_INVALID. */
 function getDefinition(type) {
@@ -61,6 +62,8 @@ async function assertCreatable(def, input, facts, { tenant, transaction, decimal
   const minPhotos = await readMinPhotos(tenant, transaction);
   const missing = missingFields(def, input, facts, minPhotos);
   if (expected && input.sourceEntityType !== expected) missing.input.unshift('sourceEntityType');
+  // M9-D427: blog sem nenhuma fonte tem o código próprio do livro (o único campo que falta é `fontes`).
+  if (def.type === 'EDUCATIONAL_BLOG' && missing.input.length === 1 && missing.input[0] === 'fontes' && missing.facts.length === 0) throw blogSourcesRequired({ reason: 'NO_SOURCES' });
   if (missing.input.length > 0 || missing.facts.length > 0) throw requiredField({ type: def.type, missing, minPhotos: missing.facts.includes('fotosAutorizadas') ? minPhotos : undefined });
   await assertSourceEligible(def, input, facts, { tenant, transaction, decimals });
   if (input.channels !== undefined) assertChannelsAllowed(def, input.channels);

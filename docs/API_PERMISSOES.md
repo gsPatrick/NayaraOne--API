@@ -600,6 +600,23 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/procurement/purchase-orders/:id/goods-receipts` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/purchase-orders/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/purchase-orders` | `procurement:read` | não |
+| `GET` | `/api/v1/marketing/attribution` | `marketing:attribution:read` | não |
+| `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
+| `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
+| `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
+| `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
+| `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
+| `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |
+| `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
+| `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
+| `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
+| `GET` | `/api/v1/marketing/publications` | `marketing:content:read` | não |
+| `GET` | `/api/v1/marketing/seo/sitemap` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/templates/:id/publish` | `marketing:template:manage` | não |
+| `GET` | `/api/v1/marketing/templates` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/templates` | `marketing:template:manage` | não |
+| `POST` | `/api/v1/marketing/tracking-links` | `marketing:campaign:manage` | não |
 | `POST` | `/api/v1/procurement/purchase-requests/:id/decide` | `procurement:approve` | não |
 | `POST` | `/api/v1/procurement/purchase-requests/:id/quotations` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/purchase-requests/:id` | `procurement:read` | não |
@@ -745,3 +762,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `POST` | `/api/v1/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
 | `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/t/:shortCode` | só login | não |
+| `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
+| `GET` | `/api/t/:shortCode` | só login | não |
+| `GET` | `/api/v1/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |

@@ -113,7 +113,7 @@ test('rotas_de_conteudo_percorrem_o_pipeline_recusam_pulo_e_isolam_empresas', { 
   assert.equal(unknown.body.error.code, 'MKT_VALIDATION');
 
   // NAY indisponível: 503, e o conteúdo FICA em DRAFT para a redação manual (o id volta nos detalhes).
-  const nayDown = await call('redator', 'POST', '/marketing/content', { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D406 sem NAY', tema: 'Financiamento', fontes: ['https://exemplo.test/fonte'] });
+  const nayDown = await call('redator', 'POST', '/marketing/content', { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 D406 sem NAY', tema: 'Financiamento', fontes: ['https://www.ibge.gov.br/fonte | 2026-10-12'] });
   assert.equal(nayDown.status, 503, JSON.stringify(nayDown.body));
   assert.equal(nayDown.body.error.code, 'MKT_NAY_UNAVAILABLE');
   const draftId = nayDown.body.error.details.contentItemId;
@@ -122,7 +122,7 @@ test('rotas_de_conteudo_percorrem_o_pipeline_recusam_pulo_e_isolam_empresas', { 
   assert.equal(early.status, 409);
   assert.equal(early.body.error.code, 'MKT_CONTENT_INVALID_TRANSITION');
   // Redação manual do mesmo item segue o pipeline (200 = retomada)
-  const resumed = await call('redator', 'POST', '/marketing/content', { contentItemId: draftId, texto: 'Texto escrito à mão.' });
+  const resumed = await call('redator', 'POST', '/marketing/content', { contentItemId: draftId, texto: Array.from({ length: 450 }, () => 'texto').join(' ') }); // M9-D427: o blog precisa do mínimo de palavras e de fonte permitida
   assert.equal(resumed.status, 200);
   assert.equal(resumed.body.data.status, 'PENDING_APPROVAL');
 

@@ -64,6 +64,7 @@ if (require.main === module) {
       if (/\/api-external\/oauth\/token$/.test(r.path)) return 'público (troca client id e segredo por token de cliente)';
       if (/\/webhooks\//.test(r.path)) return 'público; autenticidade pela assinatura do provider';
       if (/\/carts\/public\//.test(r.path)) return 'público; acesso pelo token do link';
+      if (/\/public\/properties\//.test(r.path)) return 'público; página do imóvel no site (M9-D427), só dado publicável';
       if (/\/(health|ping|version)(\/|$)/.test(r.path)) return 'público (saúde do serviço)';
       if (/\/auth\/(login|refresh)$/.test(r.path)) return 'público (obtém ou renova o token)';
       if (/\/users\/me\/mfa\//.test(r.path)) return 'só login (o próprio usuário)';
