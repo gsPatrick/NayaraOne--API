@@ -22,6 +22,7 @@ const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob')
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
 const { startFinopsDegradationJob } = require('./src/engines/jobs/finopsDegradationJob');
 const { startFeatureFlagExpiryJob } = require('./src/engines/jobs/featureFlagExpiryJob');
+const { startKillSwitchDrillJob } = require('./src/engines/jobs/killSwitchDrillJob');
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
@@ -260,6 +261,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_DEGRADATION_JOB_DISABL
 // Expiração das flags temporárias (M9-D871): uma vez por dia (06:30 de Brasília por padrão) passa a EXPIRED a flag temporária vencida e avisa o responsável.
 if (process.env.NODE_ENV !== 'test' && process.env.FEATURE_FLAG_EXPIRY_JOB_DISABLED !== 'true') {
   startFeatureFlagExpiryJob();
+}
+
+// Teste periódico do kill switch (M9-D872): uma vez por dia (05:00 de Brasília por padrão) restaura teste interrompido, testa em HOMOLOG/DEV os switches vencidos ou não verificados e alerta o responsável; nunca testa em PROD.
+if (process.env.NODE_ENV !== 'test' && process.env.KILL_SWITCH_DRILL_JOB_DISABLED !== 'true') {
+  startKillSwitchDrillJob();
 }
 
 // Exportações do DLP (M9-D822): a geração recolhe os pedidos aprovados que ficaram sem arquivo e a expiração apaga os arquivos vencidos (a cada 15 minutos por padrão).

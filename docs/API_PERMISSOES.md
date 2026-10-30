@@ -224,6 +224,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/exports/:id` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/catalog` | `governance:dlp:export` | não |
 | `POST` | `/api/v1/exports` | `governance:dlp:export` | não |
+| `POST` | `/api/v1/feature-flags/impact` | `governance:flags:manage` | não |
 | `GET` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
 | `PATCH` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
 | `POST` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
@@ -758,7 +759,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:api:manage` | HIGH | `POST /api/v1/api-governance/clients/:id/revoke`, `POST /api/v1/api-governance/clients`, `POST /api/v1/api-governance/deprecations/:id/cancel`, `POST /api/v1/api-governance/deprecations` |
 | `governance:finops:read` | LOW | `GET /api/v1/finops/health` |
 | `governance:finops:manage` | HIGH | nenhuma ainda |
-| `governance:flags:manage` | CRITICAL | `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags` |
+| `governance:flags:manage` | CRITICAL | `POST /api/v1/feature-flags/impact`, `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags` |
 | `governance:migration:run` | CRITICAL | nenhuma ainda |
 | `governance:migration:admin` | CRITICAL | nenhuma ainda |
 | `governance:classification:manage` | HIGH | nenhuma ainda |

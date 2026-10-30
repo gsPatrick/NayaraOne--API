@@ -1,7 +1,7 @@
 # Governança — Feature flags e configuração (`feature-flags`)
 
 ## Objetivo
-Feature flags e configuração com dono, escopo, risco, versão, validade e auditoria; flag vencida alerta; kill switch testado. Este módulo nasce no alicerce M9-D800; o registro (M9-D870) está aqui, a expiração e o relatório de CI estão em M9-D871 e o kill switch entra em M9-D872, e cada demanda dona atualiza este README no mesmo commit.
+Feature flags e configuração com dono, escopo, risco, versão, validade e auditoria; flag vencida alerta; kill switch testado. Este módulo nasce no alicerce M9-D800; o registro (M9-D870) está aqui, a expiração e o relatório de CI estão em M9-D871 e o kill switch está em M9-D872, e cada demanda dona atualiza este README no mesmo commit.
 
 ## Tabelas
 - `governance.feature_flags` (kind `FLAG`, valor booleano) e `governance.config_entries` (kind `CONFIG`, valor tipado): mesmas colunas. `key` (`dominio.recurso.nome`, minúsculas), `value`, `value_type` (BOOLEAN, INTEGER, DECIMAL, STRING, ENUM com `allowed_values`, JSON), `owner_user_id` (obrigatório), `scope` + `scope_ref` (GLOBAL, ENVIRONMENT, GROUP, COMPANY, SECTOR, USER), `risk` (LOW a CRITICAL), `version` (1, +1 a cada alteração), `valid_from`/`valid_until`, `temporary`, `is_kill_switch`, `state` (ACTIVE ou EXPIRED), `source` (REGISTRY ou TENANT_SETTING). Única por empresa, chave, escopo e referência; a chave também não se repete entre flag e configuração.
@@ -27,17 +27,24 @@ Os cinco passos viram flags `finops.degradation.<passo>` (escopo COMPANY, risco 
 ## Eventos
 - Auditoria `governance.flag.changed` (`registrarAuditoria`, antes e depois, motivo) em toda criação e alteração. Sem evento de domínio.
 
-## Validade, expiração e relatório de CI (M9-D871)
+## Jobs e horários
+`featureFlagExpiryJob` (06:30, M9-D871). `killSwitchDrillJob` (05:00, M9-D872).
+
+### Validade, expiração e relatório de CI (M9-D871)
 - Flag ou configuração com `temporary = true` exige `validUntil` (422 `GOV_FLAG_EXPIRY_REQUIRED`, "Flag temporária precisa de data de expiração."), na criação e no PATCH (virar temporária ou tirar o fim de uma temporária).
 - `featureFlagExpiryJob` (`src/engines/jobs/featureFlagExpiryJob.js`, serviço `expiry.service.js`): às 06:30 de Brasília (parâmetros `governanca.flags.expiracao_hora` e `governanca.flags.expiracao_minuto`), uma vez por dia e por empresa, a temporária `ACTIVE` com `validUntil` vencido passa a `EXPIRED` (guarda a versão anterior, sobe a versão, audita antes e depois) e perde o efeito pela regra de validade do `flags.resolve`. O responsável (ou, se inativo, os administradores) recebe notificação interna com título "CRÍTICO: ...", uma por flag e por dia (`governance.flag_alert_log`, UNIQUE por empresa e chave `flag.expired:<id>:<dia>`); com `governanca.flags.expiracao_lembrete_diario` ligado, a flag que continua vencida no registro avisa de novo a cada dia. Prorrogar a validade (PATCH) reativa e encerra os avisos. Desligar no processo: `FEATURE_FLAG_EXPIRY_JOB_DISABLED=true`.
 - CI: `npm run sync:flags` (`scripts/syncFlagsRegistry.js`) exporta para `docs/governance/flags.json` as flags declaradas nos seeds `seeds/*.seed.js` (`{ domain, flags: [{ key, owner, risk, temporary, validUntil, description }] }`; `--check` confere o arquivo); `npm run check:flags` (`scripts/checkFeatureFlags.js`) lê o arquivo, imprime o relatório JSON (também em `--out`, artefato da esteira) e sai 1 com `GOV_FLAG_EXPIRED Flag vencida: <chave> (<data>).`. O CI não lê o banco: só enxerga o que está versionado nos seeds; as flags criadas em tempo de execução são cobertas pelo job das 06:30 e pela notificação ao responsável.
 
-## Jobs e horários
-`featureFlagExpiryJob` (06:30, M9-D871). Kill switch: M9-D872.
+### Kill switch crítico testado periodicamente (M9-D872)
+- Kill switch = flag (`kind FLAG`) com `isKillSwitch = true`, risco CRITICAL, `probe` obrigatório (nome de um probe registrado no código com `kill-switch/probes/registry.js`; 422 `GOV_KILL_PROBE_REQUIRED` sem ele) e `verification_state` (`PENDING` nunca testado, `VERIFIED`, `UNVERIFIED` depois de um FAIL). Valor `true` = acionado = função desligada. Cada demanda dona de um switch o cria com o seu probe; esta não define a lista.
+- Acionar e restaurar: `PATCH /feature-flags` (`id` ou `key`, `value`, `reason`, `confirmation`). Acionar: permissão `governance:flags:manage`, motivo, confirmação nível 2 e auditoria, SEM MFA. Restaurar: MFA recente (403 `MFA_STEP_UP_REQUIRED`), motivo, confirmação nível 3 (digitar a chave, justificativa e `impactToken`) e auditoria. Nenhum segundo aprovador. Simulação: `POST /feature-flags/impact` com `{ id|key, action: "activate"|"restore" }` (linha 14 do inventário da M9-D852, `wired: true`).
+- `killSwitchDrillJob` (`src/engines/jobs/killSwitchDrillJob.js`, `kill-switch/killSwitch.cycle.js`): uma vez por dia a partir de 05:00 de Brasília, nesta ordem: restaura o teste interrompido (registro `RUNNING` mais antigo que a tolerância); em HOMOLOG/DEV testa (aciona, executa o probe, restaura SEMPRE o estado anterior, grava `governance.kill_switch_drills` com `result` PASS/FAIL, evidência e versão do probe) o switch vencido, nunca testado ou UNVERIFIED (um teste por switch e dia; FAIL alerta o responsável e marca UNVERIFIED, PASS libera); em PROD nunca testa (403 `GOV_KILL_DRILL_PROD_FORBIDDEN`, recusa registrada em auditoria); alerta CRÍTICO ao responsável do switch sem PASS válido. O PASS que vale é o último de HOMOLOG/DEV da mesma versão do probe (vale também para PROD); mudou a versão do probe, vence. Desligar no processo: `KILL_SWITCH_DRILL_JOB_DISABLED=true`.
+- Inventário: `kill-switch/killSwitch.status.js` `switchesWithoutProbe` (consulta `is_kill_switch = true`) deve voltar vazio.
+- Parâmetros: `governanca.flags.kill_teste_dias` (30), `kill_teste_hora` (5), `kill_teste_minuto` (0), `kill_teste_tolerancia_min` (10).
 
 ## Parâmetros
 - `governanca.modulos.feature_flags.habilitado` (padrão ligado).
-- `governanca.flags.risco_padrao` (MEDIUM), `governanca.flags.risco_config_absorvida` (LOW), `governanca.flags.risco_interruptores_degradacao` (MEDIUM), `governanca.flags.valor_max_caracteres` (2000), `governanca.flags.expiracao_hora` (6), `governanca.flags.expiracao_minuto` (30), `governanca.flags.expiracao_lembrete_diario` (ligado). Aba Governança em Configurações; catálogo em `Maturacao/demandas/parametros.csv`.
+- `governanca.flags.risco_padrao` (MEDIUM), `governanca.flags.risco_config_absorvida` (LOW), `governanca.flags.risco_interruptores_degradacao` (MEDIUM), `governanca.flags.valor_max_caracteres` (2000), `governanca.flags.expiracao_hora` (6), `governanca.flags.expiracao_minuto` (30), `governanca.flags.expiracao_lembrete_diario` (ligado), `governanca.flags.kill_teste_dias` (30), `kill_teste_hora` (5), `kill_teste_minuto` (0), `kill_teste_tolerancia_min` (10). Aba Governança em Configurações; catálogo em `Maturacao/demandas/parametros.csv`.
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).

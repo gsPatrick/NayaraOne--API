@@ -5,10 +5,11 @@ const { ENVIRONMENTS } = require('../finops/finops.constants');
 const { isUuid } = require('../finops/budgets/budget.input');
 const { checkValue, checkAllowed } = require('./flags.value');
 const E = require('./flags.errors');
+const { parseKillSwitch } = require('./kill-switch/killSwitch.input');
 
-const CREATE_FIELDS = ['key', 'kind', 'value', 'valueType', 'allowedValues', 'ownerUserId', 'scope', 'scopeRef', 'risk', 'validFrom', 'validUntil', 'temporary', 'description', 'isKillSwitch', 'reason'];
-const PATCH_FIELDS = ['id', 'version', 'reason', 'value', 'ownerUserId', 'scope', 'scopeRef', 'risk', 'validFrom', 'validUntil', 'temporary', 'description'];
-const IMMUTABLE = ['key', 'kind', 'valueType', 'allowedValues', 'isKillSwitch'];
+const CREATE_FIELDS = ['key', 'kind', 'value', 'valueType', 'allowedValues', 'ownerUserId', 'scope', 'scopeRef', 'risk', 'validFrom', 'validUntil', 'temporary', 'description', 'isKillSwitch', 'probe', 'reason'];
+const PATCH_FIELDS = ['id', 'key', 'confirmation', 'version', 'reason', 'value', 'ownerUserId', 'scope', 'scopeRef', 'risk', 'validFrom', 'validUntil', 'temporary', 'description'];
+const IMMUTABLE = ['key', 'kind', 'valueType', 'allowedValues', 'isKillSwitch', 'probe'];
 
 const isMissing = (v) => v === undefined || v === null || v === '';
 const upper = (v) => (typeof v === 'string' ? v.trim().toUpperCase() : v);
@@ -90,9 +91,10 @@ function parseCreate(body, tenant, params) {
   const { validFrom, validUntil } = parseValidity(b.validFrom, b.validUntil);
   for (const field of ['temporary', 'isKillSwitch']) if (b[field] !== undefined && typeof b[field] !== 'boolean') throw E.inputInvalid(`"${field}" deve ser verdadeiro ou falso.`, { field });
   if (b.temporary === true && !validUntil) throw E.expiryRequired();
+  const kill = parseKillSwitch({ isKillSwitch: b.isKillSwitch === true, kind, probe: b.probe, risk: b.risk });
   return {
-    key, kind, value, valueType, allowedValues, ownerUserId, scope, scopeRef, risk: parseRisk(b.risk, params.defaultRisk), validFrom, validUntil,
-    temporary: Boolean(b.temporary), description: parseDescription(b.description), isKillSwitch: Boolean(b.isKillSwitch),
+    key, kind, value, valueType, allowedValues, ownerUserId, scope, scopeRef, risk: kill.risk || parseRisk(b.risk, params.defaultRisk), validFrom, validUntil,
+    temporary: Boolean(b.temporary), description: parseDescription(b.description), isKillSwitch: kill.isKillSwitch, probe: kill.probe,
   };
 }
 
@@ -105,7 +107,10 @@ function parsePatch(body, current, tenant, params) {
   if (has('value')) patch.value = checkValue(current.value_type, b.value, { allowedValues: current.allowed_values, max: params.valueMax });
   if (has('ownerUserId')) patch.ownerUserId = parseOwner(b.ownerUserId);
   if (has('scope') || has('scopeRef')) Object.assign(patch, parseScope(has('scope') ? b.scope : current.scope, has('scopeRef') ? b.scopeRef : (has('scope') ? undefined : current.scope_ref), tenant));
-  if (has('risk')) patch.risk = parseRisk(b.risk);
+  if (has('risk')) {
+    patch.risk = parseRisk(b.risk);
+    if (current.is_kill_switch && patch.risk !== 'CRITICAL') throw E.inputInvalid('Kill switch tem risco CRITICAL.', { field: 'risk' });
+  }
   if (has('validFrom') || has('validUntil')) {
     const from = has('validFrom') ? b.validFrom : current.valid_from;
     const until = has('validUntil') ? b.validUntil : current.valid_until;

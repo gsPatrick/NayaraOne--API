@@ -123,7 +123,8 @@ test('m9d870 PATCH que estende valid_until reativa flag EXPIRED', { skip: skip()
 
 test('m9d870 kill switch e tipo não mudam depois de criados', { skip: skip() }, () => run(async (tx) => {
   const A = tenants.A;
-  const flag = await env.mkFlag(A, tx, { isKillSwitch: true, risk: 'CRITICAL' });
+  require('../../../src/features/core-governance/feature-flags/kill-switch/probes/registry').registerProbe({ name: 'qa.m9d870.probe', version: '1', run: async () => ({ pass: true }) });
+  const flag = await env.mkFlag(A, tx, { isKillSwitch: true, risk: 'CRITICAL', probe: 'qa.m9d870.probe' });
   assert.equal(flag.isKillSwitch, true);
   assert.deepEqual(await env.codeOf(env.patch(A, tx, { id: flag.id, isKillSwitch: false, reason: 'x' })), [422, 'GOV_FLAG_INPUT_INVALID']);
   assert.deepEqual(await env.codeOf(env.patch(A, tx, { id: flag.id, valueType: 'STRING', reason: 'x' })), [422, 'GOV_FLAG_INPUT_INVALID']);

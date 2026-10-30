@@ -19,6 +19,10 @@ async function readFlagsParams(tenant, transaction) {
     expiryHour: intIn(await get(KEYS.expiryHour), 0, 23, D[KEYS.expiryHour]),
     expiryMinute: intIn(await get(KEYS.expiryMinute), 0, 59, D[KEYS.expiryMinute]),
     expiryReminderDaily: (await get(KEYS.expiryReminder)) !== false,
+    killDays: intIn(await get(KEYS.killDays), 1, 365, D[KEYS.killDays]),
+    killHour: intIn(await get(KEYS.killHour), 0, 23, D[KEYS.killHour]),
+    killMinute: intIn(await get(KEYS.killMinute), 0, 59, D[KEYS.killMinute]),
+    killToleranceMin: intIn(await get(KEYS.killToleranceMin), 1, 1440, D[KEYS.killToleranceMin]),
   };
 }
 

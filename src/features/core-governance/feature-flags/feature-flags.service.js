@@ -20,6 +20,27 @@ async function assertOwnerActive(tenant, ownerUserId, transaction) {
   if (!owner.active) throw E.ownerInvalid();
 }
 
+/**
+ * A chave que o PATCH altera: pelo `id` ou, no kill switch, pela `key` (o seletor do livro; M9-D872). Com os dois, a `key` precisa ser a da chave (ela nunca muda). `key` repetida em mais de um escopo
+ * exige o `id`. Trava a linha (FOR UPDATE).
+ */
+async function locateEntry(tenant, b, transaction) {
+  const hasId = !isMissing(b.id);
+  const hasKey = !isMissing(b.key);
+  if (!hasId && !hasKey) throw E.inputInvalid('Informe o id ou a chave (key) da chave a alterar.', { field: 'id' });
+  if ((hasId && typeof b.id !== 'string') || (hasKey && typeof b.key !== 'string')) throw E.inputInvalid('Identificação da chave inválida.', { field: hasId ? 'id' : 'key' });
+  if (hasId) {
+    const row = await repo.findAnywhere(tenant, b.id, transaction, { lock: true });
+    if (!row) throw E.notFound();
+    if (hasKey && row.key !== b.key) throw E.inputInvalid('O campo "key" não pode ser alterado depois que a chave existe.', { field: 'key' });
+    return row;
+  }
+  const rows = await repo.findByKey(tenant, b.key, transaction, { lock: true });
+  if (rows.length === 0) throw E.notFound();
+  if (rows.length > 1) throw E.inputInvalid('Há mais de uma chave com este nome (escopos diferentes): informe o id.', { field: 'key' });
+  return rows[0];
+}
+
 /** Valor vivo de uma chave absorvida das configurações da empresa; `undefined` para as demais. */
 async function liveOf(tenant, row, transaction) {
   if (row.source !== SOURCES.TENANT_SETTING) return undefined;
@@ -61,9 +82,7 @@ function nextState(row, patch, now) {
  */
 async function updateEntry(tenant, body, actorUserId, transaction, { now = new Date() } = {}) {
   const b = body && typeof body === 'object' ? body : {};
-  if (isMissing(b.id) || typeof b.id !== 'string') throw E.inputInvalid('Informe o id da chave (id).', { field: 'id' });
-  const row = await repo.findAnywhere(tenant, b.id, transaction, { lock: true });
-  if (!row) throw E.notFound();
+  const row = await locateEntry(tenant, b, transaction);
   const reason = parseReason(b.reason);
   if (b.version !== undefined && b.version !== row.version) throw E.versionConflict({ currentVersion: row.version, sentVersion: b.version });
   const params = await readFlagsParams(tenant, transaction);

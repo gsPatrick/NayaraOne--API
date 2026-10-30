@@ -31,7 +31,7 @@ test('m9d852 todo item do inventário tem rota, rota de impacto, permissão, có
     assert.ok(a.permission && a.codeLabel && a.action, a.key);
     if (!a.wired) assert.match(a.ownerDemand, /^M9-D\d{3}$/, `${a.key} sem demanda dona`);
   }
-  assert.deepEqual(D.inventory.unwired().map((a) => a.row).sort((x, y) => x - y), [5, 10, 11, 14, 14, 15, 18]);
+  assert.deepEqual(D.inventory.unwired().map((a) => a.row).sort((x, y) => x - y), [5, 10, 11, 15, 18]);
 });
 
 test('m9d852 níveis efetivos: padrão do livro, sobrescrita pelo parâmetro e valor inválido recusado', () => {

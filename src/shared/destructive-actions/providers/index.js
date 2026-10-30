@@ -13,6 +13,7 @@ const { apiClientRevoke, apiClientCreate } = require('./apiClient');
 const { integrationRetry, integrationConnection } = require('./integration');
 const { aiAgent } = require('./ai.agent');
 const { mergeProvider, bulkProvider } = require('../../../features/core-governance/data-quality/confirmation.providers');
+const { activateProvider, restoreProvider } = require('../../../features/core-governance/feature-flags/kill-switch/killSwitch.impact');
 
 /** Provedores das ações do inventário com rota no código (M9-D852). As linhas sem rota registram o seu provedor na demanda dona. */
 const PROVIDERS = {
@@ -31,6 +32,8 @@ const PROVIDERS = {
   'ai.agent.deactivate': aiAgent,
   'data_quality.merge': mergeProvider,
   'data_quality.bulk': bulkProvider,
+  'kill_switch.activate': activateProvider,
+  'kill_switch.restore': restoreProvider,
 };
 for (const [key, fn] of Object.entries(PROVIDERS)) registerProvider(key, fn);
 

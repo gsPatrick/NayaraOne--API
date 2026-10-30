@@ -130,6 +130,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_INSUFFICIENT_SCOPE` | 403 | A credencial não tem permissão para esta operação. | api-governance | 1.0.0 | não |
 | `GOV_INVALID_CLIENT` | 401 | Credenciais inválidas. | api-governance | 1.0.0 | não |
 | `GOV_INVALID_SCOPE` | 400 | Nenhum dos scopes pedidos é permitido para esta credencial. | api-governance | 1.0.0 | não |
+| `GOV_KILL_DRILL_PROD_FORBIDDEN` | 403 | O teste automático não roda em produção. | feature-flags | 1.3.0 | não |
+| `GOV_KILL_PROBE_REQUIRED` | 422 | Todo kill switch precisa de um teste automatizado. | feature-flags | 1.3.0 | não |
 | `GOV_LINEAGE_AREA_INVALID` | 400 | Área de lineage inválida. | lineage | 1.0.0 | não |
 | `GOV_LINEAGE_AREA_MISSING` | 422 | Área sem lineage cadastrado. | core-governance | 1.0.0 | não |
 | `GOV_LINEAGE_AREA_REQUIRED` | 422 | Informe a área do nó de lineage. | lineage | 1.0.0 | não |

@@ -32,6 +32,13 @@ async function findBySlot(tenant, kind, key, scope, scopeRef, transaction) {
   return rows[0] || null;
 }
 
+/** Todas as entradas (flags e configurações) da empresa com a chave, qualquer escopo (o seletor `key` do PATCH). */
+async function findByKey(tenant, key, transaction, { lock = false } = {}) {
+  const out = [];
+  for (const kind of Object.keys(TABLES)) out.push(...await q(`SELECT * FROM ${tableOf(kind)} WHERE company_id = :companyId AND key = :key${lock ? ' FOR UPDATE' : ''}`, transaction, { companyId: tenant.companyId, key }));
+  return out;
+}
+
 /** A chave já existe em OUTRO tipo (a chave é única entre flags e configurações da empresa). */
 async function keyExistsInKind(tenant, kind, key, transaction) {
   const rows = await q(`SELECT 1 AS hit FROM ${tableOf(kind)} WHERE company_id = :companyId AND key = :key LIMIT 1`, transaction, { companyId: tenant.companyId, key });
@@ -41,15 +48,15 @@ async function keyExistsInKind(tenant, kind, key, transaction) {
 async function insert(tenant, kind, e, actorUserId, transaction) {
   const rows = await q(
     `INSERT INTO ${tableOf(kind)} (group_id, company_id, key, kind, value, value_type, allowed_values, owner_user_id, scope, scope_ref, risk, version,
-       valid_from, valid_until, temporary, description, is_kill_switch, state, source, updated_by)
+       valid_from, valid_until, temporary, description, is_kill_switch, state, source, updated_by${kind === 'FLAG' ? ', probe' : ''})
      VALUES (:groupId, :companyId, :key, :kind, CAST(:value AS jsonb), :valueType, CAST(:allowed AS jsonb), :owner, :scope, :scopeRef, :risk, 1,
-       :validFrom, :validUntil, :temporary, :description, :killSwitch, 'ACTIVE', :source, :actor)
+       :validFrom, :validUntil, :temporary, :description, :killSwitch, 'ACTIVE', :source, :actor${kind === 'FLAG' ? ', :probe' : ''})
      RETURNING *`,
     transaction, {
       groupId: tenant.groupId, companyId: tenant.companyId, key: e.key, kind, value: JSON.stringify(e.value), valueType: e.valueType,
       allowed: e.allowedValues ? JSON.stringify(e.allowedValues) : null, owner: e.ownerUserId, scope: e.scope, scopeRef: e.scopeRef || null, risk: e.risk,
       validFrom: e.validFrom || null, validUntil: e.validUntil || null, temporary: Boolean(e.temporary), description: e.description || null,
-      killSwitch: Boolean(e.isKillSwitch), source: e.source || 'REGISTRY', actor: actorUserId || null,
+      killSwitch: Boolean(e.isKillSwitch), source: e.source || 'REGISTRY', actor: actorUserId || null, probe: e.probe || null,
     }
   );
   return rows[0];
@@ -128,4 +135,4 @@ async function listPastExpired(tenant, now, transaction) {
   return out;
 }
 
-module.exports = { listDueForExpiry, listPastExpired, findById, findAnywhere, findBySlot, keyExistsInKind, insert, update, insertVersion, listVersions, list, candidates };
+module.exports = { findByKey, listDueForExpiry, listPastExpired, findById, findAnywhere, findBySlot, keyExistsInKind, insert, update, insertVersion, listVersions, list, candidates };

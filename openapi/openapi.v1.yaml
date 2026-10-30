@@ -4940,6 +4940,68 @@ paths:
             schema:
               type: object
               additionalProperties: true
+  /feature-flags/impact:
+    post:
+      operationId: postFeatureFlagsImpact
+      summary: POST /feature-flags/impact
+      description: Simula acionar (activate) ou restaurar (restore) um kill switch e devolve o impacto e o impactToken da confirmação (M9-D852, linha 14). Não grava nada.
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Chave não encontrada.
+          x-error-code: GOV_FLAG_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Informe a ação (activate ou restore) e a chave do kill switch.
+          x-error-code: GOV_FLAG_INPUT_INVALID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-permissions:
+        - governance:flags:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
   /finops/health:
     get:
       operationId: getFinopsHealth
