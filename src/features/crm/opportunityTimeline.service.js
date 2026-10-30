@@ -93,6 +93,7 @@ async function getOpportunityTimeline(opportunityId, transaction, options = {}) 
         direction: message.direction,
         authorType: message.authorType,
         status: message.status,
+        automatic: Boolean(message.actionKey), // M9-D429: mensagem automática do Marketing; só conta como contato com DELIVERED/READ
         personId: message.personId,
         body: message.body,
       },

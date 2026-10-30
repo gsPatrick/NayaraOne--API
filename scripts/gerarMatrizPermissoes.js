@@ -65,6 +65,7 @@ if (require.main === module) {
       if (/\/webhooks\//.test(r.path)) return 'público; autenticidade pela assinatura do provider';
       if (/\/carts\/public\//.test(r.path)) return 'público; acesso pelo token do link';
       if (/\/public\/properties\//.test(r.path)) return 'público; página do imóvel no site (M9-D427), só dado publicável';
+      if (/\/marketing\/unsubscribe$/.test(r.path)) return 'público; autenticidade pelo token assinado do link de descadastro';
       if (/\/(health|ping|version)(\/|$)/.test(r.path)) return 'público (saúde do serviço)';
       if (/\/auth\/(login|refresh)$/.test(r.path)) return 'público (obtém ou renova o token)';
       if (/\/users\/me\/mfa\//.test(r.path)) return 'só login (o próprio usuário)';

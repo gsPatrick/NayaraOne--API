@@ -3,6 +3,7 @@
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
 const { runLifecycleTick } = require('../../features/marketing/campaigns/lifecycle.service');
+const { installCampaignSendPort } = require('../../features/marketing/publications');
 
 /**
  * campaignLifecycleJob (M9-D412) — a cada minuto, para cada empresa: campanha SCHEDULED com starts_at vencido vira RUNNING (evento
@@ -49,6 +50,7 @@ async function runCampaignLifecycleJob(now = new Date()) {
 }
 
 function startCampaignLifecycleJob({ intervalMs = INTERVAL_MS } = {}) {
+  installCampaignSendPort(); // M9-D429: o step sai pelo ChannelAdapter depois do canSend (sandbox enquanto o canal não estiver liberado)
   const tick = () => runCampaignLifecycleJob().catch((err) => logger.error({ err: err.message }, 'campaignLifecycleJob.failed'));
   tick();
   return setInterval(tick, intervalMs);

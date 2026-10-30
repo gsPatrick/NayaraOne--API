@@ -8,6 +8,7 @@ const { persistAccepted } = require('../../../../integrations/webhooks/webhooks.
 const { assertFreshTimestamp } = require('../../../../integrations/webhooks/intake/intake.replay');
 const { normalizeChannel, channelNotFound, webhookPayloadInvalid } = require('../channel.errors');
 const { verifyAndParseWebhook } = require('./webhook.parse');
+const { runWebhookEventHooks } = require('./webhook.hooks');
 
 /**
  * Recebimento do webhook de um canal do Marketing (M9-D430 5: POST /marketing/webhooks/:channel). Rota pública: a assinatura é a autorização. A empresa vem
@@ -39,6 +40,7 @@ async function receiveChannelWebhook({ channel: channelName, provider, token, he
     const saved = await persistAccepted(ctx, conn, {
       provider: providerCode, channel: String(token), rawBody, body: event.data, headers, eventId: event.eventId, eventType: event.eventType, maxStoredBytes: params.maxBodyBytes,
     }, transaction);
+    if (saved.status === 'accepted') await runWebhookEventHooks({ tenant: { groupId: conn.groupId, companyId: conn.companyId }, channel, event }, transaction); // M9-D429: status de entrega
     return { status: saved.status, eventId: saved.eventId };
   });
 }

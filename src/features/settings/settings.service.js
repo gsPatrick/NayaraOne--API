@@ -25,6 +25,7 @@ const { CHANNEL_SETTINGS_SCHEMA } = require('../../features/marketing/publicatio
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
 const { SEO_SETTINGS_SCHEMA } = require('../../features/marketing/publications/seo/seo.settings');
 const { BLOG_SETTINGS_SCHEMA } = require('../../features/marketing/content/blog/blog.settings');
+const { PREVIEW_SETTINGS_SCHEMA } = require('../../features/marketing/publications/messaging/preview/preview.settings');
 const { CATALOG_SETTINGS_SCHEMA, IntegrationHttpClient } = require('../integrations');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
 const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
@@ -232,6 +233,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D427 — SEO do site (política de página vendida/removida, dias, URL base) e blog educativo (fontes permitidas, mínimo de palavras, aviso de IA).
   ...SEO_SETTINGS_SCHEMA,
   ...BLOG_SETTINGS_SCHEMA,
+  // Marco 9, M9-D429 — preview sem dado sensível (tamanho, dicionários, número de contrato, texto seguro) e endereço do descadastro do e-mail.
+  ...PREVIEW_SETTINGS_SCHEMA,
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.

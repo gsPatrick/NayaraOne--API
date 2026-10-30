@@ -23,6 +23,7 @@ const { fanOut } = require('./contingency/fanOut');
 const { sendToChannel } = require('./sendToChannel');
 const { verifyAndParseWebhook } = require('./webhook/webhook.parse');
 const { publicRouter } = require('./webhook/webhook.routes');
+const { registerWebhookEventHook } = require('./webhook/webhook.hooks');
 const settings = require('./channel.settings');
 
 installChannelAdapters();
@@ -56,6 +57,7 @@ module.exports = {
   fanOut,
   sendToChannel,
   verifyAndParseWebhook,
+  registerWebhookEventHook,
   publicRouter,
   resetSandbox: sandboxStore.resetSandbox,
   sandboxRecordCount: sandboxStore.countRecords,

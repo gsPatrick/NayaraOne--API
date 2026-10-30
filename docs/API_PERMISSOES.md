@@ -766,3 +766,5 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `GET` | `/api/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
 | `GET` | `/api/t/:shortCode` | só login | não |
 | `GET` | `/api/v1/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
+| `POST` | `/api/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
+| `POST` | `/api/v1/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |

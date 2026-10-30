@@ -52,4 +52,4 @@ function buildCampaignSendPort({ send, purposeOf = audiencePurposes, isOfficial 
   };
 }
 
-module.exports = { buildCampaignSendPort };
+module.exports = { buildCampaignSendPort, audiencePurposes };

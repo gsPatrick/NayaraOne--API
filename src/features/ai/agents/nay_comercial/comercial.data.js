@@ -39,7 +39,8 @@ async function pendingDocuments(opportunityId, companyId, transaction) {
 function interactionsOf(timeline, nowMs) {
   return timeline
     // M9-D229: mensagem enviada que ainda está na fila ou que falhou não foi contato; o contato só conta com evidência de envio do fornecedor.
-    .filter((i) => (i.type === 'MESSAGE' && !(i.data.direction === 'OUTBOUND' && ['QUEUED', 'FAILED'].includes(i.data.status))) || (i.type === 'VISIT' && timeOf(i.occurredAt) <= nowMs && !['CANCELED', 'NO_SHOW'].includes(i.data.status)))
+    // M9-D429: a mensagem AUTOMÁTICA (action_key) só é contato com a entrega confirmada (DELIVERED ou READ); SENT, UNKNOWN, QUEUED e FAILED não contam.
+    .filter((i) => (i.type === 'MESSAGE' && !(i.data.direction === 'OUTBOUND' && (['QUEUED', 'FAILED'].includes(i.data.status) || (i.data.automatic && !['DELIVERED', 'READ'].includes(i.data.status))))) || (i.type === 'VISIT' && timeOf(i.occurredAt) <= nowMs && !['CANCELED', 'NO_SHOW'].includes(i.data.status)))
     .map((i) => ({
       type: i.type, occurredAt: new Date(i.occurredAt).toISOString(), channel: i.data.channel || null, direction: i.data.direction || null, status: i.data.status || null,
     }));

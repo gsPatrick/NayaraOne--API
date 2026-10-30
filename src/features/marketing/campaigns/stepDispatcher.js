@@ -55,6 +55,8 @@ async function processRecipient(port, ctx, transaction) {
   const portCtx = { tenant, campaign: { id: campaign.id, code: campaign.code, channels: campaign.channels }, step: { id: step.id, stepNo: step.step_no, channel: step.channel, templateId: step.template_id, contentItemId: step.content_item_id }, personId, actionKey, now, transaction };
   let decision;
   try { decision = await port.canSend(portCtx); } catch (err) { logger.error({ err: err.message, stepId: step.id }, 'marketing.campaign.cansend.failed'); decision = { allowed: false, reason: 'CANSEND_ERROR' }; }
+  // Horário de silêncio (M9-D429/M9-D418): a mensagem é reagendada, não perdida; sem registro de entrega, o destinatário continua pendente e sai na primeira rodada fora do silêncio.
+  if (decision && decision.allowed !== true && decision.reason === 'QUIET_HOURS') return 'DEFERRED';
   if (!decision || decision.allowed !== true) {
     await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, 'BLOCKED', (decision && decision.reason) || 'NOT_ALLOWED', null, transaction);
     return 'BLOCKED';
