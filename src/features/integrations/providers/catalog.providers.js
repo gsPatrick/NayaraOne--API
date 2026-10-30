@@ -6,6 +6,7 @@
  * fornecedor real, ele entra como linha nova + um adapter; o sandbox permanece.
  */
 const { DEFAULT_CRITICALITY } = require('./catalog.domains');
+const { INSURANCE_PROVIDERS } = require('./catalog.insurance');
 
 const sandbox = (domain, code, displayName, capabilities) => ({
   code, displayName, domain, capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY[domain], sandboxAvailable: true,
@@ -18,7 +19,7 @@ const SANDBOX_PROVIDERS = Object.freeze([
   sandbox('PORTAL', 'portal-sandbox', 'Portais imobiliários — sandbox', ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus']),
   sandbox('SIGNATURE', 'signature-sandbox', 'Assinatura digital — sandbox', ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook']),
   sandbox('BANK', 'bank-sandbox', 'Bancos, extratos e pagamentos — sandbox', ['submitPayment', 'getPaymentStatus', 'getStatement', 'verifyWebhook']),
-  sandbox('INSURANCE', 'insurance-sandbox', 'Seguradoras e garantias — sandbox', ['quote', 'propose', 'getPolicy', 'getStatus']),
+  sandbox('INSURANCE', 'insurance-sandbox', 'Seguradoras e garantias — sandbox', ['quote', 'propose', 'getPolicy', 'getStatus', 'submitClaim', 'verifyWebhook']),
   // O sandbox de financiamento já verificava o webhook (assinatura HMAC) antes do catálogo: mantém verifyWebhook (DI-D201-3).
   sandbox('FINANCING', 'financing-sandbox', 'Financiamento e promotoras — sandbox', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook']),
   sandbox('FISCAL', 'fiscal-sandbox', 'NFS-e e fiscal — sandbox', ['issueNfse', 'getNfseStatus', 'cancelNfse']),
@@ -40,7 +41,7 @@ const EXISTING_PROVIDERS = Object.freeze([
     capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
   },
   // M9-D232: três portais sandbox com mapping, versão e capacidades próprios (o exemplo do livro: A converte VENDA em SALE, B exige bathrooms, C não tem vídeo).
-  ...[['portal-zap-sandbox', 'Portal A (estilo ZAP) — sandbox'], ['portal-vivareal-sandbox', 'Portal B (estilo Viva Real) — sandbox'], ['portal-olx-sandbox', 'Portal C (estilo OLX) — sandbox']]
+  ...[['portal-zap-sandbox', 'Portal A (estilo ZAP) — sandbox', ['video', 'virtualTour', 'highlight']], ['portal-vivareal-sandbox', 'Portal B (estilo Viva Real) — sandbox', ['video', 'batchPublish']], ['portal-olx-sandbox', 'Portal C (estilo OLX) — sandbox', []]]
     .map(([code, nome]) => ({ code, displayName: nome, domain: 'PORTAL', capabilities: ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.PORTAL, sandboxAvailable: true })),
   // M9-D237: o Santander (PIX e boleto por mTLS) que já existia no Financeiro entra no catálogo com o contrato do port BankAdapter.
   {
@@ -56,22 +57,22 @@ const EXISTING_PROVIDERS = Object.freeze([
     code: 'signature-alt-sandbox', displayName: 'Assinatura digital — sandbox alternativo (prova de troca de provider)', domain: 'SIGNATURE',
     capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
   },
-]);
-
-/** Fornecedores reais de modelo de IA (M9-D011). Nascem sem conexão: só valem com conexão ACTIVE, que exige a referência do segredo. */
-const aiReal = (code, displayName, capabilities) => ({
-  code, displayName, domain: 'AI', capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.AI, sandboxAvailable: false,
   // M9-D229: o segundo fornecedor de mensageria de laboratório (formato de webhook diferente e sem sendMedia) que prova a troca de provider da M9-D221.
   {
     code: 'messaging-alt-sandbox', displayName: 'Mensageria — sandbox alternativo (prova de troca de provider)', domain: 'MESSAGING',
     capabilities: ['sendText', 'sendTemplate', 'getStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.MESSAGING, sandboxAvailable: false,
   },
+]);
+
+/** Fornecedores reais de modelo de IA (M9-D011). Nascem sem conexão: só valem com conexão ACTIVE, que exige a referência do segredo. */
+const aiReal = (code, displayName, capabilities) => ({
+  code, displayName, domain: 'AI', capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.AI, sandboxAvailable: false,
 });
 const AI_REAL_PROVIDERS = Object.freeze([
   aiReal('anthropic', 'Modelos de IA — Anthropic', ['generate']),
   aiReal('openai', 'Modelos de IA — OpenAI', ['generate', 'embed']),
 ]);
 
-const SEED_PROVIDERS = Object.freeze([...SANDBOX_PROVIDERS, ...EXISTING_PROVIDERS, ...AI_REAL_PROVIDERS]);
+const SEED_PROVIDERS = Object.freeze([...SANDBOX_PROVIDERS, ...EXISTING_PROVIDERS, ...AI_REAL_PROVIDERS, ...INSURANCE_PROVIDERS]);
 
-module.exports = { SANDBOX_PROVIDERS, EXISTING_PROVIDERS, AI_REAL_PROVIDERS, SEED_PROVIDERS };
+module.exports = { SANDBOX_PROVIDERS, EXISTING_PROVIDERS, AI_REAL_PROVIDERS, INSURANCE_PROVIDERS, SEED_PROVIDERS };
