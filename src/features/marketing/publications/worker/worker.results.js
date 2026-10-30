@@ -2,6 +2,14 @@
 
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../../models');
+const { redactDeep } = require('../../../../shared/redaction');
+
+const MARKER = '[REDIGIDO]';
+/**
+ * Segredo dentro de texto (token no meio de uma mensagem de erro, "Bearer ..." no meio da frase) também sai: a redação do banco olha o nome da chave e o início do texto, então a
+ * biblioteca única de redaction varre os valores antes de gravar, com o marcador único do Marketing no lugar do [REDACTED] dela (M9-D437, adv_11).
+ */
+const redactResponse = (response) => JSON.parse(JSON.stringify(redactDeep(response, { secretsOnly: true })).split('[REDACTED]').join(MARKER));
 
 /**
  * Resultados das tentativas (publication_results, append-only: o banco recusa UPDATE e DELETE e redige segredo de response_redacted_json). Cada tentativa,
@@ -14,7 +22,7 @@ async function insertResult(job, { outcome, attemptNo, externalPostId = null, ex
     {
       replacements: {
         groupId: job.group_id, companyId: job.company_id, jobId: job.id, attemptNo: Math.max(attemptNo || job.attempts || 1, 1), outcome, externalPostId, externalUrl, providerStatus,
-        metrics: JSON.stringify(metrics), response: JSON.stringify(response), actor,
+        metrics: JSON.stringify(metrics), response: JSON.stringify(redactResponse(response)), actor,
       },
       transaction, type: QueryTypes.INSERT,
     }

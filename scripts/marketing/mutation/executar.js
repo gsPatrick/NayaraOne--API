@@ -4,14 +4,14 @@
 /**
  * Mutation check do Marketing: para cada mutação do grupo, copia a API, injeta a violação e roda o teste nomeado; o teste TEM de reprovar. Mutação que passa é defeito do teste.
  * Só roda em banco descartável (DISPOSABLE_DB=1): node scripts/withDisposableDb.js -- bash -c "node scripts/seed-ci-two-tenants.js && node scripts/marketing/mutation/executar.js --grupo adversariais".
- * Opções: --grupo adversariais|guardas  --relatorio arquivo.json  --so id1,id2
+ * Opções: --grupo adversariais|adversariais2|guardas  --relatorio arquivo.json  --so id1,id2
  */
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const arvore = require('./arvore');
 
-const GRUPOS = { adversariais: './adversariais', guardas: './guardas' };
+const GRUPOS = { adversariais: './adversariais', adversariais2: './adversariais2', guardas: './guardas' };
 
 function argumento(nome) {
   const i = process.argv.indexOf(`--${nome}`);
