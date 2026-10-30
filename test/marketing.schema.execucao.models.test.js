@@ -27,7 +27,7 @@ test('erros_da_parte_2_viram_codigos_mkt_em_portugues', async () => {
   const errorHandler = require('../src/middlewares/errorHandler');
   const chamar = (parent) => {
     const out = {};
-    const res = { status(c) { out.status = c; return this; }, json(b) { out.body = b; return this; } };
+    const res = { status(c) { out.status = c; return this; }, json(b) { out.body = b; return this; }, getHeader() { return undefined; } };
     errorHandler(Object.assign(new Error('x'), { name: 'SequelizeDatabaseError', parent }), { method: 'POST', originalUrl: '/x' }, res, () => {});
     return out;
   };
