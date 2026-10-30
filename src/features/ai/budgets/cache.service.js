@@ -1,6 +1,7 @@
 'use strict';
 
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
+const clock = require('../clock');
 const repo = require('../readmodels/cacheSupport.readmodel');
 const { cachePort } = require('../providers/router/cachePort');
 const { readCacheParams } = require('./cache.params');
@@ -43,7 +44,7 @@ async function lookup(input, { tenant, transaction }) {
     companyId: tenant.companyId, agentCode: input.agentCode, agentVersion: input.agentVersion, taskType: input.taskType, permissions: rule.permissions,
     request: requestHash({ taskType: input.taskType, input: rule.input, purpose: rule.purpose }),
   });
-  const now = new Date();
+  const now = clock.now();
   const found = await repo.findLive(tenant.companyId, scope, now, transaction);
   if (!found) return null;
   const entry = found;
@@ -72,7 +73,7 @@ async function store(ctx, data, transaction) {
     request: requestHash({ taskType: data.taskType, input: data.input, purpose: data.purpose }),
   });
   const key = cacheKey(scope, { sources: data.sources, snapshotAt: data.snapshotAt });
-  const now = new Date();
+  const now = clock.now();
   await repo.removeExpired(ctx.companyId, now, transaction);
   const row = await repo.upsert({
     ...tenantOf(ctx), key, scopeKey: scope, agentCode: String(data.agentCode).toUpperCase(), agentVersion: data.agentVersion, taskType: data.taskType,

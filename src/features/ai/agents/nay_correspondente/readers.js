@@ -1,6 +1,7 @@
 'use strict';
 
 const { getSetting } = require('../../../settings/settings.service');
+const clock = require('../../clock');
 const nay = require('../../../correspondent/correspondentNay.service');
 const { getFinancingCase } = require('../../../correspondent/cases/financingCases.service');
 const { getPendingRequirements } = require('../../../correspondent/correspondentNayReaders.service');
@@ -25,7 +26,7 @@ function correspondentReaders(transaction, { groupId, companyId }) {
     async getStatus(caseId) {
       const c = plain(await getFinancingCase(caseId, groupId, companyId, transaction));
       return {
-        ...c, applicantsCount: Array.isArray(c.applicants) ? c.applicants.length : 0, source: 'correspondent.financing_cases', updatedAt: c.updatedAt ?? c.updated_at ?? null, asOf: iso(new Date()),
+        ...c, applicantsCount: Array.isArray(c.applicants) ? c.applicants.length : 0, source: 'correspondent.financing_cases', updatedAt: c.updatedAt ?? c.updated_at ?? null, asOf: iso(clock.now()),
       };
     },
 
@@ -35,7 +36,7 @@ function correspondentReaders(transaction, { groupId, companyId }) {
       const result = await nay.checkStalledCases(groupId, companyId, {}, transaction);
       const ordered = [...result.cases].sort((a, b) => b.idleDays - a.idleDays);
       return {
-        source: 'correspondent.financing_cases', asOf: iso(new Date()), thresholdDays: result.thresholdDays, total: ordered.length, truncated: ordered.length > max,
+        source: 'correspondent.financing_cases', asOf: iso(clock.now()), thresholdDays: result.thresholdDays, total: ordered.length, truncated: ordered.length > max,
         items: ordered.slice(0, max).map((c) => ({ financingCaseId: c.financingCaseId, status: c.status, idleDays: c.idleDays, reason: c.reason, pendingRequirementTypes: c.pendingRequirementTypes })),
       };
     },
@@ -48,7 +49,7 @@ function correspondentReaders(transaction, { groupId, companyId }) {
       const result = plain(await nay.compareSimulations(caseId, groupId, companyId, transaction));
       const sims = result.simulations;
       return {
-        financingCaseId: caseId, source: 'correspondent.simulations', asOf: iso(new Date()), referenceAmount: sims.length ? sims[0].amount : null,
+        financingCaseId: caseId, source: 'correspondent.simulations', asOf: iso(clock.now()), referenceAmount: sims.length ? sims[0].amount : null,
         total: sims.length, truncated: sims.length > max, termsDiffer: result.termsDiffer,
         simulations: sims.slice(0, max).map((s) => ({
           id: s.id, providerCode: s.providerCode, amount: s.amount, termMonths: s.termMonths, monthlyPayment: s.monthlyPayment, rate: s.rate, rateInformed: s.rateInformed,

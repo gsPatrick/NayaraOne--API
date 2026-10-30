@@ -2,6 +2,7 @@
 
 const { getSetting } = require('../../../settings/settings.service');
 const { DOCUMENTAL_KEYS: K, DOCUMENTAL_SETTING_DEFAULTS: D } = require('./documental.settings');
+const clock = require('../../clock');
 const { openVerifiedFile } = require('./files');
 const { readText, sha256 } = require('./transcribe');
 const { classifyText } = require('./classify');
@@ -9,7 +10,7 @@ const { extractFields } = require('./extract');
 const { checkConsistency } = require('./check');
 const { recordSuggestion, TYPES } = require('./suggestion');
 
-const iso = () => new Date().toISOString();
+const iso = () => clock.now().toISOString();
 const SOURCE = 'people.files';
 
 async function paramsOf(scope, transaction) {
