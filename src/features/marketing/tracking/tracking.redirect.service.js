@@ -8,7 +8,7 @@ const signing = require('./tracking.signing');
 const { recordEvent } = require('./tracking.events.service');
 const { withUtms } = require('./tracking.url');
 const { linkNotFound } = require('./tracking.errors');
-const trackingConsent = require('../suppression/trackingConsent');
+const { trackingConsent } = require('../suppression');
 
 const SHORT_CODE_RE = /^[A-Za-z0-9_-]{4,64}$/;
 const MINUTE_MS = 60000;
