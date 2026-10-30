@@ -13,11 +13,11 @@ const { findAgedQueued } = require('./contingency.queueAge');
 const { publishManualTask } = require('./contingency.manualTask');
 const { autoSwitchQueued } = require('./contingency.autoSwitch');
 const { tryRecover } = require('./contingency.recovery');
-const { handleAged, runDomainStep } = require('./contingency.domainHooks');
+const { handleAged, runDomainStep, extraAgedStatuses } = require('./contingency.domainHooks');
 
 /** Item da fila que passou do prazo vira tarefa manual (um evento por envio). Devolve quantos eventos novos saíram. */
 async function publishAgedAsTasks(ctx, connection, policy, params, now, transaction) {
-  const itens = await findAgedQueued(ctx, connection.id, policy.queueMaxAgeH, now, params.manualTaskBatchSize, transaction);
+  const itens = await findAgedQueued(ctx, connection.id, policy.queueMaxAgeH, now, params.manualTaskBatchSize, transaction, extraAgedStatuses(policy.domain));
   let tarefas = 0;
   for (const item of itens) {
     // O domínio pode resolver o item vencido sozinho (o marketing do WhatsApp é cancelado, não vira tarefa): M9-D227.

@@ -49,7 +49,7 @@ function successOf(dispatch, usedAlternate) {
     result: dispatch.operation === 'requestAppraisal' && original
       ? { ...original, externalId: dispatch.externalResourceId || original.externalId, raw: { via: 'dispatch', dispatchId: dispatch.id } }
       : { externalId: dispatch.externalResourceId, status: dispatch.externalStatus, raw: { via: 'dispatch', dispatchId: dispatch.id, provider: dispatch.providerCode } },
-    adapter: adapter && adapter.legacyAdapterSync ? adapter.legacyAdapterSync() : null, dispatchId: dispatch.id, usedAlternate,
+    adapter: adapter && adapter.legacyAdapterSync ? adapter.legacyAdapterSync() : null, dispatchId: dispatch.id, usedAlternate, providerCode: dispatch.providerCode,
   };
 }
 
@@ -65,8 +65,12 @@ async function enqueueOperation({ ctx, financingCase, spec, transaction }) {
   });
 }
 
-/** O envio ainda está na fila e o fornecedor não pode atender agora: troca pelo alternativo da contingência, se a política tiver um elegível. */
-async function tryAlternate(ctx, dispatchId, transaction) {
+/**
+ * O envio ainda está na fila e o fornecedor não pode atender agora: troca pelo alternativo da contingência, se a política tiver um elegível. O caso com exclusividade contratual
+ * com a promotora (`provider_exclusive`) NUNCA vai a outro provider automático (M9-D228): fica na fila e, passado o prazo, segue pelo fluxo manual.
+ */
+async function tryAlternate(ctx, dispatchId, transaction, financingCase) {
+  if (financingCase && financingCase.providerExclusive === true) return null;
   try {
     const r = await runner(ctx, transaction)((t) => switchToAlternate(ctx, dispatchId, { auto: true }, t));
     return r.switched ? r.toDispatchId : null;
@@ -113,7 +117,7 @@ async function callViaDispatch(args) {
     }
     if (r.deferred) {
       // eslint-disable-next-line no-await-in-loop
-      const outro = await tryAlternate(ctx, dispatch.id, transaction);
+      const outro = await tryAlternate(ctx, dispatch.id, transaction, args.financingCase);
       if (!outro) return { deferred: r.deferred, dispatchId: dispatch.id };
       // eslint-disable-next-line no-await-in-loop
       dispatch = await run((t) => IntegrationDispatch.findOne({ where: { id: outro, companyId: ctx.companyId }, transaction: t }));
@@ -154,5 +158,7 @@ function requestAppraisalViaDispatch({ appraisal, financingCase, ...resto }) {
     },
   });
 }
+
+require('./financing.contingency').installFinancingContingency(); // M9-D228: promotora fora além do prazo da fila segue pelo fluxo manual
 
 module.exports = { submitViaDispatch, requestAppraisalViaDispatch };

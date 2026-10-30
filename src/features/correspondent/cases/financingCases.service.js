@@ -18,7 +18,7 @@ const FINANCING_PURPOSES = ['RESIDENCIAL', 'COMERCIAL'];
  * precisa ser PRINCIPAL.
  */
 async function createFinancingCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, providerCode, purpose, applicants, opportunityId, product } = payload;
+  const { groupId, companyId, propertyId, providerCode, purpose, applicants, opportunityId, product, providerExclusive } = payload;
 
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCING_CASE_VALIDATION');
@@ -92,6 +92,7 @@ async function createFinancingCase(payload, actorUserId, transaction) {
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
       providerCode: resolvedProviderCode,
+      providerExclusive: providerExclusive === true, // M9-D228: exclusividade contratual com a promotora (nenhum provider automático alternativo)
       purpose: resolvedPurpose,
       status: 'DRAFT',
       createdBy: actorUserId || null,

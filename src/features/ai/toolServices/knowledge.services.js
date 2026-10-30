@@ -20,7 +20,7 @@ function knowledge(transaction, scope) {
       const actor = {
         groupId: scope.groupId, companyId: scope.companyId, userId: scope.userId, permissions: ragPermissions(scope.userPermissions || scope.permissions || [], scope.actorType),
       };
-      const found = await service.search(actor, query, { limit: limit || LIMITE_PADRAO, execution: scope.execution }, transaction);
+      const found = await service.search(actor, query, { limit: limit || LIMITE_PADRAO, execution: scope.execution, lexicalOnly: scope.lexicalOnly === true }, transaction);
       return {
         items: found.items.map((i) => ({
           id: i.chunkId, title: `${i.sourceType} ${i.sourceId}`, version: versionOf(i), classification: i.classification, summary: maskSecrets(String(i.content || '')).slice(0, RESUMO_MAX),

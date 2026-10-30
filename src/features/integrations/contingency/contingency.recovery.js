@@ -8,6 +8,7 @@ const { resolveContingencyPolicy, resolvePolicyFor } = require('./contingency.po
 const { readContingencyParams } = require('./contingency.params');
 const { drainQueue } = require('./contingency.drain');
 const { toView } = require('./contingency.state');
+const { runDrained } = require('./contingency.domainHooks');
 
 /** A connection está recuperada? Circuito CLOSED, ativa, saúde fora de DOWN e `recovery_checks` testes de saúde seguidos OK. */
 async function isRecovered(ctx, connection, checks, now, transaction) {
@@ -44,6 +45,7 @@ async function tryRecover(ctx, row, now, transaction) {
   }
   if (!alvo) return { deactivated: false, drained: [] };
   const drained = await drainQueue(ctx, alvo.id, params.drainBatchSize, now, transaction);
+  if (policy) await runDrained(policy.domain, ctx, { connection: alvo, ids: drained }, transaction); // M9-D228: o banco consulta antes de reenviar
   const note = `Recuperação confirmada: circuito fechado e ${params.recoveryChecks} testes de saúde seguidos OK.`;
   const r = await deactivateContingency(ctx, row, note, policy, transaction);
   return { deactivated: r.deactivated, drained };

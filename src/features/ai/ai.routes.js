@@ -20,6 +20,7 @@ const { registerBudgetRoutes } = require('./budgets/budgets.routes');
 const { registerMemoryRoutes } = require('./memory/memory.routes');
 const { registerIngestionRoutes } = require('./retrieval/ingestion.routes');
 const { registerReleaseGateRoutes } = require('./releaseGates');
+const { registerDeterministicRoutes } = require('./deterministic');
 const { AI_AGENTS_ENABLED_KEY, AI_SETTING_DEFAULTS, parseAgentList } = require('./ai.settings');
 
 /**
@@ -45,6 +46,8 @@ registerRunRoutes(router);
 registerKnowledgeRoutes(router);
 // Catálogo das tools registradas no servidor (M9-D016): GET /ai/tools.
 registerToolRoutes(router);
+// Caminho determinístico de cada função com IA, para a IA fora do ar (M9-D228): GET /ai/deterministic e POST /ai/deterministic/:tool.
+registerDeterministicRoutes(router);
 // Identidades de serviço da NAY, só leitura (M9-D017): /ai/service-identities.
 registerServiceIdentityRoutes(router);
 // Avaliações, homologação humana, feedback e fila de candidatos ao golden dataset (M9-D031/D032).

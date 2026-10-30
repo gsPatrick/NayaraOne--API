@@ -13,6 +13,7 @@ const { publishCommissionEntitlementCreated, publishCommissionConfirmed, publish
 const { reconcile } = require('../fiscal/reconciliation.service');
 const { recordIntegrationError, resolveIntegrationError } = require('../integrationErrors.service');
 const { businessDateKey, startOfBusinessDay } = require('../../../utils/businessDate');
+const { contractedProviderCode } = require('../dispatch/providerSwitch');
 
 const INVOICE_SOURCE_TYPE_COMMISSION = 'COMMISSION_ENTITLEMENT';
 const INVOICE_IN_FLIGHT_STATUSES = ['REQUESTED', 'SUBMITTED', 'UNKNOWN'];
@@ -85,7 +86,8 @@ async function createCommissionEntitlement(financingCaseId, payload, actorUserId
   // Trava o caso: dois pedidos simultâneos de comissão para o mesmo caso não passam juntos pela checagem de repetição.
   const financingCase = await findCase(financingCaseId, groupId, companyId, transaction, { lock: true });
   // Uma única leitura da regra por operação: bloqueio e cálculo usam sempre a mesma versão.
-  const split = await resolveCommissionSplit(financingCase.providerCode, groupId, companyId, actorUserId, transaction);
+  // M9-D228: a comissão segue o provider CONTRATADO do caso, mesmo quando a promotora esteve fora e o envio seguiu por um alternativo ou pelo fluxo manual.
+  const split = await resolveCommissionSplit(contractedProviderCode(financingCase), groupId, companyId, actorUserId, transaction);
   if (split.blockedCaseStatuses.includes(financingCase.status)) {
     const messages = {
       CANCELED: 'Este caso foi cancelado e não gera comissão.',

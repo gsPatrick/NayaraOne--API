@@ -83,7 +83,8 @@ class RetrievalService {
   }
 
   async searchArgs(ctx, text, opts, params, transaction) {
-    const q = await queryVector(ctx, text, transaction);
+    // M9-D228: com a IA fora a busca é só por palavras-chave (vetor nulo não casa com nenhum chunk: pesa apenas o texto).
+    const q = opts.lexicalOnly === true ? { embedding: [0], norm: 1, model: '' } : await queryVector(ctx, text, transaction);
     return {
       companyId: ctx.companyId, now: opts.now || new Date(), permissions: [...new Set(ctx.permissions || [])], classes: allowedClassifications(ctx, opts),
       sourceTypes: allowedSourceTypes(opts), userId: ctx.userId, topK: params.topK, model: q.model, vector: q.embedding, norm: q.norm, queryText: text,

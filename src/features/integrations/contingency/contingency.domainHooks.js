@@ -14,12 +14,18 @@ const agedHandlers = new Map();
 const taskBuilders = new Map();
 const steps = new Map();
 const movedHooks = new Map();
+const agedStatuses = new Map();
+const drainedHooks = new Map();
 
 const registerAlternateSqlFilter = (domain, sql) => { sqlFilters.set(domain, String(sql)); };
 const registerAgedHandler = (domain, fn) => { agedHandlers.set(domain, fn); };
 const registerManualTaskBuilder = (domain, fn) => { taskBuilders.set(domain, fn); };
 const registerContingencyStep = (domain, fn) => { steps.set(domain, fn); };
 const registerDispatchMoved = (domain, fn) => { movedHooks.set(domain, fn); };
+/** Estados além da fila (PENDING e RETRY_WAIT) que contam na idade do pendente e viram tarefa manual: o pagamento incerto (UNKNOWN) e o aceito sem status final (SUBMITTED). */
+const registerAgedStatuses = (domain, statuses) => { agedStatuses.set(domain, Object.freeze([...statuses])); };
+/** Depois que a recuperação solta a fila: `(ctx, { connection, ids }, transaction)`. */
+const registerDrained = (domain, fn) => { drainedHooks.set(domain, fn); };
 
 /** Trecho `AND ...` (alias `d` = integration.dispatches) acrescentado à seleção da troca automática; vazio se a família não restringe. */
 const alternateSqlFilter = (domain) => sqlFilters.get(domain) || '';
@@ -48,7 +54,15 @@ async function runDispatchMoved(domain, ctx, info, transaction) {
   return fn ? fn(ctx, info, transaction) : null;
 }
 
-/** O que a família registrou (para o painel e para os testes): { sqlFilter, agedHandler, taskBuilder, step, moved }. */
-const registered = (domain) => ({ sqlFilter: sqlFilters.has(domain), agedHandler: agedHandlers.has(domain), taskBuilder: taskBuilders.has(domain), step: steps.has(domain), moved: movedHooks.has(domain) });
+const extraAgedStatuses = (domain) => agedStatuses.get(domain) || [];
 
-module.exports = { registered, registerDispatchMoved, runDispatchMoved, registerAlternateSqlFilter, registerAgedHandler, registerManualTaskBuilder, registerContingencyStep, alternateSqlFilter, handleAged, buildManualTask, runDomainStep };
+/** A fila foi solta ao encerrar a contingência: o domínio marca o que precisa de cuidado antes de ser enviado. */
+async function runDrained(domain, ctx, info, transaction) {
+  const fn = drainedHooks.get(domain);
+  return fn ? fn(ctx, info, transaction) : null;
+}
+
+/** O que a família registrou (para o painel e para os testes): { sqlFilter, agedHandler, taskBuilder, step, moved }. */
+const registered = (domain) => ({ sqlFilter: sqlFilters.has(domain), agedHandler: agedHandlers.has(domain), taskBuilder: taskBuilders.has(domain), step: steps.has(domain), moved: movedHooks.has(domain), agedStatuses: agedStatuses.has(domain), drained: drainedHooks.has(domain) });
+
+module.exports = { registered, registerDispatchMoved, registerAgedStatuses, registerDrained, extraAgedStatuses, runDrained, runDispatchMoved, registerAlternateSqlFilter, registerAgedHandler, registerManualTaskBuilder, registerContingencyStep, alternateSqlFilter, handleAged, buildManualTask, runDomainStep };

@@ -1,6 +1,6 @@
 'use strict';
 
-const { sequelize, FinancingCase, ProviderStatusHistory, ProviderSubmission, FinancingProposal, IntegrationError } = require('../../../models');
+const { sequelize, File, FinancingCase, ProviderStatusHistory, ProviderSubmission, FinancingProposal, IntegrationError } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { shouldApplyTransition } = require('../statusMachine');
@@ -8,6 +8,7 @@ const { publishFinancingStatusChanged } = require('../correspondentEvents.servic
 const { syncOpportunityFromFinancingCase, STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { recordIntegrationError } = require('../integrationErrors.service');
+const { switchedByContingency } = require('../dispatch/providerSwitch');
 const { publishIntegrationCorrespondentFailed } = require('../correspondentEvents.service');
 
 // Estados que uma pessoa pode registrar para um caso de provider manual (o banco não tem API: quem
@@ -170,7 +171,15 @@ async function registerManualStatus(financingCaseId, payload, actorUserId, group
   if (!MANUAL_STATUSES.includes(status)) {
     throw AppError.badRequest(`O status deve ser um destes: ${MANUAL_STATUSES.map(label).join(', ')}.`, 'MANUAL_STATUS_VALIDATION');
   }
-  const note = String(payload?.note || '').trim();
+  let note = String(payload?.note || '').trim();
+  if (switchedByContingency(financingCase)) {
+    // M9-D228: o caso foi para o fluxo manual porque a promotora estava fora: o status que ela informa por canal humano só entra com a evidência (arquivo do e-mail, print ou protocolo).
+    const evidencia = payload?.evidenceFileId ? await File.findOne({ where: { id: payload.evidenceFileId, companyId }, transaction }) : null;
+    if (!evidencia) {
+      throw AppError.badRequest('Informe o arquivo de evidência do status que a promotora informou (e-mail, print ou protocolo).', 'MANUAL_STATUS_EVIDENCE_REQUIRED');
+    }
+    note = `${note ? `${note} ` : ''}[evidência: arquivo ${evidencia.id}]`.trim();
+  }
   if (status === 'REJECTED' && note.length < 3) {
     throw AppError.badRequest('Informe o motivo da recusa pelo banco.', 'MANUAL_STATUS_REASON_REQUIRED');
   }

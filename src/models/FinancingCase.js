@@ -27,6 +27,9 @@ module.exports = (sequelize) => {
       duplicateReviewNote: { type: DataTypes.TEXT, allowNull: true, field: 'duplicate_review_note' },
       possibleDuplicateOfCaseId: { type: DataTypes.UUID, allowNull: true, field: 'possible_duplicate_of_case_id' },
       providerCode: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'sandbox', field: 'provider_code' },
+      // M9-D228: trocas de provider na contingência ({ from, to, at, reason, dispatchId }) e exclusividade contratual com a promotora (nenhum provider automático alternativo).
+      providerHistory: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'provider_history' },
+      providerExclusive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'provider_exclusive' },
       product: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'FINANCIAMENTO_IMOBILIARIO', field: 'product' },
       purpose: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'RESIDENCIAL', field: 'purpose' },
       status: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'DRAFT', field: 'status' },

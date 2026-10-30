@@ -16,11 +16,14 @@ const { BANK_SETTINGS_SCHEMA } = require('./bank.settings');
 const { toCents, toDecimal } = require('./bank.money');
 const { ensureBankAdaptersRegistered } = require('./bank.boot');
 const { installBankReactions } = require('./bank.react');
+const { installBankContingency } = require('./bank.contingency');
 
 // A resolução humana do erro de valor divergente chega ao Financeiro (decisão REJECT_PAYMENT leva o envio a FAILED).
 registerResolveHandler(constants.MISMATCH_CODE, onMismatchResolved);
 // M9-D220: a intenção muda de estado por evento interno do envio (recusa do banco) e a ordem sem resposta conclusiva vai à revisão humana.
 installBankReactions();
+// M9-D228: banco fora não presume pagamento, consulta antes de reenviar e vira tarefa ao financeiro passado o prazo.
+installBankContingency();
 
 module.exports = {
   ...constants, ensureBankConnection, configuredProviderKey, callBankSubmit, dispatchOf, sentResultOf, checkAmount, applyStatusToDispatch, rejectByAmount, recordAmountMismatch,

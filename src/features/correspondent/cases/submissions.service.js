@@ -23,6 +23,7 @@ const { sanitizeProviderMessage } = require('../sanitizeProviderMessage');
 const { safeAudit } = require('../safeAudit');
 const { syncOpportunityFromFinancingCase, STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
 const { submitViaDispatch } = require('../dispatch/submitViaDispatch');
+const { recordProviderSwitch, REASONS } = require('../dispatch/providerSwitch');
 
 // Tempo máximo de espera do provider antes de tratar o envio como incerto (UNKNOWN): o valor da empresa vem de
 // Parâmetros (providerTimeoutSeconds). Este é só o último recurso quando ninguém informou o tempo; variável de
@@ -881,6 +882,11 @@ async function applyProviderOutcome(adapter, submission, financingCase, outcome,
       await markSubmissionUnknown(submission, financingCase, outcome.error, transaction);
     }
     return submission;
+  }
+  if (outcome.usedAlternate && outcome.providerCode) {
+    // M9-D228: o envio seguiu por um provider alternativo elegível da contingência: o provider original fica no histórico do caso e a troca é auditada, ANTES do roteamento do id externo.
+    const { catalogLegacy: { toCorrespondentCode } } = require('../../integrations');
+    await recordProviderSwitch(financingCase, submission, { toCode: toCorrespondentCode(outcome.providerCode), reason: REASONS.ALTERNATE, dispatchId: outcome.dispatchId, actorUserId }, transaction);
   }
   const { result } = outcome;
   if (!result || !validExternalId(result.externalId)) {

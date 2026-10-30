@@ -23,6 +23,11 @@ module.exports = (sequelize) => {
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       financialEntryId: { type: DataTypes.UUID, allowNull: false, field: 'financial_entry_id' },
       snapshotJson: { type: DataTypes.JSONB, allowNull: false, field: 'snapshot_json' },
+      // M9-D228: o que a tela mostra enquanto a ordem espera o banco (fila, envio incerto ou aceita sem status final): nunca "pago" por presunção.
+      statusMessage: {
+        type: DataTypes.VIRTUAL,
+        get() { return ['SUBMITTING', 'SUBMITTED'].includes(this.getDataValue('status')) ? 'Aguardando confirmação do banco' : null; },
+      },
       snapshotHash: { type: DataTypes.STRING(64), allowNull: false, field: 'snapshot_hash' },
       status: {
         type: DataTypes.STRING(32),
