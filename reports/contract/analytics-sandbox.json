@@ -1,0 +1,91 @@
+{
+  "provider": "analytics-sandbox",
+  "domain": "ANALYTICS",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T14:55:24.255Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "emitMetric",
+    "emitEvent",
+    "queryHealth"
+  ],
+  "adapterHash": "22b12e9a51bb15075b52d26775692d5c1eb880acc073cca1591785cb5af45076",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 66,
+  "passed": 66,
+  "status": "PASSED",
+  "errors": []
+}

@@ -1,0 +1,30 @@
+{
+  "provider": "analytics-sandbox",
+  "apiVersion": "v1",
+  "description": "Serviço de métricas e eventos de laboratório: aceita métrica e evento sem dado pessoal (ids opacos e agregados), com id simulado determinístico; nenhuma chamada de rede.",
+  "requests": {
+    "emitMetric": {
+      "name": "nayara.contrato.contador",
+      "value": "3",
+      "tags": {
+        "origem": "contrato"
+      }
+    },
+    "emitEvent": {
+      "name": "nayara.contrato.evento",
+      "properties": {
+        "origem": "contrato"
+      }
+    },
+    "queryHealth": {}
+  },
+  "noResourceId": [
+    "queryHealth"
+  ],
+  "statuses": {
+    "ACCEPTED": "ACCEPTED",
+    "REJECTED": "REJECTED"
+  },
+  "unknownStatus": "em_triagem",
+  "renewal": false
+}
