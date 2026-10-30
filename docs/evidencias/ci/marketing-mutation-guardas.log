@@ -1,0 +1,13 @@
+controle: a cópia sem mutação passa (5 teste(s)).
+MORTA    g1_literal (guard_no_hardcoded_cadence.test.js): um atraso de 3 dias escrito no código (delay = 3 * 86400) -> 2 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação]
+MORTA    g1_lista (guard_no_hardcoded_cadence.test.js): a lista de dias de cadência escrita no código -> 2 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação]
+MORTA    g1_seed (guard_no_hardcoded_cadence.test.js): a automação pronta volta a levar o cap 3 em 7 dias escrito no código -> 3 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação]
+MORTA    g2_direta (guard_send_requires_cansend.test.js): um arquivo novo chama o canal direto, sem o wrapper com canSend -> 2 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_send_requires_cansend achou violação]
+MORTA    g2_sem_cansend (guard_send_requires_cansend.test.js): o wrapper deixa de consultar o canSend antes do canal -> 3 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_send_requires_cansend achou violação]
+MORTA    g3_pula_factual (guard_ai_output_requires_factual_validation.test.js): o passo de marca deixa de exigir a validação factual -> 2 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_ai_output_requires_factual_validation achou violação]
+MORTA    g4_dto_bruto (guard_public_payload_only.test.js): a porta de saída deixa de exigir PublicPayload nos canais de publicação -> 4 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_public_payload_only achou violação]
+MORTA    g5_retry_cego (guard_no_blind_retry.test.js): o timeout volta o job a PENDING sem consultar o canal -> 5 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_no_blind_retry achou violação]
+MORTA    g6_sem_kill (guard_kill_switch_always_checked.test.js): o runner deixa de consultar o kill switch -> 3 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_kill_switch_always_checked achou violação]
+MORTA    g7_sem_ocorrencia (guard_review_after_case_resolved.test.js): o pedido de avaliação deixa de conferir ocorrência aberta -> 3 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_review_after_case_resolved achou violação]
+MORTA    g8_sem_chave (guard_replay_is_safe.test.js): o agendamento deixa de reaproveitar o job da mesma chave -> 3 teste(s) reprovado(s) [AssertionError [ERR_ASSERTION]: a guarda guard_replay_is_safe achou violação]
+MUTATION CHECK: as 11 mutações foram detectadas.

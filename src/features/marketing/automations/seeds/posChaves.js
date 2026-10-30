@@ -1,6 +1,7 @@
 'use strict';
 
 const { POS_KEYS_DAYS_KEY } = require('../cadence/cadence.defaults');
+const { seedFrequencyCap } = require('./seedCap');
 
 const POS_CHAVES_CODE = 'POS-CHAVES';
 const PURPOSE = 'POS_VENDA';
@@ -17,7 +18,7 @@ const MARCOS = Object.freeze([
  * Pós-chaves (M9-D422): gatilho `keys.delivered` (o livro o chama de contract.keys_delivered; o evento real do Jurídico é keys.delivered). Uma mensagem por marco, com horário
  * calculado pelo parâmetro de cadência, finalidade POS_VENDA para todas, e a conferência do contrato (ativo e sem ocorrência aberta) em cada vencimento.
  */
-async function posChavesDefinition({ ownerUserId, templates = {} }) {
+async function posChavesDefinition({ ownerUserId, templates = {}, tenant, transaction }) {
   return {
     code: POS_CHAVES_CODE, name: 'Pós-chaves: acompanhamento depois da entrega das chaves', ownerUserId, riskLevel: 'LOW', triggerType: 'EVENT',
     triggerConfig: { eventType: 'keys.delivered', dedupeKey: '{id}', requireActiveContract: true, requireNoOpenOccurrence: true },
@@ -26,7 +27,7 @@ async function posChavesDefinition({ ownerUserId, templates = {} }) {
       actionType: 'SEND_MESSAGE', channel: 'AUTO', purpose: PURPOSE, subject: marco.subject, text: marco.text, ...(marco.linkProvider ? { linkProvider: marco.linkProvider } : {}),
       ...(templates[index] ? { templateId: templates[index] } : {}), cadence: { code: POS_KEYS_DAYS_KEY, index, base: 'KEYS_DELIVERED' }, stopOnError: false,
     })),
-    cooldown: { amount: 1, unit: 'HOURS' }, frequencyCap: { max: 3, windowDays: 7, scope: 'PERSON_CHANNEL_PURPOSE' },
+    cooldown: { amount: 1, unit: 'HOURS' }, frequencyCap: await seedFrequencyCap(tenant, transaction),
   };
 }
 

@@ -6,6 +6,7 @@ const { resolveChannelAdapter } = require('./release/channelAccess');
 const { decideOnResult } = require('./contingency/channelContingency');
 const gate = require('./circuit.gate');
 const { assertOutboundAllowed } = require('../../killswitch.state');
+const { assertPublicPayload } = require('../../security/publicPayload');
 
 /** Resposta sintética do sandbox que passou do tempo máximo: resultado incerto (UNKNOWN), nunca falha presumida (Guia §9). */
 const timeoutResult = (adapter, operation, idempotencyKey) => adapter.result(operation, idempotencyKey, {
@@ -40,6 +41,7 @@ function raceTimeout(work, timeoutMs) {
 async function sendToChannel(channelName, message, { tenant, transaction, idempotencyKey, mode = 'AUTO', scenario, campaignId, automationId, media, circuit, now = new Date() } = {}) {
   const channel = normalizeChannel(channelName);
   await assertOutboundAllowed(tenant, { channel, campaignId, automationId }, transaction);
+  if (CHANNEL_META[channel].operation === 'publish') assertPublicPayload(message, channel); // canal público só recebe PublicPayload (M9-D440), depois do kill switch
   const adapter = await resolveChannelAdapter(channel, { tenant, transaction, mode });
   const operation = CHANNEL_META[channel].operation;
   const selfManaged = adapter.isSandbox && circuit === undefined;

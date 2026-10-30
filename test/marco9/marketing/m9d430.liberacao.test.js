@@ -10,6 +10,9 @@ const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { prepararTenants } = require('../../helpers/marketingExecucao');
 const { upsertSetting, getSetting } = require('../../../src/features/settings/settings.service');
 const adapters = require('../../../src/features/marketing/publications/adapters');
+const { sanitizePublicFields } = require('../../../src/features/marketing/content/sanitize');
+
+const publico = (objeto) => sanitizePublicFields(objeto).payload; // canal de publicação só recebe PublicPayload (M9-D440)
 
 const { CHANNELS, SCENARIOS, releaseKey, releaseChannel, approveConsentPolicy, homologateAdapter, recordChannelDrill, isChannelReleased, sendToChannel, resetSandbox, listChannelStatus } = adapters;
 let A;
@@ -42,7 +45,7 @@ test('canal_nao_liberado_so_usa_sandbox: a resposta nasce marcada sandbox e prod
   await run(async (t) => {
     const r = await sendToChannel('WHATSAPP', { to: '+5511999990000', texto: 'Olá' }, { tenant: A, transaction: t, idempotencyKey: 'chave-lib-000001' });
     assert.deepEqual([r.sandbox, r.mode, r.status], [true, 'SANDBOX', 'SENT']);
-    const p = await sendToChannel('SITE', { slug: 'casa', titulo: 'Casa' }, { tenant: A, transaction: t, idempotencyKey: 'chave-lib-000002', scenario: 'REJECTED' });
+    const p = await sendToChannel('SITE', publico({ slug: 'casa', titulo: 'Casa' }), { tenant: A, transaction: t, idempotencyKey: 'chave-lib-000002', scenario: 'REJECTED' });
     assert.deepEqual([p.sandbox, p.status], [true, 'REJECTED'], 'o cenário de teste vale no sandbox');
     await rejeita(() => sendToChannel('WHATSAPP', { to: '+5511999990000', texto: 'Olá' }, { tenant: A, transaction: t, idempotencyKey: 'chave-lib-000003', mode: 'PRODUCTION' }), 409, 'MKT_CHANNEL_NOT_RELEASED');
     await rejeita(() => adapters.resolveChannelAdapter('PORTAL', { tenant: A, transaction: t, mode: 'PRODUCTION' }), 409, 'MKT_CHANNEL_NOT_RELEASED');
@@ -149,9 +152,9 @@ test('parametros_do_sandbox_sao_lidos_da_empresa', async () => {
   await run(async (t) => {
     await upsertSetting('marketing.channel.sandbox.retry_after_s', 99, A, A.userId, t);
     await upsertSetting('marketing.channel.sandbox.slow_ms', 0, A, A.userId, t);
-    const r = await sendToChannel('YOUTUBE', { titulo: 'Tour' }, { tenant: A, transaction: t, idempotencyKey: 'chave-par-000001', scenario: 'HTTP_429' });
+    const r = await sendToChannel('YOUTUBE', publico({ titulo: 'Tour' }), { tenant: A, transaction: t, idempotencyKey: 'chave-par-000001', scenario: 'HTTP_429' });
     assert.equal(r.error.retryAfterMs, 99000);
-    const lento = await sendToChannel('TIKTOK', { titulo: 'Tour' }, { tenant: A, transaction: t, idempotencyKey: 'chave-par-000002', scenario: 'SLOW' });
+    const lento = await sendToChannel('TIKTOK', publico({ titulo: 'Tour' }), { tenant: A, transaction: t, idempotencyKey: 'chave-par-000002', scenario: 'SLOW' });
     assert.equal(lento.status, 'PUBLISHED');
     await assert.rejects(() => upsertSetting('marketing.channel.sandbox.retry_after_s', 0, A, A.userId, t), (e) => e.code === 'SETTING_INVALID_VALUE');
   });

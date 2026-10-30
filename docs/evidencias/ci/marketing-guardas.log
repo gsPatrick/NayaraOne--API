@@ -1,0 +1,82 @@
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_no_hardcoded_cadence] automations/violacao.cadencia.js:3 número de espera, silêncio ou frequência escrito no código (delay = 3 * 86400); o valor vem de parâmetro (getMarketingParam)
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_no_hardcoded_cadence] automations/violacao.lista.js:3 lista de dias de cadência escrita no código; o valor vem do parâmetro marketing.cadencia.* (cadence.defaults.js é o único lugar dos padrões): [3, 30, 90, 365]
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_no_hardcoded_cadence] automations/seeds/posChaves.js:30 número de espera, silêncio ou frequência escrito no código (windowDays: 7); o valor vem de parâmetro (getMarketingParam)
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_send_requires_cansend] campaigns/violacao.envio.js:5 chamada direta ao canal fora do wrapper sendMarketingMessage (sendThroughPolicy): toda mensagem a uma pessoa passa por kill switch e canSend antes do adapter
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_send_requires_cansend] publications/messaging/message/message.send.js:134 o wrapper deve chamar canSend (opt-out, silêncio, limite, consentimento) antes de sendToChannel
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_ai_output_requires_factual_validation] content/pipeline.core.js:19 o passo "branding" deve exigir o passo "factual" gravado com ok (hoje: facts); sem isso o texto da IA avança sem validação factual
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_public_payload_only] publications/adapters/sendToChannel.js:1 sendToChannel deve recusar (MKT_INTERNAL_DTO_FORBIDDEN) o que não é PublicPayload nos canais de publicação
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_no_blind_retry] publications/worker/worker.outcome.js:45 o timeout deve deixar o job em UNKNOWN; voltar a PENDING sem consultar o canal é retry cego e pode duplicar o post
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_kill_switch_always_checked] automations/runner/runner.decide.js:1 o runner de automações deve consultar o kill switch antes de decidir o envio
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_review_after_case_resolved] automations/reviews/review.positive.js:81 positive deve conferir ocorrência aberta (hasOpenCase) antes de criar ou enviar o pedido de avaliação
+  prova: MKT_GUARD_VIOLATION Violação de regra arquitetural do Marketing: [guard_replay_is_safe] publications/schedule/schedule.jobs.js:1 o agendamento deve reaproveitar o job da mesma chave de idempotência; sem isso o post duplica
+✔ o_modulo_verdadeiro_passa_nas_8_guardas_e_na_ordem_do_livro (266.990958ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g1_literal (guard_no_hardcoded_cadence): um atraso de 3 dias escrito no código (delay = 3 * 86400) (502.341125ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g1_lista (guard_no_hardcoded_cadence): a lista de dias de cadência escrita no código (561.266875ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g1_seed (guard_no_hardcoded_cadence): a automação pronta volta a levar o cap 3 em 7 dias escrito no código (518.074166ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g2_direta (guard_send_requires_cansend): um arquivo novo chama o canal direto, sem o wrapper com canSend (588.405333ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g2_sem_cansend (guard_send_requires_cansend): o wrapper deixa de consultar o canSend antes do canal (451.782666ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g3_pula_factual (guard_ai_output_requires_factual_validation): o passo de marca deixa de exigir a validação factual (562.705417ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g4_dto_bruto (guard_public_payload_only): a porta de saída deixa de exigir PublicPayload nos canais de publicação (630.843292ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g5_retry_cego (guard_no_blind_retry): o timeout volta o job a PENDING sem consultar o canal (485.993084ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g6_sem_kill (guard_kill_switch_always_checked): o runner deixa de consultar o kill switch (356.536791ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g7_sem_ocorrencia (guard_review_after_case_resolved): o pedido de avaliação deixa de conferir ocorrência aberta (485.959792ms)
+✔ cada_guarda_reprova_quando_a_violacao_e_introduzida: g8_sem_chave (guard_replay_is_safe): o agendamento deixa de reaproveitar o job da mesma chave (378.371583ms)
+✔ as_8_guardas_tem_ao_menos_uma_violacao_injetada_cada (0.203875ms)
+✔ o_portao_de_ci_sai_com_1_na_copia_com_violacao_e_com_0_no_modulo_verdadeiro (914.36775ms)
+✔ guard_ai_output_requires_factual_validation: a corrente de passos exige o passo anterior com ok e a autopublicação exige o factual ok (587.19625ms)
+✔ guard_ai_output_requires_factual_validation: passo que deixa de exigir a validação factual é achado com arquivo e linha (3898.405ms)
+✔ guard_ai_output_requires_factual_validation: texto da NAY com dado que o cadastro não tem não avança por nenhum caminho (2185.48725ms)
+✔ guard_ai_output_requires_factual_validation: texto que o cadastro sustenta avança até a aprovação humana (150.949417ms)
+✔ guard_kill_switch_always_checked: runner, worker, campanha e porta de saída consultam o kill switch (677.799917ms)
+✔ guard_kill_switch_always_checked: o runner sem a consulta ao kill switch é achado, e a cópia sem a chamada reprova (arquivo e linha) (728.056208ms)
+(node:77301) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_kill_switch_always_checked: com o kill switch global ligado, runner, worker e campanha não chamam o adapter; desligado, o job pendente sai (1178.150208ms)
+✔ guard_no_blind_retry: o timeout deixa o job em UNKNOWN, o retorno a PENDING vem da reconciliação e o envio não tem laço de nova tentativa (581.060125ms)
+✔ guard_no_blind_retry: timeout que volta o job a PENDING sem consultar o canal é achado com arquivo e linha (739.71125ms)
+(node:77540) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_no_blind_retry: com o sandbox em TIMEOUT, a segunda chamada a publish só vem depois de findByIdempotencyKey e o canal fica com um post (1373.08225ms)
+✔ guard_no_blind_retry: com o sandbox em UNKNOWN_BUT_PUBLISHED, a segunda chamada a publish só vem depois de findByIdempotencyKey e o canal fica com um post (633.851584ms)
+✔ guard_no_blind_retry: com o sandbox em UNKNOWN_NOT_PUBLISHED, a segunda chamada a publish só vem depois de findByIdempotencyKey e o canal fica com um post (431.650792ms)
+✔ guard_no_hardcoded_cadence: o código do Marketing não tem literal de cadência, silêncio, cap ou espera fora dos dicionários de parâmetros (1580.125791ms)
+✔ guard_no_hardcoded_cadence: o literal do livro (delay = 3 * 86400) é achado com arquivo e linha (1758.160541ms)
+✔ guard_no_hardcoded_cadence: trocar o frequency cap pelo parâmetro muda a decisão do canSend sem deploy (567.634167ms)
+✔ guard_no_hardcoded_cadence: trocar o horário de silêncio pelo parâmetro muda a decisão do canSend e a cadência muda as datas do plano (297.642167ms)
+✔ guard_no_hardcoded_cadence: as automações prontas levam o cap do parâmetro da empresa, não um número do código (359.640333ms)
+✔ guard_public_payload_only: a porta de saída exige PublicPayload e só o sanitizePublicFields marca (306.391333ms)
+✔ guard_public_payload_only: marcar o payload à mão fora do sanitizador é achado com arquivo e linha (582.517333ms)
+✔ guard_public_payload_only: DTO bruto em canal de publicação lança MKT_INTERNAL_DTO_FORBIDDEN e o adapter não é chamado (77.720958ms)
+(node:77875) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_public_payload_only: o payload sanitizado sai; a cópia dele (spread ou JSON) perde a marca e é recusada (119.694542ms)
+✔ guard_public_payload_only: mensagem direta a uma pessoa (WhatsApp, e-mail) não é conteúdo público e segue o próprio caminho (70.553625ms)
+✔ guard_replay_is_safe: as âncoras de idempotência de cada fluxo existem no código (425.382417ms)
+✔ guard_replay_is_safe: agendamento sem reaproveitar a chave do job é achado com arquivo e linha (614.850375ms)
+(node:78086) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_replay_is_safe: o mesmo evento do lead 3 vezes = 1 run, 1 mensagem e 1 tarefa (470.854875ms)
+✔ guard_replay_is_safe: a mesma ação de mensagem 3 vezes = 1 mensagem no CRM e 1 chamada ao adapter (224.926583ms)
+✔ guard_replay_is_safe: agendar o mesmo post e rodar o worker 3 vezes = 1 job e 1 post (897.4135ms)
+✔ guard_replay_is_safe: o step da campanha reexecutado 3 vezes envia 1 vez por destinatário (698.556625ms)
+✔ guard_replay_is_safe: a mesma satisfação positiva 3 vezes = 1 pedido de avaliação e 1 mensagem (349.884208ms)
+✔ guard_review_after_case_resolved: o pedido de avaliação confere ocorrência aberta antes de criar e de enviar (301.477833ms)
+✔ guard_review_after_case_resolved: pedido sem a conferência da ocorrência é achado com arquivo e linha (506.089666ms)
+(node:78262) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_review_after_case_resolved: com ocorrência aberta a nota positiva não gera pedido e o canal não é chamado; resolvida, só a nova nota positiva pede a avaliação (416.006375ms)
+✔ guard_review_after_case_resolved: a nota negativa abre a ocorrência antes e não pede avaliação (306.57675ms)
+✔ guard_send_requires_cansend: nenhum caminho chama o canal fora do wrapper, e o wrapper consulta o canSend antes (394.785125ms)
+✔ guard_send_requires_cansend: chamada direta ao canal fora do wrapper é achada com arquivo e linha (568.047042ms)
+(node:78386) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ guard_send_requires_cansend: quem pediu para sair, quem está na lista de supressão e quem não deu consentimento nunca chegam ao adapter (espião: zero chamadas) (213.83175ms)
+✔ guard_send_requires_cansend: quem pode ser contatado chega ao adapter uma vez, e o replay da mesma ação não chama de novo (163.081042ms)
+ℹ tests 51
+ℹ suites 0
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51710.443875

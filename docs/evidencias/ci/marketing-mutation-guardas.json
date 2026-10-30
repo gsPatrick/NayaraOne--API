@@ -1,0 +1,95 @@
+{
+  "grupo": "guardas",
+  "geradoEm": "2026-10-30T22:15:20.492Z",
+  "resultado": "TODAS_MORTAS",
+  "mutacoes": [
+    {
+      "id": "g1_literal",
+      "teste": "guard_no_hardcoded_cadence.test.js",
+      "mutacao": "um atraso de 3 dias escrito no código (delay = 3 * 86400)",
+      "reprovou": true,
+      "falhas": 2,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g1_lista",
+      "teste": "guard_no_hardcoded_cadence.test.js",
+      "mutacao": "a lista de dias de cadência escrita no código",
+      "reprovou": true,
+      "falhas": 2,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g1_seed",
+      "teste": "guard_no_hardcoded_cadence.test.js",
+      "mutacao": "a automação pronta volta a levar o cap 3 em 7 dias escrito no código",
+      "reprovou": true,
+      "falhas": 3,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_no_hardcoded_cadence achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g2_direta",
+      "teste": "guard_send_requires_cansend.test.js",
+      "mutacao": "um arquivo novo chama o canal direto, sem o wrapper com canSend",
+      "reprovou": true,
+      "falhas": 2,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_send_requires_cansend achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g2_sem_cansend",
+      "teste": "guard_send_requires_cansend.test.js",
+      "mutacao": "o wrapper deixa de consultar o canSend antes do canal",
+      "reprovou": true,
+      "falhas": 3,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_send_requires_cansend achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g3_pula_factual",
+      "teste": "guard_ai_output_requires_factual_validation.test.js",
+      "mutacao": "o passo de marca deixa de exigir a validação factual",
+      "reprovou": true,
+      "falhas": 2,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_ai_output_requires_factual_validation achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g4_dto_bruto",
+      "teste": "guard_public_payload_only.test.js",
+      "mutacao": "a porta de saída deixa de exigir PublicPayload nos canais de publicação",
+      "reprovou": true,
+      "falhas": 4,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_public_payload_only achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g5_retry_cego",
+      "teste": "guard_no_blind_retry.test.js",
+      "mutacao": "o timeout volta o job a PENDING sem consultar o canal",
+      "reprovou": true,
+      "falhas": 5,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_no_blind_retry achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g6_sem_kill",
+      "teste": "guard_kill_switch_always_checked.test.js",
+      "mutacao": "o runner deixa de consultar o kill switch",
+      "reprovou": true,
+      "falhas": 3,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_kill_switch_always_checked achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g7_sem_ocorrencia",
+      "teste": "guard_review_after_case_resolved.test.js",
+      "mutacao": "o pedido de avaliação deixa de conferir ocorrência aberta",
+      "reprovou": true,
+      "falhas": 3,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_review_after_case_resolved achou violação\n  + actual - expected"
+    },
+    {
+      "id": "g8_sem_chave",
+      "teste": "guard_replay_is_safe.test.js",
+      "mutacao": "o agendamento deixa de reaproveitar o job da mesma chave",
+      "reprovou": true,
+      "falhas": 3,
+      "motivo": "AssertionError [ERR_ASSERTION]: a guarda guard_replay_is_safe achou violação\n  + actual - expected"
+    }
+  ]
+}

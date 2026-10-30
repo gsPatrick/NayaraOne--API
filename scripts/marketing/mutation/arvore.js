@@ -18,10 +18,15 @@ function criarCopia() {
   return dir;
 }
 
-/** Aplica as edições { arquivo, de, para } (arquivo relativo à raiz da API) na cópia. Devolve a lista de arquivos mexidos. */
+/** Aplica as edições { arquivo, de, para } (arquivo relativo à raiz da API) na cópia; `{ arquivo, criar }` cria um arquivo novo com esse texto. Devolve a lista de arquivos mexidos. */
 function aplicar(dir, edicoes) {
   return edicoes.map((e) => {
     const alvo = path.join(dir, e.arquivo);
+    if (e.criar !== undefined) {
+      fs.mkdirSync(path.dirname(alvo), { recursive: true });
+      fs.writeFileSync(alvo, e.criar);
+      return e.arquivo;
+    }
     const texto = fs.readFileSync(alvo, 'utf8');
     const vezes = texto.split(e.de).length - 1;
     if (vezes !== 1) throw new Error(`mutação inválida em ${e.arquivo}: o trecho aparece ${vezes} vezes (esperado 1): ${e.de.slice(0, 80)}`);
