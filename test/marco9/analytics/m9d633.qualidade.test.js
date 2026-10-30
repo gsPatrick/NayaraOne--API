@@ -5,6 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const sc = require('../_helpers/m9d633Scenario');
+const { storedDimension } = require('../_helpers/biStoredSnapshot');
 
 const { src } = sc;
 let env;
@@ -56,7 +57,8 @@ test('m9d633 crm.broker_capture fica DEGRADED com valor nulo quando a regra de q
   const bad = await run('crm.broker_capture', 'rm_broker_performance');
   assert.equal(bad.status, 'DEGRADED');
   assert.ok(isNull(bad.value));
-  assert.equal(Number((await sc.readKpi(env.cX, 'crm.broker_capture', { dimensionKey: 'sem_captador' })).value), 2, 'o "Sem captador" continua à vista');
+  assert.ok(isNull((await sc.readKpi(env.cX, 'crm.broker_capture', { dimensionKey: 'sem_captador' })).value), 'a API nunca devolve número de KPI DEGRADED, nem o de uma dimensão (M9-D697)');
+  assert.equal(Number(await storedDimension(env, env.cX, 'crm.broker_capture', 'sem_captador', sc.TODAY)), 2, 'o snapshot gravado guarda o "Sem captador" com a contagem verdadeira');
   await sc.setSetting(env, env.cX, 'analytics.qualidade.max_sem_corretor_pct', 10); // o limite é parâmetro do administrador
   const relaxed = await run('crm.broker_capture', 'rm_broker_performance');
   assert.deepEqual([relaxed.status, Number(relaxed.value)], ['OK', 21]);
