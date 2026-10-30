@@ -15,7 +15,8 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `ingest/replay.js`, `deletions.js` | Replay como novo lote (`replay_of`); comparação de chaves que marca `source_deleted`. |
 | `ingest/targets/` | Destino por entidade (`PERSON`, `SUPPLIER`, `PROPERTY`): `assess` (quarentena ou revisão), `upsert`, `markDeleted`. Entidade nova = um arquivo + uma linha em `targets/index.js` + uma semente. |
 | `seeds/sources.seed.js` | Fontes semeadas por empresa (sem rota de cadastro). |
-| `migration.routes.js` | `POST /migration/runs` (permissão `governance:migration:run`) responde 202 com `{runId}`. |
+| `migration.routes.js` | `POST /migration/runs` (permissão `governance:migration:run`) responde 202 com `{runId}`; `GET /migration/raci` (run) e `PUT /migration/raci` (`governance:migration:admin`). |
+| `raci/` | M9-D902. RACI de cutover: dez atividades semeadas por empresa (`raci.seed`), matriz por atividade com exatamente um A e ao menos um R (`raci.service`, 422 `GOV_RACI_SINGLE_ACCOUNTABLE` para o segundo A; matriz sem A ou sem R é aceita e vira o blocker `GOV_MIG_RACI_INCOMPLETE` da Torre), papel do ator por usuário ou perfil (`raci.access`). A atividade `LAST_DELTA_LOAD` dispara `POST /migration/runs` com `lastDelta: true`. |
 
 ## Parâmetros (aba Governança em /painel/configuracoes)
 

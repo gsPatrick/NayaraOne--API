@@ -1024,3 +1024,17 @@ test('M9-D900: mig_sources, mig_runs, mig_batches, mig_records e mig_event_keys 
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
   }
 });
+
+// M9-D902: a matriz RACI do corte (governance.cutover_activities e cutover_raci) é da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT ao runtime.
+test('M9-D902: cutover_activities e cutover_raci têm RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const tables = ['cutover_activities', 'cutover_raci'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const t of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${t}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
+  }
+});

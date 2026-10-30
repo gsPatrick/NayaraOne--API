@@ -651,6 +651,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
 | `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
 | `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
+| `GET` | `/api/v1/migration/raci` | `governance:migration:run` | não |
+| `PUT` | `/api/v1/migration/raci` | `governance:migration:admin` | não |
 | `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
 | `POST` | `/api/v1/marketing/media/:id/authorize` | `marketing:content:approve` | não |
 | `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
@@ -827,8 +829,8 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:finops:read` | LOW | `GET /api/v1/finops/budgets`, `GET /api/v1/finops/degradation-policies`, `GET /api/v1/finops/health` |
 | `governance:finops:manage` | HIGH | `PATCH /api/v1/finops/budgets/:id`, `POST /api/v1/finops/budgets`, `PUT /api/v1/finops/degradation-policies` |
 | `governance:flags:manage` | CRITICAL | `POST /api/v1/feature-flags/impact`, `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags` |
-| `governance:migration:run` | CRITICAL | `POST /api/v1/migration/runs` |
-| `governance:migration:admin` | CRITICAL | nenhuma ainda |
+| `governance:migration:run` | CRITICAL | `GET /api/v1/migration/raci`, `POST /api/v1/migration/runs` |
+| `governance:migration:admin` | CRITICAL | `PUT /api/v1/migration/raci` |
 | `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
 | `governance:legal-hold:manage` | CRITICAL | nenhuma ainda |
 
