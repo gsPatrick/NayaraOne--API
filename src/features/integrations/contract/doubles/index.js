@@ -3,6 +3,7 @@
 const { makeBankDouble } = require('./bank.double');
 const { makeInsuranceDouble } = require('./insurance.double');
 const { makeManualDouble, manualMeta } = require('./insurance.manual.double');
+const { makeSignatureDouble, signatureMeta } = require('./signature.double');
 const { s3Context, setupLocalDisk } = require('./storage.double');
 const { prepareSandbox, prepareLocal, makeSessionStoreDouble, setupLocalSecret } = require('./identity.double');
 
@@ -16,6 +17,8 @@ const DOUBLES = Object.freeze({
   'insurance-porto-seguro': { make: makeInsuranceDouble },
   'insurance-yelum': { make: makeInsuranceDouble },
   'insurance-manual': { make: makeManualDouble, meta: manualMeta },
+  'signature-clicksign': { make: makeSignatureDouble, meta: signatureMeta },
+  'signature-zapsign': { make: makeSignatureDouble, meta: signatureMeta },
   // Ambiente de contrato (M9-D242): `context()` (config, segredo e http da connection de laboratório), `prepare(pedido)` (pedido com credencial emitida na hora) e `setup()` (devolve a função que desfaz).
   'storage-local-disk': { setup: setupLocalDisk },
   'storage-s3': { context: s3Context },

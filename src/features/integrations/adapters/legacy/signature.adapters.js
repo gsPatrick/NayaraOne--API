@@ -15,7 +15,8 @@ const STATUS = { PENDING: 'PENDING', SIGNED: 'SIGNER_SIGNED', CLOSED: 'COMPLETED
  */
 async function criarEnvelope(legacy, req, self, meta) {
   const transaction = meta && meta.transaction;
-  const versao = await ContractVersion.findByPk(String(req.documentRef), { transaction });
+  const carregar = meta && typeof meta.loadContractVersion === 'function' ? meta.loadContractVersion : (id, t) => ContractVersion.findByPk(id, { transaction: t });
+  const versao = await carregar(String(req.documentRef), transaction);
   if (!versao) throw AppError.notFound('Versão do contrato não encontrada para o envelope.', 'LEGAL_SIGNATURE_VERSION_NOT_FOUND');
   if (req.documentSha256 && versao.contentHash !== req.documentSha256) {
     throw AppError.conflict('A versão do contrato mudou depois do pedido: o hash enviado não é o da versão.', 'LEGAL_SIGNATURE_VERSION_HASH_CHANGED');
@@ -35,6 +36,9 @@ const ops = {
   },
   verifyWebhook: verifyOp((l, req) => hmacVerify(req.rawBody, req.headers, req.secret)),
 };
+
+/** Clicksign e ZapSign não consultam envelope pela chave de idempotência: a consulta recusa com o código de sempre e o envio incerto segue para a revisão humana (como nos bancos e seguradoras). */
+const semConsultaPorChave = async () => { throw Object.assign(new Error('O provedor de assinatura não oferece consulta por chave de idempotência.'), { code: 'INTEGRATION_LOOKUP_UNSUPPORTED' }); };
 
 const CAPABILITIES = ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'];
 const SCHEMA_EVENTO = Object.freeze({ type: 'object', required: ['event'], properties: { event: { type: 'object' } } });
@@ -76,6 +80,7 @@ const SignatureClicksignContractAdapter = wrapLegacy({
   derivesEventId: true,
   toInternalEvent: eventoClicksign,
   idempotentOps: [],
+  lookups: { findByIdempotencyKey: semConsultaPorChave },
 });
 
 /** signature-zapsign: mesmo contrato do Clicksign sobre o adapter antigo do ZapSign (cabeçalho x-zapsign-signature, formato do evento ainda sem credencial real para confirmar). */
@@ -103,6 +108,7 @@ const SignatureZapSignContractAdapter = wrapLegacy({
     return signatureEvent({ kind, envelopeId, signerId: signer.token || null, signerEmail: signer.email || null, signerName: signer.name || null, signedAt: payload.signed_at || null, ip: signer.ip || null, userAgent: signer.user_agent || null, authMethod: 'email' });
   },
   idempotentOps: [],
+  lookups: { findByIdempotencyKey: semConsultaPorChave },
 });
 
 module.exports = { SignatureClicksignContractAdapter, SignatureZapSignContractAdapter };

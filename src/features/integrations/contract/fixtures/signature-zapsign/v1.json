@@ -1,0 +1,44 @@
+{
+  "provider": "signature-zapsign",
+  "apiVersion": "v1",
+  "description": "ZapSign sob o contrato do port SignatureAdapter, contra o objeto antigo duplo de laboratório (sem rede, sem credencial e sem banco).",
+  "requests": {
+    "createEnvelope": {
+      "documentRef": "doc-contrato-001",
+      "documentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "signers": [
+        {
+          "personId": "pessoa-1",
+          "email": "assinante1@qa-m9.test",
+          "name": "Assinante Um"
+        }
+      ]
+    },
+    "getEnvelope": {
+      "externalResourceIdFrom": "createEnvelope"
+    },
+    "cancelEnvelope": {
+      "externalResourceIdFrom": "createEnvelope"
+    },
+    "downloadSigned": {
+      "externalResourceIdFrom": "createEnvelope",
+      "documentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    "verifyWebhook": {
+      "rawBody": "{}",
+      "headers": {}
+    }
+  },
+  "noResourceId": [
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "pending": "PENDING",
+    "signed": "SIGNER_SIGNED",
+    "closed": "COMPLETED",
+    "canceled": "CANCELED"
+  },
+  "unknownStatus": "em_analise_do_provedor",
+  "renewal": false,
+  "legacyDouble": "signature-zapsign"
+}
