@@ -4,9 +4,10 @@ const { createAutomation, publishAutomation } = require('../definition.service')
 const { findFlowByCode } = require('../definition.repository');
 const { posChavesDefinition, POS_CHAVES_CODE } = require('./posChaves');
 const { locacaoDefinition, LOCACAO_CODE } = require('./locacao');
+const { lembreteDefinition, expiracaoDefinition, LEMBRETE_CODE, EXPIRACAO_CODE } = require('./restricao');
 
 /** Automações prontas do Marketing (M9-D422 a M9-D424): código do fluxo -> montagem da definição. Entram nas mesmas rotas de criação e publicação do livro. */
-const SEEDS = { [POS_CHAVES_CODE]: posChavesDefinition, [LOCACAO_CODE]: locacaoDefinition };
+const SEEDS = { [POS_CHAVES_CODE]: posChavesDefinition, [LOCACAO_CODE]: locacaoDefinition, [LEMBRETE_CODE]: lembreteDefinition, [EXPIRACAO_CODE]: expiracaoDefinition };
 const registerSeed = (code, build) => { SEEDS[code] = build; };
 
 /**

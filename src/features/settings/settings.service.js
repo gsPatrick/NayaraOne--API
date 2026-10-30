@@ -24,7 +24,7 @@ const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns
 const { COST_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/cost.settings');
 const { SEGMENT_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/segment.settings');
 const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automations/cadence/cadence.settings');
-const { CADENCE_SEED_SETTINGS_SCHEMA } = require('../../features/marketing/automations/seeds/cadence.settings');
+const { SEEDS_SETTINGS_SCHEMA } = require('../../features/marketing/automations/seeds/seeds.settings');
 const { CHANNEL_SETTINGS_SCHEMA } = require('../../features/marketing/publications/adapters/channel.settings');
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
 const { SEO_SETTINGS_SCHEMA } = require('../../features/marketing/publications/seo/seo.settings');
@@ -239,7 +239,7 @@ const SETTINGS_SCHEMA = {
   ...TRACKING_SETTINGS_SCHEMA,
   // Marco 9, M9-D417 — cadência, quiet hours e frequency cap do Marketing (lidos por getMarketingParam; escrita exige marketing:automation:manage).
   ...CADENCE_SETTINGS_SCHEMA,
-  ...CADENCE_SEED_SETTINGS_SCHEMA, // M9-D422: cadência de locação, tipos de contrato e link da pesquisa de satisfação
+  ...SEEDS_SETTINGS_SCHEMA, // M9-D422 a M9-D424: cadência de locação, link da pesquisa, lembretes de restrição e pedido de avaliação
   // Marco 9, M9-D430 — liberação por canal (só o serviço releaseChannel grava) e tempos do sandbox dos adapters de canal.
   ...CHANNEL_SETTINGS_SCHEMA,
   // Marco 9, M9-D418 — listas de finalidade do consentimento, palavras de opt-out e janela de atendimento do canSend.
