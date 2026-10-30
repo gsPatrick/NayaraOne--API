@@ -6,6 +6,7 @@ const adapterRegistry = require('../../integrations/registry/adapterRegistry');
 const { invoke } = require('../../integrations/registry/adapterInvoke');
 const { messagingStatus: { shouldApply } } = require('../../integrations');
 const { updateMessageStatus } = require('../messages.service');
+const { guardExternalData } = require('../../integrations/domain');
 
 /**
  * Consulta o status da mensagem no fornecedor (`getStatus`, M9-D229 3.1) quando a connection tem a capability, e aplica pela mesma regra do webhook (só avança). É a
@@ -20,7 +21,8 @@ async function refreshStatus(ctx, messageId, transaction) {
   const connection = await IntegrationConnection.findOne({ where: { id: message.connectionId, companyId: ctx.companyId }, transaction });
   const adapter = await adapterRegistry.resolve(connection, ctx, transaction);
   if (!adapter.supports('getStatus')) throw AppError.unprocessable('O fornecedor não suporta esta operação.', 'INTEGRATION_CAPABILITY_UNSUPPORTED');
-  const resposta = await invoke(adapter, 'getStatus', { externalResourceId: message.externalMessageId }, { tenant: ctx, transaction, meta: { transaction } });
+  // Resposta fora do formato: 502 INTEGRATION_EXTERNAL_DATA_REJECTED e a mensagem não muda (M9-D220).
+  const resposta = await guardExternalData(() => invoke(adapter, 'getStatus', { externalResourceId: message.externalMessageId }, { tenant: ctx, transaction, meta: { transaction } }));
   if (!shouldApply(message.deliveryStatus, resposta.status)) return { message, changed: false };
   await updateMessageStatus(message.id, resposta.status, null, transaction, { fromProvider: true });
   return { message: await message.reload({ transaction }), changed: true };

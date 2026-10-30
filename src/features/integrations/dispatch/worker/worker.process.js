@@ -42,7 +42,7 @@ async function observe(args) {
 }
 
 /** Fase B (tx da chamada): resolve o adapter, chama pelo contrato, e grava sucesso ou falha. O commit de SENDING já aconteceu. */
-async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx) {
+async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx, maxCallMs = null) {
   return run(ctx, async (transaction) => {
     const dispatch = await lockSending(ctx, id, transaction);
     if (!dispatch) return { skipped: true };
@@ -62,7 +62,8 @@ async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx) {
     let normalized;
     let bruta = null;
     try {
-      normalized = await invoke(adapter, dispatch.operation, dispatch.payloadSnapshot, { tenant: ctx, transaction, meta, onResponse: (r) => { bruta = r; } });
+      const chamada = invoke(adapter, dispatch.operation, dispatch.payloadSnapshot, { tenant: ctx, transaction, meta, onResponse: (r) => { bruta = r; } });
+      normalized = maxCallMs ? await withDeadline(chamada, maxCallMs) : await chamada;
     } catch (error) {
       const latencyMs = Date.now() - inicio;
       await observe({ ctx, dispatch, connection, adapter, error, attemptId, now, transaction });
@@ -76,13 +77,21 @@ async function phaseB(ctx, id, attemptId, now, probe = false, run = tenantTx) {
   });
 }
 
-/** Processa UM envio já pego (SENDING): fase A e, se liberado, fase B. */
-async function processClaimed(ctx, id, { now = new Date(), transaction = null } = {}) {
+/** Prazo da chamada feita a pedido do usuário (M9-D220 3.1 item 6): passou do prazo, a chamada é abandonada como timeout (operação perigosa vira UNKNOWN e reconcilia) e o usuário recebe o aceite. */
+function withDeadline(promessa, ms) {
+  let timer;
+  const prazo = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('Tempo esgotado esperando o fornecedor.'), { code: 'ETIMEDOUT', name: 'TimeoutError' })), ms); });
+  promessa.catch(() => {}); // a chamada abandonada pode falhar depois; ninguém mais espera por ela
+  return Promise.race([promessa, prazo]).finally(() => clearTimeout(timer));
+}
+
+/** Processa UM envio já pego (SENDING): fase A e, se liberado, fase B. `maxCallMs`: prazo máximo da chamada (ação do usuário esperando). */
+async function processClaimed(ctx, id, { now = new Date(), transaction = null, maxCallMs = null } = {}) {
   // Com `transaction` (M9-D240: fluxo do Correspondente dentro da transação do pedido) as duas fases rodam nela; sem, cada fase abre a sua.
   const run = transaction ? (_ctx, fn) => sequelize.transaction({ transaction }, fn) : tenantTx; // savepoint: a falha de uma fase não aborta a transação do pedido
   const a = await phaseA(ctx, id, now, run);
   if (a.skipped || a.deferred || a.failed) return a;
-  return phaseB(ctx, id, a.attemptId, now, a.probe, run);
+  return phaseB(ctx, id, a.attemptId, now, a.probe, run, maxCallMs);
 }
 
 module.exports = { processClaimed };

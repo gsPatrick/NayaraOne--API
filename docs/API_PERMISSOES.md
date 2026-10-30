@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 593. Rotas só com login ou públicas: 26.
+Rotas com permissão exigida: 598. Rotas só com login ou públicas: 26.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -589,6 +589,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/procurement/insurance-policies/:id/installments` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/insurance-policies/:id/issue` | `procurement:approve` | não |
 | `POST` | `/api/v1/procurement/insurance-policies/:id/quote` | `procurement:create` | não |
+| `GET` | `/api/v1/procurement/insurance-policies/:id/versions` | `procurement:read` | não |
+| `POST` | `/api/v1/procurement/insurance-policies/:id/versions` | `procurement:approve` | não |
 | `GET` | `/api/v1/procurement/insurance-policies/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/insurance-policies` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/insurance-policies` | `procurement:create` | não |
@@ -647,6 +649,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `DELETE` | `/api/v1/roles/:id` | `roles:delete` | sim |
 | `GET` | `/api/v1/roles/:id` | `roles:read` | não |
 | `POST` | `/api/v1/procurement/insurance-renewal-tasks/:id/complete` | `procurement:approve` | não |
+| `GET` | `/api/v1/procurement/insurance-tasks` | `procurement:read` | não |
+| `POST` | `/api/v1/procurement/insurance-tasks/:id/cancel` | `procurement:approve` | não |
+| `POST` | `/api/v1/procurement/insurance-tasks/:id/complete` | `procurement:approve` | não |
 | `PATCH` | `/api/v1/roles/:id` | `roles:update` | sim |
 | `GET` | `/api/v1/roles` | `roles:read` | não |
 | `POST` | `/api/v1/roles` | `roles:create` | sim |

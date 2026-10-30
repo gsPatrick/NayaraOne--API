@@ -11,6 +11,7 @@ const { publishSignatureRequested } = require('../legalEvents.service');
 const { ensureSignatureConnection } = require('./signature.connection');
 const { loadSigners } = require('./signature.signers');
 const { installEnvelopeBinder } = require('./signature.bind');
+const { readDomainParams } = require('../../integrations/domain');
 
 installEnvelopeBinder();
 
@@ -30,7 +31,9 @@ async function assertSignableVersion(contractVersion, transaction) {
 /** Manda o envio agora (a pessoa espera o id do envelope): pega o envio PENDING e roda o worker nele, na mesma transação do pedido. */
 async function sendNow(ctx, dispatchId, transaction) {
   await transitionDispatch(ctx, dispatchId, 'SENDING', {}, { motivo: 'Envio pego pelo fluxo de assinatura do Jurídico.' }, transaction);
-  const resultado = await processClaimed(ctx, dispatchId, { transaction });
+  // M9-D220: a pessoa não espera o fornecedor além de integration.sync_call_timeout_ms; passou disso o pedido é aceito, o envelope fica PENDING e o id se aprende pela reconciliação.
+  const { syncCallTimeoutMs } = await readDomainParams(ctx, transaction);
+  const resultado = await processClaimed(ctx, dispatchId, { transaction, maxCallMs: syncCallTimeoutMs });
   const atual = await IntegrationDispatch.findOne({ where: { id: dispatchId, companyId: ctx.companyId }, transaction });
   if (FINAL_FAILURE.includes(atual.status)) {
     throw AppError.internal('O fornecedor de assinatura não aceitou o pedido de envelope.', 'LEGAL_SIGNATURE_PROVIDER_ERROR', { dispatchStatus: atual.status, code: atual.lastErrorCode || null });
