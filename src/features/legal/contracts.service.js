@@ -2,6 +2,7 @@
 
 const { Contract, ContractParty, ContractVersion, Signature, Guarantee, Person, sequelize } = require('../../models');
 const { publishContractRenewalChange } = require('./legalDeadlineCalendarEvents.service');
+const { countingSignatures } = require('./signatureRows');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('./legalEvents.service');
@@ -234,7 +235,7 @@ async function assertSignatureGate(contract, transaction) {
   // FIX (29/09/2026, mesmo padrão do gate de ativação abaixo): "toda Signature que existe está
   // SIGNED" não garante que EXISTE uma Signature pra cada parte obrigatória — cruza contra
   // REQUIRED_ROLES_BY_TYPE.
-  const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
+  const signatures = countingSignatures(await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction }));
   const requiredRolesForSigning = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
   let allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
   if (allSigned && requiredRolesForSigning.length > 0) {
@@ -301,7 +302,7 @@ async function assertActivationGate(contract, transaction) {
   // contrato (mesmo padrão já usado em handleSignatureWebhook, signatures.service.js) — cada
   // papel obrigatório do tipo de contrato precisa ter uma pessoa titular com Signature SIGNED,
   // não só "as assinaturas que existem estão OK".
-  const signatures = await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction });
+  const signatures = countingSignatures(await Signature.findAll({ where: { contractVersionId: latestVersion.id }, transaction }));
   const requiredRoles = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
   let allSigned = signatures.length > 0 && signatures.every((s) => s.status === 'SIGNED');
   if (allSigned && requiredRoles.length > 0) {

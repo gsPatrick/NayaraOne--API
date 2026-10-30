@@ -96,6 +96,7 @@ legalRouter.post('/legal/amendments/:id/sign', requirePermission('legal:update')
 legalRouter.post('/legal/contract-versions/:id/signatures', requirePermission('legal:sign'), legalController.initiateSignature);
 // M45 (Caderno M5 §8): assinatura MANUAL exige arquivo da via assinada e coletor identificado.
 legalRouter.post('/legal/contract-versions/:id/manual-signatures', requirePermission('legal:sign'), legalController.recordManualSignature);
+legalRouter.post('/legal/signature-envelopes/:id/switch-provider', requirePermission('legal:sign'), requireRecentMfa, legalController.switchSignatureProvider);
 legalRouter.get('/legal/contract-versions/:id/signatures', requirePermission('legal:read'), legalController.listSignaturesByContractVersion);
 legalRouter.post('/legal/signatures/:externalSignatureId/webhook', requirePermission('legal:sign'), legalController.signatureWebhook);
 legalRouter.get('/legal/signatures/:id/status', requirePermission('legal:sign'), legalController.checkSignatureStatus);

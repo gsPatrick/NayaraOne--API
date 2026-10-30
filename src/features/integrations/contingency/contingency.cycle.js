@@ -13,12 +13,20 @@ const { findAgedQueued } = require('./contingency.queueAge');
 const { publishManualTask } = require('./contingency.manualTask');
 const { autoSwitchQueued } = require('./contingency.autoSwitch');
 const { tryRecover } = require('./contingency.recovery');
+const { handleAged, runDomainStep } = require('./contingency.domainHooks');
 
 /** Item da fila que passou do prazo vira tarefa manual (um evento por envio). Devolve quantos eventos novos saíram. */
 async function publishAgedAsTasks(ctx, connection, policy, params, now, transaction) {
   const itens = await findAgedQueued(ctx, connection.id, policy.queueMaxAgeH, now, params.manualTaskBatchSize, transaction);
-  for (const item of itens) await publishManualTask(ctx, { item, policy, domain: policy.domain, dueH: params.manualTaskDueH, now }, transaction);
-  return itens.length;
+  let tarefas = 0;
+  for (const item of itens) {
+    // O domínio pode resolver o item vencido sozinho (o marketing do WhatsApp é cancelado, não vira tarefa): M9-D227.
+    const tratado = await handleAged(policy.domain, ctx, item, policy, now, transaction);
+    if (tratado && tratado.handled) continue;
+    await publishManualTask(ctx, { item, policy, domain: policy.domain, dueH: params.manualTaskDueH, now }, transaction);
+    tarefas += 1;
+  }
+  return tarefas;
 }
 
 /** Passo de UMA connection: ativa pelos gatilhos, troca a fila para o alternativo e transforma o vencido em tarefa manual. */
@@ -36,6 +44,8 @@ async function stepConnection(ctx, connection, params, now, transaction, resumo)
   if (MODES_WITH_ALTERNATE.includes(policy.mode) && policy.alternateConnectionId) {
     resumo.switched += (await autoSwitchQueued(ctx, connection, policy.domain, params.drainBatchSize, now, transaction)).length;
   }
+  const passo = await runDomainStep(policy.domain, ctx, { connection, policy, params, now }, transaction);
+  if (passo && passo.switched) resumo.switched += passo.switched;
   if (policy.queueMaxAgeH !== null) resumo.manualTasks += await publishAgedAsTasks(ctx, connection, policy, params, now, transaction);
   return ativa;
 }

@@ -618,6 +618,13 @@ const recordManualSignature = catchAsync(async (req, res) => {
   );
   return success(res, { statusCode: 201, data: result });
 });
+// M9-D227: troca do fornecedor de assinatura fora do ar por outro elegível, aprovada por uma pessoa com MFA recente (a rota exige).
+const switchSignatureProvider = catchAsync(async (req, res) => {
+  const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
+  const approved = Boolean(req.body && req.body.approve === true);
+  const result = await req.withTenantTransaction((t) => signatureFlow.switchSignatureProvider(ctx, { envelopeId: req.params.id, approved, actorUserId: req.auth.userId }, t));
+  return success(res, { data: result });
+});
 const listInspectionSignatures = catchAsync(async (req, res) => {
   const signatures = await req.withTenantTransaction((t) => inspectionsService.listInspectionSignatures(req.params.id, t));
   return success(res, { data: signatures });
@@ -782,7 +789,7 @@ const nayDeadlineSuggestions = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createInspectionRevision, recordManualSignature,
+  createInspectionRevision, recordManualSignature, switchSignatureProvider,
   nayContractSummary, nayContractCompare, nayCaseSummary, nayCaseDossier, nayClauseSuggestions, nayDeadlineSuggestions,
   createContract, listContracts, getContract, transitionContract,
   suspendContract, reactivateContract, terminateContract, closeContract,

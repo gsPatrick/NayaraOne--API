@@ -15,7 +15,8 @@ const { readDomainParams } = require('../../integrations/domain');
 
 installEnvelopeBinder();
 
-const FINAL_FAILURE = ['FAILED', 'DEAD_LETTER', 'CANCELLED', 'RETRY_WAIT'];
+// M9-D227: RETRY_WAIT e PENDING (fornecedor fora, circuito aberto) NÃO são recusa: o pedido é aceito, o envelope fica PENDING, o estado do contrato é preservado e o envio espera na fila.
+const FINAL_FAILURE = ['FAILED', 'DEAD_LETTER', 'CANCELLED'];
 
 /** Só a versão vigente e aprovada do contrato vai para assinatura, com o hash dela (M9-D236 3.2 item 7): o hash é o que o fornecedor confirma depois. */
 async function assertSignableVersion(contractVersion, transaction) {

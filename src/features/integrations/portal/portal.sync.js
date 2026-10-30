@@ -12,6 +12,7 @@ const { ensurePortalAdaptersRegistered } = require('./portal.boot');
 const { readPortalParams } = require('./portal.params');
 const { STREAM, SYNCABLE } = require('./portal.constants');
 const { applyExternalListingStatus, lastPublishDispatch } = require('./portal.status');
+const { reprocessPendingSync } = require('./portal.reprocess');
 
 /** Lê o estado de UM anúncio no portal e aplica. Portal fora do ar não derruba nada: grava o erro no vínculo e segue. Devolve { changed } ou { skipped }. */
 async function syncOne(ctx, listingId, transaction) {
@@ -69,6 +70,7 @@ async function syncListingStatuses({ group, company, onlyConnectionId }) {
   ensurePortalAdaptersRegistered();
   const ctx = { groupId: group.id, companyId: company.id, userId: null };
   const { syncPageSize } = await tenantTx(ctx, (t) => readPortalParams(ctx, t));
+  await reprocessPendingSync(ctx); // M9-D227: o anúncio PENDING_SYNC (portal que esteve fora) é reprocessado a cada intervalo até o portal aceitar
   const conexoes = (await tenantTx(ctx, (transaction) => PortalListing.findAll({
     where: { companyId: ctx.companyId, supersededAt: null, status: { [Op.in]: SYNCABLE } }, attributes: ['connectionId'], group: ['connection_id'], transaction,
   }))).map((l) => l.connectionId).filter((id) => !onlyConnectionId || id === onlyConnectionId);

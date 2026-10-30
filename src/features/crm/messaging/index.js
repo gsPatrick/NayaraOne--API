@@ -7,6 +7,7 @@ const { applyMessagingEvent, installMessagingEvents } = require('./messaging.eve
 const { installMessageBinder } = require('./messaging.bind');
 const { installMessageFailureConsumer } = require('./messaging.failure');
 const { installConsentGuard } = require('./whatsapp.guard');
+const { sendViaAlternateChannel } = require('./contingency');
 const { MESSAGING_SETTINGS_SCHEMA } = require('./messaging.settings');
 const { assertE164 } = require('./messaging.phone');
 
@@ -15,4 +16,4 @@ installMessageBinder();
 installMessageFailureConsumer();
 installConsentGuard();
 
-module.exports = { sendMessage, refreshStatus, applyMessagingEvent, assertE164, MESSAGING_SETTINGS_SCHEMA };
+module.exports = { sendMessage, sendViaAlternateChannel, refreshStatus, applyMessagingEvent, assertE164, MESSAGING_SETTINGS_SCHEMA };

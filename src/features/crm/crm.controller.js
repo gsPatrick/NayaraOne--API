@@ -165,6 +165,13 @@ const sendMessage = catchAsync(async (req, res) => {
   return success(res, { statusCode: 202, data: { messageId: r.message.id, dispatchId: r.dispatchId, status: r.status, operation: r.operation, degraded: r.degraded } });
 });
 
+// M9-D227: com o WhatsApp fora, leva a mensagem de texto da fila para o e-mail do contato (canal alternativo, só com o consentimento dele).
+const sendMessageViaAlternate = catchAsync(async (req, res) => {
+  const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
+  const r = await req.withTenantTransaction((transaction) => messaging.sendViaAlternateChannel(ctx, req.params.id, { auth: req.auth }, transaction));
+  return success(res, { data: r });
+});
+
 const refreshMessageStatus = catchAsync(async (req, res) => {
   const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
   const r = await req.withTenantTransaction((transaction) => messaging.refreshStatus(ctx, req.params.id, transaction));
@@ -345,6 +352,7 @@ module.exports = {
   removeVisit,
   createMessage,
   sendMessage,
+  sendMessageViaAlternate,
   refreshMessageStatus,
   listMessages,
   getMessage,

@@ -11,6 +11,8 @@ const { SandboxSignatureAdapter, ClicksignSignatureAdapter, ZapSignSignatureAdap
 const { getSetting, getDecryptedSetting } = require('../settings/settings.service');
 const diskStorage = require('../../utils/diskStorage');
 const signatureFlow = require('./signature');
+const { buildManualEvidence, supersedeElectronicRequest } = require('./signature/signature.manual');
+const { queryEnvelopeStatus } = require('./signature/signature.status');
 const { recordSimulatedEvidence } = require('./signature/signature.simulated');
 const { encryptFileBuffer } = require('../../utils/fileCrypto');
 
@@ -202,7 +204,8 @@ async function checkSignatureStatus(signatureId, transaction) {
 
   const ctx = { groupId: signature.groupId, companyId: signature.companyId, userId: null };
   const envelope = await envelopeOf(signature, transaction);
-  const providerStatus = await signatureFlow.callEnvelope(ctx, envelope, 'getEnvelope', { externalResourceId: envelope.externalEnvelopeId }, transaction);
+  const providerStatus = await queryEnvelopeStatus(ctx, envelope, transaction); // M9-D227: fornecedor fora = UNKNOWN, sem presumir assinado nem cancelado
+  if (providerStatus.unavailable) return { signature, providerStatus, reconciled: false, unknown: true };
 
   const providerSaysSigned = providerStatus.status === 'COMPLETED';
   if (providerSaysSigned && signature.status !== 'SIGNED') {
@@ -397,6 +400,7 @@ async function recordManualSignature(contractVersionId, payload, actorUserId, tr
   if (!evidence) {
     throw AppError.badRequest('Arquivo de evidência da assinatura não encontrado nesta empresa.', 'LEGAL_MANUAL_SIGNATURE_EVIDENCE_NOT_FOUND');
   }
+  const manual = buildManualEvidence({ contractVersion, file: evidence, collectedByUserId: actorUserId, signedAt }); // M9-D227: evidência MANUAL_UPLOAD com os hashes
   const externalSignatureId = `manual:${crypto.randomUUID()}`;
   const signature = await Signature.create(
     {
@@ -407,6 +411,9 @@ async function recordManualSignature(contractVersionId, payload, actorUserId, tr
       status: 'PENDING',
       signatureMethod: 'MANUAL',
       evidenceFileId,
+      evidenceType: 'MANUAL_UPLOAD',
+      evidenceJson: manual.evidence,
+      evidenceComplete: manual.complete,
       collectedByUserId: actorUserId,
       contentHash: contractVersion.contentHash || null,
       externalSignatureId,
@@ -428,6 +435,7 @@ async function recordManualSignature(contractVersionId, payload, actorUserId, tr
     },
     transaction
   );
+  await supersedeElectronicRequest({ groupId: contractVersion.groupId, companyId: contractVersion.companyId }, { contractVersionId: contractVersion.id, personId, manualSignatureId: signature.id, actorUserId }, transaction);
   return handleSignatureWebhook(externalSignatureId, { signedAt: signedAt || new Date(), contentHash: contractVersion.contentHash }, transaction);
 }
 

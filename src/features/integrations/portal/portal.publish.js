@@ -12,6 +12,8 @@ const { findActive, createListing, listActive } = require('./portal.listing.stor
 const { minimizedListing } = require('./portal.minimize');
 const { ensurePortalAdaptersRegistered } = require('./portal.boot');
 const { REQUIRED_MISSING_CODE, REQUIRED_MISSING_MESSAGE } = require('./portal.constants');
+const { findActive: findActiveContingency } = require('../contingency/contingency.state');
+const { MENSAGEM: PENDING_MESSAGE } = require('./portal.contingency.message');
 
 /** Texto que a tela mostra por estado do anúncio (M9-D233: remoção só termina com a confirmação do portal). */
 const STATUS_MESSAGES = Object.freeze({ UNPUBLISHING: 'Remoção aguardando confirmação do portal', REJECTED: 'Anúncio reprovado: complete o cadastro do imóvel ou veja o motivo', PUBLISHING: 'Publicação aguardando confirmação do portal' });
@@ -64,13 +66,19 @@ async function publishOne(ctx, con, propertyId, readModel, transaction) {
   const hash = hashPayload({ mappingVersion: version, payload: mapped.payload });
   if (listing.payloadHash === hash && ['PENDING_SYNC', 'PUBLISHING', 'PUBLISHED'].includes(listing.status)) return toItem(con, listing, { noop: true });
 
-  const operation = listing.externalListingId && ['PUBLISHING', 'PUBLISHED', 'ERROR', 'REJECTED'].includes(listing.status) ? 'updateListing' : 'publishListing';
+  const operation = listing.externalListingId && ['PUBLISHING', 'PUBLISHED', 'ERROR', 'REJECTED', 'PENDING_SYNC'].includes(listing.status) ? 'updateListing' : 'publishListing';
   const { dispatch } = await createPropertyPublicationDispatch(ctx, {
     connectionId: con.id, propertyId, operation, idempotencyKey: await dispatchKey(ctx, listing, operation, hash, transaction), externalResourceId: listing.externalListingId || undefined,
     aggregateType: 'PortalListing', aggregateId: listing.id,
   }, transaction);
-  await listing.update({ status: 'PUBLISHING', payloadHash: hash, mappingVersion: version, fieldsDropped: mapped.fieldsDropped, rejectionReason: null, lastError: null }, { transaction });
-  await audit(ctx, listing, 'integration.portal_listing.publish_requested', antes, { status: 'PUBLISHING', payloadHash: hash, operation }, `Anúncio enviado ao portal (${operation}).`, transaction);
+  // M9-D227: com o portal em contingência o anúncio nasce PENDING_SYNC (o imóvel segue publicado internamente) e o envio espera na fila até o portal voltar.
+  const emContingencia = Boolean(await findActiveContingency(ctx, { connectionId: con.id }, transaction));
+  const status = emContingencia ? 'PENDING_SYNC' : 'PUBLISHING';
+  await listing.update({
+    status, payloadHash: hash, mappingVersion: version, fieldsDropped: mapped.fieldsDropped, rejectionReason: null,
+    lastError: emContingencia ? PENDING_MESSAGE : null, pendingSyncSince: emContingencia ? (listing.pendingSyncSince || new Date()) : null,
+  }, { transaction });
+  await audit(ctx, listing, 'integration.portal_listing.publish_requested', antes, { status, payloadHash: hash, operation }, `Anúncio enviado ao portal (${operation}).`, transaction);
   return toItem(con, listing, { dispatchId: dispatch.id, operation });
 }
 
@@ -109,4 +117,4 @@ async function listPortalListings(ctx, propertyId, transaction) {
   return summarize(items);
 }
 
-module.exports = { publishToPortals, listPortalListings, activePortals, summarize };
+module.exports = { publishToPortals, listPortalListings, activePortals, summarize, dispatchKey };

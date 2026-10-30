@@ -17,7 +17,7 @@ async function onPublicChanged(event, transaction) {
   const ctx = { groupId: event.groupId, companyId: event.companyId, userId: null };
   const propertyId = event.payloadJson && event.payloadJson.propertyId;
   if (!propertyId) return { status: 'SKIPPED' };
-  const vivos = await PortalListing.findAll({ where: { companyId: ctx.companyId, propertyId, supersededAt: null, status: ['PUBLISHING', 'PUBLISHED', 'REJECTED', 'ERROR'] }, attributes: ['connectionId'], transaction });
+  const vivos = await PortalListing.findAll({ where: { companyId: ctx.companyId, propertyId, supersededAt: null, status: ['PUBLISHING', 'PUBLISHED', 'REJECTED', 'ERROR', 'PENDING_SYNC'] }, attributes: ['connectionId'], transaction });
   if (!vivos.length) return { status: 'SKIPPED' };
   try {
     return await publishToPortals(ctx, { propertyId, connectionIds: vivos.map((v) => v.connectionId) }, transaction);

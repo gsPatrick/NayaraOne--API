@@ -2,6 +2,7 @@
 
 const AppError = require('../../../utils/AppError');
 const { WHATSAPP_SETTINGS_SCHEMA } = require('./whatsapp.settings');
+const { WHATSAPP_CONTINGENCY_SETTINGS_SCHEMA } = require('./contingency/mc.settings');
 
 /**
  * Parâmetros da mensageria do CRM (M9-D229): só o dicionário de SETTINGS_SCHEMA; a leitura está em messaging.params.js. Padrões em Maturacao/demandas/parametros.csv.
@@ -17,6 +18,7 @@ const MESSAGING_SETTINGS_SCHEMA = Object.freeze({
   // Prazo (horas) da primeira ação da oportunidade criada para quem escreve pela primeira vez (lead provisório).
   'integration.messaging.inbound_lead_prazo_horas': { type: 'integer', min: 1, max: 720 },
   ...WHATSAPP_SETTINGS_SCHEMA,
+  ...WHATSAPP_CONTINGENCY_SETTINGS_SCHEMA,
 });
 
 module.exports = { MESSAGING_SETTINGS_SCHEMA };

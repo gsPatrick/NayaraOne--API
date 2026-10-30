@@ -69,6 +69,7 @@ module.exports = (sequelize) => {
       signerEmail: { type: DataTypes.STRING(254), allowNull: true, field: 'signer_email' },
       evidenceJson: { type: DataTypes.JSONB, allowNull: true, field: 'evidence_json' },
       evidenceComplete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'evidence_complete' },
+      evidenceType: { type: DataTypes.STRING(24), allowNull: true, field: 'evidence_type', comment: 'M9-D227: PROVIDER_EVENT (evento do fornecedor) ou MANUAL_UPLOAD (via assinada anexada)' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

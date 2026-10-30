@@ -45,6 +45,7 @@ async function applyExternalListingStatus(ctx, listing, external, transaction) {
   } else if (to === 'PUBLISHED') {
     Object.assign(patch, { rejectionReason: null, lastError: null });
   }
+  if (to !== 'PENDING_SYNC') patch.pendingSyncSince = null; // o portal respondeu: o anúncio não espera mais a sincronização (M9-D227)
   await listing.update({ ...patch, status: to }, { transaction });
   const s = String(external.status || '').toUpperCase();
   if (['PUBLISHED', 'UPDATED', 'REJECTED'].includes(s) && from !== 'UNPUBLISHING') {

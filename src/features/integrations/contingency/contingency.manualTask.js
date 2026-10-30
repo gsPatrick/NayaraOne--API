@@ -7,6 +7,7 @@ const { registerEventConsumer } = require('../../../engines/events/consumers');
 const { createOnceByActionKey } = require('../../../utils/createOnceByActionKey');
 const { activeUserIdsWithRole } = require('../../core-governance/governance.users');
 const { EVENTS, RELATED_ENTITY_TYPE } = require('./contingency.constants');
+const { buildManualTask } = require('./contingency.domainHooks');
 
 const CONSUMER = 'integration-contingency-manual-task';
 
@@ -38,9 +39,10 @@ async function publishManualTask(ctx, { item, policy, domain, dueH, now }, trans
 async function onManualTask(event, transaction) {
   const p = event.payloadJson || {};
   const donos = (await activeUserIdsWithRole(p.assigneeRole, { companyId: event.companyId }, transaction)).sort();
+  const doDominio = await buildManualTask(p.domain, event, transaction); // M9-D227: o domínio dá o responsável, o título e o texto da tarefa
   const { record } = await createOnceByActionKey(Task, {
-    groupId: event.groupId, companyId: event.companyId, assignedToUserId: donos[0] || null,
-    title: `Contingência: tratar envio pendente (${p.providerCode})`.slice(0, 255), description: String(p.text || '').slice(0, 2000),
+    groupId: event.groupId, companyId: event.companyId, assignedToUserId: (doDominio && doDominio.assignedToUserId) || donos[0] || null,
+    title: ((doDominio && doDominio.title) || `Contingência: tratar envio pendente (${p.providerCode})`).slice(0, 255), description: String((doDominio && doDominio.description) || p.text || '').slice(0, 2000),
     relatedEntityType: RELATED_ENTITY_TYPE, relatedEntityId: p.dispatchId, dueAt: p.dueAt ? new Date(p.dueAt) : null, status: 'OPEN', priority: 'HIGH',
     actionKey: crypto.createHash('sha256').update(`${EVENTS.MANUAL_TASK}:${p.dispatchId}`).digest('hex'),
   }, { transaction });

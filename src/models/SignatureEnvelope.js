@@ -22,6 +22,7 @@ module.exports = (sequelize) => sequelize.define(
     originalConfirmedSha256: { type: DataTypes.CHAR(64), allowNull: true, field: 'original_confirmed_sha256' },
     signedDocumentFileId: { type: DataTypes.UUID, allowNull: true, field: 'signed_document_file_id' },
     dispatchId: { type: DataTypes.UUID, allowNull: true, field: 'dispatch_id' },
+    supersededBy: { type: DataTypes.UUID, allowNull: true, field: 'superseded_by' },
   },
   { schema: 'legal', tableName: 'signature_envelopes', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at', underscored: true }
 );

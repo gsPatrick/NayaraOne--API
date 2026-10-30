@@ -58,6 +58,7 @@ async function fakeFile(transaction, ext = 'pdf') {
       storageKey: `m45/${suffix}.${ext}`,
       fileName: `evid-m45-${suffix}.${ext}`,
       mimeType: 'application/pdf',
+      checksumSha256: String(suffix).padEnd(64, 'e').slice(0, 64), // M9-D227: a assinatura manual só vale com a evidência com hash
       uploadedByUserId: tenant.userId,
       createdBy: tenant.userId,
       updatedBy: tenant.userId,

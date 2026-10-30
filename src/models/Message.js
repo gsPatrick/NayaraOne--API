@@ -98,6 +98,9 @@ module.exports = (sequelize) => {
       mediaQuarantineId: { type: DataTypes.UUID, allowNull: true, field: 'media_quarantine_id' },
       mediaState: { type: DataTypes.STRING(16), allowNull: true, field: 'media_state' },
       failureReason: { type: DataTypes.STRING(240), allowNull: true, field: 'failure_reason' },
+      alternateChannel: { type: DataTypes.STRING(48), allowNull: true, field: 'alternate_channel', comment: 'M9-D227: EMAIL ou o outro fornecedor de mensagens que levou a mensagem com o WhatsApp principal fora' },
+      alternateRef: { type: DataTypes.STRING(64), allowNull: true, field: 'alternate_ref' },
+      alternateAt: { type: DataTypes.DATE, allowNull: true, field: 'alternate_at' },
       actionKey: {
         type: DataTypes.STRING(64),
         allowNull: true,

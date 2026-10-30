@@ -18,6 +18,7 @@ const { drainQueue } = require('./contingency.drain');
 const { readContingencyParams, modeQueueMaxAgeH } = require('./contingency.params');
 const { onManualTask } = require('./contingency.manualTask');
 const { registerFamilyHandlers } = require('./contingency.handlers');
+const hooks = require('./contingency.domainHooks');
 
 let installed = false;
 
@@ -30,5 +31,5 @@ function installContingency() {
 module.exports = {
   installContingency, runContingencyCycle, activateContingency, deactivateContingency, tryRecover, drainQueue, findActive, listActiveRows, listActiveContingencies, toView,
   resolveContingencyPolicy, resolvePolicyFor, contingencyProblems, checkAlternate, assertAlternate, switchToAlternate, isAlternateSafe, readContingencyParams, modeQueueMaxAgeH,
-  onManualTask, CONTINGENCY_SETTINGS_SCHEMA, FAMILY_DEFAULT_MODE, MODES, EVENTS, REASONS,
+  onManualTask, ...hooks, CONTINGENCY_SETTINGS_SCHEMA, FAMILY_DEFAULT_MODE, MODES, EVENTS, REASONS,
 };

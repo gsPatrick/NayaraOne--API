@@ -6,6 +6,7 @@ const { lastPublishDispatch, publishStatusChanged } = require('./portal.status')
 const { LISTING_AGGREGATE } = require('./portal.constants');
 
 const PUBLISH_OPS = ['publishListing', 'updateListing'];
+const AWAITING = ['PUBLISHING', 'PENDING_SYNC'];
 
 /** Evento de envio de um anúncio de portal (aggregate PortalListing e operação do port), ou null. */
 const listingEvent = (event, operations) => {
@@ -33,14 +34,15 @@ async function onConfirmed(ctx, event, transaction) {
     return { entity: { type: LISTING_AGGREGATE, id: listing.id }, before: { status: listing.status }, after: { status: listing.status, compensationDispatchId: r.dispatch.id },
       reason: `Envio ${p.dispatchId} confirmado pelo portal depois da remoção do anúncio: remoção compensatória pedida (envio ${r.dispatch.id}).` };
   }
-  if (listing.status !== 'PUBLISHING') return null;
+  if (!AWAITING.includes(listing.status)) return null; // PENDING_SYNC (portal fora, M9-D227) espera a confirmação como PUBLISHING
   const ultimo = await lastPublishDispatch(ctx, listing.id, transaction);
   if (!ultimo || ultimo.id !== p.dispatchId) return null;
-  const patch = { status: 'PUBLISHED', rejectionReason: null, lastError: null, lastSyncedAt: new Date() };
+  const de = listing.status;
+  const patch = { status: 'PUBLISHED', rejectionReason: null, lastError: null, lastSyncedAt: new Date(), pendingSyncSince: null };
   if (!listing.externalListingId && p.externalResourceId) patch.externalListingId = String(p.externalResourceId).slice(0, 160);
   await listing.update(patch, { transaction });
-  await publishStatusChanged(ctx, listing, { from: 'PUBLISHING', to: 'PUBLISHED' }, p.dispatchId, transaction);
-  return { entity: { type: LISTING_AGGREGATE, id: listing.id }, before: { status: 'PUBLISHING' }, after: { status: 'PUBLISHED' }, reason: `Envio ${p.dispatchId} confirmado pelo portal: o anúncio vai a PUBLISHED.` };
+  await publishStatusChanged(ctx, listing, { from: de, to: 'PUBLISHED' }, p.dispatchId, transaction);
+  return { entity: { type: LISTING_AGGREGATE, id: listing.id }, before: { status: de }, after: { status: 'PUBLISHED' }, reason: `Envio ${p.dispatchId} confirmado pelo portal: o anúncio vai a PUBLISHED.` };
 }
 
 /**
@@ -66,14 +68,14 @@ async function onFailed(ctx, event, transaction) {
   let erro;
   if (p.operation === 'unpublishListing') {
     erro = 'O portal não aceitou o pedido de remoção: a remoção segue em conferência e será pedida de novo.';
-  } else if (listing.status === 'PUBLISHING' && !listing.externalListingId) {
+  } else if (AWAITING.includes(listing.status) && !listing.externalListingId) {
     status = 'ERROR';
     erro = `O portal não aceitou o anúncio (${classe}): confira os dados do imóvel e publique de novo.`;
   } else {
-    if (listing.status === 'PUBLISHING') status = 'PUBLISHED';
+    if (AWAITING.includes(listing.status)) status = 'PUBLISHED';
     erro = `O portal não aceitou a atualização (${classe}): o anúncio anterior segue no ar.`;
   }
-  await listing.update({ status, lastError: erro }, { transaction });
+  await listing.update({ status, lastError: erro, ...(status === 'PENDING_SYNC' ? {} : { pendingSyncSince: null }) }, { transaction });
   if (status !== antes.status) await publishStatusChanged(ctx, listing, { from: antes.status, to: status }, p.dispatchId, transaction);
   return { entity: { type: LISTING_AGGREGATE, id: listing.id }, before: antes, after: { status, lastError: erro }, reason: `Envio ${p.dispatchId} (${p.operation}) falhou no portal.` };
 }

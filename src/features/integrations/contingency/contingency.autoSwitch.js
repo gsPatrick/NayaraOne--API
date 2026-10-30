@@ -7,6 +7,7 @@ const { PORTS } = require('../providers/ports');
 const { QUEUED_STATUSES } = require('./contingency.constants');
 const { isAlternateSafe } = require('./contingency.alternateSafe');
 const { switchToAlternate } = require('./contingency.switch');
+const { alternateSqlFilter } = require('./contingency.domainHooks');
 
 /** Nomes das operações do port da família em que a troca automática é permitida. */
 function safeOperations(domain) {
@@ -23,8 +24,8 @@ async function autoSwitchQueued(ctx, connection, domain, limit, now, transaction
   const operacoes = safeOperations(domain);
   if (!operacoes.length) return [];
   const itens = await sequelize.query(
-    `SELECT id FROM "integration"."dispatches" WHERE company_id = :companyId AND connection_id = :connectionId AND status IN (:statuses) AND operation IN (:operacoes)
-      ORDER BY created_at ASC, id ASC LIMIT :limit`,
+    `SELECT d.id FROM "integration"."dispatches" d WHERE d.company_id = :companyId AND d.connection_id = :connectionId AND d.status IN (:statuses) AND d.operation IN (:operacoes) ${alternateSqlFilter(domain)}
+      ORDER BY d.created_at ASC, d.id ASC LIMIT :limit`,
     { replacements: { companyId: ctx.companyId, connectionId: connection.id, statuses: QUEUED_STATUSES, operacoes, limit }, type: QueryTypes.SELECT, transaction },
   );
   const feitas = [];
