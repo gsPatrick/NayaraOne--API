@@ -18,6 +18,7 @@ for (const mod of GOVERNANCE_MODULES) modules[mod.code] = require(`./${mod.code}
 const GOVERNANCE_PREFIXES = Object.freeze([
   ...GOVERNANCE_MODULES.map((mod) => mod.prefix),
   '/exports',
+  '/retention',
   '/governance',
 ]);
 

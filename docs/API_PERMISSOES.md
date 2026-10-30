@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 601. Rotas só com login ou públicas: 26.
+Rotas com permissão exigida: 785. Rotas só com login ou públicas: 37.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -767,6 +767,13 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/crm/carts/public/:token/properties/:propertyId/click` | público; acesso pelo token do link | não |
 | `GET` | `/api/v1/crm/carts/public/:token` | público; acesso pelo token do link | não |
 | `GET` | `/api/v1/files/:id/content` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `POST` | `/api/v1/retention/dry-run` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
+| `PUT` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
+| `POST` | `/api/v1/retention/runs/:id/apply` | `governance:retention:manage` | sim |
+| `GET` | `/api/v1/retention/runs/:id/impact` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/runs/:id` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/runs` | `governance:retention:manage` | não |
 | `GET` | `/api/v1/files/:id` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
 | `POST` | `/api/v1/files` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
 | `POST` | `/api/v1/finance/webhooks/bank-payment` | público; autenticidade pela assinatura do provider | não |
@@ -819,3 +826,4 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `GET` | `/api/v1/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
 | `POST` | `/api/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
 | `POST` | `/api/v1/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
+| `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |

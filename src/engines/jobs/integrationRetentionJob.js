@@ -3,6 +3,8 @@
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
 const { purgeExpired, readJobHour } = require('../../features/integrations/retention');
+const holdGuard = require('../../features/core-governance/data-quality/retention.holdGuard');
+const { HOLD_ENTITY_INTEGRATION } = require('../../features/core-governance/data-quality/retention.constants');
 
 /**
  * integrationRetentionJob (Marco 9, M9-D244): uma vez por dia, a partir da hora `integration.retention.job_hour`
@@ -41,6 +43,8 @@ async function runIntegrationRetentionJob({ now = new Date(), force = false } = 
       try {
         const counts = await tenantTx(group, company, async (transaction) => {
           if (!force && (hour < (await readJobHour(ctx, transaction)) || lastRunDay.get(company.id) === day)) return null;
+          // M9-D911: legal hold sobre os dados de integração da empresa suspende o descarte (a M9-D912 liga a interface).
+          if ((await holdGuard.heldIds(HOLD_ENTITY_INTEGRATION, [company.id], { tenant: ctx, transaction })).length > 0) return null;
           return purgeExpired(ctx, transaction);
         });
         if (counts) {

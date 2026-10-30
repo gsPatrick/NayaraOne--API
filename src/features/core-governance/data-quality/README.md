@@ -54,6 +54,8 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 | `governanca.dados.bulk.motivo_minimo` | `10` | mínimo de caracteres do motivo obrigatório (padrão 10, o mais conservador: o livro só exige motivo). |
 | `governanca.dados.bulk.pagina_tamanho` | `50` | itens por página das consultas de lotes e de itens (padrão 50). |
 
+### Retenção de dados (M9-D911, código em `data-quality/retention.*`)
+`GET|PUT /retention/policies` (cinco elementos do livro em toda política: prazo, gatilho, base legal, disposição e exceções com `LEGAL_HOLD`), `POST /retention/dry-run` (simulação que não altera dado), `GET /retention/runs[/:id]` e `POST /retention/runs/:id/apply` (linha 10 da D852: nível 3, MFA, Idempotency-Key, código da rodada; `GET /retention/runs/:id/impact`). Os tipos de dado governados ficam em `retention.targets.js`; o `retentionJob` simula todo dia e só aplica sozinho as políticas `auto_apply` (integração, via `integration.purge_expired()`). Sintoma de aplicação parada: rodada em `FAILED`; chamar o apply de novo retoma só os lotes pendentes.
 ### Parâmetros da retenção (M9-D911, código em `data-quality/retention.*`)
 | Chave | Padrão | O que controla |
 |---|---|---|

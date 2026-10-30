@@ -172,6 +172,19 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_RESPONSE_SCHEMA_MISMATCH` | 422 | A resposta de <método> <rota> não segue o contrato. | api-governance | 1.1.0 | não |
 | `GOV_STATUS_NOT_DOCUMENTED` | 422 | Status <N> não está no contrato de <rota>. | api-governance | 1.1.0 | não |
 | `GOV_TOKEN_EXPIRED` | 401 | O token expirou. Obtenha um novo token. | api-governance | 1.0.0 | não |
+| `GOV_RETENTION_ALL_HELD` | 409 | Todos os registros desta rodada estão sob bloqueio legal (legal hold). | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_ALREADY_APPLIED` | 409 | Esta rodada de retenção já foi aplicada. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_APPLY_FAILED` | 500 | A aplicação parou num lote; os lotes concluídos foram mantidos e o restante pode ser retomado. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_AUTO_APPLY_UNSAFE` | 422 | A aplicação automática só vale para dados técnicos de integração. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_DISPOSITION_UNSUPPORTED` | 422 | O tipo de dado não aceita esta disposição. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_DRY_RUN_REQUIRED` | 409 | Execute a simulação antes de aplicar. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_HOLD_EXCEPTION_REQUIRED` | 422 | Toda política deve respeitar a retenção legal (legal hold). | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_LEGAL_BASIS_INVALID` | 422 | A base legal informada não existe no catálogo. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_LEGAL_BASIS_REQUIRED` | 422 | Informe a base legal da política de retenção. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_PERIOD_INVALID` | 422 | O prazo de retenção é inválido. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_RUN_IN_PROGRESS` | 409 | Esta rodada de retenção está sendo aplicada agora. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_TARGET_TAKEN` | 409 | Este tipo de dado já pertence a outra política de retenção. | data-quality | 1.3.0 | não |
+| `GOV_RETENTION_TRIGGER_UNSUPPORTED` | 422 | O tipo de dado não aceita este gatilho. | data-quality | 1.3.0 | não |
 | `GOV_TOKEN_INVALID` | 401 | Token de acesso inválido. | api-governance | 1.0.0 | não |
 | `GOV_UNSUPPORTED_GRANT_TYPE` | 400 | Informe grant_type=client_credentials. | api-governance | 1.0.0 | não |
 | `GOV_VALIDATION_PAGINATION` | 400 | Parâmetros de paginação inválidos. | api-governance | 1.0.0 | não |

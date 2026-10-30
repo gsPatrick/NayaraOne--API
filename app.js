@@ -21,6 +21,7 @@ const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJ
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
 const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
+const { startRetentionJob } = require('./src/engines/jobs/retentionJob');
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
 const { startFinopsDegradationJob } = require('./src/engines/jobs/finopsDegradationJob');
@@ -236,6 +237,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED 
 }
 if (process.env.NODE_ENV !== 'test') {
   require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()
+// Marco 9, M9-D911: retenção de dados (simulação diária às 03:30 e aplicação automática só das políticas técnicas de integração).
+if (process.env.NODE_ENV !== 'test' && process.env.RETENTION_JOB_DISABLED !== 'true') {
+  startRetentionJob();
+}
+
     .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
 }
 

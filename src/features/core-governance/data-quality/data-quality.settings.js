@@ -11,8 +11,9 @@ const { EVIDENCE_SETTING_DEFAULTS, EVIDENCE_SETTINGS_SCHEMA } = require('./evide
 const { MERGE_SETTING_DEFAULTS, MERGE_SETTINGS_SCHEMA } = require('./merge.settings');
 const { QUALITY_SETTING_DEFAULTS, QUALITY_SETTINGS_SCHEMA } = require('./quality.settings');
 const { BULK_SETTING_DEFAULTS, BULK_SETTINGS_SCHEMA } = require('./bulk.settings');
+const { RETENTION_SETTING_DEFAULTS, RETENTION_SETTINGS_SCHEMA } = require('./retention.settings');
 
-const DATA_QUALITY_SETTING_DEFAULTS = Object.freeze({ [DOMAINS_KEY]: DEFAULT_DOMAINS, ...EVIDENCE_SETTING_DEFAULTS, ...MERGE_SETTING_DEFAULTS, ...QUALITY_SETTING_DEFAULTS, ...BULK_SETTING_DEFAULTS });
+const DATA_QUALITY_SETTING_DEFAULTS = Object.freeze({ [DOMAINS_KEY]: DEFAULT_DOMAINS, ...EVIDENCE_SETTING_DEFAULTS, ...MERGE_SETTING_DEFAULTS, ...QUALITY_SETTING_DEFAULTS, ...BULK_SETTING_DEFAULTS, ...RETENTION_SETTING_DEFAULTS });
 
 /** "A, b" -> ['A','B'] (maiúsculas, sem vazios nem repetidos); código fora do formato é ignorado; vazio volta ao padrão. */
 function parseDomains(text) {
@@ -28,6 +29,6 @@ function validateDomains(key, value) {
   }
 }
 
-const DATA_QUALITY_SETTINGS_SCHEMA = { [DOMAINS_KEY]: { type: 'string', validate: validateDomains }, ...EVIDENCE_SETTINGS_SCHEMA, ...MERGE_SETTINGS_SCHEMA, ...QUALITY_SETTINGS_SCHEMA, ...BULK_SETTINGS_SCHEMA };
+const DATA_QUALITY_SETTINGS_SCHEMA = { [DOMAINS_KEY]: { type: 'string', validate: validateDomains }, ...EVIDENCE_SETTINGS_SCHEMA, ...MERGE_SETTINGS_SCHEMA, ...QUALITY_SETTINGS_SCHEMA, ...BULK_SETTINGS_SCHEMA, ...RETENTION_SETTINGS_SCHEMA };
 
 module.exports = { DOMAINS_KEY, DEFAULT_DOMAINS, DATA_QUALITY_SETTING_DEFAULTS, DATA_QUALITY_SETTINGS_SCHEMA, parseDomains };

@@ -1162,6 +1162,97 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_RETENTION_ALL_HELD": {
+      "status": 409,
+      "message": "Todos os registros desta rodada estão sob bloqueio legal (legal hold).",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_ALREADY_APPLIED": {
+      "status": 409,
+      "message": "Esta rodada de retenção já foi aplicada.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_APPLY_FAILED": {
+      "status": 500,
+      "message": "A aplicação parou num lote; os lotes concluídos foram mantidos e o restante pode ser retomado.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_AUTO_APPLY_UNSAFE": {
+      "status": 422,
+      "message": "A aplicação automática só vale para dados técnicos de integração.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_DISPOSITION_UNSUPPORTED": {
+      "status": 422,
+      "message": "O tipo de dado não aceita esta disposição.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_DRY_RUN_REQUIRED": {
+      "status": 409,
+      "message": "Execute a simulação antes de aplicar.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_HOLD_EXCEPTION_REQUIRED": {
+      "status": 422,
+      "message": "Toda política deve respeitar a retenção legal (legal hold).",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_LEGAL_BASIS_INVALID": {
+      "status": 422,
+      "message": "A base legal informada não existe no catálogo.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_LEGAL_BASIS_REQUIRED": {
+      "status": 422,
+      "message": "Informe a base legal da política de retenção.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_PERIOD_INVALID": {
+      "status": 422,
+      "message": "O prazo de retenção é inválido.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_RUN_IN_PROGRESS": {
+      "status": 409,
+      "message": "Esta rodada de retenção está sendo aplicada agora.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_TARGET_TAKEN": {
+      "status": 409,
+      "message": "Este tipo de dado já pertence a outra política de retenção.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_RETENTION_TRIGGER_UNSUPPORTED": {
+      "status": 422,
+      "message": "O tipo de dado não aceita este gatilho.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_TOKEN_INVALID": {
       "status": 401,
       "message": "Token de acesso inválido.",
