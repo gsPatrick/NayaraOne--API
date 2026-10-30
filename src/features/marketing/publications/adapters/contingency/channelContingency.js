@@ -51,7 +51,7 @@ function decideOnResult(channelName, result, options = {}) {
   const plan = planFor(channelName);
   const base = { channel: plan.channel, mode: plan.mode, alternate: plan.alternate, delivered: false, blocksOthers: false, retry: 'NONE' };
   // SENT/PUBLISHED é o que o canal aceitou; "entregue" só vem do status/webhook do canal, nunca daqui.
-  if (['SENT', 'PUBLISHED'].includes(result.status)) return { ...base, action: 'NONE', state: result.status };
+  if (['SENT', 'PUBLISHED', 'LIVE', 'PROCESSING'].includes(result.status)) return { ...base, action: 'NONE', state: result.status }; // PROCESSING/LIVE: post de rede social (M9-D428)
   if (result.status === 'REJECTED') return { ...base, action: 'REJECT', state: 'REJECTED' };
   const klass = result.error && result.error.class;
   const retry = NEVER_RETRY.includes(klass) ? 'NONE' : plan.retry;

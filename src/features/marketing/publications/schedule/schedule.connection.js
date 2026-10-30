@@ -5,6 +5,7 @@ const { isChannelReleased } = require('../adapters/release/channelAccess');
 const { ensureSandboxConnection, findActiveByDomain } = require('../../../integrations/registry/connections.ensureSandbox');
 const { getCurrentHealth } = require('../../../integrations/health/healthQuery');
 const { channelConnectionInactive } = require('./schedule.errors');
+const { assertNetworkAuthorized } = require('../adapters/social');
 
 /**
  * A conexão do canal para o agendamento (M9-D410 item 2): a ATIVA da família no framework de Integrações (canal liberado) ou a do sandbox da família
@@ -28,6 +29,7 @@ async function resolveChannelConnection({ tenant, actor, channel, transaction })
   if (health.healthStatus === 'DOWN') {
     throw channelConnectionInactive({ channel, reason: 'UNHEALTHY', connectionId: connection.id, healthStatus: health.healthStatus, circuitState: health.circuitState });
   }
+  await assertNetworkAuthorized({ tenant, channel, connection }, transaction); // M9-D428: rede com token recusado precisa ser reautorizada (409 MKT_PROVIDER_AUTH_FAILED)
   return { id: connection.id, providerCode: connection.providerCode, family: meta.family };
 }
 

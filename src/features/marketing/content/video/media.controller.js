@@ -11,11 +11,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 async function authorize(req, res) {
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw videoInvalid('Corpo da requisição inválido.');
-  const unknown = Object.keys(body).filter((k) => k !== 'origin');
+  const unknown = Object.keys(body).filter((k) => !['origin', 'width', 'height', 'durationS'].includes(k));
   if (unknown.length) throw videoInvalid(`Dados inválidos: campo(s) desconhecido(s): ${unknown.join(', ')}.`, { unknown });
   if (typeof body.origin !== 'string' || !body.origin.trim()) throw videoInvalid('Dados inválidos: origin.', { field: 'origin' });
   if (!UUID_RE.test(String(req.params.id))) throw videoInvalid('Dados inválidos: id do arquivo.', { field: 'id' });
-  const data = await req.withTenantTransaction((t) => media.authorizeMedia({ tenant: tenantFromAuth(req), auth: req.auth, fileId: req.params.id, origin: body.origin }, t));
+  const data = await req.withTenantTransaction((t) => media.authorizeMedia({ tenant: tenantFromAuth(req), auth: req.auth, fileId: req.params.id, origin: body.origin, width: body.width, height: body.height, durationS: body.durationS }, t));
   return success(res, { data });
 }
 

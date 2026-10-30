@@ -18,12 +18,13 @@ async function makeFile(t, tenant, { mime = 'video/mp4', name = 'midia.mp4', siz
   return { id: row.id, sha256: row.checksum_sha256 };
 }
 
-const authorize = (t, tenant, fileId, origin = 'EQUIPE') => video.authorizeMedia({ tenant, auth: authOf(tenant), fileId, origin }, t);
+/** `dims`: { width, height, durationS } declarados por quem autoriza (M9-D428: o servidor não examina o arquivo). */
+const authorize = (t, tenant, fileId, origin = 'EQUIPE', dims = {}) => video.authorizeMedia({ tenant, auth: authOf(tenant), fileId, origin, ...dims }, t);
 
 /** Arquivo já autorizado. */
 async function authorizedFile(t, tenant, opts = {}) {
   const file = await makeFile(t, tenant, opts);
-  await authorize(t, tenant, file.id, opts.origin || 'EQUIPE');
+  await authorize(t, tenant, file.id, opts.origin || 'EQUIPE', opts.dims);
   return file;
 }
 

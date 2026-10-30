@@ -10,7 +10,7 @@ const { mediaNotAuthorized, mediaNotFound, videoInvalid } = require('./video.err
 
 const ENTITY = 'MarketingMediaAuthorization';
 const MEDIA_MIME = /^(image|video)\//;
-const view = (row) => ({ fileId: row.file_id, sha256: row.sha256, origin: row.origin, authorizedBy: row.authorized_by, authorizedAt: row.authorized_at, revokedAt: row.revoked_at || null });
+const view = (row) => ({ fileId: row.file_id, sha256: row.sha256, origin: row.origin, width: row.width ?? null, height: row.height ?? null, durationS: row.duration_s ?? null, authorizedBy: row.authorized_by, authorizedAt: row.authorized_at, revokedAt: row.revoked_at || null });
 
 /** Acesso ao arquivo pelo módulo de arquivos, com os erros no padrão do Marketing (MKT_NOT_FOUND, MKT_FORBIDDEN). */
 async function readableFile(fileId, auth, transaction) {
@@ -25,9 +25,21 @@ async function readableFile(fileId, auth, transaction) {
 
 /**
  * POST /marketing/media/:id/authorize (rota I9, M9-D426 regra 1): quem tem acesso ao arquivo pelo módulo de arquivos o autoriza para marketing, com a origem (lista do
- * parâmetro). Só imagem ou vídeo, já examinado pelo antivírus (CLEAN) e com SHA-256 gravado. Reautorizar arquivo revogado reabre a autorização. `auth` = req.auth.
+ * parâmetro) e, se quiser, as medidas (largura, altura e duração) que o agendamento confere contra a rede. Só imagem ou vídeo, já examinado pelo antivírus (CLEAN) e com SHA-256 gravado. Reautorizar arquivo revogado reabre a autorização. `auth` = req.auth.
  */
-async function authorizeMedia({ tenant, auth, fileId, origin }, transaction) {
+function parseDimensions({ width, height, durationS }) {
+  const given = [width, height, durationS].filter((v) => v !== undefined && v !== null);
+  if (given.length === 0) return {};
+  const int = (v, max) => Number.isInteger(v) && v >= 1 && v <= max;
+  if ((width === undefined || width === null) !== (height === undefined || height === null)) throw videoInvalid('Informe largura e altura juntas.', { field: 'width' });
+  if ((width !== undefined && width !== null && (!int(width, 100000) || !int(height, 100000))) || (durationS !== undefined && durationS !== null && !int(durationS, 86400))) {
+    throw videoInvalid('Medidas inválidas: largura e altura em pixels (inteiros positivos) e duração em segundos.', { fields: ['width', 'height', 'durationS'] });
+  }
+  return { width: width ?? null, height: height ?? null, durationS: durationS ?? null };
+}
+
+async function authorizeMedia({ tenant, auth, fileId, origin, width, height, durationS }, transaction) {
+  const dimensions = parseDimensions({ width, height, durationS });
   const { file } = await readableFile(fileId, auth, transaction);
   if (!MEDIA_MIME.test(String(file.mimeType || ''))) throw videoInvalid('Só imagem ou vídeo pode ser autorizado para marketing.', { mimeType: file.mimeType });
   if (file.scanStatus !== 'CLEAN') throw mediaNotAuthorized({ reason: 'SCAN_NOT_CLEAN', fileId });
@@ -36,7 +48,7 @@ async function authorizeMedia({ tenant, auth, fileId, origin }, transaction) {
   const chosen = String(origin || '').trim().toUpperCase();
   if (!config.origins.includes(chosen)) throw mktError(422, 'MKT_VALIDATION', 'Origem da mídia inválida.', { field: 'origin', validos: config.origins });
   const before = await repo.lockAuthorization(fileId, transaction);
-  const row = await repo.upsertAuthorization(tenant, { fileId, sha256: file.checksumSha256, origin: chosen, actor: auth.userId }, transaction);
+  const row = await repo.upsertAuthorization(tenant, { fileId, sha256: file.checksumSha256, origin: chosen, actor: auth.userId, ...dimensions }, transaction);
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: auth.userId, action: 'marketing.media.authorize', entityType: ENTITY, entityId: row.id,
     beforeJson: before ? view(before) : null, afterJson: view(row), reason: 'Mídia autorizada para uso em marketing.',

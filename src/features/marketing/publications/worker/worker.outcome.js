@@ -7,7 +7,7 @@ const { statusKind, providerStatusOf } = require('./worker.status');
 const { backoffFor } = require('./worker.settings');
 
 const addSeconds = (date, s) => new Date(date.getTime() + s * 1000);
-const messageOf = { MKT_PROVIDER_AUTH_FAILED: 'O provedor recusou a credencial; reconecte a conta.', MKT_PROVIDER_REJECTED: 'A rede recusou o conteúdo.', MKT_PUBLICATION_RETRIES_EXHAUSTED: 'As tentativas de publicação acabaram.', MKT_PUBLICATION_ADAPTER_EXCEPTION: 'Falha inesperada ao falar com o canal.' };
+const messageOf = { MKT_PROVIDER_AUTH_FAILED: 'O provedor recusou a credencial; reconecte a conta.', MKT_PROVIDER_REJECTED: 'A rede recusou o conteúdo.', MKT_PUBLICATION_RETRIES_EXHAUSTED: 'As tentativas de publicação acabaram.', MKT_PUBLICATION_ADAPTER_EXCEPTION: 'Falha inesperada ao falar com o canal.', MKT_CAPABILITY_VIOLATION: 'O conteúdo excede um limite da rede escolhida.' };
 /** O que se guarda da resposta do canal: status, erro reduzido (classe, código, HTTP), se é simulada e a decisão de contingência do canal (M9-D430); nunca o corpo bruto. */
 const redactedResponse = (r) => ({
   status: r.status || null, error: r.error ? { class: r.error.class, code: r.error.code, httpStatus: r.error.httpStatus ?? null } : null, sandbox: Boolean(r.sandbox), replayed: Boolean(r.replayed),

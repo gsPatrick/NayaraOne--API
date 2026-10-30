@@ -3,7 +3,7 @@
 const { CHANNEL_META } = require('../adapters/channels');
 const { sendToChannel } = require('../adapters/sendToChannel');
 const content = require('../../content');
-const { loadVersion, buildPayload, addressPolicyOf } = require('./worker.content');
+const { loadVersion, buildPayload, addressPolicyOf, mediaOf } = require('./worker.content');
 const logger = require('../../../../utils/logger');
 
 /** Erros que provam que NADA saiu para o canal e que repetir não adianta: a causa está no pedido ou no estado, não na rede. */
@@ -30,7 +30,8 @@ async function sendJob({ tenant, job, timeoutS, transaction, scenarioFor }) {
   const version = await loadVersion(job, transaction);
   const operation = CHANNEL_META[job.channel].operation;
   const scenario = scenarioFor ? scenarioFor(job) : undefined;
-  const adapter = { [operation]: (payload) => sendToChannel(job.channel, payload, { tenant, transaction, idempotencyKey: job.idempotency_key, campaignId: job.campaign_id, ...(scenario ? { scenario } : {}) }) };
+  const media = mediaOf(version);
+  const adapter = { [operation]: (payload) => sendToChannel(job.channel, payload, { tenant, transaction, idempotencyKey: job.idempotency_key, campaignId: job.campaign_id, ...(scenario ? { scenario } : {}), ...(media ? { media } : {}) }) };
   const outcome = await withTimeout(
     content.adapterGate.deliverToAdapter(adapter, operation, buildPayload(version), { policy: addressPolicyOf(version), tenant, transaction }),
     timeoutS * 1000

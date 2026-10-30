@@ -25,6 +25,7 @@ const { verifyAndParseWebhook } = require('./webhook/webhook.parse');
 const { publicRouter } = require('./webhook/webhook.routes');
 const { registerWebhookEventHook } = require('./webhook/webhook.hooks');
 const settings = require('./channel.settings');
+const social = require('./social');
 
 installChannelAdapters();
 
@@ -61,6 +62,7 @@ module.exports = {
   publicRouter,
   resetSandbox: sandboxStore.resetSandbox,
   sandboxRecordCount: sandboxStore.countRecords,
+  social,
   CHANNEL_SETTINGS_SCHEMA: settings.CHANNEL_SETTINGS_SCHEMA,
   CHANNEL_SETTING_DEFAULTS: settings.CHANNEL_SETTING_DEFAULTS,
 };

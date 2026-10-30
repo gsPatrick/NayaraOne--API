@@ -46,4 +46,11 @@ function buildPayload(content) {
 
 const addressPolicyOf = (content) => (content.facts_snapshot_json || {}).politicaEndereco;
 
-module.exports = { loadVersion, checkApproval, buildPayload, addressPolicyOf, PUBLISHABLE_STATUSES };
+/** A mídia do conteúdo (reel) para o adapter da rede conferir: só formato, proporção, duração, tamanho, hash e o id do arquivo; nunca caminho nem transform_log. */
+function mediaOf(content) {
+  const media = (content.body_json || {}).midia;
+  if (!media) return null;
+  return { arquivoId: media.arquivoId, formato: media.formato, proporcao: media.proporcao || null, duracaoS: media.duracaoS ?? null, tamanhoBytes: media.tamanhoBytes ?? null, sha256: media.sha256 };
+}
+
+module.exports = { loadVersion, checkApproval, buildPayload, addressPolicyOf, mediaOf, PUBLISHABLE_STATUSES };

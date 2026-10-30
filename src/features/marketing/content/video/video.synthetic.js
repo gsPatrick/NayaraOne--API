@@ -9,7 +9,7 @@ const { SYNTHETIC_KINDS } = require('./video.settings');
  * "Imagem ilustrativa" (parâmetro), que a montagem exige na legenda do próprio vídeo.
  */
 const PROJECT_KINDS = Object.freeze(['RENDER', 'ILLUSTRATION']);
-const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const includesText = (haystack, needle) => fold(haystack).includes(fold(needle));
 
 /** Lista de tipos sintéticos informada na requisição: [{kind}] ou ['VOICE']; tipo fora do catálogo é 400. */

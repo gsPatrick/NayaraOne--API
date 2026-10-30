@@ -6,7 +6,7 @@ const { sequelize } = require('../../../../models');
 /** SQL da autorização de mídia e dos derivados (M9-D426). RLS por grupo e empresa vale na transação do chamador. */
 const run = (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
 
-const AUTH_COLUMNS = 'id, file_id, sha256, origin, authorized_by, authorized_at, revoked_at, revoked_by';
+const AUTH_COLUMNS = 'id, file_id, sha256, origin, width, height, duration_s, authorized_by, authorized_at, revoked_at, revoked_by';
 const DERIV_COLUMNS = `id, inputs_hash, derived_file_id, derived_sha256, derived_from, transform_log, format, aspect_ratio, duration_s,
   synthetic, synthetic_kinds, created_by, created_at`;
 
@@ -16,14 +16,14 @@ const findAuthorization = async (fileId, transaction) => (await run(`SELECT ${AU
 const lockAuthorization = async (fileId, transaction) => (await run(`SELECT ${AUTH_COLUMNS} FROM marketing.media_authorizations WHERE file_id = :fileId FOR UPDATE`, { fileId }, transaction))[0] || null;
 
 /** Autoriza (ou reautoriza, depois de revogada) o arquivo: uma linha por arquivo. */
-async function upsertAuthorization(tenant, { fileId, sha256, origin, actor }, transaction) {
+async function upsertAuthorization(tenant, { fileId, sha256, origin, actor, width = null, height = null, durationS = null }, transaction) {
   const [row] = await run(
-    `INSERT INTO marketing.media_authorizations (group_id, company_id, file_id, sha256, origin, authorized_by)
-     VALUES (:groupId, :companyId, :fileId, :sha256, :origin, :actor)
-     ON CONFLICT (company_id, file_id) DO UPDATE SET sha256 = EXCLUDED.sha256, origin = EXCLUDED.origin, authorized_by = EXCLUDED.authorized_by,
-        authorized_at = now(), revoked_at = NULL, revoked_by = NULL, updated_at = now()
+    `INSERT INTO marketing.media_authorizations (group_id, company_id, file_id, sha256, origin, width, height, duration_s, authorized_by)
+     VALUES (:groupId, :companyId, :fileId, :sha256, :origin, :width, :height, :durationS, :actor)
+     ON CONFLICT (company_id, file_id) DO UPDATE SET sha256 = EXCLUDED.sha256, origin = EXCLUDED.origin, width = EXCLUDED.width, height = EXCLUDED.height,
+        duration_s = EXCLUDED.duration_s, authorized_by = EXCLUDED.authorized_by, authorized_at = now(), revoked_at = NULL, revoked_by = NULL, updated_at = now()
      RETURNING ${AUTH_COLUMNS}`,
-    { groupId: tenant.groupId, companyId: tenant.companyId, fileId, sha256, origin, actor }, transaction
+    { groupId: tenant.groupId, companyId: tenant.companyId, fileId, sha256, origin, width, height, durationS, actor }, transaction
   );
   return row;
 }

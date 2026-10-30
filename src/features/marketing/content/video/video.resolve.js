@@ -7,14 +7,17 @@ const { mediaNotAuthorized } = require('./video.errors');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sizeOf = (file) => (file && file.size_bytes !== undefined ? Number(file.size_bytes) : null);
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+/** Proporção reduzida ("4:5") das medidas informadas na autorização; sem medidas, null. */
+const ratioOf = (w, h) => (Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0 ? `${w / gcd(w, h)}:${h / gcd(w, h)}` : null);
 
-/** Mídia original usada direto: o arquivo autorizado (formato pelo tipo do arquivo; proporção e duração não são conhecidas sem examinar o vídeo, ficam nulas). */
+/** Mídia original usada direto: o arquivo autorizado (formato pelo tipo do arquivo; proporção e duração são as informadas na autorização, nulas se não foram informadas). */
 async function summaryOfOriginal(fileId, transaction) {
   const { authorization, file } = await assertAuthorized(fileId, transaction);
   const render = authorization.origin === 'RENDER_PROJETO';
   return {
     tipo: 'ORIGINAL', arquivoId: fileId, sha256: authorization.sha256, origem: authorization.origin, derivadoDe: [{ fileId, sha256: authorization.sha256 }], transformLog: { operations: [], order: [fileId], syntheticKinds: render ? ['RENDER'] : [] },
-    sintetico: render, tiposSinteticos: render ? ['RENDER'] : [], formato: String(file.mime_type || '').startsWith('video/') ? 'VIDEO' : 'IMAGE', proporcao: null, duracaoS: null, tamanhoBytes: sizeOf(file), mimeType: file.mime_type,
+    sintetico: render, tiposSinteticos: render ? ['RENDER'] : [], formato: String(file.mime_type || '').startsWith('video/') ? 'VIDEO' : 'IMAGE', proporcao: ratioOf(authorization.width, authorization.height), duracaoS: authorization.duration_s ?? null, tamanhoBytes: sizeOf(file), mimeType: file.mime_type,
   };
 }
 
