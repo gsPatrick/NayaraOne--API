@@ -45,6 +45,7 @@ const { router: marketingModuleRouter, publicRouter: marketingPublicRouter } = r
 const { router: analyticsModuleRouter } = require('../features/analytics');
 const { rateLimitMiddleware } = require('../features/core-governance/api-governance/standards');
 const { deprecationMiddleware } = require('../features/core-governance/api-governance/consumers');
+const { egressMeterMiddleware } = require('../features/core-governance/finops/collectors/egress.meter');
 
 /**
  * Agregador único de rotas da API.
@@ -57,6 +58,8 @@ const router = Router();
 router.use(rateLimitMiddleware);
 // Marco 9 (M9-D841): deprecação de rota ou major nas respostas (Deprecation, Sunset, Link; 410 após o desligamento) e rastro de uso por consumidor.
 router.use(deprecationMiddleware);
+// Marco 9 (M9-D860): contador de bytes de download (exportações, arquivos e API externa) do FinOps, somado ao egress da hora.
+router.use(egressMeterMiddleware);
 
 // GET /health — fora do prefixo /v1, usado por health checks de infraestrutura.
 router.use('/', healthRouter);

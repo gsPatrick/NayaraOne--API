@@ -16,9 +16,12 @@
  */
 const pino = require('pino');
 const { redactText, createRedactingStream } = require('../shared/redaction');
+const logVolume = require('../shared/log-volume/counter');
 
 // M9-D246: toda linha passa pela biblioteca única de redaction (por nome de chave, por padrão de valor e por classe) antes de ser gravada.
 const logStream = createRedactingStream(process.stdout);
+// M9-D860: o volume de log do dia (bytes gravados) alimenta o coletor de storage do FinOps e a M9-D862.
+logStream.addTap((line) => logVolume.add(Buffer.byteLength(line)));
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',

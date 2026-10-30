@@ -885,3 +885,17 @@ test('M9-D230: crm.channels, crm.conversations e crm.conversation_links têm RLS
     if (grants.length) assert.deepEqual([grants[0].upd, grants[0].ins], [true, true], `GRANT ao role de runtime em crm.${tabela}`);
   }
 });
+
+// M9-D860: cost_ledger e cost_read_model (RLS pelo grupo, empresa opcional), cost_accruals e cost_collector_runs (pela empresa), com FORCE e GRANT ao runtime.
+test('M9-D860: tabelas do FinOps têm RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const tables = ['cost_ledger', 'cost_read_model', 'cost_accruals', 'cost_collector_runs'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as quatro tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const t of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${t}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
+  }
+});

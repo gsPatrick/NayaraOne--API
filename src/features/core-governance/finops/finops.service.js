@@ -1,18 +1,26 @@
 'use strict';
 
 const { isModuleEnabled } = require('../governance.module');
+const { readFinopsParams } = require('./finops.params');
+const readModel = require('./costReadModel');
+const { collectorStatus } = require('./collectors/status');
 
 /**
- * FinOps — serviço do módulo. O alicerce (M9-D800) entrega o esqueleto: o estado do módulo para a empresa. As regras de
- * negócio entram nas demandas M9-D860 a M9-D863, sobre este mesmo arquivo.
+ * FinOps — serviço do módulo. M9-D860: o custo técnico sai em DUAS séries separadas, `estimado` e `faturado`, cada uma com o seu total; nenhuma resposta
+ * traz total que some as duas. O custo compartilhado (sem empresa) só aparece para quem administra o FinOps. Orçamentos e alertas: M9-D861; detectores: M9-D862.
  */
-async function getOverview(tenant, transaction) {
+async function getOverview(tenant, transaction, { includeShared = false, now = new Date() } = {}) {
+  const habilitado = await isModuleEnabled('finops', tenant, transaction);
+  const base = { modulo: 'finops', rotulo: 'FinOps', habilitado, fase: 'custos', itens: [] };
+  if (!habilitado) return base;
+  const params = await readFinopsParams(tenant, transaction);
+  const to = readModel.dayKey(now);
+  const from = readModel.dayKey(new Date(now.getTime() - (params.windowDays - 1) * 86400000));
+  const series = await readModel.report(tenant, { from, to }, { includeShared }, transaction);
   return {
-    modulo: 'finops',
-    rotulo: 'FinOps',
-    habilitado: await isModuleEnabled('finops', tenant, transaction),
-    fase: 'alicerce',
-    itens: [],
+    ...base,
+    custos: { moeda: params.currency, periodo: { de: from, ate: to }, estimado: series.estimated, faturado: series.billed, aviso: 'Estimado e faturado nunca são somados.' },
+    coletores: await collectorStatus(tenant, transaction),
   };
 }
 

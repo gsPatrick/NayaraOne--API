@@ -10,6 +10,7 @@ const { STANDARDS_SETTING_DEFAULTS, STANDARDS_SETTINGS_SCHEMA } = require('./api
 const { CONSUMERS_SETTING_DEFAULTS, CONSUMERS_SETTINGS_SCHEMA } = require('./api-governance/consumers/consumers.settings');
 const { CLIENTS_SETTING_DEFAULTS, CLIENTS_SETTINGS_SCHEMA } = require('./api-governance/clients/clients.settings');
 const { UI_SETTING_DEFAULTS, UI_SETTINGS_SCHEMA } = require('./governance.ui.settings');
+const { FINOPS_SETTING_DEFAULTS, FINOPS_SETTINGS_SCHEMA } = require('./finops/finops.settings');
 
 /**
  * Parâmetros do bloco de governança que o administrador configura na tela /painel/configuracoes (aba Governança).
@@ -49,6 +50,7 @@ const GOVERNANCE_SETTING_DEFAULTS = {
   ...CONSUMERS_SETTING_DEFAULTS,
   ...CLIENTS_SETTING_DEFAULTS,
   ...UI_SETTING_DEFAULTS,
+  ...FINOPS_SETTING_DEFAULTS,
   [ERRORS_EXCEPTIONS_KEY]: 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR',
   [PROFILES_MANAGEMENT_KEY]: 'GESTAO, GESTÃO, DIRETOR, GERENTE, GESTOR',
   [PROFILES_FINANCE_KEY]: 'FINANCEIRO',
@@ -66,6 +68,7 @@ const GOVERNANCE_SETTINGS_SCHEMA = {
   ...CONSUMERS_SETTINGS_SCHEMA,
   ...CLIENTS_SETTINGS_SCHEMA,
   ...UI_SETTINGS_SCHEMA,
+  ...FINOPS_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

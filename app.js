@@ -18,6 +18,7 @@ const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJ
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
 const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
+const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
@@ -235,6 +236,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_MERGE_JOB_DISABL
 // Varredura noturna da qualidade de cadastro (M9-D806): nota por cadastro, issues e aviso dos domínios sem responsável, na hora configurada (padrão 03:00 de Brasília).
 if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_SCAN_JOB_DISABLED !== 'true') {
   startDataQualityScanJob();
+}
+
+// Coletores do cost ledger do FinOps (M9-D860): fecha as horas de IA, mensageria e egress a cada 10 minutos e mede o armazenamento uma vez por dia (padrão 02:00 de Brasília).
+if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_COLLECT_JOB_DISABLED !== 'true') {
+  startFinopsCollectJob();
 }
 
 // Exportações do DLP (M9-D822): a geração recolhe os pedidos aprovados que ficaram sem arquivo e a expiração apaga os arquivos vencidos (a cada 15 minutos por padrão).

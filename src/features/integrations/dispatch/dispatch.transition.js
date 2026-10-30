@@ -7,6 +7,7 @@ const { invalidTransition, translateDispatchDbError } = require('./dispatch.erro
 const { auditarMudanca, visao } = require('./dispatch.audit');
 const { ERROR_CLASSES, HUMAN_RETRY_EXTRA_ATTEMPTS } = require('./dispatch.constants');
 const { settleRetryingErrors } = require('../errors/errors.settle');
+const { onDispatchConfirmed } = require('../../core-governance/finops/finops.hooks');
 
 /** Campos que quem transiciona pode informar (o conteúdo aprovado nunca está aqui). */
 const PATCH_FIELDS = ['externalRequestId', 'externalResourceId', 'nextAttemptAt', 'lastErrorClass', 'lastErrorCode', 'lastHttpStatus', 'reconcileAttempts', 'externalStatus', 'authRenewals', 'deadLetterReason'];
@@ -59,6 +60,7 @@ async function applyTransition(ctx, row, to, patch, opts, transaction) {
   }
   await auditarMudanca(ctx, antes, row, opts.motivo || `Envio: ${antes.status} -> ${to}.`, transaction);
   // M9-D250: o erro que foi a RETRYING no retry humano fecha com o desfecho do envio (confirmou: resolve; voltou a falhar: reabre).
+  if (to === 'CONFIRMED') await onDispatchConfirmed(ctx, row, transaction); // M9-D860: uma unidade de mensageria no ledger do FinOps
   if (to === 'CONFIRMED') await settleRetryingErrors(ctx, row.id, 'RESOLVED', transaction, 'O envio repetido foi confirmado pelo fornecedor.');
   else if (['FAILED', 'DEAD_LETTER', 'UNKNOWN'].includes(to)) await settleRetryingErrors(ctx, row.id, 'OPEN', transaction);
   return row;

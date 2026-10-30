@@ -8,6 +8,7 @@ const V = require('./runs.validation');
 const { toRun } = require('./runs.mapper');
 const { computeRunCost } = require('./runCost');
 const { publishRunEvent, auditRun } = require('./runEvents');
+const { onAiRunFinished } = require('../../../core-governance/finops/finops.hooks');
 const { sanitizeSummary, summaryLimit } = require('../../audit/auditSanitizer');
 
 /** Traduz recusas do banco (gatilhos) e deixa passar qualquer outro erro. */
@@ -96,6 +97,7 @@ async function finishRun(ctx, runId, data, transaction) {
     const run = toRun(row);
     await auditRun(ctx, 'ai.run.state_changed', run, before, `Execução da NAY: ${before.status} para ${run.status}.`, transaction);
     await publishRunEvent(ctx, run, transaction);
+    await onAiRunFinished(ctx, run, C.FINAL_STATUSES, transaction); // M9-D860: custo ESTIMATED da hora no ledger do FinOps
     return run;
   });
 }
