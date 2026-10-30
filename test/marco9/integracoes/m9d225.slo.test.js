@@ -10,6 +10,7 @@ const env = require('../_helpers/m9d249Env');
 const { aggregateConnectionHealth } = require('../../../src/features/integrations/health');
 const { readHealthParams } = require('../../../src/features/integrations/health/healthParams');
 const { IntegrationConnection } = require('../../../src/models');
+const { registerDispatchHealthSource } = require('../../../src/features/integrations/dispatch');
 
 let tenants;
 let tokenLeitura;
@@ -22,6 +23,8 @@ const chaves = ['integration.slo.CRITICAL', 'integration.slo.HIGH', 'integration
 const limparMetas = () => env.sql(tenants.tenant, 'DELETE FROM core.tenant_settings WHERE company_id = :c AND key IN (:k)', { c: tenants.tenant.companyId, k: chaves });
 
 before(async () => {
+  // O app só registra a fonte de amostras fora de NODE_ENV=test: o teste a registra (idempotente) e não depende de como o app sobe.
+  registerDispatchHealthSource();
   tenants = await env.carregarTenants();
   tokenLeitura = env.tokenDe(tenants.tenant, ['integration:read']);
   tokenEdita = env.tokenDe(tenants.tenant, ['settings:read', 'settings:update']);
