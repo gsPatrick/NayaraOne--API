@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { Op } = require('sequelize');
 const { sequelize, IntegrationDispatch } = require('../../../models');
 const AppError = require('../../../utils/AppError');
+require('../../integrations/dispatch'); // carrega a política de nova tentativa por classe de erro, a cota e a reconciliação (D216, D218 e D215), mesmo fora do servidor
 const dispatchService = require('../../integrations/dispatch/enqueue/dispatch.service');
 const { transitionDispatch } = require('../../integrations/dispatch/dispatch.transition');
 const { confirmDispatch } = require('../../integrations/dispatch/worker/worker.confirm');
