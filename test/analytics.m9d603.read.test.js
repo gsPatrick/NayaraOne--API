@@ -10,6 +10,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const sup = require('./analytics.m9d603.support');
 const registry = require('../src/features/analytics/metrics');
+const clock = require('../src/features/analytics/metrics/clock');
 
 const { inTx, ctxOf, metricInput } = sup;
 const FRONT_ROOT = path.join(__dirname, '..', '..', 'NayaraOne--FRONT');
@@ -17,10 +18,11 @@ let env;
 let catalog;
 
 before(async () => {
+  clock.setClock(() => new Date('2026-12-01T15:00:00Z')); // M9-D609: carimbo da fonte à frente do relógio é dado inválido
   env = await sup.setup();
   catalog = registry.createFormulaCatalog(env.formulaDir);
 });
-after(() => sup.teardown(env));
+after(() => { clock.resetClock(); return sup.teardown(env); });
 
 test('m9d603 listar o registry devolve código, nome, owner, unidade, versão e status', async () => {
   await inTx(env.tenantA, {}, async (tx) => {
@@ -43,7 +45,7 @@ test('m9d603 resposta de métrica traz valor, unidade, versão e sourceRefs', as
     await sup.metrics.recordSnapshot({
       groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, metricId: definition.id, metricVersionId: version.id,
       scopeType: 'COMPANY', scopeId: env.tenantA.companyId, periodStart: '2026-10-01', periodEnd: '2026-10-31', asOfDate: '2026-10-31',
-      valueNumeric: '120000.5000', status: 'OK', sourceSnapshotAt: '2026-10-31T23:00:00Z', sourceRefs: [{ table: 'finance.entries', id: 'abc' }],
+      valueNumeric: '120000.5000', status: 'OK', sourceSnapshotAt: '2026-10-31T23:00:00Z', refreshedAt: '2026-10-31T23:05:00Z', sourceRefs: [{ table: 'finance.entries', id: 'abc' }],
       calcHash: createHash('sha256').update('x').digest('hex'),
     }, tx);
     const r = await registry.readMetricValue(ctxOf(env.tenantA, ['analytics:read', 'finance:read']), {

@@ -2,7 +2,7 @@
 
 /**
  * M9-D609 (3.2) — regras de exibição: aplica a freshness ao snapshot antes de ele sair numa resposta. Dado velho nunca se passa por atual:
- *  - nunca atualizado (source_snapshot_at nulo): status INCOMPLETE, sem valor;
+ *  - nunca atualizado (source_snapshot_at nulo) ou carimbo da fonte no futuro além da folga (relógio adiantado): status INCOMPLETE, sem valor;
  *  - EXPIRED: status DEGRADED e value nulo (o Front mostra "Dado antigo, não use para decidir", nunca o número);
  *  - STALE: status STALE e o valor com o selo "Desatualizado há X";
  *  - FRESH: o status gravado no snapshot.
@@ -33,13 +33,13 @@ async function presentSnapshot({ definition, version, snapshot, rawValue, asOfDa
   const historical = asOfDate < clock.businessToday(now);
   const freshness = computeFreshness({
     asOfDate, sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
-    maxStalenessMinutes: maxStalenessOf(version.refresh_policy, definition.domain, params), factor: params.factor, now, historical,
+    maxStalenessMinutes: maxStalenessOf(version.refresh_policy, definition.domain, params), factor: params.factor, now, historical, futureToleranceMinutes: params.futureToleranceMinutes,
   });
-  const base = historical ? snapshot.status : resolveStatus(snapshot.status, freshness.state);
+  const base = historical && !freshness.futureStamp ? snapshot.status : resolveStatus(snapshot.status, freshness.state);
   const assessed = await assessQuality({ metricCode: definition.metric_code, scope, asOfDate, historical, transaction, visited });
   const status = worstStatus(base, assessed.status);
   const unreliable = isUnreliable(status);
-  const hidden = unreliable || (!historical && (freshness.state === STATES.UNKNOWN || freshness.state === STATES.EXPIRED));
+  const hidden = unreliable || (freshness.futureStamp || (!historical && (freshness.state === STATES.UNKNOWN || freshness.state === STATES.EXPIRED)));
   return {
     value: hidden ? null : rawValue, status, valueReliable: !unreliable, freshness,
     quality: { degradedBy: assessed.degradedBy, inheritedFrom: assessed.inheritedFrom },

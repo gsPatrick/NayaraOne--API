@@ -15,6 +15,7 @@
  *  analytics.qualidade.max_chaves_conciliacao    quantas chaves (as mais recentes) a conciliação de cada read model recalcula da fonte (padrão 200)
  *  analytics.freshness.max_minutos.<DOMINIO>     idade máxima da fonte por domínio (FRESH até aqui; STALE acima)
  *  analytics.freshness.fator_expirado            EXPIRED acima de fator x o limite (livro/M9-D609: 4)
+ *  analytics.freshness.tolerancia_futuro_minutos folga para o relógio da fonte adiantado; carimbo mais à frente que isso é dado inválido (M9-D609, padrão 5)
  */
 const AppError = require('../../../utils/AppError');
 
@@ -45,6 +46,7 @@ const K = Object.freeze({
   tolerance: 'analytics.qualidade.tolerancia_conciliacao',
   severities: 'analytics.qualidade.severidades',
   factor: 'analytics.freshness.fator_expirado',
+  futureTolerance: 'analytics.freshness.tolerancia_futuro_minutos',
   maxKeys: 'analytics.qualidade.max_chaves_conciliacao',
 });
 const nullKey = (field) => `analytics.qualidade.max_nulos_pct.${field}`;
@@ -52,7 +54,7 @@ const freshnessKey = (domain) => `analytics.freshness.max_minutos.${domain}`;
 
 const DEFAULT_SEVERITIES_TEXT = SEVERITY_KEYS.map((k) => `${k}=${DEFAULT_SEVERITIES[k]}`).join('; ');
 const DEFAULTS = Object.freeze({
-  [K.rangePct]: 50, [K.window]: 14, [K.minRefreshes]: 1, [K.blockNullPct]: 5, [K.tolerance]: 'R$ 0,01', [K.severities]: DEFAULT_SEVERITIES_TEXT, [K.factor]: 4, [K.maxKeys]: 200,
+  [K.rangePct]: 50, [K.window]: 14, [K.minRefreshes]: 1, [K.blockNullPct]: 5, [K.tolerance]: 'R$ 0,01', [K.severities]: DEFAULT_SEVERITIES_TEXT, [K.factor]: 4, [K.futureTolerance]: 5, [K.maxKeys]: 200,
   ...Object.fromEntries(Object.entries(NULL_FIELDS).map(([f, v]) => [nullKey(f), v])),
   ...Object.fromEntries(Object.entries(FRESHNESS_DOMAINS).map(([d, v]) => [freshnessKey(d), v])),
 });
@@ -91,6 +93,7 @@ const QUALITY_SETTINGS_SCHEMA = {
   [K.tolerance]: { type: 'string', validate: validateTolerance },
   [K.severities]: { type: 'string', validate: validateSeverities },
   [K.factor]: { type: 'integer', min: 1, max: 1000 },
+  [K.futureTolerance]: { type: 'integer', min: 0, max: 1440 },
   [K.maxKeys]: { type: 'integer', min: 1, max: 10000 },
   ...Object.fromEntries(Object.keys(NULL_FIELDS).map((f) => [nullKey(f), { type: 'number', min: 0, max: 100 }])),
   ...Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [freshnessKey(d), { type: 'integer', min: 1, max: 525600 }])),
@@ -113,6 +116,7 @@ async function readQualityParams(scope, transaction) {
     severities: parseSeverities(get(K.severities)),
     maxReconcileKeys: num(get(K.maxKeys), DEFAULTS[K.maxKeys], { min: 1, integer: true }),
     freshnessFactor: num(get(K.factor), DEFAULTS[K.factor], { min: 1, integer: true }),
+    futureToleranceMinutes: num(get(K.futureTolerance), DEFAULTS[K.futureTolerance], { min: 0, integer: true }),
     freshnessLimits: Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [d, num(get(freshnessKey(d)), DEFAULTS[freshnessKey(d)], { min: 1, integer: true })])),
     nullPct: Object.fromEntries(Object.keys(NULL_FIELDS).map((f) => [f, num(get(nullKey(f)), DEFAULTS[nullKey(f)])])),
   };

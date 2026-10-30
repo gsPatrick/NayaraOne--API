@@ -20,6 +20,11 @@ before(async () => {
   registry.clock.setClock(() => NOW);
   env = await http.setup();
   const t = env.tenantA;
+  await env.admin.transaction(async (transaction) => { // sobras de outros arquivos com o carimbo da fonte à frente da gravação (M9-D609: dado do futuro é inválido)
+    await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
+    await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id = :c AND source_snapshot_at > refreshed_at', { replacements: { c: t.companyId }, transaction });
+    await env.admin.query('DELETE FROM analytics.read_model_refreshes WHERE company_id = :c AND source_snapshot_at > now()', { replacements: { c: t.companyId }, transaction });
+  });
   const broker = biSources.uuid();
   for (const [day, source, minutes] of [[5, 'PORTAL', 10], [6, 'PORTAL', 20], [7, 'SITE', 12], [8, 'SITE', 14], [9, 'INDICACAO', 14], [10, 'INDICACAO', null]]) {
     const id = await biSources.opportunity(env, t, { owner: broker, source, created: at(day, 10) });

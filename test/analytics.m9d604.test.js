@@ -11,6 +11,8 @@ const express = require('express');
 const sup = require('./analytics.m9d603.support');
 const registry = require('../src/features/analytics/metrics');
 const { calcHash } = require('../src/features/analytics/metrics/calcHash');
+const clock = require('../src/features/analytics/metrics/clock');
+const PINNED = new Date('2026-12-01T15:00:00Z'); // M9-D609: carimbo da fonte à frente do relógio é dado inválido; o relógio fixo deixa as datas do teste no passado
 const { sequelize } = require('./testHelpers');
 const { correlationIdMiddleware } = require('../src/middlewares/correlationId.middleware');
 const tenantMiddleware = require('../src/middlewares/tenant.middleware');
@@ -40,11 +42,13 @@ async function purgeCommitted() {
 }
 
 before(async () => {
+  clock.setClock(() => PINNED);
   env = await sup.setup();
   fs.writeFileSync(path.join(env.formulaDir, 'soma_sem_hoje.js'), V2_FORMULA);
   catalog = registry.createFormulaCatalog(env.formulaDir);
 });
 after(async () => {
+  clock.resetClock();
   await purgeCommitted();
   await sup.teardown(env);
 });
@@ -77,6 +81,7 @@ async function snapshot(def, version, asOfDate, value, rows, tx) {
     groupId: env.tenantA.groupId, companyId: env.tenantA.companyId, metricId: def.id, metricVersionId: version.id, scopeType: 'COMPANY',
     scopeId: env.tenantA.companyId, periodStart: '2026-10-01', periodEnd: '2026-10-31', asOfDate, valueNumeric: value, status: 'OK',
     sourceSnapshotAt: `${asOfDate}T10:00:00Z`, // M9-D609: snapshot sem instante da fonte é INCOMPLETE e sem valor
+    refreshedAt: `${asOfDate}T10:05:00Z`, // a gravação é posterior ao carimbo da fonte
 
     calcHash: calcHash({ metricCode: def.metric_code, version: version.version, inputs: rows, params: {} }),
   }, tx);
@@ -253,8 +258,7 @@ test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTT
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}/v1/analytics/metrics/${code}`;
-  const clock = require('../src/features/analytics/metrics/clock');
-  clock.setClock(() => new Date('2026-12-01T15:00:00Z')); // M9-D606: data-base futura é 400; o relógio fixo deixa as datas do teste no passado
+  clock.setClock(() => PINNED); // M9-D606: data-base futura é 400; o relógio fixo deixa as datas do teste no passado
   try {
     const get = async (qs) => { const res = await fetch(`${base}${qs}`); return { status: res.status, body: await res.json() }; };
     const a = await get('?asOf=2026-10-31');
@@ -268,7 +272,6 @@ test('m9d604 GET /analytics/metrics/:code?asOf= devolve a versão da época (HTT
     assert.equal(c.body.error.code, 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
     assert.equal(patch.status, 405);
   } finally {
-    clock.resetClock();
     await new Promise((resolve) => server.close(resolve));
   }
 });

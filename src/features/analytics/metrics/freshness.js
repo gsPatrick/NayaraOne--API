@@ -7,14 +7,22 @@
  * `maxStalenessMinutes` da refresh_policy da versão da métrica, senão do padrão do livro por domínio (`analytics.freshness.max_minutos.<DOMINIO>`). Tudo aqui é puro (sem banco).
  */
 const { BUSINESS_TIMEZONE } = require('../../../utils/businessDate');
+const { K, DEFAULTS } = require('../quality/quality.settings');
 
 const STATES = Object.freeze({ FRESH: 'FRESH', STALE: 'STALE', EXPIRED: 'EXPIRED', UNKNOWN: 'UNKNOWN' });
 const EXPIRED_TEXT = 'Dado antigo, não use para decidir';
+const FUTURE_TEXT = 'Data da fonte no futuro, dado não confiável';
 
 /** Idade em minutos inteiros entre dois instantes (nunca negativa); null se faltar um deles. */
 function ageMinutesBetween(from, to) {
   if (!from || !to) return null;
   return Math.max(0, Math.floor((new Date(to).getTime() - new Date(from).getTime()) / 60000));
+}
+
+/** O carimbo da fonte está à frente do instante de referência (a gravação do registro) por mais que a folga (minutos)? Relógio adiantado = dado inválido, nunca "fresco com idade 0". */
+function isFutureStamp(sourceSnapshotAt, reference, toleranceMinutes) {
+  if (!sourceSnapshotAt || !reference) return false;
+  return new Date(sourceSnapshotAt).getTime() - new Date(reference).getTime() > toleranceMinutes * 60000;
 }
 
 /**
@@ -47,7 +55,8 @@ const clockText = (instant) => new Intl.DateTimeFormat('pt-BR', { timeZone: BUSI
 
 const dateText = (asOfDate) => asOfDate.split('-').reverse().join('/');
 
-function labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate) {
+function labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate, futureStamp) {
+  if (futureStamp) return FUTURE_TEXT; // dado do futuro nunca se passa por fresco, nem como registro histórico
   if (historical && asOfDate) return `Registro de ${dateText(asOfDate)}`; // dia passado: o selo descreve o registro, não a atualidade
   if (state === STATES.FRESH) return `Atualizado às ${clockText(sourceSnapshotAt)}`;
   if (state === STATES.STALE) return `Desatualizado há ${ageText(ageMinutes)}`;
@@ -59,12 +68,15 @@ function labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate) {
  * Bloco `freshness` da resposta. `now` é o instante da leitura; `historical` (leitura de dia passado) mede a idade que o dado tinha quando foi
  * gravado (refreshed_at - source_snapshot_at), porque um snapshot antigo é antigo por definição e continua legível como registro do passado.
  */
-function computeFreshness({ asOfDate = null, sourceSnapshotAt, refreshedAt, maxStalenessMinutes, factor, now, historical = false }) {
-  const ageMinutes = sourceSnapshotAt ? ageMinutesBetween(sourceSnapshotAt, historical ? refreshedAt : now) : null;
-  const state = classify(ageMinutes, maxStalenessMinutes, factor);
+function computeFreshness({ asOfDate = null, sourceSnapshotAt, refreshedAt, maxStalenessMinutes, factor, now, historical = false, futureToleranceMinutes = DEFAULTS[K.futureTolerance] }) {
+  const reference = historical ? refreshedAt : now;
+  // o carimbo da fonte não pode ser posterior ao instante em que o próprio registro foi gravado (refreshed_at, relógio do banco); sem ele, ao relógio da leitura
+  const futureStamp = isFutureStamp(sourceSnapshotAt, refreshedAt || reference, futureToleranceMinutes);
+  const ageMinutes = sourceSnapshotAt && !futureStamp ? ageMinutesBetween(sourceSnapshotAt, reference) : null;
+  const state = classify(ageMinutes, maxStalenessMinutes, factor); // carimbo futuro: sem idade confiável, UNKNOWN (status INCOMPLETE, sem valor)
   return {
     state, ageMinutes, asOfDate, sourceSnapshotAt: sourceSnapshotAt || null, refreshedAt: refreshedAt || null, maxStalenessMinutes,
-    expiredAboveMinutes: maxStalenessMinutes * factor, historical, label: labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate),
+    expiredAboveMinutes: maxStalenessMinutes * factor, historical, futureStamp, label: labelOf(state, ageMinutes, sourceSnapshotAt, historical, asOfDate, futureStamp),
   };
 }
 
@@ -73,4 +85,4 @@ function buildFreshness(asOfDate, snapshot) {
   return { asOfDate, sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at };
 }
 
-module.exports = { STATES, EXPIRED_TEXT, ageMinutesBetween, maxStalenessOf, classify, ageText, computeFreshness, buildFreshness };
+module.exports = { STATES, EXPIRED_TEXT, FUTURE_TEXT, isFutureStamp, ageMinutesBetween, maxStalenessOf, classify, ageText, computeFreshness, buildFreshness };

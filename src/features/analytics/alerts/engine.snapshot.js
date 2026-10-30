@@ -44,7 +44,7 @@ async function loadAlertInput(def, scope, { now = clock.now() } = {}, transactio
   const params = await readFreshnessParams(scope, transaction);
   const freshness = computeFreshness({
     asOfDate: String(snapshot.as_of_date), sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
-    maxStalenessMinutes: maxStalenessOf(snapshot.refresh_policy, metric.domain, params), factor: params.factor, now,
+    maxStalenessMinutes: maxStalenessOf(snapshot.refresh_policy, metric.domain, params), factor: params.factor, now, futureToleranceMinutes: params.futureToleranceMinutes,
   });
   const assessed = await assessQuality({ metricCode: def.metric_code, scope, asOfDate: clock.businessToday(now), transaction }); // M9-D697: check BLOCK falho ou componente ruim
   const status = worstStatus(resolveStatus(snapshot.status, freshness.state), assessed.status);

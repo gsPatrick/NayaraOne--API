@@ -2,12 +2,13 @@
 
 /**
  * M9-D609 (3.1) — leitura dos parâmetros de freshness da empresa: limite de idade por domínio (`analytics.freshness.max_minutos.<DOMINIO>`)
- * e fator do EXPIRED (`analytics.freshness.fator_expirado`, padrão 4). O dicionário (SETTINGS_SCHEMA) e os padrões vivem em
+ * e fator do EXPIRED (`analytics.freshness.fator_expirado`, padrão 4) e folga para carimbo futuro (`analytics.freshness.tolerancia_futuro_minutos`, padrão 5). O dicionário (SETTINGS_SCHEMA) e os padrões vivem em
  * quality/quality.settings.js (M9-D696 declarou as chaves; esta demanda é a segunda leitora). Valor ausente ou inválido cai no padrão do livro.
  */
 const { K, DEFAULTS, FRESHNESS_DOMAINS } = require('../quality/quality.settings');
 
 const freshnessKey = (domain) => `analytics.freshness.max_minutos.${domain}`;
+const nonNegativeInt = (v, fallback) => (Number.isInteger(v) && v >= 0 ? v : fallback);
 const positiveInt = (v, fallback) => (Number.isInteger(v) && v >= 1 ? v : fallback);
 
 /**
@@ -23,6 +24,7 @@ async function readFreshnessParams(scope, transaction) {
   return {
     overrides: Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [d, explicit(d)]).filter(([, v]) => v !== undefined)),
     factor: positiveInt(get(K.factor), DEFAULTS[K.factor]),
+    futureToleranceMinutes: nonNegativeInt(get(K.futureTolerance), DEFAULTS[K.futureTolerance]), // carimbo da fonte à frente do relógio por mais que isto é inválido
     limits: Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [d, positiveInt(get(freshnessKey(d)), DEFAULTS[freshnessKey(d)])])),
   };
 }

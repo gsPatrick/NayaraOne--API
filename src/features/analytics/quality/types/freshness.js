@@ -8,6 +8,7 @@
  */
 const clock = require('../../metrics/clock');
 const sql = require('../quality.sql');
+const { isFutureStamp } = require('../../metrics/freshness');
 
 function freshness({ code, domain, metrics = [] }) {
   async function run(ctx) {
@@ -17,6 +18,10 @@ function freshness({ code, domain, metrics = [] }) {
     if (!limit) throw new Error(`Domínio de freshness desconhecido: ${domain}`);
     const expected = { maxMinutes: limit, expiredAboveMinutes: limit * factor };
     if (!snapshot) return { passed: true, expected, observed: { state: 'EMPTY', ageMinutes: null, limitMinutes: limit, factor } };
+    const recordedAt = await sql.value(ctx, `SELECT max(refreshed_at)::text AS v FROM ${sql.tableOf(ctx)} WHERE company_id = :companyId`);
+    if (isFutureStamp(snapshot, recordedAt || clock.now(), ctx.params.futureToleranceMinutes)) { // relógio da fonte adiantado: dado do futuro não é fresco (M9-D609 reabertura L-1)
+      return { passed: false, severityKey: 'FRESHNESS_EXPIRED', expected, observed: { sourceSnapshotAt: new Date(snapshot).toISOString(), ageMinutes: null, limitMinutes: limit, factor, state: 'FUTURE', toleranceMinutes: ctx.params.futureToleranceMinutes } };
+    }
     const ageMinutes = Math.max(0, Math.floor((clock.now().getTime() - new Date(snapshot).getTime()) / 60000));
     const observed = { sourceSnapshotAt: new Date(snapshot).toISOString(), ageMinutes, limitMinutes: limit, factor, state: 'FRESH' };
     if (ageMinutes <= limit) return { passed: true, expected, observed };

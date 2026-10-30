@@ -42,7 +42,7 @@ async function collectCriticalFreshness(scope, transaction, { now = clock.now() 
   for (const row of await latestSnapshots(scope.companyId, transaction)) {
     const freshness = computeFreshness({
       asOfDate: row.asOfDate, sourceSnapshotAt: row.sourceSnapshotAt, refreshedAt: row.refreshedAt,
-      maxStalenessMinutes: maxStalenessOf(row.refreshPolicy, row.domain, params), factor: params.factor, now,
+      maxStalenessMinutes: maxStalenessOf(row.refreshPolicy, row.domain, params), factor: params.factor, now, futureToleranceMinutes: params.futureToleranceMinutes,
     });
     out.push({
       type: EVENT_TYPE, companyId: scope.companyId, groupId: scope.groupId || null, metricCode: row.metricCode, metricName: row.name, domain: row.domain,
