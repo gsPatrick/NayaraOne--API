@@ -243,12 +243,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED 
 }
 if (process.env.NODE_ENV !== 'test') {
   require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()
+    .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
+}
+
 // Marco 9, M9-D911: retenção de dados (simulação diária às 03:30 e aplicação automática só das políticas técnicas de integração).
 if (process.env.NODE_ENV !== 'test' && process.env.RETENTION_JOB_DISABLED !== 'true') {
   startRetentionJob();
-}
-
-    .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
 }
 
 // Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
