@@ -1,0 +1,93 @@
+{
+  "provider": "storage-s3",
+  "domain": "STORAGE",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T14:55:26.544Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "putObject",
+    "getObject",
+    "deleteObject",
+    "headObject",
+    "getSignedUrl"
+  ],
+  "adapterHash": "28928d7e54469d3903ada88e3b0529933fdca8bdbe560f098bc8146c51953f5f",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 15,
+      "passed": 15,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 7,
+      "passed": 7,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 106,
+  "passed": 106,
+  "status": "PASSED",
+  "errors": []
+}

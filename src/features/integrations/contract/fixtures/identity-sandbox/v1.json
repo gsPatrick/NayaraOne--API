@@ -1,0 +1,28 @@
+{
+  "provider": "identity-sandbox",
+  "apiVersion": "v1",
+  "description": "Provedor de identidade OIDC de laboratório: token RS256 emitido na hora pelo par de chaves do sandbox, validado pelo JWKS com cache; iss, aud, exp e nbf obrigatórios.",
+  "legacyDouble": "identity-sandbox",
+  "requests": {
+    "verifyToken": {
+      "token": "token-emitido-pela-suite"
+    },
+    "getUserInfo": {
+      "token": "token-emitido-pela-suite"
+    },
+    "revokeSession": {
+      "sessionId": "sessao-de-contrato-001"
+    },
+    "listJwks": {}
+  },
+  "noResourceId": [
+    "listJwks"
+  ],
+  "statuses": {
+    "VALID": "VALID",
+    "REVOKED": "REVOKED",
+    "OK": "OK"
+  },
+  "unknownStatus": "em_federacao",
+  "renewal": false
+}

@@ -95,7 +95,7 @@ test('nao_improvisar_6_http_sucesso_nao_e_fato_financeiro', () => {
 
 test('nao_improvisar_7_integracao_sem_health_runbook_contrato', () => {
   limpo(g7);
-  assert.ok(g7.scan.pendentes.length > 0, 'as famílias com suíte pendente por demanda aparecem à parte (a lista da M9-D222 só encolhe)');
+  assert.ok(Array.isArray(g7.scan.pendentes), 'as famílias com suíte pendente por demanda aparecem à parte (a lista da M9-D222 só encolhe e pode chegar a vazia, quando todas têm suíte)');
   const deps = {
     registry: { list: () => [{ providerCode: 'novo-sandbox' }], instantiate: () => ({}) },
     contract: { coverage: () => ({ pending: [], uncovered: ['novo-sandbox'], withoutApi: [] }) },

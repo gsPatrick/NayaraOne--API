@@ -39,13 +39,19 @@ async function runSuite(target, { timeoutMs } = {}) {
     const ops = capabilities.filter((c) => !semCenario.includes(c) && typeof adapterBase[c] === 'function');
     capabilities.filter((c) => typeof adapterBase[c] !== 'function').forEach((capability) => errors.push({ code: 'CONTRACT_CAPABILITY_NOT_IMPLEMENTED', version, capability, message: 'Capacidade declarada sem operação implementada no adapter.' }));
     const prazo = timeoutMs || fixture.timeoutMs || DEFAULT_TIMEOUT_MS;
-    const adapter = new target.AdapterClass(buildContext({ providerCode: target.providerCode, version, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS }));
     const dub = loadDouble(fixture.legacyDouble);
-    if (dub) adapter.legacyInstance = dub.legacy;
-    const state = {};
-    for (const [, , fn] of SCENARIOS) {
-      const lista = await fn({ adapter, fixture, ops, state, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS });
-      resultados.push(...lista.map((r) => ({ ...r, version })));
+    const desfazer = dub && dub.setup ? dub.setup() : null;
+    try {
+      const extra = (dub && dub.context) || {};
+      const adapter = new target.AdapterClass(buildContext({ providerCode: target.providerCode, version, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS, config: extra.config, secret: extra.secret, http: extra.http }));
+      if (dub && dub.legacy) adapter.legacyInstance = dub.legacy;
+      const state = {};
+      for (const [, , fn] of SCENARIOS) {
+        const lista = await fn({ adapter, fixture, ops, state, timeoutMs: prazo, healthTimeoutMs: HEALTH_LIMIT_MS });
+        resultados.push(...lista.map((r) => ({ ...r, version })));
+      }
+    } finally {
+      if (desfazer) desfazer();
     }
   }
   const scenarios = SCENARIOS.map(([id, name]) => {

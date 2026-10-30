@@ -1,0 +1,28 @@
+{
+  "provider": "identity-local",
+  "apiVersion": "v1",
+  "description": "Identidade própria do sistema: token de acesso assinado com o segredo do app (HS256, iss, aud, nbf e exp), sessão em tabela de laboratório e nenhuma chave pública a publicar.",
+  "legacyDouble": "identity-local",
+  "requests": {
+    "verifyToken": {
+      "token": "token-emitido-pela-suite"
+    },
+    "getUserInfo": {
+      "token": "token-emitido-pela-suite"
+    },
+    "revokeSession": {
+      "sessionId": "sessao-de-contrato-001"
+    },
+    "listJwks": {}
+  },
+  "noResourceId": [
+    "listJwks"
+  ],
+  "statuses": {
+    "VALID": "VALID",
+    "REVOKED": "REVOKED",
+    "OK": "OK"
+  },
+  "unknownStatus": "em_federacao",
+  "renewal": false
+}

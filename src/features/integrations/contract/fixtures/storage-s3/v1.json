@@ -1,0 +1,52 @@
+{
+  "provider": "storage-s3",
+  "apiVersion": "v1",
+  "description": "Serviço S3 compatível de laboratório (servidor falso em memória): requisição assinada com SigV4, conteúdo cifrado pelo serviço e URL pré-assinada com prazo limitado.",
+  "legacyDouble": "storage-s3",
+  "requests": {
+    "putObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "body": "conteudo-de-contrato",
+      "contentType": "text/plain",
+      "sha256": "9eab04b39432495b5bb4d21939b3d5ff065c44da0cbbd90832e443616df98edb"
+    },
+    "getObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "expectedSha256": "9eab04b39432495b5bb4d21939b3d5ff065c44da0cbbd90832e443616df98edb",
+      "externalResourceIdFrom": "putObject"
+    },
+    "headObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "externalResourceIdFrom": "putObject"
+    },
+    "deleteObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "externalResourceIdFrom": "putObject"
+    },
+    "getSignedUrl": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "ttlSeconds": 3600,
+      "method": "GET",
+      "externalResourceIdFrom": "putObject"
+    }
+  },
+  "freshOrigin": [
+    "getObject",
+    "headObject",
+    "deleteObject",
+    "getSignedUrl"
+  ],
+  "statuses": {
+    "STORED": "STORED",
+    "FOUND": "FOUND",
+    "DELETED": "DELETED",
+    "OK": "OK"
+  },
+  "unknownStatus": "em_replicacao",
+  "renewal": false
+}

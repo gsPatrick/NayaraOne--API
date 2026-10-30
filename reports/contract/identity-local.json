@@ -1,0 +1,92 @@
+{
+  "provider": "identity-local",
+  "domain": "IDENTITY",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T14:55:25.239Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "verifyToken",
+    "getUserInfo",
+    "revokeSession",
+    "listJwks"
+  ],
+  "adapterHash": "dba5755f3c3f88ec008fcfd728df11f482b9a2da9cac64facec76dda9aeb2358",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 16,
+      "passed": 16,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 86,
+  "passed": 86,
+  "status": "PASSED",
+  "errors": []
+}

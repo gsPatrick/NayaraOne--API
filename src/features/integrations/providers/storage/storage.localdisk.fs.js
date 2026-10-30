@@ -14,7 +14,8 @@ const { sha256Of } = require('./storage.body');
  * da chave já chegou validado por `assertCompanyKey` (sem `..`, só segmentos seguros); aqui o caminho ainda é conferido contra a raiz.
  */
 function absolute(relative) {
-  const raiz = path.resolve(diskStorage.UPLOADS_ROOT);
+  // A raiz acompanha UPLOADS_DIR no momento da chamada (a suíte de contrato aponta para uma pasta temporária); sem ela vale a raiz do sistema.
+  const raiz = path.resolve(process.env.UPLOADS_DIR || diskStorage.UPLOADS_ROOT);
   const alvo = path.resolve(raiz, relative);
   if (!alvo.startsWith(raiz + path.sep)) throw Object.assign(new Error('Caminho fora da raiz de uploads.'), { code: 'INTEGRATION_STORAGE_KEY_FORBIDDEN', status: 403 });
   return alvo;

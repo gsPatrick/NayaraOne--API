@@ -2,16 +2,17 @@
 
 const { classifyDispatchError } = require('../dispatch/retry/retry.classify');
 const { invoke } = require('../registry/adapterInvoke');
-const { doubleMeta } = require('./doubles');
+const { doubleMeta, prepareRequest } = require('./doubles');
 
 /** Contexto do adapter nos contract tests: connection de laboratório, prazos curtos da política e leitor de segredo falso (nenhum segredo real). */
-function buildContext({ providerCode, version, timeoutMs, healthTimeoutMs, config = {} }) {
+function buildContext({ providerCode, version, timeoutMs, healthTimeoutMs, config = {}, secret, http }) {
   return Object.freeze({
     connection: Object.freeze({ id: `contract-${providerCode}`, providerCode, environment: 'SANDBOX', apiVersion: version, config }),
     policy: {},
     timeouts: { readMs: timeoutMs, writeMs: timeoutMs },
     healthCheckTimeoutMs: healthTimeoutMs,
-    secret: async () => 'segredo-de-contrato-nao-real',
+    secret: secret || (async () => 'segredo-de-contrato-nao-real'),
+    ...(http ? { http } : {}),
   });
 }
 
@@ -31,14 +32,15 @@ async function callOp(adapter, fixture, op, state, { key = nextKey(op), tenant =
   const pedido = { ...modelo };
   if (modelo.externalResourceIdFrom) {
     delete pedido.externalResourceIdFrom;
-    if (!state[modelo.externalResourceIdFrom]) {
+    // `freshOrigin` (fixture): a operação consome o recurso (ex.: ler e apagar um objeto): o recurso de origem é criado de novo antes de cada chamada.
+    if (!state[modelo.externalResourceIdFrom] || (fixture.freshOrigin || []).includes(op)) {
       const origem = await callOp(adapter, fixture, modelo.externalResourceIdFrom, state, { key: nextKey(`${op}-origem`) });
       state[modelo.externalResourceIdFrom] = origem;
     }
     pedido.externalResourceId = state[modelo.externalResourceIdFrom].externalResourceId;
   }
   // Duplo do fluxo manual: empresa e transação de mentira que o adapter exige (vale também para os cenários de falha).
-  return invoke(adapter, op, pedido, { tenant, meta: { idempotencyKey: key, ...(extraMeta || {}) } });
+  return invoke(adapter, op, prepareRequest(fixture.legacyDouble, pedido), { tenant, meta: { idempotencyKey: key, ...(extraMeta || {}) } });
 }
 
 /** Classe do erro como o Dispatch Service decide: o `classifyError` do adapter mais a tabela única da M9-D216. */

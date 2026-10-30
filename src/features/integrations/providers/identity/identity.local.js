@@ -35,4 +35,15 @@ async function sessionIsActive(claims, transaction, now = new Date()) {
   return Boolean(sessao) && !sessao.revokedAt && sessao.expiresAt >= now;
 }
 
-module.exports = { verifyLocalToken, sessionIsActive, LOCAL_ALGORITHMS };
+/** Revoga a sessão (idempotente: já revogada ou inexistente não é erro). */
+async function revokeLocalSession(sessionId, transaction) {
+  const { Session } = require('../../../../models');
+  const sessao = await Session.findByPk(sessionId, { transaction });
+  if (sessao && !sessao.revokedAt) await sessao.update({ revokedAt: new Date() }, { transaction });
+  return { revoked: true };
+}
+
+/** Tabela de sessões do sistema (`core.sessions`) como o adapter a enxerga; a suíte de contrato troca por um duplo em memória, sem banco. */
+const localSessionStore = Object.freeze({ isActive: sessionIsActive, revoke: revokeLocalSession });
+
+module.exports = { verifyLocalToken, sessionIsActive, revokeLocalSession, localSessionStore, LOCAL_ALGORITHMS };

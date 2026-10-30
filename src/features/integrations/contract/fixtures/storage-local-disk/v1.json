@@ -1,0 +1,44 @@
+{
+  "provider": "storage-local-disk",
+  "apiVersion": "v1",
+  "description": "Disco local de laboratório: o objeto é gravado cifrado numa pasta temporária, com o hash do conteúdo original ao lado; não há URL assinada.",
+  "legacyDouble": "storage-local-disk",
+  "requests": {
+    "putObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "body": "conteudo-de-contrato",
+      "contentType": "text/plain",
+      "sha256": "9eab04b39432495b5bb4d21939b3d5ff065c44da0cbbd90832e443616df98edb"
+    },
+    "getObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "expectedSha256": "9eab04b39432495b5bb4d21939b3d5ff065c44da0cbbd90832e443616df98edb",
+      "externalResourceIdFrom": "putObject"
+    },
+    "headObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "externalResourceIdFrom": "putObject"
+    },
+    "deleteObject": {
+      "companyId": "00000000-0000-4000-8000-0000000000c1",
+      "key": "company/00000000-0000-4000-8000-0000000000c1/contrato/objeto-001.txt",
+      "externalResourceIdFrom": "putObject"
+    }
+  },
+  "freshOrigin": [
+    "getObject",
+    "headObject",
+    "deleteObject"
+  ],
+  "statuses": {
+    "STORED": "STORED",
+    "FOUND": "FOUND",
+    "DELETED": "DELETED",
+    "OK": "OK"
+  },
+  "unknownStatus": "em_replicacao",
+  "renewal": false
+}

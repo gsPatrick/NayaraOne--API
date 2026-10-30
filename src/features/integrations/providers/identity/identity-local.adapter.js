@@ -2,7 +2,7 @@
 
 const { IdentityAdapter } = require('./identity.port');
 const { classifyHttpError } = require('../../registry/classifyHttpError');
-const { verifyLocalToken, sessionIsActive } = require('./identity.local');
+const { verifyLocalToken, localSessionStore } = require('./identity.local');
 const { tokenInvalid } = require('./identity.errors');
 
 const STATUS = Object.freeze({ VALID: 'VALID', REVOKED: 'REVOKED', OK: 'OK' });
@@ -27,10 +27,13 @@ class IdentityLocalAdapter extends IdentityAdapter {
     return Object.prototype.hasOwnProperty.call(STATUS, s) ? STATUS[s] : null;
   }
 
+  /** Tabela de sessões: a do sistema; a suíte de contrato entrega um duplo em memória (`legacyInstance`). */
+  sessions() { return this.legacyInstance || localSessionStore; }
+
   /** Tolerância de relógio da configuração (meta.clockToleranceS, entregue por quem chama). */
   async verify(request, meta) {
     const claims = verifyLocalToken(request.token, { clockToleranceS: meta && meta.clockToleranceS });
-    if (!(await sessionIsActive(claims, meta && meta.transaction))) throw tokenInvalid('SESSION_REVOKED');
+    if (!(await this.sessions().isActive(claims, meta && meta.transaction))) throw tokenInvalid('SESSION_REVOKED');
     return claims;
   }
 
@@ -52,10 +55,7 @@ class IdentityLocalAdapter extends IdentityAdapter {
 
   /** Idempotente: sessão já revogada ou inexistente não é erro. */
   async revokeSession(_ctx, request, meta) {
-    const { Session } = require('../../../../models');
-    const transaction = meta && meta.transaction;
-    const sessao = await Session.findByPk(request.sessionId, { transaction });
-    if (sessao && !sessao.revokedAt) await sessao.update({ revokedAt: new Date() }, { transaction });
+    await this.sessions().revoke(request.sessionId, meta && meta.transaction);
     return { externalRequestId: null, externalResourceId: String(request.sessionId), status: 'REVOKED' };
   }
 
