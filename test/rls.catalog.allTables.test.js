@@ -799,3 +799,16 @@ test('M9-D232: real_estate.portal_listings tem RLS, FORCE RLS, a política tenan
   const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'real_estate.portal_listings', 'UPDATE') AS upd WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
   if (grant.length) assert.equal(grant[0].upd, true, 'GRANT ao role de runtime');
 });
+
+// M9-D237: finance.bank_statement_entries (lançamentos do extrato bancário) com RLS, FORCE RLS, política por empresa e UNIQUE (connection_id, entry_id).
+test('M9-D237: finance.bank_statement_entries tem RLS, FORCE RLS, a política tenant_isolation e o índice único (connection_id, entry_id)', async () => {
+  const [rls] = await sequelize.query(`SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'finance' AND c.relname = 'bank_statement_entries'`);
+  assert.equal(rls.length, 1, 'finance.bank_statement_entries não existe');
+  assert.deepEqual([rls[0].rls, rls[0].force_rls], [true, true]);
+  const [pol] = await sequelize.query(`SELECT 1 FROM pg_policy p WHERE p.polname = 'tenant_isolation' AND p.polrelid = '"finance"."bank_statement_entries"'::regclass`);
+  assert.equal(pol.length, 1, 'política tenant_isolation');
+  const [uniq] = await sequelize.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'finance' AND tablename = 'bank_statement_entries' AND indexname = 'bank_statement_entries_conn_entry_uidx'`);
+  assert.match(uniq[0].indexdef, /UNIQUE.*\(connection_id, entry_id\)/);
+  const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'finance.bank_statement_entries', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grant.length) assert.equal(grant[0].ins, true, 'GRANT ao role de runtime');
+});
