@@ -42,7 +42,7 @@ Convenções: `$API` e `$TOKEN` como em `calendario.md`.
 ## Como confirmar
 - `npm run lint:openapi` termina com exit 0; `npm run test:contract` fecha verde e grava `docs/evidencias/ci/contract-report.json`.
 - A rota deprecada responde com os cabeçalhos `Deprecation`, `Sunset` e `Link`; o cliente revogado recebe 401.
-- O teste nomeado `m9d840 breaking API change detectado` segue verde (`node scripts/ci-governanca.sh openapi`).
+- O teste nomeado `m9d840 breaking API change detectado` segue verde (`bash scripts/ci-governanca.sh openapi`).
 
 ## Quem escalar
 O responsável do consumidor (campo obrigatório do catálogo) antes de desligar; o dono do produto para major nova; segurança para credencial vazada.

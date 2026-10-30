@@ -42,7 +42,7 @@ Convenções: `$API` e `$TOKEN` como em `calendario.md`. Nenhum comando abaixo d
 - O link revogado devolve 404 em `GET /public/share/<token>` e a auditoria mostra quem revogou.
 - O teste nomeado `m9d824 mass export dispara anomaly` e o `m9d822 export RESTRICTED sem MFA bloqueia` seguem verdes:
   ```bash
-  node scripts/ci-governanca.sh dlp
+  bash scripts/ci-governanca.sh dlp
   ```
 
 ## Quem escalar

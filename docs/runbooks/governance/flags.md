@@ -40,7 +40,7 @@ Convenções: `$API` e `$TOKEN` como em `calendario.md`. Restaurar um kill switc
 ## Como confirmar
 - `GET $API/feature-flags?id=<uuid>` mostra o novo valor e as `versoes` anteriores, com motivo e autor na auditoria.
 - `npm run check:flags` termina com exit 0; o kill switch testado tem `verification_state = VERIFIED` e o registro `PASS` em `governance.kill_switch_drills`.
-- O teste nomeado `m9d871 flag vencida alerta` segue verde (`node scripts/ci-governanca.sh flags`).
+- O teste nomeado `m9d871 flag vencida alerta` segue verde (`bash scripts/ci-governanca.sh flags`).
 
 ## Quem escalar
 O responsável nomeado da flag; o segundo nome da escala de plantão para restaurar kill switch crítico; plataforma se o probe falhar.

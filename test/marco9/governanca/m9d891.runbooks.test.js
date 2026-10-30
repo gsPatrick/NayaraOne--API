@@ -40,9 +40,28 @@ test('m9d891 todo runbook tem comando executável', () => {
       if (npm) assert.ok(PACOTE.scripts[npm[1]], `${f}: npm run ${npm[1]} não existe no package.json`);
       const script = c.match(/^(?:node|bash) (scripts\/[\w./-]+\.(?:js|sh))/);
       if (script) assert.ok(fs.existsSync(path.join(RAIZ, script[1])), `${f}: ${script[1]} não existe`);
+      // o interpretador tem que ser o do arquivo: `node` sobre .sh dá SyntaxError e `bash` sobre .js também
+      const interp = c.match(/^(node|bash) scripts\/[\w./-]+\.(js|sh)\b/);
+      if (interp) assert.equal(interp[1], interp[2] === 'sh' ? 'bash' : 'node', `${f}: "${c}" usa o interpretador errado para o arquivo`);
       for (const job of c.matchAll(/require\('\.\/(src\/engines\/jobs\/\w+)'\)/g)) assert.ok(fs.existsSync(path.join(RAIZ, `${job[1]}.js`)), `${f}: ${job[1]} não existe`);
     }
   }
+});
+
+test('m9d891 todo comando de runbook, também o escrito em linha, usa o interpretador certo e um controle que existe', () => {
+  const CONTROLES = (ler(path.join(RAIZ, 'scripts', 'ci-governanca.sh')).match(/^\s*(\w+)\)/gm) || []).map((l) => l.trim().replace(')', ''));
+  assert.ok(CONTROLES.includes('bcp') && CONTROLES.includes('openapi'));
+  let citacoes = 0;
+  for (const f of fs.readdirSync(RUNBOOKS).filter((x) => x.endsWith('.md'))) {
+    const texto = ler(path.join(RUNBOOKS, f));
+    // qualquer menção a scripts/<arquivo> seguida do interpretador, em bloco ou em linha
+    for (const m of texto.matchAll(/\b(node|bash) (scripts\/[\w./-]+\.(js|sh))(?: ([\w:-]+))?/g)) {
+      assert.equal(m[1], m[3] === 'sh' ? 'bash' : 'node', `${f}: "${m[0]}" usa o interpretador errado`);
+      assert.ok(fs.existsSync(path.join(RAIZ, m[2])), `${f}: ${m[2]} não existe`);
+      if (m[2] === 'scripts/ci-governanca.sh') { citacoes += 1; assert.ok(CONTROLES.includes(m[4]), `${f}: controle "${m[4]}" não existe em ci-governanca.sh`); }
+    }
+  }
+  assert.ok(citacoes >= 5, 'os runbooks citam o teste do módulo pelo ci-governanca.sh');
 });
 
 test('m9d891 as rotas citadas nos runbooks existem no README do módulo', () => {
@@ -99,7 +118,7 @@ test('m9d891 documentos não contêm segredos', () => {
   }
 });
 
-test('m9d891 teste do novato executado e registrado', { todo: 'aguarda o verificador independente executar a operação de cada módulo e preencher docs/governance/teste-do-novato.md' }, () => {
+test('m9d891 teste do novato executado e registrado', () => {
   const linhas = ler(path.join(RAIZ, 'docs', 'governance', 'teste-do-novato.md')).split('\n').filter((l) => /^\| (calendar|data-quality|lineage|dlp|bcp|api-governance|finops|feature-flags) \|/.test(l));
   assert.equal(linhas.length, 8, 'uma linha por módulo');
   for (const l of linhas) {

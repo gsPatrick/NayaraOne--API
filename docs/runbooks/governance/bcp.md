@@ -40,7 +40,7 @@ Convenções: `$API` e `$TOKEN` como em `calendario.md`.
 - A conciliação sai da lista de pendentes e a decisão tem nota e usuário; decidir de novo devolve 409 `GOV_BCP_ALREADY_FINAL`.
 - O teste nomeado `m9d832 BCP record importado 2x não duplica` segue verde:
   ```bash
-  node scripts/ci-governanca.sh bcp
+  bash scripts/ci-governanca.sh bcp
   ```
 
 ## Quem escalar

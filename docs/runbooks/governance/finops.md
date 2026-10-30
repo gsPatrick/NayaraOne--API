@@ -38,7 +38,7 @@ Convenções: `$API` e `$TOKEN` como em `calendario.md`. Comandos `node -e` só 
 - O mês fechado com fatura mostra o percentual FINAL sobre a série BILLED.
 - O teste nomeado `m9d861 FinOps budget alerta sem derrubar PROD` segue verde:
   ```bash
-  node scripts/ci-governanca.sh finops
+  bash scripts/ci-governanca.sh finops
   ```
 
 ## Quem escalar
