@@ -19,6 +19,14 @@
     {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "valor zero", "as": "gestor", "expect": 422, "params": {"id": "${budgetId}"}, "body": {"amountCents": 0}},
     {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "orçamento inexistente", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}, "body": {"amountCents": 100}},
     {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${budgetId}"}, "body": {}},
-    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${budgetId}"}, "body": {}}
+    {"op": "PATCH /finops/budgets/{id}", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${budgetId}"}, "body": {}},
+    {"op": "GET /finops/degradation-policies", "kind": "positive", "name": "lista as políticas de degradação", "as": "gestor", "expect": 200},
+    {"op": "GET /finops/degradation-policies", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /finops/degradation-policies", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403},
+    {"op": "PUT /finops/degradation-policies", "kind": "positive", "name": "salva a política do orçamento", "as": "gestor", "expect": 200, "body": {"budgetId": "${budgetId}", "steps": [{"step": "SWITCH_AI_MODEL_CHEAPER"}, {"step": "LIMIT_EXPORT_SIZE"}]}},
+    {"op": "PUT /finops/degradation-policies", "kind": "negative", "name": "função crítica na política", "as": "gestor", "expect": 422, "body": {"budgetId": "${budgetId}", "steps": [{"step": "DISABLE_LOGIN"}]}},
+    {"op": "PUT /finops/degradation-policies", "kind": "negative", "name": "orçamento inexistente", "as": "gestor", "expect": 404, "body": {"budgetId": "${uuid}", "steps": []}},
+    {"op": "PUT /finops/degradation-policies", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "body": {}},
+    {"op": "PUT /finops/degradation-policies", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "body": {}}
   ]
 }

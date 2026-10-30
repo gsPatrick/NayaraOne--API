@@ -693,6 +693,13 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_FINOPS_CRITICAL_NOT_DEGRADABLE": {
+      "status": 422,
+      "message": "Esta função é crítica e não pode ser degradada.",
+      "module": "finops",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_FINOPS_INVOICE_INVALID": {
       "status": 422,
       "message": "A fatura de custo não é válida.",
@@ -710,6 +717,20 @@
     "GOV_FINOPS_PERIOD_OPEN": {
       "status": 422,
       "message": "A fatura só pode ser importada para um período já fechado.",
+      "module": "finops",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FINOPS_POLICY_INVALID": {
+      "status": 422,
+      "message": "A política de degradação por custo é inválida.",
+      "module": "finops",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FINOPS_PROD_PROTECTED": {
+      "status": 403,
+      "message": "O ambiente de produção não pode ser desligado por custo.",
       "module": "finops",
       "since": "1.3.0",
       "deprecated": false

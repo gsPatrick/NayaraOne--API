@@ -4,6 +4,7 @@ const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
 const { getSetting } = require('../../features/settings/settings.service');
 const { moduleSettingKey } = require('../../features/core-governance/governance.settings');
+const degradationState = require('../../features/core-governance/finops/degradation/state');
 
 /**
  * Percorre grupos e empresas abrindo uma transação por empresa com o contexto de tenant (RLS), pulando as que desligaram o módulo
@@ -26,6 +27,7 @@ async function runForEachCompany(name, work, moduleCode = 'calendar') {
           });
           const tenant = { groupId: group.id, companyId: company.id };
           if ((await getSetting(moduleSettingKey(moduleCode), tenant, transaction, true)) === false) return null;
+          if (await degradationState.shouldDeferJob(name, tenant, transaction)) return null; // M9-D863: passo DEFER_NON_CRITICAL_JOBS adia o job de baixa prioridade para a janela noturna
           return work(tenant, transaction);
         });
         if (summary) { total.ran += 1; total.summaries.push({ companyId: company.id, ...summary }); }

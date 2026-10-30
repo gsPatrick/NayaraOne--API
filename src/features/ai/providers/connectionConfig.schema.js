@@ -25,6 +25,7 @@ const MODEL_SCHEMA = {
     region: { type: 'string', minLength: 1, maxLength: 32 },
     pricePerMTokIn: price, pricePerMTokOut: price,
     safetyTier: { type: 'integer', minimum: 1, maximum: 3 },
+    cheaperAlternative: { type: 'string', minLength: 1, maxLength: 120 }, // M9-D863: outro modelo do mesmo provedor, mais barato, usado no passo de degradação por custo
   },
   additionalProperties: false,
 };

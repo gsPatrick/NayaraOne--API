@@ -9,6 +9,7 @@ const stepsService = require('./steps.service');
 const { assertTransition } = require('./campaigns.stateMachine');
 const { campaignIncomplete } = require('./campaigns.errors');
 const { assertMassSendAllowed } = require('../marketing.guards');
+const { assertSchedulingNotPaused } = require('../degradation.guard');
 
 /**
  * Itens de MKT-009 que faltam para agendar (lista vazia = campanha completa). `now` é o relógio da operação: o início precisa
@@ -38,6 +39,7 @@ function missingItems(row, audienceCount, stepCount, now) {
 async function scheduleDraft(row, ctx, transaction) {
   const { tenant, actor, permissions, now } = ctx;
   assertTransition(row.status, 'SCHEDULED');
+  await assertSchedulingNotPaused(tenant, transaction); // M9-D863: passo PAUSE_MARKETING_CAMPAIGNS
   const audiences = await audienceRepo.listAudiences(row.id, tenant, transaction);
   const steps = await stepsRepo.listSteps(row.id, tenant, transaction);
   const missing = missingItems(row, audiences.length, steps.length, now);

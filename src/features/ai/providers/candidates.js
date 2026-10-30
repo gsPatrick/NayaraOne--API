@@ -53,6 +53,7 @@ function rankCandidates(entries, { capabilities, criticidade, politica = {}, req
         providerCode: e.providerCode,
         model: e.model.model,
         classe: e.model.classe,
+        cheaperAlternative: e.model.cheaperAlternative || null,
         safetyTier: e.model.safetyTier,
         p95LatencyMs: e.model.p95LatencyMs,
         maxInputTokens: e.model.maxInputTokens,

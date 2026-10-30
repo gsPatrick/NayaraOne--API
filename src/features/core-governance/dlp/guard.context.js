@@ -7,6 +7,7 @@ const { resolveClassification } = require('./classification.resolver');
 const { highestClass } = require('./dlp.constants');
 const { readSuspension } = require('./suspension.reader');
 const policyService = require('./policy.service');
+const { effectiveMaxRows } = require('../finops/degradation/state');
 
 const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, settings.DLP_SETTING_DEFAULTS[key]);
 
@@ -18,7 +19,9 @@ const read = (key, tenant, transaction) => getSetting(key, tenant, transaction, 
 async function buildContext(tenant, req, transaction) {
   const resolved = await resolveClassification(tenant, req.resources, transaction);
   const classification = highestClass([resolved, req.minClassification]);
-  const policy = await policyService.getPolicy(tenant, classification, req.action, transaction);
+  const stored = await policyService.getPolicy(tenant, classification, req.action, transaction);
+  // M9-D863: o passo LIMIT_EXPORT_SIZE reduz o max_rows efetivo (a política cadastrada não muda).
+  const policy = { ...stored, maxRows: await effectiveMaxRows(stored.maxRows, tenant, transaction) };
   const permissions = req.permissions || (await getEffectiveAccess(req.actorUserId, tenant.companyId, transaction)).permissions;
   const suspendable = ['EXPORT', 'SHARE', 'PRINT'].includes(req.action);
   return {

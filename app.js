@@ -20,6 +20,7 @@ const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQu
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
+const { startFinopsDegradationJob } = require('./src/engines/jobs/finopsDegradationJob');
 const { startExportExpiryJob } = require('./src/engines/jobs/exportExpiryJob');
 const { startExportGenerationJob } = require('./src/engines/jobs/exportGenerationJob');
 const { startShareLinkExpiryJob } = require('./src/engines/jobs/shareLinkExpiryJob');
@@ -248,6 +249,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_COLLECT_JOB_DISABLED !
 // Detectores de desperdício do FinOps (M9-D862): storage órfão, logs, modelo de IA caro e egress uma vez por dia (padrão 03:00 de Brasília) e fila acumulada a cada 5 minutos.
 if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_DETECTORS_JOB_DISABLED !== 'true') {
   startFinopsDetectorsJob();
+}
+
+// Degradação por custo do FinOps (M9-D863): a cada hora (minuto 20) aplica no máximo um passo reversível e não crítico da política por orçamento; nunca desliga PROD.
+if (process.env.NODE_ENV !== 'test' && process.env.FINOPS_DEGRADATION_JOB_DISABLED !== 'true') {
+  startFinopsDegradationJob();
 }
 
 // Exportações do DLP (M9-D822): a geração recolhe os pedidos aprovados que ficaram sem arquivo e a expiração apaga os arquivos vencidos (a cada 15 minutos por padrão).

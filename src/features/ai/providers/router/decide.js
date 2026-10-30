@@ -5,6 +5,7 @@ const { forcedRoutingPath } = require('../../orchestrator/numbers/calculationRou
 const { readRouterParams } = require('./router.params');
 const { classOfTask, REASONS } = require('./router.tasks');
 const E = require('./router.errors');
+const { preferCheaper } = require('./degrade');
 
 const CLASS_BY_PATH = Object.freeze({ SMALL_MODEL: 'SMALL', ADVANCED_MODEL: 'ADVANCED' });
 const DEFAULT_MAX_OUTPUT = 1024;
@@ -76,7 +77,12 @@ async function decide(input, ctx, transaction, { registry, resolvers, cache }) {
   assertBudgetAllows(wanted.path, input.budgetState);
   const lista = await eligibleOf(wanted.path, input, params, ctx, transaction, registry);
   if (!lista.length) throw E.noEligibleModel({ routingPath: wanted.path, taskType: input.taskType });
-  return modelDecision(wanted.path, wanted.reason, lista);
+  // M9-D863: degradação por custo (tarefa simples usa a alternativa mais barata marcada, mesmo que mais lenta que o orçamento de latência da chamada)
+  const degraded = await preferCheaper(wanted.path, lista, ctx, transaction, {
+    critical: String(input.criticality || '').toUpperCase() === 'CRITICAL',
+    loadRelaxed: () => eligibleOf(wanted.path, { ...input, latencyBudgetMs: undefined }, params, ctx, transaction, registry),
+  });
+  return modelDecision(wanted.path, wanted.reason, degraded.lista, degraded.switched ? { degradedByCost: true } : {});
 }
 
 module.exports = { decide, eligibleOf, modelDecision, assertBudgetAllows, tenantOf };

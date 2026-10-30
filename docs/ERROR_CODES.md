@@ -105,9 +105,12 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_EXTERNAL_ROUTE_WITHOUT_SCOPE` | 500 | Rota externa sem scope declarado. | api-governance | 1.0.0 | não |
 | `GOV_FINOPS_AMOUNT_INVALID` | 422 | O valor do custo não pode ser negativo. | finops | 1.3.0 | não |
 | `GOV_FINOPS_COLLECTOR_FAILED` | 500 | O coletor de custo "<valor>" falhou; nenhum valor foi gravado e o último sucesso continua exibido. | finops | 1.3.0 | não |
+| `GOV_FINOPS_CRITICAL_NOT_DEGRADABLE` | 422 | Esta função é crítica e não pode ser degradada. | finops | 1.3.0 | não |
 | `GOV_FINOPS_INVOICE_INVALID` | 422 | A fatura de custo não é válida. | finops | 1.3.0 | não |
 | `GOV_FINOPS_LINE_INVALID` | 422 | A linha de custo não é válida. | finops | 1.3.0 | não |
 | `GOV_FINOPS_PERIOD_OPEN` | 422 | A fatura só pode ser importada para um período já fechado. | finops | 1.3.0 | não |
+| `GOV_FINOPS_POLICY_INVALID` | 422 | A política de degradação por custo é inválida. | finops | 1.3.0 | não |
+| `GOV_FINOPS_PROD_PROTECTED` | 403 | O ambiente de produção não pode ser desligado por custo. | finops | 1.3.0 | não |
 | `GOV_IDEMPOTENCY_KEY_INVALID` | 400 | A chave de idempotência deve ter de 8 a 128 caracteres. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REQUIRED` | 400 | Envie o cabeçalho Idempotency-Key. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REUSED` | 422 | Esta chave de idempotência já foi usada com outra requisição. | api-governance | 1.0.0 | não |
