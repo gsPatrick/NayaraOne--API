@@ -7,6 +7,7 @@ const { cadenceDueAt } = require('./cadence.due');
 const { SEEDS_SETTINGS_SCHEMA } = require('./seeds.settings');
 
 registerSeedPorts();
+require('./lead.register').registerLeadSeeds(); // M9-D420: lead novo, sem retorno e cliente frio
 require('./reviewFlow.register').registerReviewSeeds(); // M9-D424: pedido de avaliação (positiva) ou ocorrência antes (negativa)
 
 /** Automações prontas do Marketing (M9-D422 a M9-D424): pós-chaves, cadência de locação, lembretes de restrição e pedido de avaliação. */

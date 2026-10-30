@@ -17,6 +17,7 @@ const { TRACKING_SETTINGS_SCHEMA } = require('../../features/marketing/tracking/
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
 const { SCHEDULE_SETTINGS_SCHEMA } = require('../../features/marketing/publications/schedule/schedule.settings');
 const { WORKER_SETTINGS_SCHEMA } = require('../../features/marketing/publications/worker/worker.settings');
+const { LEAD_PARAMS_SCHEMA } = require('../../features/marketing/automations/leadParams');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
@@ -230,6 +231,8 @@ const SETTINGS_SCHEMA = {
   ...SCHEDULE_SETTINGS_SCHEMA,
   // Marco 9, M9-D411 — worker de publicação: intervalo, lote, espera das retentativas, tentativas, reconciliação, limite do UNKNOWN, tempo do adapter e dias das métricas.
   ...WORKER_SETTINGS_SCHEMA,
+  // Marco 9, M9-D420 — lead novo (prazo da tarefa, origens) e cliente frio (dias sem interação, limite de mensagens e janela móvel, tipos de conteúdo aprovado).
+  ...LEAD_PARAMS_SCHEMA,
   // Marco 9, M9-D408 — classes de conteúdo da NAY autorizadas a sair sem aprovação humana (escrita exige marketing:automation:manage).
   ...AUTOPUBLISH_SETTINGS_SCHEMA,
   // Marco 9, M9-D414 — runner de automações: tempo máximo de cada ação e ordem dos canais automáticos.

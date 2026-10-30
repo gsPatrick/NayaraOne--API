@@ -39,7 +39,8 @@ async function reevaluate(ctx, cand, entry, subject) {
 async function processDueRun(row, tenant, transaction, options) {
   const cand = await loadForRun(row.automation_version_id, transaction);
   const subject = row.subject_id ? { type: row.subject_type, id: row.subject_id } : null;
-  const ctx = await buildContext({ tenant, eventId: row.trigger_event_id, eventType: 'due', subject, payload: {}, correlationId: row.correlation_id }, transaction, options);
+  const refs = ((Array.isArray(row.policy_trace) ? row.policy_trace : []).find((e) => e.step === 1) || {}).refs || {}; // o que a run lembrou do evento (M9-D420/D421)
+  const ctx = await buildContext({ tenant, eventId: row.trigger_event_id, eventType: 'due', subject, payload: refs, correlationId: row.correlation_id }, transaction, options);
   const reason = await inapplicableNow(cand, row, transaction);
   let blockedReason = row.blocked_reason;
   const entries = [];

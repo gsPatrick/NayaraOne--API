@@ -23,6 +23,9 @@ function inboxIdOf(eventId) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/** Campos do evento que a espera lembra: radar, imóvel, oportunidade e etapa da cadência (identificadores e números, nunca texto livre). */
+const REMEMBERED_REFS = Object.freeze(['radarId', 'propertyId', 'opportunityId', 'step']);
+
 const NO_VERSION = Object.freeze({ code: 'MKT_NO_PUBLISHED_VERSION', message: 'Nenhuma versão publicada para este gatilho.' });
 
 const setTenant = (tenant, transaction) => sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true)", { replacements: { g: tenant.groupId, c: tenant.companyId }, transaction });
@@ -39,7 +42,9 @@ const view = (run, extra = {}) => ({ runId: run.id, flowId: run.flowId || null, 
 function refsOf(event) {
   const payload = (event && event.payload) || {};
   const contractId = payload.contractId || (event && event.aggregateType === 'Contract' ? event.aggregateId : null);
-  return contractId ? { contractId: String(contractId) } : {};
+  // M9-D420/D421: o lead, o radar, o imóvel e a etapa da cadência também são lembrados (só identificadores e números), para a mensagem adiada ser montada igual na hora do envio
+  const ids = Object.fromEntries(REMEMBERED_REFS.filter((key) => payload[key] !== undefined && payload[key] !== null && typeof payload[key] !== 'object').map((key) => [key, String(payload[key])]));
+  return contractId ? { ...ids, contractId: String(contractId) } : ids;
 }
 
 /**
@@ -135,8 +140,9 @@ async function replayRun(runId, tenant, transaction, options = {}) {
   if (!plan.shouldReplay) return { runId: row.id, status: row.status, replayed: false };
   const cand = await loadForRun(row.automation_version_id, transaction);
   const subject = row.subject_id ? { type: row.subject_type, id: row.subject_id } : null;
-  const ctx = await buildContext({ tenant, eventId: row.trigger_event_id, eventType: 'replay', subject, payload: {}, correlationId: row.correlation_id }, transaction, { ...options, now });
   const trace = Array.isArray(row.policy_trace) ? row.policy_trace : [];
+  const refs = (trace.find((e) => e.step === 1) || {}).refs || {}; // o que a run lembrou do evento (M9-D420/D421)
+  const ctx = await buildContext({ tenant, eventId: row.trigger_event_id, eventType: 'replay', subject, payload: refs, correlationId: row.correlation_id }, transaction, { ...options, now });
   ctx.trace.push(...trace.filter((e) => e.step <= 6));
   const entries = plan.actionsResult.map((e) => (plan.pending.some((p) => p.actionKey === e.action_key) ? { ...e, status: 'PENDING', error_code: null } : e));
   const out = await finishRun(ctx, { runRow: { id: row.id, correlation_id: row.correlation_id, status: row.status }, flow: cand.flow, version: cand.version, entries, blockedReason: row.blocked_reason });

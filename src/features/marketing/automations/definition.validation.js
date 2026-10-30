@@ -4,6 +4,7 @@ const {
   TRIGGER_TYPES, RISK_LEVELS, COOLDOWN_UNITS, FREQUENCY_SCOPES, MAX_ACTIONS, ACTION_TYPES, TRIGGER_EVENTS,
 } = require('./catalog');
 const { incomplete, actionUnknown, invalidBody } = require('./definition.errors');
+const { CAP_PARAM_KEYS } = require('./leadParams');
 
 const BODY_FIELDS = [
   'flowId', 'code', 'name', 'ownerUserId', 'riskLevel', 'triggerType', 'triggerConfig', 'conditions', 'conditionsEmptyReason',
@@ -77,7 +78,9 @@ function checkLimits(def, problems) {
   const c = def.cooldown;
   if (!isObject(c) || !positiveInt(c.amount) || !COOLDOWN_UNITS.includes(c.unit)) problems.push({ field: 'cooldown', reason: `Informe {amount inteiro >= 1, unit: ${COOLDOWN_UNITS.join('|')}}.` });
   const f = def.frequencyCap;
-  if (!isObject(f) || !positiveInt(f.max) || !positiveInt(f.windowDays) || !FREQUENCY_SCOPES.includes(f.scope)) {
+  // max e windowDays são números ou o nome de um parâmetro da lista fechada (maxParam, windowDaysParam), lido na hora da avaliação (M9-D420)
+  const part = (value, param) => (param === undefined ? positiveInt(value) : value === undefined && CAP_PARAM_KEYS.includes(param));
+  if (!isObject(f) || !part(f.max, f.maxParam) || !part(f.windowDays, f.windowDaysParam) || !FREQUENCY_SCOPES.includes(f.scope)) {
     problems.push({ field: 'frequencyCap', reason: `Informe {max >= 1, windowDays >= 1, scope: ${FREQUENCY_SCOPES.join('|')}}.` });
   }
 }

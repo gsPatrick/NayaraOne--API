@@ -5,16 +5,18 @@ const { sequelize } = require('../../../models');
 const { COUNTED_MESSAGE_STATUSES } = require('./policy.statuses');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Tipos de contato em que uma mensagem do Marketing pode chegar (WhatsApp e telefone para o WhatsApp, e-mail). */
+const CONTACT_CHANNEL_TYPES = Object.freeze(['WHATSAPP', 'PHONE', 'EMAIL']);
 const q = (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
 
 /**
  * Facts da pessoa para as condições do Motor de Regras (M9-D416): só campos seguros do CRM, nunca endereço, documento ou texto
  * livre. `subject` = { type: 'PERSON', id }. Campos: leadStage, leadTemperature, daysSinceContact (null se nunca houve contato),
- * interests (tipos de imóvel dos radares ativos), consents ({ CANAL: { FINALIDADE: 'OPT_IN'|'OPT_OUT' } }, o estado mais recente)
- * e lastProposalValue (número ou null). Sujeito que não é pessoa devolve facts vazios (as regras decidem sobre o vazio).
+ * interests (tipos de imóvel dos radares ativos), consents ({ CANAL: { FINALIDADE: 'OPT_IN'|'OPT_OUT' } }, o estado mais recente),
+ * hasContactChannel (a pessoa tem WhatsApp, telefone ou e-mail cadastrado: condição `lead.has_contact_channel` da M9-D420) e lastProposalValue (número ou null). Sujeito que não é pessoa devolve facts vazios (as regras decidem sobre o vazio).
  */
 async function buildAutomationFacts(subject, tenant, transaction, now = new Date()) {
-  const empty = { subjectType: subject && subject.type ? subject.type : null, leadStage: null, leadTemperature: null, daysSinceContact: null, interests: [], consents: {}, lastProposalValue: null };
+  const empty = { subjectType: subject && subject.type ? subject.type : null, leadStage: null, leadTemperature: null, daysSinceContact: null, interests: [], consents: {}, lastProposalValue: null, hasContactChannel: false };
   if (!subject || subject.type !== 'PERSON' || !subject.id) return empty;
   const base = { companyId: tenant.companyId, personId: subject.id };
   const [opportunity] = await q(
@@ -34,6 +36,10 @@ async function buildAutomationFacts(subject, tenant, transaction, now = new Date
     `SELECT p.value FROM crm.proposals p JOIN crm.opportunities o ON o.id = p.opportunity_id AND o.company_id = p.company_id
       WHERE p.company_id = :companyId AND o.person_id = :personId AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1`, base, transaction);
 
+  const [contactable] = await q(
+    `SELECT 1 AS ok FROM people.person_contacts WHERE company_id = :companyId AND person_id = :personId AND contact_type IN (:types) AND deleted_at IS NULL LIMIT 1`,
+    { ...base, types: CONTACT_CHANNEL_TYPES }, transaction);
+
   const consentMap = {};
   for (const c of consents) { consentMap[c.channel] = { ...(consentMap[c.channel] || {}), [c.purpose]: c.status }; }
   const interests = [...new Set(radars.flatMap((r) => (r.criteria_json && Array.isArray(r.criteria_json.propertyTypes) ? r.criteria_json.propertyTypes : [])).map(String))];
@@ -45,6 +51,7 @@ async function buildAutomationFacts(subject, tenant, transaction, now = new Date
     interests,
     consents: consentMap,
     lastProposalValue: proposal ? Number(proposal.value) : null,
+    hasContactChannel: Boolean(contactable),
   };
 }
 

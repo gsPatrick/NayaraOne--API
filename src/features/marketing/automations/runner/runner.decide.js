@@ -7,6 +7,7 @@ const { evaluateValidity } = require('../definition.validity');
 const { evaluateAutomationPolicy } = require('../policy');
 const { subjectIsInCompany } = require('./runner.subject');
 const ports = require('./runner.ports');
+const { resolveVersionCap } = require('../frequency.cap');
 const { SEND, SEND_BLOCK_REASONS, MESSAGE_PURPOSE_DEFAULT } = require('./runner.constants');
 
 const q = (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
@@ -15,8 +16,10 @@ const CONTACT_TYPES = Object.freeze({ WHATSAPP: ['WHATSAPP', 'PHONE'], EMAIL: ['
 /** Canal da ação de envio: o informado, ou (`AUTO`) o primeiro da ordem do parâmetro em que a pessoa tem contato; nenhum = null (NO_CONTACT_CHANNEL). */
 async function resolveChannel(def, subject, ctx) {
   const wanted = String(def.channel || '').toUpperCase();
-  if (wanted && wanted !== 'AUTO') return wanted;
+  if (wanted && wanted !== 'AUTO' && !ports.hasChannelResolver(wanted)) return wanted;
   if (!subject) return null;
+  const preferred = wanted && wanted !== 'AUTO' ? await ports.channelResolved(wanted, { def, subject, event: ctx.event, tenant: ctx.tenant, transaction: ctx.transaction }) : null; // canal nomeado (ex.: o de origem do lead)
+  if (preferred) return String(preferred).toUpperCase();
   for (const channel of ctx.params.autoChannels) {
     const rows = await q('SELECT 1 AS ok FROM people.person_contacts WHERE company_id = :c AND person_id = :p AND contact_type IN (:types) AND deleted_at IS NULL LIMIT 1',
       { c: ctx.tenant.companyId, p: subject.id, types: CONTACT_TYPES[channel] }, ctx.transaction);
@@ -46,7 +49,7 @@ async function decideSend(def, ctx, version, subject, now = ctx.now) {
   if (!channel) return { ...base, kind: 'blocked', reason: 'NO_CONTACT_CHANNEL' };
   if (expired(def, now)) return { ...base, kind: 'blocked', reason: 'EXPIRED' };
   if (!subject) return { ...base, kind: 'blocked', reason: 'NO_ADDRESS' };
-  const decision = await ports.canSend(subject.id, channel, base.purpose, now, { tenant: ctx.tenant, transaction: ctx.transaction, capDaVersao: version.frequencyCap, officialTemplate: Boolean(await isOfficial(def.templateId, ctx)) });
+  const decision = await ports.canSend(subject.id, channel, base.purpose, now, { tenant: ctx.tenant, transaction: ctx.transaction, capDaVersao: await resolveVersionCap(version.frequencyCap, ctx.tenant, ctx.transaction), officialTemplate: Boolean(await isOfficial(def.templateId, ctx)) });
   if (decision.allowed) return { ...base, kind: 'allowed' };
   if (decision.reason === 'QUIET_HOURS') return { ...base, kind: 'delay', reason: 'QUIET_HOURS', dueAt: decision.nextEligibleAt };
   return { ...base, kind: 'blocked', reason: decision.reason, nextEligibleAt: decision.nextEligibleAt || null };
