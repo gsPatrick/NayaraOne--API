@@ -14,7 +14,8 @@ const {
 const { withRollbackTenantTransaction } = require('./testHelpers');
 
 // Migrations posteriores que alteram as tabelas da parte 2 (D414 definição da automação; D431 atribuição e links).
-const POSTERIORES = ['20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js'];
+const POSTERIORES = ['20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js', '20260101000771-marketing-publication-jobs-one-active-per-version-channel.js', '20260101000772-marketing-automation-action-receipts.js'];
+const RECIBOS = '20260101000772-marketing-automation-action-receipts.js'; // M9-D414: o recibo das ações aponta para automation_runs e cai antes da parte 2
 
 let tenantA;
 
@@ -90,6 +91,7 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
     await assert.rejects(() => migration.down(qi), /MKT_MIGRATION_DOWN_NOT_EMPTY|não está vazi/i);
     assert.equal(await contagem(), 9);
     await admin.query("DELETE FROM marketing.suppression_list WHERE source = 'DOWN-TEST'");
+    await require(path.resolve(__dirname, '../migrations', RECIBOS)).down(qi);
     await migration.down(qi);
     assert.equal(await contagem(), 0);
     await migration.up(qi);

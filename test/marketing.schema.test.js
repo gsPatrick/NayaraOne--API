@@ -281,6 +281,7 @@ test('audiencia_e_etapa_so_referenciam_campanha_da_mesma_empresa', async () => {
 const POSTERIORES = [
   '20260101000752-marketing-template-immutability.js', '20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js',
   '20260101000761-marketing-campaign-cost.js', '20260101000765-marketing-public-read-models.js', '20260101000775-marketing-content-types-trigger.js',
+  '20260101000771-marketing-publication-jobs-one-active-per-version-channel.js', '20260101000772-marketing-automation-action-receipts.js', // M9-D410 e M9-D414
 ];
 
 test('migration_e_idempotente_e_reversivel', async (t) => {
@@ -300,6 +301,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     assert.equal(inicial, 6);
     await migration.up(qi); // segunda vez: sem erro e sem alteração
     // As tabelas da parte 2 (M9-D401) apontam para as da parte 1: o down da parte 1 só roda depois do down da parte 2.
+    await require(path.resolve(__dirname, '../migrations/20260101000772-marketing-automation-action-receipts.js')).down(qi); // M9-D414: o recibo das ações aponta para automation_runs
     await parte3.down(qi); // M9-D412: as tabelas do ciclo da campanha apontam para campaigns
     await parte2.down(qi);
     assert.equal(await contagem(), inicial);

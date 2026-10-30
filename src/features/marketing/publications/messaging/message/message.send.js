@@ -124,9 +124,11 @@ async function sendMarketingMessage(ctx, rawInput) {
   if (existing) return resumeExisting(ctx, existing, rebuild);
 
   const message = await rebuild(); // verificações de template, preview e descadastro vêm antes do canSend
-  if ((await killBlock(ctx, input.channel)).blocked) return blockedResult(KILL, input, tenant, transaction); // kill switch antes do canSend (runner, passo 3)
-  const decision = await canSend(input.personId, input.channel, input.purpose, now, { tenant, transaction, officialTemplate });
-  if (!decision.allowed) return blockedResult(decision, input, tenant, transaction);
+  if (!ctx.preAuthorized) { // o runner de automações (M9-D414) já decidiu kill switch e canSend, com a trava e a reserva, antes de chamar: decidir de novo contaria a própria reserva no cap
+    if ((await killBlock(ctx, input.channel)).blocked) return blockedResult(KILL, input, tenant, transaction); // kill switch antes do canSend (runner, passo 3)
+    const decision = await canSend(input.personId, input.channel, input.purpose, now, { tenant, transaction, officialTemplate });
+    if (!decision.allowed) return blockedResult(decision, input, tenant, transaction);
+  }
   if (!message.to) return blockedResult({ reason: 'NO_ADDRESS', code: 'MKT_NO_ADDRESS', message: 'A pessoa não tem endereço de contato utilizável neste canal.' }, input, tenant, transaction);
 
   const result = await sendToChannel(input.channel, message, { tenant, transaction, idempotencyKey: input.actionKey, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });

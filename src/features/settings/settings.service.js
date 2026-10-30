@@ -17,6 +17,7 @@ const { TRACKING_SETTINGS_SCHEMA } = require('../../features/marketing/tracking/
 const { PIPELINE_SETTINGS_SCHEMA } = require('../../features/marketing/content/pipeline.settings');
 const { SCHEDULE_SETTINGS_SCHEMA } = require('../../features/marketing/publications/schedule/schedule.settings');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
+const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
@@ -227,6 +228,8 @@ const SETTINGS_SCHEMA = {
   ...SCHEDULE_SETTINGS_SCHEMA,
   // Marco 9, M9-D408 — classes de conteúdo da NAY autorizadas a sair sem aprovação humana (escrita exige marketing:automation:manage).
   ...AUTOPUBLISH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D414 — runner de automações: tempo máximo de cada ação e ordem dos canais automáticos.
+  ...RUNNER_SETTINGS_SCHEMA,
   // Marco 9, M9-D409 — tipos de conteúdo: hora do aniversário, casas do percentual, fotos mínimas, tipos com rascunho automático, finalidade do pós-venda e varredura de obras.
   ...TYPES_SETTINGS_SCHEMA,
   // Marco 9, M9-D407 — validador factual: tolerância de área, dicionário de características e telefones da empresa.

@@ -13,6 +13,8 @@ const { register: metricsRegister } = require('./src/utils/metrics');
 const { startRadarMatchingJob } = require('./src/engines/jobs/radarMatchingJob');
 const { startCampaignLifecycleJob } = require('./src/engines/jobs/campaignLifecycleJob');
 const { startMarketingContentTypesJob } = require('./src/engines/jobs/marketingContentTypesJob');
+const { startAutomationRunnerJob } = require('./src/engines/jobs/automationRunnerJob');
+const { startAutomationDueJob } = require('./src/engines/jobs/automationDueJob');
 const { startCalendarBackfillJob } = require('./src/engines/jobs/calendarBackfillJob');
 const { startCalendarOverdueJob } = require('./src/engines/jobs/calendarOverdueJob');
 const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflictJob');
@@ -197,6 +199,12 @@ if (process.env.NODE_ENV !== 'test' && process.env.CAMPAIGN_LIFECYCLE_JOB_DISABL
 // Rascunhos dos tipos de conteúdo do Marketing (M9-D409): aniversário diário (08:00 de Brasília) e marco público das obras.
 if (process.env.NODE_ENV !== 'test' && process.env.MARKETING_CONTENT_TYPES_JOB_DISABLED !== 'true') {
   startMarketingContentTypesJob();
+}
+
+// Runner de automações do Marketing (M9-D414): tick de agenda e executor das ações adiadas, a cada minuto.
+if (process.env.NODE_ENV !== 'test' && process.env.AUTOMATION_RUNNER_JOBS_DISABLED !== 'true') {
+  startAutomationRunnerJob();
+  startAutomationDueJob();
 }
 
 // Varredura diária do Calendário nas fontes de obras e garantias (M9-D803), na hora configurada (padrão 06:00 de Brasília).

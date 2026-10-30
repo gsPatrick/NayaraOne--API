@@ -11,6 +11,9 @@ const tracking = require('./tracking');
 const suppression = require('./suppression');
 const killSwitchRouter = require('./killswitch.service').router;
 
+// M9-D414: o runner de automações chama outras áreas por portas (sem import entre áreas): canSend, envio de mensagem e rascunho de conteúdo.
+automations.runner.registerRunnerPorts({ canSend: suppression.canSend, sendMessage: publications.messaging.sendMarketingMessage, createDraft: content.service.createContent });
+
 /**
  * Módulo Marketing (Caderno §Marketing, Guia do Marcelo §2): seis áreas em src/features/marketing/<área>/ (content, campaigns,
  * automations, publications, tracking, suppression), cada uma com service, controller, routes e index. Nenhuma área importa a
