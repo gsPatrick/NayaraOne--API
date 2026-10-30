@@ -14,18 +14,23 @@ const { enableAnalyticsWriter } = require('../../../src/features/analytics/metri
 const { KPI_DEFINITIONS } = require('../../../src/features/analytics/metrics/kpis');
 require('../../../src/features/analytics');
 
-const NOW = new Date(`${new Date().toISOString().slice(0, 10)}T15:00:00Z`);
+// Relógio e âncora da massa FIXOS (nunca a data da máquina): o rebuild lê o relógio injetável do BI e o incremental recebe o mesmo `now`; com a data da máquina o teste
+// quebrava quando a máquina virava o dia (UTC) em relação ao instante fixado (reabertura M-3/M-4).
+const ANCHOR = '2026-10-29';
+const NOW = new Date(`${ANCHOR}T15:00:00Z`);
+const clock = require('../../../src/features/analytics/metrics/clock');
 const SMALL = { scale: 'light', companies: 1, entries: 800, bankTransactions: 80, opportunities: 120, properties: 60, projects: 6, stages: 18, measurements: 60, dailyReports: 60 };
 let admin;
 let massa;
 let tenant;
 before(async () => {
   admin = connect();
-  massa = await seedLoad(admin, { ...SMALL, seed: 'rb699' });
+  clock.setClock(() => new Date(NOW));
+  massa = await seedLoad(admin, { ...SMALL, seed: 'rb699', anchor: ANCHOR });
   const [[u]] = await admin.query("SELECT id FROM core.users WHERE email = 'admin@nayaraone.dev'");
   tenant = { groupId: massa.companies[0].groupId, companyId: massa.companies[0].companyId, userId: u.id };
 });
-after(async () => { await cleanupLoad(admin, massa.companies); await admin.close(); await sequelize.close(); });
+after(async () => { clock.resetClock(); await cleanupLoad(admin, massa.companies); await admin.close(); await sequelize.close(); });
 
 const rebuild = (model, reason = 'Teste de carga (M9-D699)') => readModels.rebuildReadModel({ groupId: tenant.groupId, actorUserId: tenant.userId, permissions: ['analytics:rebuild'], reason }, { model, companyId: tenant.companyId });
 const event = (eventType, payload = {}) => ({ id: crypto.randomUUID(), eventType, companyId: tenant.companyId, groupId: tenant.groupId, aggregateId: crypto.randomUUID(), payloadJson: payload, occurredAt: NOW, retryCount: 0 });

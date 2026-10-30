@@ -90,12 +90,60 @@ test('m9d699 mediana das rodadas: uma rodada com ruído aprova, degradação em 
   assert.equal(ev([round(100, 104), round(100, 110)]).pass, true);
 });
 
-test('m9d699 envelope de ruído: BI dentro da oscilação da própria linha de base aprova; acima dela reprova', () => {
+test('m9d699 o antigo envelope de ruído foi removido: oscilação da linha de base não perdoa +30% com BI', () => {
   const round = (b, w) => ({ baseline: { criar_lancamento: stat(b) }, withBi: { criar_lancamento: stat(w) } });
   const ev = (pooledBi, rounds) => evaluate({ baseline: { criar_lancamento: stat(100) }, withBi: { criar_lancamento: stat(pooledBi) }, panels: { finance: stat(900) }, targets: { finance: 1500 }, rebuild: rebuildOk, maxPct: 10, floorMs: 0, rounds });
-  const noisyBase = [round(100, 130), round(140, 130), round(100, 130)];
-  const ok = ev(130, noisyBase);
-  assert.equal(ok.pass, true, 'a linha de base já oscila de 100 a 140 ms sem o BI: 130 ms com BI não se distingue disso');
-  assert.equal(ev(150, [round(100, 150), round(140, 150), round(100, 150)]).pass, false, '150 ms passa do maior p95 de rodada sem BI (140 ms)');
-  assert.equal(ev(130, [round(100, 130), round(101, 130), round(100, 130)]).pass, false, 'linha de base estável (100 a 101 ms): +30% é degradação real');
+  const r = ev(130, [round(100, 130), round(140, 130), round(100, 130)]);
+  assert.equal(r.pass, false, 'só 1 de 3 rodadas (a de base 140) fica dentro do limite: antes o envelope aprovava');
+  assert.equal(r.oltp.criar_lancamento.baselineRoundMaxP95, undefined);
+  assert.equal(ev(130, [round(100, 130), round(101, 130), round(100, 130)]).pass, false);
+});
+
+test('m9d699 prova determinística: bloqueio causado pelo BI reprova, sem amostra do BI ativo a prova não vale, zero bloqueio aprova', () => {
+  const probe = (extra = {}) => ({ samples: 120, blockedByBi: 0, biSeen: 90, maxBiActive: 3, intervalMs: 25, ...extra });
+  const ev = (locks) => evaluate({ baseline: base, withBi: { criar_lancamento: stat(190) }, panels: { finance: stat(900) }, targets: { finance: 1500 }, rebuild: rebuildOk, maxPct: 10, locks });
+  assert.equal(ev(probe()).pass, true);
+  assert.equal(ev(probe()).locks.blockedByBi, 0);
+  const blocked = ev(probe({ blockedByBi: 2 }));
+  assert.equal(blocked.pass, false);
+  assert.deepEqual(blocked.failures.map((f) => f.kind), ['BLOQUEIO']);
+  assert.match(blocked.failures[0].reason, /2 amostra\(s\).*lock de uma sessão do BI/);
+  assert.equal(ev(probe({ biSeen: 0 })).pass, false, 'a sonda nunca viu o BI: a prova não vale');
+  assert.equal(ev(probe({ samples: 0, biSeen: 0 })).pass, false);
+  assert.equal(ev(probe({ error: '42501' })).pass, false, 'sonda que falhou não aprova');
+  assert.equal(ev(null).locks.skipped, true, 'sem sonda (cálculo puro) o critério não se aplica');
+  assert.match(renderText({ verdict: blocked }), /Bloqueios causados pelo BI.*FALHOU/);
+});
+
+test('m9d699 latência só vale com a CPU sobrando: saturada fica INCONCLUSIVA (não reprova), no modo estrito reprova, quieta continua estrita', () => {
+  const ev = (host, withBi = 230) => evaluate({ baseline: base, withBi: { criar_lancamento: stat(withBi) }, panels: { finance: stat(900) }, targets: { finance: 1500 }, rebuild: rebuildOk, maxPct: 10, host });
+  const quiet = { cpuBusyMax: 0.4, saturationMax: 0.85, strict: false };
+  assert.equal(ev(quiet).pass, false, 'CPU sobrando: +27,8% reprova');
+  assert.equal(ev(quiet).latency.conclusive, true);
+  const busy = { cpuBusyMax: 0.97, saturationMax: 0.85, strict: false };
+  const inconclusive = ev(busy);
+  assert.equal(inconclusive.pass, true);
+  assert.equal(inconclusive.oltp.criar_lancamento.inconclusive, true);
+  assert.equal(inconclusive.latency.conclusive, false);
+  assert.match(inconclusive.latency.reason, /máquina saturada: CPU ocupada em 97% \(limite 85%\)/);
+  assert.match(renderText({ verdict: inconclusive }), /INCONCLUSIV/);
+  const strict = ev({ ...busy, strict: true });
+  assert.equal(strict.pass, false, 'no pipeline LAB (--exigir-latencia) máquina saturada reprova: a prova não pôde ser feita');
+  assert.match(strict.failures[0].reason, /máquina saturada/);
+  assert.equal(ev(busy, 190).pass, true, 'dentro do limite aprova mesmo saturada, sem marcar inconclusivo');
+  assert.equal(ev(busy, 190).oltp.criar_lancamento.inconclusive, undefined);
+  assert.equal(ev(busy).locks.skipped, true);
+});
+
+test('m9d699 modo observação: a latência fora do limite é relatada como observada e não reprova; bloqueio do BI e painel sem medida continuam reprovando', () => {
+  const ev = (extra = {}) => evaluate({ baseline: base, withBi: { criar_lancamento: stat(230) }, panels: { finance: stat(1900) }, targets: { finance: 1500 }, rebuild: rebuildOk, maxPct: 10, latencyMode: 'report', ...extra });
+  const r = ev();
+  assert.equal(r.pass, true);
+  assert.deepEqual([r.oltp.criar_lancamento.observed, r.panels.finance.observed, r.latency.mode], [true, true, 'report']);
+  assert.match(renderText({ verdict: r }), /observado \(fora do limite\)/);
+  assert.equal(ev({ locks: { samples: 100, blockedByBi: 1, biSeen: 50, maxBiActive: 2, intervalMs: 25 } }).pass, false, 'bloqueio causado pelo BI reprova mesmo em observação');
+  assert.equal(ev({ unexpected: 1 }).pass, false);
+  assert.equal(ev({ rebuild: { completed: false, error: 'x' } }).pass, false);
+  assert.equal(ev({ panels: { finance: stat(null) } }).pass, false, 'painel sem nenhuma medida reprova (cobertura)');
+  assert.equal(evaluate({ baseline: base, withBi: { criar_lancamento: stat(230) }, panels: { finance: stat(900) }, targets: { finance: 1500 }, rebuild: rebuildOk, maxPct: 10 }).pass, false, 'sem o modo observação (padrão do CLI e do LAB) +27,8% reprova');
 });

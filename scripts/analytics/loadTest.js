@@ -12,7 +12,7 @@
  *
  * SÓ em banco descartável (scripts/withDisposableDb.js ou o Postgres efêmero do CI). Uso:
  *   node scripts/withDisposableDb.js -- node scripts/analytics/loadTest.js [--scale light|full] [--seed 42] [--duration-sec 20] [--rounds 5]
- *        [--oltp-users 4] [--bi-users 8] [--think-ms 5] [--bi-think-ms 150] [--degradacao-max-pct N] [--tolerancia-absoluta-ms N] [--json relatorio.json] [--keep]
+ *        [--oltp-users 4] [--bi-users 8] [--think-ms 5] [--bi-think-ms 150] [--degradacao-max-pct N] [--tolerancia-absoluta-ms N] [--saturacao-max 0.85] [--exigir-latencia] [--latencia-observar] [--json relatorio.json] [--keep]
  */
 const { fork } = require('node:child_process');
 const path = require('node:path');
@@ -22,15 +22,16 @@ const { runWindow, askChild } = require('./load/phases');
 const { summarizeRaw, mergeRaw } = require('./load/stats');
 const { evaluate } = require('./load/verdict');
 const { buildReport, write, renderText } = require('./load/report');
+const { mergeProbes, BI_APP_NAME } = require('./load/lockProbe');
 
-const DEFAULTS = Object.freeze({ scale: 'light', seed: 42, durationMs: 20000, rounds: 5, oltpUsers: 4, biUsers: 8, thinkMs: 5, biThinkMs: 150, rebuildAtFraction: 0.3, requestTimeoutMs: 20000 });
+const DEFAULTS = Object.freeze({ scale: 'light', seed: 42, durationMs: 20000, rounds: 5, oltpUsers: 4, biUsers: 8, thinkMs: 5, biThinkMs: 150, rebuildAtFraction: 0.3, requestTimeoutMs: 20000, lockSampleMs: 25, saturationMax: 0.85, strictLatency: false, latencyMode: 'gate' });
 
 function parseArgs(argv) {
   const arg = (n) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : undefined);
   const num = (n) => (arg(n) === undefined ? undefined : Number(arg(n)));
   return {
     scale: arg('--scale'), seed: arg('--seed'), durationMs: num('--duration-sec') === undefined ? undefined : num('--duration-sec') * 1000, rounds: num('--rounds'),
-    oltpUsers: num('--oltp-users'), biUsers: num('--bi-users'), thinkMs: num('--think-ms'), biThinkMs: num('--bi-think-ms'), maxPct: num('--degradacao-max-pct'), floorMs: num('--tolerancia-absoluta-ms'), json: arg('--json'), keep: argv.includes('--keep'),
+    oltpUsers: num('--oltp-users'), biUsers: num('--bi-users'), thinkMs: num('--think-ms'), biThinkMs: num('--bi-think-ms'), maxPct: num('--degradacao-max-pct'), floorMs: num('--tolerancia-absoluta-ms'), saturationMax: num('--saturacao-max'), strictLatency: argv.includes('--exigir-latencia') || undefined, latencyMode: argv.includes('--latencia-observar') ? 'report' : undefined, json: arg('--json'), keep: argv.includes('--keep'),
   };
 }
 
@@ -85,11 +86,11 @@ async function execute(opts, admin, massa, models) {
   metrics = (await loadTargets(admin)).metrics; // os KPIs financeiros são publicados no primeiro refresh
   const asOf = require('../../src/features/analytics/metrics/clock').businessToday();
   const biConfig = { tenants, permissions, panels, metrics, asOf, requestTimeoutMs: opts.requestTimeoutMs, users: opts.biUsers, thinkMs: opts.biThinkMs, durationMs: opts.durationMs };
-  const child = fork(path.join(__dirname, 'load', 'biWorker.js'), { env: process.env });
+  const child = fork(path.join(__dirname, 'load', 'biWorker.js'), { env: { ...process.env, PGAPPNAME: BI_APP_NAME } }) // a sessão do BI se identifica no banco (sonda de bloqueios);
   try {
     await askChild(child, { cmd: 'start', config: biConfig }, 'ready');
     const ctx = {
-      sequelize: models.sequelize, seed: massa.sizes.seed, sizes: massa.sizes, rndSeed: Number(massa.sizes.seed) || 1, oltpTenants, thinkMs: opts.thinkMs, child, biConfig,
+      sequelize: models.sequelize, admin, lockSampleMs: opts.lockSampleMs, seed: massa.sizes.seed, sizes: massa.sizes, rndSeed: Number(massa.sizes.seed) || 1, oltpTenants, thinkMs: opts.thinkMs, child, biConfig,
       rebuild: async () => {
         const r = await models.readModels.rebuildReadModel({ groupId: rebuildTenant.groupId, actorUserId: rebuildTenant.userId, permissions: ['analytics:rebuild'], reason: 'Teste de carga do BI (M9-D699)' },
           { model: 'rm_finance_health', companyId: rebuildTenant.companyId });
@@ -97,13 +98,16 @@ async function execute(opts, admin, massa, models) {
       },
     };
     await runWindow(ctx, { durationMs: Math.min(3000, opts.durationMs), oltpUsers: opts.oltpUsers, withBi: true, rebuildAtMs: 0, noRebuild: true }); // aquecimento, descartado
-    const base = []; const withBi = []; const biRaw = []; const rebuilds = [];
+    const cpuBusy = [];
+    const base = []; const withBi = []; const biRaw = []; const rebuilds = []; const probes = [];
     for (let round = 0; round < opts.rounds; round += 1) {
       const a = await runWindow(ctx, { durationMs: opts.durationMs, oltpUsers: opts.oltpUsers, withBi: false });
-      const b = await runWindow(ctx, { durationMs: opts.durationMs, oltpUsers: opts.oltpUsers, withBi: true, rebuildAtMs: Math.round(opts.durationMs * opts.rebuildAtFraction) });
+      const b = await runWindow(ctx, { durationMs: opts.durationMs, oltpUsers: opts.oltpUsers, withBi: true, rebuildAtMs: Math.round(opts.durationMs * opts.rebuildAtFraction), windowIndex: round, windowCount: opts.rounds });
+      cpuBusy.push(a.cpuBusy, b.cpuBusy);
       base.push(a.oltp); withBi.push(b.oltp); biRaw.push(b.bi); if (b.rebuild) rebuilds.push(b.rebuild);
+      if (b.locks) probes.push(b.locks);
     }
-    return { base: mergeRaw(base), withBi: mergeRaw(withBi), roundsRaw: base.map((b, i) => ({ base: b, withBi: withBi[i] })), biRaw: mergeRaw(biRaw), rebuilds, panels, targets, limit };
+    return { base: mergeRaw(base), withBi: mergeRaw(withBi), roundsRaw: base.map((b, i) => ({ base: b, withBi: withBi[i] })), biRaw: mergeRaw(biRaw), rebuilds, locks: mergeProbes(probes), host: { cpuBusyMax: Math.max(...cpuBusy), saturationMax: opts.saturationMax, strict: opts.strictLatency }, latencyMode: opts.latencyMode, panels, targets, limit };
   } finally {
     child.send({ cmd: 'stop' });
   }
@@ -118,7 +122,7 @@ function consolidate(run) {
   const failedRebuild = run.rebuilds.find((r) => !r.completed || r.hashBefore !== r.hashAfter);
   const rebuild = failedRebuild || run.rebuilds[0] || { completed: false, error: 'o rebuild não rodou' };
   const unexpected = unexpectedCount(baseline, withBi, panelSummary, Object.fromEntries(Object.entries(other).filter(([k]) => k.startsWith('falha:'))));
-  const verdict = evaluate({ baseline, withBi, panels: panelSummary, targets: run.targets, rebuild: { ...rebuild, count: run.rebuilds.length }, maxPct: run.limit.maxPct, floorMs: run.limit.floorMs, rounds: run.roundsRaw.map((r) => ({ baseline: summarizeRaw(r.base), withBi: summarizeRaw(r.withBi) })), unexpected });
+  const verdict = evaluate({ baseline, withBi, panels: panelSummary, targets: run.targets, rebuild: { ...rebuild, count: run.rebuilds.length }, maxPct: run.limit.maxPct, floorMs: run.limit.floorMs, rounds: run.roundsRaw.map((r) => ({ baseline: summarizeRaw(r.base), withBi: summarizeRaw(r.withBi) })), unexpected, locks: run.locks, host: run.host, latencyMode: run.latencyMode });
   return { baseline, withBi, panelSummary, other, verdict };
 }
 
@@ -139,7 +143,7 @@ async function runLoadTest(input = {}) {
     const done = consolidate(run);
     const report = buildReport({
       options: { ...opts, anchor: massa.anchor }, seed: massa.sizes.seed, verdict: done.verdict, baseline: done.baseline, withBi: done.withBi, panels: done.panelSummary,
-      extra: { massa: { rows: massa.rows, digest: massa.digest, companies: massa.companies.length, months: massa.sizes.months }, other: { ...done.other, rebuilds: run.rebuilds, limitSource: run.limit.source } },
+      extra: { massa: { rows: massa.rows, digest: massa.digest, companies: massa.companies.length, months: massa.sizes.months }, other: { ...done.other, rebuilds: run.rebuilds, locks: run.locks, limitSource: run.limit.source } },
       startedAt, finishedAt: new Date().toISOString(),
     });
     write(report, opts.json);

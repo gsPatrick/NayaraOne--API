@@ -93,28 +93,53 @@ async function drill(sourceRef, tenantIndex, config, rec) {
 
 const pause = (ms) => (ms > 0 ? new Promise((resolve) => { setTimeout(resolve, ms); }) : Promise.resolve());
 
-/** Usuário do BI: abre os painéis e lê os indicadores com uma pausa de leitura entre as ações (config.thinkMs), alternando drill-down. */
-async function user(index, config, rec, deadline) {
+/**
+ * Ordem de trabalho de uma janela: a fatia da janela (`índice % janelas == janela`) vem primeiro, o resto depois. Cinco janelas com BI cobrem a lista
+ * inteira nas primeiras posições de cada uma, sem depender da velocidade da máquina (painel de 1 s numa janela de 2,5 s não deixa painel sem medida).
+ */
+function ordered(list, config, ordinal = 0) {
+  const count = Math.max(1, config.windowCount || 1);
+  const slice = (config.windowIndex || 0) % count;
+  const own = list.filter((_, i) => i % count === slice);
+  const turn = own.length ? ordinal % own.length : 0; // cada usuário abre primeiro um item diferente da fatia: painel lento não deixa o resto da fatia sem medida
+  const mine = [...own.slice(turn), ...own.slice(0, turn)];
+  return [...mine, ...list.filter((_, i) => i % count !== slice)];
+}
+
+/** Usuário de painéis (índices pares): abre os painéis, com a pausa de leitura entre as ações (config.thinkMs), alternando drill-down. */
+async function panelUser(index, config, rec, deadline) {
   const tenantIndex = index % config.tenants.length;
+  const list = ordered(config.panels, config, Math.floor(index / 2));
   let round = 0;
   while (Date.now() < deadline) {
-    for (let p = 0; p < config.panels.length; p += 1) {
+    for (let n = 0; n < list.length; n += 1) {
       if (Date.now() >= deadline) break;
-      const ref = await openPanel(config.panels[p], tenantIndex, config, rec);
-      if (ref && (p + round) % 2 === 0) await drill(ref, tenantIndex, config, rec); // alterna painel e drill-down
+      const ref = await openPanel(list[n], tenantIndex, config, rec);
+      if (ref && (n + round) % 2 === 0) await drill(ref, tenantIndex, config, rec); // alterna painel e drill-down
       await pause(config.thinkMs);
     }
-    const metrics = config.metrics || [];
-    for (let k = 0; k < metrics.length; k += 1) {
+    round += 1;
+  }
+}
+
+/** Usuário de indicadores (índices ímpares): lê o valor de cada indicador publicado, como um card, alternando drill-down. */
+async function metricUser(index, config, rec, deadline) {
+  const tenantIndex = index % config.tenants.length;
+  const list = ordered(config.metrics || [], config, Math.floor(index / 2));
+  let round = 0;
+  while (Date.now() < deadline && list.length) {
+    for (let k = 0; k < list.length; k += 1) {
       if (Date.now() >= deadline) break;
-      const code = metrics[(k + index * 7) % metrics.length]; // cada usuário começa num ponto diferente: com a janela curta, todos os indicadores são lidos
-      const ref = await readMetric(code, tenantIndex, config, rec);
+      const ref = await readMetric(list[k], tenantIndex, config, rec);
       if (ref && (k + round) % 2 === 1) await drill(ref, tenantIndex, config, rec);
       await pause(config.thinkMs);
     }
     round += 1;
   }
 }
+
+/** Metade dos usuários abre painéis e a outra metade lê indicadores: nenhuma das duas coberturas fica sem medida quando os painéis são lentos. */
+const user = (index, config, rec, deadline) => (index % 2 === 0 || !(config.metrics || []).length ? panelUser(index, config, rec, deadline) : metricUser(index, config, rec, deadline));
 
 /** Na linha de base o BI não consulta o banco, mas a máquina e o processo ficam ocupados do mesmo jeito (mesmo HTTP, mesmo JSON): só muda o banco. */
 async function neutralUser(config, rec, deadline) {

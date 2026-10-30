@@ -7,6 +7,8 @@
  */
 const { createRecorder } = require('./stats');
 const { createOps, OP_NAMES } = require('./oltpOps');
+const { createLockProbe } = require('./lockProbe');
+const { startCpuMeter } = require('./hostCpu');
 
 function prng(seed) {
   let a = seed >>> 0;
@@ -48,13 +50,16 @@ function askChild(child, message, expected) {
  * ctx: { sequelize, seed, sizes, rndSeed, oltpTenants, thinkMs, child, biConfig, rebuild: async () => resumo }
  * options: { durationMs, oltpUsers, biUsers, withBi, rebuildAtMs }
  */
-async function runWindow(ctx, { durationMs, oltpUsers, withBi, rebuildAtMs, noRebuild = false }) {
+async function runWindow(ctx, { durationMs, oltpUsers, withBi, rebuildAtMs, noRebuild = false, windowIndex = 0, windowCount = 1 }) {
   const rec = createRecorder();
+  const stopCpu = startCpuMeter();
   const deadline = Date.now() + durationMs;
+  const probe = withBi && ctx.admin ? createLockProbe(ctx.admin, { intervalMs: ctx.lockSampleMs }) : null;
+  if (probe && !noRebuild) probe.start();
   const jobs = Array.from({ length: oltpUsers }, (_, i) => oltpUser(i, ctx, rec, deadline));
   let rebuild = null;
   let bi = Promise.resolve({ raw: {} });
-  bi = askChild(ctx.child, { cmd: 'run', config: { ...ctx.biConfig, durationMs, users: ctx.biConfig.users, neutral: !withBi } }, 'done'); // sem BI roda a carga neutra (sem banco)
+  bi = askChild(ctx.child, { cmd: 'run', config: { ...ctx.biConfig, durationMs, users: ctx.biConfig.users, neutral: !withBi, windowIndex, windowCount } }, 'done'); // sem BI roda a carga neutra (sem banco)
   if (withBi) {
     if (ctx.rebuild && !noRebuild) {
       jobs.push(new Promise((resolve) => { setTimeout(resolve, rebuildAtMs); }).then(async () => {
@@ -69,7 +74,8 @@ async function runWindow(ctx, { durationMs, oltpUsers, withBi, rebuildAtMs, noRe
   }
   await Promise.all(jobs);
   const biDone = await bi;
-  return { oltp: rec.raw(), bi: biDone.raw, rebuild };
+  const locks = probe && !noRebuild ? await probe.stop() : null;
+  return { oltp: rec.raw(), bi: biDone.raw, rebuild, locks, cpuBusy: stopCpu() };
 }
 
 module.exports = { runWindow, askChild, prng };

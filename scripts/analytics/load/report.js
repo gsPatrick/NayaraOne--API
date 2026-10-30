@@ -25,9 +25,11 @@ function write(report, file) {
 function renderText(report) {
   const v = report.verdict;
   const lines = [`Carga do BI: ${v.pass ? 'APROVADA' : 'REPROVADA'} (limite de degradação do fluxo operacional: ${v.maxPct}%)`, '', 'Fluxo operacional (p95 ms): linha de base -> com BI'];
-  for (const [op, r] of Object.entries(v.oltp)) lines.push(`  ${op}: ${r.baselineP95} -> ${r.withBiP95} (${r.variationPct === null ? 's/ base' : `${r.variationPct}%`}) ${r.pass ? 'ok' : 'FALHOU'}`);
+  for (const [op, r] of Object.entries(v.oltp)) lines.push(`  ${op}: ${r.baselineP95} -> ${r.withBiP95} (${r.variationPct === null ? 's/ base' : `${r.variationPct}%`}) ${r.inconclusive ? 'INCONCLUSIVO' : r.observed ? 'observado (fora do limite)' : r.pass ? 'ok' : 'FALHOU'}`);
+  if (v.latency && !v.latency.conclusive) lines.push(`  latência ${v.latency.strict ? 'REPROVADA' : 'INCONCLUSIVA'}: ${v.latency.reason}`);
   lines.push('', 'Painéis (p95 ms / meta):');
-  for (const [code, r] of Object.entries(v.panels)) lines.push(`  ${code}: ${r.p95} / ${r.targetMs} ${r.pass ? 'ok' : 'FALHOU'}`);
+  for (const [code, r] of Object.entries(v.panels)) lines.push(`  ${code}: ${r.p95} / ${r.targetMs} ${r.inconclusive ? 'INCONCLUSIVO' : r.observed ? 'observado (fora da meta)' : r.pass ? 'ok' : 'FALHOU'}`);
+  if (v.locks && !v.locks.skipped) lines.push('', `Bloqueios causados pelo BI (sonda a cada ${v.locks.intervalMs} ms, ${v.locks.samples} amostras): ${v.locks.blockedByBi} ${v.locks.pass ? 'ok' : 'FALHOU'}`);
   lines.push('', `Rebuild sob carga: ${v.rebuild.pass ? 'concluiu e reproduziu o hash' : `FALHOU (${v.rebuild.reason})`}`);
   if (v.failures.length) {
     lines.push('', 'Responsáveis pela reprovação:');
