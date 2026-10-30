@@ -64,6 +64,8 @@ test('m9_d238_segredo_lido_pelo_secretstore', async () => {
   // Porto Seguro: o segredo do cliente sai de tenant_settings e vai ao cofre quando a connection é criada a partir da configuração.
   const segredoPorto = `porto-${env.uniqueSuffix()}`;
   await pausarDe('insurance-porto-seguro');
+  // Reexecução no mesmo banco: a connection de uma rodada anterior (pausada) ainda guarda a referência canônica do cofre e o nome; ela é arquivada com outros valores para a desta rodada nascer limpa.
+  await env.sql(tenant, "UPDATE integration.connections SET secret_ref = secret_ref || '/arquivada-' || :s, label = left(label, 120) || ' arquivada ' || :s WHERE company_id = :c AND provider_code = 'insurance-porto-seguro' AND status <> 'ACTIVE' AND secret_ref NOT LIKE '%/arquivada-%'", { c: tenant.companyId, s: env.uniqueSuffix() });
   await env.escolher(tenant, 'porto_seguro');
   await env.config(tenant, 'procurement.porto_seguro_client_id', 'cid-qa-m9');
   await env.config(tenant, 'procurement.porto_seguro_client_secret', segredoPorto);

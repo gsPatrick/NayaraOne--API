@@ -70,4 +70,7 @@ const FiscalSandboxContractAdapter = wrapLegacy({
   lookups: { findByIdempotencyKey, findByReference },
 });
 
-module.exports = { FiscalSandboxContractAdapter };
+/** Esquece as falhas já aplicadas (o sandbox é do processo): quem reaproveita a mesma connection e a mesma chave, como os testes que repetem o cenário, recebe a falha de novo. */
+const resetInjectedFaults = () => FAULTS_USED.clear();
+
+module.exports = { FiscalSandboxContractAdapter, resetInjectedFaults };

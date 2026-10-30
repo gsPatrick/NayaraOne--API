@@ -7,7 +7,12 @@ const crypto = require('node:crypto');
 const nfseService = require('../../../src/features/correspondent/fiscal/nfse.service');
 const { InvoiceRequest, TaxDocument } = require('../../../src/models');
 const { ensureFiscalConnection } = require('../../../src/features/correspondent/fiscal/nfse/nfse.connection');
-const { resetSandbox, sandboxStats } = require('../../../src/features/correspondent/adapters/NfseAdapter');
+const nfseSandbox = require('../../../src/features/correspondent/adapters/NfseAdapter');
+const { resetInjectedFaults } = require('../../../src/features/integrations/adapters/legacy/fiscal.adapters');
+
+const { sandboxStats } = nfseSandbox;
+/** Zera o emissor de laboratório e as falhas já aplicadas: o cenário repetido no mesmo banco (connection e chave iguais) recebe a falha de novo. */
+const resetSandbox = () => { nfseSandbox.resetSandbox(); resetInjectedFaults(); };
 
 let tenant;
 const carregar = async () => { tenant = await getSeedTenant(); return tenant; };

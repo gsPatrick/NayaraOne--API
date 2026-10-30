@@ -15,6 +15,8 @@ let desligarCofre;
 before(async () => {
   tenant = (await env.carregarTenants()).tenant;
   desligarCofre = env.useTempSecretStore();
+  // Reexecução no mesmo banco: as apólices de rodadas anteriores continuam vigentes e a rotina as contaria; saem da rotina (sem vigência) para a contagem ser só desta rodada.
+  await env.sql(tenant, 'UPDATE procurement.insurance_policies SET expiry_date = NULL WHERE company_id = :c AND expiry_date IS NOT NULL', { c: tenant.companyId });
   await new Promise((resolve) => { setTimeout(resolve, 300); });
 });
 after(async () => { desligarCofre(); await env.escolher(tenant, 'sandbox'); await env.config(tenant, 'integration.insurance.renewal_quote_enabled', true); await env.sequelize.close(); process.exit(0); });
