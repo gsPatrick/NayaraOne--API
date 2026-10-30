@@ -38,7 +38,8 @@ async function pendingDocuments(opportunityId, companyId, transaction) {
 /** Interações de contato: mensagens e visitas que já aconteceram (a visita futura ainda não é contato). */
 function interactionsOf(timeline, nowMs) {
   return timeline
-    .filter((i) => (i.type === 'MESSAGE') || (i.type === 'VISIT' && timeOf(i.occurredAt) <= nowMs && !['CANCELED', 'NO_SHOW'].includes(i.data.status)))
+    // M9-D229: mensagem enviada que ainda está na fila ou que falhou não foi contato; o contato só conta com evidência de envio do fornecedor.
+    .filter((i) => (i.type === 'MESSAGE' && !(i.data.direction === 'OUTBOUND' && ['QUEUED', 'FAILED'].includes(i.data.status))) || (i.type === 'VISIT' && timeOf(i.occurredAt) <= nowMs && !['CANCELED', 'NO_SHOW'].includes(i.data.status)))
     .map((i) => ({
       type: i.type, occurredAt: new Date(i.occurredAt).toISOString(), channel: i.data.channel || null, direction: i.data.direction || null, status: i.data.status || null,
     }));
@@ -92,4 +93,4 @@ async function loadOpportunityFacts(opportunityId, transaction, { now = new Date
   };
 }
 
-module.exports = { loadOpportunityFacts, findOpportunity, CLOSED_STAGES };
+module.exports = { loadOpportunityFacts, findOpportunity, interactionsOf, CLOSED_STAGES };

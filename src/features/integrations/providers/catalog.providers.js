@@ -53,6 +53,11 @@ const EXISTING_PROVIDERS = Object.freeze([
 /** Fornecedores reais de modelo de IA (M9-D011). Nascem sem conexão: só valem com conexão ACTIVE, que exige a referência do segredo. */
 const aiReal = (code, displayName, capabilities) => ({
   code, displayName, domain: 'AI', capabilities, supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.AI, sandboxAvailable: false,
+  // M9-D229: o segundo fornecedor de mensageria de laboratório (formato de webhook diferente e sem sendMedia) que prova a troca de provider da M9-D221.
+  {
+    code: 'messaging-alt-sandbox', displayName: 'Mensageria — sandbox alternativo (prova de troca de provider)', domain: 'MESSAGING',
+    capabilities: ['sendText', 'sendTemplate', 'getStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.MESSAGING, sandboxAvailable: false,
+  },
 });
 const AI_REAL_PROVIDERS = Object.freeze([
   aiReal('anthropic', 'Modelos de IA — Anthropic', ['generate']),

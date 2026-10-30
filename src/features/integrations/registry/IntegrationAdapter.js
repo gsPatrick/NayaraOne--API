@@ -26,6 +26,9 @@ class IntegrationAdapter {
   /** Lista de capabilities (operações) suportadas, subconjunto das do domínio. */
   capabilities() { throw new Error('capabilities() não implementado'); }
 
+  /** A capability é suportada por este fornecedor? O domínio pergunta antes de pedir e degrada de forma declarada quando não (M9-D221 3.3), nunca falha. */
+  supports(capability) { return this.capabilities().includes(capability); }
+
   /** Versões da API do fornecedor suportadas. */
   supportedVersions() { throw new Error('supportedVersions() não implementado'); }
 

@@ -14,14 +14,14 @@ const recipient = [
 
 module.exports = {
   messaging: {
-    sendText: defineMapper({ purpose: 'CUSTOMER_MESSAGE', fields: [...recipient, { name: 'text', classification: 'PUBLIC', freeText: true, required: true }] }),
+    sendText: defineMapper({ purpose: 'CUSTOMER_MESSAGE', fields: [...recipient, { name: 'text', classification: 'PUBLIC', freeText: true, required: true }, { name: 'conversationId', classification: 'PUBLIC' }] }),
     sendTemplate: defineMapper({
       purpose: 'CUSTOMER_MESSAGE',
-      fields: [...recipient, { name: 'templateName', classification: 'PUBLIC', required: true }, { name: 'templateVars', classification: 'PERSONAL' }],
+      fields: [...recipient, { name: 'templateName', classification: 'PUBLIC', required: true }, { name: 'templateVars', classification: 'PERSONAL' }, { name: 'language', classification: 'PUBLIC' }, { name: 'conversationId', classification: 'PUBLIC' }],
     }),
     sendMedia: defineMapper({
       purpose: 'CUSTOMER_MESSAGE',
-      fields: [...recipient, { name: 'mediaRef', classification: 'PUBLIC', classificationFrom: 'mediaClassification', personalData: true, required: true }, { name: 'caption', classification: 'PUBLIC', freeText: true }],
+      fields: [...recipient, { name: 'mediaRef', classification: 'PUBLIC', classificationFrom: 'mediaClassification', personalData: true, required: true }, { name: 'caption', classification: 'PUBLIC', freeText: true }, { name: 'mimeType', classification: 'PUBLIC' }, { name: 'conversationId', classification: 'PUBLIC' }],
     }),
   },
   email: {

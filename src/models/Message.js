@@ -73,9 +73,26 @@ module.exports = (sequelize) => {
       externalMessageId: {
         type: DataTypes.STRING(128),
         allowNull: true,
-        unique: true,
         field: 'external_message_id',
         comment: "ID do provedor — usado para deduplicação de webhook",
+      },
+      connectionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'connection_id',
+        comment: "M9-D229: connection de mensageria que enviou ou recebeu; com external_message_id é único (UNIQUE parcial)",
+      },
+      dispatchId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'dispatch_id',
+        comment: "M9-D229: envio (integration.dispatches) que levou a mensagem ao fornecedor",
+      },
+      deliveryStatus: {
+        type: DataTypes.STRING(16),
+        allowNull: true,
+        field: 'delivery_status',
+        comment: "M9-D229: QUEUED|SENT|DELIVERED|READ|FAILED, só por evidência (webhook ou consulta), nunca pelo HTTP 200 do envio",
       },
       actionKey: {
         type: DataTypes.STRING(64),

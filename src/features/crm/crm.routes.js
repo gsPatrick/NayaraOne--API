@@ -58,6 +58,8 @@ crmRouter.patch('/visits/:id', requirePermission('crm:visits:update'), crmContro
 crmRouter.delete('/visits/:id', requirePermission('crm:visits:delete'), crmController.removeVisit);
 
 crmRouter.post('/messages', requirePermission('crm:messages:create'), crmController.createMessage);
+crmRouter.post('/messages/send', requirePermission('crm:messages:create'), crmController.sendMessage);
+crmRouter.post('/messages/:id/refresh-status', requirePermission('crm:messages:update'), crmController.refreshMessageStatus);
 crmRouter.get('/messages', requirePermission('crm:messages:read'), crmController.listMessages);
 crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), crmController.getMessage);
 crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), crmController.updateMessageStatus);

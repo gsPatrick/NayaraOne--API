@@ -612,6 +612,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/procurement/supplier-qualifications` | `procurement:create` | não |
 | `DELETE` | `/api/v1/properties/:id/documents/:documentId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/documents` | `properties:read` | não |
+| `POST` | `/api/v1/messages/send` | `crm:messages:create` | não |
+| `POST` | `/api/v1/messages/:id/refresh-status` | `crm:messages:update` | não |
 | `POST` | `/api/v1/properties/:id/documents` | `properties:update` | não |
 | `DELETE` | `/api/v1/properties/:id/media/:mediaId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/media` | `properties:read` | não |

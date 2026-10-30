@@ -24,7 +24,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey } = payload;
+  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey, connectionId, dispatchId, deliveryStatus } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -72,7 +72,7 @@ async function createMessage(payload, actorUserId, transaction) {
   }
 
   if (externalMessageId) {
-    const existing = await Message.findOne({ where: { externalMessageId }, transaction });
+    const existing = await Message.findOne({ where: { externalMessageId, connectionId: connectionId || null }, transaction }); // M9-D229: o identificador é único por connection
     if (existing) {
       // Deduplicação de webhook — mesma mensagem externa reenviada não gera duplicata.
       return existing;
@@ -92,8 +92,11 @@ async function createMessage(payload, actorUserId, transaction) {
       authorType: normalizedAuthorType,
       authorUserId: authorUserId || null,
       body: body || null,
-      status: 'RECEIVED',
+      status: deliveryStatus || 'RECEIVED',
       externalMessageId: externalMessageId || null,
+      connectionId: connectionId || null,
+      dispatchId: dispatchId || null,
+      deliveryStatus: deliveryStatus || null,
       actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -133,13 +136,18 @@ async function getMessage(id, transaction) {
   return message;
 }
 
-async function updateMessageStatus(id, status, actorUserId, transaction) {
+async function updateMessageStatus(id, status, actorUserId, transaction, { fromProvider = false } = {}) {
   const message = await getMessage(id, transaction);
+  // M9-D229: o status de entrega de mensagem que passou por fornecedor só muda por evidência dele (webhook ou consulta de status), nunca por edição manual.
+  if (message.deliveryStatus && !fromProvider) {
+    throw AppError.conflict('O status de entrega desta mensagem é confirmado pelo fornecedor e não pode ser alterado manualmente.', 'MESSAGE_STATUS_BY_PROVIDER_ONLY');
+  }
   if (!status) {
     throw AppError.badRequest('O campo "status" é obrigatório.', 'MESSAGE_VALIDATION');
   }
   const previousStatus = message.status;
   message.status = String(status).toUpperCase();
+  if (fromProvider) message.deliveryStatus = message.status;
   message.updatedBy = actorUserId || null;
   await message.save({ transaction });
   // M9-D627: o status de entrega muda os números do BI de Marketing (entregues e falhas do dia da mensagem); o dia é o de criação, em SP.

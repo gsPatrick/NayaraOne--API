@@ -13,6 +13,7 @@ const opportunityTasksService = require('./opportunityTasks.service');
 const opportunityTimelineService = require('./opportunityTimeline.service');
 const cartsService = require('./carts.service');
 const { sequelize } = require('../../models');
+const messaging = require('./messaging');
 
 // --- Opportunities ---
 
@@ -148,11 +149,26 @@ const removeVisit = catchAsync(async (req, res) => {
 // --- Messages ---
 
 const createMessage = catchAsync(async (req, res) => {
-  const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
+  // M9-D229: ligação com o fornecedor e status de entrega só nascem pelo fluxo de mensageria, nunca pelo corpo da requisição.
+  const { connectionId, dispatchId, deliveryStatus, ...corpo } = req.body || {};
+  const payload = { ...corpo, groupId: req.auth.groupId, companyId: req.auth.companyId };
   const message = await req.withTenantTransaction((transaction) =>
     messagesService.createMessage(payload, req.auth.userId, transaction)
   );
   return success(res, { statusCode: 201, data: message });
+});
+
+// M9-D229: envio de mensagem pelo fornecedor de mensageria (aceite 202; a entrega só avança por evidência do fornecedor) e consulta de status.
+const sendMessage = catchAsync(async (req, res) => {
+  const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
+  const r = await req.withTenantTransaction((transaction) => messaging.sendMessage(ctx, req.body || {}, req.auth.userId, transaction));
+  return success(res, { statusCode: 202, data: { messageId: r.message.id, dispatchId: r.dispatchId, status: r.status, operation: r.operation, degraded: r.degraded } });
+});
+
+const refreshMessageStatus = catchAsync(async (req, res) => {
+  const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
+  const r = await req.withTenantTransaction((transaction) => messaging.refreshStatus(ctx, req.params.id, transaction));
+  return success(res, { data: { messageId: r.message.id, deliveryStatus: r.message.deliveryStatus, changed: r.changed } });
 });
 
 const listMessages = catchAsync(async (req, res) => {
@@ -328,6 +344,8 @@ module.exports = {
   updateVisit,
   removeVisit,
   createMessage,
+  sendMessage,
+  refreshMessageStatus,
   listMessages,
   getMessage,
   updateMessageStatus,

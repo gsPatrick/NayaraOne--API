@@ -15,6 +15,7 @@ const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
 const { registerAiAdapters } = require('../../ai/providers/builtIn');
 const { MessagingSandboxAdapter } = require('../providers/messaging/sandbox/messaging-sandbox.adapter');
 const { PortalSandboxAdapter } = require('../providers/portal/sandbox/portal-sandbox.adapter');
+const { MessagingAltSandboxAdapter } = require('../providers/messaging/sandbox/messaging-alt-sandbox.adapter');
 const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/analytics-sandbox.adapter');
 const { SocialSandboxAdapter } = require('../providers/social/sandbox/social-sandbox.adapter');
 const { EmailSandboxAdapter } = require('../providers/email/sandbox/email-sandbox.adapter');
@@ -25,7 +26,7 @@ const { installContingency } = require('../contingency');
 const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, SignatureSandboxAdapter,
   SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
-  MessagingSandboxAdapter, PortalSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
+  MessagingSandboxAdapter, MessagingAltSandboxAdapter, PortalSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
 ]);
 
 /** Registra todos; contrato inválido lança 500 INTEGRATION_ADAPTER_CONTRACT_INVALID (o boot não segue). Devolve a lista registrada. */
