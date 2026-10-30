@@ -151,3 +151,14 @@ test('o_adapter_recusa_conteudo_acima_do_limite_mesmo_chamado_direto', async () 
   await assert.rejects(sandbox('INSTAGRAM').publish({ texto: 'oi' }, { idempotencyKey: 'pub:limite-2', media: { formato: 'IMAGE', proporcao: '3:1' } }), (e) => e.code === 'MKT_CAPABILITY_VIOLATION' && e.details.limit === 'ASPECT_RATIO');
   assert.equal(adapters.sandboxRecordCount('qa-m9', 'INSTAGRAM'), 0, 'nada foi publicado');
 });
+
+test('a_contingencia_das_redes_e_a_da_m9_d430_sem_modo_proprio', () => {
+  for (const network of SOCIAL_NETWORKS) {
+    const plan = adapters.planFor(network);
+    assert.deepEqual([plan.owner, plan.mode, plan.queue, plan.alternate, plan.isolated, plan.retry], ['M9-D430', null, false, false, true, 'BY_ERROR_CLASS'], network);
+    const decision = adapters.decideOnResult(network, { status: 'FAILED', error: { class: 'TRANSIENT', code: 'MKT_PROVIDER_UNAVAILABLE', httpStatus: 503 } });
+    assert.deepEqual([decision.action, decision.blocksOthers], ['ISOLATE_AND_RETRY', false]);
+    assert.equal(adapters.decideOnResult(network, { status: 'PROCESSING' }).action, 'NONE', 'post em processamento não é falha');
+    assert.equal(adapters.decideOnResult(network, { status: 'LIVE' }).action, 'NONE');
+  }
+});

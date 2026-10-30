@@ -97,3 +97,19 @@ test('o_resultado_gravado_pelo_worker_nao_traz_segredo_nem_o_texto_da_marca', as
     assert.ok(results.every((r) => r.response_redacted_json && r.response_redacted_json.sandbox === true));
   });
 });
+
+test('token_so_no_cofre: conexao de rede com token na configuracao e recusada e so a referencia do cofre vale', async () => {
+  await env.withRollbackTenantTransaction(ctx.tenant, async (t) => {
+    const registry = require('../../../src/features/integrations/registry/registry.service');
+    const who = { groupId: ctx.tenant.groupId, companyId: ctx.tenant.companyId, userId: ctx.tenant.userId };
+    const TOKEN = 'EAABsbCS1iHgBAPlmnopQRSTuvwxYZ0123456789tokenDaRede';
+    await assert.rejects(registry.createConnection({ providerCode: 'social-sandbox', environment: 'SANDBOX', label: 'QA-M9 rede token', configJson: { accessToken: TOKEN } }, who, t),
+      (e) => e.statusCode === 422 && e.code === 'INTEGRATION_SECRET_IN_CONFIG');
+    await assert.rejects(registry.createConnection({ providerCode: 'social-sandbox', environment: 'SANDBOX', label: 'QA-M9 rede token 2', secretRef: TOKEN }, who, t),
+      (e) => e.statusCode >= 400 && e.statusCode < 500, 'o token no lugar da referência do cofre também é recusado');
+    const rows = await fx.q(t, 'SELECT config_json, secret_ref FROM integration.connections WHERE company_id = :c', { c: ctx.tenant.companyId });
+    assert.ok(!JSON.stringify(rows).includes(TOKEN), 'nenhuma linha guarda o token');
+    const results = await fx.q(t, 'SELECT response_redacted_json FROM marketing.publication_results WHERE company_id = :c', { c: ctx.tenant.companyId });
+    assert.ok(!JSON.stringify(results).includes(TOKEN));
+  });
+});
