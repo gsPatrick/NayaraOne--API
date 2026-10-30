@@ -57,7 +57,12 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 ### Parâmetros da retenção (M9-D911, código em `data-quality/retention.*`)
 | Chave | Padrão | O que controla |
 |---|---|---|
-| `governanca.retencao.prazo_meses.<política>` | fiscal 60; contratos 120; jurídico 120; leads 24; logs 18; auditoria 60 | prazo inicial, em meses, de cada política semeada (editável depois por política); o livro exige prazo sem dar valores, o jurídico da cliente confirma |
+| `governanca.retencao.prazo_meses.fiscal` | 60 | prazo inicial, em meses, da política fiscal (o livro exige prazo sem dar valores; o jurídico da cliente confirma; editável depois por política) |
+| `governanca.retencao.prazo_meses.contratos` | 120 | prazo inicial, em meses, da política de contratos |
+| `governanca.retencao.prazo_meses.juridico` | 120 | prazo inicial, em meses, da política jurídica |
+| `governanca.retencao.prazo_meses.leads` | 24 | prazo inicial, em meses, da política de leads |
+| `governanca.retencao.prazo_meses.logs` | 18 | prazo inicial, em meses, da política de logs |
+| `governanca.retencao.prazo_meses.auditoria` | 60 | prazo inicial, em meses, da política de auditoria |
 | `governanca.retencao.lote_tamanho` | 500 | registros por lote na aplicação |
 | `governanca.retencao.amostra_tamanho` | 20 | tamanho da amostra do dry-run |
 | `governanca.retencao.dry_run_validade_horas` | 72 | validade do dry-run para poder aplicar |
