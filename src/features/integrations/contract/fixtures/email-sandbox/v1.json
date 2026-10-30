@@ -1,0 +1,38 @@
+{
+  "provider": "email-sandbox",
+  "apiVersion": "v1",
+  "description": "E-mail de laboratório: o envio devolve o id da mensagem com status SENT; entrega, bounce e reclamação só chegam pelo evento do provedor.",
+  "requests": {
+    "sendEmail": {
+      "to": [
+        "destinatario@qa-m9.test"
+      ],
+      "subject": "Contrato de laboratório",
+      "text": "Mensagem de laboratório sem dado real."
+    },
+    "getDeliveryStatus": {
+      "externalResourceIdFrom": "sendEmail"
+    },
+    "receiveInbound": {
+      "payload": {
+        "from": "remetente@qa-m9.test",
+        "subject": "Resposta de laboratório"
+      }
+    }
+  },
+  "noResourceId": [
+    "receiveInbound"
+  ],
+  "statuses": {
+    "QUEUED": "QUEUED",
+    "SENT": "SENT",
+    "DELIVERED": "DELIVERED",
+    "BOUNCED_SOFT": "BOUNCED_SOFT",
+    "BOUNCED_HARD": "BOUNCED_HARD",
+    "COMPLAINED": "COMPLAINED",
+    "FAILED": "FAILED",
+    "RECEIVED": "RECEIVED"
+  },
+  "unknownStatus": "em_fila_do_provedor",
+  "renewal": false
+}
