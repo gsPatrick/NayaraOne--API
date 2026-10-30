@@ -4,6 +4,7 @@ const AppError = require('../utils/AppError');
 const { failure } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 const { redactText, redactDeep } = require('../shared/redaction');
+const { debugBody } = require('../shared/destructive-actions/debug.policy');
 
 /**
  * Middleware de erro global do Express — único ponto que traduz qualquer
@@ -70,9 +71,19 @@ function attachTraceId(req, res) {
   };
 }
 
-function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
+/** M9-D852 §3.2: `governanca.ui.exibir_debug` (padrão desligado, proibido em produção). Falha ao ler = desligado; nunca derruba a resposta de erro. */
+async function debugEnabled(req) {
+  if (process.env.NODE_ENV === 'production' || !req.auth || typeof req.withTenantTransaction !== 'function') return false;
+  try {
+    const { getSetting } = require('../features/settings/settings.service');
+    return (await req.withTenantTransaction((transaction) => getSetting('governanca.ui.exibir_debug', { groupId: req.auth.groupId, companyId: req.auth.companyId }, transaction, false))) === true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+async function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   attachTraceId(req, res);
-  const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
 
   // F-01 (conferência ao vivo 20/10/2026): variável de ambiente ausente é problema do servidor, não
@@ -179,11 +190,13 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
 
   logger.error({ ...context, err: { message: err?.message, name: err?.name, stack: err?.stack } }, '[UnhandledError]');
 
-  return failure(res, {
-    statusCode: 500,
-    code: 'INTERNAL_ERROR',
-    message: isProduction ? 'Erro interno do servidor.' : err && err.message ? err.message : 'Erro interno do servidor.',
-  });
+  // M9-D852: a pessoa vê uma frase em português com o código de suporte (o mesmo correlationId dos logs e da auditoria); stack, SQL e caminhos
+  // nunca vão no corpo. Fora de produção, e só com o parâmetro ligado, o campo separado `debug` leva a mensagem e a stack.
+  const traceId = req.correlationId || res.getHeader('X-Correlation-Id') || null;
+  const debug = debugBody(err, await debugEnabled(req));
+  const body = { success: false, error: { code: 'INTERNAL_ERROR', message: `Algo deu errado. Informe o código ${traceId} ao suporte.`, traceId } };
+  if (debug) body.error.debug = debug;
+  return res.status(500).json(body);
 }
 
 module.exports = errorHandler;

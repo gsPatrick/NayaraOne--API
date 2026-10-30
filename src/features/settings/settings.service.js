@@ -427,6 +427,7 @@ function validateAgainstSchema(key, value) {
     if (typeof value !== 'boolean') {
       throw AppError.badRequest(`O valor de "${key}" deve ser booleano.`, 'SETTING_INVALID_VALUE', { key, value });
     }
+    if (typeof spec.validate === 'function') spec.validate(key, value); // M9-D852: regra própria da chave (ex.: debug proibido em produção)
     return;
   }
 

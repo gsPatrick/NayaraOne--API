@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../../middlewares/tenant.middleware');
 const controller = require('./registry.controller');
+const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852 linha 17
 
 // Registro de integração (M9-D200). As listagens por fornecedor/saúde (`/admin/integrations/:provider/...`)
 // são da M9-D249; aqui ficam só os caminhos do registro, sob `/admin/integrations/registry`.
@@ -19,7 +20,7 @@ registryRouter.get(`${base}/connections`, requirePermission('integration:read'),
 registryRouter.post(`${base}/connections`, requirePermission('integration:manage'), controller.createConnection);
 registryRouter.get(`${base}/connections/:id`, requirePermission('integration:read'), controller.getConnection);
 registryRouter.patch(`${base}/connections/:id`, requirePermission('integration:manage'), controller.updateConnection);
-registryRouter.post(`${base}/connections/:id/transition`, requirePermission('integration:manage'), controller.transitionConnection);
+registryRouter.post(`${base}/connections/:id/transition`, requirePermission('integration:manage'), confirmAction('integration.connection.disable', { mfa: true }), controller.transitionConnection);
 registryRouter.post(`${base}/connections/:id/swap`, requirePermission('integration:manage'), controller.swapConnection);
 
 module.exports = registryRouter;

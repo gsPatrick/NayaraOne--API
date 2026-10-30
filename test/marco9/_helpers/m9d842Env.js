@@ -6,6 +6,7 @@ const path = require('node:path');
 const env = require('./exportsEnv');
 const { startHttp } = require('./m9d806Http');
 const { listOperations, loadContract } = require('../../../src/features/core-governance/api-governance/contract');
+const { withConfirmation, grantRecentMfa } = require('./m9d852Confirm');
 
 const ROOT = path.resolve(__dirname, '../../..');
 // CONTRACT_OPENAPI_FILE troca o contrato lido (evidência da execução vermelha com uma divergência plantada, sem tocar no arquivo versionado).
@@ -35,7 +36,10 @@ async function startContractApi(doc, port) {
 /** Duas credenciais de API externa criadas pela rota (M9-D844): a completa (três scopes) e a limitada (properties:read), com o token de cada uma. */
 async function externalClients(http, vars) {
   const issue = async (name, scopes) => {
-    const created = await http.call('gestor', 'POST', '/api-governance/clients', { name, kind: 'PARTNER', ownerUserId: vars.userId, scopes });
+    // M9-D852 (linha 13): criar credencial é nível 3 com MFA recente; o MFA é gravado no banco descartável e a confirmação vem da simulação de impacto.
+    await grantRecentMfa(http.tenants.A);
+    const request = { name, kind: 'PARTNER', ownerUserId: vars.userId, scopes };
+    const created = await http.call('gestor', 'POST', '/api-governance/clients', await withConfirmation(http, 'gestor', '/api-governance/clients/impact', request, { method: 'POST', body: request }));
     const { clientId, clientSecret } = created.body.data;
     const token = await fetch(`${http.baseUrl}/api-external/oauth/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }) });
     return { clientId, clientSecret, accessToken: (await token.json()).access_token };

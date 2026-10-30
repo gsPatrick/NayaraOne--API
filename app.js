@@ -138,6 +138,9 @@ app.get('/', (req, res) => {
   res.status(200).json({ success: true, data: { name: 'Nayara One API', apiPrefix } });
 });
 
+// M9-D852: rota inexistente também responde no formato único de erro, com error.traceId (nunca a página HTML padrão do Express).
+app.use((req, res, next) => next(new (require('./src/utils/AppError'))('Rota não encontrada.', 404, 'ROUTE_NOT_FOUND')));
+
 // Error handler global — deve ser o último middleware montado.
 app.use(errorHandler);
 

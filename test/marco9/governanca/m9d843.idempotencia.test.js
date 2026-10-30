@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const { startHttp, stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/m9d843Env');
 const exportsEnv = require('../_helpers/exportsEnv');
+const { withConfirmation } = require('../_helpers/m9d852Confirm');
 const bulkEnv = require('../_helpers/m9d808Env');
 const { withTenantTransaction } = require('../../testHelpers');
 const { IDEMPOTENCY_REQUIRED_ROUTES } = require('../../../src/features/core-governance/api-governance/standards');
@@ -119,7 +120,8 @@ test('m9d843 POST /data-quality/bulk-changes passa pelo middleware padrão sem m
     VALUES (gen_random_uuid(), $1, $2, $3, 'teste-m9d843', true, now(), '{}', 0, now(), now())`, [A.userId, A.groupId, A.companyId]);
   await exportsEnv.grantMfa(A);
   const { city, rows } = await withTenantTransaction(A, (tx) => bulkEnv.properties(A, tx, 2));
-  const body = bulkEnv.bulkBody(city, { city: 'Cidade Padrao QA' });
+  const plain = bulkEnv.bulkBody(city, { city: 'Cidade Padrao QA' });
+  const body = await withConfirmation({ call: (who, method, path, payload) => http.call('gestorA', method, path, payload) }, 'gestorA', '/data-quality/bulk-changes/impact', plain, { method: 'POST', body: plain }); // M9-D852: nível 3
   const k = key('bulk');
   const first = await post('/data-quality/bulk-changes', body, k);
   assert.ok([200, 201, 202].includes(first.status), JSON.stringify(first.body));
@@ -129,7 +131,8 @@ test('m9d843 POST /data-quality/bulk-changes passa pelo middleware padrão sem m
   assert.deepEqual(second.body, first.body);
   const stored = await env.idemRows(A.companyId, '%POST /data-quality/bulk-changes');
   assert.deepEqual([stored.length, stored[0].key, stored[0].response_status], [1, k, first.status], 'a chave está no registro do middleware padrão');
-  const other = await post('/data-quality/bulk-changes', bulkEnv.bulkBody(city, { city: 'Outra Cidade QA' }), k);
+  const otherPlain = bulkEnv.bulkBody(city, { city: 'Outra Cidade QA' });
+  const other = await post('/data-quality/bulk-changes', { ...otherPlain, confirmation: body.confirmation }, k);
   assert.deepEqual([other.status, other.body.error.code], [422, 'GOV_IDEMPOTENCY_KEY_REUSED']);
   assert.ok(rows.length === 2);
 });

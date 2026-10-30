@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const api = require('../../../src/features/core-governance/api-governance/contract');
 const env = require('../_helpers/m9d842Env');
 const { runSeeds } = require('../_helpers/m9d842Seeds');
+const { addConfirmation } = require('../_helpers/m9d842Confirm');
 
 const doc = env.loadContract(env.CONTRACT_FILE);
 const { examples, findings: loadFindings } = api.loadExamples(env.EXAMPLES_DIR);
@@ -32,6 +33,7 @@ before(async () => {
         Object.assign(current, await runSeeds(example, current, { tenants: started.tenants }));
         if (example.clearMfa) await env.revokeMfaFor(example, started.tenants);
         if (example.mfa) await env.grantMfaFor(example, started.tenants);
+        await addConfirmation(example, current, { baseUrl: started.http.baseUrl, tokens: started.tokens, tenants: started.tenants }); // M9-D852
       },
     },
   };

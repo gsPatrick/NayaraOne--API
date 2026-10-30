@@ -38,7 +38,8 @@ after(async () => { if (env.DISPOSABLE) { await env.cleanClients(); await restor
 test('m9d844 segredo guardado em hash e mostrado uma vez', { skip: skip() }, async () => {
   const key = `qa-m9-idem-${Date.now()}`;
   const body = { name: env.unique('segredo'), kind: 'PROVIDER', ownerUserId: A.userId, scopes: ['properties:read', 'leads:write', 'properties:read'] };
-  const created = await http.call('gestorA', 'POST', '/api-governance/clients', body, { 'Idempotency-Key': key });
+  const confirmed = await env.confirmedBody(http, 'gestorA', A, body);
+  const created = await http.call('gestorA', 'POST', '/api-governance/clients', confirmed, { 'Idempotency-Key': key });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const data = created.body.data;
   assert.match(data.clientSecret, /^nys_[A-Za-z0-9_-]{40,}$/);
@@ -48,7 +49,7 @@ test('m9d844 segredo guardado em hash e mostrado uma vez', { skip: skip() }, asy
   assert.notEqual(stored.secret_hash, data.clientSecret);
   assert.match(stored.secret_hash, /^\$2[aby]\$\d{2}\$/, 'hash bcrypt');
   assert.ok(!JSON.stringify(stored).includes(data.clientSecret), 'nenhuma coluna guarda o segredo em claro');
-  const replay = await http.call('gestorA', 'POST', '/api-governance/clients', body, { 'Idempotency-Key': key });
+  const replay = await http.call('gestorA', 'POST', '/api-governance/clients', confirmed, { 'Idempotency-Key': key });
   assert.equal(replay.status, 201);
   assert.equal(replay.headers.get('idempotent-replay'), 'true');
   assert.deepEqual([replay.body.data.id, replay.body.data.clientSecret, replay.body.data.secretShown], [data.id, null, false], 'a repetição devolve a credencial sem o segredo');
@@ -76,7 +77,8 @@ test('m9d844 criar a credencial cria o consumidor no mesmo ato e o uso é rastre
   assert.ok(usage.includes('ROUTE:POST /api-external/oauth/token'), `a emissão do token também fica no rastro: ${usage}`);
   const listed = await http.call('gestorA', 'GET', '/api-governance/consumers?kind=PARTNER');
   assert.ok(listed.body.data.some((c) => c.id === consumer.id && c.lastSeenAt), 'o catálogo da D841 mostra o consumidor externo visto');
-  const noOwner = await http.call('gestorA', 'POST', '/api-governance/clients', { name: env.unique('x'), kind: 'PARTNER', ownerUserId: B.userId, scopes: ['properties:read'] });
+  const noOwnerBody = { name: env.unique('x'), kind: 'PARTNER', ownerUserId: B.userId, scopes: ['properties:read'] };
+  const noOwner = await http.call('gestorA', 'POST', '/api-governance/clients', await env.confirmedBody(http, 'gestorA', A, noOwnerBody));
   assert.equal(noOwner.status, 422, 'o responsável deve ser usuário da empresa');
   assert.equal((await env.adminQuery('SELECT count(*)::int AS n FROM governance.api_clients WHERE name = $1', [noOwner.body && 'x'])).rows[0].n, 0);
 });

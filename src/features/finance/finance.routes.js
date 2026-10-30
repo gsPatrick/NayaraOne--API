@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const financeController = require('./finance.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 2 do inventário)
 
 const financeRouter = Router();
 
@@ -44,7 +45,7 @@ financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:set
 // A4 (revisão 18/10/2026): comprovante da baixa manual é anexado ANTES da aprovação.
 financeRouter.post('/finance/entries/:id/settlement-evidence', requirePermission('finance:settle'), financeController.attachSettlementEvidence);
 financeRouter.post('/finance/entries/:id/settlement-evidence/detach', requirePermission('finance:settle'), financeController.detachSettlementEvidence);
-financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), financeController.reverseFinancialEntry);
+financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), confirmAction('finance.entry.reverse', { reasonField: 'reason' }), financeController.reverseFinancialEntry);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);
 
@@ -105,7 +106,7 @@ financeRouter.post('/finance/payment-intents', requirePermission('finance:create
 financeRouter.get('/finance/payment-intents', requirePermission('finance:read'), financeController.listPaymentIntents);
 financeRouter.post('/finance/payment-intents/:id/approve', requirePermission('finance:approve'), financeController.approvePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/execute', requirePermission('finance:settle'), requireRecentMfa, financeController.executePaymentIntent);
-financeRouter.post('/finance/payment-intents/:id/cancel', requirePermission('finance:update'), financeController.cancelPaymentIntent);
+financeRouter.post('/finance/payment-intents/:id/cancel', requirePermission('finance:update'), confirmAction('finance.payment_intent.cancel', { reasonField: 'reason' }), financeController.cancelPaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/reconcile', requirePermission('finance:settle'), financeController.reconcilePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/resolve-uncertainty', requirePermission('finance:approve'), requireRecentMfa, financeController.resolveUncertainPaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/submit-to-bank', requirePermission('finance:settle'), requireRecentMfa, financeController.submitPaymentIntentToBank);

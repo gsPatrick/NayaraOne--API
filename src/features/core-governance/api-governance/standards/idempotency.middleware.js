@@ -75,6 +75,20 @@ function idempotency({ required = false } = {}) {
   };
 }
 
+/**
+ * M9-D852: uma chave já usada (resposta guardada) NÃO passa pela confirmação de novo: o impacto já mudou por causa do próprio efeito e o cliente só quer a resposta
+ * original (mesmo corpo) ou a recusa 422 GOV_IDEMPOTENCY_KEY_REUSED (outro corpo), decididas pela idempotência. Devolve true quando existe resposta guardada para a chave.
+ */
+async function hasStoredReplay(req) {
+  const raw = req.get('Idempotency-Key');
+  if (raw === undefined || !String(raw).trim() || !req.auth || typeof req.withTenantTransaction !== 'function') return false;
+  const key = String(raw).trim();
+  if (key.length < 8 || key.length > 128) return false;
+  const scope = `${req.auth.userId}:${req.method} ${req.route ? req.route.path : req.path}`;
+  const row = await req.withTenantTransaction((transaction) => repository.find(req.auth.companyId, scope, key, transaction));
+  return Boolean(row && row.responseStatus);
+}
+
 /** Tratador de erro do router: devolve a resposta original de uma repetição (a transação já foi desfeita, nenhum efeito aconteceu). */
 function replayErrorHandler(err, _req, res, next) {
   if (!(err instanceof IdempotentReplay)) return next(err);
@@ -82,4 +96,4 @@ function replayErrorHandler(err, _req, res, next) {
   return res.status(err.status).json(err.body);
 }
 
-module.exports = { idempotency, replayErrorHandler, IdempotentReplay };
+module.exports = { idempotency, replayErrorHandler, hasStoredReplay, IdempotentReplay };

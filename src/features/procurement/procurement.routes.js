@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const controller = require('./procurement.controller');
 const insuranceController = require('./insurance.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 3 do inventário)
 
 const procurementRouter = Router();
 procurementRouter.use(authMiddleware, tenantMiddleware);
@@ -29,7 +30,7 @@ procurementRouter.post('/procurement/discrepancies/:id/resolve', requirePermissi
 procurementRouter.post('/procurement/supplier-evaluations', requirePermission('procurement:create'), controller.evaluateSupplier);
 procurementRouter.get('/procurement/supplier-evaluations', requirePermission('procurement:read'), controller.listSupplierEvaluations);
 
-procurementRouter.post('/procurement/purchase-orders/:id/cancel', requirePermission('procurement:approve'), controller.cancelPurchaseOrder);
+procurementRouter.post('/procurement/purchase-orders/:id/cancel', requirePermission('procurement:approve'), confirmAction('procurement.order.cancel'), controller.cancelPurchaseOrder);
 
 procurementRouter.post('/procurement/supplier-qualifications', requirePermission('procurement:create'), controller.upsertSupplierQualification);
 procurementRouter.get('/procurement/supplier-qualifications', requirePermission('procurement:read'), controller.listSupplierQualifications);

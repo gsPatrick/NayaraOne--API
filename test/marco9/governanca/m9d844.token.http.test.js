@@ -8,6 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { startHttp, stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/m9d844Env');
+const { grantRecentMfa } = require('../_helpers/m9d852Confirm');
 const { signClientToken } = require('../../../src/features/core-governance/api-governance/clients/token');
 
 const READ = 'governance:api:read';
@@ -85,13 +86,13 @@ test('m9d844 token de usuário não entra em rota externa e vice-versa', { skip:
 
 test('m9d844 credencial revogada não obtém token', { skip: skip() }, async () => {
   const client = await env.createClient(http, 'gestorA', A, { scopes: ['properties:read'] });
-  const revoked = await http.call('gestorA', 'POST', `/api-governance/clients/${client.id}/revoke`);
+  const revoked = await env.revokeClient(http, 'gestorA', A, client.id);
   assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
   assert.equal(revoked.body.data.status, 'REVOKED');
   const res = await env.tokenFor(client);
   assert.deepEqual([res.status, res.body.error.code, res.body.error.message], [401, 'GOV_CLIENT_DISABLED', 'Esta credencial está desativada.']);
-  const again = await http.call('gestorA', 'POST', `/api-governance/clients/${client.id}/revoke`);
-  assert.deepEqual([again.status, again.body.error.code], [409, 'GOV_API_CLIENT_REVOKED']);
+  const again = await env.revokeClient(http, 'gestorA', A, client.id);
+  assert.deepEqual([again.status, again.body.error.code], [409, 'GOV_ACTION_BLOCKED'], 'revogar de novo: a simulação de impacto já aponta o impedimento (M9-D852)');
   const wrong = await env.tokenFor({ clientId: client.clientId, clientSecret: 'segredo-errado' });
   assert.deepEqual([wrong.status, wrong.body.error.code], [401, 'GOV_INVALID_CLIENT'], 'segredo errado de credencial revogada não revela a situação');
   const unknown = await env.tokenFor({ clientId: 'nyc_inexistente', clientSecret: 'x' });
@@ -101,7 +102,7 @@ test('m9d844 credencial revogada não obtém token', { skip: skip() }, async () 
 test('m9d844 token já emitido de credencial revogada é recusado na chamada seguinte', { skip: skip() }, async () => {
   const client = await env.clientWithToken(http, 'gestorA', A, { scopes: ['properties:read'] });
   assert.equal((await external(client.accessToken, 'GET', '/properties')).status, 200, 'antes de revogar o token vale');
-  assert.equal((await http.call('gestorA', 'POST', `/api-governance/clients/${client.id}/revoke`)).status, 200);
+  assert.equal((await env.revokeClient(http, 'gestorA', A, client.id)).status, 200);
   const after = await external(client.accessToken, 'GET', '/properties');
   assert.deepEqual([after.status, after.body.error.code], [401, 'GOV_CLIENT_DISABLED'], 'o JWT ainda não venceu, mas a credencial está REVOGADA');
 });
@@ -123,7 +124,9 @@ test('m9d844 isolamento entre empresas', { skip: skip() }, async () => {
   const listA = await http.call('gestorA', 'GET', '/api-governance/clients');
   assert.ok(listA.body.data.some((c) => c.clientId === clientA.clientId) && listA.body.data.every((c) => c.clientId !== clientB.clientId), 'cada gestor vê as credenciais da própria empresa');
   assert.ok(listA.body.data.every((c) => c.secretHash === undefined && c.clientSecret === undefined), 'a lista nunca traz segredo nem hash');
+  await grantRecentMfa(A);
   assert.equal((await http.call('gestorA', 'POST', `/api-governance/clients/${clientB.id}/revoke`)).status, 404, 'revogar credencial de outra empresa: 404');
+  assert.equal((await http.call('gestorA', 'GET', `/api-governance/clients/${clientB.id}/impact`)).status, 404, 'e o impacto dela também');
   assert.equal((await external(clientB.accessToken, 'GET', '/contracts')).status, 200, 'a credencial de B segue valendo');
   const forged = signClientToken({ clientId: clientB.clientId, groupId: A.groupId, companyId: A.companyId, scopes: ['contracts:read'] }, 60);
   assert.equal((await external(forged, 'GET', '/contracts')).status, 401, 'client_id de B com a empresa de A não existe na empresa de A');
@@ -136,9 +139,11 @@ test('m9d844 criar e revogar exigem governance:api:manage', { skip: skip() }, as
   assert.equal((await http.call('makerA', 'GET', '/api-governance/clients')).status, 403);
   const anon = await env.raw('POST', '/api-governance/clients', { body });
   assert.equal(anon.status, 401);
-  const invalid = await http.call('gestorA', 'POST', '/api-governance/clients', { ...body, scopes: ['properties:write'], kind: 'APP' });
+  const invalidBody = { ...body, scopes: ['properties:write'], kind: 'APP' };
+  const invalid = await http.call('gestorA', 'POST', '/api-governance/clients', await env.confirmedBody(http, 'gestorA', A, invalidBody));
   assert.deepEqual([invalid.status, invalid.body.error.code], [422, 'GOV_API_CLIENT_INVALID']);
   assert.deepEqual(invalid.body.error.details.problems.map((p) => p.field).sort(), ['kind', 'scopes']);
-  const noOwner = await http.call('gestorA', 'POST', '/api-governance/clients', { ...body, ownerUserId: undefined });
+  const noOwnerBody = { ...body, ownerUserId: undefined };
+  const noOwner = await http.call('gestorA', 'POST', '/api-governance/clients', await env.confirmedBody(http, 'gestorA', A, noOwnerBody));
   assert.equal(noOwner.status, 422);
 });

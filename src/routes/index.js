@@ -101,6 +101,8 @@ router.use('/v1', viewPolicyRouter);
 // Marco 9 — governança (src/features/core-governance). Montado ANTES dos routers de feature: o envelope de erro (error.traceId) e a
 // autenticação valem só nos prefixos do bloco (nenhum router.use sem caminho), então as demais rotas de /v1 não são afetadas.
 router.use('/v1', governanceRouter);
+// Marco 9 (M9-D852) — rotas /impact das ações destrutivas do inventário (src/shared/destructive-actions); autenticação e permissão em cada rota, sem router.use global.
+router.use('/v1', require('../shared/destructive-actions/impact.routes'));
 // Marco 9 — NAY (src/features/ai, M9-D003): /v1/ai/*, auth/tenant só sob /ai, chave geral ia.habilitada no aiGate.
 router.use('/v1', aiModuleRouter);
 // Marco 9 — Marketing (src/features/marketing, M9-D402): /v1/marketing/*, auth/tenant só sob /marketing, permissões marketing:*.

@@ -37,7 +37,20 @@ after(async () => { restaurar(); await env.sequelize.close(); process.exit(0); }
 
 const pagar = () => enfileirar(tenant, { connectionId: banco.id, operation: 'submitPayment', aggregateType: 'PaymentIntent', aggregateId: crypto.randomUUID(), payload: pagamento() });
 const rodar = () => dispatch.runDispatchCycle(ctxDe(tenant), { now: new Date() });
-const tentar = (id, body) => chamar(token, 'POST', `/admin/integrations/errors/${id}/retry`, body);
+// M9-D852 (linha 16): repetir operação DANGEROUS pede a confirmação nível 3 (impacto, código digitado e justificativa); o corpo com `confirmDangerous: true` representa a
+// pessoa que passou pela tela de confirmação, então o teste busca o impacto e envia o `confirmation` como o ConfirmAction faria.
+const JUSTIFICATIVA = 'QA-M9 confirmação de teste da operação perigosa.';
+async function tentar(id, body) {
+  let corpo = body;
+  if (body && body.confirmDangerous === true) {
+    const impacto = await chamar(token, 'GET', `/admin/integrations/errors/${id}/impact`);
+    if (impacto.status === 200) {
+      const d = impacto.corpo.data;
+      corpo = { ...body, confirmation: { understood: true, impactToken: d.impactToken, typedCode: d.record.code, justification: JUSTIFICATIVA } };
+    }
+  }
+  return chamar(token, 'POST', `/admin/integrations/errors/${id}/retry`, corpo);
+}
 const codigo = (r) => (r.corpo.error ? r.corpo.error.code : null);
 
 /** Pagamento que o banco NÃO recebeu: o pedido se perdeu antes de chegar (UNKNOWN) e a consulta responde "não existe". */
@@ -103,10 +116,10 @@ test('retry_perigoso_sem_confirmacao_recusado', async () => {
   const r = await comErro(await perdido());
   await env.ativarMfa(tenant);
   const res = await tentar(r.erro.id, { reason: 'Conferi o extrato.' });
-  assert.equal(res.status, 409);
-  assert.equal(codigo(res), 'INTEGRATION_RETRY_NOT_ALLOWED');
+  assert.equal(res.status, 422);
+  assert.equal(codigo(res), 'GOV_CONFIRMATION_REQUIRED', 'sem a confirmação nível 3 da M9-D852 (antes: INTEGRATION_RETRY_NOT_ALLOWED)');
   const falso = await tentar(r.erro.id, { reason: 'Conferi o extrato.', confirmDangerous: false });
-  assert.equal(codigo(falso), 'INTEGRATION_RETRY_NOT_ALLOWED');
+  assert.equal(codigo(falso), 'GOV_CONFIRMATION_REQUIRED');
   assert.equal((await ler(tenant, r.dispatchId)).status, 'UNKNOWN', 'nada mudou');
   assert.equal(Banco.S.consultas.length, 0, 'sem confirmação nem consulta');
   const tipo = await tentar(r.erro.id, { reason: 'Conferi o extrato.', confirmDangerous: 'sim' });
@@ -121,7 +134,7 @@ test('retry_dead_letter_dangerous_move_para_retry_wait_com_mais_3_tentativas', a
   await env.vencerMfa(tenant);
   assert.equal(codigo(await tentar(r.erro.id, corpoOk)), 'MFA_STEP_UP_REQUIRED', 'sem MFA: 403');
   await env.ativarMfa(tenant);
-  assert.equal(codigo(await tentar(r.erro.id, { reason: 'Conferi o extrato.' })), 'INTEGRATION_RETRY_NOT_ALLOWED', 'sem confirmação: 409');
+  assert.equal(codigo(await tentar(r.erro.id, { reason: 'Conferi o extrato.' })), 'GOV_CONFIRMATION_REQUIRED', 'sem confirmação: 422');
   assert.equal((await ler(tenant, r.dispatchId)).status, 'DEAD_LETTER');
   const ok = await tentar(r.erro.id, corpoOk);
   assert.equal(ok.status, 202);
@@ -163,7 +176,8 @@ test('retry_concorrente_um_vence', async () => {
 test('retry_auditoria_com_motivo_e_aprovador', async () => {
   const r = await comErro(await perdido());
   await env.ativarMfa(tenant);
-  assert.equal(codigo(await tentar(r.erro.id, { confirmDangerous: true })), 'INTEGRATION_RETRY_REASON_REQUIRED', 'sem motivo: 422');
+  // Com a confirmação da M9-D852 a justificativa vira o motivo quando o corpo não traz `reason`; sem confirmação a operação perigosa nem chega ao serviço.
+  assert.equal(codigo(await chamar(token, 'POST', `/admin/integrations/errors/${r.erro.id}/retry`, { confirmDangerous: true })), 'GOV_CONFIRMATION_REQUIRED', 'sem motivo nem confirmação: 422');
   assert.equal((await tentar(r.erro.id, { reason: 'ab', confirmDangerous: true })).status, 422, 'motivo curto demais');
   assert.equal((await tentar(r.erro.id, { reason: 'x'.repeat(501), confirmDangerous: true })).status, 422, 'motivo longo demais');
   assert.equal((await env.trilha(tenant, r.erro.id, 'integration.error.retry_requested')).length, 0, 'recusa não audita');

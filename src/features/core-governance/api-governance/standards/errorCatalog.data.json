@@ -7,6 +7,20 @@
       "since": "1.1.0",
       "deprecated": false
     },
+    "GOV_ACTION_BLOCKED": {
+      "status": 409,
+      "message": "Não é possível continuar: há um impedimento.",
+      "module": "governanca-ui",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_ACTION_IMPACT_CHANGED": {
+      "status": 409,
+      "message": "O impacto mudou. Revise e confirme novamente.",
+      "module": "governanca-ui",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_ANOMALY_INVALID_TRANSITION": {
       "status": 409,
       "message": "Esta anomalia não pode mudar para a situação pedida.",
@@ -320,6 +334,20 @@
       "message": "Esta mudança de situação do compromisso não é permitida.",
       "module": "calendar",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_CONFIRMATION_REQUIRED": {
+      "status": 422,
+      "message": "Confirme a ação digitando o código do registro.",
+      "module": "governanca-ui",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_CONFIRMATION_ROUTE_REQUIRED": {
+      "status": 422,
+      "message": "Para desativar o usuário use a ação Desativar, que mostra o impacto e pede confirmação.",
+      "module": "governanca-ui",
+      "since": "1.3.0",
       "deprecated": false
     },
     "GOV_CONTRACT_DB_NOT_DISPOSABLE": {
@@ -999,6 +1027,13 @@
       "message": "Você não tem permissão para realizar esta ação.",
       "module": "plataforma",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "ROUTE_NOT_FOUND": {
+      "status": 404,
+      "message": "Rota não encontrada.",
+      "module": "plataforma",
+      "since": "1.3.0",
       "deprecated": false
     },
     "VALIDATION_ERROR": {

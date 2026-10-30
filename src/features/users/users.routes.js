@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission, requireRecentMfa } = require('../../m
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const usersController = require('./users.controller');
 const mfaController = require('./mfa.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852 linha 6
 
 const usersRouter = Router();
 
@@ -15,6 +16,15 @@ usersRouter.get('/users', requirePermission('users:read'), usersController.list)
 usersRouter.get('/users/:id', requirePermission('users:read'), usersController.getOne);
 usersRouter.patch('/users/:id', requirePermission('users:update'), usersController.update);
 usersRouter.delete('/users/:id', requirePermission('users:delete'), usersController.remove);
+// M9-D852 linha 6: desativar usuário = nível 2 (impacto + "Entendi o impacto") com MFA recente; PATCH /users/:id não muda mais o status para fora de ACTIVE.
+usersRouter.patch(
+  '/users/:id/deactivate',
+  tenantMiddleware,
+  requirePermission('users:update'),
+  requireRecentMfa,
+  confirmAction('user.deactivate'),
+  usersController.deactivate
+);
 
 // Definir/resetar a senha de outro usuário é ação HIGH (mesmo risco de conceder papel — dá
 // acesso efetivo à conta) — exige MFA recente, igual a POST /memberships.

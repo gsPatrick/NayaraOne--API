@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Nayara One API
-  version: 1.2.0
+  version: 1.3.0
   description: 'Contrato público e de integração da API do Nayara One (M9-D840). Versionado: sem breaking change dentro da mesma major.'
 servers:
   - url: /api/v1
@@ -2568,6 +2568,40 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+        '409':
+          description: Impacto mudou ou há impedimento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-code: GOV_ACTION_BLOCKED
+          x-error-codes:
+            - GOV_ACTION_IMPACT_CHANGED
+        '422':
+          description: Confirmação ausente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-code: GOV_CONFIRMATION_REQUIRED
         '429':
           description: Limite de requisições excedido.
           x-error-code: GOV_RATE_LIMITED
@@ -2876,6 +2910,40 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+        '409':
+          description: Impacto mudou, impedimento ou item já decidido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-code: GOV_ACTION_BLOCKED
+          x-error-codes:
+            - GOV_ACTION_IMPACT_CHANGED
+        '422':
+          description: Confirmação ausente (união MERGED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-code: GOV_CONFIRMATION_REQUIRED
         '429':
           description: Limite de requisições excedido.
           x-error-code: GOV_RATE_LIMITED
@@ -3777,6 +3845,25 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - GOV_ACTION_BLOCKED
+            - GOV_ACTION_IMPACT_CHANGED
+        '422':
+          description: Confirmação ausente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-code: GOV_CONFIRMATION_REQUIRED
         '429':
           description: Limite de requisições excedido.
           x-error-code: GOV_RATE_LIMITED
@@ -3802,6 +3889,116 @@ paths:
             schema:
               type: object
               additionalProperties: true
+  /dlp/share-links/{id}/impact:
+    get:
+      operationId: getDlpShareLinksIdImpact
+      summary: GET /dlp/share-links/{id}/impact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+            Deprecation:
+              $ref: '#/components/headers/Deprecation'
+            Sunset:
+              $ref: '#/components/headers/Sunset'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '404':
+          description: Registro não encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+      x-permissions:
+        - governance:dlp:export
   /dlp/share-links:
     get:
       operationId: getDlpShareLinks
@@ -6151,6 +6348,28 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - MFA_STEP_UP_REQUIRED
+            - MFA_REQUIRED_NOT_ENABLED
+        '409':
+          description: Impacto mudou ou há impedimento.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - GOV_ACTION_BLOCKED
+            - GOV_ACTION_IMPACT_CHANGED
         '422':
           description: Dados da credencial inválidos (nome, tipo, responsável, scopes).
           x-error-code: GOV_API_CLIENT_INVALID
@@ -6160,6 +6379,103 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
           x-error-codes:
             - GOV_API_CONSUMER_INVALID
+            - GOV_CONFIRMATION_REQUIRED
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+      x-permissions:
+        - governance:api:manage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /api-governance/clients/impact:
+    post:
+      operationId: postApiGovernanceClientsImpact
+      summary: POST /api-governance/clients/impact
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+            Deprecation:
+              $ref: '#/components/headers/Deprecation'
+            Sunset:
+              $ref: '#/components/headers/Sunset'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/XCorrelationId'
@@ -6256,6 +6572,9 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - MFA_STEP_UP_REQUIRED
+            - MFA_REQUIRED_NOT_ENABLED
         '404':
           description: Credencial não encontrada.
           x-error-code: GOV_API_CLIENT_NOT_FOUND
@@ -6288,6 +6607,27 @@ paths:
               $ref: '#/components/headers/XRateLimitRemaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - GOV_ACTION_BLOCKED
+            - GOV_ACTION_IMPACT_CHANGED
+        '422':
+          description: Confirmação ausente.
+          x-error-code: GOV_API_CLIENT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          x-error-codes:
+            - GOV_CONFIRMATION_REQUIRED
         '429':
           description: Limite de requisições excedido.
           x-error-code: GOV_RATE_LIMITED
@@ -6313,6 +6653,116 @@ paths:
             schema:
               type: object
               additionalProperties: true
+  /api-governance/clients/{id}/impact:
+    get:
+      operationId: getApiGovernanceClientsIdImpact
+      summary: GET /api-governance/clients/{id}/impact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+            Deprecation:
+              $ref: '#/components/headers/Deprecation'
+            Sunset:
+              $ref: '#/components/headers/Sunset'
+        '400':
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '401':
+          description: Sem login.
+          x-error-code: MISSING_ACCESS_TOKEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '403':
+          description: Sem permissão.
+          x-error-code: PERMISSION_DENIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '404':
+          description: Registro não encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+        '429':
+          description: Limite de requisições excedido.
+          x-error-code: GOV_RATE_LIMITED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/XCorrelationId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+      x-permissions:
+        - governance:api:manage
 components:
   securitySchemes:
     bearerAuth:

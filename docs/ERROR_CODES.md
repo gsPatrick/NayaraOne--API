@@ -7,6 +7,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | Código | Status | Mensagem | Módulo | Desde | Descontinuado |
 |---|---|---|---|---|---|
 | `AUTH_VALIDATION` | 400 | Os dados de acesso enviados são inválidos. | plataforma | 1.1.0 | não |
+| `GOV_ACTION_BLOCKED` | 409 | Não é possível continuar: há um impedimento. | governanca-ui | 1.3.0 | não |
+| `GOV_ACTION_IMPACT_CHANGED` | 409 | O impacto mudou. Revise e confirme novamente. | governanca-ui | 1.3.0 | não |
 | `GOV_ANOMALY_INVALID_TRANSITION` | 409 | Esta anomalia não pode mudar para a situação pedida. | dlp | 1.0.0 | não |
 | `GOV_ANOMALY_REASON_REQUIRED` | 400 | Informe o motivo da revisão. | dlp | 1.0.0 | não |
 | `GOV_API_CLIENT_INVALID` | 422 | Dados da credencial inválidos. | api-governance | 1.0.0 | não |
@@ -52,6 +54,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_COMMITMENT_INVALID` | 400 | O fim do compromisso deve ser após o início. | calendar | 1.0.0 | não |
 | `GOV_COMMITMENT_OWNER_ONLY` | 403 | Somente a pessoa responsável pelo compromisso ou um administrador pode fazer esta alteração. | calendar | 1.0.0 | não |
 | `GOV_COMMITMENT_TRANSITION_INVALID` | 409 | Esta mudança de situação do compromisso não é permitida. | calendar | 1.0.0 | não |
+| `GOV_CONFIRMATION_REQUIRED` | 422 | Confirme a ação digitando o código do registro. | governanca-ui | 1.3.0 | não |
+| `GOV_CONFIRMATION_ROUTE_REQUIRED` | 422 | Para desativar o usuário use a ação Desativar, que mostra o impacto e pede confirmação. | governanca-ui | 1.3.0 | não |
 | `GOV_CONTRACT_DB_NOT_DISPOSABLE` | 422 | O contract test só roda em banco descartável: <motivo>. | api-governance | 1.1.0 | não |
 | `GOV_CONTRACT_EXAMPLE_INVALID` | 422 | O exemplo do contract test é inválido: <motivo>. | api-governance | 1.1.0 | não |
 | `GOV_CONTRACT_EXAMPLE_MISSING` | 422 | Falta exemplo positivo ou negativo para <rota>. | api-governance | 1.1.0 | não |
@@ -149,4 +153,5 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `MFA_STEP_UP_REQUIRED` | 403 | Confirme sua identidade com o código de verificação em duas etapas. | plataforma | 1.0.0 | não |
 | `MISSING_ACCESS_TOKEN` | 401 | Token de acesso ausente. | plataforma | 1.0.0 | não |
 | `PERMISSION_DENIED` | 403 | Você não tem permissão para realizar esta ação. | plataforma | 1.0.0 | não |
+| `ROUTE_NOT_FOUND` | 404 | Rota não encontrada. | plataforma | 1.3.0 | não |
 | `VALIDATION_ERROR` | 400 | Os dados enviados são inválidos. | plataforma | 1.0.0 | não |

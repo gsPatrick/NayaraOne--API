@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const propertiesController = require('./properties.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 4 do inventário)
 require('./publicReadModel'); // M9-D231: consumidores do read model público (property.* -> recalcula o registro)
 
 const propertiesRouter = Router();
@@ -14,7 +15,7 @@ propertiesRouter.post('/properties', requirePermission('properties:create'), pro
 propertiesRouter.get('/properties', requirePermission('properties:read'), propertiesController.list);
 propertiesRouter.get('/properties/:id', requirePermission('properties:read'), propertiesController.getOne);
 propertiesRouter.patch('/properties/:id', requirePermission('properties:update'), propertiesController.update);
-propertiesRouter.delete('/properties/:id', requirePermission('properties:delete'), propertiesController.remove);
+propertiesRouter.delete('/properties/:id', requirePermission('properties:delete'), confirmAction('property.delete'), propertiesController.remove);
 
 propertiesRouter.post('/properties/:id/owners', requirePermission('properties:update'), propertiesController.createOwner);
 propertiesRouter.get('/properties/:id/owners', requirePermission('properties:read'), propertiesController.listOwners);

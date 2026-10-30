@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const legalController = require('./legal.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
 
 const legalRouter = Router();
 
@@ -24,14 +25,14 @@ legalRouter.use(authMiddleware, tenantMiddleware);
 legalRouter.post('/legal/contracts', requirePermission('legal:create'), legalController.createContract);
 legalRouter.get('/legal/contracts', requirePermission('legal:read'), legalController.listContracts);
 legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalController.getContract);
-legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), legalController.transitionContract);
+legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), confirmAction('legal.contract.terminate', { reasonField: 'reason' }), legalController.transitionContract);
 // FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): fim-de-vida do contrato (Caderno,
 // Anexo I "5. Estado do contrato") — SUSPENDED/TERMINATED/CLOSED. Ações HIGH, exigem motivo
 // (ver assertReason em contracts.service.js) e permissão de aprovação jurídica, mesmo padrão de
 // "/transition" acima (não é correção de dado — é máquina de estados).
 legalRouter.post('/legal/contracts/:id/suspend', requirePermission('legal:approve'), legalController.suspendContract);
 legalRouter.post('/legal/contracts/:id/reactivate', requirePermission('legal:approve'), legalController.reactivateContract);
-legalRouter.post('/legal/contracts/:id/terminate', requirePermission('legal:approve'), legalController.terminateContract);
+legalRouter.post('/legal/contracts/:id/terminate', requirePermission('legal:approve'), confirmAction('legal.contract.terminate', { reasonField: 'reason' }), legalController.terminateContract);
 legalRouter.post('/legal/contracts/:id/close', requirePermission('legal:approve'), legalController.closeContract);
 legalRouter.post('/legal/contracts/:id/parties', requirePermission('legal:create'), legalController.addContractParty);
 legalRouter.get('/legal/contracts/:id/parties', requirePermission('legal:read'), legalController.listContractParties);
@@ -95,8 +96,8 @@ legalRouter.post('/legal/amendments/:id/sign', requirePermission('legal:update')
 // Signatures
 legalRouter.post('/legal/contract-versions/:id/signatures', requirePermission('legal:sign'), legalController.initiateSignature);
 // M45 (Caderno M5 §8): assinatura MANUAL exige arquivo da via assinada e coletor identificado.
-legalRouter.post('/legal/contract-versions/:id/manual-signatures', requirePermission('legal:sign'), legalController.recordManualSignature);
 legalRouter.post('/legal/signature-envelopes/:id/switch-provider', requirePermission('legal:sign'), requireRecentMfa, legalController.switchSignatureProvider);
+legalRouter.post('/legal/contract-versions/:id/manual-signatures', requirePermission('legal:sign'), legalController.recordManualSignature);
 legalRouter.get('/legal/contract-versions/:id/signatures', requirePermission('legal:read'), legalController.listSignaturesByContractVersion);
 legalRouter.post('/legal/signatures/:externalSignatureId/webhook', requirePermission('legal:sign'), legalController.signatureWebhook);
 legalRouter.get('/legal/signatures/:id/status', requirePermission('legal:sign'), legalController.checkSignatureStatus);

@@ -9,6 +9,13 @@ function canonical(value) {
   return JSON.stringify(value === undefined ? null : value);
 }
 
-const bodyHash = (body) => crypto.createHash('sha256').update(canonical(body === undefined ? {} : body)).digest('hex');
+// M9-D852: o corpo `confirmation` (impactToken novo a cada tentativa) não faz parte do que a chave de idempotência protege.
+function withoutConfirmation(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !('confirmation' in body)) return body;
+  const { confirmation: _confirmation, ...rest } = body;
+  return rest;
+}
+
+const bodyHash = (body) => crypto.createHash('sha256').update(canonical(body === undefined ? {} : withoutConfirmation(body))).digest('hex');
 
 module.exports = { canonical, bodyHash };

@@ -1,5 +1,6 @@
 'use strict';
 
+const AppError = require('../../utils/AppError');
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const usersService = require('./users.service');
@@ -46,10 +47,21 @@ const getOne = catchAsync(async (req, res) => {
 });
 
 const update = catchAsync(async (req, res) => {
+  if (req.body && req.body.status !== undefined && String(req.body.status).toUpperCase() !== 'ACTIVE') {
+    throw AppError.unprocessable('Para desativar o usuário use a ação Desativar, que mostra o impacto e pede confirmação.', 'GOV_CONFIRMATION_ROUTE_REQUIRED');
+  }
   const user = await usersService.updateUser(req.params.id, req.body, req.auth.userId, {
     groupId: req.auth.groupId,
     companyId: req.auth.companyId,
   });
+  return success(res, { data: user });
+});
+
+// M9-D852 linha 6: PATCH /users/:id/deactivate (a confirmação com impacto e o MFA já passaram na rota).
+const deactivate = catchAsync(async (req, res) => {
+  // INACTIVE (desativar) ou SUSPENDED (bloquear acesso, tela de Atividades); sem corpo vale INACTIVE.
+  const status = req.body && req.body.status === 'SUSPENDED' ? 'SUSPENDED' : 'INACTIVE';
+  const user = await usersService.updateUser(req.params.id, { status }, req.auth.userId, { groupId: req.auth.groupId, companyId: req.auth.companyId });
   return success(res, { data: user });
 });
 
@@ -69,4 +81,4 @@ const setPassword = catchAsync(async (req, res) => {
   return success(res, { data: user });
 });
 
-module.exports = { create, list, getOne, update, remove, setPassword };
+module.exports = { create, list, getOne, update, deactivate, remove, setPassword };

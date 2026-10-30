@@ -10,6 +10,7 @@ const { startHttp, stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/shareEnv');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const logger = require('../../../src/utils/logger');
+const { withConfirmation } = require('../_helpers/m9d852Confirm');
 
 let http;
 let A;
@@ -38,6 +39,8 @@ after(async () => {
 const create = (who, over = {}, key) => http.call(who, 'POST', '/dlp/share-links', env.body(contract, over), { 'Idempotency-Key': key || env.nextKey('http') });
 const publicGet = (token, headers = {}) => fetch(`${http.baseUrl}/public/share/${token}`, { headers });
 const tokenOf = (res) => res.body.data.token;
+// M9-D852 (linha 12): revogar link é nível 2; a tela simula o impacto e envia o impactToken com "Entendi o impacto".
+const revoke = async (who, id) => http.call(who, 'POST', `/dlp/share-links/${id}/revoke`, await withConfirmation(http, who, `/dlp/share-links/${id}/impact`));
 
 test('m9d823 criar, abrir sem login, revogar e abrir de novo (404) pela API', { skip: skip() }, async () => {
   await env.grantMfa(A);
@@ -64,7 +67,7 @@ test('m9d823 criar, abrir sem login, revogar e abrir de novo (404) pela API', { 
   assert.equal(listed.body.data.find((l) => l.id === id).accessCount, 1);
   assert.equal(JSON.stringify(listed.body).includes(token), false);
 
-  const revoked = await http.call('gestorA', 'POST', `/dlp/share-links/${id}/revoke`);
+  const revoked = await revoke('gestorA', id);
   assert.deepEqual([revoked.status, revoked.body.data.status], [200, 'REVOKED']);
   const gone = await publicGet(token);
   assert.equal(gone.status, 404);
@@ -74,8 +77,8 @@ test('m9d823 criar, abrir sem login, revogar e abrir de novo (404) pela API', { 
   assert.deepEqual({ ...unknown.error, traceId: null }, { ...goneBody.error, traceId: null }, 'inexistente e revogado têm a mesma resposta');
   const audits = await env.auditOf('dlp.share.accessed', id);
   assert.equal(audits.length, 1, 'só o acesso que abriu foi auditado');
-  const again = await http.call('gestorA', 'POST', `/dlp/share-links/${id}/revoke`);
-  assert.deepEqual([again.status, again.body.error.code], [409, 'GOV_LINK_ALREADY_FINAL']);
+  const again = await revoke('gestorA', id);
+  assert.deepEqual([again.status, again.body.error.code], [409, 'GOV_ACTION_BLOCKED'], 'revogar de novo: o impacto já aponta o impedimento (a regra GOV_LINK_ALREADY_FINAL segue no serviço)');
 });
 
 test('m9d823 sem Idempotency-Key 400, sem permissão 403, prazo acima do teto 422 e HIGH sem MFA 403', { skip: skip() }, async () => {
@@ -134,7 +137,7 @@ test('m9d823 o token nunca aparece no log da API (abertura, 404 e 429)', { skip:
     const created = await create('gestorA');
     const token = tokenOf(created);
     await publicGet(token);
-    await http.call('gestorA', 'POST', `/dlp/share-links/${created.body.data.id}/revoke`);
+    await revoke('gestorA', created.body.data.id);
     await publicGet(token);
     await publicGet(`${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`);
     assert.ok(lines.some((line) => line.includes('/public/share/')), 'a rota pública foi registrada');

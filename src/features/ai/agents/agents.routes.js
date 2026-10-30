@@ -4,6 +4,8 @@ const AppError = require('../../../utils/AppError');
 const { requirePermission } = require('../../../middlewares/auth.middleware');
 const { aiGate } = require('../aiGate.middleware');
 const c = require('./agents.controller');
+const { requireRecentMfa } = require('../../../middlewares/auth.middleware');
+const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852 linha 19
 
 /** Gestão de versões é da empresa toda, não de um agente: só a chave geral da NAY vale (não a lista `ai.agents.enabled`). */
 const gate = aiGate({ agentParam: '__sem_agente__' });
@@ -33,7 +35,7 @@ function registerAgentRoutes(router) {
   router.post(`${base}/:code/versions/:version/homologate`, requirePermission('ai:evaluate'), gate, c.homologate);
   router.post(`${base}/:code/versions/:version/activate`, requirePermission('ai:admin'), gate, c.activate);
   router.put(`${base}/:code/versions/:version/activate`, requirePermission('ai:admin'), gate, c.activate);
-  router.post(`${base}/:code/versions/:version/retire`, requirePermission('ai:admin'), gate, c.retire);
+  router.post(`${base}/:code/versions/:version/retire`, requirePermission('ai:admin'), gate, requireRecentMfa, confirmAction('ai.agent.deactivate', { resourceId: (req) => `${req.params.code}/${req.params.version}` }), c.retire);
 }
 
 module.exports = { registerAgentRoutes };

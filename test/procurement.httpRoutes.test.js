@@ -160,7 +160,12 @@ test('HTTP POST /procurement/purchase-orders/:id/cancel — cancela, devolve {or
   assert.equal(forbidden.status, 403);
   assert.equal((await forbidden.json()).error.code, 'PERMISSION_DENIED');
 
-  const res = await call('POST', `/procurement/purchase-orders/${order.id}/cancel`, approverToken, { reason: 'Fornecedor não vai entregar' });
+  // M9-D852 (linha 3, nível 2): a tela simula o impacto e envia "Entendi o impacto" com o impactToken.
+  const confirmationOf = async () => {
+    const impact = (await (await call('GET', `/procurement/purchase-orders/${order.id}/impact`, approverToken)).json()).data;
+    return { understood: true, impactToken: impact.impactToken };
+  };
+  const res = await call('POST', `/procurement/purchase-orders/${order.id}/cancel`, approverToken, { reason: 'Fornecedor não vai entregar', confirmation: await confirmationOf() });
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.success, true);
@@ -172,9 +177,9 @@ test('HTTP POST /procurement/purchase-orders/:id/cancel — cancela, devolve {or
   const detail = await call('GET', `/procurement/purchase-orders/${order.id}`, approverToken);
   assert.equal((await detail.json()).data.status, 'CANCELED');
 
-  const again = await call('POST', `/procurement/purchase-orders/${order.id}/cancel`, approverToken, {});
+  const again = await call('POST', `/procurement/purchase-orders/${order.id}/cancel`, approverToken, { confirmation: await confirmationOf() });
   assert.equal(again.status, 409);
-  assert.equal((await again.json()).error.code, 'PURCHASE_ORDER_INVALID_TRANSITION');
+  assert.equal((await again.json()).error.code, 'GOV_ACTION_BLOCKED', 'recancelar: o impacto já aponta o impedimento (a regra PURCHASE_ORDER_INVALID_TRANSITION segue no serviço)');
 });
 
 test('HTTP supplier-qualifications — registrar risco/documentos, listar por fornecedor, aprovar/reprovar due diligence (só procurement:approve)', async () => {

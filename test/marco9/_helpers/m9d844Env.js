@@ -4,6 +4,7 @@
 const env = require('./bcpEnv');
 const clientsApi = require('../../../src/features/core-governance/api-governance/clients');
 const consumersApi = require('../../../src/features/core-governance/api-governance/consumers');
+const { withConfirmation, grantRecentMfa } = require('./m9d852Confirm');
 
 let seq = 0;
 const unique = (label) => { seq += 1; return `QA-M9 ${label} ${Date.now()}-${seq}`; };
@@ -24,9 +25,22 @@ async function raw(method, path, { token, body, form, headers = {} } = {}) {
   return { status: res.status, body: json, text, headers: res.headers };
 }
 
+/** Corpo de criação/revogação com a confirmação nível 3 da M9-D852 (impacto da simulação + código digitado + justificativa) e o MFA recente do gestor no banco descartável. */
+async function confirmedBody(http, who, tenant, body) {
+  await grantRecentMfa(tenant);
+  return withConfirmation(http, who, '/api-governance/clients/impact', body, { method: 'POST', body });
+}
+
+/** Revoga pela rota real com MFA recente e confirmação (a simulação de impacto vem do servidor). */
+async function revokeClient(http, who, tenant, id) {
+  await grantRecentMfa(tenant);
+  return http.call(who, 'POST', `/api-governance/clients/${id}/revoke`, await withConfirmation(http, who, `/api-governance/clients/${id}/impact`, {}));
+}
+
 /** Cria a credencial pela rota (como o gestor) e devolve { id, clientId, clientSecret, response }. */
 async function createClient(http, who, owner, over = {}) {
-  const response = await http.call(who, 'POST', '/api-governance/clients', { name: unique('credencial'), kind: 'PARTNER', ownerUserId: owner.userId, scopes: ['properties:read'], ...over });
+  const request = { name: unique('credencial'), kind: 'PARTNER', ownerUserId: owner.userId, scopes: ['properties:read'], ...over };
+  const response = await http.call(who, 'POST', '/api-governance/clients', await confirmedBody(http, who, owner, request));
   const data = response.body && response.body.data;
   return { response, id: data && data.id, clientId: data && data.clientId, clientSecret: data && data.clientSecret, data };
 }
@@ -52,4 +66,4 @@ async function cleanClients() {
   consumersApi.resetUsageThrottle();
 }
 
-module.exports = { ...env, unique, raw, createClient, tokenFor, clientWithToken, cleanClients, clientsApi, consumersApi, baseUrl };
+module.exports = { ...env, unique, raw, createClient, confirmedBody, revokeClient, tokenFor, clientWithToken, cleanClients, clientsApi, consumersApi, baseUrl };

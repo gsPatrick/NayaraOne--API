@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const constructionController = require('./construction.controller');
+const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto
 
 const constructionRouter = Router();
 
@@ -24,7 +25,7 @@ constructionRouter.post('/construction/projects', requirePermission('constructio
 constructionRouter.get('/construction/projects', requirePermission('construction:read'), constructionController.listProjects);
 constructionRouter.get('/construction/projects/:id', requirePermission('construction:read'), constructionController.getProject);
 constructionRouter.patch('/construction/projects/:id', requirePermission('construction:update'), constructionController.updateProject);
-constructionRouter.post('/construction/projects/:id/transition', requirePermission('construction:update'), constructionController.transitionProject);
+constructionRouter.post('/construction/projects/:id/transition', requirePermission('construction:update'), confirmAction('construction.project.cancel'), constructionController.transitionProject); // M9-D852 linha 7: só a transição para CANCELLED pede confirmação
 // Gate de entrega da obra (M6-25/M6-39/M6-51/M6-65/M6-79/M6-87) — permissão dedicada de
 // aprovação, mesmo padrão de `/construction/measurements/:id/decide`.
 constructionRouter.post('/construction/projects/:id/deliver', requirePermission('construction:approve'), constructionController.deliverProject);
