@@ -1,0 +1,29 @@
+{
+  "commit": "f1e53d2431de695b485dfddd5edc4fd2079f9d37",
+  "inicio": "2026-10-30T22:29:38.095Z",
+  "modo": "entrega",
+  "estagios": [
+    {
+      "numero": 12,
+      "nome": "DEV",
+      "tipo": "entrega",
+      "status": "VERDE",
+      "duracaoMs": 16756
+    },
+    {
+      "numero": 13,
+      "nome": "LAB",
+      "tipo": "entrega",
+      "status": "VERDE",
+      "duracaoMs": 8157
+    },
+    {
+      "numero": 14,
+      "nome": "failure drills",
+      "tipo": "entrega",
+      "status": "VERDE",
+      "duracaoMs": 174276
+    }
+  ],
+  "resultado": "VERDE"
+}

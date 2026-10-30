@@ -1,0 +1,35 @@
+# estágio 12: DEV
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d435.http.test.js test/marco9/marketing/m9d435.inventario.test.js
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16656.493125
+# estágio 12: DEV => VERDE
+# estágio 13: LAB
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/channelAdapter.contract.test.js test/marco9/marketing/m9d430.sandbox.test.js test/marco9/marketing/m9d430.real.test.js test/marco9/marketing/m9d430.liberacao.test.js
+ℹ tests 64
+ℹ suites 0
+ℹ pass 64
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8069.06975
+# estágio 13: LAB => VERDE
+# estágio 14: failure drills
+$ node --test --test-concurrency=1 --test-reporter=spec test/marco9/marketing/m9d442.cenarios.test.js test/marco9/marketing/m9d442.circuito.test.js test/marco9/marketing/m9d442.contingencia.test.js test/marco9/marketing/m9d442.liberacao.test.js test/marco9/marketing/m9d442.portao.test.js
+# Combinações: 108; aprovadas: 108; reprovadas: 0; casos de base reprovados: 0. | FAILURE DRILL APROVADO
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 174180.670083
+# estágio 14: failure drills => VERDE
+# esteira do marketing: VERDE
