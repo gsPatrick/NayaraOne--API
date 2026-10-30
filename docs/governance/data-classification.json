@@ -1706,6 +1706,16 @@
    "tax_id",
    "updated_by"
   ],
+  "core.external_refs": [
+   "entity_id",
+   "entity_type",
+   "is_primary",
+   "migration_run_id",
+   "source_key",
+   "source_system",
+   "valid_from",
+   "valid_to"
+  ],
   "core.groups": [
    "created_by",
    "deleted_at",
@@ -3136,6 +3146,18 @@
    "environment",
    "line_count"
   ],
+  "governance.cutover_activities": [
+   "code",
+   "phase",
+   "sort_order",
+   "title"
+  ],
+  "governance.cutover_raci": [
+   "activity_code",
+   "raci",
+   "role",
+   "user_id"
+  ],
   "governance.data_classification_registry": [
    "ai_allowed",
    "classification",
@@ -3382,6 +3404,62 @@
    "sector",
    "status",
    "validation_errors"
+  ],
+  "governance.mig_batches": [
+   "attempts",
+   "entity",
+   "error",
+   "finished_at",
+   "from_token",
+   "replay_of",
+   "root_hash",
+   "row_count",
+   "run_id",
+   "source_id",
+   "source_system",
+   "started_at",
+   "status",
+   "to_token"
+  ],
+  "governance.mig_event_keys": [
+   "batch_id",
+   "idempotency_key"
+  ],
+  "governance.mig_records": [
+   "batch_id",
+   "entity",
+   "last_position",
+   "reason",
+   "row_hash",
+   "source_deleted",
+   "source_key",
+   "source_payload",
+   "source_system",
+   "source_version",
+   "state",
+   "target_entity_id"
+  ],
+  "governance.mig_runs": [
+   "entity",
+   "error",
+   "finished_at",
+   "last_delta",
+   "requested_by",
+   "source_system",
+   "started_at",
+   "status",
+   "summary"
+  ],
+  "governance.mig_sources": [
+   "checkpoint_at",
+   "checkpoint_token",
+   "config",
+   "enabled",
+   "entity",
+   "mode",
+   "mode_reason",
+   "secret_ref",
+   "source_system"
   ],
   "governance.public_access_counters": [
    "hits",
@@ -4795,6 +4873,8 @@
    "person_type",
    "preferred_name",
    "risk_flags_json",
+   "source_deleted",
+   "source_deleted_at",
    "status",
    "tax_id_normalized",
    "tax_id_normalized_hash",
@@ -5045,6 +5125,8 @@
    "published_at",
    "registry_number",
    "registry_office",
+   "source_deleted",
+   "source_deleted_at",
    "state",
    "title",
    "updated_by",
