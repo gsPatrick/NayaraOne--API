@@ -45,9 +45,11 @@ const SOURCES = Object.freeze({
   boletoFormatted: '(?<!\\d)\\d{5}\\.\\d{5}\\s\\d{5}\\.\\d{6}\\s\\d{5}\\.\\d{6}\\s\\d\\s\\d{14}(?!\\d)',
   boletoDigits: '(?<![\\d.-])(?:\\d{47}|\\d{48})(?![\\d.-])',
   agencyLabeled: '(\\bag(?:[eê]ncia|\\.)?\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{3,5}(?:-[\\dxX])?\\b)',
-  accountLabeled: '(\\b(?:conta(?:\\s+(?:corrente|poupan[cç]a))?|c\\/c|cc|c\\.c\\.)\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{4,12}-?[\\dxX]\\b)',
+  // O rótulo é uma palavra solta e tem separador depois dele: um UUID que começa com "cc" (cc823232-...) não é "cc 823232-8".
+  accountLabeled: '((?<![\\w.-])(?:conta(?:\\s+(?:corrente|poupan[cç]a))?|c\\/c|cc|c\\.c\\.)(?:\\s+|\\s*[:=-]\\s*)(?:n[º°o]\\.?\\s*[:=-]?\\s*)?)(\\d{4,12}-?[\\dxX]\\b)',
   addressPattern: '\\b(?:rua|avenida|av\\.|alameda|travessa|rodovia|estrada|pra[cç]a)\\s+[^\\n,;.]{2,60}?,?\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}(?:\\s*[,-]\\s*[^\\n,;]{2,40})?',
-  cepFormatted: '(?<![\\d.-])\\d{5}-\\d{3}(?![\\d-])',
+  // Sem letra ou dígito colado antes ou depois: um UUID (0bd60392-200b-...) tem "60392-200" no meio e não é CEP.
+  cepFormatted: '(?<![\\w.-])\\d{5}-\\d{3}(?![\\w-])',
   cepLabeled: '(\\bCEP\\b\\s*[:=-]?\\s*)(\\d{8}\\b)',
 });
 
