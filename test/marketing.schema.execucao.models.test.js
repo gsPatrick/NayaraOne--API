@@ -94,10 +94,11 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
     assert.equal(await contagem(), 0);
     await migration.up(qi);
     assert.equal(await contagem(), 9);
-    // O down derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, checks, gatilhos): recompõe na ordem,
-    // para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
-    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
   } finally {
+    // O down derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, checks, gatilhos): recompõe na ordem
+    // MESMO se uma asserção falhar, para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
+    await migration.up(qi);
+    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
     await admin.close();
   }
 });

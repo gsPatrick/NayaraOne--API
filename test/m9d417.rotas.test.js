@@ -113,19 +113,24 @@ test('alteracao_exige_permissao_e_gera_auditoria', { skip: !DISPOSABLE && SKIP }
   assert.equal(denied.status, 403);
   assert.equal(denied.body.error.code, 'MKT_FORBIDDEN');
   assert.equal(denied.body.error.details.required, 'marketing:automation:manage');
-  assert.equal(await auditCount(K), 0);
+  // A auditoria é append-only e fica entre execuções no mesmo banco: conta-se sempre RELATIVO ao estado inicial deste teste.
+  const base = await auditCount(K);
+  assert.equal(await auditCount(K), base);
 
+  // Começa do padrão: remove o valor gravado por uma execução anterior (senão o PUT inicial seria "sem mudança" e não auditaria).
+  await adminQuery('DELETE FROM core.tenant_settings WHERE key = $1', [K]);
   const ok = await put('gestorA', K, '[3,45,120,365]');
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assert.equal(await auditCount(K), 1);
+  assert.equal(await auditCount(K), base + 1);
 
   // PUT repetido com o mesmo valor (mesmo em outra grafia) não gera nova versão nem nova auditoria.
   const same = await put('gestorA', K, '3, 45, 120, 365');
   assert.equal(same.status, 200);
-  assert.equal(await auditCount(K), 1);
+  assert.equal(await auditCount(K), base + 1);
 
   // Valor novo: nova versão com antes e depois na auditoria.
   assert.equal((await put('gestorA', K, '[3,60]')).status, 200);
+  assert.equal(await auditCount(K), base + 2);
   const rows = (await adminQuery(
     "SELECT before_json->>'value' AS antes, after_json->>'value' AS depois, user_id FROM audit.audit_log WHERE entity_type = 'TenantSetting' AND after_json->>'key' = $1 ORDER BY occurred_at DESC LIMIT 1", [K])).rows;
   assert.equal(rows[0].antes, '[3,45,120,365]');
