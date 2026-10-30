@@ -78,8 +78,8 @@ test('m9d800 corpo de erro de governança tem formato único com error.traceId e
   const allowed = new Set(errors.DEFAULT_PREFIX_EXCEPTIONS);
   const offenders = [];
   for (const file of listJsFiles(GOV_DIR)) {
-    // *.constants.js guarda enumerações de domínio (ex.: tipos de origem do calendário), não códigos de erro.
-    if (file.endsWith('governance.errors.js') || file.endsWith('.constants.js')) continue;
+    // *.constants.js, *.seeds.js e *.targets.js guardam catálogos de domínio (tipos de origem, classes e alvos de retenção), não códigos de erro.
+    if (file.endsWith('governance.errors.js') || /\.(constants|seeds|targets)\.js$/.test(file)) continue;
     const text = fs.readFileSync(file, 'utf8');
     // Só o que é código de erro: 2º argumento de govError(status, 'CODIGO', ...) e propriedades `code: 'CODIGO'`; enumerações de domínio (tipos, ações, formatos) não são códigos.
     for (const m of text.matchAll(/(?:govError\(\s*\d+\s*,|\bcode\s*(?:[:=]|===)\s*)\s*['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) {
@@ -115,15 +115,16 @@ test('m9d800 a tabela de ordem 3.5 coincide com o campo Dependências das demand
     assert.ok(deps[id], `demanda ${id} sem campo Dependências`);
     assert.deepEqual(deps[id], [...want].sort(), `Dependências de ${id} divergem da tabela 3.5`);
   }
-  // Bloco F: a primeira demanda de cada trilha chega a D891 (F1, F2) ou não depende de ninguém (F4); D940 fecha as trilhas.
+  // Bloco F (K1 revisada em 30/10/2026): as trilhas não esperam o bloco E; o portão "bloco E fechado" é D940, que alcança D890 e D891.
   const reaches = (from, target, seen = new Set()) => {
     if (from === target) return true;
     if (seen.has(from)) return false;
     seen.add(from);
     return (deps[from] || []).some((d) => reaches(d, target, seen));
   };
-  assert.ok(reaches('D906', 'D891'), 'F1 começa depois de D891');
-  assert.ok(reaches('D911', 'D891'), 'F2 começa depois de D891');
+  assert.ok(reaches('D940', 'D891'), 'o fechamento do bloco F (D940) exige o bloco E fechado (D891)');
+  assert.ok(reaches('D940', 'D890'), 'o fechamento do bloco F (D940) exige D890');
+  assert.ok(!reaches('D906', 'D891') && !reaches('D911', 'D891'), 'F1 e F2 não esperam mais o bloco E');
   assert.ok(reaches('D914', 'D901') && reaches('D914', 'D810'), 'F3 (D914) depende da migração e do lineage');
   assert.deepEqual(deps.D930, [], 'F4 não depende de ninguém');
   for (const id of ['D908', 'D910', 'D915', 'D920', 'D932']) assert.ok(deps.D940.includes(id), `D940 deve depender de ${id}`);
