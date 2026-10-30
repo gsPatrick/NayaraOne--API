@@ -28,7 +28,7 @@ const OPS = Object.freeze({
 
 /** insurance-manual: a seguradora sem API cumpre o MESMO port InsuranceAdapter por tarefas a uma pessoa; sem rede, sem segredo. */
 const InsuranceManualContractAdapter = wrapLegacy({
-  Port: InsuranceAdapter, className: 'InsuranceManualContractAdapter', code: 'insurance-manual', capabilities: CAPABILITIES.filter((c) => c !== 'verifyWebhook'), mapper: STATUS, ops: OPS, idempotentOps: ['quote', 'propose'],
+  Port: InsuranceAdapter, className: 'InsuranceManualContractAdapter', code: 'insurance-manual', capabilities: CAPABILITIES.filter((c) => c !== 'verifyWebhook'), mapper: STATUS, ops: OPS, idempotentOps: ['quote', 'propose', 'submitClaim'], // o sinistro manual tem o identificador derivado de `claimRef`: repetir devolve o mesmo registro
   makeLegacy: () => new ManualInsuranceWorkflow(),
 });
 

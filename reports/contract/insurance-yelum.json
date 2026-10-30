@@ -1,0 +1,94 @@
+{
+  "provider": "insurance-yelum",
+  "domain": "INSURANCE",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T09:54:09.136Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "quote",
+    "propose",
+    "getPolicy",
+    "getStatus",
+    "submitClaim",
+    "verifyWebhook"
+  ],
+  "adapterHash": "a6842d0a17e97392b7ce520e36aa9497e995342f6426ba80a0b6e495e2969695",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 24,
+      "passed": 24,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 24,
+      "passed": 24,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 24,
+      "passed": 24,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 15,
+      "passed": 15,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 13,
+      "passed": 13,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 128,
+  "passed": 128,
+  "status": "PASSED",
+  "errors": []
+}

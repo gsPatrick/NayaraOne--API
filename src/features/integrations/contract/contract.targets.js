@@ -12,8 +12,16 @@ const FIRST = Object.freeze(['messaging-sandbox']);
 
 /** Famílias de adapter que ainda não têm fixtures: a suíte delas entra no sprint da demanda indicada (a lista só encolhe). Casa pelo prefixo do código do fornecedor. */
 const PENDING_BY_DEMAND = Object.freeze({
-  'financing-': 'M9-D240', 'signature-': 'M9-D236', 'insurance-': 'M9-D238', 'fiscal-': 'M9-D241', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
+  'financing-': 'M9-D240', 'signature-': 'M9-D236', 'fiscal-': 'M9-D241', 'analytics-': 'M9-D243', 'social-': 'M9-D239',
   'storage-': 'M9-D242', 'identity-': 'M9-D242', 'ai-': 'M9-D011', anthropic: 'M9-D011', openai: 'M9-D011',
+});
+
+/**
+ * Adapters registrados cujo fornecedor não tem API utilizável: o adapter só reserva o código no registro e TODA operação recusa com o erro de sempre. Não há comportamento de
+ * contrato a provar (o caminho feliz não existe); o que se prova é a recusa (teste m9d238.contrato). Quando o fornecedor ganhar API, o adapter ganha fixtures e sai daqui.
+ */
+const WITHOUT_PUBLIC_API = Object.freeze({
+  'insurance-junto-seguros': 'Junto Seguros não tem documentação técnica pública sem parceria de corretora: toda operação recusa com PROCUREMENT_INSURANCE_PROVIDER_NOT_IMPLEMENTED.',
 });
 const pendingDemand = (code) => { const k = Object.keys(PENDING_BY_DEMAND).find((p) => code === p || code.startsWith(p)); return k ? PENDING_BY_DEMAND[k] : null; };
 
@@ -32,9 +40,10 @@ function coverage() {
   const alvos = new Set(listTargets().map((t) => t.providerCode));
   return {
     covered: registrados.filter((c) => alvos.has(c)),
-    pending: registrados.filter((c) => !alvos.has(c) && pendingDemand(c)).map((c) => ({ providerCode: c, demand: pendingDemand(c) })),
-    uncovered: registrados.filter((c) => !alvos.has(c) && !pendingDemand(c)),
+    pending: registrados.filter((c) => !alvos.has(c) && !WITHOUT_PUBLIC_API[c] && pendingDemand(c)).map((c) => ({ providerCode: c, demand: pendingDemand(c) })),
+    withoutApi: registrados.filter((c) => !alvos.has(c) && WITHOUT_PUBLIC_API[c]).map((c) => ({ providerCode: c, reason: WITHOUT_PUBLIC_API[c] })),
+    uncovered: registrados.filter((c) => !alvos.has(c) && !pendingDemand(c) && !WITHOUT_PUBLIC_API[c]),
   };
 }
 
-module.exports = { listTargets, coverage, FIRST, PENDING_BY_DEMAND, pendingDemand };
+module.exports = { listTargets, coverage, FIRST, PENDING_BY_DEMAND, WITHOUT_PUBLIC_API, pendingDemand };

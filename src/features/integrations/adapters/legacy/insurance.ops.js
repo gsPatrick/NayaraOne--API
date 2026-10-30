@@ -50,4 +50,10 @@ const OPS = Object.freeze({
 /** Esquema e evento normalizado do webhook de status da apólice (iguais para todas as seguradoras que o têm). */
 const WEBHOOK = Object.freeze({ schemas: { '*': { v1: SCHEMA_EVENTO } }, derivesEventId: false, toInternalEvent });
 
-module.exports = { STATUS, CAPABILITIES, CAPABILITIES_WEBHOOK, OPS, WEBHOOK, quoteRequestOf, proposeRequestOf };
+/**
+ * As seguradoras reais (Porto Seguro e Yelum) não oferecem consulta por chave de idempotência: a pergunta "essa proposta/esse sinistro existe?" não tem resposta conclusiva, então o envio
+ * incerto vai à revisão humana em vez de reenviar às cegas (a reconciliação trata `INTEGRATION_LOOKUP_UNSUPPORTED` como "sem resposta conclusiva", como no Santander).
+ */
+const semConsultaPorChave = async () => { throw Object.assign(new Error('A seguradora não oferece consulta por chave de idempotência.'), { code: 'INTEGRATION_LOOKUP_UNSUPPORTED' }); };
+
+module.exports = { semConsultaPorChave, STATUS, CAPABILITIES, CAPABILITIES_WEBHOOK, OPS, WEBHOOK, quoteRequestOf, proposeRequestOf };

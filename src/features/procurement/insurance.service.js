@@ -24,11 +24,13 @@ const { callInsurer, proposalKey } = require('./insurance/insurance.call');
 const { providerKeyOf } = require('./insurance/insurance.connection');
 const { publishQuoteReceived, publishPolicyIssued } = require('./insurance/insurance.events');
 const { installInsuranceEvents } = require('./insurance/insurance.webhook');
+const { installInsuranceReactions } = require('./insurance/insurance.react');
 const { quoteDomainObject, quoteFromResponse, proposeDomainObject, claimDomainObject, pendingTaskOf, providerResultOf } = require('./insurance/insurance.domain');
 const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
 const filesService = require('../files/files.service');
 
+installInsuranceReactions(); // M9-D220: o aviso ao responsável e a apólice vigente por evento interno do envio
 installInsuranceEvents(); // M9-D238: o status da apólice que a seguradora informa por webhook assinado entra pelo worker da caixa de entrada
 
 // Insurance Hub (Marco 7, contrato 00000009 Anexo I — "COMPRAS/PROCUREMENT + SEGUROS"):

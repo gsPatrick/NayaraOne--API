@@ -1,0 +1,93 @@
+{
+  "provider": "insurance-manual",
+  "domain": "INSURANCE",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T09:54:08.033Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "quote",
+    "propose",
+    "getPolicy",
+    "getStatus",
+    "submitClaim"
+  ],
+  "adapterHash": "f65dfab4b2120ceb757233c1f108e4c90f31b9f265609a79ae543286a52644fd",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 15,
+      "passed": 15,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 13,
+      "passed": 13,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 112,
+  "passed": 112,
+  "status": "PASSED",
+  "errors": []
+}

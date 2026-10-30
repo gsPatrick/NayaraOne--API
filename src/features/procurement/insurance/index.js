@@ -15,8 +15,10 @@ const { resolveInsuranceWebhookSecret, credentialInVault } = require('./insuranc
 const { installInsuranceEvents, applyInsuranceEvent } = require('./insurance.webhook');
 const { readInsuranceParams, PADROES } = require('./insurance.params');
 const { INSURANCE_SETTINGS_SCHEMA } = require('./insurance.settings');
+const { installInsuranceReactions } = require('./insurance.react');
 
 installInsuranceEvents();
+installInsuranceReactions(); // M9-D220: o aviso ao responsável e a apólice vigente por evento interno do envio
 
 module.exports = {
   callInsurer, proposalKey, ensureInsuranceConnection, PROVIDER_CODES, providerKeyOf, addPolicyVersion, listPolicyVersions, currentVersion, completeTask, cancelTask, listTasks,

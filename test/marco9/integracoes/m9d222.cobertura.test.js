@@ -67,7 +67,7 @@ test('suite_roda_no_primeiro_adapter_sandbox_antes_dos_demais', () => {
   assert.equal(alvos[0], 'messaging-sandbox');
   assert.ok(alvos.length >= 4 && alvos.includes('signature-sandbox'));
   const { coverage } = contract;
-  assert.deepEqual(coverage().uncovered.filter((c) => !c.startsWith('insurance-')), [], 'todo adapter registrado tem suíte ou pendência declarada com a demanda do sprint');
+  assert.deepEqual(coverage().uncovered, [], 'todo adapter registrado tem suíte ou pendência declarada com a demanda do sprint');
 });
 
 test('contrato_relatorio_por_adapter_e_portao_de_liberacao', async () => {

@@ -5,7 +5,7 @@ const { PortoSeguroInsuranceAdapter, YelumInsuranceAdapter, JuntoSegurosInsuranc
 const { getDecryptedSetting, getSetting } = require('../../../settings/settings.service');
 const AppError = require('../../../../utils/AppError');
 const { wrapLegacy } = require('../legacyWrap');
-const { STATUS, OPS, CAPABILITIES, CAPABILITIES_WEBHOOK, WEBHOOK } = require('./insurance.ops');
+const { STATUS, OPS, CAPABILITIES, CAPABILITIES_WEBHOOK, WEBHOOK, semConsultaPorChave } = require('./insurance.ops');
 
 const configMissing = (nome) => AppError.badRequest(`O provedor de seguro ${nome} está selecionado, mas a credencial está incompleta — corrija a configuração antes de cotar, emitir ou enviar sinistro.`, 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
 
@@ -41,9 +41,9 @@ async function makeYelum(ctx, meta) {
   return new YelumInsuranceAdapter({ apiKey: segredo.value.reveal(), baseUrl });
 }
 
-/** O adapter da seguradora real é criado na primeira operação (precisa do segredo do cofre e da configuração da empresa), com o contrato do port. Nenhuma das duas consulta lookups: o envio incerto vai à revisão humana. */
+/** O adapter da seguradora real é criado na primeira operação (precisa do segredo do cofre e da configuração da empresa), com o contrato do port. Nenhuma das duas consulta pela chave (`semConsultaPorChave`): o envio incerto vai à revisão humana. */
 const real = (className, code, make, hosts) => wrapLegacy({
-  Port: InsuranceAdapter, className, code, capabilities: CAPABILITIES_WEBHOOK, makeLegacy: make, mapper: STATUS, ops: OPS, idempotentOps: ['propose'], health: saudeCofre, hosts, ...WEBHOOK,
+  Port: InsuranceAdapter, className, code, capabilities: CAPABILITIES_WEBHOOK, makeLegacy: make, mapper: STATUS, ops: OPS, idempotentOps: ['propose'], lookups: { findByIdempotencyKey: semConsultaPorChave }, health: saudeCofre, hosts, ...WEBHOOK,
 });
 
 const InsurancePortoContractAdapter = real('InsurancePortoContractAdapter', 'insurance-porto-seguro', makePorto, ['portoapi.portoseguro.com.br', 'portoapi-hml.portoseguro.com.br']);

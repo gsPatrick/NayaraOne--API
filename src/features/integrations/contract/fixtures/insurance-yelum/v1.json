@@ -1,0 +1,52 @@
+{
+  "provider": "insurance-yelum",
+  "apiVersion": "v1",
+  "description": "Yelum sob o contrato do port InsuranceAdapter, contra o objeto antigo duplo de laboratório (credencial do cofre e rede não entram no teste de contrato).",
+  "legacyDouble": "insurance-yelum",
+  "requests": {
+    "quote": {
+      "policyRef": "apolice-contrato-001",
+      "insuredAmount": 500000,
+      "propertyType": "APARTMENT"
+    },
+    "propose": {
+      "policyRef": "apolice-contrato-001",
+      "premiumAmount": 1200,
+      "effectiveDate": "2026-11-01",
+      "expiryDate": "2027-11-01"
+    },
+    "getPolicy": {
+      "externalResourceIdFrom": "propose"
+    },
+    "getStatus": {
+      "externalResourceIdFrom": "propose"
+    },
+    "submitClaim": {
+      "claimRef": "sinistro-contrato-001",
+      "externalPolicyNumber": "APL-0001",
+      "description": "Sinistro de laboratório",
+      "claimAmount": 800
+    },
+    "verifyWebhook": {
+      "rawBody": "{}",
+      "headers": {}
+    }
+  },
+  "noResourceId": [
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "ACTIVE": "ACTIVE",
+    "ISSUED": "ISSUED",
+    "QUOTED": "QUOTED",
+    "PENDING": "PENDING",
+    "UNDER_REVIEW": "UNDER_REVIEW",
+    "APPROVED": "APPROVED",
+    "DENIED": "DENIED",
+    "SETTLED": "SETTLED",
+    "EXPIRED": "EXPIRED",
+    "CANCELLED": "CANCELED"
+  },
+  "unknownStatus": "em_subscricao",
+  "renewal": false
+}
