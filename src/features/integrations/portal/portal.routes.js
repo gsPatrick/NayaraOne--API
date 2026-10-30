@@ -15,4 +15,6 @@ portalListingsRouter.use(authMiddleware, tenantMiddleware);
 portalListingsRouter.get('/properties/:id/portal-listings', requirePermission('properties:read'), controller.list);
 portalListingsRouter.post('/properties/:id/portal-listings/publish', requirePermission('properties:update'), controller.publish);
 
+portalListingsRouter.post('/properties/:id/portal-listings/unpublish', requirePermission('properties:update'), controller.unpublish);
+
 module.exports = portalListingsRouter;

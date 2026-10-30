@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 600. Rotas só com login ou públicas: 26.
+Rotas com permissão exigida: 601. Rotas só com login ou públicas: 26.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -631,6 +631,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/properties/:id/owners` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/owners` | `properties:update` | não |
 | `POST` | `/api/v1/properties/:id/portal-listings/publish` | `properties:update` | não |
+| `POST` | `/api/v1/properties/:id/portal-listings/unpublish` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/portal-listings` | `properties:read` | não |
 | `GET` | `/api/v1/properties/:id/price-history` | `properties:read` | não |
 | `DELETE` | `/api/v1/properties/:id` | `properties:delete` | não |

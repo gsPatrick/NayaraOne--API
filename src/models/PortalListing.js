@@ -23,6 +23,11 @@ module.exports = (sequelize) => sequelize.define(
     lastSyncedAt: { type: DataTypes.DATE, allowNull: true, field: 'last_synced_at' },
     lastError: { type: DataTypes.TEXT, allowNull: true, field: 'last_error' },
     supersededAt: { type: DataTypes.DATE, allowNull: true, field: 'superseded_at' },
+    // M9-D233: controle da despublicação (pedido, reenvios, próxima conferência do job e esgotamento).
+    unpublishRequestedAt: { type: DataTypes.DATE, allowNull: true, field: 'unpublish_requested_at' },
+    unpublishAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'unpublish_attempts' },
+    unpublishNextAttemptAt: { type: DataTypes.DATE, allowNull: true, field: 'unpublish_next_attempt_at' },
+    unpublishExhaustedAt: { type: DataTypes.DATE, allowNull: true, field: 'unpublish_exhausted_at' },
   },
   { schema: 'real_estate', tableName: 'portal_listings', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at', underscored: true },
 );

@@ -12,6 +12,9 @@ const { minimizedListing } = require('./portal.minimize');
 const { ensurePortalAdaptersRegistered } = require('./portal.boot');
 const { REQUIRED_MISSING_CODE, REQUIRED_MISSING_MESSAGE } = require('./portal.constants');
 
+/** Texto que a tela mostra por estado do anúncio (M9-D233: remoção só termina com a confirmação do portal). */
+const STATUS_MESSAGES = Object.freeze({ UNPUBLISHING: 'Remoção aguardando confirmação do portal', REJECTED: 'Anúncio reprovado: complete o cadastro do imóvel ou veja o motivo', PUBLISHING: 'Publicação aguardando confirmação do portal' });
+
 const notFound = () => AppError.notFound('Nenhuma integração ativa para este recurso: configure em Integrações.', 'INTEGRATION_CONNECTION_NOT_FOUND');
 
 /** Os portais contratados (connection ACTIVE de fornecedor da família PORTAL) da empresa, opcionalmente só os pedidos. */
@@ -30,7 +33,8 @@ const audit = (ctx, listing, action, antes, depois, reason, transaction) => regi
 
 const toItem = (con, listing, extra = {}) => ({
   connectionId: con.id, providerCode: con.providerCode, listingId: listing.id, status: listing.status, externalListingId: listing.externalListingId || null, rejectionReason: listing.rejectionReason || null,
-  mappingVersion: listing.mappingVersion, fieldsDropped: listing.fieldsDropped || [], dispatchId: null, noop: false, operation: null, ...extra,
+  mappingVersion: listing.mappingVersion, fieldsDropped: listing.fieldsDropped || [], dispatchId: null, noop: false, operation: null,
+  statusMessage: STATUS_MESSAGES[listing.status] || null, lastError: listing.lastError || null, ...extra,
 });
 
 /** Publica (ou atualiza) o imóvel em UM portal. Recusa internamente o que falta (sem chamar o portal), compara o hash e cria o envio só quando o conteúdo mudou. */

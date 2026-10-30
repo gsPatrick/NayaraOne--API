@@ -22,10 +22,10 @@ const carregar = async () => {
 };
 
 /** Conexão ATIVA do portal (desativa a anterior do mesmo fornecedor). */
-async function portalAtivo(providerCode) {
+async function portalAtivo(providerCode, { manter = false } = {}) {
   const c = await comTenant(tenant, (t) => registry.createConnection({ providerCode, environment: registry.getServerEnvironment(), label: `QA-M9 ${providerCode} ${uniqueSuffix()}` }, ctxDe(tenant), t));
   await comTenant(tenant, async (t) => {
-    await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code = :p AND status = 'ACTIVE' AND id <> :id", { replacements: { c: tenant.companyId, p: providerCode, id: c.id }, transaction: t });
+    if (!manter) await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code = :p AND status = 'ACTIVE' AND id <> :id", { replacements: { c: tenant.companyId, p: providerCode, id: c.id }, transaction: t });
     await transitionConnection(c.id, 'ACTIVE', ctxDe(tenant), t);
   });
   return c;
