@@ -56,3 +56,12 @@ test('m9d641 os tipos sem vencimento são parâmetro: sem DEPOSIT na lista a cau
   const result = (await kit.kpis(t)).rent.kpis['rent.guarantees_expiring'];
   assert.deepEqual([result.status, result.value, result.details.withoutDate], ['INCOMPLETE', null, '2']);
 });
+
+test('m9d641 o número das garantias vencendo é o mesmo com o relógio às 23:30 e às 00:30 de São Paulo do dia da data-base', async () => {
+  for (const instant of ['2026-10-29T02:30:00Z', '2026-10-29T03:30:00Z']) { // 23:30 de 28/10 e 00:30 de 29/10 em São Paulo (UTC já é 29/10 nos dois)
+    kit.registry.clock.setClock(() => new Date(instant));
+    const result = (await kit.kpis(env.cX, kit.AS_OF)).rent.kpis['rent.guarantees_expiring'];
+    assert.deepEqual([result.status, result.value], ['OK', '3'], `data-base ${kit.AS_OF} lida com o relógio em ${instant}`);
+  }
+  kit.registry.clock.setClock(() => kit.NOW);
+});

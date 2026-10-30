@@ -32,7 +32,7 @@ function declareDomainChecks({ model, short, domain, metrics, completeness, inva
     t.completeness({
       code: `${short}_${completeness.field}_completeness`, field: completeness.field, metrics,
       async measure(ctx) {
-        const [row] = await sql.rows(ctx, completeness.sql);
+        const [row] = await sql.rows(ctx, completeness.sql, completeness.replacements ? await completeness.replacements(ctx) : {}); // `replacements(ctx)`: parâmetros do administrador que a medição respeita (M9-D641)
         return { total: Number(row.total), nulls: Number(row.nulls) };
       },
     }),
