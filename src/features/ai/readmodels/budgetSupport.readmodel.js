@@ -100,6 +100,11 @@ async function addReservation(ids, estimate, guard, transaction) {
   return rows.map((r) => r.id);
 }
 
+/** Trava (FOR UPDATE, em ordem de id) os orçamentos que seguraram a reserva, para o acerto e a rechecagem do limite serem atômicos. */
+function lockByIds(ids, transaction) {
+  return select('SELECT id FROM ai.budgets WHERE id IN (:ids) ORDER BY id FOR UPDATE', { ids }, transaction);
+}
+
 /** Troca a reserva pelo custo real em todos os orçamentos que a seguraram; devolve as linhas já atualizadas. */
 function swapReservation(ids, estimate, actual, transaction) {
   return select(
@@ -143,6 +148,6 @@ async function usersWithPermission(ctx, code, transaction) {
 }
 
 module.exports = {
-  lockApplicable, peekApplicable, copyPreviousPeriods, insertBudget, findById, updateBudget, listForPeriod, overLimit, addReservation, swapReservation,
+  lockApplicable, peekApplicable, copyPreviousPeriods, insertBudget, findById, updateBudget, listForPeriod, overLimit, addReservation, lockByIds, swapReservation,
   insertAlert, listAlerts, usersWithPermission,
 };

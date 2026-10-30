@@ -6,6 +6,7 @@ const { readBudgetParams } = require('./budgets.params');
 const { budgetPolicy } = require('./budgets.policy');
 const { reaches, toMicro, normalize } = require('./budgets.money');
 const { raiseAlerts } = require('./budgets.alerts');
+const { recordOverrun } = require('./budgets.overrun');
 const { pickGoverning, ensureCurrentPeriod, agentCriticality } = require('./budgets.resolve');
 const { ROUTING_PATHS, PAID_PATHS, CLASS_BY_PATH, CRITICALITY } = require('./budgets.constants');
 
@@ -52,17 +53,23 @@ async function reserve(ctx, input, transaction) {
   return { free: false, state: policy.state, routingPath: path, budgetIds: ids, governingId: governing.id, estimate: normalize(estimate) };
 }
 
-/** Troca a reserva pelo custo real e dispara os alertas dos limiares alcançados. */
+/**
+ * Troca a reserva pelo custo real e dispara os alertas dos limiares alcançados. O custo real nunca é recusado (a chamada já foi feita e
+ * custou), mas depois da troca o limite é REVERIFICADO sob o lock das linhas: o que passou do limite é o excedente, devolvido em `overrun`
+ * e gravado na trilha (AI_BUDGET_OVERRUN) para o administrador ver; o orçamento já esgotado barra as próximas reservas.
+ */
 async function settle(ctx, reservation, actualCost, transaction) {
-  if (!reservation || reservation.free) return { raised: [] };
+  if (!reservation || reservation.free) return { raised: [], overrun: [] };
   const actual = normalize(actualCost ?? '0');
+  await repo.lockByIds(reservation.budgetIds, transaction);
   const rows = await repo.swapReservation(reservation.budgetIds, reservation.estimate, actual, transaction);
   const params = await readBudgetParams(ctx, transaction);
+  const overrun = await recordOverrun(ctx, rows, actual, transaction);
   const raised = [];
   for (const row of rows) {
     for (const threshold of await raiseAlerts(ctx, row, params.thresholds, transaction)) raised.push({ budgetId: row.id, threshold });
   }
-  return { raised };
+  return { raised, overrun };
 }
 
 /** Falha no meio: devolve a reserva sem consumir nada. */
@@ -81,8 +88,8 @@ async function spendWithBudget(ctx, input, call, transaction) {
     await release(ctx, reservation, transaction);
     throw err;
   }
-  const { raised } = await settle(ctx, reservation, outcome && outcome.cost, transaction);
-  return { ...outcome, reservation, alertsRaised: raised };
+  const { raised, overrun } = await settle(ctx, reservation, outcome && outcome.cost, transaction);
+  return { ...outcome, reservation, alertsRaised: raised, overrun };
 }
 
 module.exports = { reserve, settle, release, spendWithBudget };
