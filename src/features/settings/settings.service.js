@@ -24,15 +24,17 @@ const { CADENCE_SETTINGS_SCHEMA } = require('../../features/marketing/automation
 const { SUPPRESSION_SETTINGS_SCHEMA } = require('../../features/marketing/suppression/suppression.settings');
 const { CATALOG_SETTINGS_SCHEMA, IntegrationHttpClient } = require('../integrations');
 const { SECRET_SETTINGS_SCHEMA } = require('../integrations/secrets/secrets.settings');
-const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
 const { HEALTH_SETTINGS_SCHEMA } = require('../integrations/health/health.settings');
 const { CIRCUIT_SETTINGS_SCHEMA } = require('../integrations/health/circuit.settings');
 const { ALERT_SETTINGS_SCHEMA } = require('../integrations/health/alerts/alerts.settings');
+const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settings');
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
 const { SIGNATURE_SETTINGS_SCHEMA } = require('../legal/signature/signature.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
+const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insurance.settings');
+const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
@@ -40,15 +42,14 @@ const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actio
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
-const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { MESSAGING_SETTINGS_SCHEMA } = require('../crm/messaging/messaging.settings');
 const { CONTRACT_SETTINGS_SCHEMA } = require('../integrations/contract/contract.settings');
-const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { DOMAIN_SETTINGS_SCHEMA } = require('../integrations/domain/domain.settings');
+const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { TRANSPORT_SETTINGS_SCHEMA } = require('../integrations/http/transport.settings');
 const { RETENTION_SETTINGS_SCHEMA } = require('../integrations/retention/retention.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
-const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/acceptance.settings');
+const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
 const { READ_MODEL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/readModel.settings');
 const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/rebuild.settings');
@@ -56,47 +57,47 @@ const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metric
 const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/drilldown.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
 const { FINANCE_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/financeKpi.settings');
-const { FINANCE_WINDOW_SETTINGS_SCHEMA } = require('../analytics/read-models/financeWindow.settings');
 const { CASH_SETTINGS_SCHEMA } = require('../analytics/read-models/cash.settings');
+const { FINANCE_WINDOW_SETTINGS_SCHEMA } = require('../analytics/read-models/financeWindow.settings');
 const { CRM_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/crmKpi.settings');
 const { FINANCE_RESULT_SETTINGS_SCHEMA } = require('../analytics/read-models/financeResults.settings');
-const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
-const { QUERY_SETTINGS_SCHEMA } = require('../analytics/metrics/query.settings');
 const { FINANCE_DELINQUENCY_SETTINGS_SCHEMA } = require('../analytics/read-models/financeDelinquency.settings');
 const { PANEL_SETTINGS_SCHEMA } = require('../analytics/panelSettings'); // M9-D626
+const { LOAD_SETTINGS_SCHEMA } = require('../analytics/loadTest.settings');
+const { QUERY_SETTINGS_SCHEMA } = require('../analytics/metrics/query.settings');
 const { DECISAO_FILA_SETTINGS_SCHEMA } = require('../analytics/read-models/decisaoFilaKpi.settings');
+const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
+const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
+const { IA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/iaKpi.settings');
+const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
+const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
+const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
 const { COMERCIAL_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/comercial.settings');
 const { IMOVEIS_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/imoveisKpi.settings');
 const { CORRETORES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/corretoresKpi.settings');
 const { LOCACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacao.settings');
 const { OBRA_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obra.settings');
-const { INV_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/estoqueKpi.settings');
-const { OBRA_COST_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraPerdasKpi.settings');
 const { OBRA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraKpi.settings');
 const { OBRA_OPERACAO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraOperacaoKpi.settings');
+const { OBRA_COST_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/obraPerdasKpi.settings');
+const { INV_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/estoqueKpi.settings');
 const { JURIDICO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridico.settings');
 const { JUR_COR_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/juridicoCorrespondenteKpi.settings');
 const { SUPPORT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/atendimentoKpi.settings');
-const { MKT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingKpi.settings');
 const { RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoPrazosKpi.settings');
+const { RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoCarteiraKpi.settings');
 const { RENTAL_CARE_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoAtendimentoKpi.settings');
+const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
+const { MKT_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingKpi.settings');
 const { COMMAND_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/commandEvents.settings');
 const { CENTRO_SETTINGS_SCHEMA } = require('../analytics/centroSettings'); // M9-D685
 const { HEALTH_SETTINGS_SCHEMA: SAUDE_GERAL_SETTINGS_SCHEMA } = require('../analytics/healthSettings'); // M9-D686
-const { TECH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologia.settings');
-const { TECH_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/tecnologiaKpi.settings');
-const { IA_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/iaKpi.settings');
-const { QUALITY_SETTINGS_SCHEMA } = require('../../features/analytics/quality/quality.settings');
-const { RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/locacaoCarteiraKpi.settings');
-const { CACHE_SETTINGS_SCHEMA } = require('../../features/analytics/security/cache.settings');
-const { MV_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/matview.settings');
-const { MKT_ATENDIMENTO_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/marketingAtendimento.settings');
 const { NAY_TOOLS_SETTINGS_SCHEMA } = require('../../features/analytics/nayToolsSettings');
 const { SNAPSHOT_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/snapshots.settings');
 const { BI_ALERT_SETTINGS_SCHEMA } = require('../../features/analytics/alerts/engine.settings');
-const { EXPORT_SETTINGS_SCHEMA } = require('../../features/analytics/exports/export.settings');
 const { BRIEF_SETTINGS_SCHEMA } = require('../../features/analytics/briefSettings');
-const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
+const { EXPORT_SETTINGS_SCHEMA } = require('../../features/analytics/exports/export.settings');
+const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/acceptance.settings');
 
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
@@ -168,7 +169,7 @@ const SETTINGS_SCHEMA = {
   // parceria de corretora") mas NUNCA tem settings de credencial aqui — não há documentação
   // técnica pública pra essa seguradora, então não existe campo real pra pedir (ver
   // InsuranceAdapter.js — JuntoSegurosInsuranceAdapter lança sempre que instanciada).
-  'procurement.insurance_provider': { type: 'string', enum: ['sandbox', 'porto_seguro', 'junto_seguros', 'yelum'] },
+  'procurement.insurance_provider': { type: 'string', enum: ['sandbox', 'porto_seguro', 'junto_seguros', 'yelum', 'manual'] }, // 'manual' (M9-D238): seguradora sem API, com tarefas a uma pessoa
   // Porto Seguro: OAuth2 client_credentials CONFIRMADO (dev.portoseguro.com.br/api-portal/
   // content/autorizacao) — client_id/client_secret, não um api_key único.
   'procurement.porto_seguro_environment': { type: 'string', enum: ['sandbox', 'production'] },
@@ -213,13 +214,13 @@ const SETTINGS_SCHEMA = {
   ...TYPES_SETTINGS_SCHEMA,
   // Marco 9, M9-D407 — validador factual: tolerância de área, dicionário de características e telefones da empresa.
   ...FACTUAL_SETTINGS_SCHEMA,
-  // Marco 9, M9-D431 - janela da atribuição (first-touch e last-touch) em dias.
+  // Marco 9, M9-D431 — janela da atribuição (first-touch e last-touch) em dias.
   ...TRACKING_SETTINGS_SCHEMA,
-  // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // Marco 9, M9-D417 — cadência, quiet hours e frequency cap do Marketing (lidos por getMarketingParam; escrita exige marketing:automation:manage).
   ...CADENCE_SETTINGS_SCHEMA,
   // Marco 9, M9-D418 — listas de finalidade do consentimento, palavras de opt-out e janela de atendimento do canSend.
   ...SUPPRESSION_SETTINGS_SCHEMA,
+  // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
   'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },
@@ -241,14 +242,14 @@ const SETTINGS_SCHEMA = {
   ...CATALOG_SETTINGS_SCHEMA,
   // Marco 9, M9-D202 — cofre de segredos: cache, janela de graça, idade máxima BANK, avisos, prefixo da empresa e MFA do BANK.
   ...SECRET_SETTINGS_SCHEMA,
-  // Marco 9, M9-D207 — erros de integração: janela de agrupamento, retenção e tentativas até a severidade subir.
-  ...ERRORS_SETTINGS_SCHEMA,
   // Marco 9, M9-D206 — saúde dos fornecedores: dado velho, janela do job, retenção, falhas até DOWN e meta de SLO por criticidade.
   ...HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D217 — circuit breaker: falhas seguidas até abrir, cooldown, chamadas de teste em HALF_OPEN, sucessos para fechar e espera de quem não coube.
   ...CIRCUIT_SETTINGS_SCHEMA,
   // Marco 9, M9-D224 — alertas das integrações: repetição (antiflap), papéis avisados, minutos de circuito aberto até alertar e intervalo da avaliação.
   ...ALERT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D207 — erros de integração: janela de agrupamento, retenção e tentativas até a severidade subir.
+  ...ERRORS_SETTINGS_SCHEMA,
   // Marco 9, M9-D208 — sincronização retomável: página, lease, sobreposição, falhas até parar e limite de sync parado por criticidade.
   ...SYNC_SETTINGS_SCHEMA,
   // Marco 9, M9-D203 — caixa de entrada de webhooks: tentativas, retenção do corpo e da linha, espera entre tentativas, tamanho e cabeçalhos guardados.
@@ -262,33 +263,35 @@ const SETTINGS_SCHEMA = {
   ...PORTAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
-  // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).
-  ...MINIMIZATION_SETTINGS_SCHEMA,
-  // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
+  // Marco 9, M9-D238 — seguradoras: marcos de vencimento, cotação de renovação e prazo da tarefa manual.
+  ...INSURANCE_SETTINGS_SCHEMA,
+  // Marco 9, M9-D241 — NFS-e: série do RPS da empresa.
+  ...NFSE_SETTINGS_SCHEMA,
   // Marco 9, M9-D226 — contingência das integrações: testes de saúde para encerrar, prazo da fila por modo (e do banco), papéis avisados e responsável da tarefa manual.
   ...CONTINGENCY_SETTINGS_SCHEMA,
   // Marco 9, M9-D250 — ações do operador: tempo do teste de conexão, tentativas extras do retry humano e MFA na rotação de credencial.
   ...ACTIONS_SETTINGS_SCHEMA,
+  // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).
+  ...MINIMIZATION_SETTINGS_SCHEMA,
+  // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
   ...PUBLICATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
-  // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.
-  ...DEPAUDIT_SETTINGS_SCHEMA,
   // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.
   ...MESSAGING_SETTINGS_SCHEMA,
   // Marco 9, M9-D222 — contract tests dos adapters: validade do relatório que libera a connection.
   ...CONTRACT_SETTINGS_SCHEMA,
-  // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
-  // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.
-  ...MESSAGING_SETTINGS_SCHEMA,
   // Marco 9, M9-D220 — integridade do domínio: tempo que a ação do usuário espera o fornecedor antes de responder "aceito".
   ...DOMAIN_SETTINGS_SCHEMA,
   // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.
   ...DEPAUDIT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
   ...TRANSPORT_SETTINGS_SCHEMA,
   ...RETENTION_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
+  ...SECURITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D604 — versionamento de métricas do BI: mínimo de caracteres do motivo da mudança de fórmula.
   ...METRICS_SETTINGS_SCHEMA,
   // Marco 9, M9-D607 — atualização dos read models do BI: teto de linhas por evento, intervalo do lote, lote e agenda do job, tempo máximo da consulta.
@@ -302,35 +305,44 @@ const SETTINGS_SCHEMA = {
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
   // Marco 9, M9-D624 — KPIs de conciliações pendentes e anomalias: idade máxima do extrato, faixas de idade e owner de cada KPI.
   ...FINANCE_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
+  ...CASH_SETTINGS_SCHEMA,
   ...FINANCE_WINDOW_SETTINGS_SCHEMA,
   // Marco 9, M9-D630 / M9-D631 — KPIs do funil comercial: owner de cada KPI, limites de qualidade (origem vazia, sem motivo, amostra mínima, sem corretor) e ordem dos estágios.
   ...CRM_KPI_SETTINGS_SCHEMA,
   ...FINANCE_RESULT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D622 — KPIs de inadimplência: faixas de atraso do valor inadimplente e owner de cada um dos três indicadores.
+  ...FINANCE_DELINQUENCY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D626 — painel Financeiro: limiar dos cartões de conciliações pendentes e anomalias abertas quando não há alerta publicado.
+  ...PANEL_SETTINGS_SCHEMA,
   // Marco 9, M9-D699 — teste de carga do BI: quanto o p95 do fluxo operacional pode subir com os painéis sob carga.
   ...LOAD_SETTINGS_SCHEMA,
   // Marco 9, M9-D702 — API de métricas: quantas linhas da decomposição por dimensão a resposta traz.
   ...QUERY_SETTINGS_SCHEMA,
   // Marco 9, M9-D709 — fila de decisão do Centro de Comando: owner de cada KPI e idade a partir da qual o item pendente é "envelhecido".
   ...DECISAO_FILA_SETTINGS_SCHEMA,
-  // Marco 9, M9-D616 — read models de Comercial/Imóveis: oportunidade parada, janela de recálculo dos números diários, resposta da NAY e faixas de imóvel sem venda.
-  // Marco 9, M9-D622 — KPIs de inadimplência: faixas de atraso do valor inadimplente e owner de cada um dos três indicadores.
-  ...FINANCE_DELINQUENCY_SETTINGS_SCHEMA,
-  // Marco 9, M9-D626 — painel Financeiro: limiar dos cartões de conciliações pendentes e anomalias abertas quando não há alerta publicado.
-  ...PANEL_SETTINGS_SCHEMA,
-  // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
-  ...CASH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D628 — read models de Tecnologia e IA: histórico em dias, sondas ligadas, intervalo das sondas e retenção dos sinais técnicos.
+  ...TECH_SETTINGS_SCHEMA,
+  // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.
+  ...TECH_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D681 — KPIs de IA: owner de cada um, limite de alerta do orçamento, semanas de histórico da qualidade e motivos de bloqueio com linha própria.
+  ...IA_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
+  ...QUALITY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
+  ...CACHE_SETTINGS_SCHEMA,
+  ...MV_SETTINGS_SCHEMA,
+  // Marco 9, M9-D616 / M9-D617 — read models de Comercial/Imóveis (oportunidade parada, janela de recálculo, faixas sem venda) e de Locação (tipos de contrato, prazo do repasse, notas).
   ...COMERCIAL_SETTINGS_SCHEMA,
   ...IMOVEIS_KPI_SETTINGS_SCHEMA,
   ...CORRETORES_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D617 — read models de Locação: tipos de contrato, prazo do repasse e nota de cada tipo de registro de atendimento (a janela da inadimplência é a da D615).
   ...LOCACAO_SETTINGS_SCHEMA,
   // Marco 9, M9-D618 — read models de Obras e Estoque: método de previsão, status de contrato da receita e tipos de item do estoque.
   ...OBRA_SETTINGS_SCHEMA,
-  // Marco 9, M9-D653 — KPIs de Estoque e Patrimônio: owner de cada KPI.
-  ...INV_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D652 — KPIs de desperdício, custo pós-obra e recorrência: owner de cada KPI e janela, mínimo, tamanho do ranking e limite de ocorrências sem classificação.
+  // Marco 9, M9-D652 / M9-D653 — KPIs de desperdício, custo pós-obra, recorrência e de Estoque/Patrimônio: owner de cada KPI e janela, mínimo e tamanho do ranking da recorrência.
   ...OBRA_COST_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D650 — KPIs de Obras no BI (avanço, custo e margem): owner de cada indicador.
+  ...INV_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D650 / M9-D651 — KPIs de Obras no BI: owner de cada indicador e limite de não conformidade sem causa.
   ...OBRA_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D651 — KPIs de Obras no BI (atrasos, medições e não conformidades): owner de cada indicador e limite de não conformidade sem causa.
   ...OBRA_OPERACAO_SETTINGS_SCHEMA,
@@ -340,45 +352,32 @@ const SETTINGS_SCHEMA = {
   ...JUR_COR_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D672 — KPIs de Atendimento: owner de cada um, horas e severidades do SLA por prioridade e limite de reclamações sem motivo.
   ...SUPPORT_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D670 / M9-D671 — KPIs de Marketing no BI: owner de cada um, janela da frequência e limites de qualidade.
-  ...MKT_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D641 — KPIs de prazos da Locação: owner de cada um e tipos de garantia que não têm vencimento.
   ...RENTAL_DEADLINES_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D640 — KPIs da carteira de Locação: owner de contratos ativos, vacância e inadimplência da locação e faixas de valor do aluguel.
+  ...RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D642 — KPIs de chamados, satisfação e repasses da Locação: owner de cada um.
   ...RENTAL_CARE_KPI_SETTINGS_SCHEMA,
+  // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
+  ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,
+  // Marco 9, M9-D670 / M9-D671 — KPIs de Marketing no BI: owner de cada um, janela da frequência e limites de qualidade.
+  ...MKT_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D710 — fatos do dia do Centro de Comando: janela em horas, valor relevante de pagamento e owner dos três indicadores.
   ...COMMAND_SETTINGS_SCHEMA,
   ...CENTRO_SETTINGS_SCHEMA, // M9-D685
   ...SAUDE_GERAL_SETTINGS_SCHEMA, // M9-D686
-  // Marco 9, M9-D628 — read models de Tecnologia e IA: histórico em dias, sondas ligadas, intervalo das sondas e retenção dos sinais técnicos.
-  ...TECH_SETTINGS_SCHEMA,
-  // Marco 9, M9-D680 — KPIs de Tecnologia: owner de cada um, janela de erro das integrações, limiar de falhas de autenticação, sondas ausentes, fila sem medição e motivos de bloqueio.
-  ...TECH_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D681 — KPIs de IA: owner de cada um, limite de alerta do orçamento, semanas de histórico da qualidade e motivos de bloqueio com linha própria.
-  // Marco 9, M9-D640 — KPIs da carteira de Locação: owner de contratos ativos, vacância e inadimplência da locação e faixas de valor do aluguel.
-  ...RENTAL_PORTFOLIO_KPI_SETTINGS_SCHEMA,
-  ...IA_KPI_SETTINGS_SCHEMA,
-  // Marco 9, M9-D696 — qualidade de dados do BI: faixa de linhas, nulos, tolerância da conciliação, severidades e limites de freshness por domínio.
-  ...QUALITY_SETTINGS_SCHEMA,
-  // Marco 9, M9-D698 — desempenho do BI: TTL do cache dos painéis (analytics.cache.ttl_segundos) e agenda das materialized views (analytics.mv.schedule).
-  ...CACHE_SETTINGS_SCHEMA,
-  // Marco 9, M9-D708 — ambiente do BI (LAB ou PRODUCAO, com a trava do aceite dos owners) e tolerância da diferença no aceite.
-  ...ACCEPTANCE_SETTINGS_SCHEMA,
-  ...MV_SETTINGS_SCHEMA,
-  // Marco 9, M9-D627 — read models de Marketing e Atendimento: dias que a agenda reconfere.
-  ...MKT_ATENDIMENTO_SETTINGS_SCHEMA,
   // Marco 9, M9-D695 — ferramentas da NAY Diretoria no BI: tamanho máximo das listas devolvidas.
   ...NAY_TOOLS_SETTINGS_SCHEMA,
   // Marco 9, M9-D609 — snapshot diário do BI: hora de execução (padrão 00:30 de São Paulo) e limite de dias do catch-up.
   ...SNAPSHOT_SETTINGS_SCHEMA,
   // Marco 9, M9-D691 — alert engine: cooldown por severidade, avaliações para resolver, intervalo, owner reserva e os alertas semente.
   ...BI_ALERT_SETTINGS_SCHEMA,
-  // Marco 9, M9-D701 — exportação do BI: limite de linhas de alto risco (MFA), validade do arquivo, validade do endereço, teto de linhas e tempo máximo de execução.
-  ...EXPORT_SETTINGS_SCHEMA,
   // Marco 9, M9-D693 / M9-D694 — briefing da NAY Diretoria: horários, limite de itens, papel e áreas, variação relevante, polaridade, fontes de causa e fechamentos.
   ...BRIEF_SETTINGS_SCHEMA,
-  // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
-  ...SECURITY_SETTINGS_SCHEMA,
+  // Marco 9, M9-D701 — exportação do BI: limite de linhas de alto risco (MFA), validade do arquivo, validade do endereço, teto de linhas e tempo máximo de execução.
+  ...EXPORT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D708 — ambiente do BI (LAB ou PRODUCAO, com a trava do aceite dos owners) e tolerância da diferença no aceite.
+  ...ACCEPTANCE_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };
@@ -682,16 +681,18 @@ async function getIntegrationsStatus(tenant, transaction) {
   // Insurance Hub (Marco 7): mesma distinção do Santander acima — nenhuma seguradora foi
   // testada contra credencial real, então "Conectado" aqui significa "configurado por
   // completo", não "testado contra a seguradora".
+  const { credentialInVault } = require('../procurement/insurance/insurance.secrets'); // carregado aqui: o módulo de segredos de seguro também lê as configurações
   const insuranceProvider = await getSetting('procurement.insurance_provider', tenant, transaction, 'sandbox');
   if (insuranceProvider === 'porto_seguro') {
     const [clientId, clientSecret] = await Promise.all([
       getDecryptedSetting('procurement.porto_seguro_client_id', tenant, transaction, null),
       getDecryptedSetting('procurement.porto_seguro_client_secret', tenant, transaction, null),
     ]);
-    const complete = Boolean(clientId && clientSecret);
+    // M9-D238: o segredo do cliente passa para o cofre na primeira operação e sai daqui; a credencial no cofre também conta como configurada.
+    const complete = Boolean(clientId && (clientSecret || await credentialInVault(tenant, 'porto_seguro', transaction)));
     result.insurance = { configured: complete, connected: complete, checkedAt };
   } else if (insuranceProvider === 'yelum') {
-    const apiKey = await getDecryptedSetting('procurement.yelum_api_key', tenant, transaction, null);
+    const apiKey = (await getDecryptedSetting('procurement.yelum_api_key', tenant, transaction, null)) || (await credentialInVault(tenant, 'yelum', transaction));
     result.insurance = { configured: Boolean(apiKey), connected: Boolean(apiKey), checkedAt };
   } else if (insuranceProvider === 'junto_seguros') {
     // Nunca "configurado" de verdade — não existe credencial real pra essa seguradora ainda
