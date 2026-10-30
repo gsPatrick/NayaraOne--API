@@ -58,3 +58,20 @@ test('portal_foto_so_pelo_ssrf_guard', async () => {
     assert.equal(/\bfetch\(|require\('(node:)?https?'\)|axios|got\(/.test(src), false, `${f} busca URL por fora do guarda`);
   });
 });
+
+test('portal_webhook_aplica_a_mesma_regra_do_sync', async () => {
+  // webhook do portal (quando houver) entra pelo framework e aplica o estado ao vínculo pelo id externo, gerando o mesmo evento de mudança
+  const { onPortalWebhook } = require('../../../src/features/integrations/portal/portal.events');
+  const imovel = await env.criarImovel(tenant);
+  const r = await publicar(imovel.id, [zap.id]);
+  await env.entregar(r.items[0].dispatchId);
+  await sincronizar();
+  const antes = (await env.vinculos(imovel.id))[0];
+  const ev = { resourceRef: antes.external_listing_id, externalStatus: 'REJECTED', data: { rejectionReason: 'ENDERECO_INVALIDO' } };
+  const aplicado = await comTenant(tenant, (t) => onPortalWebhook(env.ctxDe(tenant), { connectionId: zap.id, providerCode: 'portal-zap-sandbox' }, ev, t));
+  assert.equal(aplicado.applied, true);
+  const depois = (await env.vinculos(imovel.id))[0];
+  assert.deepEqual([depois.status, depois.rejection_reason], ['REJECTED', 'ENDERECO_INVALIDO']);
+  const desconhecido = await comTenant(tenant, (t) => onPortalWebhook(env.ctxDe(tenant), { connectionId: zap.id, providerCode: 'portal-zap-sandbox' }, { resourceRef: 'nao-existe', externalStatus: 'PUBLISHED' }, t));
+  assert.equal(desconhecido.applied, false);
+});
