@@ -35,6 +35,7 @@ const { SIGNATURE_SETTINGS_SCHEMA } = require('../legal/signature/signature.sett
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
+const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
@@ -257,6 +258,8 @@ const SETTINGS_SCHEMA = {
   ...SIGNATURE_SETTINGS_SCHEMA,
   // Marco 9, M9-D237 — pagamento bancário: página do extrato, tolerância de data da conciliação, idade mínima da consulta e confirmação sem valor informado.
   ...BANK_SETTINGS_SCHEMA,
+  // Marco 9, M9-D232 — portais: intervalo da leitura de status dos anúncios e anúncios por página do sync.
+  ...PORTAL_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D219 — minimização dos dados enviados: classificação máxima por família (só pode ser mais restritiva que o livro).

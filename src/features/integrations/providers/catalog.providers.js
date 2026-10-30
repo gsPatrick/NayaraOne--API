@@ -39,6 +39,9 @@ const EXISTING_PROVIDERS = Object.freeze([
     code: 'signature-clicksign', displayName: 'Assinatura digital — Clicksign', domain: 'SIGNATURE',
     capabilities: ['createEnvelope', 'getEnvelope', 'cancelEnvelope', 'downloadSigned', 'verifyWebhook'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.SIGNATURE, sandboxAvailable: false,
   },
+  // M9-D232: três portais sandbox com mapping, versão e capacidades próprios (o exemplo do livro: A converte VENDA em SALE, B exige bathrooms, C não tem vídeo).
+  ...[['portal-zap-sandbox', 'Portal A (estilo ZAP) — sandbox'], ['portal-vivareal-sandbox', 'Portal B (estilo Viva Real) — sandbox'], ['portal-olx-sandbox', 'Portal C (estilo OLX) — sandbox']]
+    .map(([code, nome]) => ({ code, displayName: nome, domain: 'PORTAL', capabilities: ['publishListing', 'updateListing', 'unpublishListing', 'getListingStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.PORTAL, sandboxAvailable: true })),
   // M9-D237: o Santander (PIX e boleto por mTLS) que já existia no Financeiro entra no catálogo com o contrato do port BankAdapter.
   {
     code: 'bank-santander', displayName: 'Banco — Santander (PIX e boleto)', domain: 'BANK',

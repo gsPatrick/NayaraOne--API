@@ -103,6 +103,7 @@ const modelDefiners = {
   PeriodClosureSnapshot: require('./PeriodClosureSnapshot'),
   BankStatementImport: require('./BankStatementImport'),
   BankStatementEntry: require('./BankStatementEntry'),
+  PortalListing: require('./PortalListing'),
   BankTransaction: require('./BankTransaction'),
   Reconciliation: require('./Reconciliation'),
   ApprovalRequest: require('./ApprovalRequest'),

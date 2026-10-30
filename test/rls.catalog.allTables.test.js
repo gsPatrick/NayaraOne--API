@@ -786,3 +786,16 @@ test('M9-D234: email_messages e email_message_events têm RLS, FORCE RLS e polí
     WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
   if (grants.length) assert.deepEqual([grants[0].msg_upd, grants[0].ev_ins], [true, true], 'GRANT ao role de runtime');
 });
+
+// M9-D232: real_estate.portal_listings (anúncio do imóvel em cada portal) com RLS, FORCE RLS, política por empresa e um anúncio ativo por (imóvel, portal).
+test('M9-D232: real_estate.portal_listings tem RLS, FORCE RLS, a política tenant_isolation e o índice único parcial (property_id, connection_id)', async () => {
+  const [rls] = await sequelize.query(`SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'real_estate' AND c.relname = 'portal_listings'`);
+  assert.equal(rls.length, 1, 'real_estate.portal_listings não existe');
+  assert.deepEqual([rls[0].rls, rls[0].force_rls], [true, true]);
+  const [pol] = await sequelize.query(`SELECT 1 FROM pg_policy p WHERE p.polname = 'tenant_isolation' AND p.polrelid = '"real_estate"."portal_listings"'::regclass`);
+  assert.equal(pol.length, 1, 'política tenant_isolation');
+  const [uniq] = await sequelize.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'real_estate' AND tablename = 'portal_listings' AND indexname = 'portal_listings_active_uidx'`);
+  assert.match(uniq[0].indexdef, /UNIQUE.*\(property_id, connection_id\).*superseded_at IS NULL/);
+  const [grant] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'real_estate.portal_listings', 'UPDATE') AS upd WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+  if (grant.length) assert.equal(grant[0].upd, true, 'GRANT ao role de runtime');
+});

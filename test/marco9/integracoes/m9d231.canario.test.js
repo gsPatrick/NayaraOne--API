@@ -89,3 +89,27 @@ test('portal_publicacao_registra_quem_autorizou_e_a_finalidade', async () => {
   const antes = await comTenant(tenant, (t) => Property.findByPk(imovel.id, { transaction: t }));
   assert.ok(antes, 'o imóvel segue existindo');
 });
+
+// M9-D232: o mesmo teste do livro roda sobre os adapters de portal reais da demanda (A, B e C sandbox) e sobre o portal-sandbox: o que o adapter recebe e guarda não tem CANARY.
+test('portal_payload_canario_sem_vazamento_adapters_de_portal', async () => {
+  const portalEnv = require('../_helpers/m9d232Env');
+  const portal = require('../../../src/features/integrations/portal');
+  const store = require('../../../src/features/integrations/providers/portal/sandbox/portal.sandbox.store');
+  await portalEnv.carregar();
+  const portais = await portalEnv.tresPortais();
+  const r = await comTenant(tenant, (t) => portal.publishToPortals(ctxDe(tenant), { propertyId: imovel.id }, t));
+  assert.equal(r.items.length, 3);
+  for (const i of r.items) await portalEnv.entregar(i.dispatchId); // eslint-disable-line no-await-in-loop
+  await portal.syncListingStatuses({ group: portalEnv.grupo, company: portalEnv.empresa });
+  for (const v of await portalEnv.vinculos(imovel.id)) {
+    const visto = JSON.stringify(store.lastPayload(v.connection_id, v.external_listing_id));
+    MARCADORES().forEach((m) => assert.ok(!visto.includes(m), `${v.provider_code}: o adapter recebeu ${m}`));
+    assert.ok(visto.includes('Batel'), 'o dado público chega ao portal');
+  }
+  // o portal-sandbox (D210) recebe o mesmo pedido minimizado e também não vê nada interno
+  const { dispatch } = await publicar(await conexao(tenant, 'PORTAL'), imovel.id, 'publishListing');
+  const { adapter, recebidos } = gravador(PORTS.PORTAL);
+  await invoke(adapter, 'publishListing', (await ler(tenant, dispatch.id)).payload_snapshot);
+  MARCADORES().forEach((m) => assert.ok(!JSON.stringify(recebidos[0].request).includes(m), `portal-sandbox: o adapter recebeu ${m}`));
+  assert.equal(portais.length, 3);
+});
