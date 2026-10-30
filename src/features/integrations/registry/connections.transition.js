@@ -26,6 +26,7 @@ async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
     if (c.environment === 'PRODUCTION' && !c.productionReleasedAt) {
       throw AppError.conflict('Esta integração ainda não foi liberada para produção.', 'INTEGRATION_PRODUCTION_NOT_RELEASED');
     }
+    if (c.environment === 'PRODUCTION') await require('./release.evidence.contract').assertSuiteGreenForActivation(c, ctx, transaction); // M9-D222/D256: sem suíte verde não fica ACTIVE em produção
     const outra = await IntegrationConnection.findOne({
       where: { companyId: c.companyId, providerCode: c.providerCode, environment: c.environment, status: 'ACTIVE', id: { [Op.ne]: c.id } },
       transaction,

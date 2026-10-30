@@ -23,4 +23,9 @@ registryRouter.patch(`${base}/connections/:id`, requirePermission('integration:m
 registryRouter.post(`${base}/connections/:id/transition`, requirePermission('integration:manage'), confirmAction('integration.connection.disable', { mfa: true }), controller.transitionConnection);
 registryRouter.post(`${base}/connections/:id/swap`, requirePermission('integration:manage'), controller.swapConnection);
 
+// M9-D256: liberação para produção por connection (a rota do livro `/admin/integrations/connections/:id/release` responde igual) e estado do portão por fornecedor.
+registryRouter.post(`${base}/connections/:id/release`, requirePermission('integration:manage'), controller.releaseConnection);
+registryRouter.post('/admin/integrations/connections/:id/release', requirePermission('integration:manage'), controller.releaseConnection);
+registryRouter.get(`${base}/release-gate`, requirePermission('integration:read'), controller.getReleaseGate);
+
 module.exports = registryRouter;

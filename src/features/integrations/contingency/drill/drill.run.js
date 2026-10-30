@@ -1,13 +1,12 @@
 'use strict';
 
-const path = require('node:path');
 const { SCENARIOS, reload } = require('./drill.scenarios');
 const actions = require('./drill.actions');
-const { newReport, addStep, finish, writeReport } = require('./drill.report');
+const { newReport, addStep, finish, writeReport, reportDir, DEFAULT_DIR } = require('./drill.report');
+const { currentAdapterHash } = require('../../contract/contract.version');
 const { readContingencyParams } = require('../contingency.params');
 const { MODES_WITH_ALTERNATE } = require('../contingency.constants');
 
-const DEFAULT_DIR = path.resolve(__dirname, '../../../../../docs/evidencias/contingencia');
 const ativaDa = (lista, connectionId) => lista.find((a) => a.connectionId === connectionId);
 
 
@@ -35,9 +34,10 @@ async function fullFlow({ ctx, connection, cenario, ativa, now, report, envios }
  * tarefa manual e a recuperação (encerramento e fila liberada), e grava o relatório do ensaio. Nunca lança por causa de um passo: o veredito está no relatório.
  * `opts`: provider, scenario, companyId?, outDir?, now?. Devolve { report, file }.
  */
-async function runFailureDrill({ provider, scenario, companyId = null, outDir = DEFAULT_DIR, now = new Date() }) {
+async function runFailureDrill({ provider, scenario, companyId = null, outDir = reportDir(), now = new Date() }) {
   const cenario = SCENARIOS[scenario];
   const report = newReport({ provider, scenario, companyId, startedAt: now });
+  report.adapterHash = currentAdapterHash(provider);
   if (!cenario) { addStep(report, 'cenario_conhecido', false, `Cenários: ${Object.keys(SCENARIOS).join(', ')}`); return { report: finish(report, new Date()), file: writeReport(report, outDir) }; }
   const fornecedor = await actions.loadSandboxProvider(provider);
   if (!addStep(report, 'fornecedor_de_laboratorio', Boolean(fornecedor), fornecedor ? fornecedor.domain : 'só fornecedor de laboratório (sandbox) entra no ensaio')) return { report: finish(report, new Date()), file: writeReport(report, outDir) };

@@ -7,7 +7,8 @@ const { writeReport, readReport, assertContractReportForRelease, reportDir } = r
 const { loadFixture, listFixtureProviders } = require('./contract.fixtures');
 const { CONTRACT_SETTINGS_SCHEMA } = require('./contract.settings');
 const { readContractParams } = require('./contract.params');
+const { currentAdapterHash, assertReportCoversApiVersion } = require('./contract.version');
 
 module.exports = {
-  runSuite, hashAdapter, SCENARIOS, listTargets, coverage, FIRST, PENDING_BY_DEMAND, writeReport, readReport, assertContractReportForRelease, reportDir, loadFixture, listFixtureProviders, CONTRACT_SETTINGS_SCHEMA, readContractParams,
+  runSuite, hashAdapter, SCENARIOS, listTargets, coverage, FIRST, PENDING_BY_DEMAND, writeReport, readReport, assertContractReportForRelease, reportDir, loadFixture, listFixtureProviders, CONTRACT_SETTINGS_SCHEMA, readContractParams, currentAdapterHash, assertReportCoversApiVersion,
 };

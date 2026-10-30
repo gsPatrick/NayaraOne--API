@@ -13,6 +13,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/admin/integrations/errors/:id/resolve` | `integration:retry` | não |
 | `GET` | `/api/v1/admin/integrations/errors` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/registry/connections/:id/transition` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections/:id/release` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/connections/:id/release` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/registry/release-gate` | `integration:read` | não |
 | `GET` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:read` | não |
 | `PATCH` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/connections` | `integration:read` | não |

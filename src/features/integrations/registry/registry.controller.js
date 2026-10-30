@@ -54,4 +54,18 @@ const swapConnection = catchAsync(async (req, res) => {
   return success(res, { data: { from: service.serializeConnection(r.from), to: service.serializeConnection(r.to) } });
 });
 
-module.exports = { swapConnection, listProviders, createProvider, updateProvider, listConnections, getConnection, createConnection, updateConnection, transitionConnection };
+// M9-D256: liberação da connection de produção (portão com evidências e MFA) e o estado do portão por fornecedor.
+const releaseConnection = catchAsync(async (req, res) => {
+  const { releaseConnection: liberar } = require('./connections.release');
+  const { releaseStateOf } = require('./releaseGate');
+  const row = await req.withTenantTransaction((t) => liberar(req.params.id, ctxDe(req), t));
+  return success(res, { data: { ...service.serializeConnection(row), releaseState: releaseStateOf(row) } });
+});
+
+const getReleaseGate = catchAsync(async (req, res) => {
+  const { listReleaseStates } = require('./releaseGate');
+  const data = await req.withTenantTransaction((t) => listReleaseStates(ctxDe(req), t));
+  return success(res, { data });
+});
+
+module.exports = { releaseConnection, getReleaseGate, swapConnection, listProviders, createProvider, updateProvider, listConnections, getConnection, createConnection, updateConnection, transitionConnection };

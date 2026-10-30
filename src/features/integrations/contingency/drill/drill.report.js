@@ -3,9 +3,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-/** Relatório do ensaio (exigido pela M9-D256): JSON com cada passo, o resultado e o veredito. Não leva segredo, endereço nem dado pessoal. */
+/** Pasta dos relatórios do ensaio: `INTEGRATION_DRILL_REPORT_DIR` (testes) ou docs/evidencias/contingencia. */
+const DEFAULT_DIR = path.resolve(__dirname, '../../../../../docs/evidencias/contingencia');
+const reportDir = () => process.env.INTEGRATION_DRILL_REPORT_DIR || DEFAULT_DIR;
+
+/** Relatório do ensaio (exigido pela M9-D256): JSON com cada passo, o resultado, o veredito e o hash do adapter ensaiado (relatório de adapter alterado não vale). Não leva segredo, endereço nem dado pessoal. */
 function newReport({ provider, scenario, companyId, startedAt }) {
-  return { schemaVersion: 1, kind: 'contingency-failure-drill', provider, scenario, companyId, startedAt: startedAt.toISOString(), finishedAt: null, steps: [], passed: false };
+  return { schemaVersion: 1, kind: 'contingency-failure-drill', provider, scenario, companyId, adapterHash: null, startedAt: startedAt.toISOString(), finishedAt: null, steps: [], passed: false };
 }
 
 function addStep(report, name, ok, detail) {
@@ -28,4 +32,4 @@ function writeReport(report, dir) {
   return file;
 }
 
-module.exports = { newReport, addStep, finish, writeReport };
+module.exports = { newReport, addStep, finish, writeReport, reportDir, DEFAULT_DIR };
