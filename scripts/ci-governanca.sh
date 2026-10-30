@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Esteira de governança (M9-D890, Guia §8 "Testes/CI"): um controle por chamada, o mesmo comando no CI e na máquina de quem desenvolve.
+#
+#   bash scripts/ci-governanca.sh <controle>
+#   controles: calendar | lineage | dlp | bcp | openapi | flags | finops | accessibility | aud | adversarial
+#
+# calendar/dlp/bcp/finops/aud rodam os testes do bloco num cluster PostgreSQL DESCARTÁVEL (scripts/withDisposableDb.js), nunca no banco compartilhado de desenvolvimento. Nesse banco NENHUM teste pode ficar
+# pulado: o relatório JUnit é conferido e qualquer `skipped` reprova (GOV_CI_TEST_SKIPPED). JUnit e resumo ficam em docs/evidencias/ci/governanca/ (o CI os publica como artefato).
+# Nenhuma etapa tolera falha: o código de saída do controle é o da etapa.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+CONTROLE="${1:-}"
+SAIDA="docs/evidencias/ci/governanca"
+mkdir -p "$SAIDA"
+
+resumo() {
+  echo "$1" | tee -a "$SAIDA/resumo.md"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then echo "$1" >> "$GITHUB_STEP_SUMMARY"; fi
+}
+
+# Testes com banco descartável: $1 = nome do controle (nome do JUnit), demais = arquivos/globs de teste (expandidos pelo bash dentro do cluster).
+testes_com_banco() {
+  local nome="$1"; shift
+  local porta="${GOV_CI_PORTA:-$((55000 + RANDOM % 2000))}"
+  node scripts/withDisposableDb.js --port "$porta" -- env LOG_LEVEL=info \
+    CI_TENANT_USERS_PASSWORD="${CI_TENANT_USERS_PASSWORD:-ci-tenant-users-password-not-for-production}" \
+    CLAMAV_HOST="${CLAMAV_HOST:-127.0.0.1}" CLAMAV_PORT="${CLAMAV_PORT:-3310}" \
+    bash -c 'node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test exec node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination="$0" "${@:1}"' \
+    "$SAIDA/$nome.junit.xml" "$@"
+  node scripts/governance-ci/checkJunit.js "$SAIDA/$nome.junit.xml"
+  resumo "- $nome: verde, nenhum teste pulado ($SAIDA/$nome.junit.xml)"
+}
+
+case "$CONTROLE" in
+  calendar)      testes_com_banco calendar test/marco9/governanca/m9d80[123].*.test.js ;;
+  lineage)       npm run check:lineage && resumo "- lineage: verde" ;;
+  dlp)           testes_com_banco dlp test/marco9/governanca/m9d82[0-5].*.test.js ;;
+  bcp)           testes_com_banco bcp test/marco9/governanca/m9d83[0-4].*.test.js ;;
+  openapi)
+    if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+      git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+      npm run lint:openapi -- --base "origin/$GITHUB_BASE_REF" --candidate openapi/openapi.v1.yaml
+    else
+      npm run lint:openapi -- --base openapi/openapi.v1.yaml --candidate openapi/openapi.v1.yaml
+    fi
+    npm run test:contract
+    resumo "- openapi: lint e contract test verdes" ;;
+  flags)         npm run sync:flags && npm run check:flags -- --out "$SAIDA/flags-check.json" && resumo "- flags: verde" ;;
+  finops)        testes_com_banco finops test/marco9/governanca/m9d86[123].*.test.js ;;
+  accessibility)
+    FRONT="${GOV_CI_FRONT:-../NayaraOne--FRONT}"
+    [ -d "$FRONT" ] || { echo "GOV_CI_FRONT_MISSING: repositório do Front não encontrado em $FRONT." >&2; exit 2; }
+    npm run test:a11y --prefix "$FRONT"
+    resumo "- accessibility: verde (test:a11y do Front)" ;;
+  aud)           testes_com_banco aud test/marco9/governanca/m9d809.aud*.test.js ;;
+  adversarial)   node scripts/checkAdversarialMap.js --json "$SAIDA/adversarial-map.json" | tee "$SAIDA/adversarial-map.txt"
+                 resumo "- adversarial: $(head -1 "$SAIDA/adversarial-map.txt")" ;;
+  *) echo "uso: bash scripts/ci-governanca.sh calendar|lineage|dlp|bcp|openapi|flags|finops|accessibility|aud|adversarial" >&2; exit 2 ;;
+esac

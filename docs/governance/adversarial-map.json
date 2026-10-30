@@ -1,0 +1,16 @@
+{
+  "descricao": "Os 10 testes adversariais do Caderno do Marco 9, bloco de governança (§11), com o nome exato do teste que os prova. M9-D890: scripts/checkAdversarialMap.js reprova se faltar, se estiver skip/todo ou se a lista deixar de ter 10 itens.",
+  "raizes": ["test", "../NayaraOne--FRONT/test"],
+  "itens": [
+    { "n": 1, "frase": "Calendar replay não duplica; source concluído fecha item", "demanda": "M9-D802", "testes": ["m9d802 calendar replay não duplica", "m9d802 source concluído fecha item"] },
+    { "n": 2, "frase": "Bulk master data sem permissão bloqueia", "demanda": "M9-D808", "testes": ["m9d808 bulk master data sem permissão bloqueia"] },
+    { "n": 3, "frase": "KPI sem lineage crítico falha gate", "demanda": "M9-D811", "testes": ["m9d811 KPI sem lineage crítico falha gate"] },
+    { "n": 4, "frase": "Export RESTRICTED sem MFA bloqueia", "demanda": "M9-D822", "testes": ["m9d822 export RESTRICTED sem MFA bloqueia"] },
+    { "n": 5, "frase": "BCP record importado 2x não duplica", "demanda": "M9-D832", "testes": ["m9d832 BCP record importado 2x não duplica"] },
+    { "n": 6, "frase": "Breaking API change detectado", "demanda": "M9-D840", "testes": ["m9d840 breaking API change detectado"] },
+    { "n": 7, "frase": "Flag vencida alerta", "demanda": "M9-D871", "testes": ["m9d871 flag vencida alerta"] },
+    { "n": 8, "frase": "UI endpoint 403 não vira tela vazia enganosa", "demanda": "M9-D850", "testes": ["m9d850 UI endpoint 403 não vira tela vazia enganosa"] },
+    { "n": 9, "frase": "FinOps budget alerta sem derrubar PROD", "demanda": "M9-D861", "testes": ["m9d861 FinOps budget alerta sem derrubar PROD"] },
+    { "n": 10, "frase": "Mass export dispara anomaly", "demanda": "M9-D824", "testes": ["m9d824 mass export dispara anomaly"] }
+  ]
+}

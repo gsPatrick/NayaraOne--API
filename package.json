@@ -38,6 +38,8 @@
     "check:lineage": "node scripts/checkLineageCoverage.js",
     "sync:flags": "node scripts/syncFlagsRegistry.js",
     "check:flags": "node scripts/checkFeatureFlags.js",
+    "check:adversarial-governance": "node scripts/checkAdversarialMap.js",
+    "ci:governanca": "bash scripts/ci-governanca.sh",
     "sync:lineage": "node scripts/withDisposableDb.js -- node scripts/syncLineageRegistry.js",
     "scan:secrets": "node scripts/secretScan.js",
     "lint:openapi": "node scripts/lintOpenapi.js",

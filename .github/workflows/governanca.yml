@@ -1,0 +1,300 @@
+name: Governanca
+
+# M9-D890 (Guia §8, Testes/CI do bloco de governança): oito verificações obrigatórias, uma por job, mais o job de regressão da matriz AUD-013 a AUD-020 (M9-D809, nono job, que não é
+# controle do Guia §8) e o job do mapa dos 10 testes adversariais do livro (scripts/checkAdversarialMap.js). Todos chamam scripts/ci-governanca.sh <controle>, o mesmo comando de quem
+# desenvolve. Nenhum job tolera falha: nenhum controle é desligado sem aparecer no run. Os testes com banco rodam no cluster PostgreSQL DESCARTÁVEL (scripts/withDisposableDb.js),
+# nunca no banco compartilhado, e nenhum teste pode ficar pulado nele. JUnit e resumo de cada job saem como artefato. O CI não faz push nem deploy.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  calendar-idempotency:
+    name: Calendar idempotency (D801 a D803)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Calendar idempotency (D801 a D803)
+        run: bash scripts/ci-governanca.sh calendar
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-calendar-idempotency-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  lineage-coverage:
+    name: Lineage coverage (D811)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Lineage coverage (D811)
+        run: bash scripts/ci-governanca.sh lineage
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-lineage-coverage-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  dlp:
+    name: DLP (D820 a D825)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: DLP (D820 a D825)
+        run: bash scripts/ci-governanca.sh dlp
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-dlp-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  bcp-replay:
+    name: BCP replay (D831 a D834)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: BCP replay (D831 a D834)
+        run: bash scripts/ci-governanca.sh bcp
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-bcp-replay-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  openapi-breaking:
+    name: OpenAPI breaking e contract test (D840, D842)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: OpenAPI breaking e contract test (D840, D842)
+        run: bash scripts/ci-governanca.sh openapi
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-openapi-breaking-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  feature-expiry:
+    name: Feature expiry (D871)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Feature expiry (D871)
+        run: bash scripts/ci-governanca.sh flags
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-feature-expiry-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  finops-thresholds:
+    name: FinOps thresholds (D861, D862, D863)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: FinOps thresholds (D861, D862, D863)
+        run: bash scripts/ci-governanca.sh finops
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-finops-thresholds-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  accessibility:
+    name: Accessibility, checagens automatizadas (D851)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout do Front (NayaraOne--FRONT)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
+          path: front-checkout
+      - name: Posicionar o Front ao lado da API
+        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Dependências do Front
+        run: npm ci --prefix front-checkout
+      - name: Accessibility, checagens automatizadas (D851)
+        run: bash scripts/ci-governanca.sh accessibility
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-accessibility-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  aud-regression:
+    name: Regressão AUD-013 a AUD-020 (D809), nono job, fora dos controles do Guia §8
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Regressão AUD-013 a AUD-020 (D809), nono job, fora dos controles do Guia §8
+        run: bash scripts/ci-governanca.sh aud
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-aud-regression-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90
+
+  adversarial-map:
+    name: Mapa dos 10 testes adversariais do livro (D890)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout do Front (NayaraOne--FRONT)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
+          path: front-checkout
+      - name: Posicionar o Front ao lado da API
+        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Mapa dos 10 testes adversariais do livro (D890)
+        run: bash scripts/ci-governanca.sh adversarial
+      - name: Publicar JUnit e resumo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governanca-adversarial-map-${{ github.sha }}
+          path: docs/evidencias/ci/governanca
+          if-no-files-found: warn
+          retention-days: 90

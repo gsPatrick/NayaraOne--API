@@ -10,6 +10,7 @@ Pipelines: `NayaraOne--API/.github/workflows/test.yml` e `NayaraOne--FRONT/.gith
 | unit/integration/RLS tests | suíte completa com a role sem BYPASSRLS | — |
 | security_scan | scanner de hard-code, SAST, `npm audit` | — |
 | lineage (M9-D811) | `npm run check:lineage` em todo push e pull request: KPI ou exportação crítica sem caminho completo de lineage reprova o build (sem lista de isenção); o arquivo `docs/governance/lineage-registry.json` só é gerado por `npm run sync:lineage` | — |
+| governança (M9-D890) | workflow `.github/workflows/governanca.yml`: 8 jobs, um por controle do Guia §8 (`calendar-idempotency`, `lineage-coverage`, `dlp`, `bcp-replay`, `openapi-breaking`, `feature-expiry`, `finops-thresholds`, `accessibility`), mais `aud-regression` (matriz AUD-013 a AUD-020, M9-D809, fora do Guia §8) e `adversarial-map` (`npm run check:adversarial-governance`: os 10 testes adversariais do livro, mapa em `docs/governance/adversarial-map.json`, `GOV_ADVERSARIAL_MISSING`). Cada job é `bash scripts/ci-governanca.sh <controle>` (`npm run ci:governanca -- <controle>`), com banco descartável e nenhum teste pulado; JUnit e resumo sobem como artefato | — |
 | load_failure_tests | `loadTestInventoryProcurement.js --light` (gates) + `inventory.failureDrills.test.js` na suíte | — |
 | deploy_LAB | job `deploy-lab` (push em `marco-6-e-7-homologado-nayara`, environment `lab`) | idem |
 | production_approval | job `deploy-production` (environment `production` com required reviewers; push em `main` ou disparo manual) | idem |
