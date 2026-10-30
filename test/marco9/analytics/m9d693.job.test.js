@@ -5,25 +5,13 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const e = require('../_helpers/m9d693Env');
+const { purgeBriefResidue } = require('../_helpers/m9d693Purge');
 const { runAnalyticsBriefJob } = require('../../../src/engines/jobs/analyticsBriefJob');
 
 let env;
 before(async () => { env = await e.setup(); });
 after(async () => {
-  const c = env.tenantA.companyId;
-  await env.admin.transaction(async (transaction) => {
-    await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
-    for (const sql of [
-      'DELETE FROM analytics.executive_briefs WHERE company_id = :c',
-      "DELETE FROM analytics.access_log WHERE company_id = :c AND resource_type = 'BRIEF'",
-      'DELETE FROM analytics.dashboard_widgets WHERE dashboard_id IN (SELECT id FROM analytics.dashboard_definitions WHERE company_id = :c)',
-      'DELETE FROM analytics.dashboard_definitions WHERE company_id = :c',
-      'DELETE FROM analytics.metric_snapshots WHERE company_id = :c',
-      'DELETE FROM analytics.metric_versions WHERE company_id = :c',
-      'DELETE FROM analytics.metric_definitions WHERE company_id = :c',
-      "DELETE FROM core.tenant_settings WHERE company_id = :c AND (key LIKE 'ia.%' OR key LIKE 'ai.%' OR key LIKE 'analytics.brief.%')",
-    ]) await env.admin.query(sql, { replacements: { c }, transaction });
-  });
+  await purgeBriefResidue(env);
   await e.teardown(env);
 });
 

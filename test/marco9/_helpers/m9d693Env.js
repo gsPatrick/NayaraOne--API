@@ -10,6 +10,7 @@ const dashboardStore = require('../../../src/features/analytics/dashboardStore.s
 const alertDefs = require('../../../src/features/analytics/alertDefinitionStore.service');
 const alertInstances = require('../../../src/features/analytics/alertInstanceStore.service');
 const { TenantSetting } = require('../../../src/models');
+const { purgeBriefResidue } = require('./m9d693Purge');
 
 const { sup, registry, inTx } = base;
 const NOW = '2026-10-28T09:40:00Z';
@@ -18,6 +19,7 @@ const sha = (text) => crypto.createHash('sha256').update(String(text)).digest('h
 
 async function setup() {
   const env = await base.setup();
+  await purgeBriefResidue(env); // independente de resto deixado por outros arquivos no mesmo banco
   clock.setClock(() => new Date(NOW));
   return env;
 }
