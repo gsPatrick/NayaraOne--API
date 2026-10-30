@@ -1,0 +1,31 @@
+{
+  "provider": "site-sandbox",
+  "apiVersion": "v1",
+  "description": "Gerenciador de site de laboratório (publicação responde 202 pendente; a página só fica no ar depois).",
+  "requests": {
+    "publishPage": {
+      "pageKey": "property:ap-contrato-001:pt-BR",
+      "slug": "ap-contrato-001",
+      "locale": "pt-BR",
+      "contentRef": "property:ap-contrato-001@0123456789ab",
+      "contentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    "unpublishPage": {
+      "pageKey": "property:ap-contrato-001:pt-BR"
+    },
+    "getPageStatus": {
+      "pageKey": "property:ap-contrato-001:pt-BR"
+    }
+  },
+  "noResourceId": [
+    "unpublishPage"
+  ],
+  "statuses": {
+    "pending": "PENDING",
+    "live": "PUBLISHED",
+    "removed": "UNPUBLISHED",
+    "error": "FAILED"
+  },
+  "unknownStatus": "em_revisao",
+  "renewal": false
+}

@@ -28,6 +28,7 @@ const { StorageSandboxAdapter } = require('../providers/storage/storage-sandbox.
 const { StorageS3Adapter } = require('../providers/storage/storage-s3.adapter');
 const { IdentityLocalAdapter } = require('../providers/identity/identity-local.adapter');
 const { IdentitySandboxAdapter } = require('../providers/identity/sandbox/identity-sandbox.adapter');
+const { SiteSandboxAdapter } = require('../providers/site/sandbox/site-sandbox.adapter');
 const { installAnalytics } = require('../analytics');
 const { registerAiContingency } = require('../providers/ai/ai.degrade');
 const { installContingency } = require('../contingency');
@@ -37,6 +38,7 @@ const BUILT_IN_ADAPTERS = Object.freeze([
   SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, ...INSURANCE_ADAPTERS, FiscalSandboxContractAdapter,
   MessagingSandboxAdapter, MessagingAltSandboxAdapter, PortalSandboxAdapter, PortalZapSandboxAdapter, PortalVivaRealSandboxAdapter, PortalOlxSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
   StorageLocalDiskAdapter, StorageSandboxAdapter, StorageS3Adapter, IdentityLocalAdapter, IdentitySandboxAdapter, // M9-D242
+  SiteSandboxAdapter, // M9-D259
 ]);
 
 /** Registra todos; contrato inválido lança 500 INTEGRATION_ADAPTER_CONTRACT_INVALID (o boot não segue). Devolve a lista registrada. */
@@ -46,6 +48,7 @@ function registerBuiltInAdapters() {
   installAnalytics(); // descarte de métricas vencidas na rodada do worker (M9-D243)
   registerAiContingency(); // IA fora: modo determinístico (M9-D243)
   require('../email'); // M9-D234: identificador da mensagem no envio, falha definitiva e eventos do provedor (entregue, bounce, reclamação)
+  require('../site'); // M9-D259: páginas do site (reações ao envio confirmado ou falho, webhook do site, consulta de status na rodada do worker e dados da reconciliação)
   require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
   installContingency(); // contingência das famílias e passo da rodada do worker (M9-D226)
   return registry.list();

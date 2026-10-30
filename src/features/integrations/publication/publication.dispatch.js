@@ -4,6 +4,8 @@ const { IntegrationConnection, IntegrationProvider } = require('../../../models'
 const AppError = require('../../../utils/AppError');
 const { loadPublicPropertyReadModel } = require('../../properties/publicReadModel');
 const { createMinimizedDispatch } = require('../minimization');
+const { pageFieldsOf } = require('../site/site.page');
+const { readSiteParams } = require('../site/site.params');
 
 /** Operações de publicação do imóvel por família: PORTAL e SITE (M9-D231 regra 5: o mapper do adapter consome o read model). */
 const OPERATIONS = Object.freeze({
@@ -29,6 +31,8 @@ async function createPropertyPublicationDispatch(ctx, d, transaction) {
   }
   const readModel = await loadPublicPropertyReadModel(d.propertyId, ctx, transaction);
   const domainObject = { ...readModel, slug: slugOf(readModel.public_code), externalResourceId: d.externalResourceId };
+  // M9-D259: a página do site leva a chave, o idioma, a referência e o hash do conteúdo (só do read model público).
+  if (provider.domain === 'SITE') Object.assign(domainObject, pageFieldsOf(readModel, d.locale || (await readSiteParams(ctx, transaction)).defaultLocale));
   return createMinimizedDispatch(ctx, {
     connectionId: connection.id, operation: d.operation, idempotencyKey: d.idempotencyKey, domainObject,
     // M9-D232: o anúncio no portal é o agregado do envio (assim o vínculo acha o envio dele); sem ele, o imóvel.

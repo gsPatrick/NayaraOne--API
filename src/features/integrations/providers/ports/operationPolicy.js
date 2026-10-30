@@ -29,7 +29,8 @@ const MENSAGEM = op('SAFE', 'ON_RESPONSE', ['DELIVERED', 'READ']);
 const OPERATION_POLICY = Object.freeze({
   MESSAGING: Object.freeze({ sendText: MENSAGEM, sendTemplate: MENSAGEM, sendMedia: MENSAGEM, getStatus: SAFE }),
   EMAIL: Object.freeze({ sendEmail: op('SAFE', 'ON_RESPONSE', ['DELIVERED']), getDeliveryStatus: SAFE, receiveInbound: SAFE }),
-  SITE: Object.freeze({ publishPage: perigosa('getPageStatus'), unpublishPage: SAFE, getPageStatus: SAFE }),
+  // M9-D259: a retirada é SAFE (idempotente, repete com backoff), mas só o status final (UNPUBLISHED) por consulta ou webhook assinado a confirma; a resposta 200 do site não.
+  SITE: Object.freeze({ publishPage: perigosa('getPageStatus'), unpublishPage: op('SAFE', 'ON_STATUS'), getPageStatus: SAFE }),
   PORTAL: Object.freeze({ publishListing: perigosa('getListingStatus'), updateListing: SAFE, unpublishListing: SAFE, getListingStatus: SAFE }),
   SIGNATURE: Object.freeze({ createEnvelope: perigosa('getEnvelope'), getEnvelope: ESSENCIAL, cancelEnvelope: SAFE, verifyWebhook: SAFE, downloadSigned: SAFE }),
   BANK: Object.freeze({ submitPayment: perigosa('getPaymentStatus'), getPaymentStatus: ESSENCIAL, getStatement: SAFE, verifyWebhook: SAFE }),

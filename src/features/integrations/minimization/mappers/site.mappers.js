@@ -7,7 +7,11 @@ module.exports = {
   publishPage: defineMapper({
     purpose: 'SITE_PUBLICATION',
     fields: [
+      { name: 'pageKey', classification: 'PUBLIC', required: true },
       { name: 'slug', classification: 'PUBLIC', required: true },
+      { name: 'locale', classification: 'PUBLIC' },
+      { name: 'contentRef', classification: 'PUBLIC' },
+      { name: 'contentHash', classification: 'PUBLIC' },
       { name: 'public_code', classification: 'PUBLIC', required: true },
       { name: 'title', classification: 'PUBLIC', freeText: true },
       { name: 'description_public', classification: 'PUBLIC', freeText: true },
@@ -31,5 +35,5 @@ module.exports = {
       { name: 'published_at', classification: 'PUBLIC' },
     ],
   }),
-  unpublishPage: defineMapper({ purpose: 'SITE_PUBLICATION', fields: [{ name: 'slug', classification: 'PUBLIC', required: true }] }),
+  unpublishPage: defineMapper({ purpose: 'SITE_PUBLICATION', fields: [{ name: 'pageKey', classification: 'PUBLIC', required: true }, { name: 'slug', classification: 'PUBLIC' }] }),
 };

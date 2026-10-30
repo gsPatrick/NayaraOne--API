@@ -1,0 +1,91 @@
+{
+  "provider": "site-sandbox",
+  "domain": "SITE",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T02:21:56.815Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "publishPage",
+    "unpublishPage",
+    "getPageStatus"
+  ],
+  "adapterHash": "b7159661c69b174413f36e230a30ee979b8385a546be67ba073d5acb8e9d5fb2",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 7,
+      "passed": 7,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 68,
+  "passed": 68,
+  "status": "PASSED",
+  "errors": []
+}
