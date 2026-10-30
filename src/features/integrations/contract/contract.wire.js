@@ -15,9 +15,11 @@ const BEFORE = Object.freeze({
   rateLimit: (segundos) => async () => { throw httpError(429, { headers: { 'retry-after': String(segundos) } }); },
   auth: () => async () => { throw httpError(401); },
   expiredToken: () => async () => { throw httpError(401, { code: 'TOKEN_EXPIRED', credentialInvalid: true }); },
-  // O fornecedor demora o dobro do prazo da política; o cliente desiste no prazo (ETIMEDOUT), como o transporte real.
+  // O fornecedor demora além do prazo da política; o cliente desiste no prazo (ETIMEDOUT), como o transporte real. Um único temporizador: a corrida entre dois (prazo e o dobro dele)
+  // deixava o de 2x vencer quando a máquina ocupada disparava os dois no mesmo ciclo, e a operação "passava" sem erro (M9-D222, intermitência vista sob carga).
   timeout: (prazoMs) => async () => {
-    await Promise.race([sleep(prazoMs * 2), sleep(prazoMs).then(() => { throw Object.assign(new Error('Tempo esgotado esperando o fornecedor.'), { code: 'ETIMEDOUT', name: 'TimeoutError' }); })]);
+    await sleep(prazoMs);
+    throw Object.assign(new Error('Tempo esgotado esperando o fornecedor.'), { code: 'ETIMEDOUT', name: 'TimeoutError' });
   },
   truncatedJson: () => async () => { JSON.parse('{"status":"SE'); },
 });
