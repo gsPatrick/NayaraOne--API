@@ -43,6 +43,29 @@ Antes: nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pel
 - M9-D863 (`degradation/degradation.settings.js`): `governanca.finops.degradacao.ligada` (ligado), `.limiar_primeiro` (90), `.limiar_demais` (100), `.minuto_job` (20), `.log_nivel` (warn), `.exportacao_percentual` (50), `.jobs_baixa_prioridade` (lista), `.jobs_hora_inicio` (0) e `.jobs_hora_fim` (5).
 - Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.finops.ambiente` | `PROD` | ambiente (PROD, HOMOLOG, DEV) a que esta instalação atribui os custos que coleta. |
+| `governanca.finops.gb_base` | `1024` | bytes de 1 GB (1024 = GiB, o padrão da nuvem; 1000 = GB decimal). |
+| `governanca.finops.janela_dias` | `30` | dias de histórico que a consulta de saúde (GET /finops/health) mostra. |
+| `governanca.finops.log_x_media` | `3` | o volume de log do dia acima de N vezes a média móvel abre o achado de logs excessivos. |
+| `governanca.finops.egress_x_media` | `3` | os bytes de saída do dia acima de N vezes a média móvel abrem o achado de egress anormal. |
+| `governanca.finops.media_dias` | `14` | dias da média móvel de logs e egress. |
+| `governanca.finops.fila_max` | `5000` | eventos PENDING acima disso abrem o achado de fila acumulada. |
+| `governanca.finops.fila_antigos_min` | `50` | ao menos N eventos mais velhos que `fila_idade_min` minutos abrem o achado de fila. |
+| `governanca.finops.fila_idade_min` | `30` | idade, em minutos, a partir da qual um evento pendente conta como antigo. |
+| `governanca.finops.ia_custo_chamada_centavos` | `50` | custo médio por chamada de tarefa simples da IA acima disso abre o achado de modelo caro. |
+| `governanca.finops.degradacao.limiar_primeiro` | `90` | limiar padrão (% do orçamento) do primeiro passo da política de degradação. |
+| `governanca.finops.degradacao.limiar_demais` | `100` | limiar padrão (% do orçamento) dos passos seguintes. |
+| `governanca.finops.degradacao.log_nivel` | `warn` | nível de log aplicado pelo passo REDUCE_LOG_LEVEL. |
+| `governanca.finops.degradacao.exportacao_percentual` | `50` | percentual do `max_rows` efetivo que sobra no passo LIMIT_EXPORT_SIZE. |
+| `governanca.finops.degradacao.jobs_baixa_prioridade` | `dataQualityScanJob,dataQualityMergeDetectionJob,calendarConflictJob,idempotencyCleanupJob,exportExpiryJob` | nomes dos jobs que o passo DEFER_NON_CRITICAL_JOBS adia, separados por vírgula. |
+| `governanca.finops.degradacao.jobs_hora_inicio` | `0` | início (hora de Brasília) da janela em que esses jobs seguem rodando durante o passo. |
+| `governanca.finops.degradacao.jobs_hora_fim` | `5` | fim (hora de Brasília) da janela em que esses jobs seguem rodando durante o passo. |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.

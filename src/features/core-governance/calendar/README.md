@@ -51,6 +51,13 @@ Aba Governança em /painel/configuracoes (padrão = `Maturacao/demandas/parametr
 - `governanca.calendario.papel_por_fonte` (`BILLING=financeiro, FISCAL=fiscal`): perfil que recebe o aviso quando a origem não tem responsável (gravado em `owner_team`).
 - `governanca.calendario.fontes_conflito` (`VISIT, COMMITMENT, MAINTENANCE`), `governanca.calendario.alerta_vencido_hora` (6) e `governanca.calendario.conflito_intervalo_min` (15).
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.calendario.feriados` | `(vazio)` | lista de datas ISO (AAAA-MM-DD) de feriados para a conta de dias úteis; vazio = os feriados nacionais do ano, calculados. |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_`.
 - DI-D801-1 a DI-D801-6 em `Maturacao/demandas/decisoes-de-implementacao.md` (permissão por origem configurável, severidade em texto `FONTE=NIVEL`, janela e página como parâmetro, duração padrão do compromisso, dono do compromisso, deep link do compromisso).

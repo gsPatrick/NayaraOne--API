@@ -46,6 +46,15 @@ Os cinco passos viram flags `finops.degradation.<passo>` (escopo COMPANY, risco 
 - `governanca.modulos.feature_flags.habilitado` (padrão ligado).
 - `governanca.flags.risco_padrao` (MEDIUM), `governanca.flags.risco_config_absorvida` (LOW), `governanca.flags.risco_interruptores_degradacao` (MEDIUM), `governanca.flags.valor_max_caracteres` (2000), `governanca.flags.expiracao_hora` (6), `governanca.flags.expiracao_minuto` (30), `governanca.flags.expiracao_lembrete_diario` (ligado), `governanca.flags.kill_teste_dias` (30), `kill_teste_hora` (5), `kill_teste_minuto` (0), `kill_teste_tolerancia_min` (10). Aba Governança em Configurações; catálogo em `Maturacao/demandas/parametros.csv`.
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.flags.kill_teste_hora` | `5` | hora (Brasília) do job que testa os kill switches. |
+| `governanca.flags.kill_teste_minuto` | `0` | minuto (Brasília) do job que testa os kill switches. |
+| `governanca.flags.kill_teste_tolerancia_min` | `10` | minutos que um teste pode ficar em andamento antes de a execução seguinte considerá-lo interrompido e restaurar o switch (10). |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.

@@ -20,6 +20,21 @@ Governança de API: consumidores, contratos OpenAPI, mudança incompatível dete
 - `governanca.modulos.api_governance.habilitado` (booleano, padrão ligado): o administrador liga ou desliga o módulo para a empresa em Configurações > Governança.
 - Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.api.rate_limit.anonimo_por_minuto` | `60` | acessos por minuto, por IP, nas rotas sem login (M9-D843 §3.1; aqui o consumidor é /public/share/:token). |
+| `governanca.api.rate_limit.habilitado` | `true` | liga o limite de requisições (padrão ligado). |
+| `governanca.api.rate_limit.interno_por_minuto` | `1200` | requisições por minuto por usuário logado (padrão 1200; o tráfego manual é o dobro do automatizado). |
+| `governanca.api.rate_limit.externo_por_minuto` | `600` | requisições por minuto por credencial de API externa (padrão 600). |
+| `governanca.api.idempotencia.validade_horas` | `24` | por quanto tempo a chave devolve a resposta original (padrão 24). |
+| `governanca.api.idempotencia.espera_segundos` | `10` | quanto uma repetição simultânea espera a resposta da primeira antes de responder 409 (padrão 10). |
+| `governanca.api.deprecacao.consumidor_ativo_dias` | `30` | janela em que o consumidor conta como "usando" um alvo (padrão 30). |
+| `governanca.api.deprecacao.cache_segundos` | `30` | por quanto tempo cada processo guarda as deprecações e consumidores da empresa (padrão 30; 1 a 3600). |
+| `governanca.api.consumidor.uso_intervalo_minutos` | `60` | no máximo uma gravação de uso por consumidor e alvo neste intervalo (padrão 60). |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.

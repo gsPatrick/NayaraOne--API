@@ -43,6 +43,29 @@ Demais tabelas: ainda nenhuma. O alicerce cria o schema `governance` e a funçã
 - Exportação (M9-D822): `governanca.dlp.exportacao.formatos`, `csv_separador`, `marca_dagua.texto`, `marca_dagua.texto_csv`, `mascara_texto`, `url_minutos`, `job_expiracao_minutos` e `geracao_timeout_minutos`. Links (M9-D823): `governanca.api.rate_limit.anonimo_por_minuto`, `governanca.dlp.link.url_base`, `prazo_sem_teto_horas`, `expiracao_job_minutos` e `arquivo_texto_marca`. Tudo na aba Governança.
 - Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.dlp.finalidades` | `AUDITORIA,OPERACAO,JURIDICO,CONTABIL,CLIENTE_SOLICITOU,OUTRA` | catálogo de finalidades aceitas no campo `purpose` de exportação, link e impressão (o livro cita a finalidade e não dá a lista). |
+| `governanca.dlp.justificativa_min` | `20` | mínimo de caracteres da justificativa quando a política da classe a exige. |
+| `governanca.dlp.volume_teto_por_classe` | `LOW 100000; MEDIUM 50000; HIGH 10000; RESTRICTED 1000` | `max_rows` inicial da política de EXPORT de cada classe (LOW 100.000; MEDIUM 50.000; HIGH 10.000; RESTRICTED 1.000). |
+| `governanca.dlp.expiracao_horas_da_classe` | `LOW 168; MEDIUM 72; HIGH 48; RESTRICTED 24` | `max_expiry_hours` inicial de EXPORT e SHARE (LOW 168; MEDIUM 72; HIGH 48; RESTRICTED 24); é o ÚNICO parâmetro de prazo. |
+| `governanca.dlp.watermark.padrao_por_classe` | `LOW desligado; MEDIUM desligado; HIGH desligado; RESTRICTED desligado` | `require_watermark` inicial por classe (o livro: marca d'água opcional, então tudo desligado). |
+| `governanca.dlp.anomalia.mfa_horas` | `24` | por quanto tempo o MFA verificado antes da detecção deixa de valer (a próxima ação sensível pede MFA novo). |
+| `governanca.dlp.anomalia.suspensao_horas` | `24` | duração de EXPORT, SHARE e PRINT suspensos até a revisão. |
+| `governanca.dlp.anomalia.confirmada_horas` | `168` | a suspensão a partir da confirmação humana; ao vencer, cai sozinha. |
+| `governanca.dlp.view.auditoria_janela_min` | `1` | a auditoria `dlp.view` é de uma linha por recurso e por janela (padrão 1 minuto). |
+| `governanca.dlp.exportacao.csv_separador` | `PONTO_E_VIRGULA` | separador de colunas do CSV exportado. |
+| `governanca.dlp.exportacao.marca_dagua.texto` | `Nayara One · {usuario} · {data} · {job}` | texto da marca d'água dos arquivos de planilha e PDF (variáveis `{usuario}`, `{data}`, `{job}`). |
+| `governanca.dlp.exportacao.marca_dagua.texto_csv` | `# Exportado por {usuario} em {data} (job {job})` | linha de marca do CSV, comentada (variáveis `{usuario}`, `{data}`, `{job}`). |
+| `governanca.dlp.exportacao.mascara_texto` | `***` | texto que substitui o valor de uma coluna mascarada na exportação. |
+| `governanca.dlp.exportacao.url_minutos` | `15` | validade do endereço assinado de download (nunca passa da validade do arquivo). |
+| `governanca.dlp.exportacao.geracao_timeout_minutos` | `30` | tempo máximo de um pedido em GENERATING antes de virar FAILED. |
+| `governanca.dlp.link.arquivo_texto_marca` | `Nayara One · {destinatario} · {data} · {link}` | texto da marca d'água do arquivo entregue pelo link (variáveis {destinatario}, {data}, {link}). |
+| `governanca.dlp.link.prazo_sem_teto_horas` | `168` | prazo máximo do link quando a política da classe não tem teto (nunca existe link sem prazo; padrão 168 h). |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.

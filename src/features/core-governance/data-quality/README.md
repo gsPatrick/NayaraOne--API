@@ -40,6 +40,32 @@ Nenhum job no alicerce. M9-D806: `dataQualityScanJob` (varredura noturna da qual
 - Alteração em massa (M9-D808): `governanca.dados.bulk.max_registros` (5.000), `.motivo_minimo` (10) e `.pagina_tamanho` (50).
 - Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
 
+### Demais parâmetros do módulo (M9-D891: conferência)
+Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor muda em /painel/configuracoes (aba Governança) e vale na leitura seguinte.
+
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.dados.qualidade.severidades` | `PERSON_TAX_ID_PRESENT=HIGH, PERSON_TAX_ID_VALID=CRITICAL, PERSON_CONTACT_PRESENT=MEDIUM, PERSON_ADDRESS_COMPLETE=MEDIUM,` | severidade de cada regra (REGRA=LOW\|MEDIUM\|HIGH\|CRITICAL). Padrão = item 3.1. |
+| `governanca.dados.qualidade.regras_desativadas` | `NENHUMA` | regras fora do cálculo (NENHUMA = todas ligadas). |
+| `governanca.dados.qualidade.endereco_campos` | `zip_code, street, number, neighborhood, city, state` | campos do endereço que o "endereço completo" exige. |
+| `governanca.dados.qualidade.midia_minima` | `1` | mínimo de fotos/mídias do imóvel (padrão 1). |
+| `governanca.dados.qualidade.categorias_qualificacao` | `*` | categorias de fornecedor que exigem qualificação vigente (* = todas; hoje as compras já exigem de todos). |
+| `governanca.dados.qualidade.severidade_revisao` | `CRITICAL` | a partir de qual severidade a issue vai à fila de revisão do steward (padrão CRITICAL). |
+| `governanca.dados.bulk.motivo_minimo` | `10` | mínimo de caracteres do motivo obrigatório (padrão 10, o mais conservador: o livro só exige motivo). |
+| `governanca.dados.bulk.pagina_tamanho` | `50` | itens por página das consultas de lotes e de itens (padrão 50). |
+
+### Parâmetros da retenção (M9-D911, código em `data-quality/retention.*`)
+| Chave | Padrão | O que controla |
+|---|---|---|
+| `governanca.retencao.prazo_meses.<política>` | fiscal 60; contratos 120; jurídico 120; leads 24; logs 18; auditoria 60 | prazo inicial, em meses, de cada política semeada (editável depois por política); o livro exige prazo sem dar valores, o jurídico da cliente confirma |
+| `governanca.retencao.lote_tamanho` | 500 | registros por lote na aplicação |
+| `governanca.retencao.amostra_tamanho` | 20 | tamanho da amostra do dry-run |
+| `governanca.retencao.dry_run_validade_horas` | 72 | validade do dry-run para poder aplicar |
+| `governanca.retencao.apply_timeout_min` | 30 | tempo máximo de uma aplicação |
+| `governanca.retencao.job_hora` e `governanca.retencao.job_minuto` | 3 e 30 | horário do job (Brasília) |
+| `governanca.retencao.pagina_tamanho` | 50 | itens por página das consultas |
+| `governanca.retencao.integracao_automatica` | ligado | liga o alvo de integração da retenção (calendário de descarte das tabelas de integração, `retention.integration.js`) |
+
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.
