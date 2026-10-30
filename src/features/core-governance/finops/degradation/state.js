@@ -1,13 +1,13 @@
 'use strict';
 
-const repo = require('./degradation.repository');
+const { isSwitchActive } = require('../../feature-flags/flags.degradation');
 const { readDegradationParams } = require('./degradation.params');
 
 /**
- * Leitura do estado de degradação por quem consome os efeitos (M9-D863). A "flag" de cada passo é a linha APPLIED em governance.degradation_actions da
- * empresa: sem linha, comportamento normal. Leituras baratas (uma consulta indexada) e sempre dentro da transação do tenant do chamador.
+ * Leitura do estado de degradação por quem consome os efeitos (M9-D863). A flag de cada passo é o interruptor do registro de flags (M9-D870), lido por flags.resolve e mantido pela
+ * ação APPLIED/REVERTED de governance.degradation_actions; empresa sem interruptor registrado cai na própria linha APPLIED (DI-D863-2). Sempre dentro da transação do tenant do chamador.
  */
-const isStepActive = (step, tenant, transaction) => repo.isStepApplied(tenant, step, transaction);
+const isStepActive = (step, tenant, transaction) => isSwitchActive(tenant, step, transaction);
 
 /** LIMIT_EXPORT_SIZE: o max_rows efetivo. Passo ativo => `degradacao.exportacao_percentual` do valor base (mínimo 1); senão o próprio valor. Nulo continua nulo. */
 async function effectiveMaxRows(base, tenant, transaction) {

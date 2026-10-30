@@ -1,24 +1,38 @@
 # Governança — Feature flags e configuração (`feature-flags`)
 
 ## Objetivo
-Feature flags e configuração com dono, escopo, risco, versão, validade e auditoria; flag vencida alerta; kill switch testado. Este módulo nasce no alicerce M9-D800 (esqueleto, permissões, liga/desliga e rota do livro); as regras entram em M9-D870 a M9-D872, e cada demanda dona atualiza este README no mesmo commit.
+Feature flags e configuração com dono, escopo, risco, versão, validade e auditoria; flag vencida alerta; kill switch testado. Este módulo nasce no alicerce M9-D800; o registro (M9-D870) está aqui, a expiração e o relatório de CI entram em M9-D871 e o kill switch em M9-D872, e cada demanda dona atualiza este README no mesmo commit.
 
 ## Tabelas
-Nenhuma ainda. O alicerce cria o schema `governance` e a função `governance.apply_tenant_rls(regclass)`, que toda tabela do módulo chama na sua migration (faixa 20260101000800 a 20260101000869 no bloco E) para ganhar RLS + FORCE RLS, política `tenant_isolation` e GRANT protegido por existência do role `nayara_runtime`. Colunas padrão: `id uuid`, `group_id`, `company_id`, `created_at`, `updated_at`.
+- `governance.feature_flags` (kind `FLAG`, valor booleano) e `governance.config_entries` (kind `CONFIG`, valor tipado): mesmas colunas. `key` (`dominio.recurso.nome`, minúsculas), `value`, `value_type` (BOOLEAN, INTEGER, DECIMAL, STRING, ENUM com `allowed_values`, JSON), `owner_user_id` (obrigatório), `scope` + `scope_ref` (GLOBAL, ENVIRONMENT, GROUP, COMPANY, SECTOR, USER), `risk` (LOW a CRITICAL), `version` (1, +1 a cada alteração), `valid_from`/`valid_until`, `temporary`, `is_kill_switch`, `state` (ACTIVE ou EXPIRED), `source` (REGISTRY ou TENANT_SETTING). Única por empresa, chave, escopo e referência; a chave também não se repete entre flag e configuração.
+- `governance.flag_versions`: a foto da chave ANTES de cada alteração (valor anterior, escopo, risco, validade, motivo e quem alterou).
+- RLS + FORCE pela empresa (`governance.apply_tenant_rls`), GRANT ao `nayara_runtime` guardado por existência do role.
 
 ## Rotas e permissões
-- `GET /feature-flags` exige `governance:flags:manage` e o módulo ligado para a empresa (esqueleto do alicerce: devolve o estado do módulo). Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`.
-- Corpo de erro único: `{success:false,error:{code,message,details?,traceId}}` (traceId dentro de `error`).
+Todas exigem `governance:flags:manage` e o módulo ligado para a empresa. Sem login: 401 `MISSING_ACCESS_TOKEN`; sem permissão: 403 `PERMISSION_DENIED`; módulo desligado: 403 `GOV_MODULE_DISABLED`. Corpo de erro único: `{success:false,error:{code,message,details?,traceId}}`.
+- `GET /feature-flags`: lista as chaves da empresa (filtros `kind`, `scope`, `risk`, `state`, `owner`, `key` por prefixo); antes absorve as configurações já gravadas da empresa. Com `?id=` devolve a chave e as `versoes` anteriores.
+- `POST /feature-flags` (201): corpo `{ key, kind?, value, valueType?, allowedValues?, ownerUserId, scope?, scopeRef?, risk?, validFrom?, validUntil?, temporary?, description?, isKillSwitch?, reason? }`.
+- `PATCH /feature-flags` (200): corpo `{ id, reason, version?, value?, ownerUserId?, scope?, scopeRef?, risk?, validFrom?, validUntil?, temporary?, description? }`. `reason` é obrigatório; `version` divergente da atual devolve 409. Chave, tipo, lista de valores e `isKillSwitch` não mudam depois de criados. PATCH sem mudança real devolve `unchanged: true` e não gera versão. Chave `EXPIRED` só volta a `ACTIVE` quando o PATCH põe `validUntil` posterior a agora.
+- Erros: 422 `GOV_FLAG_OWNER_REQUIRED`, `GOV_FLAG_OWNER_INVALID`, `GOV_FLAG_VALIDITY_INVALID`, `GOV_FLAG_VALUE_INVALID`, `GOV_FLAG_INPUT_INVALID`, `GOV_FLAG_REASON_REQUIRED`, `GOV_FLAG_EXPIRED`, `GOV_FLAG_SOURCE_LOCKED`; 409 `GOV_FLAG_DUPLICATE`, `GOV_FLAG_VERSION_CONFLICT`; 404 `GOV_FLAG_NOT_FOUND`.
+
+### Leitura pelo código (flags.resolve)
+`flags.resolve(tenant, key, { userId, sector, environment }, transaction, { defaultValue, now })` (em `index.js`, `flags.resolve.js`) devolve `{ found, value, version, origin: { scope, scopeRef, entryId }, kind, risk }`. O escopo mais específico vigente vence (USER > SECTOR > COMPANY > GROUP > ENVIRONMENT > GLOBAL); entrada fora da validade (`now < valid_from` ou `now >= valid_until`) ou `EXPIRED` é ignorada e vale a seguinte, ou o padrão do código. Sem informar o ambiente, vale o da instalação (`governanca.finops.ambiente`).
+
+### Configurações da empresa (adaptador)
+`core.tenant_settings` continua sendo a fonte do valor e `getSetting`/tela de Parâmetros seguem como estão. O registro absorve cada linha existente como `CONFIG` (escopo COMPANY, responsável = quem gravou por último, risco do parâmetro, versão 1, `source = TENANT_SETTING`), idempotente, sem tocar no valor; chave cifrada nunca entra. Para essas chaves o valor mostrado e resolvido é o vivo; o PATCH grava o valor também pelo `upsertSetting` (com a validação do dicionário e as travas existentes) e só aceita valor, responsável, risco e descrição.
+
+### Interruptores de degradação por custo (M9-D863)
+Os cinco passos viram flags `finops.degradation.<passo>` (escopo COMPANY, risco `governanca.flags.risco_interruptores_degradacao`, responsável = dono do orçamento que acionou), ajustadas pelo `finopsDegradationJob` na mesma transação da ação (aplicar liga; desfazer desliga quando nenhum orçamento mantém o passo) e lidas por `flags.resolve` no ponto de leitura `finops/degradation/state.js`. Empresa sem o interruptor registrado ainda cai na própria ação APPLIED.
 
 ## Eventos
-- Este módulo não publica evento de domínio; mudanças relevantes ficam no registro de auditoria (`registrarAuditoria`, com antes e depois).
+- Auditoria `governance.flag.changed` (`registrarAuditoria`, antes e depois, motivo) em toda criação e alteração. Sem evento de domínio.
 
 ## Jobs e horários
-Nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela demanda dona e listados aqui com horário e parâmetro que o controla.
+Nenhum job próprio. Expiração e relatório de CI: M9-D871. Kill switch: M9-D872.
 
 ## Parâmetros
-- `governanca.modulos.feature_flags.habilitado` (booleano, padrão ligado): o administrador liga ou desliga o módulo para a empresa em Configurações > Governança.
-- Demais parâmetros do módulo: acrescentados pela demanda dona em `governance.settings.js` e em `SETTINGS_SCHEMA`, sempre com padrão do catálogo (`Maturacao/demandas/parametros.csv`).
+- `governanca.modulos.feature_flags.habilitado` (padrão ligado).
+- `governanca.flags.risco_padrao` (MEDIUM), `governanca.flags.risco_config_absorvida` (LOW), `governanca.flags.risco_interruptores_degradacao` (MEDIUM), `governanca.flags.valor_max_caracteres` (2000). Aba Governança em Configurações; catálogo em `Maturacao/demandas/parametros.csv`.
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).
@@ -26,7 +40,7 @@ Nenhum job no alicerce. Jobs deste módulo (se houver) são definidos pela deman
 - Decisões de implementação do bloco: `Maturacao/demandas/decisoes-de-implementacao.md`.
 
 ## Como testar
-`node scripts/withDisposableDb.js --port <porta> -- ...` com `test/m9d800.alicerceGovernanca.test.js` (alicerce) e os testes da demanda dona. Nunca contra o banco do `.env`.
+`node scripts/withDisposableDb.js --port <porta> -- ...` com `test/m9d800.alicerceGovernanca.test.js` (alicerce) e os testes `test/marco9/governanca/m9d870.*.test.js`. Nunca contra o banco do `.env`.
 
 ## Como diagnosticar
 Use o `traceId` da resposta de erro (igual ao cabeçalho `X-Correlation-Id`) para achar a requisição nos logs e no registro de auditoria. Módulo respondendo 403 `GOV_MODULE_DISABLED`: conferir a chave `governanca.modulos.feature_flags.habilitado` em Configurações > Governança.

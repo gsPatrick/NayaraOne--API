@@ -111,6 +111,17 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FINOPS_PERIOD_OPEN` | 422 | A fatura só pode ser importada para um período já fechado. | finops | 1.3.0 | não |
 | `GOV_FINOPS_POLICY_INVALID` | 422 | A política de degradação por custo é inválida. | finops | 1.3.0 | não |
 | `GOV_FINOPS_PROD_PROTECTED` | 403 | O ambiente de produção não pode ser desligado por custo. | finops | 1.3.0 | não |
+| `GOV_FLAG_DUPLICATE` | 409 | Já existe uma chave igual neste escopo. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_EXPIRED` | 422 | A chave expirou: estenda a validade para uma data futura para reativá-la. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_INPUT_INVALID` | 422 | Algum campo da chave é inválido. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_NOT_FOUND` | 404 | Chave não encontrada. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_OWNER_INVALID` | 422 | O responsável deve ser uma pessoa ativa desta empresa. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_OWNER_REQUIRED` | 422 | Informe o responsável pela chave. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_REASON_REQUIRED` | 422 | Informe o motivo da alteração. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_SOURCE_LOCKED` | 422 | Esta configuração vem das Configurações da empresa: só valor, responsável, risco e descrição podem mudar aqui. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_VALIDITY_INVALID` | 422 | O fim da validade deve ser após o início. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_VALUE_INVALID` | 422 | O valor não corresponde ao tipo da chave. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_VERSION_CONFLICT` | 409 | A chave foi alterada por outra pessoa. Recarregue e tente de novo. | feature-flags | 1.3.0 | não |
 | `GOV_IDEMPOTENCY_KEY_INVALID` | 400 | A chave de idempotência deve ter de 8 a 128 caracteres. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REQUIRED` | 400 | Envie o cabeçalho Idempotency-Key. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REUSED` | 422 | Esta chave de idempotência já foi usada com outra requisição. | api-governance | 1.0.0 | não |

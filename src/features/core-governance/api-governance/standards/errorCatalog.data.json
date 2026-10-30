@@ -735,6 +735,83 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_FLAG_DUPLICATE": {
+      "status": 409,
+      "message": "Já existe uma chave igual neste escopo.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_EXPIRED": {
+      "status": 422,
+      "message": "A chave expirou: estenda a validade para uma data futura para reativá-la.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_INPUT_INVALID": {
+      "status": 422,
+      "message": "Algum campo da chave é inválido.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_NOT_FOUND": {
+      "status": 404,
+      "message": "Chave não encontrada.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_OWNER_INVALID": {
+      "status": 422,
+      "message": "O responsável deve ser uma pessoa ativa desta empresa.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_OWNER_REQUIRED": {
+      "status": 422,
+      "message": "Informe o responsável pela chave.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_REASON_REQUIRED": {
+      "status": 422,
+      "message": "Informe o motivo da alteração.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_SOURCE_LOCKED": {
+      "status": 422,
+      "message": "Esta configuração vem das Configurações da empresa: só valor, responsável, risco e descrição podem mudar aqui.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_VALIDITY_INVALID": {
+      "status": 422,
+      "message": "O fim da validade deve ser após o início.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_VALUE_INVALID": {
+      "status": 422,
+      "message": "O valor não corresponde ao tipo da chave.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FLAG_VERSION_CONFLICT": {
+      "status": 409,
+      "message": "A chave foi alterada por outra pessoa. Recarregue e tente de novo.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_IDEMPOTENCY_KEY_INVALID": {
       "status": 400,
       "message": "A chave de idempotência deve ter de 8 a 128 caracteres.",
