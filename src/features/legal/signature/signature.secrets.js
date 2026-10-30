@@ -40,7 +40,7 @@ async function migrateToVault({ tenant, connection, providerKey, valor }, transa
   await TenantSetting.destroy({ where: { companyId: tenant.companyId, key: keyOf(providerKey) }, force: true, transaction }); // exclusão de verdade: o valor cifrado não pode ficar na linha apagada
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: null, action: 'legal.signature.webhook_secret_migrated_to_vault', entityType: 'IntegrationConnection', entityId: atual.id,
-    afterJson: { secretRef: atual.secretRef, referenciaAnterior: anterior }, reason: `O segredo do webhook de "${providerKey}" passou para o cofre de segredos e saiu das configurações da empresa.`,
+    beforeJson: { secretRef: anterior, origem: 'tenant_settings', setting: keyOf(providerKey) }, afterJson: { secretRef: atual.secretRef, referenciaAnterior: anterior }, reason: `O segredo do webhook de "${providerKey}" passou para o cofre de segredos e saiu das configurações da empresa.`,
   }, transaction);
   return true;
 }

@@ -56,7 +56,7 @@ async function createRealFromSettings(ctx, key, environment, transaction) {
   await TenantSetting.destroy({ where: { companyId: ctx.companyId, key: tokenKey }, force: true, transaction });
   await registrarAuditoria({
     groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: null, action: 'legal.signature.credential_migrated_to_vault', entityType: 'IntegrationConnection', entityId: criada.id,
-    afterJson: { secretRef, providerCode }, reason: `A credencial de "${providerCode}" passou para o cofre de segredos e saiu das configurações da empresa.`,
+    beforeJson: { connectionId: null, origem: 'tenant_settings', setting: tokenKey, secretRef: null }, afterJson: { secretRef, providerCode }, reason: `A credencial de "${providerCode}" passou para o cofre de segredos e saiu das configurações da empresa.`,
   }, transaction);
   return transitionConnection(criada.id, 'ACTIVE', ctx, transaction);
 }
