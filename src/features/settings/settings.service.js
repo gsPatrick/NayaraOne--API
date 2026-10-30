@@ -38,6 +38,8 @@ const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.sett
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
+const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
+const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
@@ -261,6 +263,9 @@ const SETTINGS_SCHEMA = {
   ...BANK_SETTINGS_SCHEMA,
   // Marco 9, M9-D232 — portais: intervalo da leitura de status dos anúncios e anúncios por página do sync.
   ...PORTAL_SETTINGS_SCHEMA,
+  // Marco 9, M9-D242 — armazenamento de objetos (validade máxima da URL assinada, driver padrão, tamanho máximo) e identidade (acesso local na contingência, relógio, JWKS, algoritmos).
+  ...STORAGE_SETTINGS_SCHEMA,
+  ...IDENTITY_SETTINGS_SCHEMA,
   // Marco 9, M9-D205 — envios a fornecedores: espera até SENDING virar UNKNOWN, retenção do envio e do conteúdo, tentativas máximas.
   ...DISPATCH_SETTINGS_SCHEMA,
   // Marco 9, M9-D238 — seguradoras: marcos de vencimento, cotação de renovação e prazo da tarefa manual.

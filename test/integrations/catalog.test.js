@@ -75,7 +75,9 @@ test('catalogo_seed_14_dominios', async () => {
       assert.equal(p.criticality, criticidade, `${code} criticidade`);
       assert.equal(p.status, 'ACTIVE');
       assert.equal(p.sandboxAvailable, true);
-      const esperado = domain === 'FINANCING' ? [...capabilities, 'verifyWebhook'] : capabilities;
+      // Operações extras que a demanda dona do port implementa sobre a tabela do livro (financiamento: verifyWebhook; armazenamento: URL assinada da M9-D242; identidade: JWKS da M9-D242).
+      const EXTRAS = { FINANCING: ['verifyWebhook'], STORAGE: ['getSignedUrl'], IDENTITY: ['listJwks'] };
+      const esperado = [...capabilities, ...(EXTRAS[domain] || [])];
       assert.deepEqual(ordenado(p.capabilities), ordenado(esperado), `${code} capabilities`);
     }
     const sandboxes = await IntegrationProvider.findAll({ where: { code: Object.values(LIVRO).map((v) => v[0]) }, transaction });

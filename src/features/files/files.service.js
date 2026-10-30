@@ -4,9 +4,9 @@ const crypto = require('crypto');
 const { File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const diskStorage = require('../../utils/diskStorage');
+const { sanitizeFileName } = require('../../utils/diskStorage');
 const { resolveAntivirusAdapter } = require('../people/adapters/resolveDocumentAdapters');
-const { encryptFileBuffer, decryptFileBuffer, isEncryptedBuffer } = require('../../utils/fileCrypto');
+const storage = require('../integrations/storage');
 
 // 20MB — cobre foto, PDF, docx e um vídeo curto de vistoria.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -151,12 +151,17 @@ async function uploadFile(payload, actorUserId, transaction) {
   // nunca sobre o blob criptografado — senão o checksum devolvido na resposta não bateria com o
   // arquivo que o usuário efetivamente baixa depois.
   const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-  const encryptedBuffer = encryptFileBuffer(buffer);
-  const storageKey = diskStorage.saveFile(resolveCategory(category), groupId, fileName, encryptedBuffer);
-  // O binário já está em disco antes do registro no banco: se a transação voltar (por este ou por um passo
+  // M9-D242: o binário vai pelo port de armazenamento (driver da empresa; o padrão é o disco local cifrado de sempre). O storageKey guardado continua
+  // sendo o caminho relativo (categoria/grupo/arquivo): a chave do port é esse caminho sob o prefixo company/<id>/.
+  const storageKey = `${resolveCategory(category)}/${groupId}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
+  const tenant = { groupId, companyId, userId: actorUserId || null };
+  const objectKey = storage.buildKey(companyId, storageKey);
+  await storage.putObject(tenant, { key: objectKey, body: buffer, contentType: mimeType, sha256: checksumSha256, metadata: { category: resolveCategory(category) } }, transaction);
+  // O binário já está gravado antes do registro no banco: se a transação voltar (por este ou por um passo
   // seguinte da requisição), o arquivo cifrado órfão é removido.
   if (transaction) {
-    transaction.afterRollbackCleanups = [...(transaction.afterRollbackCleanups || []), () => diskStorage.deleteFile(storageKey)];
+    const limpar = await storage.prepareRollbackCleanup(tenant, objectKey, transaction);
+    transaction.afterRollbackCleanups = [...(transaction.afterRollbackCleanups || []), limpar];
   }
 
   const file = await File.create(
@@ -254,21 +259,22 @@ async function getFileContent(id, transaction, actorUserId, preloadedMetadata) {
     }
     content = legacy.content;
   } else {
-    let buffer;
+    const motivos = { NO_CIPHER_MARKER: 'arquivo gravado cifrado está sem o marcador de cifra', CIPHER_AUTH_FAILED: 'falha na autenticação da cifra (AES-GCM)', SHA256_MISMATCH: 'checksum SHA-256 divergente' };
     try {
-      buffer = diskStorage.readFile(metadata.storageKey);
+      const lido = await storage.getObject(
+        { groupId: metadata.groupId, companyId: metadata.companyId, userId: actorUserId || null },
+        { key: storage.buildKey(metadata.companyId, metadata.storageKey), expectEncrypted: Boolean(metadata.encryptedAtRest) },
+        transaction
+      );
+      content = lido.buffer;
     } catch (err) {
-      throw AppError.notFound('Arquivo não encontrado em disco.', 'FILE_CONTENT_NOT_FOUND');
-    }
-    if (metadata.encryptedAtRest && !isEncryptedBuffer(buffer)) {
-      await rejectTamperedFile(metadata, actorUserId, 'arquivo gravado cifrado está sem o marcador de cifra');
-    }
-    try {
-      // decryptFileBuffer devolve como está um buffer sem marcador (legado, encryptedAtRest=false).
-      content = decryptFileBuffer(buffer);
-    } catch (err) {
-      if (err instanceof AppError) throw err;
-      await rejectTamperedFile(metadata, actorUserId, 'falha na autenticação da cifra (AES-GCM)');
+      if (err.code === 'INTEGRATION_STORAGE_INTEGRITY_VIOLATION') {
+        await rejectTamperedFile(metadata, actorUserId, motivos[err.details && err.details.reason] || 'conteúdo adulterado');
+      }
+      if (err.code === 'INTEGRATION_STORAGE_OBJECT_NOT_FOUND' || err.code === 'INTEGRATION_STORAGE_KEY_FORBIDDEN') {
+        throw AppError.notFound('Arquivo não encontrado em disco.', 'FILE_CONTENT_NOT_FOUND');
+      }
+      throw err;
     }
   }
 

@@ -24,8 +24,8 @@ const SANDBOX_PROVIDERS = Object.freeze([
   sandbox('FINANCING', 'financing-sandbox', 'Financiamento e promotoras — sandbox', ['simulate', 'submitCase', 'getCaseStatus', 'uploadDocument', 'requestAppraisal', 'verifyWebhook']),
   sandbox('FISCAL', 'fiscal-sandbox', 'NFS-e e fiscal — sandbox', ['issueNfse', 'getNfseStatus', 'cancelNfse']),
   sandbox('SOCIAL', 'social-sandbox', 'Redes sociais e publicação — sandbox', ['publishPost', 'getPostStatus', 'deletePost']),
-  sandbox('STORAGE', 'storage-sandbox', 'Armazenamento de objetos — sandbox', ['putObject', 'getObject', 'deleteObject', 'headObject']),
-  sandbox('IDENTITY', 'identity-sandbox', 'Identidade e autenticação — sandbox', ['verifyToken', 'getUserInfo', 'revokeSession']),
+  sandbox('STORAGE', 'storage-sandbox', 'Armazenamento de objetos — sandbox', ['putObject', 'getObject', 'deleteObject', 'headObject', 'getSignedUrl']),
+  sandbox('IDENTITY', 'identity-sandbox', 'Identidade e autenticação — sandbox', ['verifyToken', 'getUserInfo', 'revokeSession', 'listJwks']),
   sandbox('AI', 'ai-sandbox', 'Modelos de IA — sandbox', ['generate', 'embed', 'transcribe', 'analyzeImage']),
   sandbox('ANALYTICS', 'analytics-sandbox', 'Analytics e monitoramento — sandbox', ['emitMetric', 'emitEvent', 'queryHealth']),
 ]);
@@ -61,6 +61,19 @@ const EXISTING_PROVIDERS = Object.freeze([
   {
     code: 'messaging-alt-sandbox', displayName: 'Mensageria — sandbox alternativo (prova de troca de provider)', domain: 'MESSAGING',
     capabilities: ['sendText', 'sendTemplate', 'getStatus'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.MESSAGING, sandboxAvailable: false,
+  },
+  // M9-D242: o disco do servidor (o armazenamento que o sistema já usava), o serviço S3 compatível e a autenticação própria atrás dos ports.
+  {
+    code: 'storage-local-disk', displayName: 'Armazenamento — disco local do servidor', domain: 'STORAGE',
+    capabilities: ['putObject', 'getObject', 'deleteObject', 'headObject'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.STORAGE, sandboxAvailable: false,
+  },
+  {
+    code: 'storage-s3', displayName: 'Armazenamento — serviço compatível com S3', domain: 'STORAGE',
+    capabilities: ['putObject', 'getObject', 'deleteObject', 'headObject', 'getSignedUrl'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.STORAGE, sandboxAvailable: false,
+  },
+  {
+    code: 'identity-local', displayName: 'Identidade — autenticação própria do sistema', domain: 'IDENTITY',
+    capabilities: ['verifyToken', 'getUserInfo', 'revokeSession', 'listJwks'], supportedVersions: ['v1'], criticality: DEFAULT_CRITICALITY.IDENTITY, sandboxAvailable: false,
   },
 ]);
 

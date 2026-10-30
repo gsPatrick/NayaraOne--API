@@ -23,6 +23,11 @@ const { MessagingAltSandboxAdapter } = require('../providers/messaging/sandbox/m
 const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/analytics-sandbox.adapter');
 const { SocialSandboxAdapter } = require('../providers/social/sandbox/social-sandbox.adapter');
 const { EmailSandboxAdapter } = require('../providers/email/sandbox/email-sandbox.adapter');
+const { StorageLocalDiskAdapter } = require('../providers/storage/storage-local-disk.adapter');
+const { StorageSandboxAdapter } = require('../providers/storage/storage-sandbox.adapter');
+const { StorageS3Adapter } = require('../providers/storage/storage-s3.adapter');
+const { IdentityLocalAdapter } = require('../providers/identity/identity-local.adapter');
+const { IdentitySandboxAdapter } = require('../providers/identity/sandbox/identity-sandbox.adapter');
 const { installAnalytics } = require('../analytics');
 const { registerAiContingency } = require('../providers/ai/ai.degrade');
 const { installContingency } = require('../contingency');
@@ -31,6 +36,7 @@ const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, BankSantanderContractAdapter, SignatureSandboxAdapter,
   SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, ...INSURANCE_ADAPTERS, FiscalSandboxContractAdapter,
   MessagingSandboxAdapter, MessagingAltSandboxAdapter, PortalSandboxAdapter, PortalZapSandboxAdapter, PortalVivaRealSandboxAdapter, PortalOlxSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
+  StorageLocalDiskAdapter, StorageSandboxAdapter, StorageS3Adapter, IdentityLocalAdapter, IdentitySandboxAdapter, // M9-D242
 ]);
 
 /** Registra todos; contrato inválido lança 500 INTEGRATION_ADAPTER_CONTRACT_INVALID (o boot não segue). Devolve a lista registrada. */

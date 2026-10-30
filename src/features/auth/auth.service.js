@@ -164,6 +164,13 @@ async function login({ email, password, companyId }, meta = {}) {
       ipAddress: meta.ipAddress,
     });
 
+    // M9-D242 (INT-015): com o provedor externo de identidade fora, o login local (identity-local) segue só para quem a política libera. Sem provedor externo, não muda nada.
+    await require('../integrations/identity').assertLocalLoginAllowed(
+      { groupId: membership.groupId, companyId: membership.companyId, userId: user.id },
+      { userId: user.id, roles: claims.roles },
+      transaction
+    );
+
     user.lastLoginAt = new Date();
     user.updatedBy = user.id;
     await user.save({ transaction });

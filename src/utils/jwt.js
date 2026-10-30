@@ -2,6 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const AppError = require('./AppError');
+const { localIssuer, localAudience } = require('../shared/identity/localClaims');
 
 /**
  * Wrapper fino sobre `jsonwebtoken` — centraliza leitura dos segredos/TTL de env
@@ -23,6 +24,10 @@ function requireEnv(name) {
 function signAccessToken(payload) {
   return jwt.sign(payload, requireEnv('JWT_ACCESS_SECRET'), {
     expiresIn: process.env.JWT_ACCESS_TTL || '15m',
+    // M9-D242: iss, aud e nbf (= emissão) para a validação estrita do adapter identity-local.
+    issuer: localIssuer(),
+    audience: localAudience(),
+    notBefore: 0,
   });
 }
 

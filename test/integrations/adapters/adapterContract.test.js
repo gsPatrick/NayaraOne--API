@@ -129,7 +129,7 @@ test('adapter_health_check_nunca_lanca', async () => {
   }
   const bom = await runHealthCheck(new (adapterValido(BankAdapter, 'qa-m9-d209-x', ['submitPayment'], { submitPayment: async () => ({}) }))({}), ctx, null);
   assert.deepEqual(bom, { ok: true, latencyMs: 1, detail: 'ok' });
-  for (const A of BUILT_IN_ADAPTERS) assert.equal((await runHealthCheck(new A({ healthCheckTimeoutMs: 500, secret: async () => { throw new Error('sem cofre'); } }), ctx, null)).ok === true || A.name.includes('Clicksign') || A.name.includes('ZapSign') || A.name.includes('Santander') || A.name.includes('Porto') || A.name.includes('Yelum'), true, A.name);
+  for (const A of BUILT_IN_ADAPTERS) assert.equal((await runHealthCheck(new A({ healthCheckTimeoutMs: 500, secret: async () => { throw new Error('sem cofre'); } }), ctx, null)).ok === true || A.name.includes('Clicksign') || A.name.includes('ZapSign') || A.name.includes('Santander') || A.name.includes('Porto') || A.name.includes('Yelum') || A.name.includes('StorageS3'), true, A.name);
 });
 
 test('adapter_map_status_desconhecido_retorna_null', async () => {
