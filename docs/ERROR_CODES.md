@@ -180,6 +180,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `MFA_REQUIRED_NOT_ENABLED` | 403 | Ative a verificação em duas etapas para continuar. | plataforma | 1.0.0 | não |
 | `MFA_STEP_UP_REQUIRED` | 403 | Confirme sua identidade com o código de verificação em duas etapas. | plataforma | 1.0.0 | não |
 | `MISSING_ACCESS_TOKEN` | 401 | Token de acesso ausente. | plataforma | 1.0.0 | não |
+| `MKT_PAGE_GONE` | 410 | Esta página não está mais disponível. | marketing | 1.3.0 | não |
+| `MKT_PAGE_NOT_FOUND` | 404 | Página não encontrada. | marketing | 1.3.0 | não |
 | `PERMISSION_DENIED` | 403 | Você não tem permissão para realizar esta ação. | plataforma | 1.0.0 | não |
 | `ROUTE_NOT_FOUND` | 404 | Rota não encontrada. | plataforma | 1.3.0 | não |
 | `VALIDATION_ERROR` | 400 | Os dados enviados são inválidos. | plataforma | 1.0.0 | não |

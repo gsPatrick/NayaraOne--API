@@ -13,6 +13,8 @@ const BASE_CODES = Object.freeze({
   VALIDATION_ERROR: { status: 400, message: 'Os dados enviados são inválidos.', module: 'plataforma' },
   AUTH_VALIDATION: { status: 400, message: 'Os dados de acesso enviados são inválidos.', module: 'plataforma' },
   LEGAL_INSPECTION_IMMUTABLE_AFTER_SIGNATURE: { status: 409, message: 'Esta vistoria já tem assinatura registrada e ficou imutável.', module: 'legal' },
+  MKT_PAGE_NOT_FOUND: { status: 404, message: 'Página não encontrada.', module: 'marketing' },
+  MKT_PAGE_GONE: { status: 410, message: 'Esta página não está mais disponível.', module: 'marketing' },
 });
 
 const moduleOf = (files) => { const first = [...files][0] || ''; return first.includes('/') ? first.split('/')[0] : 'core-governance'; };

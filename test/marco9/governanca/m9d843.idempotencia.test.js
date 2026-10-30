@@ -48,7 +48,7 @@ test('m9d843 mesma chave e mesmo corpo repete a resposta', { skip: skip() }, asy
   assert.deepEqual(second.body, first.body, 'a resposta original');
   assert.equal(second.headers.get('idempotent-replay'), 'true');
   assert.equal(await opsWith(body.manualReference), 1, 'um só efeito');
-  const rows = await env.idemRows(A.companyId, '%POST /bcp/manual-operations');
+  const rows = (await env.idemRows(A.companyId, '%POST /bcp/manual-operations')).filter((row) => row.key === k);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].response_status, first.status);
   assert.equal(rows[0].key, k);
@@ -129,7 +129,7 @@ test('m9d843 POST /data-quality/bulk-changes passa pelo middleware padrão sem m
   assert.equal(second.status, first.status);
   assert.equal(second.headers.get('idempotent-replay'), 'true');
   assert.deepEqual(second.body, first.body);
-  const stored = await env.idemRows(A.companyId, '%POST /data-quality/bulk-changes');
+  const stored = (await env.idemRows(A.companyId, '%POST /data-quality/bulk-changes')).filter((row) => row.key === k); // só a chave deste teste: o registro é do banco inteiro e outros arquivos (contract test) deixam as suas
   assert.deepEqual([stored.length, stored[0].key, stored[0].response_status], [1, k, first.status], 'a chave está no registro do middleware padrão');
   const otherPlain = bulkEnv.bulkBody(city, { city: 'Outra Cidade QA' });
   const other = await post('/data-quality/bulk-changes', { ...otherPlain, confirmation: body.confirmation }, k);
