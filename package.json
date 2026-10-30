@@ -24,6 +24,7 @@
     "test:failure-drills:inventory": "node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/inventory.failureDrills.test.js",
     "lint": "node scripts/lintRatchet.js",
     "ai:arch-guard": "node scripts/ai-arch-guard.js",
+    "ai:dod": "node scripts/ai-dod-check.js",
     "guard:file-size": "node scripts/check-file-size.js",
     "guard:integration-boundaries": "node scripts/checkIntegrationBoundaries.js",
     "guard:nao-improvisar": "node scripts/checkNaoImprovisar.js",

@@ -1,6 +1,7 @@
 'use strict';
 
-const logger = require('../../../../utils/logger');
+const { safeLogger: logger } = require('../../audit/safeLogger');
+const { setRunLog } = require('../../observability/logContext');
 
 /**
  * Trilha de spans dos 12 passos do run (M9-D020): cada passo registra `{ step, name, ms, status }` na ordem em que executou; os
@@ -10,6 +11,7 @@ const logger = require('../../../../utils/logger');
 function createTrace({ correlationId, onSpan, clock = Date.now } = {}) {
   const spans = [];
   let runId = null;
+  setRunLog({ correlationId });
   async function span(step, name, fn) {
     const entry = { step, name, ms: 0, status: 'ok' };
     spans.push(entry);
@@ -34,7 +36,7 @@ function createTrace({ correlationId, onSpan, clock = Date.now } = {}) {
     logger.debug({ runId, correlationId: correlationId || null, step, name, status: 'ok', ms: 0 }, 'ai.run.step');
     return entry;
   }
-  return { span, mark, spans, setRunId(id) { runId = id; } };
+  return { span, mark, spans, setRunId(id) { runId = id; setRunLog({ runId: id }); } };
 }
 
 module.exports = { createTrace };

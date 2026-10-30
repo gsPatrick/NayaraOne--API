@@ -1,0 +1,38 @@
+{
+  "descricao": "Matriz do Definition of Done da IA NAY (M9-D047): os 16 itens do livro (seção 16) e do Guia (seção 18), cada um ligado às demandas que o entregam e aos testes nomeados que o provam. scripts/ai-dod-check.js confere item por item (teste existente e verde na execução offline, demanda verificada) e sai com 1 se faltar prova. O item 14 separa as provas de redaction das de isolamento entre empresas (RLS): as duas famílias precisam estar verdes.",
+  "relatorioAdversarial": "docs/evidencias/ci/adversarial-report.json",
+  "itens": [
+    { "n": 1, "item": "ProviderAdapter/registry; Adapters", "demandas": ["M9-D010", "M9-D011"], "provas": [{ "teste": "m9d010_contrato_todos_os_adapters" }] },
+    { "n": 2, "item": "Agentes e tool allowlists", "demandas": ["M9-D004", "M9-D016"], "provas": [{ "teste": "m9d004_tool_fora_da_allowlist_bloqueada" }] },
+    { "n": 3, "item": "Permission-aware tools", "demandas": ["M9-D016", "M9-D017"], "provas": [{ "teste": "m9d017_permissao_efetiva_e_interseccao" }] },
+    { "n": 4, "item": "RAG com version/classification; RAG isolado/versionado", "demandas": ["M9-D022", "M9-D023"], "provas": [{ "teste": "m9d023_chunk_sem_metadados_nao_grava" }, { "teste": "m9d023_retrieval_cross_company_bloqueado" }] },
+    { "n": 5, "item": "Memória estruturada", "demandas": ["M9-D009"], "provas": [{ "teste": "m9d009_texto_livre_recusado" }] },
+    { "n": 6, "item": "Grounding/source refs", "demandas": ["M9-D025"], "provas": [{ "teste": "m9d025_resposta_factual_exige_fonte_e_snapshot" }] },
+    { "n": 7, "item": "Injection defenses; injection suite", "demandas": ["M9-D021"], "provas": [{ "teste": "m9d021_injection_em_pdf_nao_altera_tool_policy" }] },
+    { "n": 8, "item": "Human approval gates", "demandas": ["M9-D019"], "provas": [{ "teste": "m9d019_aprovador_distinto" }] },
+    { "n": 9, "item": "Budgets/fallback; budgets/router/fallback", "demandas": ["M9-D012", "M9-D013", "M9-D014"], "provas": [{ "teste": "m9d014_alerta_50_75_90_100_uma_vez_cada" }] },
+    { "n": 10, "item": "Audit", "demandas": ["M9-D028"], "provas": [{ "teste": "m9d028_logs_sem_secrets_nem_tokens" }] },
+    { "n": 11, "item": "Golden datasets; golden tests", "demandas": ["M9-D033"], "provas": [{ "teste": "m9d033_golden_cobre_todas_as_categorias" }] },
+    { "n": 12, "item": "15 testes adversariais", "demandas": ["M9-D042"], "provas": [{ "teste": "adv_manifest_completo" }], "relatorioAdversarial": true },
+    { "n": 13, "item": "Regressão por modelo/provider", "demandas": ["M9-D033"], "provas": [{ "teste": "m9d033_mudar_modelo_sem_regressao_409" }] },
+    {
+      "n": 14,
+      "item": "Redaction/RLS verdes",
+      "demandas": ["M9-D027", "M9-D023", "M9-D004", "M9-D005", "M9-D044"],
+      "provas": [
+        { "teste": "adv_pii_no_log_redaction", "grupo": "redaction" },
+        { "teste": "m9d023_retrieval_cross_company_bloqueado", "grupo": "rls" },
+        { "teste": "m9d005_empresa_b_404", "grupo": "rls" },
+        { "teste": "m9d004_empresa_b_nao_ve_agente_da_a", "grupo": "rls" }
+      ]
+    },
+    {
+      "n": 15,
+      "item": "Observabilidade",
+      "demandas": ["M9-D047"],
+      "propria": "M9-D047",
+      "provas": [{ "teste": "m9d047_metricas_ai_expostas" }, { "teste": "m9d047_log_com_correlation_id_e_run_id" }]
+    },
+    { "n": 16, "item": "Agentes piloto verdes", "demandas": ["M9-D034"], "provas": [{ "teste": "m9d034_golden_verde" }] }
+  ]
+}

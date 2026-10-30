@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('../../../../utils/logger');
+const { safeLogger: logger } = require('../../audit/safeLogger');
 const { screenUserInput } = require('../injectionScreen');
 const { loadInjectionLimits } = require('../injectionDetector');
 const { loadGroundingSettings } = require('../grounding');

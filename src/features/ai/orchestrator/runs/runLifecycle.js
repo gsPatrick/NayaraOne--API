@@ -10,6 +10,7 @@ const { computeRunCost } = require('./runCost');
 const { publishRunEvent, auditRun } = require('./runEvents');
 const { onAiRunFinished } = require('../../../core-governance/finops/finops.hooks');
 const { sanitizeSummary, summaryLimit } = require('../../audit/auditSanitizer');
+const { observe } = require('../../observability/observe');
 
 /** Traduz recusas do banco (gatilhos) e deixa passar qualquer outro erro. */
 async function guarded(fn) {
@@ -102,6 +103,7 @@ async function finishRun(ctx, runId, data, transaction) {
     await auditRun(ctx, 'ai.run.state_changed', run, before, `Execução da NAY: ${before.status} para ${run.status}.`, transaction);
     await publishRunEvent(ctx, run, transaction);
     await onAiRunFinished(ctx, run, C.FINAL_STATUSES, transaction); // M9-D860: custo ESTIMATED da hora no ledger do FinOps
+    await observe(ctx, transaction, (m) => m.runFinished(run)); // M9-D047: ai_runs_total, latência, custo, bloqueio e insuficiência
     return run;
   });
 }

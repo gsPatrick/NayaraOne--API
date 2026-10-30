@@ -5,6 +5,7 @@ const repo = require('../readmodels/budgetSupport.readmodel');
 const { reaches, pctOf } = require('./budgets.money');
 const { publishBudgetThreshold } = require('../events');
 const { PERMISSIONS } = require('./budgets.constants');
+const { observe } = require('../observability/observe');
 
 const brl = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -39,6 +40,7 @@ async function notifyBudgetOwners(ctx, b, threshold, transaction) {
 async function raiseAlerts(ctx, budget, paramThresholds, transaction) {
   const thresholds = Array.isArray(budget.thresholds) && budget.thresholds.length ? budget.thresholds : paramThresholds;
   const raised = [];
+  await observe(ctx, transaction, (m) => m.budgetPct(budget.id, pctOf(budget.consumedAmount, budget.limitAmount))); // M9-D047: ai_budget_pct
   for (const threshold of thresholds) {
     if (!reaches(budget.consumedAmount, budget.limitAmount, threshold)) continue;
     const pct = pctOf(budget.consumedAmount, budget.limitAmount);

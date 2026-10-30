@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('../../../utils/logger');
+const { safeLogger: logger } = require('../audit/safeLogger');
 const { success } = require('../../../utils/httpResponse');
 const runs = require('../orchestrator/runs');
 const { prepareRequest, authOf } = require('./runApi.service');

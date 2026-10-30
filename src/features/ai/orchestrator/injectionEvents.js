@@ -5,6 +5,7 @@
 
 const { publishInjectionDetected } = require('../events');
 const { PATTERN_LIST_VERSION, EXCERPT_MAX } = require('./injectionDetector');
+const { observe } = require('../observability/observe');
 
 const EVENT_TYPE = 'ai.security.prompt_injection_detected';
 
@@ -21,6 +22,7 @@ async function publishInjectionEvents(ctx, runId, detections, transaction) {
   for (const d of detections || []) {
     if (!d || d.action === 'ALLOW') continue;
     publicados.push(await publishInjectionDetected(ctx, runId, toDetection(d), transaction));
+    await observe(ctx, transaction, (m) => m.injectionDetected(d.origin, `${runId}:${d.sourceId}`)); // M9-D047: ai_injection_detected_total
   }
   return publicados;
 }

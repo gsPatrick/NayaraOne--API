@@ -6,6 +6,7 @@ const { equivalenceProblems } = require('./equivalence');
 const { readFallbackParams } = require('./fallback.params');
 const { circuitIsOpen } = require('./circuit');
 const E = require('./fallback.errors');
+const { observe } = require('../../observability/observe');
 
 /** Falhas que justificam trocar de modelo. AUTH/VALIDATION (configuração) e SAFETY_BLOCKED (bloqueio do fornecedor) nunca. */
 const TRIGGERS = Object.freeze(['TIMEOUT', 'UNAVAILABLE', 'RATE_LIMIT']);
@@ -58,6 +59,7 @@ function createFallbackSelector({ registry = providerRegistry, circuitOpen = cir
       if (candidate.policy.labOnly && production) problems.push('LAB_ONLY_IN_PRODUCTION');
       if (!problems.length && params.requireGreen && !(await isGreen(ctx, { agentCode: input && input.agentCode, provider: candidate.providerCode, model: candidate.model.model }, transaction))) problems.push('EVALUATION');
       if (problems.length) continue;
+      await observe(ctx, transaction, (m) => m.fallback(decision.provider, link.provider)); // M9-D047: ai_fallback_total
       return { ...decision, provider: link.provider, model: link.model, classe: link.classe, estimatedCost: link.estimatedCost, reason: 'FALLBACK_SAFE', fallbackChain: chain.slice(index + 1) };
     }
     throw eligible ? E.fallbackUnsafe({ providerKind: error.kind }) : E.providerUnavailable({ providerKind: error.kind });

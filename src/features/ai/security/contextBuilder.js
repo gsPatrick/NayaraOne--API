@@ -7,7 +7,7 @@
  * log sem o conteúdo. O guarda de campos é injetado (`deps.aiAccess`): sem ele o contexto NÃO é montado (falha fechada).
  */
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const logger = require('../../../utils/logger');
+const { safeLogger: logger } = require('../audit/safeLogger');
 const { getSetting } = require('../../settings/settings.service');
 const { applyClassificationGate } = require('./classificationGate');
 const { getTaskType } = require('./taskTypes');

@@ -12,7 +12,7 @@
     { "numero": 9, "nome": "hallucination tests", "tipo": "automatico", "banco": true, "comandos": [{ "testes": ["test/marco9/ia/m9d044.golden_agentes.test.js", "test/marco9/ia/m9d025.*.test.js"], "env": { "AI_CI_GOLDEN_CATEGORIA": "HALLUCINATION" } }] },
     { "numero": 10, "nome": "budget/router tests", "tipo": "automatico", "banco": true, "comandos": [{ "testes": ["test/marco9/ia/m9d012.*.test.js", "test/marco9/ia/m9d013.*.test.js", "test/marco9/ia/m9d014.*.test.js", "test/marco9/ia/m9d015.*.test.js"] }] },
     { "numero": 11, "nome": "provider contract tests", "tipo": "automatico", "banco": true, "comandos": [{ "testes": ["test/marco9/ia/m9d010.*.test.js", "test/marco9/ia/m9d011.*.test.js"] }] },
-    { "numero": 12, "nome": "privacy/log redaction", "tipo": "automatico", "banco": true, "comandos": [{ "testes": ["test/marco9/ia/m9d027.*.test.js", "test/marco9/ia/m9d028.*.test.js"] }] },
+    { "numero": 12, "nome": "privacy/log redaction", "tipo": "automatico", "banco": true, "comandos": [{ "testes": ["test/marco9/ia/m9d027.*.test.js", "test/marco9/ia/m9d028.*.test.js"] }, ["node", "scripts/ai-ci/offlineIa.js"], ["node", "scripts/ai-dod-check.js"]] },
     { "numero": 13, "nome": "DEV", "tipo": "registro", "item": "DEV_DEPLOY" },
     { "numero": 14, "nome": "LAB", "tipo": "registro", "item": "LAB_VALIDATION", "exigeEvidencia": true, "depois": [{ "argv": ["npm", "run", "test:ai:adversarial"], "env": { "ADVERSARIAL_REPORT": "docs/evidencias/ci/adversarial-report-lab.json" } }] },
     { "numero": 15, "nome": "red-team", "tipo": "registro", "item": "RED_TEAM" },

@@ -3,6 +3,7 @@
 const logger = require('../../../utils/logger');
 const { redactDeep } = require('../../../shared/redaction');
 const { dropForbidden } = require('./auditSanitizer');
+const { currentLogContext } = require('../observability/logContext');
 
 /**
  * safeLogger (M9-D028): logger da NAY sobre src/utils/logger.js. Antes de chegar ao pino, o objeto perde as chaves de conteúdo
@@ -13,10 +14,19 @@ function sanitize(value) {
   return redactDeep(dropForbidden(value));
 }
 
+/**
+ * M9-D047: todo log da NAY carrega `correlationId` e `runId` (null quando não há). O que o chamador informou vale; senão vale o do run em
+ * curso (contexto assíncrono) e, fora de um run, o correlationId da requisição.
+ */
+function withContext(fields) {
+  const ctx = currentLogContext();
+  return { ...fields, correlationId: fields.correlationId || ctx.correlationId, runId: fields.runId || ctx.runId };
+}
+
 function emit(level, first, message) {
-  if (first instanceof Error) return logger[level](sanitize({ err: first }), message === undefined ? undefined : sanitize(message));
-  if (first !== null && typeof first === 'object') return logger[level](sanitize(first), message === undefined ? undefined : sanitize(message));
-  return logger[level](sanitize(first));
+  if (first instanceof Error) return logger[level](withContext(sanitize({ err: first })), message === undefined ? undefined : sanitize(message));
+  if (first !== null && typeof first === 'object') return logger[level](withContext(sanitize(first)), message === undefined ? undefined : sanitize(message));
+  return logger[level](withContext({}), sanitize(first));
 }
 
 const safeLogger = {

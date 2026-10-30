@@ -9,6 +9,7 @@ const { toRun } = require('./runs.mapper');
 const { publishRunEvent, auditRun } = require('./runEvents');
 const { guarded } = require('./runLifecycle');
 const { sanitizeSummary, sanitizeToolCalls, summaryLimit } = require('../../audit/auditSanitizer');
+const { observe } = require('../../observability/observe');
 
 /**
  * Versão do agente a gravar no run de uma NAY determinística (sem modelo): a ACTIVE da empresa, senão a ACTIVE do sistema,
@@ -46,6 +47,7 @@ async function recordRuleRun(ctx, data, transaction) {
     const run = toRun(row);
     await auditRun(ctx, 'ai.run.recorded', run, null, 'Execução determinística da NAY registrada.', transaction);
     await publishRunEvent(ctx, run, transaction);
+    await observe(ctx, transaction, (m) => m.runFinished(run)); // M9-D047
     return run;
   });
 }
