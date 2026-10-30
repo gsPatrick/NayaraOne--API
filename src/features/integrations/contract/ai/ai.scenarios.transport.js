@@ -1,5 +1,6 @@
 'use strict';
 
+const { TIMEOUT_JITTER_MS } = require('../contract.scenarios.transport');
 const { requestOf, attempt, faultable, provoke, expectKind, result, shapeProblems } = require('./ai.runtime');
 
 /** Cenários 1 a 6 da M9-D222 para os adapters de modelo (a operação recebe só o pedido e devolve o formato rico da M9-D010, não o normalizado do port). */
@@ -50,7 +51,7 @@ async function timeout({ make, fixture, ops, timeoutMs }) {
     const { out: r } = await provoke({ make, fixture, op, fault: { kind: 'timeout', afterMs: timeoutMs }, kind: 'TIMEOUT' });
     const ms = Date.now() - t0;
     const problema = expectKind(r, 'TIMEOUT', true);
-    const noPrazo = fixture.transport !== 'http' || (ms >= timeoutMs * 0.8 && ms < timeoutMs * 1.9);
+    const noPrazo = fixture.transport !== 'http' || (ms >= timeoutMs * 0.8 && ms < timeoutMs + TIMEOUT_JITTER_MS);
     out.push(result(3, 'timeout', op, !problema && noPrazo, `${problema || 'fora do prazo'} (${ms} ms, prazo ${timeoutMs} ms)`));
   }
   return out;

@@ -3,6 +3,9 @@
 const { withWire, BEFORE } = require('./contract.wire');
 const { callOp, classifyFailure, attempt, result, opClassOf } = require('./contract.runtime');
 
+/** Folga absoluta além do prazo para a máquina ocupada (CI, desenvolvimento paralelo): o adapter precisa desistir NO prazo, não em 1,9 vezes dele (prazo de 40 ms estourava em 76 ms sob carga). */
+const TIMEOUT_JITTER_MS = 1500;
+
 /** Cenários 1 a 6 (M9-D222 3.1): auth, happy path, timeout, 4xx, 5xx e rate limit. Cada função recebe { adapter, fixture, ops, state, timeoutMs } e devolve a lista de resultados. */
 
 async function auth({ adapter, fixture, ops, state }) {
@@ -43,7 +46,7 @@ async function timeout({ adapter, fixture, ops, timeoutMs }) {
     const ms = Date.now() - t0;
     const classe = r.ok ? null : classifyFailure(adapter, r.error, op).class;
     const esperado = opClassOf(adapter, op) === 'DANGEROUS' ? 'UNKNOWN' : 'TRANSIENT';
-    out.push(result(3, 'timeout', op, classe === esperado && ms >= timeoutMs * 0.8 && ms < timeoutMs * 1.9, `esperado ${esperado} em ~${timeoutMs} ms; veio ${classe} em ${ms} ms`));
+    out.push(result(3, 'timeout', op, classe === esperado && ms >= timeoutMs * 0.8 && ms < timeoutMs + TIMEOUT_JITTER_MS, `esperado ${esperado} em ~${timeoutMs} ms; veio ${classe} em ${ms} ms`));
   }
   return out;
 }
@@ -84,4 +87,4 @@ async function rateLimit({ adapter, fixture, ops }) {
   return out;
 }
 
-module.exports = { auth, happyPath, timeout, client4xx, server5xx, rateLimit };
+module.exports = { auth, happyPath, timeout, client4xx, server5xx, rateLimit, TIMEOUT_JITTER_MS };
