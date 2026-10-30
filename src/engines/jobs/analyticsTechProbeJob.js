@@ -2,6 +2,7 @@
 
 const { sequelize, Group, Company } = require('../../models');
 const logger = require('../../utils/logger');
+const clock = require('../../features/analytics/metrics/clock'); // M9-D606: o relógio do BI é um só
 const { runProbes, purgeTechSignals, PROBES } = require('../../features/analytics/tech-signals');
 const { readTechParams, TECH_DEFAULTS, KEYS } = require('../../features/analytics/read-models/tecnologia.settings');
 
@@ -44,7 +45,7 @@ async function resolveGlobalParams() {
 }
 
 /** Uma passada: mede as sondas se o intervalo venceu e apaga o que passou da retenção. `force` ignora o intervalo (teste). */
-async function runAnalyticsTechProbeJob({ now = new Date(), force = false } = {}) {
+async function runAnalyticsTechProbeJob({ now = clock.now(), force = false } = {}) {
   if (!state.params || force || now.getTime() - state.paramsAt >= PARAMS_TTL_MS) { state.params = await resolveGlobalParams(); state.paramsAt = now.getTime(); }
   const { intervalS, probes, retentionDays } = state.params;
   const out = { probed: null, purged: 0 };

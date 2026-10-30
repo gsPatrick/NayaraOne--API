@@ -8,6 +8,7 @@
 const fs = require('node:fs');
 const { sequelize } = require('../../../models');
 const { UPLOADS_ROOT } = require('../../../utils/diskStorage');
+const clock = require('../metrics/clock');
 const { KINDS, recordTechSignal } = require('./record');
 
 const CHECKS = Object.freeze({
@@ -26,7 +27,7 @@ async function measure(probe, timeoutMs) {
 }
 
 /** Mede e grava as sondas pedidas; devolve { PROBE: ok }. Sonda desconhecida não é gravada (não há como medir). */
-async function runProbes({ probes, timeoutMs = 4000, now = new Date() }) {
+async function runProbes({ probes, timeoutMs = 4000, now = clock.now() }) {
   const out = {};
   for (const probe of probes.filter((p) => CHECKS[p])) {
     out[probe] = await measure(probe, timeoutMs);

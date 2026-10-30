@@ -9,6 +9,7 @@
 const crypto = require('node:crypto');
 const { sequelize } = require('../../../models');
 const logger = require('../../../utils/logger');
+const clock = require('../metrics/clock'); // M9-D606: o relógio do BI é um só
 
 const KINDS = Object.freeze({ PROBE: 'PROBE', LOGIN_FAILURE: 'LOGIN_FAILURE', MFA_FAILURE: 'MFA_FAILURE' });
 
@@ -18,7 +19,7 @@ async function insertSignal(signal, transaction) {
   await sequelize.query("SELECT set_config('app.analytics_writer', 'on', true)", { transaction });
   await sequelize.query(
     `INSERT INTO analytics.tech_signal_log (kind, probe, ok, actor_hash, ip_hash, occurred_at) VALUES (:kind, :probe, :ok, :actor, :ip, :at)`,
-    { replacements: { kind: signal.kind, probe: signal.probe || null, ok: signal.ok === undefined ? null : signal.ok, actor: hashOf(signal.actor), ip: hashOf(signal.ip), at: signal.occurredAt || new Date() }, transaction }
+    { replacements: { kind: signal.kind, probe: signal.probe || null, ok: signal.ok === undefined ? null : signal.ok, actor: hashOf(signal.actor), ip: hashOf(signal.ip), at: signal.occurredAt || clock.now() }, transaction }
   );
 }
 
@@ -37,7 +38,7 @@ const recordLoginFailure = ({ email, ip }) => recordTechSignal({ kind: KINDS.LOG
 const recordMfaFailure = ({ userId, ip }) => recordTechSignal({ kind: KINDS.MFA_FAILURE, actor: userId, ip });
 
 /** Apaga os sinais mais antigos que `retentionDays` (o escritor do BI tem DELETE; o runtime não grava em outra tabela). Devolve quantos apagou. */
-async function purgeTechSignals({ now = new Date(), retentionDays }, transaction) {
+async function purgeTechSignals({ now = clock.now(), retentionDays }, transaction) {
   await sequelize.query("SELECT set_config('app.analytics_writer', 'on', true)", { transaction });
   const [, meta] = await sequelize.query("DELETE FROM analytics.tech_signal_log WHERE occurred_at < CAST(:now AS timestamptz) - make_interval(days => :days)", { replacements: { now, days: retentionDays }, transaction });
   return meta && meta.rowCount ? meta.rowCount : 0;
