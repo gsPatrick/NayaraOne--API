@@ -12,6 +12,8 @@ const { writePlan, writeOutcome, lockRun, runsOfEvent } = require('./runner.pers
 const { emitStarted, emitEnd } = require('./runner.events');
 const { readRunnerParams } = require('./runner.settings');
 const { CONSUMER_NAME, STEPS } = require('./runner.constants');
+const { passesFilter } = require('./runner.registry');
+const { resolveContractSubject } = require('./runner.subject');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** O inbox guarda o id do evento como uuid; o evento sintético da agenda (`sched:{fluxo}:{janela}`) ganha um uuid determinístico derivado do texto. */
@@ -34,7 +36,11 @@ async function buildContext(input, transaction, options) {
 const view = (run, extra = {}) => ({ runId: run.id, flowId: run.flowId || null, status: run.status, blockedReason: run.blocked_reason || null, replay: false, ...extra });
 
 /** Referências do payload que a espera precisa lembrar (o contrato do evento, para o executor das ações adiadas conferir). */
-const refsOf = (payload) => (payload && payload.contractId ? { contractId: String(payload.contractId) } : {});
+function refsOf(event) {
+  const payload = (event && event.payload) || {};
+  const contractId = payload.contractId || (event && event.aggregateType === 'Contract' ? event.aggregateId : null);
+  return contractId ? { contractId: String(contractId) } : {};
+}
 
 /**
  * Passos 2 a 9 de UMA versão para o evento. Insere a run (passo 6) DEPOIS das checagens, sempre: a run bloqueada nasce já BLOCKED com o motivo e o rastro. Conflito de chave =
@@ -45,7 +51,7 @@ async function processVersion(ctx, cand) {
   const decision = await decide(ctx, cand);
   const triggerEventId = resolveTriggerEventId({ triggerConfig: version.triggerConfig, payload: ctx.event.payload, eventId: ctx.event.eventId });
   const runKey = runIdempotencyKey({ automationVersionId: version.id, triggerEventId, subjectId: ctx.subject ? ctx.subject.id : null });
-  const entries = planEntries(runKey, version.actions, decision, ctx);
+  const entries = await planEntries(runKey, version.actions, decision, ctx);
   const blockedReason = decision.applicability || decision.runBlock || null;
   ctx.trace.push({ step: 6, name: STEPS[6], key: runKey, triggerEventId });
 
@@ -65,7 +71,7 @@ async function finishRun(ctx, { runRow, flow, version, entries, blockedReason })
   const summary = summarize(done, blockedReason);
   ctx.trace.push({ step: 7, name: STEPS[7], executed: done.filter((e, i) => e.status !== entries[i].status).map((e) => ({ index: e.index, type: e.type, status: e.status })) });
   ctx.trace.push({ step: 8, name: STEPS[8], results: done.map((e) => ({ index: e.index, type: e.type, status: e.status, error_code: e.error_code })) });
-  ctx.trace.push({ step: 9, name: STEPS[9], status: summary.status, event: { COMPLETED: 'automation.run.completed', BLOCKED: 'automation.run.blocked' }[summary.status] || null, refs: refsOf(ctx.event.payload) });
+  ctx.trace.push({ step: 9, name: STEPS[9], status: summary.status, event: { COMPLETED: 'automation.run.completed', BLOCKED: 'automation.run.blocked' }[summary.status] || null, refs: refsOf(ctx.event) });
   await writeOutcome(runRow.id, { status: summary.status, blockedReason: summary.blockedReason, trace: ctx.trace, actionsResult: done, nextDueAt: summary.nextDueAt }, ctx.transaction);
   const error = (done.find((e) => ['FAILED', 'UNKNOWN'].includes(e.status)) || {}).detail;
   await emitEnd({ tenant: ctx.tenant, run: runRow, status: summary.status, blockedReason: summary.blockedReason, entries: done, error }, ctx.transaction);
@@ -77,8 +83,9 @@ async function finishRun(ctx, { runRow, flow, version, entries, blockedReason })
  * (código MKT_NO_PUBLISHED_VERSION só no retorno e no log técnico). `input`: { eventId, eventType, subject, tenant, payload, correlationId }.
  * `candidates` (agenda) substitui a busca por tipo de evento.
  */
-async function processEvent(input, transaction, options = {}) {
-  await setTenant(input.tenant, transaction);
+async function processEvent(rawInput, transaction, options = {}) {
+  await setTenant(rawInput.tenant, transaction);
+  const input = rawInput.subject ? rawInput : { ...rawInput, subject: await resolveContractSubject(rawInput, transaction) };
   let result = { runs: [] };
   const work = async () => {
     const candidates = options.candidates || await findCandidates(input.eventType, transaction);
@@ -90,7 +97,8 @@ async function processEvent(input, transaction, options = {}) {
     const runs = [];
     for (const cand of candidates) {
       const ctx = await buildContext({ ...input, correlationId: input.correlationId || require('node:crypto').randomUUID() }, transaction, options);
-      ctx.trace.push({ step: 1, name: STEPS[1], eventId: input.eventId, eventType: input.eventType, correlationId: ctx.correlationId, refs: refsOf(input.payload) });
+      ctx.trace.push({ step: 1, name: STEPS[1], eventId: input.eventId, eventType: input.eventType, correlationId: ctx.correlationId, refs: refsOf(input) });
+      if (!(await passesFilter(cand, ctx))) continue; // o evento não interessa a esta automação: nenhuma run
       runs.push(await processVersion(ctx, cand));
     }
     result = { runs };

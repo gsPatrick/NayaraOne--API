@@ -1,10 +1,9 @@
 'use strict';
 
-const { QueryTypes } = require('sequelize');
-const { sequelize } = require('../../../../models');
 const { isOutboundBlocked } = require('../../killswitch.state');
 const { getRunnerTimeoutS, isRunStuck } = require('../idempotency');
 const { loadForRun } = require('./runner.load');
+const { contractAllowsMessages } = require('./runner.contract');
 const { decideSend } = require('./runner.decide');
 const { summarize } = require('./runner.plan');
 const { executePending } = require('./runner.exec');
@@ -15,17 +14,13 @@ const { SEND, STEPS, APPLICABILITY_REASONS } = require('./runner.constants');
 
 const skip = (entry, reason) => ({ ...entry, status: 'SKIPPED', error_code: reason, due_at: null });
 
-async function contractIsActive(contractId, transaction) {
-  const rows = await sequelize.query("SELECT status FROM legal.contracts WHERE id = :id AND deleted_at IS NULL", { replacements: { id: contractId }, transaction, type: QueryTypes.SELECT });
-  return rows.length > 0 && rows[0].status === 'ACTIVE';
-}
-
 /** Precondição da automação que deixou de valer durante a espera (fluxo pausado, contrato que deixou de estar ativo). Devolve o motivo de aplicabilidade ou null. */
 async function inapplicableNow(cand, row, transaction) {
   if (cand.flow.status !== 'ACTIVE') return 'AUTOMATION_PAUSED';
   const step1 = (Array.isArray(row.policy_trace) ? row.policy_trace : []).find((e) => e.step === 1) || {};
   const contractId = step1.refs && step1.refs.contractId;
-  if (contractId && cand.version.triggerConfig.requireActiveContract && !(await contractIsActive(contractId, transaction))) return 'CONTRACT_NOT_ACTIVE';
+  const cfg = cand.version.triggerConfig;
+  if (contractId && (cfg.requireActiveContract || cfg.requireNoOpenOccurrence) && !(await contractAllowsMessages(contractId, row.subject_id, cfg, transaction))) return 'CONTRACT_NOT_ACTIVE';
   return null;
 }
 
@@ -35,8 +30,8 @@ async function reevaluate(ctx, cand, entry, subject) {
   const def = cand.version.actions[entry.index] || {};
   const kill = await isOutboundBlocked(ctx.tenant, { channel: entry.channel, campaignId: cand.version.triggerConfig.campaignId, automationId: cand.flow.id }, ctx.transaction);
   if (kill.blocked) return skip(entry, 'KILL_SWITCH');
-  const decision = await decideSend({ ...def, channel: entry.channel, purpose: entry.purpose }, ctx, cand.version, subject, ctx.now);
-  if (decision.kind === 'allowed') return { ...entry, status: 'PENDING', due_at: null, at: ctx.now.toISOString() };
+  const decision = await decideSend({ ...def, channel: entry.channel || def.channel, purpose: entry.purpose }, ctx, cand.version, subject, ctx.now);
+  if (decision.kind === 'allowed') return { ...entry, channel: decision.channel, status: 'PENDING', due_at: null, at: ctx.now.toISOString() };
   if (decision.kind === 'delay') return { ...entry, due_at: new Date(decision.dueAt).toISOString() };
   return skip(entry, decision.reason);
 }

@@ -2,9 +2,9 @@
 
 const { mktError } = require('../../marketing.errors');
 const {
-  POS_KEYS_DAYS_KEY, RENTAL_DAYS_KEY, NO_REPLY_DAYS_KEY, QUIET_HOURS_KEY, FREQUENCY_CAP_KEY, CADENCE_DEFAULTS, EXPECTED,
+  POS_KEYS_DAYS_KEY, RENTAL_DAYS_KEY, NO_REPLY_DAYS_KEY, SEND_TIME_KEY, QUIET_HOURS_KEY, FREQUENCY_CAP_KEY, CADENCE_DEFAULTS, EXPECTED,
 } = require('./cadence.defaults');
-const { parseDaysList, parseQuietHours, parseFrequencyCap } = require('./cadence.parse');
+const { parseDaysList, parseQuietHours, parseFrequencyCap, parseTimeOfDay } = require('./cadence.parse');
 
 /**
  * M9-D417 — dicionário fail-closed dos parâmetros de cadência do Marketing (settings.service.js faz o spread). Valor inválido
@@ -14,6 +14,7 @@ const PARSERS = Object.freeze({
   [POS_KEYS_DAYS_KEY]: parseDaysList,
   [RENTAL_DAYS_KEY]: parseDaysList,
   [NO_REPLY_DAYS_KEY]: parseDaysList,
+  [SEND_TIME_KEY]: parseTimeOfDay,
   [QUIET_HOURS_KEY]: parseQuietHours,
   [FREQUENCY_CAP_KEY]: parseFrequencyCap,
 });

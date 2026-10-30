@@ -52,4 +52,12 @@ function parseFrequencyCap(text) {
   return { messages, days };
 }
 
-module.exports = { parseDaysList, parseQuietHours, parseFrequencyCap, validTimeZone };
+/** "10:00" -> { minutes } (minutos desde a meia-noite). Hora 00-23, minuto 00-59. */
+function parseTimeOfDay(text) {
+  if (typeof text !== 'string') return null;
+  const m = /^\s*(\d{2}):(\d{2})\s*$/.exec(text);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return { minutes: Number(m[1]) * 60 + Number(m[2]) };
+}
+
+module.exports = { parseTimeOfDay, parseDaysList, parseQuietHours, parseFrequencyCap, validTimeZone };

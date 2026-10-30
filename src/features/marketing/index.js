@@ -19,6 +19,8 @@ automations.runner.registerRunnerPorts({ canSend: suppression.canSend, sendMessa
  * automations, publications, tracking, suppression), cada uma com service, controller, routes e index. Nenhuma área importa a
  * outra por caminho interno: só pelo index.js. As integrações ficam nos adapters já definidos (M9-D200). Rotas em /marketing/*.
  */
+automations.seeds.registerUrlGuard(tracking.urls.assertAllowedUrl); // a regra única de URL externa (M9-D433) para o link de pesquisa e de avaliação
+
 const areas = { content, campaigns, automations, publications, tracking, suppression };
 
 // Rotas públicas (sem login) do Marketing: GET /t/:shortCode (M9-D431) e POST /marketing/webhooks/:channel (M9-D430). Montadas FORA de /marketing, antes das rotas autenticadas.

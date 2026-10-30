@@ -8,6 +8,7 @@
 const POS_KEYS_DAYS_KEY = 'marketing.cadencia.pos_chaves_dias';
 const RENTAL_DAYS_KEY = 'marketing.cadencia.locacao_dias';
 const NO_REPLY_DAYS_KEY = 'marketing.cadencia.sem_retorno_dias';
+const SEND_TIME_KEY = 'marketing.cadencia.horario_envio';
 const QUIET_HOURS_KEY = 'marketing.quiet_hours';
 const FREQUENCY_CAP_KEY = 'marketing.frequency_cap.global';
 
@@ -15,6 +16,7 @@ const CADENCE_DEFAULTS = Object.freeze({
   [POS_KEYS_DAYS_KEY]: '[3,30,90,365]',
   [RENTAL_DAYS_KEY]: '[7,15,30,90,180]',
   [NO_REPLY_DAYS_KEY]: '[1,3,7]',
+  [SEND_TIME_KEY]: '10:00',
   [QUIET_HOURS_KEY]: '21:00 a 08:00 America/Sao_Paulo',
   [FREQUENCY_CAP_KEY]: '3 mensagens por 7 dias por pessoa, canal e finalidade',
 });
@@ -23,6 +25,7 @@ const EXPECTED = Object.freeze({
   [POS_KEYS_DAYS_KEY]: 'lista crescente de dias inteiros, ex.: 3,30,90,365',
   [RENTAL_DAYS_KEY]: 'lista crescente de dias inteiros, ex.: 7,15,30,90,180',
   [NO_REPLY_DAYS_KEY]: 'lista crescente de dias inteiros, ex.: 1,3,7',
+  [SEND_TIME_KEY]: 'HH:MM, ex.: 10:00',
   [QUIET_HOURS_KEY]: 'HH:MM a HH:MM fuso, ex.: 21:00 a 08:00 America/Sao_Paulo',
   [FREQUENCY_CAP_KEY]: 'N mensagens por M dias, ex.: 3 mensagens por 7 dias por pessoa, canal e finalidade',
 });
@@ -37,5 +40,5 @@ const CADENCE_LIMITS = Object.freeze({
 });
 
 module.exports = {
-  POS_KEYS_DAYS_KEY, RENTAL_DAYS_KEY, NO_REPLY_DAYS_KEY, QUIET_HOURS_KEY, FREQUENCY_CAP_KEY, CADENCE_DEFAULTS, CADENCE_LIMITS, EXPECTED,
+  POS_KEYS_DAYS_KEY, RENTAL_DAYS_KEY, NO_REPLY_DAYS_KEY, SEND_TIME_KEY, QUIET_HOURS_KEY, FREQUENCY_CAP_KEY, CADENCE_DEFAULTS, CADENCE_LIMITS, EXPECTED,
 };

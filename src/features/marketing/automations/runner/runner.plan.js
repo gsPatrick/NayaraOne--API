@@ -1,35 +1,46 @@
 'use strict';
 
 const { actionKey, nextDueAt } = require('../idempotency');
-const { SEND, SEND_BLOCK_REASONS, APPLICABILITY_REASONS } = require('./runner.constants');
+const { SEND, SEND_BLOCK_REASONS, APPLICABILITY_REASONS, NO_CADENCE_DAY } = require('./runner.constants');
 
-/** Porta da cadência (M9-D422): devolve o horário em que a ação deve sair, ou null. Sem registro, nenhuma ação espera por cadência. */
-let cadenceDueAt = () => null;
+/** Porta da cadência (M9-D422): `fn(def, ctx) -> Date|null` (pode ser assíncrona) devolve o horário em que a ação deve sair, ou null. Sem registro, nenhuma ação espera por cadência. */
+let cadenceDueAt = async () => null;
 const registerCadenceDue = (fn) => { cadenceDueAt = fn; };
 
 const skip = (entry, reason) => ({ ...entry, status: 'SKIPPED', error_code: reason });
 const schedule = (entry, dueAt) => ({ ...entry, status: 'SCHEDULED', due_at: new Date(dueAt).toISOString() });
+
+/** Ação de envio de cadência: nasce SCHEDULED no horário da cadência, mesmo que já tenha passado (o executor das ações adiadas reavalia o canSend na hora do envio). Sem dia na lista, SKIPPED. */
+async function planDeferred(entry, def, ctx) {
+  const due = await cadenceDueAt(def, ctx);
+  return due ? schedule(entry, due) : skip(entry, NO_CADENCE_DAY);
+}
+
+async function planOne(runKey, def, index, decision, ctx) {
+  const type = def.actionType;
+  let entry = { index, type, action_type: type, action_key: actionKey(runKey, index, type), status: 'PENDING', due_at: null, provider_ref: null, error_code: null };
+  const send = decision.sends[index];
+  if (type === SEND) entry = { ...entry, channel: send ? send.channel : null, purpose: send ? send.purpose : String(def.purpose || 'MARKETING').toUpperCase(), at: ctx.now.toISOString() };
+  if (decision.applicability) return skip(entry, decision.applicability);
+  if (type === SEND) {
+    if (send && send.kind === 'blocked') return skip(entry, send.reason);
+    if (decision.runBlock) return skip(entry, decision.runBlock);
+    if (send && send.kind === 'delay') return schedule(entry, send.dueAt);
+    if (send && send.kind === 'deferred') return planDeferred(entry, def, ctx);
+  }
+  const cadence = await cadenceDueAt(def, ctx);
+  return cadence && new Date(cadence).getTime() > ctx.now.getTime() ? schedule(entry, cadence) : entry;
+}
 
 /**
  * Lista inicial de `actions_result` (passos 6 a 8): uma entrada por ação, com a action_key calculada UMA vez (e nunca trocada). A ação de envio guarda
  * canal, finalidade e horário (DI-D416-3). Aplicabilidade: tudo SKIPPED. Bloqueio de envio: a mensagem fica SKIPPED e as internas esperam a execução.
  * Horário de silêncio (ou cadência): a ação passa a SCHEDULED com o horário.
  */
-function planEntries(runKey, defs, decision, ctx) {
-  return defs.map((def, index) => {
-    const type = def.actionType;
-    let entry = { index, type, action_type: type, action_key: actionKey(runKey, index, type), status: 'PENDING', due_at: null, provider_ref: null, error_code: null };
-    const send = decision.sends[index];
-    if (type === SEND) entry = { ...entry, channel: send ? send.channel : null, purpose: send ? send.purpose : String(def.purpose || 'MARKETING').toUpperCase(), at: ctx.now.toISOString() };
-    if (decision.applicability) return skip(entry, decision.applicability);
-    if (type === SEND) {
-      if (send && send.kind === 'blocked') return skip(entry, send.reason);
-      if (decision.runBlock) return skip(entry, decision.runBlock);
-      if (send && send.kind === 'delay') return schedule(entry, send.dueAt);
-    }
-    const cadence = cadenceDueAt(def, ctx);
-    return cadence && new Date(cadence).getTime() > ctx.now.getTime() ? schedule(entry, cadence) : entry;
-  });
+async function planEntries(runKey, defs, decision, ctx) {
+  const out = [];
+  for (const [index, def] of defs.entries()) out.push(await planOne(runKey, def, index, decision, ctx));
+  return out;
 }
 
 /**

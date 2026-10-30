@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { findScheduled } = require('./runner.load');
 const { processEvent, setTenant } = require('./runner.service');
+const { expanderOf } = require('./runner.registry');
 
 const MINUTE = 60000;
 
@@ -38,6 +39,14 @@ async function runScheduleTick(tenant, transaction, options = {}) {
   for (const cand of await findScheduled(transaction)) {
     const cfg = cand.version.triggerConfig;
     if (!cronMatches(cfg.cron, window, cfg.timeZone)) continue;
+    const expand = expanderOf(cand);
+    if (expand) { // um evento por item (ex.: uma run por pendência aberta), cada um com sujeito e eventId próprios
+      for (const item of await expand(cand, { tenant, transaction, now, window })) {
+        const done = await processEvent({ eventId: item.eventId, eventType: 'schedule', subject: item.subject || null, tenant, payload: item.payload || {}, correlationId: crypto.randomUUID() }, transaction, { ...options, now, candidates: [cand] });
+        created += done.runs.filter((r) => !r.replay).length;
+      }
+      continue;
+    }
     const out = await processEvent({ eventId: `sched:${cand.flow.id}:${window.toISOString()}`, eventType: 'schedule', subject: null, tenant, payload: {}, correlationId: crypto.randomUUID() }, transaction, { ...options, now, candidates: [cand] });
     created += out.runs.filter((r) => !r.replay).length;
   }

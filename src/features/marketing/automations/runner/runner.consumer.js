@@ -9,7 +9,7 @@ const { CONSUMER_NAME } = require('./runner.constants');
 /** Do evento do outbox para a entrada do runner: eventId do outbox, sujeito do payload/agregado, empresa e correlationId do evento. */
 const inputOf = (event) => ({
   eventId: event.id, eventType: event.eventType, subject: resolveSubject(event), tenant: { groupId: event.groupId, companyId: event.companyId },
-  payload: event.payloadJson || {}, correlationId: event.correlationId || undefined,
+  payload: event.payloadJson || {}, correlationId: event.correlationId || undefined, aggregateType: event.aggregateType, aggregateId: event.aggregateId, occurredAt: event.occurredAt || event.createdAt || null,
 });
 
 /** Passo 1: o runner consome do outbox todo evento do catálogo de gatilhos (um registro por evento; idempotente pelo inbox). */

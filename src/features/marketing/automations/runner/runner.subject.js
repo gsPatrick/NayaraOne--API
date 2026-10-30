@@ -28,4 +28,21 @@ async function subjectIsInCompany(subject, tenant, payload, transaction) {
   return rows.length > 0;
 }
 
-module.exports = { resolveSubject, subjectIsInCompany };
+const COUNTERPARTY_ROLES = ['TENANT', 'BUYER'];
+
+/**
+ * Sujeito dos eventos de contrato que não trazem a pessoa no payload (contract.activated): a contraparte do contrato (locatário ou comprador, a mais antiga). Evento sem
+ * contrato, ou contrato sem contraparte, segue sem sujeito.
+ */
+async function resolveContractSubject(input, transaction) {
+  const payload = input.payload || {};
+  const contractId = payload.contractId || (input.aggregateType === 'Contract' ? input.aggregateId : null);
+  if (!contractId) return null;
+  const [party] = await sequelize.query(
+    'SELECT person_id FROM legal.contract_parties WHERE contract_id = :id AND party_role IN (:roles) AND deleted_at IS NULL ORDER BY created_at, id LIMIT 1',
+    { replacements: { id: contractId, roles: COUNTERPARTY_ROLES }, transaction, type: QueryTypes.SELECT }
+  );
+  return party ? { type: 'PERSON', id: party.person_id } : null;
+}
+
+module.exports = { resolveSubject, subjectIsInCompany, resolveContractSubject };

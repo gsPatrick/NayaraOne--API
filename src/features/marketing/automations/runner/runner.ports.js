@@ -5,6 +5,7 @@
  * em outras áreas (canSend da supressão, o envio de mensagem e a criação de rascunho). O pedido de avaliação (REQUEST_REVIEW) é registrado pela M9-D424.
  */
 const ports = { canSend: null, sendMessage: null, createDraft: null, reviewRequester: null };
+const linkProviders = new Map();
 
 const required = (name) => {
   if (!ports[name]) throw new Error(`Porta do runner não registrada: ${name}. Carregue o módulo de Marketing (src/features/marketing).`);
@@ -22,10 +23,17 @@ function registerReviewRequester(fn) {
   ports.reviewRequester = fn;
 }
 
+/** Provedor de link de uma mensagem (`linkProvider` da ação): `fn({ tenant, transaction, personId }) -> string|null`. O dono do link (ex.: pesquisa de satisfação do CRM) o registra. */
+function registerLinkProvider(name, fn) {
+  if (!name || typeof fn !== 'function') throw new TypeError('Informe o nome e a função do provedor de link.');
+  linkProviders.set(name, fn);
+}
+const linkOf = async (name, context) => (linkProviders.has(name) ? linkProviders.get(name)(context) : null);
+
 const clearReviewRequester = () => { ports.reviewRequester = null; };
 
 module.exports = {
-  registerRunnerPorts, registerReviewRequester, clearReviewRequester,
+  registerLinkProvider, linkOf, registerRunnerPorts, registerReviewRequester, clearReviewRequester,
   canSend: (...a) => required('canSend')(...a), sendMessage: (...a) => required('sendMessage')(...a), createDraft: (...a) => required('createDraft')(...a),
   requestReview: (...a) => { if (!ports.reviewRequester) throw new Error('Serviço de pedido de avaliação (M9-D424) não registrado.'); return ports.reviewRequester(...a); },
 };

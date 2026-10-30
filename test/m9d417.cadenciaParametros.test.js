@@ -108,7 +108,8 @@ test('historico_guarda_antes_e_depois_e_ator', async () => {
     assert.equal(history[0].changedBy, tenant.userId);
     assert.equal(history[1].before, null);
     const list = await P.listMarketingParams(tenant, t);
-    assert.equal(list.length, 5);
+    assert.equal(list.length, P.CADENCE_KEYS.length); // M9-D422 acrescentou o horário de envio da cadência
+    assert.ok(list.some((p) => p.code === P.SEND_TIME_KEY && p.isDefault && p.value === '10:00'));
     assert.equal(list.find((p) => p.code === P.POS_KEYS_DAYS_KEY).isDefault, false);
     assert.equal(list.find((p) => p.code === P.QUIET_HOURS_KEY).isDefault, true);
   });

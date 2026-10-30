@@ -73,12 +73,24 @@ async function decide(ctx, cand) {
     return out;
   }
 
+  const forced = version.triggerConfig && version.triggerConfig.blockWith;
+  if (SEND_BLOCK_REASONS.includes(forced)) { // automação cujo desfecho é o próprio bloqueio de envio (ex.: série de lembretes expirada): as ações internas executam e nenhuma mensagem sai
+    out.runBlock = forced;
+    ctx.trace.push({ step: 3, name: 'SUPPRESSION_CONSENT', forcedBy: 'trigger_config.blockWith', reason: forced }, skipped(4, 'COOLDOWN', { reason: forced }), skipped(5, 'CONDITIONS', { reason: forced }));
+    return out;
+  }
+
   const sendDefs = version.actions.map((def, index) => ({ def, index })).filter((x) => x.def.actionType === SEND);
   const resolved = {};
   for (const { def, index } of sendDefs) resolved[index] = await resolveChannel(def, subject, ctx);
   const kill = await isOutboundBlocked(ctx.tenant, { channel: Object.values(resolved).filter(Boolean), campaignId: version.triggerConfig && version.triggerConfig.campaignId, automationId: flow.id }, ctx.transaction);
   const step3 = { step: 3, name: 'SUPPRESSION_CONSENT', killSwitch: { blocked: kill.blocked, unreadable: kill.unreadable, by: kill.blockedBy || [] }, sends: [] };
   for (const { def, index } of sendDefs) {
+    if (def.cadence) { // mensagem de cadência: kill switch e canSend valem na hora do envio (executor das ações adiadas), nunca na criação da agenda
+      out.sends[index] = { kind: 'deferred', channel: resolved[index], purpose: purposeOf(def) };
+      step3.sends.push({ index, channel: resolved[index], purpose: purposeOf(def), allowed: null, decision: 'deferred', reason: null, nextEligibleAt: null });
+      continue;
+    }
     const decision = kill.blocked ? { kind: 'blocked', reason: 'KILL_SWITCH', channel: resolved[index], purpose: purposeOf(def) } : await decideSend(def, ctx, version, subject);
     out.sends[index] = decision;
     step3.sends.push({ index, channel: decision.channel, purpose: decision.purpose, allowed: decision.kind === 'allowed', decision: decision.kind, reason: decision.reason || null, nextEligibleAt: decision.nextEligibleAt || decision.dueAt || null });

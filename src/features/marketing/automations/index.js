@@ -7,4 +7,6 @@ const policy = { ...require('./policy'), ...require('./policy.reserve'), ...requ
 
 const runner = require('./runner'); // M9-D414: automation runner (9 passos, ações adiadas, agenda); as portas para outras áreas são registradas em marketing/index.js
 
-module.exports = { router, service, cadence, policy, runner };
+const seeds = require('./seeds'); // M9-D422: automações prontas (pós-chaves, locação) ligadas ao runner pelas portas dele
+
+module.exports = { router, service, cadence, policy, runner, seeds };
