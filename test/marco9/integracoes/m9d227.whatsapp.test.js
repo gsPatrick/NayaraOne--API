@@ -19,7 +19,7 @@ before(async () => {
   await new Promise((resolve) => { setTimeout(resolve, 300); });
 });
 beforeEach(async () => { await env.limparContingencias(tenant); await env.limparCircuito(tenant); await env.limparPendentes(tenant); await env.restaurar(tenant, CHAVES); });
-after(async () => { await env.limparContingencias(tenant); await env.limparCircuito(tenant); await env.limparPendentes(tenant); await env.restaurar(tenant, CHAVES); await env.desativarConexoesDeTeste(tenant); await env.sequelize.close(); process.exit(0); });
+after(async () => { await env.drenarEventos(tenant); await env.limparContingencias(tenant); await env.limparCircuito(tenant); await env.limparPendentes(tenant); await env.restaurar(tenant, CHAVES); await env.desativarConexoesDeTeste(tenant); await env.sequelize.close(); process.exit(0); });
 
 const recusa = (status, code) => (e) => e.statusCode === status && e.code === code;
 

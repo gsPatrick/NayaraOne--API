@@ -10,6 +10,7 @@ const personConsents = require('../../../src/features/people/personConsents.serv
 const registry = require('../../../src/features/integrations/registry/registry.service');
 const { transitionConnection } = require('../../../src/features/integrations/registry/connections.transition');
 const { runDispatchCycle } = require('../../../src/features/integrations/dispatch/worker');
+const { dispatchPendingEventsForCompany } = require('../../../src/engines/events/outbox-dispatcher');
 
 const { comTenant, ctxDe, uniqueSuffix, sequelize } = e226;
 const { sql } = e230;
@@ -46,8 +47,10 @@ const emails = (tenant, messageId) => sql(tenant, "SELECT * FROM integration.ema
 const tarefasDe = (tenant, dispatchId) => e226.tarefasDoEnvio(tenant, dispatchId);
 const rodarEnvios = (tenant) => runDispatchCycle(ctxDe(tenant));
 const cancelarTudo = (tenant) => e226.limparPendentes(tenant);
+/** Entrega os eventos que o teste deixou no outbox com as connections ainda de pé: o teste seguinte do mesmo banco não herda reação a envio de integração que já foi desativada. */
+const drenarEventos = (tenant) => dispatchPendingEventsForCompany({ id: tenant.groupId }, { id: tenant.companyId }, { limit: 2000 }).catch(() => null);
 
 module.exports = {
-  ...e226, whatsapp, derrubar, recuperar, pessoa, enviar, emails, tarefasDe, rodarEnvios, cancelarTudo, e230, e234, abrirJanela: e230.abrirJanela, mensagem: e230.mensagem, envioDe: e230.envioDe, parametro: e230.parametro, restaurar: e230.restaurar,
+  ...e226, whatsapp, derrubar, recuperar, pessoa, enviar, emails, tarefasDe, rodarEnvios, cancelarTudo, drenarEventos, e230, e234, abrirJanela: e230.abrirJanela, mensagem: e230.mensagem, envioDe: e230.envioDe, parametro: e230.parametro, restaurar: e230.restaurar,
   consentir: e230.consentir, modelo: e230.modelo, sequelize, sql, comTenant, ctxDe, uniqueSuffix, registry,
 };

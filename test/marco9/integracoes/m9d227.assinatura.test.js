@@ -23,7 +23,7 @@ before(async () => {
   await new Promise((resolve) => { setTimeout(resolve, 300); });
 });
 beforeEach(async () => { await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); });
-after(async () => { desligarCofre(); await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); await e227.desativarConexoesDeTeste(tenant); await env.sequelize.close(); process.exit(0); });
+after(async () => { desligarCofre(); await e227.drenarEventos(tenant); await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); await e227.desativarConexoesDeTeste(tenant); await env.sequelize.close(); process.exit(0); });
 
 const iso = () => new Date().toISOString();
 const signerDe = (s) => ({ id: s.external_signature_id, email: s.signer_email, name: 'Signatário' });

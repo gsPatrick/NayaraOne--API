@@ -21,7 +21,7 @@ before(async () => {
   [zap, viva, olx] = await env.tresPortais();
 });
 beforeEach(async () => { await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); });
-after(async () => { await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); await e227.desativarConexoesDeTeste(tenant); await sequelize.close(); process.exit(0); });
+after(async () => { await e227.drenarEventos(tenant); await e227.limparContingencias(tenant); await e227.limparCircuito(tenant); await e227.limparPendentes(tenant); await e227.desativarConexoesDeTeste(tenant); await sequelize.close(); process.exit(0); });
 
 const publicar = (propertyId, connectionIds) => comTenant(tenant, (t) => portal.publishToPortals(env.ctxDe(tenant), { propertyId, connectionIds }, t));
 const sincronizar = () => portal.syncListingStatuses({ group: env.grupo, company: env.empresa });
