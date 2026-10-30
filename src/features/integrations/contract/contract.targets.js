@@ -12,7 +12,7 @@ const FIRST = Object.freeze(['messaging-sandbox']);
 
 /** Famílias de adapter que ainda não têm fixtures: a suíte delas entra no sprint da demanda indicada (a lista só encolhe). Casa pelo prefixo do código do fornecedor. */
 const PENDING_BY_DEMAND = Object.freeze({
-  'social-': 'M9-D239',
+ 
  
 });
 

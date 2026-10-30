@@ -16,9 +16,11 @@ const { registerKillSwitchCheck, isKillSwitchActive } = require('./social.killsw
 const { socialIdempotencyKey, slotOf, IMMEDIATE_SLOT } = require('./social.key');
 const { readSocialParams, PADROES } = require('./social.params');
 const { formatContentRef, parseContentRef } = require('./social.payload');
+const { installSocialReactions } = require('./social.react');
 
 registerPreflight(socialPreflight);
 registerReconcileEnricher('SOCIAL', socialReconcileEnricher);
+installSocialReactions(); // M9-D220: a reação do conteúdo ao envio confirmado ou falho (e a compensação)
 
 module.exports = {
   publishToSocial, rescheduleSocialPost, assertPublishable, socialPreflight, socialIdempotencyKey, slotOf, IMMEDIATE_SLOT, readSocialParams, SOCIAL_PADROES: PADROES,

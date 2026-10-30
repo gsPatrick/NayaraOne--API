@@ -1,0 +1,31 @@
+{
+  "provider": "social-sandbox",
+  "apiVersion": "v1",
+  "description": "Rede social de laboratório (guarda o post pela chave de idempotência; a resposta de publishPost traz o identificador do post).",
+  "requests": {
+    "publishPost": {
+      "contentRef": "mkt:item-contrato:versao-contrato:0123456789abcdef:MANUAL",
+      "text": "Casa nova no bairro do contrato"
+    },
+    "getPostStatus": {
+      "externalResourceIdFrom": "publishPost"
+    },
+    "deletePost": {
+      "externalResourceIdFrom": "publishPost"
+    },
+    "findPostByKey": {
+      "idempotencyKey": "contract-chave-inexistente"
+    }
+  },
+  "noResourceId": [
+    "findPostByKey"
+  ],
+  "statuses": {
+    "queued": "QUEUED",
+    "published": "PUBLISHED",
+    "failed": "FAILED",
+    "deleted": "DELETED"
+  },
+  "unknownStatus": "em_moderacao",
+  "renewal": false
+}
