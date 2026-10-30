@@ -8,6 +8,7 @@ const { run } = require('./campaigns.repository');
 const stepsRepo = require('./steps.repository');
 const { getCampaignSendPort } = require('./sendPort');
 const { assertCampaignRunning } = require('./runnerGuard');
+const { isOutboundBlocked } = require('../killswitch.state');
 const { readRecipientBatch } = require('./campaigns.settings');
 const { STEP_CONTENT_STATUSES } = require('./campaigns.constants');
 const { checkApproval } = require('../content').approval;
@@ -63,6 +64,8 @@ async function processRecipient(port, ctx, transaction) {
   }
   let sent;
   try { sent = await port.send(portCtx); } catch (err) { logger.error({ err: err.message, stepId: step.id }, 'marketing.campaign.send.failed'); sent = { ok: false, errorCode: 'SEND_EXCEPTION' }; }
+  // Kill switch ligado no meio do lote (M9-D425): nada é registrado para o destinatário, que continua pendente e sai depois da reativação.
+  if (sent && sent.errorCode === 'MKT_KILL_SWITCH_ACTIVE') return 'DEFERRED';
   const ok = Boolean(sent && sent.ok);
   await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, ok ? 'SENT' : 'FAILED', ok ? null : (sent && sent.errorCode) || 'SEND_FAILED', sent && sent.externalRef, transaction);
   return ok ? 'SENT' : 'FAILED';
@@ -86,6 +89,8 @@ async function processStep(port, stepId, tenant, now, transaction, totals) {
   if (!step || step.status !== 'SCHEDULED') return;
   const guard = await assertCampaignRunning(step.campaign_id, tenant, transaction);
   if (!guard.allowed) { totals.blocked += 1; return; }
+  // Kill switch global ou do canal do step (M9-D425): o step continua SCHEDULED, sem nada apagado, e sai no ciclo seguinte à reativação. Estado ilegível também segura.
+  if ((await isOutboundBlocked(tenant, { channel: step.channel, campaignId: step.campaign_id }, transaction)).blocked) { totals.blocked += 1; return; }
   const [campaign] = await run('SELECT id, code, channels FROM marketing.campaigns WHERE id = :id AND company_id = :companyId', { id: step.campaign_id, companyId: tenant.companyId }, transaction);
 
   const reason = await skipReasonOf(step, tenant, transaction);

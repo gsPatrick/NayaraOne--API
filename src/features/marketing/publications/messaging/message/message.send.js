@@ -13,8 +13,13 @@ const { buildWhatsappMessage, previewFields: whatsappPreview } = require('./what
 const { buildEmailMessage, previewFields: emailPreview } = require('./email.adapter');
 const { recipientAddress } = require('./message.recipient');
 const { recordOutbound, moveOutbound, audit, STATUS_TEXT } = require('./message.persist');
+const { isOutboundBlocked } = require('../../../killswitch.state');
 
 const QUIET = 'QUIET_HOURS';
+const KILL = { reason: 'KILL_SWITCH', code: 'MKT_KILL_SWITCH_ACTIVE', message: 'O kill switch do Marketing está ativo: nenhuma mensagem sai até a reativação.' };
+
+/** Kill switch (M9-D425) lido na hora do envio: global, canal, campanha e automação do contexto; ilegível = bloqueado. Bloquear não é exceção: a mensagem não sai e a razão fica registrada. */
+const killBlock = (ctx, channel) => isOutboundBlocked(ctx.tenant, { channel, campaignId: ctx.campaignId, automationId: ctx.automationId }, ctx.transaction);
 
 /** Mensagem do CRM já gravada com esta action_key (a replay devolve a mesma, sem enviar outra vez). */
 const findByActionKey = (actionKey, tenant, transaction) => Message.findOne({ where: { companyId: tenant.companyId, actionKey }, transaction, lock: transaction.LOCK.UPDATE });
@@ -80,8 +85,9 @@ async function resumeExisting(ctx, row, rebuild) {
   if (state === 'QUEUED' && row.channel === 'WHATSAPP' && await isQueueExpired({ queuedAt: row.get('created_at') }, tenant, transaction)) {
     return view(await moveOutbound(row, { status: 'CANCELLED', reason: STATUS_TEXT.EXPIRED }, transaction), { replayed: true, cancelled: true });
   }
+  if ((await killBlock(ctx, row.channel)).blocked) return view(row, { replayed: true, blocked: true, reason: KILL.reason, code: KILL.code }); // fica como estava (QUEUED/UNKNOWN) e sai depois da reativação
   const message = await rebuild();
-  const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, mode: ctx.mode, scenario: ctx.scenario });
+  const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
   return view(await moveOutbound(row, { ...out, providerRef: result.providerRef }, transaction), { replayed: true, sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox });
 }
@@ -118,11 +124,12 @@ async function sendMarketingMessage(ctx, rawInput) {
   if (existing) return resumeExisting(ctx, existing, rebuild);
 
   const message = await rebuild(); // verificações de template, preview e descadastro vêm antes do canSend
+  if ((await killBlock(ctx, input.channel)).blocked) return blockedResult(KILL, input, tenant, transaction); // kill switch antes do canSend (runner, passo 3)
   const decision = await canSend(input.personId, input.channel, input.purpose, now, { tenant, transaction, officialTemplate });
   if (!decision.allowed) return blockedResult(decision, input, tenant, transaction);
   if (!message.to) return blockedResult({ reason: 'NO_ADDRESS', code: 'MKT_NO_ADDRESS', message: 'A pessoa não tem endereço de contato utilizável neste canal.' }, input, tenant, transaction);
 
-  const result = await sendToChannel(input.channel, message, { tenant, transaction, idempotencyKey: input.actionKey, mode: ctx.mode, scenario: ctx.scenario });
+  const result = await sendToChannel(input.channel, message, { tenant, transaction, idempotencyKey: input.actionKey, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
   const row = await recordOutbound({ tenant, input, message: { subject: message.subject, text: message.text }, ...out, providerRef: result.providerRef }, transaction);
   await audit(tenant, 'marketing.message.sent', 'Message', row.id, { channel: input.channel, purpose: input.purpose, status: out.status, sandbox: result.sandbox, decision: result.contingency && result.contingency.action },

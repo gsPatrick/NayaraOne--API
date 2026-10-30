@@ -12,6 +12,20 @@ async function locateSwitch(tenant, ref, transaction) {
   return rows.length === 1 && rows[0].is_kill_switch ? rows[0] : null;
 }
 
+/**
+ * Rotas próprias de um módulo dono de kill switch (ex.: POST /marketing/kill-switch, M9-D425) usam as MESMAS chaves do inventário (linha 14) com outro corpo. O módulo registra um
+ * resolvedor `(action, ctx) => resultado | null`; o primeiro que reconhecer a chamada responde, os demais deixam passar para o PATCH /feature-flags.
+ */
+const ownerResolvers = [];
+const registerImpactResolver = (fn) => { if (typeof fn === 'function' && !ownerResolvers.includes(fn)) ownerResolvers.push(fn); };
+async function ownerImpact(action, ctx) {
+  for (const resolve of ownerResolvers) {
+    const out = await resolve(action, ctx);
+    if (out) return out;
+  }
+  return null;
+}
+
 /** O que o PATCH pede para o valor do switch: `true` aciona, `false` restaura, qualquer outra coisa não é transição. */
 const wantedValue = (body) => (body && typeof body.value === 'boolean' ? body.value : null);
 
@@ -19,7 +33,10 @@ const wantedValue = (body) => (body && typeof body.value === 'boolean' ? body.va
  * Provedor de impacto das linhas 14 do inventário (M9-D852): acionar (nível 2, sem MFA) e restaurar (nível 3, com MFA e a chave digitada). Na ação (`!preview`) só pede confirmação
  * quando o PATCH é de fato a transição (acionar um switch desligado ou restaurar um acionado): qualquer outra alteração de flag segue sem guarda. O impacto é o que fica pausado.
  */
-const provider = (action) => async ({ id, body, tenant, transaction, preview }) => {
+const provider = (action) => async (ctx) => {
+  const owned = await ownerImpact(action, ctx);
+  if (owned) return owned;
+  const { id, body, tenant, transaction, preview } = ctx;
   const flag = await locateSwitch(tenant, id, transaction);
   if (!flag) {
     if (preview) throw E.notFound();
@@ -48,4 +65,4 @@ const resourceIdOf = (req) => {
   return typeof b.key === 'string' && b.key ? b.key : null;
 };
 
-module.exports = { activateProvider: provider(ACTIONS.activate), restoreProvider: provider(ACTIONS.restore), resourceIdOf, locateSwitch };
+module.exports = { activateProvider: provider(ACTIONS.activate), restoreProvider: provider(ACTIONS.restore), resourceIdOf, locateSwitch, registerImpactResolver };

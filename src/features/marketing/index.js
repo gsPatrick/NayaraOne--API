@@ -9,7 +9,7 @@ const automations = require('./automations');
 const publications = require('./publications');
 const tracking = require('./tracking');
 const suppression = require('./suppression');
-const killSwitchRouter = require('./killswitch.routes');
+const killSwitchRouter = require('./killswitch.service').router;
 
 /**
  * Módulo Marketing (Caderno §Marketing, Guia do Marcelo §2): seis áreas em src/features/marketing/<área>/ (content, campaigns,

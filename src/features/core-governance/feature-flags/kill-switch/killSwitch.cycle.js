@@ -11,6 +11,7 @@ const { runDrill } = require('./killSwitch.drill');
 const { recoverInterrupted } = require('./killSwitch.recovery');
 const { evaluate } = require('./killSwitch.status');
 const { alertStale } = require('./killSwitch.alerts');
+const { provisionSwitches } = require('./killSwitch.provision');
 
 /** O switch precisa de teste agora? UNVERIFIED (reexecuta todo dia até PASS) ou vencido; nunca dois testes no mesmo dia nem enquanto outro está em andamento. */
 async function needsDrill(tenant, row, status, { now, transaction }) {
@@ -41,6 +42,7 @@ async function runCycle(tenant, { now = new Date(), environment, transaction } =
   const env = String(environment || await read((tx) => ENVIRONMENT_KEY.read(tenant, tx))).toUpperCase();
   const summary = { environment: env, recovered: [], drills: [], refused: [], stale: [] };
   summary.recovered = await read((tx) => recoverInterrupted(tenant, { now, transaction: tx }));
+  await read((tx) => provisionSwitches(tenant, tx)); // os módulos donos cadastram as chaves que faltam na empresa (Marketing, M9-D425)
   const switches = await read((tx) => kRepo.listSwitches(tenant, tx));
   for (const row of switches) {
     const status = await read((tx) => evaluate(tenant, row, { now, transaction: tx }));

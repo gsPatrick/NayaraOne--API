@@ -16,7 +16,7 @@ async function sendStep(ctx) {
     const [purpose] = [].concat(await audiencePurposes(ctx));
     const content = await resolveStepContent(ctx);
     const out = await sendMarketingMessage(
-      { tenant: ctx.tenant, transaction: ctx.transaction, now: ctx.now },
+      { tenant: ctx.tenant, transaction: ctx.transaction, now: ctx.now, campaignId: ctx.campaign.id },
       { channel: ctx.step.channel, personId: ctx.personId, purpose, actionKey: ctx.actionKey, ...content },
     );
     if (out.status === 'SENT') return { ok: true, externalRef: out.providerRef || undefined };

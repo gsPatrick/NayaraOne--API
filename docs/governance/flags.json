@@ -61,6 +61,126 @@
       "probe": null,
       "description": "Degradação por custo: usar o modelo de IA mais barato.",
       "seed": "finops.seed.js"
+    },
+    {
+      "key": "marketing.channel.email.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal EMAIL do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.facebook.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal FACEBOOK do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.instagram.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal INSTAGRAM do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.linkedin.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal LINKEDIN do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.portal.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal PORTAL do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.site.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal SITE do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.tiktok.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal TIKTOK do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.whatsapp.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal WHATSAPP do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.channel.youtube.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch do canal YOUTUBE do Marketing.",
+      "seed": "marketing.seed.js"
+    },
+    {
+      "key": "marketing.sending.kill",
+      "domain": "marketing",
+      "owner": "Marketing",
+      "risk": "CRITICAL",
+      "temporary": false,
+      "validUntil": null,
+      "killSwitch": true,
+      "probe": "marketing.kill.envio_parado",
+      "description": "Kill switch global do Marketing: para toda ação de saída automática.",
+      "seed": "marketing.seed.js"
     }
   ]
 }
