@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D234 — anexos do e-mail: arquivo autorizado ao usuário que envia, classificado dentro do teto, limpo no antivírus, tipo da allowlist e tamanho dentro do limite.
 // Os limites vêm dos parâmetros da empresa (integration.email.*). Banco descartável.
-process.env.PORT = process.env.M9D234_ANEXOS_PORT || '21235';
+process.env.PORT = process.env.M9D234_ANEXOS_PORT || '24235';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

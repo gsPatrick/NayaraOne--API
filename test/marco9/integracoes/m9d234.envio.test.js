@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D234 — e-mail de saída pelo adapter: o identificador da mensagem no provedor é gravado (único por connection), a entrega só vale com o evento do
 // provedor, bounce, reclamação e falha ficam registrados como vieram. Envio pelo Dispatch Service e eventos pela rota única de webhooks. Banco descartável.
-process.env.PORT = process.env.M9D234_ENVIO_PORT || '21234';
+process.env.PORT = process.env.M9D234_ENVIO_PORT || '24234';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
