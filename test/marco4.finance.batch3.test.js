@@ -754,18 +754,17 @@ test('M4-25 replay do mesmo evento em transações distintas não duplica Financ
     );
     assert.equal(outboxCount, 1);
 
-    await assert.rejects(
-      () =>
-        withCommittedTenantTransaction(tenant, async (t) => {
-          const entry = await FinancialEntry.findByPk(first.id, { transaction: t });
-          return publishFinancialEntryCreated(entry, t);
-        }),
-      (err) => {
-        assert.equal(err.name, 'SequelizeUniqueConstraintError', `esperado erro de unicidade no outbox, veio: ${err.name}`);
-        return true;
-      },
-      'republicar o mesmo evento de domínio não pode gerar uma segunda linha no outbox'
+    // M9-D204: republicar a mesma chave é no-op idempotente (devolve o evento já gravado), em vez de
+    // estourar a unicidade e abortar a transação do chamador. A garantia do M4-25 é a mesma: nenhuma
+    // segunda linha no outbox e o consumidor não vê o mesmo fato duas vezes.
+    const original = await withCommittedTenantTransaction(tenant, (t) =>
+      OutboxEvent.findOne({ where: { idempotencyKey: `finance.entry.created:${first.id}` }, transaction: t })
     );
+    const republicado = await withCommittedTenantTransaction(tenant, async (t) => {
+      const entry = await FinancialEntry.findByPk(first.id, { transaction: t });
+      return publishFinancialEntryCreated(entry, t);
+    });
+    assert.equal(republicado.id, original.id, 'republicar devolve o MESMO evento, não cria outro');
 
     const outboxCountAfter = await withCommittedTenantTransaction(tenant, (t) =>
       OutboxEvent.count({ where: { idempotencyKey: `finance.entry.created:${first.id}` }, transaction: t })
