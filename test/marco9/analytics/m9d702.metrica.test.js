@@ -156,6 +156,20 @@ test('m9d702 dimensão declarada devolve a decomposição e o valor do recorte; 
   assert.equal(codeOf(noSlice), 'ANALYTICS_SNAPSHOT_NOT_AVAILABLE');
 });
 
+test('m9d702 o limite de linhas da decomposição é o parâmetro do administrador e marca truncated', async () => {
+  const items = (res) => res.body.data.breakdown;
+  assert.equal(items(await get('?dimension=company')).truncated, false, 'padrão 50: as duas linhas cabem');
+  await e609.setSetting(env, env.tenantA, 'analytics.metrica.dimensao_max_itens', 1);
+  try {
+    const cut = items(await get('?dimension=company'));
+    assert.equal(cut.items.length, 1, 'só uma linha com o limite 1');
+    assert.equal(cut.truncated, true);
+  } finally {
+    await env.admin.query("DELETE FROM core.tenant_settings WHERE company_id = :c AND key = 'analytics.metrica.dimensao_max_itens'", { replacements: { c: env.tenantA.companyId } });
+  }
+  assert.equal(items(await get('?dimension=company')).items.length, 2, 'sem o parâmetro volta ao padrão');
+});
+
 test('m9d702 compareTo devolve variação contra o período anterior e o mesmo período do ano anterior', async () => {
   const prev = await get('?period=2026-10&compareTo=previous_period');
   assert.equal(prev.status, 200, JSON.stringify(prev.body));

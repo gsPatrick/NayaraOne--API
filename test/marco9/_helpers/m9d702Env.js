@@ -41,6 +41,7 @@ const messageOf = (res) => res.body && (res.body.message || (res.body.error && r
  * Grava (com commit) um snapshot da métrica de uma empresa. `dimensionKey` vazio = valor principal.
  * opts: { asOfDate, periodStart, periodEnd, value, status, dimensionKey, sourceSnapshotAt }.
  */
+// refreshedAt nunca antes da fonte: a M9-D609 trata isso como data no futuro (futureStamp) e esconde o valor.
 async function snapshotAt(sup, tenant, { definition, version }, opts) {
   return sup.inTx(tenant, { commit: true }, async (tx) => {
     await store.enableAnalyticsWriter(tx);
@@ -48,7 +49,7 @@ async function snapshotAt(sup, tenant, { definition, version }, opts) {
       companyId: tenant.companyId, groupId: tenant.groupId, metricId: definition.id, metricVersionId: version.id, scopeType: 'COMPANY', scopeId: tenant.companyId,
       periodStart: opts.periodStart || opts.asOfDate, periodEnd: opts.periodEnd || opts.asOfDate, asOfDate: opts.asOfDate, dimensionKey: opts.dimensionKey || '',
       valueNumeric: opts.value, status: opts.status || 'OK', sourceSnapshotAt: opts.sourceSnapshotAt || `${opts.asOfDate}T12:00:00Z`,
-      refreshedAt: opts.refreshedAt || `${opts.asOfDate}T12:05:00Z`, sourceRefs: opts.sourceRefs || [], calcHash: crypto.createHash('sha256').update(`${definition.id}${opts.asOfDate}${opts.dimensionKey || ''}${opts.value}`).digest('hex'),
+      refreshedAt: opts.refreshedAt || (opts.sourceSnapshotAt ? new Date(Date.parse(opts.sourceSnapshotAt) + 60000).toISOString() : `${opts.asOfDate}T12:05:00Z`), sourceRefs: opts.sourceRefs || [], calcHash: crypto.createHash('sha256').update(`${definition.id}${opts.asOfDate}${opts.dimensionKey || ''}${opts.value}`).digest('hex'),
     }, tx);
   });
 }
