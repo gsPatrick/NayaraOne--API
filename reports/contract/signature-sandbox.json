@@ -1,0 +1,93 @@
+{
+  "provider": "signature-sandbox",
+  "domain": "SIGNATURE",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T00:33:44.458Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "createEnvelope",
+    "getEnvelope",
+    "cancelEnvelope",
+    "downloadSigned",
+    "verifyWebhook"
+  ],
+  "adapterHash": "88bf689e7f8500ba29b27a4058e8ab867a26229d5f36b43352ed432b57b6a625",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 20,
+      "passed": 20,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 5,
+      "passed": 5,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 6,
+      "passed": 6,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 102,
+  "passed": 102,
+  "status": "PASSED",
+  "errors": []
+}

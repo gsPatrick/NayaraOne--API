@@ -41,6 +41,8 @@ const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/p
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { MESSAGING_SETTINGS_SCHEMA } = require('../crm/messaging/messaging.settings');
+const { CONTRACT_SETTINGS_SCHEMA } = require('../integrations/contract/contract.settings');
+const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { TRANSPORT_SETTINGS_SCHEMA } = require('../integrations/http/transport.settings');
 const { RETENTION_SETTINGS_SCHEMA } = require('../integrations/retention/retention.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
@@ -268,6 +270,10 @@ const SETTINGS_SCHEMA = {
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D248 — auditoria de dependências e SDKs: versão exata, lista de SDKs, validade da exceção e hora do job diário.
   ...DEPAUDIT_SETTINGS_SCHEMA,
+  // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.
+  ...MESSAGING_SETTINGS_SCHEMA,
+  // Marco 9, M9-D222 — contract tests dos adapters: validade do relatório que libera a connection.
+  ...CONTRACT_SETTINGS_SCHEMA,
   // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
   // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.
   ...MESSAGING_SETTINGS_SCHEMA,

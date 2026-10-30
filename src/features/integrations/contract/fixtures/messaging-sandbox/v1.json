@@ -1,0 +1,31 @@
+{
+  "provider": "messaging-sandbox",
+  "apiVersion": "v1",
+  "description": "Mensageria de laboratório (formato A de webhook).",
+  "requests": {
+    "sendText": {
+      "to": "+5511999990000",
+      "text": "Mensagem de contrato"
+    },
+    "sendTemplate": {
+      "to": "+5511999990000",
+      "templateName": "contrato_modelo"
+    },
+    "sendMedia": {
+      "to": "+5511999990000",
+      "mediaRef": "file:contrato-001"
+    },
+    "getStatus": {
+      "externalResourceIdFrom": "sendText"
+    }
+  },
+  "statuses": {
+    "QUEUED": "QUEUED",
+    "SENT": "SENT",
+    "DELIVERED": "DELIVERED",
+    "READ": "READ",
+    "FAILED": "FAILED"
+  },
+  "unknownStatus": "STATUS_NOVO",
+  "renewal": false
+}

@@ -1,0 +1,42 @@
+{
+  "provider": "signature-alt-sandbox",
+  "apiVersion": "v1",
+  "description": "Assinatura de laboratório alternativa (formato B de webhook).",
+  "requests": {
+    "createEnvelope": {
+      "documentRef": "doc-contrato-001",
+      "documentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "signers": [
+        {
+          "personId": "pessoa-1",
+          "email": "assinante1@qa-m9.test",
+          "name": "Assinante Um"
+        }
+      ]
+    },
+    "getEnvelope": {
+      "externalResourceIdFrom": "createEnvelope"
+    },
+    "cancelEnvelope": {
+      "externalResourceIdFrom": "createEnvelope"
+    },
+    "downloadSigned": {
+      "externalResourceIdFrom": "createEnvelope",
+      "documentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    "verifyWebhook": {
+      "rawBody": "{}",
+      "headers": {}
+    }
+  },
+  "noResourceId": [
+    "verifyWebhook"
+  ],
+  "statuses": {
+    "WAITING": "PENDING",
+    "COMPLETED": "COMPLETED",
+    "VOIDED": "CANCELED"
+  },
+  "unknownStatus": "EM_ANALISE",
+  "renewal": false
+}

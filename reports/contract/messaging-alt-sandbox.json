@@ -1,0 +1,91 @@
+{
+  "provider": "messaging-alt-sandbox",
+  "domain": "MESSAGING",
+  "mode": "SANDBOX",
+  "generatedAt": "2026-10-30T00:33:43.791Z",
+  "apiVersions": [
+    "v1"
+  ],
+  "capabilities": [
+    "sendText",
+    "sendTemplate",
+    "getStatus"
+  ],
+  "adapterHash": "e4a5790b0edd4ef3da912277816b7e74f3e98b48f7092a7aabf0a1c3b9a590e7",
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "auth",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "happy path",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "timeout",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 4,
+      "name": "4xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "5xx",
+      "executions": 12,
+      "passed": 12,
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "rate limit",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 7,
+      "name": "duplicate request",
+      "executions": 3,
+      "passed": 3,
+      "failures": []
+    },
+    {
+      "id": 8,
+      "name": "malformed response",
+      "executions": 9,
+      "passed": 9,
+      "failures": []
+    },
+    {
+      "id": 9,
+      "name": "status mapping",
+      "executions": 8,
+      "passed": 8,
+      "failures": []
+    },
+    {
+      "id": 10,
+      "name": "health check",
+      "executions": 4,
+      "passed": 4,
+      "failures": []
+    }
+  ],
+  "executions": 69,
+  "passed": 69,
+  "status": "PASSED",
+  "errors": []
+}
