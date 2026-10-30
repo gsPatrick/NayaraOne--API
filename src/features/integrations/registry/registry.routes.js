@@ -20,5 +20,6 @@ registryRouter.post(`${base}/connections`, requirePermission('integration:manage
 registryRouter.get(`${base}/connections/:id`, requirePermission('integration:read'), controller.getConnection);
 registryRouter.patch(`${base}/connections/:id`, requirePermission('integration:manage'), controller.updateConnection);
 registryRouter.post(`${base}/connections/:id/transition`, requirePermission('integration:manage'), controller.transitionConnection);
+registryRouter.post(`${base}/connections/:id/swap`, requirePermission('integration:manage'), controller.swapConnection);
 
 module.exports = registryRouter;

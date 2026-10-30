@@ -1,6 +1,7 @@
 'use strict';
 
 const { getPreflights } = require('./worker.hooks');
+const { isDraining } = require('../../swap/swap.drain');
 
 /**
  * Verificações antes de gastar tentativa (M9-D214 3.2 item 2). Devolve { until, reason } para esperar, { unknown } ou { fail } (worker.verdict.js) ou null para chamar.
@@ -13,7 +14,8 @@ async function runPreflight({ ctx, dispatch, connection, now, params, transactio
   if (dispatch.criticalityOp === 'DANGEROUS' && dispatch.externalResourceId) return { unknown: true, reason: 'EXTERNAL_ID_REGISTERED' };
   const recheck = new Date(now.getTime() + params.blockedRecheckS * 1000);
   if (!connection) return { until: recheck, reason: 'CONNECTION_MISSING' };
-  if (connection.status !== 'ACTIVE') return { until: recheck, reason: `CONNECTION_${connection.status}` };
+  // M9-D221: a connection pausada por uma troca de fornecedor termina os envios que já estavam na fila (drenagem).
+  if (connection.status !== 'ACTIVE' && !isDraining(connection)) return { until: recheck, reason: `CONNECTION_${connection.status}` };
   for (const check of getPreflights()) {
     const verdict = await check({ ctx, dispatch, connection, now, params, transaction });
     if (verdict) return verdict;

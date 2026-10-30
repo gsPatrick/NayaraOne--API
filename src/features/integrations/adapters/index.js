@@ -42,4 +42,5 @@ function registerBuiltInAdapters() {
   return registry.list();
 }
 
+  require('../swap').installSwapDrain(); // drenagem da connection antiga numa troca de fornecedor (M9-D221)
 module.exports = { registerBuiltInAdapters, BUILT_IN_ADAPTERS };

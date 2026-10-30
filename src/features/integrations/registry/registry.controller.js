@@ -47,4 +47,11 @@ const transitionConnection = catchAsync(async (req, res) => {
   return success(res, { data: service.serializeConnection(row) });
 });
 
-module.exports = { listProviders, createProvider, updateProvider, listConnections, getConnection, createConnection, updateConnection, transitionConnection };
+// M9-D221: troca de fornecedor da mesma família (a integração da rota sai de cena em drenagem; a do corpo entra).
+const swapConnection = catchAsync(async (req, res) => {
+  const { swapProvider } = require('../swap');
+  const r = await req.withTenantTransaction((t) => swapProvider(ctxDe(req), { fromConnectionId: req.params.id, toConnectionId: req.body?.toConnectionId }, t));
+  return success(res, { data: { from: service.serializeConnection(r.from), to: service.serializeConnection(r.to) } });
+});
+
+module.exports = { swapConnection, listProviders, createProvider, updateProvider, listConnections, getConnection, createConnection, updateConnection, transitionConnection };
