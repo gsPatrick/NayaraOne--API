@@ -278,6 +278,11 @@ test('audiencia_e_etapa_so_referenciam_campanha_da_mesma_empresa', async () => {
   });
 });
 
+const POSTERIORES = [
+  '20260101000752-marketing-template-immutability.js', '20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js',
+  '20260101000761-marketing-campaign-cost.js', '20260101000765-marketing-public-read-models.js', '20260101000775-marketing-content-types-trigger.js',
+];
+
 test('migration_e_idempotente_e_reversivel', async (t) => {
   if (process.env.DISPOSABLE_DB !== '1' || !process.env.DATABASE_ADMIN_URL) {
     t.skip('só roda no banco descartável (DISPOSABLE_DB=1 e DATABASE_ADMIN_URL)');
@@ -309,6 +314,9 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     assert.equal(await contagem(), inicial);
     await parte2.up(qi);
     await parte3.up(qi);
+    // O down da parte 1 derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, gatilhos, funções):
+    // recompõe o banco na ordem, para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
+    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
   } finally {
     await admin.close();
   }
@@ -318,7 +326,7 @@ test('erros_do_schema_viram_codigos_mkt_em_portugues', async () => {
   const errorHandler = require('../src/middlewares/errorHandler');
   const chamar = (parent) => {
     const out = {};
-    const res = { status(c) { out.status = c; return this; }, json(b) { out.body = b; return this; } };
+    const res = { status(c) { out.status = c; return this; }, json(b) { out.body = b; return this; }, getHeader() { return undefined; } };
     errorHandler(Object.assign(new Error('x'), { name: 'SequelizeDatabaseError', parent }), { method: 'POST', originalUrl: '/x' }, res, () => {});
     return out;
   };
