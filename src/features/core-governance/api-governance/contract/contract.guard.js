@@ -1,6 +1,7 @@
 'use strict';
 
 const { dbNotDisposable } = require('./contract.errors');
+const { DISPOSABLE_ENV_NAMES } = require('./contract.constants');
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1', '[::1]'];
 
@@ -14,7 +15,7 @@ function hostOf(url) {
  */
 function disposableProblem(env = process.env) {
   if (env.DISPOSABLE_DB !== '1') return dbNotDisposable('use `npm run test:contract` (scripts/withDisposableDb.js); DISPOSABLE_DB não está ligado');
-  for (const name of ['DATABASE_URL', 'DATABASE_ADMIN_URL']) {
+  for (const name of DISPOSABLE_ENV_NAMES) {
     const host = hostOf(env[name]);
     if (!host) return dbNotDisposable(`${name} ausente ou inválida`);
     if (!LOCAL_HOSTS.includes(host)) return dbNotDisposable(`${name} não aponta para 127.0.0.1`);

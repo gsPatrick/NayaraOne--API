@@ -74,14 +74,15 @@ test('m9d800 corpo de erro de governança tem formato único com error.traceId e
   assert.throws(() => errors.govError(400, 'CODIGO_SEM_PREFIXO', 'x'), /prefixo GOV_/);
   assert.equal(errors.govError(403, 'PERMISSION_DENIED', 'x').code, 'PERMISSION_DENIED');
 
-  // Varredura estática SOMENTE em core-governance: todo código em MAIÚSCULAS com sublinhado é GOV_ ou da lista fechada.
+  // Varredura estática SOMENTE em core-governance: todo código de erro é GOV_ ou da lista fechada.
   const allowed = new Set(errors.DEFAULT_PREFIX_EXCEPTIONS);
   const offenders = [];
   for (const file of listJsFiles(GOV_DIR)) {
     // *.constants.js guarda enumerações de domínio (ex.: tipos de origem do calendário), não códigos de erro.
     if (file.endsWith('governance.errors.js') || file.endsWith('.constants.js')) continue;
     const text = fs.readFileSync(file, 'utf8');
-    for (const m of text.matchAll(/['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) {
+    // Só o que é código de erro: 2º argumento de govError(status, 'CODIGO', ...) e propriedades `code: 'CODIGO'`; enumerações de domínio (tipos, ações, formatos) não são códigos.
+    for (const m of text.matchAll(/(?:govError\(\s*\d+\s*,|\bcode\s*(?:[:=]|===)\s*)\s*['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) {
       if (!m[1].startsWith('GOV_') && !allowed.has(m[1])) offenders.push(`${path.relative(API_ROOT, file)}: ${m[1]}`);
     }
   }
