@@ -4,7 +4,9 @@
 // nunca tinha teste dedicado. O mesmo argumento contratual já documentado para o Marco 3 (NAY
 // Comercial) vale aqui: não existe NENHUMA integração de IA/LLM no projeto (zero menção a
 // OpenAI/Anthropic em toda a árvore `src/`, ver personDataQuality.service.js) — a infraestrutura
-// real do NAY é entrega do Marco 9 (cláusula 4.10 do contrato). Por isso FIN-TS-014 é verdade
+// real do NAY é entrega do Marco 9 (cláusula 4.10 do contrato). ATUALIZAÇÃO (Marco 9, DI-REG): a IA
+// real passou a existir em src/features/ai; a premissa "sem IA" caiu e o item 3 abaixo trava a
+// invariante verdadeira (a NAY nunca executa ação financeira sem portão humano). Antes era verdade
 // por AUSÊNCIA: não há nenhum caminho de código por onde "NAY" chamaria `executePaymentIntent`,
 // `settleFinancialEntry` ou qualquer outra ação que mova dinheiro — todas exigem
 // authMiddleware + requirePermission + (quando move dinheiro de verdade) requireRecentMfa, que
@@ -46,23 +48,52 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   assert.ok(settleLine && settleLine.includes('requireRecentMfa'), 'settle de lançamento deve exigir MFA recente.');
   assert.ok(executeLine && executeLine.includes('requireRecentMfa'), 'execução de payment intent deve exigir MFA recente.');
 
-  // 3. Não existe nenhuma integração de IA/LLM real em todo o projeto (mesma confirmação já
-  // feita para o Marco 3) — enquanto isso for verdade, NAY Financeira não tem como "tentar"
-  // nada, só pode ser lida/consultada manualmente, nunca executar.
+  // 3. Invariante verdadeira desde o Marco 9 (a IA real existe; o que nunca existe é execução financeira
+  // sem portão humano): (a) código de provedor de IA (openai/anthropic) só vive em src/features/ai/providers,
+  // nunca no módulo financeiro nem no jurídico; (b) nada em src/features/ai referencia as ações que movem
+  // dinheiro (liquidar lançamento, aprovar/executar intenção de pagamento, transferência entre empresas,
+  // submissão ao banco); a única ponte NAY->financeiro de escrita é createPaymentIntent (cria intenção em
+  // aberto, que só se paga por aprovação + execução humana com MFA); (c) toda ferramenta financeira de
+  // escrita da NAY exige aprovação humana e nenhuma ferramenta se chama pagar/liquidar/executar.
   const srcDir = path.join(__dirname, '..', 'src');
-  let hasAiIntegration = false;
-  const walk = (dir) => {
+  const aiDir = path.join(srcDir, 'features', 'ai');
+  const stripComments = (c) => c.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const walk = (dir, fn) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.js')) {
-        const content = fs.readFileSync(full, 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        if (/openai|anthropic|@anthropic-ai/i.test(content)) hasAiIntegration = true;
-      }
+      if (entry.isDirectory()) walk(full, fn);
+      else if (entry.name.endsWith('.js')) fn(full, stripComments(fs.readFileSync(full, 'utf8')));
     }
   };
-  walk(srcDir);
-  assert.equal(hasAiIntegration, false, 'não deveria existir integração de IA real no backend ainda (infraestrutura é Marco 9).');
+  const providerLeaks = [];
+  for (const sub of ['finance', 'legal', 'billing']) {
+    walk(path.join(srcDir, 'features', sub), (full, content) => {
+      if (/openai|anthropic|@anthropic-ai/i.test(content)) providerLeaks.push(path.relative(srcDir, full));
+    });
+  }
+  assert.deepEqual(providerLeaks, [], 'provedor de IA não pode ser chamado de dentro de finance/legal/billing.');
+
+  const FORBIDDEN_MONEY_MOVERS = /\b(settleFinancialEntry|executePaymentIntent|approvePaymentIntent|submitPaymentIntent|createIntercompanyTransfer|reverseFinancialEntry)\b|financialEntries\.service|intercompanyTransfers\.service|finance\/bank\//;
+  const moneyMovers = [];
+  walk(aiDir, (full, content) => {
+    if (FORBIDDEN_MONEY_MOVERS.test(content)) moneyMovers.push(path.relative(srcDir, full));
+  });
+  assert.deepEqual(moneyMovers, [], 'a NAY não pode chamar nenhuma ação que mova dinheiro.');
+
+  const financeServices = stripComments(fs.readFileSync(path.join(aiDir, 'toolServices', 'finance.services.js'), 'utf8'));
+  const piCalls = [...financeServices.matchAll(/paymentIntents\.(\w+)\(/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(piCalls)], ['createPaymentIntent'], 'a única escrita financeira da NAY é criar a intenção (proposta).');
+
+  const { INITIAL_DEFINITIONS } = require('../src/features/ai/tools/definitions');
+  const financeTools = INITIAL_DEFINITIONS.filter((t) => t.domain === 'FINANCIAL' || /^finance\./.test(t.name));
+  assert.ok(financeTools.length >= 3, 'as ferramentas financeiras da NAY precisam existir para a invariante valer.');
+  for (const tool of INITIAL_DEFINITIONS) {
+    assert.ok(!/(^|\.)(pay|settle|execute|transfer|approve)/i.test(tool.name), `ferramenta "${tool.name}" não pode executar ação financeira.`);
+  }
+  for (const tool of financeTools.filter((t) => t.category !== 'READ')) {
+    assert.equal(tool.requiresHumanApproval, true, `${tool.name}: escrita financeira da NAY exige aprovação humana.`);
+    assert.equal(tool.riskLevel, 'CRITICAL', `${tool.name}: escrita financeira da NAY é risco CRITICAL.`);
+  }
 
   // 4. NAY Financeira (financeNay.service.js) é SOMENTE LEITURA por construção: só importa o read
   // model, o resolvedor de limiares (leitura do Motor de Regras), CostCenter, o sequelize para
