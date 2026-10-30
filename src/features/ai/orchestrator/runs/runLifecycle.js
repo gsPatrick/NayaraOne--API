@@ -61,7 +61,7 @@ async function startRun(ctx, data, transaction) {
 /** Campos do UPDATE a partir da entrada validada; o custo vem de costAmount ou de tokens x preço por token (BigInt, sem float). */
 function fieldsToUpdate(f, current) {
   const set = { status: f.status, updatedBy: undefined };
-  for (const k of ['outputSummary', 'providerCode', 'modelCode', 'routingPath', 'groundingStatus', 'tokensIn', 'tokensOut', 'latencyMs',
+  for (const k of ['inputSummary', 'outputSummary', 'providerCode', 'modelCode', 'routingPath', 'groundingStatus', 'tokensIn', 'tokensOut', 'latencyMs',
     'confidence', 'blockedReason', 'errorCode', 'fallbackTrail', 'snapshotAt', 'escalated', 'cached']) {
     if (f[k] !== undefined) set[k] = f[k];
   }
@@ -85,7 +85,11 @@ async function finishRun(ctx, runId, data, transaction) {
   V.ctxOk(ctx);
   const f = V.parseFinish(data);
   return guarded(async () => {
-    if (f.outputSummary !== undefined) f.outputSummary = sanitizeSummary(f.outputSummary, await summaryLimit(ctx, transaction));
+    if (f.outputSummary !== undefined || f.inputSummary !== undefined) {
+      const limit = await summaryLimit(ctx, transaction);
+      if (f.outputSummary !== undefined) f.outputSummary = sanitizeSummary(f.outputSummary, limit);
+      if (f.inputSummary !== undefined) f.inputSummary = sanitizeSummary(f.inputSummary, limit);
+    }
     const row = await loadOwn(ctx, runId, transaction, { lock: true });
     const before = toRun(row);
     if (C.FINAL_STATUSES.includes(row.status)) throw E.immutable();

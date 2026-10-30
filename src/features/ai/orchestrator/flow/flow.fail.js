@@ -4,7 +4,18 @@ const runs = require('../runs');
 const { finalStateOf, failureOutcome } = require('./flow.outcome');
 const { usageFields } = require('./flow.progress');
 const { describeAvailable } = require('../failClosed');
+const crypto = require('node:crypto');
 const CLOSED_CODES = ['AI_FALLBACK_UNSAFE', 'AI_PROVIDER_UNAVAILABLE'];
+
+/**
+ * Entrada bloqueada por segredo (M9-D028): o run não guarda o texto de quem pediu ou colou credencial, nem mascarado; fica o aviso, o
+ * tamanho e o hash (sha256 da entrada) para a trilha e a idempotência, como o detector de injeção faz com `contentHash`.
+ */
+function blockedInputSummary(input) {
+  const text = String(input || '');
+  const hash = crypto.createHash('sha256').update(text).digest('hex');
+  return `[ENTRADA BLOQUEADA POR SEGURANÇA: pedido de segredo; ${text.length} caracteres; sha256=${hash}]`;
+}
 
 /**
  * Qualquer erro depois do passo 1 finaliza o run (FAILED ou BLOCKED, com `finished_at`), com o custo já gasto. A reserva de orçamento
@@ -17,6 +28,7 @@ async function finalizeFailure(state, err) {
   try {
     await runs.finishRun(state.ctx, state.runId, {
       status: final.status, blockedReason: final.blockedReason, errorCode: String(final.errorCode).slice(0, 80), ...usageFields(state),
+      ...(final.blockedReason === 'SECRET' && state.parsed ? { inputSummary: blockedInputSummary(state.parsed.input) } : {}),
     }, state.transaction);
   } catch (closeErr) {
     if (err && err.isOperational) throw closeErr;
@@ -26,4 +38,4 @@ async function finalizeFailure(state, err) {
   return failureOutcome(state.runId, err, final, { trace: state.trace.spans, notices: state.notices, ...(available ? { available } : {}) });
 }
 
-module.exports = { finalizeFailure };
+module.exports = { finalizeFailure, blockedInputSummary };

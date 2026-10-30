@@ -91,6 +91,8 @@ function parseFinish(data = {}) {
   const out = { status };
   const put = (k, v) => { if (v !== undefined) out[k] = v; };
   put('outputSummary', text(data.outputSummary, 'O resumo da saída', RAW_TEXT_MAX) ?? undefined);
+  // Troca do resumo da entrada ao bloquear por segredo (M9-D028): o run passa a guardar só o aviso e o hash, nunca o texto.
+  put('inputSummary', text(data.inputSummary, 'O resumo da entrada', RAW_TEXT_MAX) ?? undefined);
   put('providerCode', text(data.providerCode, 'O provider', 60) ?? undefined);
   put('modelCode', text(data.modelCode, 'O modelo', 120) ?? undefined);
   put('routingPath', oneOf(data.routingPath, C.ROUTING_PATHS, 'O caminho de roteamento'));
