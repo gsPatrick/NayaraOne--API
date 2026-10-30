@@ -31,6 +31,8 @@
     "guard:analytics-rules": "node scripts/analytics/checkGuardrails.js",
     "guard:sprint-gates": "node scripts/analytics/checkSprintGates.js",
     "guard:ai-sprint": "node scripts/ai-sprint-gate.js",
+    "guard:int-sprint": "node scripts/integrationSprintGate.js",
+    "load:integracoes": "node scripts/withDisposableDb.js -- env LOG_LEVEL=error CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c \"node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/loadTestIntegrations.js\"",
     "dod:bi": "node scripts/analytics/checkDod.js",
     "dod:integracoes": "node scripts/integrationDod.js",
     "check:lineage": "node scripts/checkLineageCoverage.js",

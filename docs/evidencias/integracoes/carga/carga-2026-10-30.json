@@ -1,0 +1,61 @@
+{
+  "params": {
+    "webhooksPerS": 50,
+    "dispatchesPerS": 20,
+    "durationMin": 5,
+    "duplicatePercent": 10,
+    "concurrency": 20
+  },
+  "volume": {
+    "webhooks": {
+      "total": 15000,
+      "repetidos": 1500,
+      "distintos": 13500
+    },
+    "dispatches": {
+      "total": 6000,
+      "repetidos": 600,
+      "distintos": 5400
+    },
+    "concurrency": 20
+  },
+  "rodada": "mvv3iitr",
+  "webhooks": {
+    "enviados": 15000,
+    "distintos": 13500,
+    "repetidos": 1500,
+    "aceitos": 13500,
+    "devolvidosComoDuplicados": 1500,
+    "linhasNaInbox": 13500,
+    "esperadoNaInbox": 13500
+  },
+  "dispatches": {
+    "pedidos": 6000,
+    "distintos": 5400,
+    "repetidos": 600,
+    "criados": 5400,
+    "enviosNoBanco": 5400,
+    "rodadasDoWorker": 270,
+    "filaDrenada": true,
+    "porStatus": {
+      "SUBMITTED": 5400
+    }
+  },
+  "violacoes": {
+    "webhooksPerdidos": [],
+    "webhooksDuplicados": [],
+    "dispatchesPerdidos": [],
+    "dispatchesDuplicados": [],
+    "filaNaoDrenada": []
+  },
+  "totais": {
+    "webhooksPerdidos": 0,
+    "webhooksDuplicados": 0,
+    "dispatchesPerdidos": 0,
+    "dispatchesDuplicados": 0,
+    "filaNaoDrenada": 0
+  },
+  "ok": true,
+  "duracaoMs": 547002,
+  "executadoEm": "2026-10-30T15:06:04.041Z"
+}

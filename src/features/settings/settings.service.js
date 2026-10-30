@@ -56,6 +56,7 @@ const { DOMAIN_SETTINGS_SCHEMA } = require('../integrations/domain/domain.settin
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
 const { TRANSPORT_SETTINGS_SCHEMA } = require('../integrations/http/transport.settings');
 const { RETENTION_SETTINGS_SCHEMA } = require('../integrations/retention/retention.settings');
+const { LOAD_INTEGRATION_SETTINGS_SCHEMA } = require('../integrations/load/load.settings');
 const { READ_ONLY_SETTINGS_SCHEMA } = require('../../features/analytics/readOnly/readOnly.settings');
 const { SECURITY_SETTINGS_SCHEMA } = require('../../features/analytics/security/security.settings');
 const { METRICS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/metrics.settings');
@@ -310,6 +311,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
   ...TRANSPORT_SETTINGS_SCHEMA,
   ...RETENTION_SETTINGS_SCHEMA,
+  // Marco 9, M9-D255 — tamanho do teste de carga das integrações.
+  ...LOAD_INTEGRATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
   // Marco 9, M9-D700 / M9-D687 — segurança do BI (mapa de domínio x permissão, equipes, campos extras mascarados, log de abertura, p95 padrão).
