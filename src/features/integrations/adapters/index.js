@@ -11,7 +11,7 @@ const { BankSantanderContractAdapter } = require('./legacy/bank.santander');
 const { SignatureClicksignContractAdapter, SignatureZapSignContractAdapter } = require('./legacy/signature.adapters');
 const { SignatureSandboxAdapter } = require('../providers/signature/sandbox/signature-sandbox.adapter');
 const { SignatureAltSandboxAdapter } = require('../providers/signature/sandbox/signature-alt-sandbox.adapter');
-const { InsuranceSandboxContractAdapter } = require('./legacy/insurance.adapters');
+const { INSURANCE_ADAPTERS } = require('./legacy/insurance.registry');
 const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
 const { registerAiAdapters } = require('../../ai/providers/builtIn');
 const { MessagingSandboxAdapter } = require('../providers/messaging/sandbox/messaging-sandbox.adapter');
@@ -29,7 +29,7 @@ const { installContingency } = require('../contingency');
 
 const BUILT_IN_ADAPTERS = Object.freeze([
   FinancingSandboxContractAdapter, FinancingManualContractAdapter, BankSandboxContractAdapter, BankSantanderContractAdapter, SignatureSandboxAdapter,
-  SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, InsuranceSandboxContractAdapter, FiscalSandboxContractAdapter,
+  SignatureClicksignContractAdapter, SignatureZapSignContractAdapter, SignatureAltSandboxAdapter, ...INSURANCE_ADAPTERS, FiscalSandboxContractAdapter,
   MessagingSandboxAdapter, MessagingAltSandboxAdapter, PortalSandboxAdapter, PortalZapSandboxAdapter, PortalVivaRealSandboxAdapter, PortalOlxSandboxAdapter, AnalyticsSandboxAdapter, SocialSandboxAdapter, EmailSandboxAdapter,
 ]);
 
