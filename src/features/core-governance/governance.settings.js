@@ -9,7 +9,7 @@ const { HOLIDAYS_DEFAULTS, HOLIDAYS_SCHEMA } = require('./calendar/holidays.sett
 const { STANDARDS_SETTING_DEFAULTS, STANDARDS_SETTINGS_SCHEMA } = require('./api-governance/standards/standards.settings');
 const { CONSUMERS_SETTING_DEFAULTS, CONSUMERS_SETTINGS_SCHEMA } = require('./api-governance/consumers/consumers.settings');
 const { CLIENTS_SETTING_DEFAULTS, CLIENTS_SETTINGS_SCHEMA } = require('./api-governance/clients/clients.settings');
-const { UI_SETTING_DEFAULTS, UI_SETTINGS_SCHEMA } = require('./ui-standards/ui.settings');
+const { UI_SETTING_DEFAULTS, UI_SETTINGS_SCHEMA } = require('./governance.ui.settings');
 
 /**
  * Parâmetros do bloco de governança que o administrador configura na tela /painel/configuracoes (aba Governança).

@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const S = require('../../../src/features/core-governance/ui-standards/ui.settings');
+const S = require('../../../src/features/core-governance/governance.ui.settings');
 const { GOVERNANCE_SETTINGS_SCHEMA, GOVERNANCE_SETTING_DEFAULTS } = require('../../../src/features/core-governance/governance.settings');
 
 const ROOT = path.join(__dirname, '../../../..');
