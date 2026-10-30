@@ -7,8 +7,8 @@ const adapterRegistry = require('../../integrations/registry/adapterRegistry');
  * sem o boot do servidor (scripts e testes de serviço): registra só o adapter do fornecedor pedido, com a mesma validação de contrato, e não faz nada se já estiver registrado.
  */
 const CLASSES = () => ({
-  'signature-sandbox': require('../../integrations/providers/signature/sandbox/signature-sandbox.adapter').SignatureSandboxAdapter,
-  'signature-alt-sandbox': require('../../integrations/providers/signature/sandbox/signature-alt-sandbox.adapter').SignatureAltSandboxAdapter,
+  'signature-sandbox': require('../../integrations').SignatureSandboxAdapter,
+  'signature-alt-sandbox': require('../../integrations').SignatureAltSandboxAdapter,
   'signature-clicksign': require('../../integrations/adapters/legacy/signature.adapters').SignatureClicksignContractAdapter,
   'signature-zapsign': require('../../integrations/adapters/legacy/signature.adapters').SignatureZapSignContractAdapter,
 });

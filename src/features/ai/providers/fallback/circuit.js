@@ -1,6 +1,6 @@
 'use strict';
 
-const { readCircuitState } = require('../../../integrations/health');
+const { readCircuitState } = require('../../../integrations');
 const { activeAiConnections } = require('../providerConnections');
 
 /**

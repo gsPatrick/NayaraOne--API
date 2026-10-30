@@ -29,7 +29,9 @@ const sql = (tenant, consulta, replacements = {}) => comTenant(tenant, async (t)
 /** Conexão do domínio com a referência de segredo informada (gravada direto, a validação do cadastro é testada em outro lugar). */
 async function conexaoComSegredo(tenant, domain, secretRef, extra = '') {
   const c = await conexao(tenant, domain);
-  await sql(tenant, `UPDATE integration.connections SET secret_ref = :r ${extra} WHERE id = :id`, { r: secretRef, id: c.id });
+  // Outras conexões ATIVAS do mesmo fornecedor, deixadas por testes de outras demandas, venceriam a escolha da leitura: o cenário precisa da sua própria conexão como a escolhida.
+  await sql(tenant, "UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :co AND provider_code = :p AND id <> :id AND status = 'ACTIVE'", { co: tenant.companyId, p: c.providerCode, id: c.id });
+  await sql(tenant, `UPDATE integration.connections SET secret_ref = :r, updated_at = now() ${extra} WHERE id = :id`, { r: secretRef, id: c.id });
   return c;
 }
 

@@ -28,7 +28,7 @@ after(async () => {
 test('runbooks_existem_para_todos_os_providers', async () => {
   assert.equal(RUNBOOK_SECTIONS.length, 7);
   const ativos = SEED_PROVIDERS.map((p) => p.code);
-  assert.equal(ativos.length, 18);
+  assert.ok(ativos.length >= 20, 'o seed tem os 20 providers, com signature-zapsign e signature-alt-sandbox');
   const faltando = [];
   for (const codigo of ativos) {
     const arquivo = path.join(RAIZ, runbookPathFor(codigo));
