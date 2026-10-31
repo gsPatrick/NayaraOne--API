@@ -22,16 +22,22 @@ async function listCountedSendTimes({ personId, channel, purpose, from, to }, te
         AND direction = 'OUTBOUND' AND status IN (:counted) AND created_at > :from AND created_at <= :to`,
     { ...base, counted: COUNTED_MESSAGE_STATUSES }, transaction
   );
-  const reserved = await run(
-    `SELECT (e->>'at')::timestamptz AS at
+  // As ações reservadas saem primeiro (índice da pessoa) e a conferência "já virou mensagem" é feita pela chave, no índice único parcial (company_id, action_key). Um NOT EXISTS correlacionado
+  // com o elemento do JSON levava o planejador a varrer crm.messages inteira (M9-D441).
+  const candidates = await run(
+    `SELECT (e->>'at')::timestamptz AS at, e->>'action_key' AS action_key
        FROM marketing.automation_runs r
        CROSS JOIN LATERAL jsonb_array_elements(r.actions_result) e
       WHERE r.company_id = :companyId AND r.subject_type = 'PERSON' AND r.subject_id = :personId AND r.status IN (:runStatuses)
         AND e->>'action_type' = :actionType AND e->>'status' IN (:reserved) AND e->>'channel' = :channel AND e->>'purpose' = :purpose
-        AND (e->>'at')::timestamptz > :from AND (e->>'at')::timestamptz <= :to
-        AND NOT EXISTS (SELECT 1 FROM crm.messages m WHERE m.company_id = r.company_id AND m.action_key = e->>'action_key')`,
+        AND (e->>'at')::timestamptz > :from AND (e->>'at')::timestamptz <= :to`,
     { ...base, runStatuses: NON_TERMINAL_RUN_STATUSES, actionType: SEND_ACTION_TYPE, reserved: RESERVED_ACTION_STATUSES }, transaction
   );
+  const keys = [...new Set(candidates.map((c) => c.action_key).filter(Boolean))];
+  const alreadyMessages = keys.length > 0
+    ? new Set((await run('SELECT action_key FROM crm.messages WHERE company_id = :companyId AND action_key IN (:keys)', { companyId: tenant.companyId, keys }, transaction)).map((m) => m.action_key))
+    : new Set();
+  const reserved = candidates.filter((c) => !c.action_key || !alreadyMessages.has(c.action_key));
   return [...messages, ...reserved].map((r) => new Date(r.at));
 }
 

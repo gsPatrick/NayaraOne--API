@@ -15,6 +15,9 @@ const { CHANNEL_META } = require('./channels');
  */
 const OPERATIONS = Object.freeze(['send', 'publish', 'findByIdempotencyKey', 'getStatus', 'getMetrics', 'capabilities', 'healthCheck', 'revoke', 'parseWebhook']);
 const LOG_LIMIT = 200;
+const REDACTED_FIELD = '[REDIGIDO]';
+const ADDRESS_KEYS = Object.freeze(['to', 'cc', 'bcc', 'from', 'email', 'phone', 'telefone', 'recipient', 'destinatario', 'address']);
+const MESSAGE_KEYS = Object.freeze(['text', 'texto', 'body', 'corpo', 'html', 'subject', 'assunto', 'message', 'variables']);
 
 /** Capabilities de um canal: a operação de envio dele, as consultas comuns, revoke, parseWebhook e getMetrics só onde o canal informa métrica. */
 function capabilitiesForChannel(channel) {
@@ -48,9 +51,22 @@ class ChannelAdapter {
   /** Cópia sem segredo (mesma redação do bloco B, M9-D246). */
   redact(value) { return redactDeep(value, { secretsOnly: true }); }
 
+  /**
+   * O que o log pode mostrar do payload (M9-D441): o endereço de contato do destinatário nunca, e nos canais de mensagem direta (WhatsApp, e-mail) também não o texto integral nem as variáveis
+   * (dado pessoal). O conteúdo publicado em canal público (site, redes, portal) já passou pela sanitização de campos públicos e segue como está.
+   */
+  minimize(data) {
+    const payload = data && data.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return data;
+    const hide = new Set(ADDRESS_KEYS);
+    if (this.meta && this.meta.operation === 'send') MESSAGE_KEYS.forEach((k) => hide.add(k));
+    const copy = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, hide.has(k) ? REDACTED_FIELD : v]));
+    return { ...data, payload: copy };
+  }
+
   /** Registro do que o adapter fez, sempre redigido; vai ao log estruturado e fica (limitado) em memória para o teste de contrato. */
   log(event, data = {}) {
-    const entry = { event, channel: this.channel, mode: this.mode, ...this.redact(data) };
+    const entry = { event, channel: this.channel, mode: this.mode, ...this.redact(this.minimize(data)) };
     this.entries.push(entry);
     if (this.entries.length > LOG_LIMIT) this.entries.shift();
     logger.debug(entry, 'marketing.channel.adapter');

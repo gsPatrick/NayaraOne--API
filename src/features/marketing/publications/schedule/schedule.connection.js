@@ -1,11 +1,25 @@
 'use strict';
 
+const { sequelize } = require('../../../../models');
 const { CHANNEL_META } = require('../adapters/channels');
 const { isChannelReleased } = require('../adapters/release/channelAccess');
 const { ensureSandboxConnection, findActiveByDomain } = require('../../../integrations/registry/connections.ensureSandbox');
 const { getCurrentHealth } = require('../../../integrations/health/healthQuery');
 const { channelConnectionInactive } = require('./schedule.errors');
 const { assertNetworkAuthorized } = require('../adapters/social');
+
+/**
+ * Dois pedidos simultâneos que acham o canal sem conexão tentam criar a mesma conexão do laboratório: o segundo bate no nome já em uso (INTEGRATION_CONNECTION_DUPLICATE_LABEL) e a mensagem
+ * ou o job se perdia. A criação roda num savepoint e, se perder a corrida, o pedido relê e usa a conexão que o outro acabou de criar (M9-D441).
+ */
+async function ensureSandboxOnce(ctx, args, transaction) {
+  try {
+    return await sequelize.transaction({ transaction }, (savepoint) => ensureSandboxConnection(ctx, args, savepoint));
+  } catch (err) {
+    if (err.code !== 'INTEGRATION_CONNECTION_DUPLICATE_LABEL') throw err;
+    return ensureSandboxConnection(ctx, args, transaction);
+  }
+}
 
 /**
  * A conexão do canal para o agendamento (M9-D410 item 2): a ATIVA da família no framework de Integrações (canal liberado) ou a do sandbox da família
@@ -20,7 +34,7 @@ async function resolveChannelConnection({ tenant, actor, channel, transaction, c
   try {
     connection = (await isChannelReleased(channel, tenant, transaction))
       ? await findActiveByDomain(ctx, meta.family, transaction)
-      : await ensureSandboxConnection(ctx, { providerCode: meta.sandboxProvider, label: `Marketing: ${meta.family}` }, transaction);
+      : await ensureSandboxOnce(ctx, { providerCode: meta.sandboxProvider, label: `Marketing: ${meta.family}` }, transaction);
   } catch (err) {
     if (err.code !== 'INTEGRATION_CONNECTION_NOT_FOUND') throw err;
   }

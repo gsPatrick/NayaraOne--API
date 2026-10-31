@@ -76,14 +76,21 @@
             "test/marco9/marketing/m9d410.concorrencia.test.js",
             "test/marco9/marketing/adversarial/adv_02_*.test.js",
             "test/marco9/marketing/adversarial/adv_14_*.test.js",
-            "test/marco9/marketing/guards/guard_replay_is_safe.test.js"
+            "test/marco9/marketing/guards/guard_replay_is_safe.test.js",
+            "test/marco9/marketing/carga/carga_runner_sem_perda_nem_duplicidade.test.js",
+            "test/marco9/marketing/carga/carga_worker_3_instancias_um_post_por_job.test.js",
+            "test/marco9/marketing/carga/m9d441.conexao_concorrente.test.js",
+            "test/marco9/marketing/carga/queda_de_worker_sem_perda_nem_duplicidade.test.js"
           ]
         }
       ],
       "exigidos": [
         "adv_02_mesmo_evento_2x_uma_mensagem_ou_post",
         "adv_14_campanha_encerrada_steps_nao_continuam",
-        "guard_replay_is_safe"
+        "guard_replay_is_safe",
+        "carga_runner_sem_perda_nem_duplicidade",
+        "carga_worker_3_instancias_um_post_por_job",
+        "queda_de_worker_sem_perda_nem_duplicidade"
       ]
     },
     {
@@ -125,14 +132,16 @@
             "test/marco9/marketing/m9d407.*.test.js",
             "test/marco9/marketing/adversarial/adv_03_*.test.js",
             "test/marco9/marketing/adversarial/adv_15_*.test.js",
-            "test/marco9/marketing/guards/guard_ai_output_requires_factual_validation.test.js"
+            "test/marco9/marketing/guards/guard_ai_output_requires_factual_validation.test.js",
+            "test/marco9/marketing/seguranca/injecao_de_prompt_em_campos_de_origem.test.js"
           ]
         }
       ],
       "exigidos": [
         "adv_03_imovel_sem_dado_ia_nao_inventa",
         "adv_15_prompt_injection_em_descricao_nao_altera_policy",
-        "guard_ai_output_requires_factual_validation"
+        "guard_ai_output_requires_factual_validation",
+        "injecao_de_prompt_em_campos_de_origem"
       ]
     },
     {
@@ -150,7 +159,12 @@
             "test/marco9/marketing/adversarial/adv_04_*.test.js",
             "test/marco9/marketing/adversarial/adv_05_*.test.js",
             "test/marco9/marketing/adversarial/adv_13_*.test.js",
-            "test/marco9/marketing/guards/guard_public_payload_only.test.js"
+            "test/marco9/marketing/guards/guard_public_payload_only.test.js",
+            "test/marco9/marketing/seguranca/vazamento_nada_sensivel_em_resposta_log_evento.test.js",
+            "test/marco9/marketing/seguranca/logs_com_pii_mascarada.test.js",
+            "test/marco9/marketing/seguranca/varredura_rls_15_tabelas.test.js",
+            "test/marco9/marketing/seguranca/ssrf_em_todos_os_campos_de_url.test.js",
+            "test/marco9/marketing/seguranca/escalada_de_permissao_recusada.test.js"
           ]
         }
       ],
@@ -158,7 +172,12 @@
         "adv_04_ocorrencia_interna_nao_entra_em_conteudo",
         "adv_05_template_muda_apos_approval_invalida",
         "adv_13_endereco_restrito_payload_publico_sanitizado",
-        "guard_public_payload_only"
+        "guard_public_payload_only",
+        "vazamento_nada_sensivel_em_resposta_log_evento",
+        "logs_com_pii_mascarada",
+        "varredura_rls_15_tabelas",
+        "ssrf_em_todos_os_campos_de_url",
+        "escalada_de_permissao_recusada"
       ]
     },
     {
@@ -196,13 +215,16 @@
             "test/marco9/marketing/m9d418.canSend.test.js",
             "test/m9d417.*.test.js",
             "test/marco9/marketing/adversarial/adv_06_*.test.js",
-            "test/marco9/marketing/guards/guard_no_hardcoded_cadence.test.js"
+            "test/marco9/marketing/guards/guard_no_hardcoded_cadence.test.js",
+            "test/marco9/marketing/carga/canSend_usa_indice_em_tabelas_grandes.test.js",
+            "test/marco9/marketing/carga/m9d441.migracao_indice.test.js"
           ]
         }
       ],
       "exigidos": [
         "adv_06_frequency_cap_excedido_bloqueia",
-        "guard_no_hardcoded_cadence"
+        "guard_no_hardcoded_cadence",
+        "canSend_usa_indice_em_tabelas_grandes"
       ]
     },
     {
@@ -215,13 +237,15 @@
           "testes": [
             "test/marco9/marketing/m9d425.*.test.js",
             "test/marco9/marketing/adversarial/adv_07_*.test.js",
-            "test/marco9/marketing/guards/guard_kill_switch_always_checked.test.js"
+            "test/marco9/marketing/guards/guard_kill_switch_always_checked.test.js",
+            "test/marco9/marketing/carga/kill_switch_sob_carga_nenhuma_chamada_depois.test.js"
           ]
         }
       ],
       "exigidos": [
         "adv_07_kill_switch_ativo_nenhuma_acao_outbound",
-        "guard_kill_switch_always_checked"
+        "guard_kill_switch_always_checked",
+        "kill_switch_sob_carga_nenhuma_chamada_depois"
       ]
     },
     {
