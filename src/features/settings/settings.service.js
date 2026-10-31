@@ -343,9 +343,8 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D244 — modo da allowlist de saída (enforce ou log) e hora do job de retenção que chama integration.purge_expired().
   ...TRANSPORT_SETTINGS_SCHEMA,
   ...RETENTION_SETTINGS_SCHEMA,
-  // Marco 9, M9-D255 — tamanho do teste de carga das integrações.
+  // Marco 9, M9-D255 e M9-D256 — tamanho do teste de carga das integrações e portão de liberação para produção.
   ...LOAD_INTEGRATION_SETTINGS_SCHEMA,
-  // Marco 9, M9-D256 — portão de liberação para produção (cenários do ensaio, rotação programada e fornecedores sem conta externa).
   ...RELEASE_SETTINGS_SCHEMA,
   // Marco 9, M9-D612 — BI somente leitura: usar o role de banco sem escrita nos GET de /analytics (padrão Ligado).
   ...READ_ONLY_SETTINGS_SCHEMA,
