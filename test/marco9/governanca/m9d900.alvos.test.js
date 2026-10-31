@@ -21,7 +21,7 @@ const A = () => tenants.A;
 test('m9d900 os parâmetros da migração (da D900, a janela do ETA da D901, os limites de execução, o filtro de empresa do legado e o descarte do conteúdo) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
   assert.deepEqual(INGEST_SETTING_DEFAULTS, {
     'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30, 'migracao.eta.janela_lotes': 5,
-    'migracao.execucao.max_por_fonte': 1, 'migracao.execucao.max_por_empresa': 3, 'migracao.execucao.max_no_processo': 5, 'migracao.execucao.expira_min': 720,
+    'migracao.execucao.max_por_fonte': 1, 'migracao.execucao.max_por_empresa': 3, 'migracao.execucao.max_no_processo': 5, 'migracao.execucao.expira_min': 720, 'migracao.execucao.expira_replay_min': 30,
     'migracao.legado.filtrar_por_empresa': false, 'migracao.legado.coluna_empresa': 'empresa_id', 'migracao.legado.codigo_empresa': 'A_DEFINIR', 'migracao.legado.exigir_filtro_multiempresa': true, 'migracao.payload.retencao_dias': 30,
   });
   for (const key of Object.values(KEYS)) assert.ok(SETTINGS_SCHEMA[key], `${key} no SETTINGS_SCHEMA`);
@@ -41,7 +41,7 @@ test('m9d900 toda parametrização declarada é lida por código de produção',
   for (const name of ['OVERLAP_S', 'BATCH_SIZE', 'MAX_ATTEMPTS', 'BATCH_TIMEOUT_MIN']) assert.match(runner, new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo executor`);
   assert.match(read('control/eta.service.js'), /KEYS\.ETA_WINDOW/, 'KEYS.ETA_WINDOW lido pela Torre de controle');
   assert.match(runner, /KEYS\.EXEC_PER_PROCESS/, 'teto do processo lido pelo executor');
-  for (const name of ['EXEC_PER_SOURCE', 'EXEC_PER_COMPANY', 'EXEC_EXPIRE_MIN']) assert.match(read('ingest/run.admission.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido ao aceitar a execução ou o replay`);
+  for (const name of ['EXEC_PER_SOURCE', 'EXEC_PER_COMPANY', 'EXEC_EXPIRE_MIN', 'EXEC_REPLAY_EXPIRE_MIN']) assert.match(read('ingest/run.admission.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido ao aceitar a execução ou o replay`);
   for (const name of ['LEGACY_FILTER', 'LEGACY_COLUMN', 'LEGACY_VALUE', 'LEGACY_REQUIRE']) assert.match(read('ingest/connectors/company.scope.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo filtro de empresa`);
   assert.match(read('ingest/payload.purge.js'), /KEYS\.PAYLOAD_DAYS/, 'prazo de descarte lido pelo job');
 });

@@ -40,6 +40,7 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.execucao.max_por_empresa` | 3 | `ingest/run.admission` (teto de ativas da empresa, replays incluídos; acima, 429 `GOV_MIG_RUN_LIMIT`) |
 | `migracao.execucao.max_no_processo` | 5 | `ingest/batch.runner.loadSettings` e `ingest/run.limiter` (teto de execuções rodando no processo; as demais ficam QUEUED para o job) |
 | `migracao.execucao.expira_min` | 720 | `ingest/run.repository.countActive` (execução ativa sem atividade — início ou lote gravado — há mais que isso deixa de contar) |
+| `migracao.execucao.expira_replay_min` | 30 | `ingest/run.repository.expireStaleReplays` (chamada por `run.admission.assertRoom`: registro de replay sem fim há mais que isso vira FAILED e libera a vaga) |
 | `migracao.legado.filtrar_por_empresa`, `.coluna_empresa`, `.codigo_empresa` | desligado, `empresa_id`, `A_DEFINIR` | `ingest/connectors/company.scope` (filtro de empresa em toda leitura do legado; o código é único no grupo: 409 `GOV_MIG_LEGACY_CODE_DUPLICATE`, trava em `settings/legadoEmpresa.guard`) |
 | `migracao.legado.exigir_filtro_multiempresa` | ligado | `ingest/connectors/company.scope` (grupo com várias empresas sem filtro: 422 `GOV_MIG_LEGACY_SCOPE_REQUIRED`; com a exigência desligada a execução grava `migration.legacy.unfiltered`) |
 | `migracao.payload.retencao_dias` | 30 | `ingest/payload.purge` (dias, depois de RECONCILED, até anular `mig_records.source_payload`; job `migrationRunJob`) |

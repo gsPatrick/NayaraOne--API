@@ -76,6 +76,16 @@ async function lockCompany(tenant, transaction) {
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))', { transaction, replacements: { key: `mig_run_request:${tenant.companyId}` } });
 }
 
+/** Encerra como FAILED os registros de controle de replay sem fim há mais que `expireMinutes` (processo caído no meio do replay; R3-L6). Devolve quantos encerrou. */
+async function expireStaleReplays(tenant, expireMinutes, transaction) {
+  const rows = await select(
+    `UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now(), error = 'Replay interrompido: o registro expirou sem fim.'
+      WHERE company_id = :companyId AND kind = 'REPLAY' AND status = 'RUNNING' AND COALESCE(started_at, created_at) <= now() - make_interval(mins => :expireMinutes::int) RETURNING id`,
+    { companyId: tenant.companyId, expireMinutes }, transaction
+  );
+  return rows.length;
+}
+
 /**
  * Execuções ativas (QUEUED, RUNNING ou PAUSED, com atividade — início ou lote gravado — dentro do prazo `expireMinutes`, então a execução longa que ainda grava lotes continua contando e só o processo caído expira) da empresa: `total` e as que miram a mesma fonte (`overlapping`). Pedido sem sistema ou
  * sem entidade mira todas, então cruza com qualquer outro.
@@ -92,4 +102,4 @@ async function countActive(tenant, { sourceSystem, entity, expireMinutes }, tran
   return row;
 }
 
-module.exports = { lockCompany, countActive, insert, insertReplay, get, latest, claim, finish, pause, resume, listPaused, listQueued };
+module.exports = { lockCompany, countActive, expireStaleReplays, insert, insertReplay, get, latest, claim, finish, pause, resume, listPaused, listQueued };

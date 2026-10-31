@@ -13,6 +13,8 @@ const setting = async (key, tenant, transaction) => Number(await getSetting(key,
  */
 async function assertRoom(tenant, { sourceSystem, entity }, transaction) {
   await runs.lockCompany(tenant, transaction);
+  // replay interrompido não segura a vaga até o prazo longo da execução (R3-L6): vencido o prazo do replay, o registro vira FAILED antes da contagem
+  await runs.expireStaleReplays(tenant, await setting(KEYS.EXEC_REPLAY_EXPIRE_MIN, tenant, transaction), transaction);
   const active = await runs.countActive(tenant, { sourceSystem, entity, expireMinutes: await setting(KEYS.EXEC_EXPIRE_MIN, tenant, transaction) }, transaction);
   if (active.overlapping >= await setting(KEYS.EXEC_PER_SOURCE, tenant, transaction)) throw errors.runAlreadyActive();
   if (active.total >= await setting(KEYS.EXEC_PER_COMPANY, tenant, transaction)) throw errors.runLimit();
