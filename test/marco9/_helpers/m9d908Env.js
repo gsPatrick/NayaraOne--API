@@ -15,12 +15,13 @@ const { openTenantTx, adminQuery, tenantOf } = env;
 const PARAM_PREFIXES = ['migracao.relogio.%', 'migracao.fuso%', 'migracao.dry3.%', 'migracao.paralelo.prazo_dias', 'migracao.setor.%', 'migracao.canary.%'];
 
 /** Arquivo de exportação do relatório num diretório temporário (o teste nunca escreve em docs/governance). */
-function useTempExport() {
+function useTempExport(tenant) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d908-'));
   process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
   process.env.MIGRATION_DRY3_SIGNING_KEY = 'chave-de-teste-nao-usar-em-producao'; // só de teste: assina o relatório exportado
   dry.install();
-  return { file: process.env.MIGRATION_DRY3_REPORT_PATH, read: () => JSON.parse(fs.readFileSync(process.env.MIGRATION_DRY3_REPORT_PATH, 'utf8')), exists: () => fs.existsSync(process.env.MIGRATION_DRY3_REPORT_PATH) };
+  const file = tenant ? require('../../../src/features/migration-v2/dryrun/dry.export').exportPath(tenant.companyId) : process.env.MIGRATION_DRY3_REPORT_PATH; // arquivo da empresa (R3-L4)
+  return { file, base: process.env.MIGRATION_DRY3_REPORT_PATH, read: () => JSON.parse(fs.readFileSync(file, 'utf8')), exists: () => fs.existsSync(file) };
 }
 
 /** Isola a empresa: as fontes semeadas do legado (que exigem credencial externa) ficam desabilitadas durante o teste. */

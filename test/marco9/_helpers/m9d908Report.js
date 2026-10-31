@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { sign } = require('../../../src/features/migration-v2/dryrun/dry.signature');
-const { currentCommit } = require('../../../src/features/migration-v2/dryrun/dry.export');
+const { currentCommit, exportPath } = require('../../../src/features/migration-v2/dryrun/dry.export');
 
 const TEST_KEY = 'chave-de-teste-nao-usar-em-producao';
 const CRITERIA = ['blockers_zero', 'counts_match', 'batches_verified', 'parallel_clean', 'clock_tz_validated', 'rollback_simulated'];
@@ -29,8 +29,8 @@ function signedBody(tenant, fields = {}) {
 /** Grava o relatório num arquivo temporário novo, aponta o ambiente para ele e devolve o caminho. */
 function writeReport(tenant, fields = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d908r-'));
-  const file = path.join(dir, 'dry3-report.json');
-  process.env.MIGRATION_DRY3_REPORT_PATH = file;
+  process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
+  const file = exportPath(tenant.companyId); // arquivo da empresa (R3-L4)
   process.env.MIGRATION_DRY3_SIGNING_KEY = TEST_KEY;
   fs.writeFileSync(file, `${JSON.stringify(signedBody(tenant, fields), null, 2)}\n`);
   return file;

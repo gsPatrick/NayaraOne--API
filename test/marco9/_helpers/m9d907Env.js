@@ -2,6 +2,7 @@
 
 // Apoio dos testes M9-D907 com banco (não é teste). Rodar SEMPRE em banco descartável (scripts/withDisposableDb.js). Estes testes COMMITAM dados; `cleanup` apaga o que a demanda grava.
 const fs = require('node:fs');
+const path = require('node:path');
 const env = require('./m9d904Env');
 const dry = require('../../../src/features/migration-v2/dryrun');
 const types = require('../../../src/features/migration-v2/rollback/types.service');
@@ -62,7 +63,7 @@ async function markRollbackSimulated(tenant, ok = true) {
 
 /** Apaga o relatório exportado do teste e solta o caminho (o GO volta a não encontrar relatório). */
 function dropExportedReport() {
-  try { if (process.env.MIGRATION_DRY3_REPORT_PATH) fs.rmSync(process.env.MIGRATION_DRY3_REPORT_PATH, { force: true }); } catch (_err) { /* caminho de teste inexistente (ENOTDIR): nada a apagar */ }
+  try { const dir = process.env.MIGRATION_DRY3_REPORT_PATH && path.dirname(process.env.MIGRATION_DRY3_REPORT_PATH); if (dir && /m9d908/.test(path.basename(dir))) fs.rmSync(dir, { recursive: true, force: true }); } catch (_err) { /* caminho de teste inexistente (ENOTDIR): nada a apagar */ }
   delete process.env.MIGRATION_DRY3_REPORT_PATH;
 }
 

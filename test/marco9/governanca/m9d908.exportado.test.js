@@ -32,7 +32,7 @@ test('m9d908 o GO reconhece o relatório exportado mesmo sem o ensaio no banco d
 
 test('m9d908 o GO recusa relatório exportado adulterado, sem assinatura ou sem a chave', { skip: skip() }, async () => {
   await env.markRollbackSimulated(A, false);
-  const file = process.env.MIGRATION_DRY3_REPORT_PATH;
+  const file = require('../../../src/features/migration-v2/dryrun/dry.export').exportPath(A.companyId);
   // edição à mão: vermelho vira verde sem reassinar
   edit(file, (body) => { body.criteria.rollback_simulated.ok = true; });
   const forged = await env.fail(env.decide(A, 'GO'));
@@ -50,7 +50,7 @@ test('m9d908 o GO recusa relatório exportado adulterado, sem assinatura ou sem 
   assert.match(gapReason(await env.fail(env.decide(A, 'GO'))), /chave de assinatura/);
   // ensaio exportado REPROVADO, mesmo assinado e com a simulação verde
   await env.markRollbackSimulated(A, true);
-  require('../../../src/features/migration-v2/dryrun/dry.export').exportReport({ id: 'qa-m9-reprovado', conclusion: 'REPROVADO', criteria: { rollback_simulated: { ok: true } }, commit: 'qa-m9' });
+  require('../../../src/features/migration-v2/dryrun/dry.export').exportReport({ id: 'qa-m9-reprovado', conclusion: 'REPROVADO', criteria: { rollback_simulated: { ok: true } }, commit: 'qa-m9' }, { companyId: A.companyId });
   assert.match(gapReason(await env.fail(env.decide(A, 'GO'))), /não foi APROVADO/);
   assert.equal((await env.adminQuery('SELECT count(*)::int AS n FROM governance.cutover_decisions WHERE company_id = $1', [A.companyId])).rows[0].n, 0);
 });

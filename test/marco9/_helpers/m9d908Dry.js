@@ -12,7 +12,7 @@ async function scenario(tenant, { rows = EDGE_BIRTHS.length, extra = [] } = {}) 
   // SUPPLIER e PROPERTY (alvos da migração real) não têm fonte ativa neste ensaio: sem janela para comparar, o avanço do canary não pode exigir comparação delas (parâmetro da D904).
   await env.setParam(tenant, 'migracao.canary.exigir_comparacao', false);
   await env.setParam(tenant, 'migracao.dry3.volume_minimo', 1); // o ensaio de teste tem poucas linhas; o padrão (1000) é provado em m9d908.vinculo
-  const exported = env.useTempExport();
+  const exported = env.useTempExport(tenant);
   const legacy = await env.installSource(tenant, { mode: 'WATERMARK', entity: 'PERSON' });
   const names = [];
   const taxIds = [];

@@ -31,12 +31,12 @@ const gap = (reason, report, extra = {}) => [{ code: GAP, detail: { reportId: (r
 
 /**
  * Pré-requisito do GO (M9-D907 §3.4, recebido na M9-D908): a simulação de rollback tem de ter sido executada no DRY3. O ensaio só roda em banco descartável (dry.guard), então o GO
- * não lê a tabela do banco do ensaio: reconhece o relatório EXPORTADO (docs/governance/dry3-report.json, ou MIGRATION_DRY3_REPORT_PATH), cuja assinatura HMAC (dry.signature) amarra
+ * não lê a tabela do banco do ensaio: reconhece o relatório EXPORTADO (um arquivo por empresa ao lado de docs/governance/dry3-report.json, ou de MIGRATION_DRY3_REPORT_PATH), cuja assinatura HMAC (dry.signature) amarra
  * report_id, conclusão, critérios, commit e data. Além da assinatura, o vínculo (dry.validity, N2): empresa, commit, idade, seis critérios, lotes e volume mínimo (parâmetros). Qualquer falha: 409 GOV_CUTOVER_NOT_READY com { code, detail }.
  */
 async function rollbackSimulated(tenant, transaction) {
   let report;
-  try { report = JSON.parse(fs.readFileSync(exportPath(), 'utf8')); } catch (err) { return gap(err.code === 'ENOENT' ? 'NO_FILE' : 'UNREADABLE'); }
+  try { report = JSON.parse(fs.readFileSync(exportPath(tenant.companyId), 'utf8')); } catch (err) { return gap(err.code === 'ENOENT' ? 'NO_FILE' : 'UNREADABLE'); }
   const signed = verify(report);
   if (!signed.ok) return gap(signed.reason, report);
   if (report.conclusion !== 'APROVADO') return gap('NOT_APPROVED', report);
