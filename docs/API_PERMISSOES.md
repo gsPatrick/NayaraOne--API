@@ -516,6 +516,11 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/deadlines` | `legal:read` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id/access-log` | `legal:read` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id/export` | `legal:read` | não |
+| `GET` | `/api/v1/legal-holds/:id/impact` | `governance:legal-hold:manage` | não |
+| `POST` | `/api/v1/legal-holds/:id/release` | `governance:legal-hold:manage` | sim |
+| `GET` | `/api/v1/legal-holds/:id` | `governance:legal-hold:manage` | não |
+| `GET` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
+| `POST` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id` | `legal:read` | não |
 | `DELETE` | `/api/v1/legal/guarantees/:id` | `legal:update` | não |
 | `GET` | `/api/v1/legal/guarantees/:id` | `legal:read` | não |
@@ -834,7 +839,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:migration:run` | CRITICAL | `GET /api/v1/migration/control-tower`, `GET /api/v1/migration/raci`, `POST /api/v1/migration/records/:id/resolve`, `POST /api/v1/migration/runs` |
 | `governance:migration:admin` | CRITICAL | `PUT /api/v1/migration/raci` |
 | `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
-| `governance:legal-hold:manage` | CRITICAL | nenhuma ainda |
+| `governance:legal-hold:manage` | CRITICAL | `GET /api/v1/legal-holds/:id/impact`, `POST /api/v1/legal-holds/:id/release`, `GET /api/v1/legal-holds/:id`, `GET /api/v1/legal-holds`, `POST /api/v1/legal-holds` |
 
 | `POST` | `/api/v1/procurement/webhooks/insurance` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/v1/public/share/:token` | só login | não |
