@@ -196,6 +196,11 @@ test('catalogo_dominio_sem_connection_aciona_contingencia', async () => {
 
 test('catalogo_listagem_admin_14_dominios_e_criticidade_configuravel', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // Linha de base medida na própria transação: outros testes podem deixar conexão ativa na empresa semente.
+    const ativas = await IntegrationConnection.findAll({ where: { companyId: tenant.companyId, environment: registry.getServerEnvironment(), status: 'ACTIVE' }, attributes: ['providerCode'], transaction });
+    const provs = await IntegrationProvider.findAll({ attributes: ['code', 'domain'], transaction });
+    const dominioDe = new Map(provs.map((p) => [p.code, p.domain]));
+    const base = (dominio) => ativas.filter((c) => dominioDe.get(c.providerCode) === dominio).length;
     const lista = await listCatalog(ctx, transaction);
     assert.equal(lista.domains.length, 14);
     for (const d of lista.domains) {
@@ -205,7 +210,7 @@ test('catalogo_listagem_admin_14_dominios_e_criticidade_configuravel', async () 
       assert.ok(d.providers.some((p) => p.code === code && p.sandboxAvailable));
       assert.ok(capabilities.every((c) => d.capabilities.includes(c)));
       assert.equal(d.contingencyRequired, criticidade === 'CRITICAL');
-      assert.equal(d.activeConnections, 0);
+      assert.equal(d.activeConnections, base(d.domain));
     }
     // O administrador muda a criticidade da família; o valor inválido cai no padrão (falha fechada).
     const chave = 'integration.catalog.criticality.social';
