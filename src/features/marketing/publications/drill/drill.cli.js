@@ -33,7 +33,7 @@ async function runCli(argv, { env = process.env, out = console.log, err = consol
     err('Recusado: o ensaio só roda contra banco local (127.0.0.1). Use: node scripts/withDisposableDb.js -- node scripts/marketingDrill.js ...');
     return EXIT.USAGE;
   }
-  const drill = impl || require('./index');
+  const drill = impl || { ...require('./drill.run'), ...require('./drill.report') }; // sem passar pelo index (que reexporta este arquivo)
   const { report, recorded } = await drill.runDrill({
     channels, companyId: typeof opts.empresa === 'string' ? opts.empresa : null, register: Boolean(opts.registrar),
     onRow: (r) => out(`${r.aprovado ? 'APROVADO ' : 'REPROVADO'} ${r.canal.padEnd(10)} ${r.cenario}`),
