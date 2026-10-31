@@ -12,7 +12,8 @@ const site = require('../../../src/features/integrations/site');
 const store = require('../../../src/features/integrations/providers/site/sandbox/site.sandbox.store');
 const { criarImovel } = require('./intReadModel');
 
-const { comTenant, sql, uniqueSuffix, ctxDe } = env;
+const { Op } = require('sequelize');
+const { sequelize, comTenant, sql, uniqueSuffix, ctxDe } = env;
 
 /** Canal ATIVO do site-sandbox da empresa (os outros ativos do site ficam pausados), com o segredo do webhook no cofre e a configuração do sandbox em `config`. */
 async function conectar(tenant, { config } = {}) {
@@ -51,11 +52,16 @@ const pagina = async (tenant, id) => (await sql(tenant, 'SELECT * FROM integrati
 const envio = async (tenant, id) => (await sql(tenant, 'SELECT * FROM integration.dispatches WHERE id = :id', { id }))[0];
 const eventosDoEnvio = (tenant, dispatchId, tipo) => sql(tenant, "SELECT * FROM integration.outbox_events WHERE company_id = :c AND event_type = :t AND payload_json->>'dispatchId' = :d", { c: tenant.companyId, t: tipo, d: dispatchId });
 
-/** Roda os consumidores (reações do domínio) dos eventos de confirmação e de falha do envio, como o despachante do outbox. */
+/**
+ * Roda os consumidores (reações do domínio) dos eventos de confirmação e de falha do envio DAS PÁGINAS DO SITE, como o despachante do outbox. Só os eventos cujo agregado é a página
+ * (SitePage): confirmações de outros domínios que outros testes do mesmo banco deixaram no outbox (portal, pagamento) não são deste teste e falhariam por falta da connection deles.
+ */
 async function consumir(tenant) {
   await comTenant(tenant, async (t) => {
     for (const tipo of ['integration.dispatch.confirmed', 'integration.dispatch.failed']) {
-      const rows = await OutboxEvent.findAll({ where: { companyId: tenant.companyId, eventType: tipo }, order: [['created_at', 'ASC']], transaction: t });
+      const rows = await OutboxEvent.findAll({
+        where: { companyId: tenant.companyId, eventType: tipo, [Op.and]: [sequelize.where(sequelize.literal("payload_json->'aggregate'->>'type'"), 'SitePage')] }, order: [['created_at', 'ASC']], transaction: t,
+      });
       for (const e of rows) await runEventConsumers(e, t);
     }
   });
@@ -63,7 +69,13 @@ async function consumir(tenant) {
 
 /** Evento do site (formato do sandbox). `status`: pending, live, removed, error. */
 const evento = (pageKey, publicationId, status, extra = {}) => ({ id: `evt-site-${uniqueSuffix()}`, type: 'page.status', api_version: 'v1', page: { key: pageKey, publicationId, status, ...extra } });
-const rodarIntake = (tenant) => env.rodar(tenant);
+/** Rodadas da caixa de entrada até esvaziar a fila vencida: eventos que outros testes do mesmo banco deixaram RECEIVED ocupam o lote e fariam o evento deste teste esperar a rodada seguinte. */
+async function rodarIntake(tenant) {
+  for (let i = 0; i < 30; i += 1) {
+    const r = await env.rodar(tenant);
+    if (r.claimed === 0) break;
+  }
+}
 
 module.exports = {
   ...env, conectar, configurar, semSite, novoImovel, publicar, despublicar, rodar, depois, pagina, envio, eventosDoEnvio, consumir, evento, rodarIntake, site, store,
