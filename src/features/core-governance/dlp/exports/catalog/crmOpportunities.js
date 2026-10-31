@@ -15,6 +15,7 @@ module.exports = {
   onDemand: true,
   formats: ['CSV', 'XLSX', 'PDF'],
   permission: 'crm:opportunities:export',
+  registryTable: 'crm.opportunities',
   sourceFiles: ['features/crm/opportunitiesExport.service.js'],
   lineage: {
     area: 'OTHER', ownerDomain: 'CRM', criticality: 'NORMAL', description: 'Exportação das oportunidades do CRM (CSV, XLSX ou PDF) pelo POST /exports, com finalidade, MFA, expiração e auditoria.',

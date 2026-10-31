@@ -9,6 +9,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `AUTH_VALIDATION` | 400 | Os dados de acesso enviados são inválidos. | plataforma | 1.1.0 | não |
 | `GOV_ACTION_BLOCKED` | 409 | Não é possível continuar: há um impedimento. | governanca-ui | 1.3.0 | não |
 | `GOV_ACTION_IMPACT_CHANGED` | 409 | O impacto mudou. Revise e confirme novamente. | governanca-ui | 1.3.0 | não |
+| `GOV_AI_CONTEXT_INVALID` | 400 | Empresa do agente ausente: o guarda de campos da IA não decide sem ela. | data-quality | 1.3.0 | não |
+| `GOV_AI_FIELD_FORBIDDEN` | 403 | Este dado não pode ser enviado à IA. | data-quality | 1.3.0 | não |
 | `GOV_ANOMALY_INVALID_TRANSITION` | 409 | Esta anomalia não pode mudar para a situação pedida. | dlp | 1.0.0 | não |
 | `GOV_ANOMALY_REASON_REQUIRED` | 400 | Informe o motivo da revisão. | dlp | 1.0.0 | não |
 | `GOV_API_CLIENT_INVALID` | 422 | Dados da credencial inválidos. | api-governance | 1.0.0 | não |
@@ -91,6 +93,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_EXPORT_COLUMN_INVALID` | 400 | Coluna inválida para esta exportação. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_EXPIRED` | 410 | O arquivo expirou. Faça uma nova solicitação. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_FAILED` | 409 | A geração do arquivo falhou. Faça uma nova solicitação. | dlp | 1.0.0 | não |
+| `GOV_EXPORT_FIELD_FORBIDDEN` | 403 | Este campo não pode ser exportado. | data-quality | 1.3.0 | não |
 | `GOV_EXPORT_FILTER_INVALID` | 400 | Filtro inválido para esta exportação. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_FORMAT_INVALID` | 400 | Formato inválido. | dlp | 1.0.0 | não |
 | `GOV_EXPORT_GENERATION_FAILED` | 500 | A geração da exportação falhou. | core-governance | 1.0.0 | não |
@@ -105,6 +108,9 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_EXTERNAL_LEAD_DUPLICATE` | 409 | Já existe um cadastro com este documento ou contato. | api-governance | 1.0.0 | não |
 | `GOV_EXTERNAL_LEAD_INVALID` | 422 | Dados do lead inválidos. | api-governance | 1.0.0 | não |
 | `GOV_EXTERNAL_ROUTE_WITHOUT_SCOPE` | 500 | Rota externa sem scope declarado. | api-governance | 1.0.0 | não |
+| `GOV_FIELD_ACTOR_INVALID` | 400 | Empresa do ator ausente. | data-quality | 1.3.0 | não |
+| `GOV_FIELD_CONTEXT_INVALID` | 400 | Contexto de acesso inválido. | data-quality | 1.3.0 | não |
+| `GOV_FIELD_ENTITY_INVALID` | 400 | Entidade inválida: use schema.tabela. | data-quality | 1.3.0 | não |
 | `GOV_FINOPS_AMOUNT_INVALID` | 422 | O valor do custo não pode ser negativo. | finops | 1.3.0 | não |
 | `GOV_FINOPS_COLLECTOR_FAILED` | 500 | O coletor de custo "<valor>" falhou; nenhum valor foi gravado e o último sucesso continua exibido. | finops | 1.3.0 | não |
 | `GOV_FINOPS_CRITICAL_NOT_DEGRADABLE` | 422 | Esta função é crítica e não pode ser degradada. | finops | 1.3.0 | não |
@@ -179,8 +185,6 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_QUEUE_ITEM_FINAL` | 409 | Este item já foi decidido. | data-quality | 1.0.0 | não |
 | `GOV_RATE_LIMITED` | 429 | Muitas requisições. Tente novamente em <N> segundos. | api-governance | 1.0.0 | não |
 | `GOV_RESPONSE_SCHEMA_MISMATCH` | 422 | A resposta de <método> <rota> não segue o contrato. | api-governance | 1.1.0 | não |
-| `GOV_STATUS_NOT_DOCUMENTED` | 422 | Status <N> não está no contrato de <rota>. | api-governance | 1.1.0 | não |
-| `GOV_TOKEN_EXPIRED` | 401 | O token expirou. Obtenha um novo token. | api-governance | 1.0.0 | não |
 | `GOV_RETENTION_ALL_HELD` | 409 | Todos os registros desta rodada estão sob bloqueio legal (legal hold). | data-quality | 1.3.0 | não |
 | `GOV_RETENTION_ALREADY_APPLIED` | 409 | Esta rodada de retenção já foi aplicada. | data-quality | 1.3.0 | não |
 | `GOV_RETENTION_APPLY_FAILED` | 500 | A aplicação parou num lote; os lotes concluídos foram mantidos e o restante pode ser retomado. | data-quality | 1.3.0 | não |
@@ -194,6 +198,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_RETENTION_RUN_IN_PROGRESS` | 409 | Esta rodada de retenção está sendo aplicada agora. | data-quality | 1.3.0 | não |
 | `GOV_RETENTION_TARGET_TAKEN` | 409 | Este tipo de dado já pertence a outra política de retenção. | data-quality | 1.3.0 | não |
 | `GOV_RETENTION_TRIGGER_UNSUPPORTED` | 422 | O tipo de dado não aceita este gatilho. | data-quality | 1.3.0 | não |
+| `GOV_STATUS_NOT_DOCUMENTED` | 422 | Status <N> não está no contrato de <rota>. | api-governance | 1.1.0 | não |
+| `GOV_TOKEN_EXPIRED` | 401 | O token expirou. Obtenha um novo token. | api-governance | 1.0.0 | não |
 | `GOV_TOKEN_INVALID` | 401 | Token de acesso inválido. | api-governance | 1.0.0 | não |
 | `GOV_UNSUPPORTED_GRANT_TYPE` | 400 | Informe grant_type=client_credentials. | api-governance | 1.0.0 | não |
 | `GOV_VALIDATION_PAGINATION` | 400 | Parâmetros de paginação inválidos. | api-governance | 1.0.0 | não |

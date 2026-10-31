@@ -4,7 +4,7 @@ const { getSetting } = require('../../settings/settings.service');
 const logger = require('../../../utils/logger');
 const { isModuleEnabled, tenantFromAuth } = require('../governance.module');
 const settings = require('./view.settings');
-const { sensitiveFields } = require('./view.fields');
+const { sensitiveFields, maskSpecs, registryMasker } = require('./view.fields');
 const { collect, applyMask } = require('./view.scan');
 const guardService = require('./guard.service');
 
@@ -21,6 +21,8 @@ async function loadState(req, resourceType) {
   return req.withTenantTransaction(async (transaction) => ({
     enabled: await isModuleEnabled('dlp', tenant, transaction),
     fields: await sensitiveFields(tenant, resourceType, transaction),
+    mask: await maskSpecs(tenant, resourceType, transaction),
+    tenant,
     keep: settings.maskTailOf(await getSetting(settings.MASK_TAIL_KEY, tenant, transaction, settings.VIEW_SETTING_DEFAULTS[settings.MASK_TAIL_KEY])),
   }));
 }
@@ -58,7 +60,9 @@ async function protect(req, resourceType, body) {
       failed.push(classification);
     }
   }
-  if (masked.length) applyMask(out, state.fields, masked, { keep: state.keep, full: false });
+  if (masked.length) {
+    applyMask(out, state.fields, masked, { keep: state.keep, full: false, specs: state.mask.specs, masker: registryMasker(), ctx: { companyId: state.tenant.companyId, maskText: state.mask.maskText } });
+  }
   if (failed.length) applyMask(out, state.fields, failed, { keep: 0, full: true });
   return masked.length || failed.length ? out : body;
 }

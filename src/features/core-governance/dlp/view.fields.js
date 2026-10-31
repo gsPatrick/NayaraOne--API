@@ -20,6 +20,17 @@ let current = settingSource;
 const setFieldSource = (fn) => { current = fn; };
 const resetFieldSource = () => { current = settingSource; };
 
+/**
+ * Máscara por campo do registro (M9-D915): `setMaskSource(fn)` com `fn(tenant, resourceType, transaction) -> Promise<{ specs: { [chaveNormalizada]: { masking, maskPattern, column } }, maskText }>`
+ * e `maskFor(spec, value, ctx)` que aplica a máscara; sem encaixe, vale a máscara de `view.mask.js`.
+ */
+let currentMasks = async () => ({ specs: {}, maskText: null });
+let currentMasker = null;
+const setMaskSource = (specs, masker) => { currentMasks = specs; currentMasker = masker; };
+const resetMaskSource = () => { currentMasks = async () => ({ specs: {}, maskText: null }); currentMasker = null; };
+const maskSpecs = (tenant, resourceType, transaction) => currentMasks(tenant, resourceType, transaction);
+const registryMasker = () => currentMasker;
+
 /** Mapa { chaveNormalizada: classe } dos campos HIGH e RESTRICTED do tipo (LOW e MEDIUM não têm política de VIEW e COPY). */
 async function sensitiveFields(tenant, resourceType, transaction) {
   const raw = await current(tenant, resourceType, transaction);
@@ -37,4 +48,4 @@ async function classOfField(tenant, resourceType, field, transaction) {
   return found ? found[1] : null;
 }
 
-module.exports = { setFieldSource, resetFieldSource, sensitiveFields, classOfField, normalizeKey };
+module.exports = { setFieldSource, resetFieldSource, sensitiveFields, classOfField, normalizeKey, settingSource, setMaskSource, resetMaskSource, maskSpecs, registryMasker };

@@ -33,11 +33,12 @@ function collect(body, fields) {
 }
 
 /** Mascara no próprio corpo os campos das classes pedidas (`classes`: lista); `full` = máscara total (falha da política). Devolve quantos valores mascarou. */
-function applyMask(body, fields, classes, { keep, full }) {
+function applyMask(body, fields, classes, { keep, full, specs = null, masker = null, ctx = {} }) {
   let masked = 0;
   walk(body, fields, (node, key, classification) => {
     if (!classes.includes(classification)) return;
-    node[key] = maskValue(node[key], { keep, full });
+    // Com o registro ligado (M9-D915), cada campo sai com a máscara do próprio registro; a falha da política (`full`) continua sendo máscara total.
+    node[key] = !full && masker ? masker(node[key], specs && specs[normalizeKey(key)], { ...ctx, key }) : maskValue(node[key], { keep, full });
     masked += 1;
   }, null);
   return masked;

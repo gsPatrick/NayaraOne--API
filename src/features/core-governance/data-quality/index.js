@@ -5,6 +5,7 @@ const dataQualityRouter = require('./data-quality.routes');
 const retentionRouter = require('./retention.routes');
 const classificationRouter = require('./classification.routes');
 const classificationWiring = require('./classification.wiring');
+const fieldAccessWiring = require('./fieldAccess.wiring');
 const legalHoldRouter = require('./legalHold.routes');
 const legalHoldWiring = require('./legalHold.wiring');
 const service = require('./data-quality.service');
@@ -15,6 +16,9 @@ installQualityHooks();
 
 // M9-D910: o registro de classificação passa a ser a fonte do resolvedor de DLP e da máscara usada na anonimização da retenção.
 classificationWiring.install();
+
+// M9-D915: a tela e a API passam a mascarar os campos HIGH e RESTRICTED conforme o registro de classificação.
+fieldAccessWiring.install();
 
 // M9-D912: a interface holdGuard da retenção passa a consultar as retenções legais ativas.
 legalHoldWiring.install();

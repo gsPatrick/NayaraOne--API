@@ -25,15 +25,19 @@ function resolveAiAccess(deps) {
 const refOf = (source, name) => (source.fieldRefs && source.fieldRefs[name]) || `${source.key}.${name}`;
 
 /** Passo 1: aiAccess.assertAllowed. Devolve as fontes só com os campos permitidos e a lista dos retirados (referências, nunca valores). */
-async function applyFieldAccess(aiAccess, sources, agentContext) {
+async function applyFieldAccess(aiAccess, sources, agentContext, runtime) {
   const fields = sources.flatMap((s) => Object.keys(s.fields || {}).map((name) => ({ ref: refOf(s, name), sourceId: s.id, name })));
-  const verdict = (await aiAccess.assertAllowed(fields, agentContext)) || {};
+  // O terceiro argumento (empresa, usuário e transação do pedido) é do guarda real (M9-D915); o segundo continua sendo só o contexto do agente (DI-D027-3).
+  const verdict = (await aiAccess.assertAllowed(fields, agentContext, runtime)) || {};
+  const masks = verdict.masks || {};
   const allowedRefs = new Set(Array.isArray(verdict) ? verdict.map((f) => f.ref || f) : (verdict.allowedFields || []).map((f) => f.ref || f));
   const removed = [];
   const kept = sources.map((s) => {
     const next = {};
     for (const [name, value] of Object.entries(s.fields || {})) {
-      if (allowedRefs.has(refOf(s, name))) next[name] = value; else removed.push(refOf(s, name));
+      const ref = refOf(s, name);
+      // Campo liberado com máscara no registro (ai_allowed e masking) entra mascarado: o guarda devolve a função de máscara de cada referência.
+      if (allowedRefs.has(ref)) next[name] = typeof masks[ref] === 'function' ? masks[ref](value) : value; else removed.push(ref);
     }
     return { ...s, fields: next };
   });
@@ -77,7 +81,7 @@ async function buildContext(ctx, input, transaction, deps = {}) {
   const sources = Array.isArray(input.sources) ? input.sources : [];
   if (sources.some((s) => !s || typeof s.key !== 'string' || !s.key)) throw contextInvalid('Toda fonte do contexto precisa de uma chave.');
 
-  const { kept, removed } = await applyFieldAccess(aiAccess, sources, input.agentContext);
+  const { kept, removed } = await applyFieldAccess(aiAccess, sources, input.agentContext, { ctx, transaction });
   const ownTenant = kept.filter((s) => sameTenant(ctx, s));
   const gate = applyClassificationGate(ownTenant, { task, actor: ctx, provider: input.provider, purpose: input.purpose });
   const pseudonymizeNames = (await getSetting(PRIVACY_PSEUDONYMIZE_KEY, ctx, transaction, PRIVACY_SETTING_DEFAULTS[PRIVACY_PSEUDONYMIZE_KEY])) !== false;

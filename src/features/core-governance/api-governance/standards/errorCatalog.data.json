@@ -21,6 +21,20 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_AI_CONTEXT_INVALID": {
+      "status": 400,
+      "message": "Empresa do agente ausente: o guarda de campos da IA não decide sem ela.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_AI_FIELD_FORBIDDEN": {
+      "status": 403,
+      "message": "Este dado não pode ser enviado à IA.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_ANOMALY_INVALID_TRANSITION": {
       "status": 409,
       "message": "Esta anomalia não pode mudar para a situação pedida.",
@@ -595,6 +609,13 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_EXPORT_FIELD_FORBIDDEN": {
+      "status": 403,
+      "message": "Este campo não pode ser exportado.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_EXPORT_FILTER_INVALID": {
       "status": 400,
       "message": "Filtro inválido para esta exportação.",
@@ -691,6 +712,27 @@
       "message": "Rota externa sem scope declarado.",
       "module": "api-governance",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_FIELD_ACTOR_INVALID": {
+      "status": 400,
+      "message": "Empresa do ator ausente.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FIELD_CONTEXT_INVALID": {
+      "status": 400,
+      "message": "Contexto de acesso inválido.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FIELD_ENTITY_INVALID": {
+      "status": 400,
+      "message": "Entidade inválida: use schema.tabela.",
+      "module": "data-quality",
+      "since": "1.3.0",
       "deprecated": false
     },
     "GOV_FINOPS_AMOUNT_INVALID": {

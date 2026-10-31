@@ -13,6 +13,7 @@ const { readExportParams } = require('./export.params');
 const { inTenant } = require('./export.tx');
 const { scheduleGeneration } = require('./export.run');
 const repo = require('./export.repository');
+const fieldPolicy = require('../../data-quality/fieldAccess.export');
 
 const sameRequest = (job, parsed) => job.resourceType === parsed.entry.code && job.format === parsed.format && job.watermark === parsed.watermark
   && sameJson(job.filter, parsed.filter) && sameJson(job.columns, parsed.columns)
@@ -42,6 +43,10 @@ async function requestExport({ tenant, actorUserId, body, idempotencyKey, transa
   const key = scopedKey(actorUserId, idempotencyKey, 'e');
   const params = await readExportParams(tenant, transaction);
   const parsed = parseExportBody(body, params.formats);
+  // M9-D915: coluna FORBIDDEN no registro recusa o pedido (se foi listada) ou sai do arquivo com aviso (se o pedido não listou colunas).
+  const policy = await fieldPolicy.applyRequestPolicy(tenant, parsed.entry, parsed.columns, parsed.columnsListed, transaction);
+  parsed.columns = policy.columns;
+  parsed.warnings = policy.warnings;
   const existing = await repo.findByKey(tenant.companyId, key, transaction);
   if (existing) return answerExisting(tenant, actorUserId, existing, parsed, transaction);
 

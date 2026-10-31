@@ -13,6 +13,7 @@ module.exports = {
   onDemand: true,
   formats: ['CSV', 'XLSX', 'PDF'],
   permission: 'finance:read',
+  registryTable: 'finance.financial_entries',
   sourceFiles: ['features/finance/financeExport.service.js', 'features/finance/financeExport.routes.js'],
   lineage: {
     area: 'MONEY', ownerDomain: 'FINANCEIRO', criticality: 'CRITICAL', description: 'Exportação dos lançamentos financeiros (CSV, XLSX ou PDF) pelo POST /exports, com finalidade, MFA, expiração e auditoria.',

@@ -30,16 +30,17 @@ test('m9d825 VIEW de RESTRICTED sem permissão dedicada devolve o campo mascarad
   const account = res.body.data;
   assert.match(account.accountNumber, /^\*{4}.{4}$/, 'conta mascarada com os 4 últimos caracteres');
   assert.notEqual(account.accountNumber, env.ACCOUNT);
-  assert.match(account.pixKey, /^\*{4}/, 'a chave PIX também');
+  assert.equal(account.pixKey, '••••••', 'a chave PIX também (máscara total do registro de classificação, M9-D915)');
   assert.equal(account.agency, '0001', 'HIGH segue em claro (com auditoria)');
-  assert.equal(account.bankCode, '001', 'LOW fora do registro segue como está');
+  assert.equal(account.bankCode, '••••••', 'bank_code é RESTRICTED no registro (palavra bank, M9-D910): sem a permissão sai mascarado');
+  assert.ok(account.status && account.status !== '••••••', 'MEDIUM segue como está');
   const list = await http.call('makerA', 'GET', '/finance/bank-accounts');
   const row = list.body.data.find((item) => item.id === fx.accountId);
   assert.match(row.accountNumber, /^\*{4}/, 'a lista também sai mascarada');
   assert.ok(!JSON.stringify(list.body).includes(env.ACCOUNT), 'o número da conta não aparece em nenhum lugar da lista');
   const person = await http.call('gestorA', 'GET', `/people/${fx.personId}`);
   assert.equal(person.status, 200, JSON.stringify(person.body));
-  assert.match(person.body.data.taxIdNormalized, /^\*{4}/, 'CPF RESTRICTED mascarado para quem não tem a permissão dedicada');
+  assert.equal(person.body.data.taxIdNormalized, '***.***.***-25', 'CPF RESTRICTED mascarado pelo registro (só os 2 últimos dígitos) para quem não tem a permissão dedicada');
   assert.ok(!JSON.stringify(person.body).includes(env.CPF));
 });
 
@@ -51,7 +52,7 @@ test('m9d825 RESTRICTED em claro só com a permissão dedicada e com auditoria',
   const rows = (await env.adminQuery("SELECT * FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.dlp.view' AND entity_type = 'finance.bank_account' AND entity_id = $2 ORDER BY occurred_at DESC", [http.tenants.A.companyId, fx.accountId])).rows;
   assert.ok(rows.length >= 1, 'auditoria dlp.view do recurso');
   assert.equal(rows[0].user_id, (await env.adminQuery("SELECT id FROM core.users WHERE email = 'ci-a-checker@ci.nayaraone.test'")).rows[0].id);
-  assert.equal(rows[0].after_json.classification, 'RESTRICTED');
+  assert.ok(rows.some((row) => row.after_json.classification === 'RESTRICTED'), 'a leitura de RESTRICTED em claro está registrada (HIGH do registro também gera linha)');
   assert.ok(!JSON.stringify(rows).includes(env.ACCOUNT), 'a auditoria nunca guarda o valor');
   const before = (await env.adminQuery("SELECT count(*)::int AS n FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.dlp.view' AND entity_id = $2", [http.tenants.A.companyId, fx.accountId])).rows[0].n;
   await http.call('checkerA', 'GET', `/finance/bank-accounts/${fx.accountId}`);
@@ -86,7 +87,8 @@ test('m9d825 falha da política mascara RESTRICTED e libera LOW com alerta', asy
     assert.equal(res.status, 200, 'a resposta sai, mas sem o dado sensível');
     assert.equal(res.body.data.accountNumber, '********', 'RESTRICTED mascarado por falha fechada, mesmo com a permissão dedicada');
     assert.equal(res.body.data.agency, '********', 'HIGH também falha fechado');
-    assert.equal(res.body.data.bankCode, '001', 'LOW segue liberado');
+    assert.equal(res.body.data.bankCode, '********', 'bank_code é RESTRICTED no registro (M9-D910): falha fechada também o mascara');
+    assert.ok(res.body.data.status !== '********', 'MEDIUM segue liberado');
     assert.ok(!JSON.stringify(res.body).includes(env.ACCOUNT));
   } finally { resolver.resetResolver(); }
   const ok = await http.call('checkerA', 'GET', `/finance/bank-accounts/${fx.accountId}`);

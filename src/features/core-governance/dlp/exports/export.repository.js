@@ -18,9 +18,10 @@ const findByIdForUpdate = (companyId, id, transaction) => one(`SELECT ${COLUMNS}
 /** Guarda o que o pedido tem de arquivo (formato, filtro, colunas, marca d'água) no pedido que o guard acabou de decidir (aprovado ou bloqueado). */
 async function attachRequest(companyId, id, body, transaction) {
   return one(
-    `UPDATE governance.export_jobs SET format = :format, export_filter = CAST(:filter AS jsonb), export_columns = CAST(:columns AS jsonb), watermark = :watermark, updated_at = now()
+    `UPDATE governance.export_jobs SET format = :format, export_filter = CAST(:filter AS jsonb), export_columns = CAST(:columns AS jsonb), watermark = :watermark,
+       obligations = CASE WHEN CAST(:warnings AS jsonb) = '[]'::jsonb THEN obligations ELSE COALESCE(obligations, '{}'::jsonb) || jsonb_build_object('warnings', CAST(:warnings AS jsonb)) END, updated_at = now()
      WHERE company_id = :companyId AND id = :id AND status IN ('APPROVED', 'BLOCKED') AND format IS NULL RETURNING ${COLUMNS}`,
-    { companyId, id, format: body.format, filter: JSON.stringify(body.filter), columns: JSON.stringify(body.columns), watermark: body.watermark },
+    { companyId, id, format: body.format, filter: JSON.stringify(body.filter), columns: JSON.stringify(body.columns), watermark: body.watermark, warnings: JSON.stringify(body.warnings || []) },
     transaction
   );
 }

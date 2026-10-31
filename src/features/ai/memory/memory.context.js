@@ -16,6 +16,8 @@ function toContextSources(ctx, memories) {
     groupId: ctx.groupId,
     companyId: ctx.companyId,
     fields: { tipo: m.memoryType, valor: m.value, origem: `${m.sourceType}:${m.sourceId}` },
+    // Colunas do registro de classificação (M9-D915): o guarda de campos da IA decide por elas.
+    fieldRefs: { tipo: 'ai.memories.memory_type', valor: 'ai.memories.value', origem: 'ai.memories.source_id' },
   }));
 }
 

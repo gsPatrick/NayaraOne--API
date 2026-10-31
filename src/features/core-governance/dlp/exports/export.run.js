@@ -11,6 +11,7 @@ const { getEntry } = require('./exports.catalog');
 const { readExportParams } = require('./export.params');
 const { renderFile } = require('./render');
 const { maskRows } = require('./render/mask');
+const { maskExportRows } = require('../../data-quality/fieldAccess.export');
 const repo = require('./export.repository');
 const { inTenant } = require('./export.tx');
 const { auditExport } = require('./export.audit');
@@ -29,8 +30,12 @@ async function buildFile(tenant, job, transaction, now) {
   const user = await User.findByPk(job.actorUserId, { transaction });
   const ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: job.actorUserId };
   const collected = await entry.collect(ctx, job.filter || {}, transaction);
-  const columns = entry.columns.filter((c) => (job.columns || []).includes(c.key));
-  const masked = maskRows(columns, collected.rows || [], { canViewRestricted: access.permissions.includes(VIEW_RESTRICTED_PERMISSION), maskText: params.maskText });
+  const wanted = entry.columns.filter((c) => (job.columns || []).includes(c.key));
+  // M9-D915: com o registro de classificação, cada coluna sai conforme a exportabilidade e a máscara do registro; o pedido já passou pelo guard (WITH_APPROVAL liberado).
+  const masked = entry.registryTable
+    ? await maskExportRows({ ...ctx, permissions: access.permissions }, entry, wanted, collected.rows || [], { approved: true, maskText: params.maskText, transaction })
+    : { columns: wanted, ...maskRows(wanted, collected.rows || [], { canViewRestricted: access.permissions.includes(VIEW_RESTRICTED_PERMISSION), maskText: params.maskText }) };
+  const columns = masked.columns;
   const watermarkOn = job.watermark === true || (job.obligations && job.obligations.watermark === true);
   const file = await renderFile({
     format: job.format, entry, columns, rows: masked.rows, ready: collected.ready, separator: params.separator, now: stamp(now),
