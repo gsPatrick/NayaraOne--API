@@ -18,8 +18,8 @@ before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
 after(async () => { await env.sequelize.close(); });
 const A = () => tenants.A;
 
-test('m9d900 os quatro parâmetros da migração estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
-  assert.deepEqual(INGEST_SETTING_DEFAULTS, { 'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30 });
+test('m9d900 os parâmetros da migração (quatro da D900 e a janela do ETA da D901) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
+  assert.deepEqual(INGEST_SETTING_DEFAULTS, { 'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30, 'migracao.eta.janela_lotes': 5 });
   for (const key of Object.values(KEYS)) assert.ok(SETTINGS_SCHEMA[key], `${key} no SETTINGS_SCHEMA`);
   for (const key of Object.values(KEYS)) {
      
@@ -35,6 +35,7 @@ test('m9d900 toda parametrização declarada é lida por código de produção',
   const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
   const runner = read('ingest/batch.runner.js');
   for (const name of ['OVERLAP_S', 'BATCH_SIZE', 'MAX_ATTEMPTS', 'BATCH_TIMEOUT_MIN']) assert.match(runner, new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo executor`);
+  assert.match(read('control/eta.service.js'), /KEYS\.ETA_WINDOW/, 'KEYS.ETA_WINDOW lido pela Torre de controle');
 });
 
 test('m9d900 toda fonte semeada tem destino, modo válido e motivo da escolha', () => {

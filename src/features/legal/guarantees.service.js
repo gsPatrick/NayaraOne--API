@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { Guarantee } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -176,6 +177,7 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
 
 async function deleteGuarantee(id, actorUserId, transaction) {
   const guarantee = await getGuarantee(id, transaction);
+  await legalHold.assertNotOnHold('CONTRACT', guarantee.contractId, transaction); // M9-D912: garantia de contrato sob retenção legal não se apaga
   const beforeJson = guarantee.toJSON();
   guarantee.deletedBy = actorUserId || null;
   await guarantee.save({ transaction });

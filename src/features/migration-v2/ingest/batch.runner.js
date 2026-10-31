@@ -59,7 +59,7 @@ async function runBatch(tenant, actor, runId, source, plan, { replayOf = null, s
       return await openTenantTx(tenant, (transaction) => applyBatch(tenant, actor, batch, plan.events, transaction));
     } catch (err) {
       const message = String((err && err.message) || err).slice(0, 500);
-      logger.warn({ batchId: batch.id, attempt: batch.attempts, err: message }, 'migration.batch.failed');
+      logger.warn({ batchId: batch.id, attempt: batch.attempts, err: message, detail: err && err.parent && err.parent.detail }, 'migration.batch.failed');
       if (batch.attempts >= settings.maxAttempts) {
         await openTenantTx(tenant, (transaction) => batches.transition(tenant, batch.id, BATCH.ABORTED, { error: message }, transaction));
         const aborted = new Error(`Lote abortado após ${batch.attempts} falhas seguidas: ${message}`);

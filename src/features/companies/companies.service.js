@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHoldCompany = require('../core-governance/data-quality/legalHold.companyGuard');
 const { sequelize, Company, Group } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -102,6 +103,7 @@ async function updateCompany(id, payload, actorUserId, transaction) {
 
 async function deleteCompany(id, actorUserId, transaction) {
   const company = await getCompany(id, transaction);
+  await legalHoldCompany.assertCompanyNotOnHold(company.id, transaction); // M9-D912
   const beforeJson = company.toJSON();
   company.deletedBy = actorUserId || null;
   await company.save({ transaction });

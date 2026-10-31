@@ -125,6 +125,13 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FLAG_VALIDITY_INVALID` | 422 | O fim da validade deve ser após o início. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_VALUE_INVALID` | 422 | O valor não corresponde ao tipo da chave. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_VERSION_CONFLICT` | 409 | A chave foi alterada por outra pessoa. Recarregue e tente de novo. | feature-flags | 1.3.0 | não |
+| `GOV_HOLD_ALREADY_RELEASED` | 409 | Esta retenção legal já foi liberada. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_BLOCKS_DISPOSAL` | 409 | Este registro está sob retenção legal e não pode ser apagado ou anonimizado. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_CODE_DUPLICATE` | 409 | Já existe uma retenção com este código. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_REASON_REQUIRED` | 422 | Informe o motivo e a referência do processo. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_RELEASE_REASON_REQUIRED` | 422 | Informe o motivo da liberação. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_SCOPE_INVALID` | 422 | O escopo da retenção legal é inválido. | data-quality | 1.3.0 | não |
+| `GOV_HOLD_SCOPE_REQUIRED` | 422 | Defina o escopo da retenção. | data-quality | 1.3.0 | não |
 | `GOV_IDEMPOTENCY_KEY_INVALID` | 400 | A chave de idempotência deve ter de 8 a 128 caracteres. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REQUIRED` | 400 | Envie o cabeçalho Idempotency-Key. | api-governance | 1.0.0 | não |
 | `GOV_IDEMPOTENCY_KEY_REUSED` | 422 | Esta chave de idempotência já foi usada com outra requisição. | api-governance | 1.0.0 | não |

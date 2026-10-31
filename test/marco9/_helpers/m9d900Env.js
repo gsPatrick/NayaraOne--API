@@ -66,7 +66,7 @@ function cnpj() {
 /** Cria a fonte da empresa (com commit) e registra o conector falso sob um nome exclusivo. Devolve { system, fake, source(), dispose() }. */
 async function installSource(tenant, { mode = 'CDC', entity = 'PERSON', columnMap = {}, system = sysName() } = {}) {
   const fake = fakeLegacy();
-  const name = `FAKE_${system}`;
+  const name = `FAKE_${system}_${entity}`; // uma origem por (sistema, entidade): duas entidades do mesmo sistema não podem dividir o conector
   connectors.register(name, async () => fake.connector);
   await adminQuery(
     `INSERT INTO governance.mig_sources (group_id, company_id, source_system, entity, mode, mode_reason, config, secret_ref) VALUES ($1, $2, $3, $4, $5, 'QA-M9: origem simulada do teste', $6::jsonb, NULL)`,

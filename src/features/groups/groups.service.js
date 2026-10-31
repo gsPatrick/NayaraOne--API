@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHoldCompany = require('../core-governance/data-quality/legalHold.companyGuard');
 const { Group } = require('../../models');
 const AppError = require('../../utils/AppError');
 
@@ -46,6 +47,7 @@ async function updateGroup(id, payload, actorUserId) {
 
 async function deleteGroup(id, actorUserId) {
   const group = await getGroup(id);
+  await legalHoldCompany.assertGroupNotOnHold(group.id); // M9-D912
   group.deletedBy = actorUserId || null;
   await group.save();
   await group.destroy(); // soft delete (paranoid: true no model)

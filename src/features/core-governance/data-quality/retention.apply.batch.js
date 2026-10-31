@@ -41,7 +41,7 @@ async function processBatch(ctx, runId, batch, transaction) {
   if (!policy || policy.version !== items[0].policyVersion) {
     await skip(items, ITEM_STATE.POLICY_CHANGED, 'A política foi editada depois da simulação.');
   } else if (targets.isFunction(target)) {
-    const held = await holdGuard.heldIds(target.holdEntityType, items.map((item) => item.recordId), { tenant, transaction });
+    const held = await holdGuard.heldIds(target.holdEntityType, items.map((item) => item.recordId), { tenant, transaction, disposal: true });
     const free = items.filter((item) => !held.includes(item.recordId));
     await skip(items.filter((item) => held.includes(item.recordId)), ITEM_STATE.HOLD, 'Bloqueio legal ativo.');
     for (const item of free) {
@@ -58,7 +58,7 @@ async function processBatch(ctx, runId, batch, transaction) {
     const eligible = present.filter((item) => still.has(item.recordId));
     await skip(eligible.filter((item) => still.get(item.recordId)), ITEM_STATE.EXCEPTION, 'Exceção ativa.');
     const candidates = eligible.filter((item) => !still.get(item.recordId));
-    const held = new Set(await holdGuard.heldIds(target.holdEntityType, candidates.map((item) => item.recordId), { tenant, transaction }));
+    const held = new Set(await holdGuard.heldIds(target.holdEntityType, candidates.map((item) => item.recordId), { tenant, transaction, disposal: true }));
     await skip(candidates.filter((item) => held.has(item.recordId)), ITEM_STATE.HOLD, 'Bloqueio legal ativo.');
     const go = candidates.filter((item) => !held.has(item.recordId));
     if (go.length) {

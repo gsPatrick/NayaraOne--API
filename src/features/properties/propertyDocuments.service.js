@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PropertyDocument, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
@@ -79,6 +80,7 @@ async function listDocuments(propertyId, transaction) {
 }
 
 async function deleteDocument(propertyId, documentId, transaction) {
+  await legalHold.assertNotOnHold('PROPERTY', propertyId, transaction); // M9-D912
   const document = await PropertyDocument.findOne({ where: { id: documentId, propertyId }, transaction });
   if (!document) throw AppError.notFound('Documento do imóvel não encontrado.', 'PROPERTY_DOCUMENT_NOT_FOUND');
   await document.destroy({ transaction });

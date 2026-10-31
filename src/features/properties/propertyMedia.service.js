@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PropertyMedia, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
@@ -87,6 +88,7 @@ async function listMedia(propertyId, transaction) {
 }
 
 async function deleteMedia(propertyId, mediaId, transaction) {
+  await legalHold.assertNotOnHold('PROPERTY', propertyId, transaction); // M9-D912
   const media = await PropertyMedia.findOne({ where: { id: mediaId, propertyId }, transaction });
   if (!media) throw AppError.notFound('Mídia não encontrada.', 'PROPERTY_MEDIA_NOT_FOUND');
   await media.destroy({ transaction });

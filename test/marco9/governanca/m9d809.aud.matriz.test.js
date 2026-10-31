@@ -31,7 +31,7 @@ test('m9d809 matriz cada teste nomeado existe e não está pulado', () => {
 
 test('m9d809 matriz a linha que depende de demanda posterior diz qual é a pendência', () => {
   const comPendencia = MATRIZ.linhas.filter((l) => l.pendencia).map((l) => l.aud_id);
-  assert.deepEqual(comPendencia, ['AUD-016', 'AUD-018', 'AUD-020']);
+  assert.deepEqual(comPendencia, ['AUD-016', 'AUD-020']); // AUD-018 fechou na M9-D912 (a metade do descarte)
   assert.match(MATRIZ.linhas.find((l) => l.aud_id === 'AUD-016').pendencia, /M9-D920/);
-  assert.match(MATRIZ.linhas.find((l) => l.aud_id === 'AUD-018').pendencia, /M9-D911\/M9-D912/);
+  assert.equal(MATRIZ.linhas.find((l) => l.aud_id === 'AUD-018').pendencia, null);
 });

@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const {
   Property,
   PropertyOwner,
@@ -64,6 +65,7 @@ async function assertNoDistinctRegistryNumbers(canonical, absorbed) {
 }
 
 async function mergeProperties(canonicalId, absorbedId, actorUserId, transaction) {
+  await legalHold.assertNoneOnHold('PROPERTY', [canonicalId, absorbedId].filter(Boolean), transaction); // M9-D912: união destrutiva recusada em registro sob retenção legal
   if (!absorbedId) {
     throw AppError.badRequest('O campo "absorbedId" é obrigatório.', 'PROPERTY_MERGE_VALIDATION');
   }

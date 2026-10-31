@@ -19,6 +19,12 @@ async function get(tenant, id, transaction) {
   return row || null;
 }
 
+/** A execução mais recente da empresa (a Torre de controle a usa quando não se pede uma). */
+async function latest(tenant, transaction) {
+  const [row] = await select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId ORDER BY created_at DESC, id DESC LIMIT 1`, { companyId: tenant.companyId }, transaction);
+  return row || null;
+}
+
 /** QUEUED -> RUNNING atomicamente: só uma instância reivindica a execução. */
 async function claim(tenant, id, transaction) {
   const [row] = await select(
@@ -40,4 +46,4 @@ function listQueued(tenant, transaction) {
   return select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND status = 'QUEUED' ORDER BY created_at LIMIT 20`, { companyId: tenant.companyId }, transaction);
 }
 
-module.exports = { insert, get, claim, finish, listQueued };
+module.exports = { insert, get, latest, claim, finish, listQueued };

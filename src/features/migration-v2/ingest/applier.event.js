@@ -35,7 +35,7 @@ const camel = (row) => ({
 
 /** Eventos I e U: upsert pela chave externa, com as regras de delta da M9-D901 §3.1 (EXCLUDED ignora; QUARANTINED/PENDING_REVIEW só atualizam o conteúdo de origem). */
 async function applyUpsert(ctx, source, event, existing) {
-  const row = mapRow(event.record, source.config && source.config.columnMap);
+  const row = event.canonical ? event.record : mapRow(event.record, source.config && source.config.columnMap); // `canonical`: registro PENDING relido do banco (já mapeado)
   const hash = rowHash(row);
   const base = { payload: row, rowHash: hash, batchId: ctx.batch.id, position: event.position, sourceDeleted: false };
   if (existing && existing.state === RECORD.EXCLUDED) return { outcome: 'ignored', record: existing };

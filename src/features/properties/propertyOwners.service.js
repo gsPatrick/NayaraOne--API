@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PropertyOwner, Property, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyOwnerEntity } = require('../core-governance/data-quality/evidence');
@@ -79,6 +80,7 @@ async function updateOwner(propertyId, ownerId, payload, actorUserId, transactio
 }
 
 async function deleteOwner(propertyId, ownerId, actorUserId, transaction, changeEvidence) {
+  await legalHold.assertNotOnHold('PROPERTY', propertyId, transaction); // M9-D912
   const owner = await getOwner(propertyId, ownerId, transaction);
   const entity = propertyOwnerEntity(owner, { owner: ownerState(owner) });
   const assertion = await assertEvidenceForCriticalChange(entity, { owner: null }, changeEvidence, { transaction, actorUserId });

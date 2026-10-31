@@ -15,7 +15,9 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `ingest/replay.js`, `deletions.js` | Replay como novo lote (`replay_of`); comparação de chaves que marca `source_deleted`. |
 | `ingest/targets/` | Destino por entidade (`PERSON`, `SUPPLIER`, `PROPERTY`): `assess` (quarentena ou revisão), `upsert`, `markDeleted`. Entidade nova = um arquivo + uma linha em `targets/index.js` + uma semente. |
 | `seeds/sources.seed.js` | Fontes semeadas por empresa (sem rota de cadastro). |
-| `migration.routes.js` | `POST /migration/runs` (permissão `governance:migration:run`) responde 202 com `{runId}`; `GET /migration/raci` (run) e `PUT /migration/raci` (`governance:migration:admin`). |
+| `migration.routes.js` | `GET /migration/control-tower?runId=` e `POST /migration/records/:id/resolve` (ambas `governance:migration:run`); `POST /migration/runs` (permissão `governance:migration:run`) responde 202 com `{runId}`; `GET /migration/raci` (run) e `PUT /migration/raci` (`governance:migration:admin`). |
+| `control/` | M9-D901. Torre de controle: `tower.service` (contadores total/migrated/reconciled/quarantined/pending_review/excluded/not_started no total e por entidade, blockers, ETA), `counters.*` (contadores materializados por gatilho + conferência), `blockers.*` (regras, gravação com `since`, abertura e fechamento auditados, `blockers.providers` para D903, D907 e D908), `eta.service` (vazão dos últimos lotes), `record.states` e `record.transition` (máquina de estados do registro), `resolve.service` e `resolve.apply` (decisão humana com RACI e aplicador da D900). |
+| `ingest/pending.processor.js` | Processa os registros PENDING (decisão REPROCESS) no próximo lote do aplicador, sem mexer no checkpoint. |
 | `raci/` | M9-D902. RACI de cutover: dez atividades semeadas por empresa (`raci.seed`), matriz por atividade com exatamente um A e ao menos um R (`raci.service`, 422 `GOV_RACI_SINGLE_ACCOUNTABLE` para o segundo A; matriz sem A ou sem R é aceita e vira o blocker `GOV_MIG_RACI_INCOMPLETE` da Torre), papel do ator por usuário ou perfil (`raci.access`). A atividade `LAST_DELTA_LOAD` dispara `POST /migration/runs` com `lastDelta: true`. |
 
 ## Parâmetros (aba Governança em /painel/configuracoes)
@@ -26,6 +28,7 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.watermark.sobreposicao_s` | 120 | `watermark.reader.startCursor` via executor |
 | `migracao.lote.max_tentativas` | 3 | `batch.runner.runBatch` (falhas seguidas até ABORTED) |
 | `migracao.lote.timeout_min` | 30 | `batch.runner.releaseStale` (lote RUNNING sem fim vira FAILED) |
+| `migracao.eta.janela_lotes` | 5 | `control/eta.service` (quantos lotes entram na vazão do ETA) |
 
 ## Operação
 

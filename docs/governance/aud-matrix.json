@@ -53,7 +53,7 @@
       "controle_m9": "M9-D912 (legal hold prevalece no descarte) e M9-D852 (inventário de ações destrutivas sem rota de exclusão física desses recursos)",
       "teste": "m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma rota de exclusão física dele existe no inventário",
       "criterio": "registro de contrato, assinatura, vistoria ou prova crítica aparece em `blocked_by_hold` e o inventário de ações destrutivas de M9-D852 não lista rota de exclusão física desses recursos",
-      "pendencia": "A metade do descarte (retention apply pulando o registro em `blocked_by_hold`) depende da M9-D911/M9-D912, que ainda não foram entregues. O teste prova a metade que existe: nenhuma rota nem serviço de exclusão física e o inventário da M9-D852."
+      "pendencia": null
     },
     {
       "aud_id": "AUD-019",

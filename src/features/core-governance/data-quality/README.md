@@ -60,6 +60,9 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 ### Registro de classificação de dados (M9-D910, código em `data-quality/classification.*`)
 `GET /data-classification?schema=&table=&classification=` (leitura com `governance:data-quality:read`, paginada) e `PUT /data-classification` (`governance:classification:manage`, audita antes e depois, 422 `GOV_CLASS_RETENTION_REQUIRED` sem política de retenção, 404 se a coluna não existe). Uma linha por (empresa, schema, tabela, coluna) com os 7 atributos do livro. O inventário versionado `docs/governance/data-classification.json` lista as colunas e os ajustes manuais; `npm run check:classification` (e o passo da esteira) reprova coluna nova sem entrada (`GOV_CLASSIFICATION_MISSING`) e `npm run sync:classification` o atualiza. Coluna sem linha no registro vale a classe padrão `governanca.dlp.classificacao_padrao` com máscara PARTIAL e gera finding. O resolvedor de classe do guard de DLP (`dlp/classification.resolver.js`) e a máscara da anonimização da retenção (`maskSpecFor`) leem este registro (`classification.wiring.js`). Parâmetros: `governanca.dados.classificacao.palavras_restritas`, `.palavras_altas` e `.pagina_tamanho`.
 
+### Retenção legal, o legal hold (M9-D912, código em `data-quality/legalHold.*`)
+`POST|GET /legal-holds`, `GET /legal-holds/:id` e `POST /legal-holds/:id/release` (permissão `governance:legal-hold:manage`; a leitura aceita também `governance:data-quality:read`). Criar exige código único, motivo, referência do processo e escopo (registro, pessoa, contrato, processo, empresa inteira ou tipo de dado com período); liberar é a linha 11 da D852 (nível 3, MFA, Idempotency-Key, código da retenção digitado, justificativa que vira o motivo e `GET /legal-holds/:id/impact`). A trava NÃO tem parâmetro nem exceção de papel: `legalHold.guard.js` (`assertNotOnHold`, `assertNoneOnHold`, `heldIds`, `assertPersonErasable`) é chamado dentro da transação de cada exclusão, anonimização, união e descarte; erro 409 `GOV_HOLD_BLOCKS_DISPOSAL`. A retenção (D911) lê o hold pela interface `retention.holdGuard` ligada em `legalHold.wiring.js`. O inventário fechado dos pontos de exclusão é `docs/governance/legal-hold-disposal.json` (rota DELETE nova precisa entrar nele, guardada ou isenta com motivo). Parâmetros: `governanca.legal_hold.pagina_tamanho` e `governanca.legal_hold.escopo_max_itens`.
+
 ### Parâmetros da retenção (M9-D911, código em `data-quality/retention.*`)
 | Chave | Padrão | O que controla |
 |---|---|---|
@@ -79,6 +82,8 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 | `governanca.dados.classificacao.palavras_restritas` | cpf, cnpj, rg, passport, bank, account, pix, password, secret, token, mfa | palavras (nome da coluna, palavra inteira) que classificam como RESTRICTED no registro de classificação (M9-D910) |
 | `governanca.dados.classificacao.palavras_altas` | email, phone, birth, address, salary, income, name | palavras que classificam como HIGH (M9-D910) |
 | `governanca.dados.classificacao.pagina_tamanho` | 50 | itens por página da consulta `GET /data-classification` |
+| `governanca.legal_hold.pagina_tamanho` | 50 | itens por página da consulta `GET /legal-holds` |
+| `governanca.legal_hold.escopo_max_itens` | 50 | máximo de itens no escopo de uma retenção legal |
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).

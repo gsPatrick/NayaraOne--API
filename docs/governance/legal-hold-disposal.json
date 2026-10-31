@@ -1,0 +1,42 @@
+{
+  "_comment": "Inventário fechado dos pontos que apagam, anonimizam, unem ou descartam dado (M9-D912, 'legal_hold sempre prevalece'). Cada rota DELETE da API está em 'rotas' (guardada pela trava jurídica ou isenta com o motivo) e cada caminho que não é rota está em 'caminhos'. O teste m9d912.inventario reprova rota DELETE nova que não esteja aqui, entrada guardada cujo arquivo não chame a trava e entrada isenta sem motivo. Tipos que podem estar sob retenção legal: PERSON, PROPERTY, CONTRACT, LEGAL_CASE, FISCAL_OBLIGATION, TAX_DOCUMENT, FILE, ACCESS_SIGNAL, AUDIT_LOG, INTEGRATION e a empresa inteira (COMPANY).",
+  "rotas": [
+    { "route": "DELETE /people/:id", "guard": "guarded", "file": "src/features/people/person.service.js", "call": "assertPersonErasable", "type": "PERSON" },
+    { "route": "DELETE /people/:id/contacts/:contactId", "guard": "guarded", "file": "src/features/people/personContacts.service.js", "call": "assertNotOnHold('PERSON'", "type": "PERSON" },
+    { "route": "DELETE /people/:id/documents/:documentId", "guard": "guarded", "file": "src/features/people/personDocuments.service.js", "call": "assertNotOnHold('PERSON'", "type": "PERSON" },
+    { "route": "DELETE /people/:id/roles/:roleId", "guard": "guarded", "file": "src/features/people/personRoles.service.js", "call": "assertNotOnHold('PERSON'", "type": "PERSON" },
+    { "route": "DELETE /properties/:id", "guard": "guarded", "file": "src/features/properties/properties.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
+    { "route": "DELETE /properties/:id/owners/:ownerId", "guard": "guarded", "file": "src/features/properties/propertyOwners.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
+    { "route": "DELETE /properties/:id/media/:mediaId", "guard": "guarded", "file": "src/features/properties/propertyMedia.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
+    { "route": "DELETE /properties/:id/documents/:documentId", "guard": "guarded", "file": "src/features/properties/propertyDocuments.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
+    { "route": "DELETE /legal/guarantees/:id", "guard": "guarded", "file": "src/features/legal/guarantees.service.js", "call": "assertNotOnHold('CONTRACT'", "type": "CONTRACT" },
+    { "route": "DELETE /companies/:id", "guard": "guarded", "file": "src/features/companies/companies.service.js", "call": "assertCompanyNotOnHold", "type": "COMPANY" },
+    { "route": "DELETE /groups/:id", "guard": "guarded", "file": "src/features/groups/groups.service.js", "call": "assertGroupNotOnHold", "type": "COMPANY" },
+    { "route": "DELETE /calendar/items/:id", "guard": "exempt", "reason": "A rota só responde 404: itens do calendário são derivados e não se apagam." },
+    { "route": "DELETE /ai/memories/:id", "guard": "exempt", "reason": "Memória da IA não é um dos tipos retidos; o descarte dela é regido pela retenção do módulo de IA." },
+    { "route": "DELETE /units/:id", "guard": "exempt", "reason": "Unidade organizacional: cadastro de estrutura, sem dado pessoal, fiscal ou jurídico; fora dos tipos retidos." },
+    { "route": "DELETE /users/:id", "guard": "exempt", "reason": "Desativação de acesso do usuário (identidade global); os dados de pessoa dele só se apagam pela rota de pessoas, que é guardada." },
+    { "route": "DELETE /memberships/:id", "guard": "exempt", "reason": "Revoga o vínculo de acesso; não apaga dado do titular." },
+    { "route": "DELETE /roles/:id", "guard": "exempt", "reason": "Perfil de acesso: configuração, não dado retido." },
+    { "route": "DELETE /opportunities/:id", "guard": "exempt", "reason": "Oportunidade de CRM não é um tipo retido; a pessoa dela é guardada e o lead tem a retenção (ANONYMIZE) sob a trava." },
+    { "route": "DELETE /visits/:id", "guard": "exempt", "reason": "Visita agendada de CRM: fora dos tipos retidos." },
+    { "route": "DELETE /radar/:id", "guard": "exempt", "reason": "Alerta do Radar: fora dos tipos retidos." },
+    { "route": "DELETE /finance/cost-centers/:id", "guard": "exempt", "reason": "Cadastro contábil de apoio (centro de custo): não é documento fiscal nem obrigação; fora dos tipos retidos." },
+    { "route": "DELETE /finance/result-centers/:id", "guard": "exempt", "reason": "Cadastro contábil de apoio (centro de resultado): fora dos tipos retidos." },
+    { "route": "DELETE /finance/bank-accounts/:id", "guard": "exempt", "reason": "Conta bancária cadastrada: cadastro de apoio; fora dos tipos retidos (lançamentos e notas são retidos e não têm rota de exclusão)." },
+    { "route": "DELETE /finance/chart-of-accounts/:id", "guard": "exempt", "reason": "Desativa conta do plano de contas: configuração contábil, não dado retido." },
+    { "route": "DELETE /construction/projects/:id", "guard": "exempt", "reason": "Obra: fora dos tipos retidos; o cancelamento tem a confirmação da M9-D852." },
+    { "route": "DELETE /construction/budget-lines/:id", "guard": "exempt", "reason": "Linha de orçamento de obra: fora dos tipos retidos." },
+    { "route": "DELETE /construction/quality-items/:id", "guard": "exempt", "reason": "Item de checklist de qualidade da obra: fora dos tipos retidos." },
+    { "route": "DELETE /construction/maintenance-cases/:id", "guard": "exempt", "reason": "Chamado de manutenção: fora dos tipos retidos." }
+  ],
+  "caminhos": [
+    { "path": "descarte da retenção (M9-D911): seleção da simulação e cada lote do apply", "file": "src/features/core-governance/data-quality/retention.apply.batch.js", "call": "disposal: true" },
+    { "path": "simulação da retenção (blocked_by_hold)", "file": "src/features/core-governance/data-quality/retention.dryrun.analyze.js", "call": "holdGuard.heldIds" },
+    { "path": "descarte técnico de integração (job)", "file": "src/engines/jobs/integrationRetentionJob.js", "call": "disposal: true" },
+    { "path": "união destrutiva de pessoas (rota de pessoas e fila da M9-D805)", "file": "src/features/people/personMerge.service.js", "call": "assertNoneOnHold('PERSON'" },
+    { "path": "união destrutiva de imóveis (fila da M9-D805)", "file": "src/features/properties/propertyMerge.service.js", "call": "assertNoneOnHold('PROPERTY'" },
+    { "path": "decisão MERGED da fila de dados mestres (M9-D805)", "file": "src/features/core-governance/data-quality/merge.service.js", "call": "assertNoneOnHold" },
+    { "path": "pedido de exclusão do titular (LGPD) e exclusão manual da pessoa", "file": "src/features/core-governance/data-quality/legalHold.guard.js", "call": "assertPersonErasable" }
+  ]
+}

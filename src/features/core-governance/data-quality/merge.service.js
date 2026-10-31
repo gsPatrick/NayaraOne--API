@@ -10,6 +10,7 @@ const { parsePagination, pageResult } = require('../api-governance/standards/pag
 const { assertDomainSteward } = require('./merge.steward');
 const { parseDecision, parseListQuery, isUuid } = require('./merge.input');
 const { applyMerge } = require('./merge.apply');
+const { assertNoneOnHold } = require('./legalHold.guard');
 
 const ENTITY_LABEL = { PERSON: 'Person', PROPERTY: 'Property', SUPPLIER: 'Supplier' };
 
@@ -51,6 +52,8 @@ async function decide(tenant, actor, itemId, body, transaction) {
   let applied = null;
   if (input.decision === STATUS.MERGED) {
     const rows = await repository.lockRecords(item.entity_type, [item.primary_id, item.secondary_id], transaction);
+    // M9-D912: a união mexe nos dois cadastros (o absorvido deixa de existir e o sobrevivente recebe os dados dele): qualquer um sob retenção legal bloqueia (409).
+    await assertNoneOnHold(item.entity_type === 'PROPERTY' ? 'PROPERTY' : 'PERSON', [item.primary_id, item.secondary_id], transaction, tenant);
     const survivor = rows.find((row) => row.id === input.survivorId);
     const other = rows.find((row) => row.id !== input.survivorId);
     if (rows.length !== 2 || !survivor || !other) throw errors.notFound();

@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
@@ -282,6 +283,7 @@ async function updatePerson(id, payload, actorUserId, transaction) {
 }
 
 async function deletePerson(id, actorUserId, transaction) {
+  await legalHold.assertPersonErasable(id, transaction); // M9-D912: pessoa (ou contrato, processo e arquivo dela) sob retenção legal não se apaga
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
   person.deletedBy = actorUserId || null;

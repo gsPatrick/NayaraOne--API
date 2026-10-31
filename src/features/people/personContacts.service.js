@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonContact, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 
@@ -74,6 +75,7 @@ async function updateContact(personId, contactId, payload, actorUserId, transact
 }
 
 async function deleteContact(personId, contactId, actorUserId, transaction) {
+  await legalHold.assertNotOnHold('PERSON', personId, transaction); // M9-D912
   const contact = await getContact(personId, contactId, transaction);
   contact.deletedBy = actorUserId || null;
   await contact.save({ transaction });

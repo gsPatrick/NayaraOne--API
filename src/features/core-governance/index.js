@@ -21,6 +21,7 @@ const GOVERNANCE_PREFIXES = Object.freeze([
   '/exports',
   '/retention',
   '/data-classification',
+  '/legal-holds',
   '/governance',
 ]);
   '/migration',

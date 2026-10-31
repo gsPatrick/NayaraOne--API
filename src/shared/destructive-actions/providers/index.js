@@ -14,6 +14,7 @@ const { integrationRetry, integrationConnection } = require('./integration');
 const { aiAgent } = require('./ai.agent');
 const { mergeProvider, bulkProvider } = require('../../../features/core-governance/data-quality/confirmation.providers');
 const { retentionApplyProvider } = require('../../../features/core-governance/data-quality/retention.impact');
+const { legalHoldReleaseProvider } = require('../../../features/core-governance/data-quality/legalHold.impact');
 const { activateProvider, restoreProvider } = require('../../../features/core-governance/feature-flags/kill-switch/killSwitch.impact');
 
 /** Provedores das ações do inventário com rota no código (M9-D852). As linhas sem rota registram o seu provedor na demanda dona. */
@@ -34,6 +35,7 @@ const PROVIDERS = {
   'data_quality.merge': mergeProvider,
   'data_quality.bulk': bulkProvider,
   'retention.apply': retentionApplyProvider,
+  'legal_hold.release': legalHoldReleaseProvider,
   'kill_switch.activate': activateProvider,
   'kill_switch.restore': restoreProvider,
 };

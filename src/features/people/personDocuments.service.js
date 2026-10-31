@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonDocument, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -218,6 +219,7 @@ async function updateDocument(personId, documentId, payload, actorUserId, transa
 }
 
 async function deleteDocument(personId, documentId, actorUserId, transaction) {
+  await legalHold.assertNotOnHold('PERSON', personId, transaction); // M9-D912
   const document = await getDocument(personId, documentId, transaction);
   document.deletedBy = actorUserId || null;
   await document.save({ transaction });

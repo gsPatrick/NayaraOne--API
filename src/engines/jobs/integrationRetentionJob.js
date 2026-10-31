@@ -44,7 +44,7 @@ async function runIntegrationRetentionJob({ now = new Date(), force = false } = 
         const counts = await tenantTx(group, company, async (transaction) => {
           if (!force && (hour < (await readJobHour(ctx, transaction)) || lastRunDay.get(company.id) === day)) return null;
           // M9-D911: legal hold sobre os dados de integração da empresa suspende o descarte (a M9-D912 liga a interface).
-          if ((await holdGuard.heldIds(HOLD_ENTITY_INTEGRATION, [company.id], { tenant: ctx, transaction })).length > 0) return null;
+          if ((await holdGuard.heldIds(HOLD_ENTITY_INTEGRATION, [company.id], { tenant: ctx, transaction, disposal: true })).length > 0) return null;
           return purgeExpired(ctx, transaction);
         });
         if (counts) {

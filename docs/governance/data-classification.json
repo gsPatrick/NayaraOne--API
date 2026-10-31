@@ -3349,6 +3349,23 @@
    "probe_version",
    "result"
   ],
+  "governance.legal_hold_targets": [
+   "entity_id",
+   "entity_type",
+   "hold_id",
+   "origin"
+  ],
+  "governance.legal_holds": [
+   "code",
+   "created_by",
+   "matter_ref",
+   "reason",
+   "release_reason",
+   "released_at",
+   "released_by",
+   "scope",
+   "status"
+  ],
   "governance.lineage_edges": [
    "created_by",
    "from_node_id",
@@ -5247,3 +5264,39 @@
   }
  }
 }
+  "governance.legal_holds.matter_ref": {
+   "classification": "HIGH",
+   "purpose": "OBRIGACAO_LEGAL",
+   "masking": "PARTIAL",
+   "maskPattern": "X***",
+   "exportability": "WITH_APPROVAL",
+   "aiAllowed": false,
+   "ownerDomain": "CONTRATOS"
+  },
+  "governance.legal_holds.reason": {
+   "classification": "HIGH",
+   "purpose": "OBRIGACAO_LEGAL",
+   "masking": "PARTIAL",
+   "maskPattern": "X***",
+   "exportability": "WITH_APPROVAL",
+   "aiAllowed": false,
+   "ownerDomain": "CONTRATOS"
+  },
+  "governance.legal_holds.release_reason": {
+   "classification": "HIGH",
+   "purpose": "OBRIGACAO_LEGAL",
+   "masking": "PARTIAL",
+   "maskPattern": "X***",
+   "exportability": "WITH_APPROVAL",
+   "aiAllowed": false,
+   "ownerDomain": "CONTRATOS"
+  },
+  "governance.legal_holds.scope": {
+   "classification": "HIGH",
+   "purpose": "OBRIGACAO_LEGAL",
+   "masking": "PARTIAL",
+   "maskPattern": "X***",
+   "exportability": "WITH_APPROVAL",
+   "aiAllowed": false,
+   "ownerDomain": "CONTRATOS"
+  },

@@ -1,8 +1,8 @@
 'use strict';
 
 // M9-D809 — AUD-018 (JUR-011): prova jurídica não é apagada. Nenhuma rota nem serviço de exclusão física de contrato, assinatura, vistoria, dossiê, processo, notificação, aditivo ou
-// entrega de chaves, e o inventário de ações destrutivas da M9-D852 não lista exclusão física deles. Sem banco além da carga das rotas.
-const { test } = require('node:test');
+// entrega de chaves, e o inventário de ações destrutivas da M9-D852 não lista exclusão física deles. A metade do descarte (M9-D912) usa o banco descartável: contrato em legal hold fica em blocked_by_hold.
+const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { DISPOSABLE, SKIP_DISPOSABLE } = require('../../m9d801.helpers');
 
@@ -13,7 +13,9 @@ const skip = DISPOSABLE ? false : SKIP_DISPOSABLE;
 const ESCOPO = /\/legal\/(contracts|signatures|inspections|evidence-packages|cases|notices|amendments|key-deliveries|deadlines|contract-versions)\b/;
 const SERVICOS = ['contracts', 'contractVersions', 'contractAmendments', 'signatures', 'inspections', 'evidencePackages', 'legalCases', 'legalDeadlines', 'notices', 'keyDeliveries'];
 
-test('m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma rota de exclusão física dele existe no inventário', { skip }, () => {
+after(async () => { if (DISPOSABLE) await require('../../../src/models').sequelize.close(); });
+
+test('m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma rota de exclusão física dele existe no inventário', { skip }, async () => {
   const { allRoutes } = require('../_helpers/m9d852Rotas');
   const D = require('../../../src/shared/destructive-actions');
 
@@ -31,4 +33,12 @@ test('m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma
     const exportadas = Object.keys(require(`../../../src/features/legal/${nome}.service`));
     assert.deepEqual(exportadas.filter((n) => /^(delete|remove|destroy|purge)/i.test(n)), [], `${nome}.service exporta exclusão física`);
   }
+
+  // 4) a metade do descarte (M9-D912): o contrato do escopo jurídico sob legal hold aparece em blocked_by_hold, o apply o pula e nada o arquiva; assinatura, vistoria e prova crítica
+  //    nem são alvo da retenção (só poderiam sair por rota de exclusão, que não existe)
+  const retention = require('../../../src/features/core-governance/data-quality/retention.targets').all().filter((target) => target.table).map((target) => `${target.schema}.${target.table}`);
+  for (const table of ['legal.signatures', 'legal.contract_signatures', 'legal.inspections', 'legal.evidence_packages']) assert.equal(retention.includes(table), false, `${table} é alvo de retenção`);
+  const tenants = await require('../../m9d801.helpers').loadTenants();
+  const proof = await require('../_helpers/m9d912Aud018').contractUnderHold(tenants.A);
+  assert.deepEqual(proof, { blockedByHold: 1, heldQueued: false, freeQueued: true, heldArchived: false, freeArchived: true });
 });

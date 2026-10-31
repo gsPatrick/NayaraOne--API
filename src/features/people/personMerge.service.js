@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const {
   Person,
   PersonRole,
@@ -111,6 +112,7 @@ async function assertNoIncompatibleActiveContracts(canonicalId, absorbedId, tran
 }
 
 async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
+  await legalHold.assertNoneOnHold('PERSON', [canonicalId, absorbedId].filter(Boolean), transaction); // M9-D912: união destrutiva recusada em registro sob retenção legal
   try {
     return await mergePersonsInner(canonicalId, absorbedId, actorUserId, transaction);
   } catch (err) {

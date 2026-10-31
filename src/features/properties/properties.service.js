@@ -1,5 +1,6 @@
 'use strict';
 
+const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { Op } = require('sequelize');
 const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
@@ -391,6 +392,7 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
 }
 
 async function deleteProperty(id, actorUserId, transaction) {
+  await legalHold.assertNotOnHold('PROPERTY', id, transaction); // M9-D912
   const property = await Property.findByPk(id, { transaction });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
   const beforeJson = property.toJSON();

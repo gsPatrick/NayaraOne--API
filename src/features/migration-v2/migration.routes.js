@@ -6,6 +6,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const controller = require('./migration.controller');
 const raciController = require('./raci/raci.controller');
+const controlController = require('./control/control.controller');
 const { govError } = require('../core-governance/governance.errors');
 
 const RUN_PERMISSION = 'governance:migration:run';
@@ -30,6 +31,8 @@ const requireAdminPermission = withMessage(ADMIN_PERMISSION);
 const router = Router();
 router.use('/migration', authMiddleware, tenantMiddleware);
 router.post('/migration/runs', requireRunPermission, catchAsync(controller.createRun));
+router.get('/migration/control-tower', requireRunPermission, catchAsync(controlController.getTower));
+router.post('/migration/records/:id/resolve', requireRunPermission, catchAsync(controlController.resolveRecord));
 router.get('/migration/raci', requireRunPermission, catchAsync(raciController.getMatrix));
 router.put('/migration/raci', requireAdminPermission, catchAsync(raciController.putMatrix));
 

@@ -833,6 +833,55 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_HOLD_ALREADY_RELEASED": {
+      "status": 409,
+      "message": "Esta retenção legal já foi liberada.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_BLOCKS_DISPOSAL": {
+      "status": 409,
+      "message": "Este registro está sob retenção legal e não pode ser apagado ou anonimizado.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_CODE_DUPLICATE": {
+      "status": 409,
+      "message": "Já existe uma retenção com este código.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_REASON_REQUIRED": {
+      "status": 422,
+      "message": "Informe o motivo e a referência do processo.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_RELEASE_REASON_REQUIRED": {
+      "status": 422,
+      "message": "Informe o motivo da liberação.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_SCOPE_INVALID": {
+      "status": 422,
+      "message": "O escopo da retenção legal é inválido.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_HOLD_SCOPE_REQUIRED": {
+      "status": 422,
+      "message": "Defina o escopo da retenção.",
+      "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_IDEMPOTENCY_KEY_INVALID": {
       "status": 400,
       "message": "A chave de idempotência deve ter de 8 a 128 caracteres.",

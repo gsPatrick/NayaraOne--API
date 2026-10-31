@@ -12,6 +12,7 @@ const sources = require('./source.repository');
 const batches = require('./batch.repository');
 const runs = require('./run.repository');
 const { runBatch, loadSettings } = require('./batch.runner');
+const { processPending } = require('./pending.processor');
 const { markMissingKeys } = require('./deletions');
 const { ensureSeeded } = require('../seeds/sources.seed');
 const { assertMode } = require('./modes');
@@ -26,8 +27,9 @@ async function runSource(tenant, actor, run, sourceRow, settings) {
   try {
     const source = await openTenantTx(tenant, (transaction) => sources.get(tenant, sourceRow.id, transaction));
     assertMode(source.mode);
-    connector = await connectors.open(source);
     const add = (res) => { summary.batches += 1; for (const key of COUNT_KEYS) summary.totals[key] += res.counts[key] || 0; };
+    for (const res of (await processPending(tenant, actor, run.id, source, settings)).results) add(res); // PENDING devolvido pela decisão REPROCESS (M9-D901)
+    connector = await connectors.open(source);
     let cursor = source.mode === MODES.WATERMARK ? watermark.startCursor(source.checkpoint_token, settings.overlapSeconds) : (source.mode === MODES.CDC ? source.checkpoint_token : null);
     for (;;) {
       let plan;
