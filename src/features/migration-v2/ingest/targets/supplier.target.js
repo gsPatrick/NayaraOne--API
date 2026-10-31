@@ -13,4 +13,4 @@ async function upsert(tenant, actor, row, existingTargetId, transaction) {
   return id;
 }
 
-module.exports = { entityType: 'SUPPLIER', assess: person.assess, upsert, markDeleted: person.markDeleted };
+module.exports = { entityType: 'SUPPLIER', assess: person.assess, upsert, markDeleted: person.markDeleted, canonical: person.canonical, readCanonical: person.readCanonical };

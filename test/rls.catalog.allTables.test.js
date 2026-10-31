@@ -1064,3 +1064,17 @@ test('M9-D901: mig_counters e mig_blockers têm RLS, FORCE RLS, política tenant
   const [trg] = await sequelize.query("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = 'governance.mig_records'::regclass AND tgname = 'mig_records_count_trg' AND NOT tgisinternal");
   assert.equal(trg[0].n, 1);
 });
+
+// M9-D905: esquema canônico das entidades e folhas Merkle do lote (governance.mig_entity_schema e mig_batch_leaves) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT ao runtime.
+test('M9-D905: mig_entity_schema e mig_batch_leaves têm RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const tables = ['mig_entity_schema', 'mig_batch_leaves'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as duas tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const t of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${t}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
+  }
+});

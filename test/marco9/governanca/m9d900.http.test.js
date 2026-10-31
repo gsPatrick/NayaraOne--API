@@ -81,7 +81,7 @@ test('m9d900 POST /migration/runs responde 202 com runId', async (t) => {
   assert.deepEqual(Object.keys(res.body.data), ['runId']);
   const done = await waitRun(res.body.data.runId);
   assert.equal(done.status, 'SUCCEEDED');
-  assert.equal((await env.recordsOf(legacy.system)).filter((r) => r.state === 'MIGRATED').length, 5, 'os lotes foram aplicados em segundo plano');
+  assert.equal((await env.recordsOf(legacy.system)).filter((r) => ['MIGRATED', 'RECONCILED'].includes(r.state)).length, 5, 'os lotes foram aplicados em segundo plano (a verificação da M9-D905 pode já ter reconciliado)');
   assert.equal((await env.batchesOf(legacy.system))[0].run_id, res.body.data.runId);
   const [audit] = (await adminQuery("SELECT count(*)::int AS n FROM audit.audit_log WHERE entity_id = $1 AND action IN ('migration.run.queued', 'migration.run.finished')", [res.body.data.runId])).rows;
   assert.equal(audit.n, 2, 'a execução é auditada ao entrar e ao sair');

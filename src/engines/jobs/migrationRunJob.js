@@ -6,6 +6,7 @@ const { openTenantTx } = require('../../features/core-governance/data-quality/re
 const runs = require('../../features/migration-v2/ingest/run.repository');
 const { executeRun } = require('../../features/migration-v2/ingest/executor');
 const { recount } = require('../../features/migration-v2/control/counters.service');
+const { verifyPending } = require('../../features/migration-v2/integrity/verify.job');
 
 /**
  * migrationRunJob (M9-D900 §5 e M9-D901 §6) — retoma as execuções QUEUED da migração v2 (POST /migration/runs) cuja partida imediata se perdeu (processo reiniciado) e refaz os
@@ -15,7 +16,7 @@ const { recount } = require('../../features/migration-v2/control/counters.servic
 const CHECK_INTERVAL_MS = 60 * 1000;
 
 async function runMigrationRunJob() {
-  const total = { companies: 0, runs: 0, counters: 0, errors: 0 };
+  const total = { companies: 0, runs: 0, verified: 0, counters: 0, errors: 0 };
   for (const group of await Group.findAll()) {
     const companies = await sequelize.transaction(async (transaction) => {
       await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
@@ -31,6 +32,9 @@ async function runMigrationRunJob() {
            
           if (await executeRun(tenant, run.id)) total.runs += 1;
         }
+        // Verificação dos lotes APPLIED (M9-D905): raiz Merkle do destino contra a da origem.
+         
+        total.verified += (await verifyPending(tenant, { userId: null })).length;
         // Conferência dos contadores da Torre de controle (M9-D901 §6): só mexe se a contagem direta divergir dos contadores materializados.
          
         total.counters += (await openTenantTx(tenant, (transaction) => recount(tenant, transaction))).corrected;
@@ -40,7 +44,7 @@ async function runMigrationRunJob() {
       }
     }
   }
-  if (total.runs || total.counters || total.errors) logger.info(total, 'migrationRunJob.run');
+  if (total.runs || total.verified || total.counters || total.errors) logger.info(total, 'migrationRunJob.run');
   return total;
 }
 

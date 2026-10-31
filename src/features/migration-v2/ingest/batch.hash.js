@@ -1,15 +1,21 @@
 'use strict';
 
-const { sha256 } = require('./row.canonical');
+const { canonicalLine } = require('../integrity/canonical');
+const { leafHash, merkleRoot } = require('../integrity/merkle');
+const { RECORD } = require('./ingest.constants');
+
+/** O registro está (ou deveria estar) no destino? Só esses entram na árvore: quarentena, revisão, excluídos e exclusões lógicas não têm linha a conferir. */
+const inDestination = (record) => [RECORD.MIGRATED, RECORD.RECONCILED].includes(record.state) && !record.source_deleted && Boolean(record.target_entity_id);
 
 /**
- * Resumo do lote (M9-D900 §3.5): SHA-256 das linhas `chave|hash-da-linha|excluída` das chaves do lote, em ordem de chave. Depende só do estado final das chaves,
- * então reaplicar o mesmo intervalo dá o mesmo resumo. A árvore Merkle e a verificação contra a origem são da M9-D905.
+ * Raiz do lote (M9-D905, no lugar do resumo simples da M9-D900): árvore Merkle SHA-256 sobre a linha canônica do que foi LIDO na origem (`source_payload`), na ordem do esquema
+ * da entidade, com as folhas ordenadas pela chave de origem. Depende só do estado final das chaves, então reaplicar o mesmo intervalo dá a mesma raiz.
+ * Devolve { root, empty, count, leaves: [{ key, hash }] } (hash em hexadecimal).
  */
-function batchDigest(records) {
-  const lines = [...records].sort((a, b) => (a.source_key < b.source_key ? -1 : (a.source_key > b.source_key ? 1 : 0)))
-    .map((record) => `${record.source_key}|${record.row_hash || ''}|${record.source_deleted ? 1 : 0}`);
-  return sha256(lines.join('\n'));
+function batchRoot(schema, target, records) {
+  const leaves = records.filter(inDestination).map((record) => ({ key: record.source_key, hash: leafHash(canonicalLine(schema, target.canonical(record.source_payload || {}))) }));
+  const result = merkleRoot(leaves);
+  return { ...result, leaves: leaves.map((leaf) => ({ key: leaf.key, hash: leaf.hash.toString('hex') })) };
 }
 
-module.exports = { batchDigest };
+module.exports = { batchRoot, inDestination };

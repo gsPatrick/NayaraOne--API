@@ -43,4 +43,27 @@ function markDeleted(tenant, targetId, transaction) {
   return sequelize.query('UPDATE real_estate.properties SET source_deleted = true, source_deleted_at = COALESCE(source_deleted_at, now()) WHERE company_id = :companyId AND id = :id', { transaction, replacements: { companyId: tenant.companyId, id: targetId } });
 }
 
-module.exports = { entityType: 'PROPERTY', assess, upsert, markDeleted };
+/** Campos canônicos da linha de origem na forma em que o destino os grava (M9-D905: lado da origem da verificação do lote). */
+function canonical(row) {
+  const f = fieldsOf(row);
+  return {
+    internalCode: f.internalCode, title: f.title, propertyType: f.propertyType, addressLine: f.addressLine, city: f.city, state: f.state, zipCode: f.zipCode,
+    areaTotalM2: f.areaTotalM2, bedrooms: f.bedrooms, parkingSpots: f.parkingSpots, description: f.description,
+  };
+}
+
+/** Relê do banco de destino os imóveis pedidos, nos mesmos campos canônicos (M9-D905: lado do destino). */
+async function readCanonical(tenant, ids, transaction) {
+  if (!ids.length) return new Map();
+  const rows = await sequelize.query(
+    `SELECT id, internal_code, title, property_type, address_line, city, state, zip_code, area_total_m2::text AS area, bedrooms, parking_spots, description
+       FROM real_estate.properties WHERE company_id = :companyId AND id IN (:ids)`,
+    { type: QueryTypes.SELECT, transaction, replacements: { companyId: tenant.companyId, ids } }
+  );
+  return new Map(rows.map((r) => [r.id, {
+    internalCode: r.internal_code, title: r.title, propertyType: r.property_type, addressLine: r.address_line, city: r.city, state: r.state, zipCode: r.zip_code,
+    areaTotalM2: r.area, bedrooms: r.bedrooms, parkingSpots: r.parking_spots, description: r.description,
+  }]));
+}
+
+module.exports = { entityType: 'PROPERTY', assess, upsert, markDeleted, canonical, readCanonical };

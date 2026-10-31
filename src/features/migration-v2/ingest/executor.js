@@ -13,6 +13,7 @@ const batches = require('./batch.repository');
 const runs = require('./run.repository');
 const { runBatch, loadSettings } = require('./batch.runner');
 const { processPending } = require('./pending.processor');
+const { loadSchema } = require('../integrity/schema.repository');
 const { markMissingKeys } = require('./deletions');
 const { ensureSeeded } = require('../seeds/sources.seed');
 const { assertMode } = require('./modes');
@@ -27,6 +28,7 @@ async function runSource(tenant, actor, run, sourceRow, settings) {
   try {
     const source = await openTenantTx(tenant, (transaction) => sources.get(tenant, sourceRow.id, transaction));
     assertMode(source.mode);
+    await openTenantTx(tenant, (transaction) => loadSchema(tenant, source.entity, transaction)); // sem esquema canônico não se abre lote (M9-D905: 422 GOV_MIG_SCHEMA_MISSING)
     const add = (res) => { summary.batches += 1; for (const key of COUNT_KEYS) summary.totals[key] += res.counts[key] || 0; };
     for (const res of (await processPending(tenant, actor, run.id, source, settings)).results) add(res); // PENDING devolvido pela decisão REPROCESS (M9-D901)
     connector = await connectors.open(source);

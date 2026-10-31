@@ -7,7 +7,7 @@ const { assertTransition } = require('./batch.states');
 const errors = require('./ingest.errors');
 
 const select = (sql, replacements, transaction) => sequelize.query(sql, { type: QueryTypes.SELECT, transaction, replacements });
-const COLUMNS = 'id, group_id, company_id, run_id, source_id, source_system, entity, from_token, to_token, row_count, status, attempts, replay_of, started_at, finished_at, root_hash, error, created_at';
+const COLUMNS = 'id, group_id, company_id, run_id, source_id, source_system, entity, from_token, to_token, row_count, status, attempts, replay_of, started_at, finished_at, root_hash, source_root, target_root, source_count, target_count, verified_at, error, created_at';
 
 async function insert(tenant, { runId, source, fromToken, toToken, replayOf }, transaction) {
   const [row] = await select(
@@ -34,10 +34,12 @@ async function transition(tenant, id, to, fields, transaction) {
   assertTransition(current.status, to);
   const sets = ['status = :to', 'updated_at = now()'];
   const replacements = { companyId: tenant.companyId, id, from: current.status, to };
-  const columns = { toToken: 'to_token', rowCount: 'row_count', rootHash: 'root_hash', error: 'error' };
+  const columns = { toToken: 'to_token', rowCount: 'row_count', rootHash: 'root_hash', sourceRoot: 'source_root', sourceCount: 'source_count', targetRoot: 'target_root', targetCount: 'target_count', error: 'error' };
   for (const [key, column] of Object.entries(columns)) if (fields && fields[key] !== undefined) { sets.push(`${column} = :${key}`); replacements[key] = fields[key]; }
-  if (to === BATCH.RUNNING) sets.push('started_at = now()', 'finished_at = NULL', 'attempts = attempts + 1');
-  if ([BATCH.APPLIED, BATCH.FAILED, BATCH.ABORTED, BATCH.VERIFIED, BATCH.HASH_MISMATCH].includes(to)) sets.push('finished_at = now()');
+  if (to === BATCH.RUNNING) sets.push('started_at = now()', 'finished_at = NULL', 'attempts = attempts + 1', 'target_root = NULL', 'target_count = NULL', 'verified_at = NULL');
+  // finished_at é o fim da APLICAÇÃO (a vazão do ETA depende dele): verificar o lote (M9-D905) não o move
+  if ([BATCH.APPLIED, BATCH.FAILED, BATCH.ABORTED].includes(to)) sets.push('finished_at = now()');
+  if (to === BATCH.VERIFIED) sets.push('verified_at = now()');
   let rows;
   try {
     rows = await select(`UPDATE governance.mig_batches SET ${sets.join(', ')} WHERE company_id = :companyId AND id = :id AND status = :from RETURNING ${COLUMNS}`, replacements, transaction);

@@ -53,4 +53,21 @@ function markDeleted(tenant, targetId, transaction) {
   return sequelize.query('UPDATE people.persons SET source_deleted = true, source_deleted_at = COALESCE(source_deleted_at, now()) WHERE company_id = :companyId AND id = :id', { transaction, replacements: { companyId: tenant.companyId, id: targetId } });
 }
 
-module.exports = { entityType: 'PERSON', assess, upsert, markDeleted };
+/** Campos canônicos da linha de origem na forma em que o destino os grava (M9-D905: lado da origem da verificação do lote). */
+function canonical(row) {
+  const digits = row.taxId ? onlyDigits(String(row.taxId)) : null;
+  return { personType: row.personType || 'PF', legalName: row.legalName, preferredName: row.preferredName || null, taxId: digits, birthDate: row.birthDate || null };
+}
+
+/** Relê do banco de destino as pessoas pedidas, nos mesmos campos canônicos (M9-D905: lado do destino). Devolve Map id -> campos; a pessoa que sumiu não aparece. */
+async function readCanonical(tenant, ids, transaction) {
+  if (!ids.length) return new Map();
+  const rows = await sequelize.query(
+    `SELECT id, person_type, legal_name, preferred_name, tax_id_normalized, to_char(birth_or_foundation_date, 'YYYY-MM-DD') AS birth
+       FROM people.persons WHERE company_id = :companyId AND id IN (:ids)`,
+    { type: QueryTypes.SELECT, transaction, replacements: { companyId: tenant.companyId, ids } }
+  );
+  return new Map(rows.map((r) => [r.id, { personType: r.person_type, legalName: r.legal_name, preferredName: r.preferred_name, taxId: r.tax_id_normalized, birthDate: r.birth }]));
+}
+
+module.exports = { entityType: 'PERSON', assess, upsert, markDeleted, canonical, readCanonical };

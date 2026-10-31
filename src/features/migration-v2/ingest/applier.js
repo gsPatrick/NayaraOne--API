@@ -8,7 +8,10 @@ const sources = require('./source.repository');
 const batches = require('./batch.repository');
 const records = require('./record.repository');
 const { applyEvent } = require('./applier.event');
-const { batchDigest } = require('./batch.hash');
+const { batchRoot } = require('./batch.hash');
+const { loadSchema } = require('../integrity/schema.repository');
+const { replaceLeaves } = require('../integrity/leaves.repository');
+const { getTarget } = require('./targets');
 const { sha256 } = require('./row.canonical');
 
 const IDEM_MAX = 255;
@@ -61,8 +64,11 @@ async function applyBatch(tenant, actor, batch, events, transaction) {
     applied.add(idem);
   }
   if (!batch.replay_of && advances(source.mode, source.checkpoint_token, batch.to_token)) await sources.setCheckpoint(tenant, source.id, batch.to_token, transaction);
-  const rootHash = batchDigest(keys.map((key) => known.get(key)).filter(Boolean));
-  const done = await batches.transition(tenant, batch.id, BATCH.APPLIED, { rowCount: events.length, rootHash }, transaction);
+  // lado da origem da verificação (M9-D905): raiz Merkle do que foi lido e as folhas guardadas para apontar divergência
+  const side = batchRoot(await loadSchema(tenant, source.entity, transaction), getTarget(source.entity), keys.map((key) => known.get(key)).filter(Boolean));
+  await replaceLeaves(tenant, batch.id, side.leaves, transaction);
+  const rootHash = side.root;
+  const done = await batches.transition(tenant, batch.id, BATCH.APPLIED, { rowCount: events.length, rootHash, sourceRoot: rootHash, sourceCount: side.count }, transaction);
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: actor && actor.userId, action: 'migration.batch.applied', entityType: 'MigBatch', entityId: batch.id,
     afterJson: { runId: batch.run_id, source: source.source_system, entity: source.entity, fromToken: batch.from_token, toToken: batch.to_token, rowCount: events.length, rootHash, replayOf: batch.replay_of, counts },
