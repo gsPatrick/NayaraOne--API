@@ -22,10 +22,21 @@ async function loadAll(tenant, actor, { lastDelta }) {
   return summary;
 }
 
-/** Verificação de hash por lote (D905): leva os lotes APPLIED a VERIFIED ou HASH_MISMATCH. */
+/**
+ * Verificação de hash por lote (D905): leva os lotes APPLIED a VERIFIED ou HASH_MISMATCH. Repete enquanto houver lote APPLIED (cada passada trata um número limitado) e para se
+ * uma passada não resolve nenhum lote (lote que falha ao verificar continua APPLIED e vira blocker da Torre).
+ */
 async function verifyAll(tenant, actor) {
-  const results = await verifyPending(tenant, actor);
-  return { verified: results.filter((item) => item.status === 'VERIFIED').length, mismatched: results.filter((item) => item.status === 'HASH_MISMATCH').length, failed: results.filter((item) => item.error).length };
+  const total = { verified: 0, mismatched: 0, failed: 0 };
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop
+    const results = await verifyPending(tenant, actor);
+    const resolved = results.filter((item) => item.status);
+    total.verified += results.filter((item) => item.status === 'VERIFIED').length;
+    total.mismatched += results.filter((item) => item.status === 'HASH_MISMATCH').length;
+    total.failed += results.filter((item) => item.error).length;
+    if (!resolved.length) return total;
+  }
 }
 
 module.exports = { loadAll, verifyAll };

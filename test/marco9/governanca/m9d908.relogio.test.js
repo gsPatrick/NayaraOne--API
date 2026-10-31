@@ -10,6 +10,7 @@ const gate = require('../../../src/features/migration-v2/clock/clock.gate');
 const { queryNtp } = require('../../../src/features/migration-v2/clock/ntp.reader');
 
 let A;
+env.dry.install(); // o blocker do relógio na Torre é registrado pelo install(), como nas rotas
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (!env.DISPOSABLE) return; A = (await env.loadTenants()).A; await env.cleanup(A); await env.isolate(A); });
 afterEach(async () => { if (env.DISPOSABLE) { await env.cleanup(A); await env.isolate(A); } });

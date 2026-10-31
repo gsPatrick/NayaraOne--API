@@ -9,6 +9,7 @@ const { alertOverdueWindows } = require('../../../src/features/migration-v2/aler
 const { runParallelCompare } = require('../../../src/features/migration-v2/parallel/parallel.job');
 
 let A;
+env.dry.install(); // o blocker do relógio na Torre é registrado pelo install(), como nas rotas
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (!env.DISPOSABLE) return; A = (await env.loadTenants()).A; await env.cleanup(A); });
 afterEach(async () => { if (env.DISPOSABLE) await env.cleanup(A); });
@@ -93,6 +94,7 @@ test('m9d908 RACI incompleta bloqueia o avanço do canary no ensaio', { skip: sk
   assert.ok(refused.details.blockers.some((b) => b.code === 'GOV_MIG_RACI_INCOMPLETE'));
   assert.equal(await env.percentOf(A, 'ATENDIMENTO'), 0, 'o setor não avançou');
   await env.completeRaci(A);
+  await env.setParam(A, 'migracao.canary.exigir_comparacao', false); // as entidades da migração real não têm fonte ativa neste teste: sem janela a comparar
   const advanced = await rawAdvance('ATENDIMENTO', { percent: 5 });
   assert.equal(advanced.percent, 5, 'RACI completa libera o avanço');
   await env.rollback(A, 'ATENDIMENTO', { reason: 'QA-M9 limpeza' });

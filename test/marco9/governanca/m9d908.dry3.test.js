@@ -30,7 +30,7 @@ test('m9d908 DRY3 completo aprovado com relatório e projeção', { skip: skip()
     assert.ok(report.durationMs === undefined || report.finishedAt, 'relatório fechado');
     // exportação para o fechamento do bloco F
     const file = s.exported.read();
-    assert.deepEqual(Object.keys(file).sort(), ['commit', 'conclusion', 'criteria', 'generated_at', 'report_id']);
+    assert.deepEqual(Object.keys(file).sort(), ['commit', 'conclusion', 'criteria', 'generated_at', 'report_id', 'signature', 'signature_alg']);
     assert.equal(file.conclusion, 'APROVADO');
     assert.match(file.commit, /^[0-9a-f]{7,40}$|^unknown$/);
     assert.ok(Date.now() - new Date(file.generated_at) < 120000);
@@ -139,4 +139,31 @@ test('m9d908 ensaio interrompido marca ABORTED sem aprovar e o RUNNING vencido �
     assert.deepEqual([aborted.status, aborted.conclusion], ['ABORTED', null]);
     assert.equal(aborted.errors[0].phase, 'ORCHESTRATOR');
   } finally { s.dispose(); }
+});
+
+test('m9d908 origem alterada entre a carga e o delta não reprova o DRY3 (cada lote é verificado logo depois de aplicado)', { skip: skip() }, async () => {
+  const s = await env.scenario(A);
+  const load = require('../../../src/features/migration-v2/dryrun/dry.load');
+  const original = load.loadAll;
+  let calls = 0;
+  load.loadAll = async (...args) => {
+    const result = await original(...args);
+    calls += 1;
+    if (calls === 1) { // a origem viva muda duas linhas e apaga nenhuma, entre a carga e o delta
+      for (const i of [1, 3]) s.legacy.fake.row(`dry${i}`, new Date(Date.UTC(2031, 0, 1, 0, 0, i)), env.personRecord({ taxId: s.taxIds[i], birthDate: env.EDGE_BIRTHS[i], legalName: `QA-M9 Cliente Alterado ${i}` }));
+    }
+    return result;
+  };
+  try {
+    const report = await env.runDry3(A);
+    assert.equal(report.conclusion, 'APROVADO', JSON.stringify([report.criteria, report.errors, report.blockers, report.quarantine]));
+    assert.equal(report.criteria.batches_verified.pct, 100);
+    assert.equal(report.criteria.counts_match.ok, true);
+    assert.deepEqual(report.blockers, []);
+    assert.equal(report.quarantine.QUARANTINED || 0, 0, 'nenhuma linha alterada vai à quarentena');
+    const deltaBatches = await env.adminQuery("SELECT b.status FROM governance.mig_batches b JOIN governance.mig_runs r ON r.id = b.run_id WHERE b.company_id = $1 AND r.last_delta = true", [A.companyId]);
+    assert.ok(deltaBatches.rows.length > 0 && deltaBatches.rows.every((row) => row.status === 'VERIFIED'));
+    const changed = await env.adminQuery("SELECT count(*)::int AS n FROM people.persons WHERE company_id = $1 AND legal_name LIKE 'QA-M9 Cliente Alterado%'", [A.companyId]);
+    assert.equal(changed.rows[0].n, 2, 'o delta levou a alteração ao destino');
+  } finally { load.loadAll = original; s.dispose(); }
 });

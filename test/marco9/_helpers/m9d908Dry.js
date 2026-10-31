@@ -9,6 +9,8 @@ const EDGE_BIRTHS = Object.freeze(['1992-02-29', '1999-12-31 23:59:59', '2000-01
 async function scenario(tenant, { rows = EDGE_BIRTHS.length, extra = [] } = {}) {
   await env.isolate(tenant);
   await env.completeRaci(tenant);
+  // SUPPLIER e PROPERTY (alvos da migração real) não têm fonte ativa neste ensaio: sem janela para comparar, o avanço do canary não pode exigir comparação delas (parâmetro da D904).
+  await env.setParam(tenant, 'migracao.canary.exigir_comparacao', false);
   const exported = env.useTempExport();
   const legacy = await env.installSource(tenant, { mode: 'WATERMARK', entity: 'PERSON' });
   const names = [];

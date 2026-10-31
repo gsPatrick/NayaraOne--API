@@ -81,6 +81,8 @@ async function runDryRun(tenant, actor, reportId, { now = new Date() } = {}) {
         try {
           const summary = await load.loadAll(tenant, actor, { lastDelta });
           runIds.push(summary.runId);
+          // Cada lote é verificado logo depois de aplicado, contra a origem do seu momento: o delta seguinte pode legitimamente alterar registros que estavam no lote da carga.
+          summary.verify = await load.verifyAll(tenant, actor);
           return summary;
         } catch (err) {
           if (err.runId) runIds.push(err.runId);
