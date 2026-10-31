@@ -5,7 +5,14 @@ const { sequelize } = require('../../../models');
 const flagsRepo = require('../../core-governance/feature-flags/flags.repository');
 const flagsService = require('../../core-governance/feature-flags/feature-flags.service');
 const raci = require('../raci/raci.service');
-const { flagKey, flagDescription, ACTIVITY } = require('./canary.constants');
+const { registerProtectedKeys } = require('../../core-governance/feature-flags/flags.protected');
+const { flagKey, flagDescription, ACTIVITY, FLAG_KEY_PREFIX, FLAG_OWNER } = require('./canary.constants');
+
+// N1: a API genérica de flags não escreve o estado do canary; só este arquivo (gate, blockers, RACI e MFA ficam no caminho do avanço e da reversão).
+registerProtectedKeys(FLAG_OWNER, {
+  test: (key) => key.startsWith(FLAG_KEY_PREFIX),
+  message: 'O estado do canary de um setor só muda pelo avanço ou pela reversão do setor na migração, que conferem pendências, comparação, responsáveis e MFA.',
+});
 
 /**
  * A flag do setor é a ÚNICA fonte do estado do canary (M9-D904 §3.4): `migracao.setor.<setor>.novo_sistema`, escopo SECTOR, risco CRITICAL, valor INTEGER = percentual atual.
@@ -33,13 +40,13 @@ async function ensureEntry(tenant, sector, actorUserId, transaction) {
   await flagsService.createEntry(tenant, {
     key: flagKey(sector), kind: 'CONFIG', valueType: 'INTEGER', value: 0, ownerUserId: await ownerFor(tenant, actorUserId, transaction),
     scope: 'SECTOR', scopeRef: sector, risk: 'CRITICAL', description: flagDescription(sector), reason: `Flag do canary do setor ${sector} criada.`,
-  }, actorUserId, transaction);
+  }, actorUserId, transaction, { owner: FLAG_OWNER });
   return readEntry(tenant, sector, transaction);
 }
 
 /** Grava o novo percentual pelo serviço do registro (versão anterior guardada e auditoria da flag, com o motivo). */
 async function writePercent(tenant, entry, percent, reason, actorUserId, transaction) {
-  await flagsService.updateEntry(tenant, { id: entry.id, value: percent, reason }, actorUserId, transaction);
+  await flagsService.updateEntry(tenant, { id: entry.id, value: percent, reason }, actorUserId, transaction, { owner: FLAG_OWNER });
   return flagsRepo.findById(tenant, 'CONFIG', entry.id, transaction);
 }
 

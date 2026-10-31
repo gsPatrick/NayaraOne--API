@@ -10,6 +10,7 @@ const { readFlagsParams } = require('./flags.params');
 const { viewOf, snapshotOf } = require('./flags.view');
 const { liveValues, absorbTenantSettings, writeThrough } = require('./flags.settings.adapter');
 const repo = require('./flags.repository');
+const { assertWritable } = require('./flags.protected');
 
 const LOCKED_FOR_SETTINGS = ['scope', 'scopeRef', 'validFrom', 'validUntil', 'temporary'];
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -54,11 +55,12 @@ const audit = (tenant, kind, row, actorUserId, before, after, reason, transactio
 
 /**
  * Cria uma flag ou configuração (POST /feature-flags; exige governance:flags:manage na rota). Responsável obrigatório e ativo, escopo, risco, validade e tipo do valor
- * conferidos; chave única por escopo (e entre flags e configurações). Nasce na versão 1, com auditoria. `trustedOwner`: criação interna (interruptores de degradação).
+ * conferidos; chave única por escopo (e entre flags e configurações). Nasce na versão 1, com auditoria. `trustedOwner`: criação interna (interruptores de degradação). `owner`: o módulo dono de chaves protegidas (flags.protected).
  */
-async function createEntry(tenant, body, actorUserId, transaction, { trustedOwner = false } = {}) {
+async function createEntry(tenant, body, actorUserId, transaction, { trustedOwner = false, owner = null } = {}) {
   const params = await readFlagsParams(tenant, transaction);
   const input = parseCreate(body, tenant, params);
+  assertWritable(input.key, owner);
   if (!trustedOwner) await assertOwnerActive(tenant, input.ownerUserId, transaction);
   const otherKind = input.kind === KINDS.FLAG ? KINDS.CONFIG : KINDS.FLAG;
   if (await repo.keyExistsInKind(tenant, otherKind, input.key, transaction)) throw E.duplicate();
@@ -80,9 +82,10 @@ function nextState(row, patch, now) {
  * novos sobem a versão em 1, guardam a versão anterior e auditam antes e depois com o motivo. PATCH sem mudança real não gera versão. Chave EXPIRED só volta a ACTIVE
  * com `validUntil` posterior a agora. Chave absorvida das configurações da empresa grava o valor também na configuração (leitores existentes seguem corretos).
  */
-async function updateEntry(tenant, body, actorUserId, transaction, { now = new Date() } = {}) {
+async function updateEntry(tenant, body, actorUserId, transaction, { now = new Date(), owner = null } = {}) {
   const b = body && typeof body === 'object' ? body : {};
   const row = await locateEntry(tenant, b, transaction);
+  assertWritable(row.key, owner);
   const reason = parseReason(b.reason);
   if (b.version !== undefined && b.version !== row.version) throw E.versionConflict({ currentVersion: row.version, sentVersion: b.version });
   const params = await readFlagsParams(tenant, transaction);

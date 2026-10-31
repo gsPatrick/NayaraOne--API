@@ -12,8 +12,10 @@ const RUN_PERMISSION = 'governance:migration:run';
 const FLAGS_PERMISSION = 'governance:flags:manage';
 
 /** `migracao.setor.<setor>.novo_sistema` (minúsculas: o registro de flags só aceita chaves em minúsculas). O escopo é SECTOR e a referência é o código do setor. */
-const flagKey = (sector) => `migracao.setor.${sector.toLowerCase()}.novo_sistema`;
+const FLAG_KEY_PREFIX = 'migracao.setor.';
+const FLAG_OWNER = 'migration.canary'; // dono das chaves protegidas do registro de flags (flags.protected): só o canary as escreve
+const flagKey = (sector) => `${FLAG_KEY_PREFIX}${sector.toLowerCase()}.novo_sistema`;
 const flagDescription = (sector) => `Percentual de usuários do setor ${sector} que operam no sistema novo (canary da migração).`;
 const isSector = (value) => typeof value === 'string' && SECTOR_CODES.includes(value);
 
-module.exports = { SECTOR_CODES, ACTION_ROLLBACK, ACTIVITY, AUDIT, AUDIT_ENTITY, REASON_MAX, RUN_PERMISSION, FLAGS_PERMISSION, flagKey, flagDescription, isSector };
+module.exports = { SECTOR_CODES, ACTION_ROLLBACK, ACTIVITY, AUDIT, AUDIT_ENTITY, REASON_MAX, RUN_PERMISSION, FLAGS_PERMISSION, FLAG_KEY_PREFIX, FLAG_OWNER, flagKey, flagDescription, isSector };

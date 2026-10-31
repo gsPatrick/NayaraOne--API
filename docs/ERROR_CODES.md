@@ -129,6 +129,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FLAG_EXPIRED` | 422 | A chave expirou: estenda a validade para uma data futura para reativá-la. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_EXPIRY_REQUIRED` | 422 | Flag temporária precisa de data de expiração. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_INPUT_INVALID` | 422 | Algum campo da chave é inválido. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_KEY_PROTECTED` | 403 | Esta chave só muda pelo fluxo do módulo responsável por ela. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_NOT_FOUND` | 404 | Chave não encontrada. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_OWNER_INVALID` | 422 | O responsável deve ser uma pessoa ativa desta empresa. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_OWNER_REQUIRED` | 422 | Informe o responsável pela chave. | feature-flags | 1.3.0 | não |
