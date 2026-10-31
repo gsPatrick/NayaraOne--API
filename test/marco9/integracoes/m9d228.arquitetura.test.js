@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D228 — o parâmetro do papel do financeiro existe no dicionário e é lido pelo código, a regra do banco e do financiamento mora nos ganchos do framework e o caminho
 // determinístico da IA não conhece fornecedor. Banco descartável.
-process.env.PORT = process.env.M9D228_ARQ_PORT || '22282';
+process.env.PORT = process.env.M9D228_ARQ_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

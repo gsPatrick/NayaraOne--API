@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D227 — portal fora: o imóvel segue publicado internamente, o anúncio fica PENDING_SYNC com o motivo, é reprocessado até o portal aceitar e a tarefa ao marketing sai
 // uma única vez, passadas 24 h; um portal fora nunca bloqueia os demais. Banco descartável (os testes COMMITAM). Nome do teste da seção 8 da demanda.
-process.env.PORT = process.env.M9D227_PORTAL_PORT || '22272';
+process.env.PORT = process.env.M9D227_PORTAL_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

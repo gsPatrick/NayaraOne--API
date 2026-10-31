@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D200 (reabertura M1) — o catálogo GLOBAL de fornecedores só é escrito com a permissão de plataforma (HTTP real, duas empresas).
 // Roda em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D200_CATALOGO_PORT || String(23000 + Math.floor(Math.random() * 2000));
+process.env.PORT = process.env.M9D200_CATALOGO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

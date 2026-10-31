@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D211 — as quatro rotas públicas antigas (Clicksign, banco, seguro e financiamento) seguem com o mesmo caminho e o mesmo contrato,
 // agora sobre o framework: corpo bruto e limite WEBHOOK compartilhado. A prova ponta a ponta do financiamento está em m9d240.webhook.
-process.env.PORT = process.env.M9D211_LEGADO_PORT || '21213';
+process.env.PORT = process.env.M9D211_LEGADO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

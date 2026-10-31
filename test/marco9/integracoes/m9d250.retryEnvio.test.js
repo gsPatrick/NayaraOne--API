@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D250 — POST /admin/integrations/errors/:id/retry para erro de ENVIO (HTTP real, MFA real do usuário de teste). Testes 1, 2, 5, 6, 7 e 14 da demanda.
 // Roda em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D250_ENVIO_PORT || '21751';
+process.env.PORT = process.env.M9D250_ENVIO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

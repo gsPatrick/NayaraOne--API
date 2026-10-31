@@ -20,7 +20,7 @@ before(async () => {
   ({ tenant } = await carregarTenants());
   if (DISPOSABLE) {
     await grant('CI GESTOR', ['integration:read']);
-    env = await startHttpEnv(Number(process.env.M9D224_HTTP_TEST_PORT) || 21724, [['A', 'gestor'], ['A', 'leitura'], ['B', 'gestor']]);
+    env = await startHttpEnv(Number(process.env.M9D224_HTTP_TEST_PORT) || Number(require('../_helpers/portaLivre').portaLivre()), [['A', 'gestor'], ['A', 'leitura'], ['B', 'gestor']]);
   }
   // o app já registrou as fontes no boot; registrar de novo é no-op (a mesma função não entra duas vezes)
   registerHealthSampleSource(dispatchHealthSample);

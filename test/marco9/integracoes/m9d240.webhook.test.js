@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D240 — webhook do financiamento sobre o registro genérico: caixa de entrada nova com dedup, rota pública legada e segredo no cofre.
-process.env.PORT = process.env.M9D240_WEBHOOK_PORT || '21740';
+process.env.PORT = process.env.M9D240_WEBHOOK_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

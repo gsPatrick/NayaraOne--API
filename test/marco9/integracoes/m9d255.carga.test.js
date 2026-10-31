@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D255 3.3 — teste de carga das integrações contra os sandboxes (HTTP real para os webhooks, worker real para os envios). Roda em banco descartável (COMMITA).
-process.env.PORT = process.env.M9D255_CARGA_PORT || '21755';
+process.env.PORT = process.env.M9D255_CARGA_PORT || require('../_helpers/portaLivre').portaLivre();
 process.env.WEBHOOK_RATE_LIMIT_PER_MINUTE = '100000';
 
 const { test, before, after } = require('node:test');

@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D235 — e-mail recebido: dado pessoal mascarado e restrito, cartão redigido, sem vínculo fica não vinculado sem criar processo, duplicado ignorado. Banco descartável.
-process.env.PORT = process.env.M9D235_MENSAGEM_PORT || '24236';
+process.env.PORT = process.env.M9D235_MENSAGEM_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

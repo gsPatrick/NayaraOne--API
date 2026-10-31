@@ -16,7 +16,7 @@ let env;
 before(async () => {
   if (!DISPOSABLE) return;
   await grant('CI GESTOR', ['integration:read']);
-  env = await startHttpEnv(Number(process.env.M9D223_HTTP_TEST_PORT) || 21723, [['A', 'gestor'], ['A', 'leitura'], ['B', 'gestor']]);
+  env = await startHttpEnv(Number(process.env.M9D223_HTTP_TEST_PORT) || Number(require('../_helpers/portaLivre').portaLivre()), [['A', 'gestor'], ['A', 'leitura'], ['B', 'gestor']]);
 });
 after(async () => {
   if (!env) return;

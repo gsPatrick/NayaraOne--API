@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D256 — portão de liberação para produção (HTTP real, MFA real do usuário de teste): evidências por item, relatório de versão anterior e contingência
 // da família CRITICAL. Roda em banco descartável (COMMITA).
-process.env.PORT = process.env.M9D256_PORTAO_PORT || '21756';
+process.env.PORT = process.env.M9D256_PORTAO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

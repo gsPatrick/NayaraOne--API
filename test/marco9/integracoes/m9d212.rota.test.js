@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D212 — a rota só valida, grava e responde: sem regra de negócio, dentro do prazo, 503 quando o banco não responde e evento sem id na fila morta com 200.
-process.env.PORT = process.env.M9D212_ROTA_PORT || '21212';
+process.env.PORT = process.env.M9D212_ROTA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

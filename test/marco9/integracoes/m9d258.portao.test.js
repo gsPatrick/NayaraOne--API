@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D258 / M9-D256 — a pergunta 2 usa o estado do portão (listReleaseStates) lido do banco descartável com RLS real; fora dele nada é dado como liberado.
-process.env.PORT = process.env.M9D258_PORTAO_PORT || '21758';
+process.env.PORT = process.env.M9D258_PORTAO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

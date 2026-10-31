@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D238 + M9-D220 — a apólice e o sinistro reagem só a evento interno do envio (idempotente e auditado): a recusa da seguradora avisa a pessoa sem mudar o estado, a ordem sem
 // resposta conclusiva vai à revisão humana, a apólice vigente confirmada passa a ACTIVE, o pedido nasce na transação de Compras e proposta não tem compensação automática. Banco descartável.
-process.env.PORT = process.env.M9D238_REACAO_PORT || '24239';
+process.env.PORT = process.env.M9D238_REACAO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

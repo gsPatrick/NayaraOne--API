@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D251 — teste adversarial do livro (seção 19), provider fora: o circuito aberto ativa a contingência, o domínio fica íntegro (a mensagem continua na fila, nunca entregue,
 // sem duplicata) e a recuperação drena a fila em ordem. Banco descartável (os testes COMMITAM); a queda é o circuito aberto à força, sem espera real.
-process.env.PORT = process.env.M9D251_FORA_PORT || '25252';
+process.env.PORT = process.env.M9D251_FORA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, beforeEach, after } = require('node:test');
 const assert = require('node:assert/strict');

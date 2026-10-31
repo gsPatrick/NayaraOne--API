@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D230 — mídia do WhatsApp: a que sai só sai de arquivo limpo, classificado, dentro do tamanho e do tipo, com link de curta duração; a que chega é buscada só pelo guarda SSRF,
 // entra em quarentena e só aparece depois da verificação. Banco descartável (os testes COMMITAM); antivírus real (clamd).
-process.env.PORT = process.env.M9D230_MIDIA_PORT || '21302';
+process.env.PORT = process.env.M9D230_MIDIA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const fs = require('node:fs');
 const path = require('node:path');

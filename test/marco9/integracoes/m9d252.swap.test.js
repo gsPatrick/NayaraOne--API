@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D252 — teste adversarial 14 do livro (seção 19): a mesma suíte de cenários em dois adapters de mensageria (messaging-sandbox e messaging-alt-sandbox) dá o mesmo resultado interno e os
 // mesmos eventos; o contrato de cada adapter também passa. Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D252_SWAP_PORT || '25253';
+process.env.PORT = process.env.M9D252_SWAP_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

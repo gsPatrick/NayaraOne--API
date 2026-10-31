@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D213 — esquema por tipo e versão (Ajv): campo crítico estrito, tipos e enum; todo adapter com verificador publica esquema.
-process.env.PORT = process.env.M9D213_SCHEMA_PORT || '21217';
+process.env.PORT = process.env.M9D213_SCHEMA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

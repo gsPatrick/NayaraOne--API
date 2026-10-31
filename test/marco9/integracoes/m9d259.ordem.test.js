@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D259 — ordem dos status do site pelo webhook assinado: dentro do mesmo envio o status menor não regride o maior; republicar depois de despublicar abre um envio novo e é aplicado;
 // FAILED depois de PENDING é aplicado e depois de CONFIRMED não. Passa pelo intake real (assinatura, esquema, ordem do worker e tratador do domínio). Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D259_ORDEM_PORT || '21260';
+process.env.PORT = process.env.M9D259_ORDEM_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

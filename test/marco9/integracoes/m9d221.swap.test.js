@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D221 — troca de fornecedor sem reescrever o domínio, no banco descartável: a mesma suíte de cenários nos dois adapters de mensageria (mesmo resultado interno), a troca
 // no meio da conversa, o envio em voo que termina na connection antiga, a família diferente recusada e a degradação declarada da capability ausente.
-process.env.PORT = process.env.M9D221_SWAP_PORT || '21221';
+process.env.PORT = process.env.M9D221_SWAP_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

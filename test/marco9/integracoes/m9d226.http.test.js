@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D226 — APIs administrativas da contingência (HTTP real, permissão real): lista das ativas e troca aprovada (MFA recente). Roda em banco descartável.
-process.env.PORT = process.env.M9D226_HTTP_PORT || '21726';
+process.env.PORT = process.env.M9D226_HTTP_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

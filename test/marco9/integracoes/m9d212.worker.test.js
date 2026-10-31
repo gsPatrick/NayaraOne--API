@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D212 — o worker converte o evento da caixa de entrada em evento interno exatamente uma vez, manda dado inválido à fila morta sem retry,
 // não deixa o status regredir e guarda na fila morta só o conteúdo sanitizado.
-process.env.PORT = process.env.M9D212_WORKER_PORT || '21213';
+process.env.PORT = process.env.M9D212_WORKER_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

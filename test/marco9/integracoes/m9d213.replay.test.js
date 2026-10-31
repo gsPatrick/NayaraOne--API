@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D213 — replay: horário assinado fora da tolerância (401), mesmo evento reenviado (duplicate, nada reprocessa), id derivado do corpo e a ordem
 // tamanho -> assinatura -> horário -> leitura do JSON.
-process.env.PORT = process.env.M9D213_REPLAY_PORT || '21215';
+process.env.PORT = process.env.M9D213_REPLAY_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

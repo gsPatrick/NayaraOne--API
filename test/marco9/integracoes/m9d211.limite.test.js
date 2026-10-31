@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D211 — limite WEBHOOK por IP e fornecedor sobre o contador compartilhado da M9-D843, antes de consultar a connection e com falha fechada.
-process.env.PORT = process.env.M9D211_LIMITE_PORT || '21212';
+process.env.PORT = process.env.M9D211_LIMITE_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

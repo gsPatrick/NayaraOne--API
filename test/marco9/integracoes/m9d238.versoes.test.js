@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D238 — apólice versionada (documento e hash, imutável) e marcos de vencimento (60, 30, 15 e 7 dias e expirada) publicados como eventos, uma vez por marco. Banco descartável.
-process.env.PORT = process.env.M9D238_VERSOES_PORT || '24239';
+process.env.PORT = process.env.M9D238_VERSOES_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

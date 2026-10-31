@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D230 — WhatsApp: janela de atendimento e modelos, consentimento no enfileiramento e no envio, opt-out por palavra-chave e cancelamento do que já estava na fila.
 // Banco descartável (os testes COMMITAM). Os nomes dos testes são os da seção 8 da demanda.
-process.env.PORT = process.env.M9D230_ENVIO_PORT || '21301';
+process.env.PORT = process.env.M9D230_ENVIO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

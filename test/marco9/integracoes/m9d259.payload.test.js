@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D259 — o que chega ao site: só a allowlist do read model público (canário D231); sem connection ativa 404; imóvel não publicável 409 sem gravar nada; operação fora das capabilities
 // 422; permissões e RLS; parâmetro do idioma. Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D259_PAYLOAD_PORT || '21261';
+process.env.PORT = process.env.M9D259_PAYLOAD_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

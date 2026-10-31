@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D238 — a renovação inicia uma nova cotação pelo mesmo adapter (API ou fluxo manual), uma vez por apólice e vigência, e o aviso de seguro fora do ar não derruba a
 // rotina. Banco descartável.
-process.env.PORT = process.env.M9D238_RENOV_PORT || '24241';
+process.env.PORT = process.env.M9D238_RENOV_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

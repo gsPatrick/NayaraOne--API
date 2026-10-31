@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D236 — fornecedor incerto (UNKNOWN) que reconcilia, rota antiga do Clicksign que continua funcionando, versão do documento e troca de provider
 // (signature-sandbox e signature-alt-sandbox, dois formatos de webhook, o mesmo resultado interno). Banco descartável.
-process.env.PORT = process.env.M9D236_PROVIDER_PORT || '21237';
+process.env.PORT = process.env.M9D236_PROVIDER_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -3,7 +3,7 @@
 // Apoio comum dos testes do M9-D800 (alicerce da governança): constantes do livro, cliente admin do cluster
 // descartável, subida do app com logins e chamada HTTP. Rodar SEMPRE em banco descartável (nunca no .env remoto).
 
-process.env.PORT = process.env.M9D800_HTTP_TEST_PORT || '21650';
+process.env.PORT = process.env.M9D800_HTTP_TEST_PORT || require('../marco9/_helpers/portaLivre').portaLivre();
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

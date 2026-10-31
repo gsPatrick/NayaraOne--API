@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D211 — canal do webhook: token gerado ao criar a connection, formato e tamanho pelo parâmetro, função pública de resolução e backfill.
-process.env.PORT = process.env.M9D211_CANAL_PORT || '21214';
+process.env.PORT = process.env.M9D211_CANAL_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

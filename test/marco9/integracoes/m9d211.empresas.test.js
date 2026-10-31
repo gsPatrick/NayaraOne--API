@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D211 (reabertura G1) — a deduplicação da caixa de entrada de webhooks é POR EMPRESA: o mesmo id externo do mesmo fornecedor em duas
 // empresas grava duas linhas e responde `accepted` nas duas; o `duplicate` nunca vira oráculo de existência entre empresas. Banco descartável.
-process.env.PORT = process.env.M9D211_EMPRESAS_PORT || '21219';
+process.env.PORT = process.env.M9D211_EMPRESAS_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

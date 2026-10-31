@@ -4,7 +4,7 @@
 // e NÃO pode aparecer em nenhum log (capturado em memória), auditoria, resposta HTTP ou linha de integration_errors.
 // Roda em banco descartável (grava linhas COMMITADAS e depois apaga). Tokens assinados só pelo teste, contra o app de teste.
 
-process.env.PORT = process.env.REDACTION_CANARY_TEST_PORT || '21646';
+process.env.PORT = process.env.REDACTION_CANARY_TEST_PORT || require('../../marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D228 — IA fora: toda função com IA declara o caminho determinístico equivalente e o aciona por withAiFallback/resolveAiMode (busca por palavras-chave, modelos de contrato
 // pré-definidos, regras e leituras do ERP, formulário da tela normal). Nenhuma ação de negócio depende só da IA. Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D228_IA_PORT || '22281';
+process.env.PORT = process.env.M9D228_IA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

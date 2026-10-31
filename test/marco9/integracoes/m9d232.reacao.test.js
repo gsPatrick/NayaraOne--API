@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D232 + M9-D220 — o anúncio de portal muda o próprio estado só por evento interno do envio, enfileira na transação do domínio, compensa por novo envio e não é
 // alterado pela falha ou pela ausência de resposta do portal. Banco descartável.
-process.env.PORT = process.env.M9D232_REACAO_PORT || '27232';
+process.env.PORT = process.env.M9D232_REACAO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

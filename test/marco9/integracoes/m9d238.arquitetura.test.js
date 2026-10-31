@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D238 — o fluxo antigo de seguro passa pelo Dispatch Service com dado minimizado, os segredos da seguradora saem de tenant_settings e vão ao cofre, e os adapters reais
 // (Porto Seguro, Yelum e Junto Seguros) e o fluxo manual cumprem o contrato do port InsuranceAdapter e estão no catálogo. Banco descartável.
-process.env.PORT = process.env.M9D238_ARQ_PORT || '24240';
+process.env.PORT = process.env.M9D238_ARQ_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

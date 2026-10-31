@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D235 — e-mail recebido pela leitura periódica (cursor retomável) e pelos parâmetros do administrador (prefixos, limite de anexos, verificação na chegada). Banco descartável.
-process.env.PORT = process.env.M9D235_LEITURA_PORT || '24237';
+process.env.PORT = process.env.M9D235_LEITURA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

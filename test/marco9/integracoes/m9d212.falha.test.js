@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D212 — falha transitória com nova tentativa até esgotar, janela de retenção do corpo na fila morta, regressão do webhook do Correspondente.
-process.env.PORT = process.env.M9D212_FALHA_PORT || '21214';
+process.env.PORT = process.env.M9D212_FALHA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -77,7 +77,7 @@ test('intake_correspondente_regressao', () => {
   const arquivos = ['test/correspondent.webhooks.test.js'];
   const raiz = path.join(__dirname, '..', '..', '..');
   const { NODE_TEST_CONTEXT: _contexto, ...ambiente } = process.env; // sem isso o executor de testes se recusa a rodar arquivos dentro de um teste
-  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...arquivos], { cwd: raiz, env: { ...ambiente, NODE_ENV: 'test', PORT: '21299' }, encoding: 'utf8', timeout: 240000 });
+  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...arquivos], { cwd: raiz, env: { ...ambiente, NODE_ENV: 'test', PORT: require('../_helpers/portaLivre').portaLivre() }, encoding: 'utf8', timeout: 240000 });
   const resumo = `${r.stdout}`.split('\n').filter((x) => /^# (tests|pass|fail)|^ℹ (tests|pass|fail)/.test(x)).join(' | ');
   const passou = Number((/(?:ℹ|#) pass (\d+)/.exec(String(r.stdout)) || [])[1] || 0);
   assert.equal(passou >= 13, true, `a bateria deve rodar os 13 testes do webhook do Correspondente (rodou ${passou}): ${String(r.stdout).slice(-800)} ${String(r.stderr).slice(-800)}`);

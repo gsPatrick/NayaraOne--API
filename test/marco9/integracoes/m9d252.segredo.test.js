@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D252 — teste adversarial 9 do livro (seção 19): o marcador SECRET-CANARY entra por connection, webhook e erro de provider e NÃO aparece em log (capturado em memória), auditoria,
 // resposta HTTP nem integration_errors. Banco descartável (grava linhas COMMITADAS). Tokens assinados só pelo teste, contra o app de teste.
-process.env.PORT = process.env.M9D252_SEGREDO_PORT || '25254';
+process.env.PORT = process.env.M9D252_SEGREDO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

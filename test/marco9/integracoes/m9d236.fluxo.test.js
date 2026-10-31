@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D236 — assinatura digital sobre o framework: webhook assinado, hash do original, signatário previsto, evidência completa e eventos fora de ordem.
 // Envelope e assinaturas pelo serviço do Jurídico (pedido via Dispatch Service), eventos pela rota única de webhooks e worker da caixa de entrada. Banco descartável.
-process.env.PORT = process.env.M9D236_FLUXO_PORT || '21236';
+process.env.PORT = process.env.M9D236_FLUXO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

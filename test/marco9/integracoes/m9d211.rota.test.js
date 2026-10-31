@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D211 — rota pública única de webhooks: aceite, corpo bruto, assinatura antes de ler o JSON, canal desconhecido, verificador ausente,
 // tenant pela connection, janela de graça, fila morta com 200 e alias da raiz. HTTP real em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D211_ROTA_PORT || '21211';
+process.env.PORT = process.env.M9D211_ROTA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

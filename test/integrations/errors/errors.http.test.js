@@ -3,7 +3,7 @@
 // Marco 9, M9-D207 — rotas GET /v1/admin/integrations/errors e POST .../:id/resolve (HTTP real, permissão real).
 // Roda em banco descartável (grava e apaga linhas COMMITADAS). Tokens assinados só pelo teste, contra o app de teste.
 
-process.env.PORT = process.env.INTEGRATION_ERRORS_HTTP_TEST_PORT || '21607';
+process.env.PORT = process.env.INTEGRATION_ERRORS_HTTP_TEST_PORT || require('../../marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D243 — provider de modelos de IA no catálogo: aparece no painel com saúde e circuito, não manda dado pessoal sem a
 // classificação permitir (D219) e, com a IA fora, o modo determinístico assume (D228). Banco descartável.
-process.env.PORT = process.env.M9D243_IA_PORT || '21652';
+process.env.PORT = process.env.M9D243_IA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

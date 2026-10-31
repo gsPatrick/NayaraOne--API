@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D227 — WhatsApp fora: a mensagem fica QUEUED (nunca entregue), segue por e-mail só com o consentimento do contato, o marketing aguarda e é cancelado ao vencer, a essencial
 // sem alternativo vira tarefa do responsável e a mensagem vencida na fila vira modelo. Banco descartável (os testes COMMITAM). Nomes da seção 8 da demanda.
-process.env.PORT = process.env.M9D227_WA_PORT || '22271';
+process.env.PORT = process.env.M9D227_WA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

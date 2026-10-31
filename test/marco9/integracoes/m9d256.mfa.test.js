@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D256 — aprovação humana da liberação: permissão, MFA recente de quem libera, concorrência e retorno a não liberada. Roda em banco descartável (COMMITA).
-process.env.PORT = process.env.M9D256_MFA_PORT || '21757';
+process.env.PORT = process.env.M9D256_MFA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D250 — POST /admin/integrations/errors/:id/retry para erro de WEBHOOK e de SINCRONIZAÇÃO, e as recusas por classe e origem. Testes 3, 4, 12 e 13 da demanda.
 // Roda em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D250_ORIGENS_PORT || '21752';
+process.env.PORT = process.env.M9D250_ORIGENS_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const crypto = require('crypto');

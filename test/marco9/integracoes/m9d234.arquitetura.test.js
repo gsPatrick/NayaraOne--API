@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D234 — o e-mail cumpre o contrato do port EmailAdapter, o pedido de envio passa pelo Dispatch Service com o conteúdo minimizado e os cinco parâmetros da
 // empresa existem no dicionário de configurações. Banco descartável.
-process.env.PORT = process.env.M9D234_ARQ_PORT || '24237';
+process.env.PORT = process.env.M9D234_ARQ_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

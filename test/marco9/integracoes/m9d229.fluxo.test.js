@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D229 — a mensageria do CRM de ponta a ponta no banco descartável: envio enfileirado (QUEUED), SENT só com o id do fornecedor, DELIVERED/READ só por webhook assinado
 // ou consulta de status, falha que não vira entregue nem contato, mensagem recebida sem duplicar, telefone inválido e capacidade ausente.
-process.env.PORT = process.env.M9D229_FLUXO_PORT || '21291';
+process.env.PORT = process.env.M9D229_FLUXO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

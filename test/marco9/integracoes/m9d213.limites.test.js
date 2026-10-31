@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D213 — limites da borda: corpo cortado no limite sem ler o resto (413), tipo de conteúdo (415), estrutura do JSON (fila morta com 200).
-process.env.PORT = process.env.M9D213_LIMITES_PORT || '21216';
+process.env.PORT = process.env.M9D213_LIMITES_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

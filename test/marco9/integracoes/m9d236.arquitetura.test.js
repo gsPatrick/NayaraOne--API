@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D236 — o pedido de envelope passa pelo Dispatch Service (linha real em integration.dispatches), os segredos de webhook saem das configurações e vão ao
 // cofre, e os adapters reais de assinatura cumprem o contrato IntegrationAdapter. Banco descartável.
-process.env.PORT = process.env.M9D236_ARQ_PORT || '21238';
+process.env.PORT = process.env.M9D236_ARQ_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

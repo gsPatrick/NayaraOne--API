@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D249 — GET /v1/admin/integrations/errors (cursor) e GET /v1/admin/integrations/dispatches/:id (HTTP real).
-process.env.PORT = process.env.M9D249_ENVIO_PORT || '21650';
+process.env.PORT = process.env.M9D249_ENVIO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

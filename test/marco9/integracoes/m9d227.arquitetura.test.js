@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D227 — os parâmetros da contingência do WhatsApp, do portal e da assinatura existem no dicionário e são lidos pelo código, a regra mora nos ganchos do framework
 // (nada de lógica de fornecedor no CRM) e a assinatura manual deixa de ser isenta do portão de evidência. Banco descartável.
-process.env.PORT = process.env.M9D227_ARQ_PORT || '22274';
+process.env.PORT = process.env.M9D227_ARQ_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

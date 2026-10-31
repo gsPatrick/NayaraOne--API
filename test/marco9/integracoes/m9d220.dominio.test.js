@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D220 — falha externa não corrompe o domínio, no banco descartável: o estado do domínio só muda por evento interno, a reação ao evento é idempotente e auditada,
 // a compensação cria um NOVO envio sem tocar no original, o usuário recebe o aceite com o fornecedor fora, dado externo fora do formato não entra e um anúncio que falha não reverte o imóvel.
-process.env.PORT = process.env.M9D220_DOMINIO_PORT || '21220';
+process.env.PORT = process.env.M9D220_DOMINIO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

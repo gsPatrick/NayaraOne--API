@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D251 — testes adversariais do livro (seção 19), webhook: assinatura falsa, evento duplicado, replay fora da janela, payload gigante, payload inválido e status fora de ordem.
 // HTTP real contra o app de teste, banco descartável (os testes COMMITAM), relógio simulado (horário assinado injetado, sem sleep).
-process.env.PORT = process.env.M9D251_WEBHOOK_PORT || '25251';
+process.env.PORT = process.env.M9D251_WEBHOOK_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D256 — PRONTO PARA LAB: sandbox determinístico sem rede externa, página com o estado do portão por provider, relatório de ensaio ligado ao adapter, ativação em
 // produção só com suíte verde, parâmetros do portão e Definition of Done (item 14). Roda em banco descartável (COMMITA).
-process.env.PORT = process.env.M9D256_LAB_PORT || '21758';
+process.env.PORT = process.env.M9D256_LAB_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

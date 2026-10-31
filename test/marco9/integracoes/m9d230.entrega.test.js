@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D230 — falha de envio nunca vira entregue (modelo e mídia incluídos, com o motivo em português) e a conversa e o canal têm identificador interno estável: a troca de fornecedor
 // cria um par externo novo e mantém o histórico. Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D230_ENTREGA_PORT || '21303';
+process.env.PORT = process.env.M9D230_ENTREGA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

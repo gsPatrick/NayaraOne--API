@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D250 — POST /admin/integrations/:provider/rotate-secret (HTTP real, MFA real do usuário de teste): rotação com janela de graça da M9-D202.
 // Roda em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D250_ROTACAO_PORT || '21754';
+process.env.PORT = process.env.M9D250_ROTACAO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

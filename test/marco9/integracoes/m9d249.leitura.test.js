@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D249 — GET /v1/admin/integrations e GET /v1/admin/integrations/:provider/health (HTTP real, permissão real).
 // Roda em banco descartável (grava linhas COMMITADAS).
-process.env.PORT = process.env.M9D249_LEITURA_PORT || '21649';
+process.env.PORT = process.env.M9D249_LEITURA_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

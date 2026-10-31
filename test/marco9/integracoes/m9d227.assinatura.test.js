@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D227 — assinatura fora: envelope e estado do contrato preservados, consulta de status em UNKNOWN, assinatura manual só com evidência completa (hash) e troca de
 // fornecedor só com aprovação humana (DANGEROUS), com envelope novo e o anterior cancelado por compensação. Banco descartável (os testes COMMITAM). Nomes da seção 8 da demanda.
-process.env.PORT = process.env.M9D227_ASS_PORT || '22273';
+process.env.PORT = process.env.M9D227_ASS_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

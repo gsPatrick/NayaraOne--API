@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D212 (critério herdado da M9-D211 e da M9-D215) — o worker da caixa de entrada liga o evento do fornecedor ao envio: chama resolveDispatchByEvent com o
 // status já normalizado pelo adapter e a origem WEBHOOK_SIGNED, e o envio em UNKNOWN se resolve sem esperar a consulta.
-process.env.PORT = process.env.M9D212_ENVIO_PORT || '21218';
+process.env.PORT = process.env.M9D212_ENVIO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D250 — POST /admin/integrations/:provider/test-connection (HTTP real, MFA real do usuário de teste). Testes 8, 9, 10, 11 e 15 da demanda e o critério
 // acrescentado pela M9-D011 (provedor de IA). Roda em banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D250_TESTE_PORT || '21753';
+process.env.PORT = process.env.M9D250_TESTE_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

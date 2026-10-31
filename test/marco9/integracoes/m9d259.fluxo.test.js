@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D259 — publicação de páginas no site: 202 não confirma, status confirma, o evento de confirmação sai uma vez e só ele marca a página como publicada, o timeout vira UNKNOWN e a
 // reconciliação consulta o site antes de repetir, a retirada confirma por status e é idempotente, e o site fora não desfaz o estado interno. Banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D259_FLUXO_PORT || '21259';
+process.env.PORT = process.env.M9D259_FLUXO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');

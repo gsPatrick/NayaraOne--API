@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D238 — seguradoras: cotação, proposta, apólice e status pelo adapter (Dispatch Service) e pelo fluxo manual, com o mesmo modelo e os mesmos eventos; proposta que
 // não repete depois de um timeout; webhook de status pela caixa de entrada. Banco descartável.
-process.env.PORT = process.env.M9D238_FLUXO_PORT || '24238';
+process.env.PORT = process.env.M9D238_FLUXO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

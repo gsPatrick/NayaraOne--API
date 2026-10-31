@@ -1,7 +1,7 @@
 'use strict';
 
 // Marco 9, M9-D235 — e-mail recebido: anexos em quarentena e antivírus, infectado descartado com evento, nenhuma tela ou regra usa o e-mail como fonte única. Banco descartável.
-process.env.PORT = process.env.M9D235_ANEXOS_PORT || '24235';
+process.env.PORT = process.env.M9D235_ANEXOS_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
