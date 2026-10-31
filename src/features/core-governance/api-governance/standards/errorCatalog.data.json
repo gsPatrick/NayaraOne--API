@@ -1309,20 +1309,6 @@
       "since": "1.1.0",
       "deprecated": false
     },
-    "GOV_STATUS_NOT_DOCUMENTED": {
-      "status": 422,
-      "message": "Status <N> não está no contrato de <rota>.",
-      "module": "api-governance",
-      "since": "1.1.0",
-      "deprecated": false
-    },
-    "GOV_TOKEN_EXPIRED": {
-      "status": 401,
-      "message": "O token expirou. Obtenha um novo token.",
-      "module": "api-governance",
-      "since": "1.0.0",
-      "deprecated": false
-    },
     "GOV_RETENTION_ALL_HELD": {
       "status": 409,
       "message": "Todos os registros desta rodada estão sob bloqueio legal (legal hold).",
@@ -1412,6 +1398,20 @@
       "message": "O tipo de dado não aceita este gatilho.",
       "module": "data-quality",
       "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_STATUS_NOT_DOCUMENTED": {
+      "status": 422,
+      "message": "Status <N> não está no contrato de <rota>.",
+      "module": "api-governance",
+      "since": "1.1.0",
+      "deprecated": false
+    },
+    "GOV_TOKEN_EXPIRED": {
+      "status": 401,
+      "message": "O token expirou. Obtenha um novo token.",
+      "module": "api-governance",
+      "since": "1.0.0",
       "deprecated": false
     },
     "GOV_TOKEN_INVALID": {
