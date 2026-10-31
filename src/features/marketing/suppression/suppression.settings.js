@@ -36,9 +36,19 @@ function validateTokenList(key, value) {
   }
 }
 
+// MKT-004 e LGPD: MARKETING sempre exige OPT_IN explícito; o administrador não pode dispensá-lo movendo a finalidade de lista.
+const ALWAYS_OPT_IN_PURPOSE = 'MARKETING';
+
+function validateNoOptInList(key, value) {
+  validateTokenList(key, value);
+  if (parseNameList(value, '').includes(ALWAYS_OPT_IN_PURPOSE)) {
+    throw mktError(422, 'MKT_PARAM_INVALID', 'Valor inválido para o parâmetro.', { key, esperado: 'a finalidade MARKETING sempre exige consentimento (OPT_IN) e não pode estar nesta lista' });
+  }
+}
+
 const SUPPRESSION_SETTINGS_SCHEMA = {
   [OPT_IN_PURPOSES_KEY]: { type: 'string', validate: validateTokenList },
-  [NO_OPT_IN_PURPOSES_KEY]: { type: 'string', validate: validateTokenList },
+  [NO_OPT_IN_PURPOSES_KEY]: { type: 'string', validate: validateNoOptInList },
   [OPT_OUT_WORDS_KEY]: { type: 'string', validate: validateTokenList },
   [SERVICE_WINDOW_KEY]: { type: 'integer', min: SERVICE_WINDOW_LIMITS.min, max: SERVICE_WINDOW_LIMITS.max },
   [COUNTRY_CODE_KEY]: {
@@ -57,11 +67,13 @@ async function readList(key, tenant, transaction) {
 
 /** Lista única de finalidades: quais exigem OPT_IN e quais não exigem (o resto é recusado). */
 async function readPurposeLists(tenant, transaction) {
-  const [requireOptIn, noOptIn] = await Promise.all([
+  const [configured, noOptInRaw] = await Promise.all([
     readList(OPT_IN_PURPOSES_KEY, tenant, transaction),
     readList(NO_OPT_IN_PURPOSES_KEY, tenant, transaction),
   ]);
-  return { requireOptIn, noOptIn: noOptIn.filter((p) => !requireOptIn.includes(p)) };
+  // Defesa na leitura (valor antigo ou gravado por fora da validação): MARKETING exige OPT_IN sempre.
+  const requireOptIn = configured.includes(ALWAYS_OPT_IN_PURPOSE) ? configured : [ALWAYS_OPT_IN_PURPOSE, ...configured];
+  return { requireOptIn, noOptIn: noOptInRaw.filter((p) => !requireOptIn.includes(p)) };
 }
 
 const readOptOutWords = (tenant, transaction) => readList(OPT_OUT_WORDS_KEY, tenant, transaction);
