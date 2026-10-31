@@ -24,20 +24,20 @@ function buildToolServices(transaction, scope = {}, { includeWrite = false } = {
     financeHealth: financeHealth(transaction),
     constructionProjects: constructionProjects(transaction),
     legalContracts: legalContracts(transaction),
-    correspondentCases: withStalledScope(correspondentCases(transaction, scope), transaction, scope), // M9-D035: a Diretoria recebe só o agregado
+    correspondentCases: withStalledScope(correspondentCases(transaction, scope), transaction, scope),
     knowledge: knowledge(transaction, scope),
     documents: documents(transaction, scope), // M9-D040: NAY Documental (OCR, classificação, extração e checagem, só leitura e sugestão)
-    atendimentoContact: contactStatus(transaction, scope), // M9-D041: NAY Atendimento (contato do contexto, anúncios públicos, encaminhamento)
-    atendimentoListings: publicListings(transaction, scope),
-    atendimentoHandoff: handoff(transaction, scope),
-    crmPipeline: crmPipeline(transaction), // M9-D035: leituras agregadas da NAY Diretoria
+    crmPipeline: crmPipeline(transaction),
     constructionPortfolio: constructionPortfolio(transaction, scope),
     inventoryRisks: inventoryRisks(transaction, scope),
     legalExpiring: legalExpiring(transaction, scope),
-    financeProjection: financeProjection(transaction, scope), // M9-D036: projeção de fluxo e anomalias da NAY Financeira
+    financeProjection: financeProjection(transaction, scope),
     constructionObras: constructionObras(transaction, scope), // M9-D037: NAY Obras (custos, diário, qualidade e pós-obra)
-    legalNay: legalNay(transaction, scope), // M9-D038: NAY Jurídica (resumo, comparação, checklist e prazos)
+    legalNay: legalNay(transaction, scope), // M9-D038: NAY Jurídica (comparação, checklist e prazos)
     analyticsBi: analyticsBi(transaction, scope), // M9-D695: leitura do BI pela NAY Diretoria (catálogo fechado, sem SQL)
+    atendimentoContact: contactStatus(transaction, scope), // M9-D041: NAY Atendimento (contato do contexto, anúncios públicos, encaminhamento)
+    atendimentoListings: publicListings(transaction, scope),
+    atendimentoHandoff: handoff(transaction, scope),
   };
   if (includeWrite) {
     services.crmTasks = crmTasks(transaction, scope);

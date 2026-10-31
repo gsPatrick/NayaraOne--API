@@ -22,8 +22,8 @@ const { presetAnswer } = require('./flow.preset');
 const { recordProgress } = require('./flow.progress');
 const { validateAndFinish } = require('./flow.finalize');
 const { finalizeFailure } = require('./flow.fail');
-const { runServerTools } = require('./flow.serverTools');
 const { cacheAnswer } = require('./flow.cache');
+const { runServerTools } = require('./flow.serverTools');
 const E = require('./flow.errors');
 
 const AWAITING_TEXT = 'A NAY preparou uma ação, mas ela só será feita depois que uma pessoa autorizada aprovar. Há uma proposta pendente de aprovação.';
