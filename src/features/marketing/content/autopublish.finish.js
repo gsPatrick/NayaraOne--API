@@ -1,6 +1,6 @@
 'use strict';
 
-const { sequelize } = require('../../../models');
+const { withSavepoint } = require('../killswitch.savepoint');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishMarketingEvent } = require('../marketing.events');
 const repo = require('./pipeline.repository');
@@ -30,8 +30,8 @@ async function revertToPending({ tenant, actor, item, version, error }, transact
 }
 
 /**
- * Depois do passo de aprovação que dispensou a pessoa (M9-D408 item 5): num savepoint, emite `marketing.content.approved` com `autopublished = true` e agenda nos
- * canais da classe. Se o agendamento falhar por regra (conexão inativa, canal sem liberação social, kill switch que ligou agora...), tudo do savepoint é desfeito e o
+ * Depois do passo de aprovação que dispensou a pessoa (M9-D408 item 5): agenda nos canais da classe (num savepoint de nome único) e, só se o agendamento vingar, emite
+ * `marketing.content.approved` com `autopublished = true`. Se o agendamento falhar por regra (conexão inativa, canal sem liberação social, kill switch que ligou agora...), o agendado é desfeito, nenhum evento nasce e o
  * conteúdo volta a PENDING_APPROVAL: nunca fica aprovado sem agenda. Erro que não é de regra (5xx) sobe. `schedule` é schedulePublication (injetado: evita ciclo).
  */
 async function finishAutopublish(ctx, result, transaction, schedule) {
@@ -40,13 +40,10 @@ async function finishAutopublish(ctx, result, transaction, schedule) {
   const { item, version } = await loadLocked(result.itemId, transaction);
   const detail = result.step.detalhes;
   try {
-    await sequelize.transaction({ transaction }, async (savepoint) => {
-      await publishMarketingEvent({
-        type: 'marketing.content.approved', tenant,
-        payload: { contentId: item.id, versionNo: version.version_no, approvedBy: item.created_by || actor || null, autopublished: true },
-      }, savepoint);
-      const when = await autopublishTime(tenant, detail.quando, now, savepoint);
-      const scheduled = await schedule({ tenant, actor, itemId: item.id, channels: detail.channels, when, now }, savepoint);
+    // Só o agendamento fica no savepoint (de nome único, padrão do projeto); o evento nasce DEPOIS que o agendamento vingou, então nunca existe evento de algo desfeito.
+    await withSavepoint(transaction, async () => {
+      const when = await autopublishTime(tenant, detail.quando, now, transaction);
+      const scheduled = await schedule({ tenant, actor, itemId: item.id, channels: detail.channels, when, now }, transaction);
       if (scheduled.approvalInvalidated) throw Object.assign(new Error('A aprovação foi invalidada ao agendar.'), { code: 'MKT_APPROVAL_INVALIDATED', statusCode: 409 });
       return scheduled;
     });
@@ -55,6 +52,10 @@ async function finishAutopublish(ctx, result, transaction, schedule) {
     await revertToPending({ tenant, actor, item, version, error }, transaction);
     return { ...result, status: 'PENDING_APPROVAL', autopublishReverted: error.code || 'ERROR' };
   }
+  await publishMarketingEvent({
+    type: 'marketing.content.approved', tenant,
+    payload: { contentId: item.id, versionNo: version.version_no, approvedBy: item.created_by || actor || null, autopublished: true },
+  }, transaction);
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: actor || null, action: 'marketing.content.autopublish', entityType: ENTITY, entityId: item.id,
     beforeJson: { status: 'COMPLIANCE_CHECKED' }, afterJson: { status: 'SCHEDULED', classId: detail.classId, channels: detail.channels }, reason: `Conteúdo da NAY autopublicado pela classe ${detail.classId}.`,
