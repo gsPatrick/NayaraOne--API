@@ -12,6 +12,7 @@ const { CLIENTS_SETTING_DEFAULTS, CLIENTS_SETTINGS_SCHEMA } = require('./api-gov
 const { UI_SETTING_DEFAULTS, UI_SETTINGS_SCHEMA } = require('./governance.ui.settings');
 const { FINOPS_SETTING_DEFAULTS, FINOPS_SETTINGS_SCHEMA } = require('./finops/finops.settings');
 const { FLAGS_SETTING_DEFAULTS, FLAGS_SETTINGS_SCHEMA } = require('./feature-flags/flags.settings');
+const { PARALLEL_SETTINGS_SCHEMA } = require('../migration-v2/parallel/parallel.settings');
 const { INGEST_SETTINGS_SCHEMA } = require('../migration-v2/ingest/ingest.settings'); // chaves migracao.*: os padrões ficam em ingest.settings (o catálogo de defaults abaixo é só de governanca.*)
 
 /**
@@ -74,6 +75,7 @@ const GOVERNANCE_SETTINGS_SCHEMA = {
   ...FINOPS_SETTINGS_SCHEMA,
   ...FLAGS_SETTINGS_SCHEMA,
   ...INGEST_SETTINGS_SCHEMA,
+  ...PARALLEL_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

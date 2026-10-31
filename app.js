@@ -22,6 +22,7 @@ const { startCalendarConflictJob } = require('./src/engines/jobs/calendarConflic
 const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQualityMergeDetectionJob');
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
 const { startMigrationRunJob } = require('./src/engines/jobs/migrationRunJob');
+const { startParallelCompareJob } = require('./src/engines/jobs/parallelCompareJob');
 const { startRetentionJob } = require('./src/engines/jobs/retentionJob');
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
@@ -236,6 +237,10 @@ if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISAB
 // Retomada das execuções QUEUED da migração v2 (M9-D900): confere a cada minuto; MIGRATION_RUN_JOB_DISABLED=true desliga no processo.
 if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_RUN_JOB_DISABLED !== 'true') {
   startMigrationRunJob();
+}
+// Comparação paralela antigo x novo (M9-D903): confere a cada minuto as janelas definidas; PARALLEL_COMPARE_JOB_DISABLED=true desliga no processo.
+if (process.env.NODE_ENV !== 'test' && process.env.PARALLEL_COMPARE_JOB_DISABLED !== 'true') {
+  startParallelCompareJob();
 }
 
 if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {

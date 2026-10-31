@@ -3511,6 +3511,47 @@
    "secret_ref",
    "source_system"
   ],
+  "governance.parallel_results": [
+   "diff_kind",
+   "entity",
+   "field",
+   "new_value_hash",
+   "old_value_hash",
+   "result",
+   "run_id",
+   "run_number",
+   "source_key",
+   "window_id"
+  ],
+  "governance.parallel_rules": [
+   "entity",
+   "enum_map",
+   "field",
+   "options",
+   "rule",
+   "tolerance",
+   "window_id"
+  ],
+  "governance.parallel_runs": [
+   "error_code",
+   "finished_at",
+   "run_number",
+   "started_at",
+   "status",
+   "summary",
+   "window_id"
+  ],
+  "governance.parallel_windows": [
+   "closed_at",
+   "created_by",
+   "ends_at",
+   "entities",
+   "interval_min",
+   "name",
+   "source_system",
+   "starts_at",
+   "status"
+  ],
   "governance.public_access_counters": [
    "hits",
    "scope_key",

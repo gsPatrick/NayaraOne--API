@@ -20,6 +20,7 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `ingest/pending.processor.js` | Processa os registros PENDING (decisão REPROCESS) no próximo lote do aplicador, sem mexer no checkpoint. |
 | `integrity/` | M9-D905. Integridade do lote: `canonical` (linha canônica: comprimento em bytes, nulo 0x00, separador 0x1F), `merkle` (folha 0x00, nó 0x01, ímpar sobe sem duplicar, chaves em ordem binária), `schema.*` (esquema por entidade, `GOV_MIG_SCHEMA_MISSING`), `leaves.repository` (folhas), `batch.verify` (raiz do destino relida do banco contra a da origem e as contagens: VERIFIED ou HASH_MISMATCH), `reconcile` (VERIFIED leva MIGRATED a RECONCILED; HASH_MISMATCH leva só as linhas divergentes à quarentena), `verify.job` (lotes APPLIED, cada um na sua transação). `ingest/batch.hash.js` calcula a raiz Merkle da origem na aplicação. |
 | `raci/` | M9-D902. RACI de cutover: dez atividades semeadas por empresa (`raci.seed`), matriz por atividade com exatamente um A e ao menos um R (`raci.service`, 422 `GOV_RACI_SINGLE_ACCOUNTABLE` para o segundo A; matriz sem A ou sem R é aceita e vira o blocker `GOV_MIG_RACI_INCOMPLETE` da Torre), papel do ator por usuário ou perfil (`raci.access`). A atividade `LAST_DELTA_LOAD` dispara `POST /migration/runs` com `lastDelta: true`. |
+| `parallel/` | M9-D903. Comparação paralela antigo x novo: `window.service` (cria a janela e valida que todo campo mapeado tem regra), `window.input`, `time.local` (datas sem fuso lidas no fuso configurado), `compare.rule` e `compare.normalize` (EXACT, MONEY em centavos com tolerância 0, DATE por dia civil, NUMERIC com tolerância por campo, ENUM_MAP, IGNORE; hash HMAC do valor normalizado), `comparator` (pareia pelo ID legado de `core.external_refs`, lê a origem pelo conector e o destino pelo `readCanonical` do alvo), `runner` (uma volta: reserva, compara, grava; execução que não termina vira FAILED), `blockers.provider` (blockers da Torre: um por diferença bloqueante em aberto), `report.service` (GET da janela com o claro recalculado na hora), `parallel.job` e `src/engines/jobs/parallelCompareJob.js` (a cada minuto). Rotas `POST /migration/parallel/windows` e `GET /migration/parallel/windows/:id` (`governance:migration:run`). |
 
 ## Parâmetros (aba Governança em /painel/configuracoes)
 
@@ -30,9 +31,13 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.lote.max_tentativas` | 3 | `batch.runner.runBatch` (falhas seguidas até ABORTED) |
 | `migracao.lote.timeout_min` | 30 | `batch.runner.releaseStale` (lote RUNNING sem fim vira FAILED) |
 | `migracao.eta.janela_lotes` | 5 | `control/eta.service` (quantos lotes entram na vazão do ETA) |
+| `migracao.paralelo.intervalo_min` | 60 | `parallel/window.service` (intervalo padrão de uma janela criada sem `intervalMin`) |
+| `migracao.paralelo.fuso` | America/Sao_Paulo | `parallel/window.service` (datas da janela sem fuso) e `parallel/runner` (regra DATE) |
+| `migracao.paralelo.timeout_min` | 30 | `parallel/runner.reserve` (execução RUNNING sem fim vira FAILED) |
 
 ## Operação
 
 - Variável de ambiente `MIGRATION_LEGACY_DB_URL`: endereço somente leitura da área `legado` (nunca em arquivo versionado).
 - `MIGRATION_RUN_JOB_DISABLED=true` desliga o job que retoma execuções QUEUED.
+- `PARALLEL_COMPARE_JOB_DISABLED=true` desliga o job da comparação paralela (M9-D903).
 - Replay: `replay.replayBatch(tenant, actor, batchId)`.
