@@ -5,12 +5,13 @@ const { readAdapterParams } = require('../../integrations/registry/adapters.para
 
 /**
  * Cliente HTTP do fluxo antigo de Seguros (sem connection): tempos de leitura e de escrita lidos dos parâmetros da empresa
- * (`integration.dispatch.timeout_ms.read` e `.write`) e UMA tentativa por chamada (M9-D216: quem repete é o Dispatch Service,
- * por classe de erro; operação que altera estado nunca é repetida às cegas, INT-005).
+ * (`integration.dispatch.timeout_ms.read` e `.write`) e as tentativas do parâmetro `integration.dispatch.call_attempts.idempotent`
+ * só para leitura e operação idempotente (cotação, pedido de token); emitir, propor e sinistro fazem UMA tentativa (M9-D216: quem repete é o
+ * Dispatch Service, por classe de erro; operação que altera estado nunca é repetida às cegas, INT-005).
  */
 async function insuranceHttpFor(tenant, transaction) {
   const params = await readAdapterParams(tenant, transaction);
-  return new IntegrationHttpClient({ providerCode: 'insurance', timeouts: { readMs: params.readTimeoutMs, writeMs: params.writeTimeoutMs }, maxAttempts: 1 });
+  return new IntegrationHttpClient({ providerCode: 'insurance', timeouts: { readMs: params.readTimeoutMs, writeMs: params.writeTimeoutMs }, maxAttempts: params.idempotentAttempts, stateChangeMaxAttempts: 1 });
 }
 
 module.exports = { insuranceHttpFor };

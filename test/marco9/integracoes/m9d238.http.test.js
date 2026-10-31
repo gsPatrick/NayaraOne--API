@@ -60,13 +60,13 @@ test('seguro_adapter_real_exige_cliente_http_com_os_tempos_da_empresa', async ()
   const tenant = await getSeedTenant();
   await withRollbackTenantTransaction(tenant, async (t) => {
     const padrao = await insuranceHttpFor(tenant, t);
-    assert.equal(padrao.defaultMaxAttempts, 1, 'o Dispatch Service repete; o adapter faz uma tentativa');
+    assert.equal(padrao.stateChangeMaxAttempts, 1, 'emissão: uma tentativa; a repetição dela é do Dispatch Service');
     await settingsService.upsertSetting('integration.dispatch.timeout_ms.read', 3000, tenant, tenant.userId, t);
     await settingsService.upsertSetting('integration.dispatch.timeout_ms.write', 4500, tenant, tenant.userId, t);
     const c = await insuranceHttpFor(tenant, t);
     assert.deepEqual(c.timeouts, { readMs: 3000, writeMs: 4500 }, 'tempos lidos dos parâmetros da empresa');
     const porto = new PortoSeguroInsuranceAdapter({ clientId: 'c', clientSecret: 's', http: c });
     assert.deepEqual(porto._http.timeouts, { readMs: 3000, writeMs: 4500 });
-    assert.equal(porto._http.defaultMaxAttempts, 1);
+    assert.equal(porto._http.stateChangeMaxAttempts, 1);
   });
 });
