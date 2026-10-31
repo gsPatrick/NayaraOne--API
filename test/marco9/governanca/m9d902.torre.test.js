@@ -4,11 +4,13 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d901Env');
+const { cleanMigration } = require('../_helpers/m9d900Clean');
 
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
-before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+before(async () => { if (env.DISPOSABLE) { await cleanMigration(); tenants = await env.loadTenants(); } });
+// a Torre lê tudo da empresa: antes e depois, neutraliza o resíduo de migração dos outros arquivos e deixa o seu
+after(async () => { if (env.DISPOSABLE) await cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 const raciBlockers = (tower) => tower.blockers.filter((b) => b.code === 'GOV_MIG_RACI_INCOMPLETE');
 

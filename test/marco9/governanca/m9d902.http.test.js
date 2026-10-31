@@ -6,6 +6,7 @@ process.env.PORT = process.env.M9D902_HTTP_TEST_PORT || '21902';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { DISPOSABLE, SKIP_DISPOSABLE, adminQuery, loadTenants } = require('../../m9d801.helpers');
+const { cleanMigration } = require('../_helpers/m9d900Clean');
 
 const ROLES = { gestor: 'CI GESTOR', leitura: 'CI LEITURA' };
 const GRANTS = { 'governance:migration:run': ['gestor', 'leitura'], 'governance:migration:admin': ['gestor'] };
@@ -27,6 +28,7 @@ before(async () => {
   const { emailFor } = require('../../../scripts/seed-ci-two-tenants');
   if (!password) { httpSkip = 'seed de dois tenants ausente.'; return; }
   tenants = await loadTenants();
+  await cleanMigration();
   await setAll(true);
   require('../../../app');
   appLoaded = true;
@@ -46,7 +48,7 @@ before(async () => {
 });
 
 after(async () => {
-  if (DISPOSABLE && tenants) await setAll(false);
+  if (DISPOSABLE && tenants) { await setAll(false); await cleanMigration(); }
   if (appLoaded) {
     await require('../../../src/models').sequelize.close().catch(() => {});
     setTimeout(() => process.exit(0), 300);
