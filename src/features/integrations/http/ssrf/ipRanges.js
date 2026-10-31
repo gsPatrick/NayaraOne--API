@@ -14,7 +14,7 @@ const V4 = [
   ['168.63.129.16', 32],
 ];
 const V6 = [
-  ['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8],
+  ['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8],
   // Metadados da AWS em IPv6 (fd00:ec2::254): está dentro de fc00::/7 (rede própria liberável), por isso entra aqui como faixa que NUNCA se libera.
   ['fd00:ec2::', 32],
 ];
@@ -27,8 +27,20 @@ const semRedePropria = new net.BlockList();
 V4.forEach(([base, bits]) => { bloqueios.addSubnet(base, bits, 'ipv4'); if (!PRIVADAS_V4.has(`${base}/${bits}`)) semRedePropria.addSubnet(base, bits, 'ipv4'); });
 V6.forEach(([base, bits]) => { bloqueios.addSubnet(base, bits, 'ipv6'); if (!PRIVADAS_V6.has(`${base}/${bits}`)) semRedePropria.addSubnet(base, bits, 'ipv6'); });
 
+/** NAT64 (64:ff9b::/96, DNS64): o IPv4 vai nos últimos 32 bits e é ele que decide; o prefixo inteiro não é bloqueado (R3-L3). null se não for desse prefixo. */
+function nat64EmbeddedV4(ip) {
+  let canonico;
+  try { canonico = new URL(`http://[${ip}]/`).hostname.slice(1, -1); } catch { return null; } // forma única: 64:ff9b::7f00:1 (as longas e as com ponto viram essa)
+  const m = /^64:ff9b::(?:([0-9a-f]{1,4}):([0-9a-f]{1,4})|([0-9a-f]{1,4})|)$/.exec(canonico);
+  if (!m) return null;
+  const hi = m[1] ? parseInt(m[1], 16) : 0; const lo = parseInt(m[2] || m[3] || '0', 16);
+  return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+}
+
 /** IPv6 "mapeado" (::ffff:a.b.c.d ou ::ffff:7f00:1) -> o IPv4 de dentro, ou null. */
 function embeddedV4(ip) {
+  const nat64 = nat64EmbeddedV4(ip);
+  if (nat64) return nat64;
   const m = /^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(ip);
   if (!m) return null;
   if (m[1]) return m[1];

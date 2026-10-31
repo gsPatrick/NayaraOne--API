@@ -15,15 +15,16 @@ const egressBlocked = (host) => new AppError('Destino não permitido para esta i
 
 /** Host (minúsculo, sem porta e sem colchetes) da URL, ou null se não for uma URL absoluta. */
 function hostOf(url) {
-  try { return new URL(String(url)).hostname.replace(/^\[|\]$/g, '').toLowerCase(); } catch { return null; }
+  try { return new URL(String(url)).hostname.replace(/^\[|\]$/g, '').toLowerCase().replace(/\.$/, ''); } catch { return null; }
 }
 
 /** 'api.x.com' casa exato; '*.x.com' casa qualquer subdomínio (não o próprio x.com). */
 function matchHost(pattern, host) {
-  const p = String(pattern || '').trim().toLowerCase();
-  if (!p || !host) return false;
-  if (p.startsWith('*.')) return host.endsWith(p.slice(1)) && host.length > p.length - 1;
-  return host === p;
+  const p = String(pattern || '').trim().toLowerCase().replace(/\.$/, '');
+  const h = String(host || '').replace(/\.$/, ''); // nome absoluto (ponto final) é o mesmo host (R3-L1)
+  if (!p || !h) return false;
+  if (p.startsWith('*.')) return h.endsWith(p.slice(1)) && h.length > p.length - 1;
+  return h === p;
 }
 
 /** enforce em PRODUCTION e HOMOLOG, log em SANDBOX e DEV; `mode` explícito (parâmetro integration.egress.mode) vale sobre o padrão. */
