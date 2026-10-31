@@ -26,9 +26,12 @@ async function runSource(tenant, actor, run, sourceRow, settings) {
   const summary = { source: sourceRow.source_system, entity: sourceRow.entity, mode: sourceRow.mode, batches: 0, deletedBySource: 0, totals: emptyTotals(), error: null };
   let connector = null;
   try {
-    const source = await openTenantTx(tenant, (transaction) => sources.get(tenant, sourceRow.id, transaction));
+    const source = await openTenantTx(tenant, async (transaction) => {
+      const found = await sources.get(tenant, sourceRow.id, transaction);
+      await loadSchema(tenant, found.entity, transaction); // sem esquema canônico não se abre lote (M9-D905: 422 GOV_MIG_SCHEMA_MISSING)
+      return found;
+    });
     assertMode(source.mode);
-    await openTenantTx(tenant, (transaction) => loadSchema(tenant, source.entity, transaction)); // sem esquema canônico não se abre lote (M9-D905: 422 GOV_MIG_SCHEMA_MISSING)
     const add = (res) => { summary.batches += 1; for (const key of COUNT_KEYS) summary.totals[key] += res.counts[key] || 0; };
     for (const res of (await processPending(tenant, actor, run.id, source, settings)).results) add(res); // PENDING devolvido pela decisão REPROCESS (M9-D901)
     connector = await connectors.open(source);

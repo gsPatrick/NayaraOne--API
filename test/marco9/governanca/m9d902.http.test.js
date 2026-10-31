@@ -82,12 +82,14 @@ test('m9d902 PUT /migration/raci grava a matriz e recusa o segundo A com 422', a
 
 test('m9d902 editar o RACI exige governance:migration:admin', async (t) => {
   if (httpSkip) return t.skip(httpSkip);
-  const res = await call('leitura', 'PUT', '/migration/raci', { activity: 'GO_NO_GO', entries: [{ role: 'TI', raci: 'R' }] });
+  const count = async () => (await adminQuery("SELECT count(*)::int AS n FROM governance.cutover_raci WHERE company_id = $1 AND activity_code = 'GO_NO_GO'", [tenants.A.companyId])).rows[0].n;
+  const before = await count();
+  const res = await call('leitura', 'PUT', '/migration/raci', { activity: 'GO_NO_GO', entries: [{ role: 'QA-M9-SEM-PERMISSAO', raci: 'R' }, { role: 'QA-M9-SEM-PERMISSAO-2', raci: 'I' }] });
   assert.equal(res.status, 403);
   assert.equal(res.body.error.code, 'PERMISSION_DENIED');
   assert.equal(res.body.error.message, 'Permissão ausente: governance:migration:admin.');
-  const rows = (await adminQuery("SELECT count(*)::int AS n FROM governance.cutover_raci WHERE company_id = $1 AND activity_code = 'GO_NO_GO'", [tenants.A.companyId])).rows;
-  assert.equal(rows[0].n, 0, 'nada foi gravado');
+  assert.equal(await count(), before, 'nada foi gravado');
+  assert.equal((await adminQuery("SELECT count(*)::int AS n FROM governance.cutover_raci WHERE company_id = $1 AND role LIKE 'QA-M9-SEM-PERMISSAO%'", [tenants.A.companyId])).rows[0].n, 0);
 });
 
 test('m9d902 a atividade "última carga delta" dispara a execução com lastDelta true', async (t) => {

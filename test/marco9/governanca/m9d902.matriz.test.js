@@ -71,20 +71,24 @@ test('m9d902 sem A ou sem R a matriz é aceita e fica marcada como incompleta', 
 test('m9d902 mudança de RACI auditada com antes e depois', { skip: skip() }, async () => {
   await run(async (tx) => {
     const u1 = await env.newUser(tenants.A, tx);
-    await put(tenants.A, tx, 'SECTOR_ACTIVATION', [{ userId: u1.id, raci: 'A' }, { role: 'TI', raci: 'R' }]);
+    const marker = `QA-M9-${env.suffix()}`.slice(0, 40);
+    const previous = (await raci.getMatrix(tenants.A, tx)).activities.find((a) => a.code === 'SECTOR_ACTIVATION').entries;
+    await put(tenants.A, tx, 'SECTOR_ACTIVATION', [{ userId: u1.id, raci: 'A' }, { role: marker, raci: 'R' }]);
     await put(tenants.A, tx, 'SECTOR_ACTIVATION', [{ userId: u1.id, raci: 'A' }, { role: 'OPERACIONAL', raci: 'R' }]);
-    const rows = await env.query("SELECT before_json, after_json, user_id FROM audit.audit_log WHERE action = 'migration.raci.changed' AND after_json->>'activity' = 'SECTOR_ACTIVATION' ORDER BY occurred_at, id", {}, tx);
-    assert.equal(rows.length, 2);
-    assert.deepEqual(rows[0].before_json.entries, []);
-    assert.deepEqual(rows[1].before_json.entries.map((e) => e.role || 'usuario').sort(), ['TI', 'usuario']);
-    assert.deepEqual(rows[1].after_json.entries.map((e) => e.role || 'usuario').sort(), ['OPERACIONAL', 'usuario']);
-    assert.equal(rows[1].user_id, tenants.A.userId);
+    const rows = await env.query("SELECT before_json, after_json, user_id FROM audit.audit_log WHERE action = 'migration.raci.changed' AND after_json->>'activity' = 'SECTOR_ACTIVATION' AND company_id = :companyId AND user_id = :userId AND occurred_at >= now() - interval '1 minute' ORDER BY occurred_at, id", { companyId: tenants.A.companyId, userId: tenants.A.userId }, tx);
+    const mine = rows.slice(-2);
+    assert.equal(mine.length, 2);
+    assert.deepEqual(mine[0].before_json.entries, previous.map(({ userId, role, raci: r }) => ({ userId, role, raci: r })), 'o antes é a matriz que existia');
+    assert.deepEqual(mine[1].before_json.entries.map((e) => e.role || 'usuario').sort(), [marker, 'usuario'].sort());
+    assert.deepEqual(mine[1].after_json.entries.map((e) => e.role || 'usuario').sort(), ['OPERACIONAL', 'usuario']);
+    assert.equal(mine[1].user_id, tenants.A.userId);
   });
 });
 
 test('m9d902 entradas inválidas são recusadas sem gravar', { skip: skip() }, async () => {
   await run(async (tx) => {
     const u1 = await env.newUser(tenants.A, tx);
+    const goBefore = (await raci.getMatrix(tenants.A, tx)).activities.find((a) => a.code === 'GO_NO_GO').entries;
     const bad = async (activity, entries) => (await failure(put(tenants.A, tx, activity, entries)));
     assert.equal((await bad('NAO_EXISTE', [])).code, 'GOV_NOT_FOUND');
     assert.equal((await bad('GO_NO_GO', [{ userId: u1.id, raci: 'X' }])).code, 'GOV_RACI_INVALID');
@@ -94,7 +98,7 @@ test('m9d902 entradas inválidas são recusadas sem gravar', { skip: skip() }, a
     assert.equal((await bad('GO_NO_GO', [{ role: 'TI', raci: 'R' }, { role: 'ti', raci: 'R' }])).code, 'GOV_RACI_INVALID');
     assert.equal((await failure(raci.replaceActivity(tenants.A, actor(tenants.A), { activity: 'GO_NO_GO' }, tx))).code, 'GOV_RACI_INVALID');
     const { activities } = await raci.getMatrix(tenants.A, tx);
-    assert.equal(activities.find((a) => a.code === 'GO_NO_GO').entries.length, 0);
+    assert.deepEqual(activities.find((a) => a.code === 'GO_NO_GO').entries, goBefore, 'nenhuma recusa mexeu na matriz');
   });
 });
 

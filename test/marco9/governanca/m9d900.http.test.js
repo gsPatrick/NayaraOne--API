@@ -60,7 +60,7 @@ const call = async (who, method, path, body) => {
   return { status: res.status, body: await res.json() };
 };
 const waitRun = async (runId) => {
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 400; i += 1) { // até 60 s: a execução sem filtro percorre todas as fontes da empresa, que se acumulam no banco descartável
      
     const [row] = (await adminQuery('SELECT status, summary FROM governance.mig_runs WHERE id = $1', [runId])).rows;
     if (row && ['SUCCEEDED', 'FAILED'].includes(row.status)) return row;

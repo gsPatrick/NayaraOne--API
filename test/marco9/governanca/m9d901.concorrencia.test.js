@@ -51,8 +51,8 @@ test('m9d901 duas decisões ao mesmo tempo no mesmo registro: uma vence e a outr
   const [rec] = await env.recordsOf(legacy.system);
   const actor = { userId: A().userId, roles: [] };
   const out = await Promise.all([
-    env.fail(env.resolve(A(), actor, rec.id, { decision: 'EXCLUDE', reason: 'A' })),
-    env.fail(env.resolve(A(), actor, rec.id, { decision: 'SEND_TO_REVIEW', reason: 'B' })),
+    env.fail(env.resolve(A(), actor, rec.id, { decision: 'REPROCESS', reason: 'A' })),
+    env.fail(env.resolve(A(), actor, rec.id, { decision: 'SEND_TO_REVIEW', reason: 'B' })), // depois de qualquer das duas, a outra deixa de caber no estado
   ]);
   assert.equal(out.filter(Boolean).length, 1);
   assert.equal(out.find(Boolean).code, 'GOV_MIG_RECORD_INVALID_TRANSITION');
