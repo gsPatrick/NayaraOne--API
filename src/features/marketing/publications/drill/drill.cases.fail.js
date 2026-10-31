@@ -3,7 +3,7 @@
 const { scheduledJobs, setParam, jobRow, resultRows } = require('./drill.fixture');
 const { prepare, cycle, posts, settle, seconds } = require('./drill.cycle');
 const { query } = require('./drill.env');
-const { CHANNEL_META } = require('../adapters/channels');
+const { resolveChannelConnection } = require('../schedule/schedule.connection');
 const { RETRY_AFTER_KEY } = require('../adapters/channel.settings');
 const { isOutboundBlocked } = require('../../killswitch.state');
 
@@ -51,12 +51,13 @@ async function authRevoked(t, env) {
   await prepare(t, env);
   const s = await scheduledJobs(t, env, env.channel, 1);
   const jobId = s.jobs[0];
+  // a conexão que o envio usa, pelo id: o ensaio não depende de outras conexões do mesmo provedor que já existam na empresa (hermético)
+  const used = await resolveChannelConnection({ tenant: env.tenant, actor: null, channel: env.channel, transaction: t });
   await cycle(t, env, { now: s.now, scenarios: ['AUTH_REVOKED'] });
   const first = await jobRow(t, jobId);
   await cycle(t, env, { now: seconds(s.now, 3600) });
   const later = await jobRow(t, jobId);
-  const provider = CHANNEL_META[env.channel].sandboxProvider;
-  const [conn] = await query(t, 'SELECT status FROM integration.connections WHERE company_id = :c AND provider_code = :p ORDER BY created_at DESC LIMIT 1', { c: env.tenant.companyId, p: provider });
+  const [conn] = await query(t, 'SELECT status FROM integration.connections WHERE id = :id AND company_id = :c', { id: used.id, c: env.tenant.companyId });
   const blocked = await isOutboundBlocked(env.tenant, { channel: env.channel }, t);
   const [alert] = await query(t, "SELECT count(*)::int AS n FROM audit.audit_log WHERE company_id = :c AND action = 'marketing.channel.compromised'", { c: env.tenant.companyId });
   const ok = first.status === 'FAILED' && first.last_error_code === 'MKT_PROVIDER_AUTH_FAILED' && later.attempts === 1 && posts(env) === 0 && conn && conn.status === 'COMPROMISED' && blocked.blocked === true && alert.n >= 1;

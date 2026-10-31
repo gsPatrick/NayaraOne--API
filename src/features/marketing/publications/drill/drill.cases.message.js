@@ -5,7 +5,6 @@ const messaging = require('../messaging');
 const { IntegrationConnection } = require('../../../../models');
 const health = require('../../../integrations/health');
 const { resolveChannelConnection } = require('../schedule/schedule.connection');
-const { CHANNEL_META } = require('../adapters/channels');
 const { SLOW_MS_KEY } = require('../adapters/channel.settings');
 const { KEYS: WORKER } = require('../worker/worker.settings');
 const { isOutboundBlocked } = require('../../killswitch.state');
@@ -121,9 +120,11 @@ async function rejected(t, env) {
 async function authRevoked(t, env) {
   await prepare(t, env);
   const p = await person(t, env);
+  // a conexão que o envio usa, pelo id: o ensaio não depende de outras conexões do mesmo provedor que já existam na empresa (hermético)
+  const used = await resolveChannelConnection({ tenant: env.tenant, actor: null, channel: env.channel, transaction: t });
   const first = await send(t, env, p, newKey(), { scenario: 'AUTH_REVOKED' });
   const blocked = await isOutboundBlocked(env.tenant, { channel: env.channel }, t);
-  const [conn] = await query(t, 'SELECT status FROM integration.connections WHERE company_id = :c AND provider_code = :p ORDER BY created_at DESC LIMIT 1', { c: env.tenant.companyId, p: CHANNEL_META[env.channel].sandboxProvider });
+  const [conn] = await query(t, 'SELECT status FROM integration.connections WHERE id = :id AND company_id = :c', { id: used.id, c: env.tenant.companyId });
   const [alert] = await query(t, "SELECT count(*)::int AS n FROM audit.audit_log WHERE company_id = :c AND action = 'marketing.channel.compromised'", { c: env.tenant.companyId });
   const next = await send(t, env, p, newKey()).then(() => 'saiu', (e) => e.code);
   const ok = first.status === 'FAILED' && blocked.blocked === true && Boolean(conn) && conn.status === 'COMPROMISED' && alert.n >= 1 && next === 'MKT_CHANNEL_COMPROMISED' && posts(env) === 0;

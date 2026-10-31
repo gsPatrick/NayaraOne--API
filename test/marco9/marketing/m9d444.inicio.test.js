@@ -64,15 +64,18 @@ test('ordem_de_execucao_existe_sem_impasse_com_as_adiantadas', () => {
 });
 
 test('script_imprime_9_sprints_11_passos_44_demandas_e_12_adiantadas', () => {
-  const r = K.rodar(K.pastaDemandas());
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /44 demandas, 9 sprints, 11 passos, 12 dependências adiantadas/);
-  assert.equal((r.stdout.match(/^M[1-9] /gm) || []).length, 9);
-  assert.equal((r.stdout.match(/^passo \d+ /gm) || []).length, 11);
-  assert.equal((r.stdout.match(/^adiantada /gm) || []).length, 12);
-  const json = JSON.parse(K.rodar(K.pastaDemandas(), ['--json']).stdout);
-  assert.equal(json.ok, true);
-  assert.equal(json.total, 44);
+  const c = K.copiarDemandas(); // estado do portão fixado na cópia: independe do andamento real das demandas
+  try {
+    const r = K.rodar(c.raiz);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /44 demandas, 9 sprints, 11 passos, 12 dependências adiantadas/);
+    assert.equal((r.stdout.match(/^M[1-9] /gm) || []).length, 9);
+    assert.equal((r.stdout.match(/^passo \d+ /gm) || []).length, 11);
+    assert.equal((r.stdout.match(/^adiantada /gm) || []).length, 12);
+    const json = JSON.parse(K.rodar(c.raiz, ['--json']).stdout);
+    assert.equal(json.ok, true);
+    assert.equal(json.total, 44);
+  } finally { c.limpar(); }
 });
 
 test('script_reprova_aresta_inventada_demanda_fora_do_mapa_e_inicio_fora_de_ordem', () => {

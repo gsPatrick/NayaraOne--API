@@ -31,13 +31,19 @@ function comStatus(demandas, padrao, especificos = {}, { fora = 'verificada' } =
   return copia;
 }
 
-/** Cópia da pasta de demandas (só marco-9) num diretório temporário, para o script ler com --demandas. */
+/**
+ * Cópia da pasta de demandas (só marco-9) num diretório temporário, para o script ler com --demandas. O estado do portão é do TESTE, não do andamento real do
+ * projeto (M9-D438, hermeticidade): na cópia toda demanda está `verificada`, para o resultado não mudar quando outra demanda é reaberta ou está em execução.
+ */
 function copiarDemandas() {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d444-'));
   const dest = path.join(raiz, 'marco-9');
   fs.mkdirSync(dest);
   const origem = path.join(path.dirname(fonte.CADERNO), 'demandas', 'marco-9');
-  for (const f of fs.readdirSync(origem)) if (f.endsWith('.md') && !f.startsWith('_')) fs.copyFileSync(path.join(origem, f), path.join(dest, f));
+  for (const f of fs.readdirSync(origem)) {
+    if (!f.endsWith('.md') || f.startsWith('_')) continue;
+    fs.writeFileSync(path.join(dest, f), fs.readFileSync(path.join(origem, f), 'utf8').replace(/^\| Status \|[^|\n]*\|/m, '| Status | verificada |'));
+  }
   return { raiz, dest, limpar: () => fs.rmSync(raiz, { recursive: true, force: true }) };
 }
 

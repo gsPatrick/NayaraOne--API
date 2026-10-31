@@ -58,19 +58,20 @@ test('autochecagem_do_guia_16_tem_as_4_respostas_com_evidencia', () => {
 
 test('script_pronto_para_lab_lista_o_dod_e_reprova_com_item_pendente', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d444-lab-'));
+  const c = K.copiarDemandas(); // estado das demandas fixado na cópia (hermético)
   try {
     const relatorio = (status) => JSON.stringify({ estagios: Array.from({ length: 14 }, (_, i) => ({ numero: i + 1, status })) });
     fs.writeFileSync(path.join(dir, 'esteira-marketing.json'), relatorio('VERDE'));
     // hoje a M9-D444 ainda não é `verificada`; os 16 itens independem dela
-    const r = K.rodar(K.pastaDemandas(), ['--pronto-para-lab', '--esteira', dir]);
+    const r = K.rodar(c.raiz, ['--pronto-para-lab', '--esteira', dir]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal((r.stdout.match(/^DoD verde /gm) || []).length, 16);
     assert.equal((r.stdout.match(/^§16 /gm) || []).length, 4);
     assert.match(r.stdout, /PRONTO PARA LAB; produção liberada canal por canal/);
     fs.writeFileSync(path.join(dir, 'esteira-marketing.json'), relatorio('VERMELHO'));
-    const vermelho = K.rodar(K.pastaDemandas(), ['--pronto-para-lab', '--esteira', dir]);
+    const vermelho = K.rodar(c.raiz, ['--pronto-para-lab', '--esteira', dir]);
     assert.equal(vermelho.status, 1);
     assert.match(vermelho.stdout, /DoD PENDENTE testes e failure drills verdes/);
     assert.match(vermelho.stdout, /O bloco não é declarado PRONTO PARA LAB enquanto houver item pendente\./);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); c.limpar(); }
 });
