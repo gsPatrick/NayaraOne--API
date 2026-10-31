@@ -51,11 +51,12 @@ function declaracoes(texto, nome) {
   return achadas;
 }
 
-/** Problemas da estrutura do mapa (vazio = coerente com o livro): 10 itens numerados de 1 a 10, cada um com ao menos um teste, nomes únicos. */
+/** Problemas da estrutura do mapa (vazio = coerente com o livro): 10 itens (ou `itens_do_livro`) numerados de 1 a 10, cada um com ao menos um teste, nomes únicos. */
 function problemasDoMapa(mapa) {
   const problemas = [];
   const itens = Array.isArray(mapa && mapa.itens) ? mapa.itens : [];
-  if (itens.length !== ITENS_DO_LIVRO) problemas.push(`o mapa lista ${itens.length} itens; o livro tem ${ITENS_DO_LIVRO}`);
+  const esperados = Number.isInteger(mapa && mapa.itens_do_livro) ? mapa.itens_do_livro : ITENS_DO_LIVRO; // o mapa do bloco F (M9-D940) declara os 9 testes dele
+  if (itens.length !== esperados) problemas.push(`o mapa lista ${itens.length} itens; o livro tem ${esperados}`);
   itens.forEach((it, i) => {
     if (it.n !== i + 1) problemas.push(`o item na posição ${i + 1} está numerado ${it.n}`);
     if (!Array.isArray(it.testes) || !it.testes.length) problemas.push(`o item ${it.n} não tem teste`);

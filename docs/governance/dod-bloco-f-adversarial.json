@@ -1,0 +1,16 @@
+{
+  "descricao": "Os nove testes do livro do bloco F (Caderno, Testes/DoD), com o nome exato do teste que os prova. M9-D940: scripts/checkDodBlocoF.js reprova (GOV_ADVERSARIAL_MISSING) se faltar, se estiver skip/todo ou se a lista deixar de ter 9 itens.",
+  "itens_do_livro": 9,
+  "raizes": ["test", "../Maturacao/indice-documental/testes"],
+  "itens": [
+    { "n": 1, "frase": "CDC replay", "demanda": "M9-D900", "testes": ["m9d900 CDC replay produz o mesmo estado e o mesmo hash"] },
+    { "n": 2, "frase": "Control Tower totals", "demanda": "M9-D901", "testes": ["m9d901 Control Tower totals fecham com o total"] },
+    { "n": 3, "frase": "batch checksum", "demanda": "M9-D905", "testes": ["m9d905 batch checksum idêntico gera raízes iguais"] },
+    { "n": 4, "frase": "parallel compare", "demanda": "M9-D903", "testes": ["m9d903 parallel compare detecta diferença de 1 centavo"] },
+    { "n": 5, "frase": "legal hold", "demanda": "M9-D912", "testes": ["m9d912 legal hold sempre prevalece sobre a retenção"] },
+    { "n": 6, "frase": "retention dry-run", "demanda": "M9-D911", "testes": ["m9d911 retention dry-run não altera nenhum dado"] },
+    { "n": 7, "frase": "field masking", "demanda": "M9-D915", "testes": ["m9d915 field masking em tela, API e exportação"] },
+    { "n": 8, "frase": "AI access classification", "demanda": "M9-D915", "testes": ["m9d915 AI access classification retira campos com ai_allowed falso"] },
+    { "n": 9, "frase": "obsolete document excluded", "demanda": "M9-D931", "testes": ["m9d931 obsolete document excluded do Caderno Final"] }
+  ]
+}

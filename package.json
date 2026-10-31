@@ -45,6 +45,7 @@
     "sync:flags": "node scripts/syncFlagsRegistry.js",
     "check:flags": "node scripts/checkFeatureFlags.js",
     "check:adversarial-governance": "node scripts/checkAdversarialMap.js",
+    "check:dod-f": "node scripts/checkDodBlocoF.js",
     "ci:governanca": "bash scripts/ci-governanca.sh",
     "sync:lineage": "node scripts/withDisposableDb.js -- node scripts/syncLineageRegistry.js",
     "sync:classification": "node scripts/withDisposableDb.js -- node scripts/syncClassification.js",

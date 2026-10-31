@@ -2,7 +2,7 @@
 # Esteira de governança (M9-D890, Guia §8 "Testes/CI"): um controle por chamada, o mesmo comando no CI e na máquina de quem desenvolve.
 #
 #   bash scripts/ci-governanca.sh <controle>
-#   controles: calendar | lineage | dlp | bcp | openapi | flags | finops | accessibility | aud | adversarial
+#   controles: calendar | lineage | dlp | bcp | openapi | flags | finops | accessibility | aud | adversarial | dod-f
 #
 # calendar/dlp/bcp/finops/aud rodam os testes do bloco num cluster PostgreSQL DESCARTÁVEL (scripts/withDisposableDb.js), nunca no banco compartilhado de desenvolvimento. Nesse banco NENHUM teste pode ficar
 # pulado: o relatório JUnit é conferido e qualquer `skipped` reprova (GOV_CI_TEST_SKIPPED). JUnit e resumo ficam em docs/evidencias/ci/governanca/ (o CI os publica como artefato).
@@ -57,5 +57,7 @@ case "$CONTROLE" in
   aud)           testes_com_banco aud test/marco9/governanca/m9d809.aud*.test.js ;;
   adversarial)   node scripts/checkAdversarialMap.js --json "$SAIDA/adversarial-map.json" | tee "$SAIDA/adversarial-map.txt"
                  resumo "- adversarial: $(head -1 "$SAIDA/adversarial-map.txt")" ;;
-  *) echo "uso: bash scripts/ci-governanca.sh calendar|lineage|dlp|bcp|openapi|flags|finops|accessibility|aud|adversarial" >&2; exit 2 ;;
+  dod-f)         # M9-D940: o fechamento do bloco F (sobe o próprio banco descartável); etapa final do CI do marco
+                 npm run check:dod-f && resumo "- dod-f: bloco F fechado ($SAIDA/../dod-bloco-f.json)" ;;
+  *) echo "uso: bash scripts/ci-governanca.sh calendar|lineage|dlp|bcp|openapi|flags|finops|accessibility|aud|adversarial|dod-f" >&2; exit 2 ;;
 esac

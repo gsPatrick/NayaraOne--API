@@ -1,0 +1,26 @@
+{
+  "descricao": "Configuração do fechamento do bloco F (M9-D940): onde ficam as provas e quais suítes valem. scripts/checkDodBlocoF.js lê este arquivo; nada disso fica fixo no código.",
+  "saida": "docs/evidencias/ci/dod-bloco-f.json",
+  "dry3": { "arquivo": "docs/governance/dry3-report.json" },
+  "registry": {
+    "suites": [
+      "test/marco9/governanca/m9d910.*.test.js",
+      "test/marco9/governanca/m9d911.*.test.js",
+      "test/marco9/governanca/m9d912.*.test.js",
+      "test/marco9/governanca/m9d915.*.test.js"
+    ]
+  },
+  "lineage": { "registro": "docs/governance/lineage-registry.json", "mapa": "docs/governance/migration-field-map.json" },
+  "dlp": {
+    "suites": [
+      "test/marco9/governanca/m9d82[0-5].*.test.js",
+      "test/marco9/governanca/m9d920.*.test.js"
+    ]
+  },
+  "manifest": {
+    "script": "../Maturacao/indice-documental/verificar-manifest.js",
+    "manifest": "../Maturacao/indice-documental/saida/manifest.json",
+    "args": []
+  },
+  "adversarial": { "mapa": "docs/governance/dod-bloco-f-adversarial.json" }
+}
