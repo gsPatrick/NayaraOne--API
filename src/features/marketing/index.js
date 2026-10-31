@@ -27,6 +27,7 @@ automations.seeds.registerUrlGuard(tracking.urls.assertAllowedUrl); // a regra �
 
 // M9-D433: a regra única de URL externa (8 critérios) vale para o link rastreável, e a sequência de conta comprometida roda quando o kill switch do canal chega com `compromised:true`.
 tracking.urls.registerExternalUrlValidator(security.trackingUrlValidator);
+security.registerChannelPorts({ resolveChannelAdapter: publications.adapters.resolveChannelAdapter, familyOf: (channel) => publications.adapters.CHANNEL_META[channel].family }); // a segurança não importa as publicações (sem ciclo)
 killSwitch.registerCompromisedHandler(security.handleCompromised);
 
 const areas = { content, campaigns, automations, publications, tracking, suppression };

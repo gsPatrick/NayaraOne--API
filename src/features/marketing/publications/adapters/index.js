@@ -28,6 +28,7 @@ const settings = require('./channel.settings');
 const social = require('./social');
 
 installChannelAdapters();
+require('../../killswitch.probe').registerChannelPort({ sendToChannel, sandboxRecordCount: sandboxStore.countRecords }); // o probe do kill switch envia por aqui, sem importar esta fachada
 
 module.exports = {
   ...channels,

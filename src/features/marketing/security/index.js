@@ -12,6 +12,8 @@ const { handleCompromised } = require('./compromise.service');
 const { isAuthRevoked, reportAuthRevoked } = require('./compromise.signal');
 const { recipientExportGuard, looksLikeExport } = require('./exportGuard');
 const { REASONS } = require('./urlRules');
+const { registerChannelPorts } = require('./compromise.ports');
+const { markPublicPayload, isPublicPayload, assertPublicPayload } = require('./publicPayload');
 
 /** Validador do link rastreável (tracking.registerExternalUrlValidator): { ok, reasons } no contrato do D431. */
 async function trackingUrlValidator(rawUrl, ctx) {
@@ -21,5 +23,5 @@ async function trackingUrlValidator(rawUrl, ctx) {
 
 module.exports = {
   validateExternalUrl, extractUrls, stripUrls, findDisallowedUrls, assertUrlsAllowed, trackingUrlValidator, URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig, URL_REASONS: REASONS,
-  handleCompromised, isAuthRevoked, reportAuthRevoked, recipientExportGuard, looksLikeExport,
+  handleCompromised, registerChannelPorts, markPublicPayload, isPublicPayload, assertPublicPayload, isAuthRevoked, reportAuthRevoked, recipientExportGuard, looksLikeExport,
 };

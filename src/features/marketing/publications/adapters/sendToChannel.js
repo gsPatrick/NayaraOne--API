@@ -6,7 +6,7 @@ const { resolveChannelAdapter } = require('./release/channelAccess');
 const { decideOnResult } = require('./contingency/channelContingency');
 const gate = require('./circuit.gate');
 const { assertOutboundAllowed } = require('../../killswitch.state');
-const { assertPublicPayload } = require('../../security/publicPayload');
+const { assertPublicPayload, isAuthRevoked, reportAuthRevoked } = require('../../security');
 
 /** Resposta sintética do sandbox que passou do tempo máximo: resultado incerto (UNKNOWN), nunca falha presumida (Guia §9). */
 const timeoutResult = (adapter, operation, idempotencyKey) => adapter.result(operation, idempotencyKey, {
@@ -60,8 +60,7 @@ async function sendToChannel(channelName, message, { tenant, transaction, idempo
     throw err;
   }
   if (selfManaged) await gate.report(handle, { kind: 'RESULT', result }, { tenant, transaction, now });
-  const security = require('../../security'); // carga tardia: a área de segurança importa os adapters
-  if (security.isAuthRevoked(result.error)) await security.reportAuthRevoked({ tenant, channel, transaction, now });
+  if (isAuthRevoked(result.error)) await reportAuthRevoked({ tenant, channel, transaction, now });
   return { ...result, contingency: decideOnResult(channel, result) };
 }
 

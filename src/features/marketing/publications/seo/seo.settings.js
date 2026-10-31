@@ -10,13 +10,12 @@ const { mktError } = require('../../marketing.errors');
 const POLICY_SOLD_KEY = 'marketing.seo.politica_vendido';
 const DAYS_SOLD_KEY = 'marketing.seo.dias_selo_vendido';
 const DAYS_REMOVED_KEY = 'marketing.seo.dias_removido';
-const BASE_URL_KEY = 'marketing.seo.url_base';
 const CACHE_SECONDS_KEY = 'marketing.seo.cache_s';
 
 const POLICY_SELO = 'SELO_E_REDIRECT';
 const POLICY_IMMEDIATE = 'REDIRECT_IMEDIATO';
 const SOLD_POLICIES = Object.freeze([POLICY_SELO, POLICY_IMMEDIATE]);
-const NO_BASE_URL = 'nenhuma';
+const { BASE_URL_KEY, NO_BASE_URL } = require('../../marketing.domains');
 
 const SEO_SETTING_DEFAULTS = Object.freeze({
   [POLICY_SOLD_KEY]: POLICY_SELO,

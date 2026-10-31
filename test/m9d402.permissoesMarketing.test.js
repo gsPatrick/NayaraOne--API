@@ -21,6 +21,9 @@ const MKT_DIR = path.join(API_ROOT, 'src', 'features', 'marketing');
 const MIGRATION_FILE = '20260101000760-marketing-permissions-and-roles.js';
 
 const AREAS = ['content', 'campaigns', 'automations', 'publications', 'tracking', 'suppression'];
+// Área de apoio acrescentada pela M9-D433 (segurança e antifraude): sem rotas próprias; as 6 do Guia §2 continuam com service, controller, routes e index.
+const SUPPORT_AREAS = ['security'];
+const ALL_AREAS = [...AREAS, ...SUPPORT_AREAS];
 const PERMISSIONS_12 = [
   'marketing:content:read', 'marketing:content:write', 'marketing:content:approve', 'marketing:content:publish',
   'marketing:template:manage', 'marketing:campaign:manage', 'marketing:automation:manage', 'marketing:automation:publish',
@@ -166,9 +169,10 @@ function listJsFiles(dir) {
   return out;
 }
 
-test('m9d402 estrutura de pastas igual ao Guia §2 (6 áreas, cada uma com service, controller, routes e index)', () => {
+test('m9d402 estrutura de pastas igual ao Guia §2 (6 áreas, cada uma com service, controller, routes e index) mais a área de apoio security (D433)', () => {
   const dirs = fs.readdirSync(MKT_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
-  assert.deepEqual(dirs, [...AREAS].sort());
+  assert.deepEqual(dirs, [...ALL_AREAS].sort());
+  for (const area of SUPPORT_AREAS) assert.ok(fs.existsSync(path.join(MKT_DIR, area, 'index.js')), `${area} sem index.js`);
   for (const area of AREAS) {
     const files = fs.readdirSync(path.join(MKT_DIR, area));
     for (const required of ['index.js', `${area}.service.js`, `${area}.controller.js`, `${area}.routes.js`]) {
@@ -189,8 +193,8 @@ test('m9d402 modulo_nao_tem_import_circular: nenhuma área importa outra por cam
     for (const m of text.matchAll(/require\('(\.[^']+)'\)/g)) {
       const resolved = require.resolve(path.resolve(path.dirname(file), m[1]));
       if (resolved.startsWith(MKT_DIR)) deps.push(resolved);
-      const ownArea = AREAS.find((a) => file.startsWith(path.join(MKT_DIR, a) + path.sep));
-      const targetArea = AREAS.find((a) => resolved.startsWith(path.join(MKT_DIR, a) + path.sep));
+      const ownArea = ALL_AREAS.find((a) => file.startsWith(path.join(MKT_DIR, a) + path.sep));
+      const targetArea = ALL_AREAS.find((a) => resolved.startsWith(path.join(MKT_DIR, a) + path.sep));
       if (ownArea && targetArea && ownArea !== targetArea) {
         assert.equal(path.basename(resolved), 'index.js', `${path.relative(API_ROOT, file)} importa ${m[1]} por caminho interno de outra área`);
       }

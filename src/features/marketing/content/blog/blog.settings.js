@@ -12,10 +12,9 @@ const { mktError } = require('../../marketing.errors');
  *  - aviso_ia: frase do aviso de apoio de inteligência artificial (M9-D426 item 4), exigida no artigo gerado pela NAY (DI-D427-4).
  */
 const SOURCES_KEY = 'marketing.blog.fontes_permitidas';
-const OWN_DOMAINS_KEY = 'marketing.blog.dominios_empresa';
 const MIN_WORDS_KEY = 'marketing.blog.min_palavras';
 const AI_NOTICE_KEY = 'marketing.blog.aviso_ia';
-const NONE = 'nenhum';
+const { OWN_DOMAINS_KEY, NO_DOMAINS: NONE, parseDomains } = require('../../marketing.domains');
 
 const BLOG_SETTING_DEFAULTS = Object.freeze({
   [SOURCES_KEY]: 'gov.br, ibge.gov.br, bcb.gov.br, caixa.gov.br, cnj.jus.br',
@@ -28,13 +27,6 @@ const BLOG_SETTING_DEFAULTS = Object.freeze({
 const getSetting = (...args) => require('../../../settings/settings.service').getSetting(...args);
 
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
-
-/** "gov.br, IBGE.gov.br" -> ['gov.br','ibge.gov.br'] (minúsculas, sem vazios nem repetidos; "nenhum" = lista vazia). */
-function parseDomains(text) {
-  const raw = String(text === undefined || text === null ? '' : text).trim();
-  if (!raw || raw.toLowerCase() === NONE) return [];
-  return [...new Set(raw.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean))];
-}
 
 function validateDomains({ allowNone }) {
   return (key, value) => {

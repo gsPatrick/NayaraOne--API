@@ -3,7 +3,7 @@
 const logger = require('../../../utils/logger');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const integrations = require('../../integrations');
-const { CHANNEL_META } = require('../publications/adapters/channels');
+const { ports } = require('./compromise.ports');
 
 const AUDIT_ACTION = 'marketing.channel.compromised';
 
@@ -14,12 +14,11 @@ const AUDIT_ACTION = 'marketing.channel.compromised';
  * o resultado volta com `handled: false` e o motivo, e quem chamou mantém o canal travado. Marcar de novo devolve o mesmo estado (conexão já COMPROMISED não é tocada).
  */
 async function handleCompromised({ tenant, channel, reason, actorUserId, transaction }) {
-  const meta = CHANNEL_META[channel];
+  const family = ports().familyOf(channel);
   let revoked = false;
   let error = null;
   try {
-    const adapters = require('../publications/adapters'); // carga tardia: a fachada de canais importa conteúdo, que importa esta área
-    const adapter = await adapters.resolveChannelAdapter(channel, { tenant, transaction, mode: 'AUTO' });
+    const adapter = await ports().resolveChannelAdapter(channel, { tenant, transaction, mode: 'AUTO' });
     const out = await adapter.revoke({ channel });
     revoked = Boolean(out && out.revoked === true);
     if (!revoked) error = 'MKT_REVOKE_NOT_CONFIRMED';
@@ -28,7 +27,7 @@ async function handleCompromised({ tenant, channel, reason, actorUserId, transac
     logger.error({ err: err && err.message, channel }, 'marketing.channel.compromised.revoke_failed');
   }
   const connections = await integrations.compromiseDomainConnections({
-    companyId: tenant.companyId, groupId: tenant.groupId, userId: actorUserId || null, domain: meta.family, reason, transaction,
+    companyId: tenant.companyId, groupId: tenant.groupId, userId: actorUserId || null, domain: family, reason, transaction,
   });
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: actorUserId || null, action: AUDIT_ACTION, entityType: 'marketing.channel', entityId: null,

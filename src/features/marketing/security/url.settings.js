@@ -1,6 +1,7 @@
 'use strict';
 
 const { mktError } = require('../marketing.errors');
+const { BASE_URL_KEY, NO_BASE_URL, OWN_DOMAINS_KEY, NO_DOMAINS, parseDomains } = require('../marketing.domains');
 
 /**
  * M9-D433 — parâmetros da validação de URL externa (Caderno §14). Dicionário fail-closed em SETTINGS_SCHEMA (settings.service.js faz o spread) + getSetting.
@@ -76,11 +77,9 @@ const intOr = (value, fallback, min) => (Number.isInteger(Number(value)) && Numb
 
 /** Os domínios da empresa: a URL base do site (SEO) e os domínios próprios do blog. Fonte única, sem repetir parâmetro. */
 async function companyDomains(tenant, transaction) {
-  const { BASE_URL_KEY, SEO_SETTING_DEFAULTS } = require('../publications/seo/seo.settings');
-  const { OWN_DOMAINS_KEY, BLOG_SETTING_DEFAULTS, parseDomains } = require('../content/blog/blog.settings');
   const [base, own] = await Promise.all([
-    getSetting(BASE_URL_KEY, tenant, transaction, SEO_SETTING_DEFAULTS[BASE_URL_KEY]),
-    getSetting(OWN_DOMAINS_KEY, tenant, transaction, BLOG_SETTING_DEFAULTS[OWN_DOMAINS_KEY]),
+    getSetting(BASE_URL_KEY, tenant, transaction, NO_BASE_URL),
+    getSetting(OWN_DOMAINS_KEY, tenant, transaction, NO_DOMAINS),
   ]);
   let host = null;
   try { host = new URL(String(base)).hostname.toLowerCase(); } catch (err) { host = null; }

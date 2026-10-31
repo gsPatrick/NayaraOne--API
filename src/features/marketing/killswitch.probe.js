@@ -7,6 +7,13 @@ const { registerProbe } = require('../core-governance/feature-flags/kill-switch/
 const { GLOBAL_KEY, PROBE_NAME, PROBE_VERSION } = require('./killswitch.constants');
 const { readKillState, isOutboundBlocked } = require('./killswitch.state');
 
+/** Porta do envio por canal: quem monta os adapters (publications/adapters/index.js) registra { sendToChannel, sandboxRecordCount }; o kill switch não importa os adapters (que o consultam em cada envio). */
+let channelPort = null;
+function registerChannelPort(port) {
+  if (port !== null && (!port || typeof port.sendToChannel !== 'function' || typeof port.sandboxRecordCount !== 'function')) throw new TypeError('A porta de canal do probe precisa de sendToChannel e sandboxRecordCount.');
+  channelPort = port;
+}
+
 const ROLLBACK = Symbol('killswitch.probe.rollback');
 const FALLBACK_CHANNEL = 'EMAIL';
 const channelOfKey = (key) => (key === GLOBAL_KEY ? null : key.split('.')[2].toUpperCase());
@@ -46,7 +53,8 @@ async function coverCampaignAndAutomation(tenant, ownerUserId, transaction) {
  */
 async function run({ tenant, flag, transaction }) {
   const channel = channelOfKey(flag.key) || FALLBACK_CHANNEL;
-  const adapters = require('./publications/adapters'); // carga tardia: a fachada de canais importa este módulo
+  const adapters = channelPort;
+  if (!adapters) throw new Error('Probe do kill switch sem a porta de canal registrada (carregue publications/adapters).');
   const before = adapters.sandboxRecordCount(tenant.companyId, channel);
   const decision = await isOutboundBlocked(tenant, { channel }, transaction);
   const expectedScope = flag.key === GLOBAL_KEY ? 'GLOBAL' : 'CHANNEL';
@@ -68,4 +76,4 @@ const probe = registerProbe({
   description: 'Com o kill switch acionado: estado bloqueado, envio pelo canal recusado (zero envios) e campanha e automação de teste bloqueadas.',
 });
 
-module.exports = { probe, run };
+module.exports = { probe, run, registerChannelPort };

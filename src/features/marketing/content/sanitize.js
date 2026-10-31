@@ -3,7 +3,7 @@
 const { PUBLIC_FIELDS_DEFAULTS, PUBLIC_FIELDS_ALLOWLIST_KEY, PUBLIC_FIELDS_FEATURES_KEY, parseList } = require('./publicFields.settings');
 const { mktError } = require('../marketing.errors');
 const { SOURCES } = require('../../../shared/redaction');
-const { markPublicPayload } = require('../security/publicPayload');
+const { markPublicPayload } = require('../security');
 
 /**
  * M9-D403 — sanitizePublicFields(payload, policy, options): função PURA e determinística (não muta a entrada, sem relógio nem
