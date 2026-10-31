@@ -9,6 +9,16 @@ const { NEEDS_COMPENSATION, BLOCKER } = require('./rollback.constants');
  * Outras demandas acrescentam as suas com `register(nome, fn)`, `fn(tenant, transaction) => [{ code, detail }]` (a M9-D908 registra a simulação de rollback no DRY3).
  */
 const registered = new Map();
+
+/**
+ * Verificações que o GO sempre exige (M9-D907 L6): carregadas pelo próprio `collect`, sem depender de quem importou o quê antes, e, se uma delas não estiver registrada,
+ * o GO é recusado (falha fechada) em vez de aceitar sem checar. Cada entrada: nome registrado e módulo que o registra (carga tardia, evita ciclo).
+ */
+const REQUIRED = [{ name: 'dry3-rollback-simulation', load: () => require('../dryrun/dry.readiness').install() }];
+const MISSING = 'GOV_CUTOVER_CHECK_MISSING';
+function loadRequired() {
+  for (const r of REQUIRED) if (!registered.has(r.name)) r.load();
+}
 function register(name, fn) {
   if (typeof fn !== 'function') throw new Error('Verificação de prontidão deve ser uma função.');
   registered.set(name, fn);
@@ -28,11 +38,22 @@ async function typesWithoutPlan(tenant, transaction) {
 }
 
 async function collect(tenant, transaction) {
+  loadRequired();
   const gaps = (await typesWithoutPlan(tenant, transaction)).map((t) => ({ code: BLOCKER.COMPENSATION_REQUIRED, detail: { type: t.code, missing: t.missing } }));
+  for (const r of REQUIRED) {
+    if (!registered.has(r.name)) gaps.push({ code: MISSING, detail: { check: r.name } });
+  }
   for (const fn of registered.values()) {
     gaps.push(...await fn(tenant, transaction));
   }
   return gaps;
 }
 
-module.exports = { register, typesWithoutPlan, collect };
+/** Só para teste: tira uma verificação do registro e devolve a função, para recolocá-la depois. */
+function unregister(name) {
+  const fn = registered.get(name);
+  registered.delete(name);
+  return fn;
+}
+
+module.exports = { register, unregister, loadRequired, registeredNames: () => [...registered.keys()], typesWithoutPlan, collect, REQUIRED_CHECKS: REQUIRED.map((r) => r.name), MISSING };

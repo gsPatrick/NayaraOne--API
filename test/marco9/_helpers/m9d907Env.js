@@ -1,7 +1,12 @@
 'use strict';
 
 // Apoio dos testes M9-D907 com banco (não é teste). Rodar SEMPRE em banco descartável (scripts/withDisposableDb.js). Estes testes COMMITAM dados; `cleanup` apaga o que a demanda grava.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const env = require('./m9d904Env');
+const dry = require('../../../src/features/migration-v2/dryrun');
+const { exportReport } = require('../../../src/features/migration-v2/dryrun/dry.export');
 const types = require('../../../src/features/migration-v2/rollback/types.service');
 const report = require('../../../src/features/migration-v2/rollback/report.service');
 const items = require('../../../src/features/migration-v2/rollback/items.service');
@@ -16,7 +21,11 @@ const tx = (tenant, fn) => openTenantTx(tenant, (t) => fn(tenantOf(tenant), t));
 
 const listTypes = (tenant) => tx(tenant, (tn, t) => types.listTypes(tn, t));
 const putTypes = (tenant, list) => tx(tenant, (tn, t) => types.putTypes(tn, actor(tenant), { types: list }, t));
-const decide = (tenant, decision, extra = {}) => tx(tenant, (tn, t) => cutover.decide(tn, actor(tenant), { decision, ...extra }, t));
+// O GO exige o relatório do DRY3 exportado e assinado (M9-D908; sem efeito colateral de import, M9-D907 L6): os testes que não tratam desse pré-requisito recebem um relatório verde, a menos que já tenham escolhido o seu.
+const decide = async (tenant, decision, extra = {}) => {
+  if (decision === 'GO' && !process.env.MIGRATION_DRY3_REPORT_PATH) await markRollbackSimulated(tenant, true);
+  return tx(tenant, (tn, t) => cutover.decide(tn, actor(tenant), { decision, ...extra }, t));
+};
 const getReport = (tenant, query = {}) => tx(tenant, (tn, t) => report.getReport(tn, query, t));
 const resolveItem = (tenant, id, body = {}) => tx(tenant, (tn, t) => items.resolveItem(tn, actor(tenant), id, body, t));
 const record = (tenant, op) => tx(tenant, (tn, t) => logService.recordExternalOp(tn, op, t));
@@ -44,12 +53,22 @@ const logRows = async (tenant, where = 'true') => (await adminQuery(`SELECT * FR
 const itemRows = async (tenant) => (await adminQuery('SELECT * FROM governance.rollback_items WHERE company_id = $1 ORDER BY created_at, id', [tenant.companyId])).rows;
 const fail = (promise) => promise.then(() => null, (err) => ({ status: err.statusCode, code: err.code, message: err.message, details: err.details }));
 
-/** Relatório DRY3 concluído com o critério da simulação de rollback (M9-D908): o GO pela API exige esse pré-requisito. Apagado pelo `cleanup`. */
+/**
+ * Relatório DRY3 exportado e assinado com o critério da simulação de rollback (M9-D908): o GO só reconhece o relatório do arquivo exportado, não o banco do ensaio. Usa um arquivo
+ * temporário e uma chave de assinatura só de teste (nunca a de um ambiente real).
+ */
 async function markRollbackSimulated(tenant, ok = true) {
-  await adminQuery(
-    `INSERT INTO governance.mig_dry_reports (group_id, company_id, status, conclusion, criteria, finished_at) VALUES ($1, $2, 'COMPLETED', 'APROVADO', $3::jsonb, now())`,
-    [tenant.groupId, tenant.companyId, JSON.stringify({ rollback_simulated: { ok } })]
-  );
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d907-'));
+  process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
+  process.env.MIGRATION_DRY3_SIGNING_KEY = 'chave-de-teste-nao-usar-em-producao';
+  dry.install();
+  exportReport({ id: `qa-m9-${tenant.companyId}`, conclusion: 'APROVADO', criteria: { rollback_simulated: { ok } }, commit: 'qa-m9-commit' });
+}
+
+/** Apaga o relatório exportado do teste e solta o caminho (o GO volta a não encontrar relatório). */
+function dropExportedReport() {
+  if (process.env.MIGRATION_DRY3_REPORT_PATH) fs.rmSync(process.env.MIGRATION_DRY3_REPORT_PATH, { force: true });
+  delete process.env.MIGRATION_DRY3_REPORT_PATH;
 }
 
 /** Apaga o que a demanda gravou na empresa (itens, registro, decisões, tipos, parâmetro, envios e conexões de teste, blockers). */
@@ -65,6 +84,7 @@ async function cleanup(tenant) {
   await adminQuery("ALTER TABLE integration.dispatches DISABLE TRIGGER USER").catch(() => {});
   await adminQuery("DELETE FROM integration.dispatches WHERE company_id = $1 AND idempotency_key LIKE 'qa907-%'", [c]).catch(() => {});
   await adminQuery("ALTER TABLE integration.dispatches ENABLE TRIGGER USER").catch(() => {});
+  dropExportedReport();
   await env.cleanup(tenant);
 }
 
