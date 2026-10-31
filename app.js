@@ -68,13 +68,12 @@ const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyt
 const { startAnalyticsMaterializedViewJob } = require('./src/engines/jobs/analyticsMaterializedViewJob');
 const { startAnalyticsSnapshotJob } = require('./src/engines/jobs/analyticsSnapshotJob');
 const { startAnalyticsAlertEvaluationJob } = require('./src/engines/jobs/analyticsAlertEvaluationJob');
+const { startAnalyticsBriefJob } = require('./src/engines/jobs/analyticsBriefJob');
 const { startAnalyticsExportWorkerJob } = require('./src/engines/jobs/analyticsExportWorkerJob');
 const { startAnalyticsExportCleanupJob } = require('./src/engines/jobs/analyticsExportCleanupJob');
 const { startAnalyticsTechProbeJob } = require('./src/engines/jobs/analyticsTechProbeJob');
-const { startAnalyticsBriefJob } = require('./src/engines/jobs/analyticsBriefJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
-const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 const { startIntegrationDispatchWorkerJob } = require('./src/engines/jobs/integrationDispatchWorkerJob');
 const { startIntegrationWebhookWorkerJob } = require('./src/engines/jobs/integrationWebhookWorkerJob');
 const { startIntegrationReconcileJob } = require('./src/engines/jobs/integrationReconcileJob');
@@ -82,6 +81,7 @@ const { startIntegrationSyncJob } = require('./src/engines/jobs/integrationSyncJ
 const { startEmailInboundPollJob } = require('./src/engines/jobs/emailInboundPollJob');
 const { startPortalUnpublishReconcileJob } = require('./src/engines/jobs/portalUnpublishReconcileJob');
 const { startIntegrationDispatchOrphanJob } = require('./src/engines/jobs/integrationDispatchOrphanJob');
+const { runMigrationsOnBoot } = require('./src/utils/runMigrationsOnBoot');
 
 const app = express();
 
@@ -164,14 +164,14 @@ require('./src/features/integrations/secrets').assertSecretStoreAtBoot();
 const registeredAdapters = require('./src/features/integrations/adapters').registerBuiltInAdapters();
 logger.info({ adapters: registeredAdapters }, `Adapters de integração registrados: ${registeredAdapters.length}`);
 
-if (process.env.NODE_ENV !== 'test') {
 // M9-D214: o Dispatch Service é quem recebe do outbox os eventos com destino externo (1 evento = 1 envio PENDING, na transação do despacho).
+require('./src/features/integrations/dispatch').installOutboxEnqueuer();
 // M9-D218: as tentativas de envio alimentam a saúde dos fornecedores (chamadas, latência, limite, credencial, fila morta e cota).
 require('./src/features/integrations/dispatch').registerDispatchHealthSource();
 // M9-D224: a caixa de entrada de webhooks completa a saúde (fila de eventos e fila morta).
 require('./src/features/integrations/health/inboxSample').registerInboxHealthSource();
-require('./src/features/integrations/dispatch').installOutboxEnqueuer();
 
+if (process.env.NODE_ENV !== 'test') {
   runMigrationsOnBoot();
   // M9-D016: o registro de tools da NAY confere cada definição contra core.permissions; definição inválida derruba o boot.
   require('./src/features/ai/tools').initToolRegistry()
@@ -222,19 +222,19 @@ if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_BACKFILL_JOB_DISABLE
   startCalendarBackfillJob();
 }
 
-// Conciliação do pagamento emergencial do BCP com o extrato (M9-D833): casa as linhas e alerta o prazo vencido (a cada 30 minutos por padrão).
-if (process.env.NODE_ENV !== 'test' && process.env.BCP_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
-  startBcpPaymentReconciliationJob();
+// Alertas do Calendário (M9-D802): itens vencidos (diário, 06:00 de Brasília) e conflito de agenda (a cada 15 min); ambos leem só calendar_items.
+if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_OVERDUE_JOB_DISABLED !== 'true') {
+  startCalendarOverdueJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_CONFLICT_JOB_DISABLED !== 'true') {
+  startCalendarConflictJob();
 }
 
-// Padrões de API (M9-D843): limpeza das janelas do contador de requisições e das chaves de idempotência vencidas; catálogo de códigos de erro sincronizado no banco.
-if (process.env.NODE_ENV !== 'test' && process.env.RATE_LIMIT_CLEANUP_JOB_DISABLED !== 'true') {
-  startRateLimitCleanupJob();
+// Detecção noturna de cadastros duplicados de Person, Property e Supplier para a fila do steward (M9-D805), na hora configurada (padrão 03:00 de Brasília).
+if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_MERGE_JOB_DISABLED !== 'true') {
+  startDataQualityMergeDetectionJob();
 }
-if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISABLED !== 'true') {
-  startIdempotencyCleanupJob();
-}
-// Deprecação de API (M9-D841): avaliação diária às 07:00 de Brasília (vira SUNSET e publica api.consumer.deprecation_due).
+
 // Retomada das execuções QUEUED da migração v2 (M9-D900): confere a cada minuto; MIGRATION_RUN_JOB_DISABLED=true desliga no processo.
 if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_RUN_JOB_DISABLED !== 'true') {
   startMigrationRunJob();
@@ -251,35 +251,14 @@ if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_CLOCK_JOB_DISABLED 
   startMigrationClockJob();
 }
 
-if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {
-  startApiDeprecationJob();
-}
-if (process.env.NODE_ENV !== 'test') {
-  require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()
-    .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
+// Varredura noturna da qualidade de cadastro (M9-D806): nota por cadastro, issues e aviso dos domínios sem responsável, na hora configurada (padrão 03:00 de Brasília).
+if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_SCAN_JOB_DISABLED !== 'true') {
+  startDataQualityScanJob();
 }
 
 // Marco 9, M9-D911: retenção de dados (simulação diária às 03:30 e aplicação automática só das políticas técnicas de integração).
 if (process.env.NODE_ENV !== 'test' && process.env.RETENTION_JOB_DISABLED !== 'true') {
   startRetentionJob();
-}
-
-// Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
-// Alertas do Calendário (M9-D802): itens vencidos (diário, 06:00 de Brasília) e conflito de agenda (a cada 15 min); ambos leem só calendar_items.
-if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_OVERDUE_JOB_DISABLED !== 'true') {
-  startCalendarOverdueJob();
-}
-if (process.env.NODE_ENV !== 'test' && process.env.CALENDAR_CONFLICT_JOB_DISABLED !== 'true') {
-  startCalendarConflictJob();
-}
-// Detecção noturna de cadastros duplicados de Person, Property e Supplier para a fila do steward (M9-D805), na hora configurada (padrão 03:00 de Brasília).
-if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_MERGE_JOB_DISABLED !== 'true') {
-  startDataQualityMergeDetectionJob();
-}
-
-// Varredura noturna da qualidade de cadastro (M9-D806): nota por cadastro, issues e aviso dos domínios sem responsável, na hora configurada (padrão 03:00 de Brasília).
-if (process.env.NODE_ENV !== 'test' && process.env.DATA_QUALITY_SCAN_JOB_DISABLED !== 'true') {
-  startDataQualityScanJob();
 }
 
 // Coletores do cost ledger do FinOps (M9-D860): fecha as horas de IA, mensageria e egress a cada 10 minutos e mede o armazenamento uma vez por dia (padrão 02:00 de Brasília).
@@ -320,6 +299,28 @@ if (process.env.NODE_ENV !== 'test' && process.env.DLP_SHARE_EXPIRY_JOB_DISABLED
   startShareLinkExpiryJob();
 }
 
+// Conciliação do pagamento emergencial do BCP com o extrato (M9-D833): casa as linhas e alerta o prazo vencido (a cada 30 minutos por padrão).
+if (process.env.NODE_ENV !== 'test' && process.env.BCP_PAYMENT_RECONCILIATION_JOB_DISABLED !== 'true') {
+  startBcpPaymentReconciliationJob();
+}
+
+// Padrões de API (M9-D843): limpeza das janelas do contador de requisições e das chaves de idempotência vencidas; catálogo de códigos de erro sincronizado no banco.
+if (process.env.NODE_ENV !== 'test' && process.env.RATE_LIMIT_CLEANUP_JOB_DISABLED !== 'true') {
+  startRateLimitCleanupJob();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.IDEMPOTENCY_CLEANUP_JOB_DISABLED !== 'true') {
+  startIdempotencyCleanupJob();
+}
+// Deprecação de API (M9-D841): avaliação diária às 07:00 de Brasília (vira SUNSET e publica api.consumer.deprecation_due).
+if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {
+  startApiDeprecationJob();
+}
+if (process.env.NODE_ENV !== 'test') {
+  require('./src/features/core-governance/api-governance/standards/errorCatalog.sync').syncErrorCatalog()
+    .catch((err) => logger.error({ err: err.message }, 'errorCatalog.sync.failed'));
+}
+
+// Despachante do Outbox (TEC-06/TEC-07) — existia desde antes mas nunca era chamado por nada;
 // todo evento gravado ficava PENDING para sempre. Roda a cada 30s dentro do próprio processo.
 if (process.env.NODE_ENV !== 'test' && process.env.OUTBOX_DISPATCHER_JOB_DISABLED !== 'true') {
   startOutboxDispatcherJob();
@@ -448,10 +449,10 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAnalyticsMaterializedViewJob(); // M9-D698: refresh concorrente das materialized views do BI
   startAnalyticsSnapshotJob(); // M9-D609: snapshot diário dos KPIs (D-1, 00:30 de São Paulo) com catch-up
   startAnalyticsAlertEvaluationJob(); // M9-D691: alert engine (a cada analytics.alert.intervalo_avaliacao_min e depois de cada refresh de read model)
+  startAnalyticsBriefJob(); // M9-D693: briefing executivo da NAY Diretoria (diário 06:30 e semanal segunda 07:00, horário de São Paulo)
   startAnalyticsExportWorkerJob(); // M9-D701: fila de exportações do BI (QUEUED -> RUNNING -> READY), um worker por job com FOR UPDATE SKIP LOCKED
   startAnalyticsExportCleanupJob(); // M9-D701: apaga o arquivo vencido (EXPIRED) e dá como falho o job preso em andamento
   startAnalyticsTechProbeJob(); // M9-D628: sondas de saúde (API, banco, fila, storage) a cada analytics.tec.intervalo_sonda_s
-  startAnalyticsBriefJob(); // M9-D693: briefing executivo da NAY Diretoria (diário 06:30 e semanal segunda 07:00, horário de São Paulo)
 }
 
 // Marco 9, M9-D223 — teste de saúde ativo de cada fornecedor com connection ACTIVE, a cada integration.health.check_interval_s.
@@ -467,6 +468,11 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_ALERT_JOB_DISABLE
 // Marco 9, M9-D248 — auditoria diária das dependências de produção (SDK_VULNERABILITY em integration_errors e aviso).
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DEPENDENCY_AUDIT_JOB_DISABLED !== 'true') {
   startDependencyAuditJob();
+}
+
+// Marco 9, M9-D214 — worker dos envios a fornecedores (PENDING/RETRY_WAIT -> SENDING -> SUBMITTED/CONFIRMED), a cada integration.dispatch.worker_interval_s.
+if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DISPATCH_WORKER_JOB_DISABLED !== 'true') {
+  startIntegrationDispatchWorkerJob();
 }
 
 // Marco 9, M9-D212 — worker da caixa de entrada de webhooks (RECEIVED/FAILED -> evento interno no outbox ou fila morta), a cada integration.webhook.worker_interval_s.
@@ -489,11 +495,6 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_SYNC_JOB_DISABLED
 
 // Marco 9, M9-D244 — retenção das tabelas de integração por integration.purge_expired() (o runtime não tem DELETE).
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RETENTION_JOB_DISABLED !== 'true') {
-// Marco 9, M9-D214 — worker dos envios a fornecedores (PENDING/RETRY_WAIT -> SENDING -> SUBMITTED/CONFIRMED), a cada integration.dispatch.worker_interval_s.
-if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_DISPATCH_WORKER_JOB_DISABLED !== 'true') {
-  startIntegrationDispatchWorkerJob();
-}
-
   startIntegrationRetentionJob();
 }
 
