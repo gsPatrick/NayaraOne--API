@@ -190,10 +190,16 @@ async function login({ email, password, companyId }, meta = {}) {
       requiredForSensitiveRoles && !user.mfaEnabled && hasSensitivePermission({ roles: claims.roles, permissions: claims.permissions })
     );
 
+    // M9-D904: o sistema (antigo ou novo) em que este usuário opera é decidido aqui, pela flag do setor (canary da migração).
+    const migration = await require('../migration-v2/canary/canary.login').routeForLogin(
+      { groupId: membership.groupId, companyId: membership.companyId, userId: user.id }, user.id, transaction
+    );
+
     return {
       accessToken,
       refreshToken,
       sessionId: session.id,
+      migration,
       // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 6, 2026-10-06): login nunca
       // devolvia mfaEnabled — o front (app/painel/perfil/page.js) só inicializa o badge de
       // segurança a partir deste objeto cacheado no login, nunca refaz fetch depois. Resultado:

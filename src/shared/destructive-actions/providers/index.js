@@ -16,6 +16,7 @@ const { mergeProvider, bulkProvider } = require('../../../features/core-governan
 const { retentionApplyProvider } = require('../../../features/core-governance/data-quality/retention.impact');
 const { legalHoldReleaseProvider } = require('../../../features/core-governance/data-quality/legalHold.impact');
 const { activateProvider, restoreProvider } = require('../../../features/core-governance/feature-flags/kill-switch/killSwitch.impact');
+const { canaryRollbackProvider } = require('../../../features/migration-v2/canary/canary.impact');
 
 /** Provedores das ações do inventário com rota no código (M9-D852). As linhas sem rota registram o seu provedor na demanda dona. */
 const PROVIDERS = {
@@ -38,6 +39,7 @@ const PROVIDERS = {
   'legal_hold.release': legalHoldReleaseProvider,
   'kill_switch.activate': activateProvider,
   'kill_switch.restore': restoreProvider,
+  'migration.canary.rollback': canaryRollbackProvider,
 };
 for (const [key, fn] of Object.entries(PROVIDERS)) registerProvider(key, fn);
 

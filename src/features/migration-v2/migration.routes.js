@@ -9,6 +9,7 @@ const raciController = require('./raci/raci.controller');
 const controlController = require('./control/control.controller');
 const parallelController = require('./parallel/parallel.controller');
 const { govError } = require('../core-governance/governance.errors');
+const { registerCanaryRoutes } = require('./canary/canary.routes');
 
 const RUN_PERMISSION = 'governance:migration:run';
 const ADMIN_PERMISSION = 'governance:migration:admin';
@@ -25,6 +26,7 @@ function withMessage(permission) {
 }
 const requireRunPermission = withMessage(RUN_PERMISSION);
 const requireAdminPermission = withMessage(ADMIN_PERMISSION);
+const requireFlagsPermission = withMessage('governance:flags:manage');
 
 /**
  * Rotas da migração v2 (M9-D900 a M9-D905). A operação é por API: sem tela. Os lotes são aplicados e verificados pelo job. Autenticação e tenant valem só sob /migration.
@@ -38,5 +40,6 @@ router.get('/migration/raci', requireRunPermission, catchAsync(raciController.ge
 router.put('/migration/raci', requireAdminPermission, catchAsync(raciController.putMatrix));
 router.post('/migration/parallel/windows', requireRunPermission, catchAsync(parallelController.createWindow));
 router.get('/migration/parallel/windows/:id', requireRunPermission, catchAsync(parallelController.getWindow));
+registerCanaryRoutes(router, { requireRun: requireRunPermission, requireFlags: requireFlagsPermission }); // M9-D904: avançar e reverter exigem as duas permissões juntas
 
 module.exports = router;
