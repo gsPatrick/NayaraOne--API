@@ -8,6 +8,7 @@ const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d259Env');
 const { CANARY, CANARY_PRICE } = require('../_helpers/intReadModel');
+const { temPontoExato } = require('../_helpers/pontoExato');
 const { enqueue } = require('../../../src/features/integrations/dispatch/enqueue/dispatch.service');
 const settingsService = require('../../../src/features/settings/settings.service');
 const { SiteAdapter } = require('../../../src/features/integrations/providers/site/site.port');
@@ -16,7 +17,7 @@ const { comTenant, store, ctxDe } = env;
 let tenant;
 let outro;
 let canal;
-const MARCADORES = [CANARY, CANARY_PRICE, 'Rua Interna', '80000-000', 'Zacarias', String(-25.4284), String(-49.2733)];
+const MARCADORES = [CANARY, CANARY_PRICE, 'Rua Interna', '80000-000', 'Zacarias'];
 
 before(async () => { ({ tenant, outro } = await env.carregarTenants()); env.useTempSecretStore(); await new Promise((r) => { setTimeout(r, 300); }); });
 beforeEach(async () => { store.reset(); canal = await env.conectar(tenant, { config: { sandbox_publish_delay_ms: 3600000 } }); });
@@ -31,6 +32,7 @@ test('site_payload_somente_allowlist_do_read_model', async () => {
   const envio = await env.envio(tenant, r.dispatchId);
   const gravado = JSON.stringify(envio.payload_snapshot);
   MARCADORES.forEach((m) => assert.ok(!gravado.includes(m), `o payload gravado contém ${m}`));
+  assert.ok(!temPontoExato(envio.payload_snapshot), 'o payload gravado contém o ponto exato do imóvel');
   assert.ok(gravado.includes('Batel'), 'o dado público está lá');
   assert.equal(envio.purpose, 'SITE_PUBLICATION');
   // Só campos da allowlist do port (mapper de saída da D219): nada fora dela chega ao adapter.
@@ -41,6 +43,7 @@ test('site_payload_somente_allowlist_do_read_model', async () => {
   // O que o sandbox do site guardou também não tem nada interno.
   const noSite = JSON.stringify(store.pagesOf(canal.conn.id));
   MARCADORES.forEach((m) => assert.ok(!noSite.includes(m), `o site recebeu ${m}`));
+  assert.ok(!temPontoExato(store.pagesOf(canal.conn.id)), 'o site recebeu o ponto exato do imóvel');
   assert.equal(envio.payload_snapshot.pageKey, `property:${envio.payload_snapshot.slug}:pt-BR`);
   assert.match(envio.payload_snapshot.contentHash, /^[0-9a-f]{64}$/);
 });

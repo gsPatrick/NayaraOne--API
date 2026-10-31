@@ -10,6 +10,7 @@ const { invoke } = require('../../../src/features/integrations/registry/adapterI
 const { createPropertyPublicationDispatch, OPERATIONS } = require('../../../src/features/integrations/publication');
 const { Property } = require('../../../src/models');
 const { criarImovel, CANARY, CANARY_PRICE } = require('../_helpers/intReadModel');
+const { temPontoExato } = require('../_helpers/pontoExato');
 
 let tenant;
 let imovel;
@@ -38,7 +39,7 @@ function gravador(Port) {
   return { adapter: new Gravador(null), recebidos };
 }
 
-const MARCADORES = () => [CANARY, CANARY_PRICE, 'Rua Interna', '80000-000', 'Zacarias', String(-25.4284), String(-49.2733)];
+const MARCADORES = () => [CANARY, CANARY_PRICE, 'Rua Interna', '80000-000', 'Zacarias'];
 
 test('portal_payload_canario_sem_vazamento', async () => {
   const passos = [];
@@ -48,6 +49,7 @@ test('portal_payload_canario_sem_vazamento', async () => {
       const { dispatch } = await publicar(con, imovel.id, operation, { externalResourceId: 'ext-77' });
       const gravado = JSON.stringify((await ler(tenant, dispatch.id)).payload_snapshot);
       MARCADORES().forEach((m) => assert.ok(!gravado.includes(m), `${domain}.${operation}: payload gravado contém ${m}`));
+      assert.ok(!temPontoExato((await ler(tenant, dispatch.id)).payload_snapshot), `${domain}.${operation}: payload gravado contém o ponto exato`);
       assert.ok(gravado.includes('Batel'), 'o dado público está lá');
 
       const { adapter, recebidos } = gravador(PORTS[domain]);
@@ -55,6 +57,7 @@ test('portal_payload_canario_sem_vazamento', async () => {
       assert.equal(recebidos.length, 1, `${domain}.${operation}: o adapter recebeu o pedido`);
       const visto = JSON.stringify(recebidos[0].request);
       MARCADORES().forEach((m) => assert.ok(!visto.includes(m), `${domain}.${operation}: o adapter recebeu ${m}`));
+      assert.ok(!temPontoExato(recebidos[0].request), `${domain}.${operation}: o adapter recebeu o ponto exato`);
       passos.push(`${domain}.${operation}`);
     }
   }
