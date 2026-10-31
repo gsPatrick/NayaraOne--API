@@ -53,7 +53,7 @@ test('toda_forma_de_url_no_texto_e_reconhecida_e_reprovada', async () => {
     assert.deepEqual(await motivos('ftp://evil.com/a'), ['ESQUEMA_PROIBIDO']);
     assert.ok((await motivos('https:/evil.com/x')).includes('URL_MAL_FORMADA'));
     assert.ok((await motivos('www.evil.com')).includes('SO_HTTPS'));
-    assert.ok((await motivos('www.nayara.com.br/x')).includes('SO_HTTPS'), 'domínio permitido sem https:// também não vale');
+    assert.deepEqual(await security.findDisallowedUrls('Acesse www.nayara.com.br/x', ctx(t)), [], 'o domínio da empresa sem https:// só não traz o esquema: vale (DI-D433-8)');
   });
 });
 
@@ -69,9 +69,10 @@ test('texto_comum_nao_vira_url_e_o_https_permitido_passa', async () => {
 test('terminacoes_reconhecidas_vem_do_parametro', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
-    assert.equal((await security.findDisallowedUrls('veja evil.zzz/x', ctx(t))).length, 0);
+    assert.equal((await security.findDisallowedUrls('veja evil.zzz', ctx(t))).length, 0);
+    assert.equal((await security.findDisallowedUrls('veja evil.zzz/x', ctx(t))).length, 1, 'com caminho, qualquer terminação vale sem consultar a lista');
     await set(t, 'marketing.url.tlds_reconhecidos', 'zzz, com');
-    assert.equal((await security.findDisallowedUrls('veja evil.zzz/x', ctx(t))).length, 1);
+    assert.equal((await security.findDisallowedUrls('veja evil.zzz', ctx(t))).length, 1);
     for (const ruim of ['com, 1a', 'c.o.m', ' , ']) await assert.rejects(() => set(t, 'marketing.url.tlds_reconhecidos', ruim), (e) => e.code === 'MKT_PARAM_INVALID', ruim);
   });
 });

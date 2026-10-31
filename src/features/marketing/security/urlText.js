@@ -2,35 +2,12 @@
 
 const { validateExternalUrl } = require('./validateExternalUrl');
 const { REASONS, staticReasons } = require('./urlRules');
-const { readUrlConfig, DEFAULT_TLDS } = require('./url.settings');
+const { readUrlConfig } = require('./url.settings');
 const { mktUrlNotAllowed } = require('../marketing.errors');
+const { extractUrls, stripUrls } = require('./urlText.extract');
 
-/**
- * URLs escritas num texto (template, legenda, corpo, conteúdo). O texto termina a URL em espaço, aspas, parêntese ou colchete; pontuação final não faz parte dela.
- * Reconhece, nesta ordem (M9-D433, reabertura M-1): (1) qualquer esquema seguido de "/" ou "\" (https://, ftp://, file://, https:/x, https:\\x); (2) esquemas de código
- * sem barra (javascript:, data:, vbscript:, blob:, about:); (3) esquema relativo (//host e \\host); (4) www.; (5) domínio solto cuja terminação está em
- * `marketing.url.tlds_reconhecidos` ("evil.com/login"). Endereço de e-mail (com @) não é URL.
- */
-const TAIL = '[^\\s<>"\'`)\\]}]';
-const SCHEME_SLASH = new RegExp(`\\b[a-z][a-z0-9+.-]{1,19}:[/\\\\]${TAIL}*`, 'gi');
-const CODE_SCHEME = new RegExp(`\\b(?:javascript|data|vbscript|blob|about):${TAIL}+`, 'gi');
-const SCHEME_RELATIVE = new RegExp(`(?<![\\w:/\\\\.@-])(?:\\/\\/|\\\\\\\\)[a-z0-9]${TAIL}*`, 'gi');
-const WWW = new RegExp(`(?<![\\w@./:\\\\-])www\\.${TAIL}+`, 'gi');
-const TRAILING = /[.,;:!?]+$/;
 const PLAIN_HTTP = /^https?:\/\/[^/\\]/i;
-
-const bareDomain = (tlds) => new RegExp(`(?<![\\w@./:\\\\-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${tlds.join('|')})(?![a-z0-9-])(?:[/:?#]${TAIL}*)?`, 'gi');
-
-function extractUrls(text, config = {}) {
-  if (typeof text !== 'string') return [];
-  const tlds = Array.isArray(config.tlds) && config.tlds.length > 0 ? config.tlds : DEFAULT_TLDS;
-  let rest = text;
-  const found = [];
-  for (const re of [SCHEME_SLASH, CODE_SCHEME, SCHEME_RELATIVE, WWW, bareDomain(tlds)]) {
-    rest = rest.replace(re, (match) => { found.push(match.replace(TRAILING, '')); return ' '.repeat(match.length); }); // o trecho achado sai do texto: os padrões seguintes não o contam de novo
-  }
-  return [...new Set(found.filter(Boolean))];
-}
+const BARE_FORM = /^(?![a-z][a-z0-9+.-]*:|[/\\])/i; // sem esquema e sem barra na frente: domínio solto, www. ou IP nu
 
 /** Motivos de uma "URL" que não é http(s)://host bem formada: esquema proibido, mal formada ou sem esquema. Estáticos, sem rede. */
 function malformedReasons(url, config) {
@@ -48,7 +25,10 @@ async function findDisallowedUrls(text, ctx = {}) {
   const bad = [];
   for (const url of extractUrls(text, config)) {
     if (!PLAIN_HTTP.test(url)) {
-      bad.push({ url, reasons: malformedReasons(url, config) });
+      const reasons = malformedReasons(url, config);
+      // O domínio da própria empresa (ou da allowlist) escrito sem https:// ("Acesse www.nayara.com.br") não é risco: só o esquema falta (DI-D433-8).
+      if (BARE_FORM.test(url) && reasons.length === 1 && reasons[0] === REASONS.HTTPS_ONLY) continue;
+      bad.push({ url, reasons });
       continue;
     }
     const out = await validateExternalUrl(url, { ...ctx, config });
@@ -64,4 +44,4 @@ async function assertUrlsAllowed(text, ctx) {
   return true;
 }
 
-module.exports = { extractUrls, findDisallowedUrls, assertUrlsAllowed };
+module.exports = { extractUrls, stripUrls, findDisallowedUrls, assertUrlsAllowed };

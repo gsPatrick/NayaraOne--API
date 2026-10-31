@@ -8,8 +8,9 @@ const { mktError } = require('../marketing.errors');
  *    empresa (URL base do site e domínios próprios do blog) valem sempre.
  *  - encurtadores: encurtadores públicos proibidos (lista do livro: "encurtadores públicos proibidos").
  *  - max_saltos: quantos redirecionamentos são seguidos e verificados (livro: 3). max_comprimento: tamanho máximo da URL (livro: 2048).
- *  - tlds_reconhecidos: terminações (com, br, io...) que fazem uma palavra solta do texto valer como endereço ("evil.com/login" sem https://); a conferência de URL no texto pega
- *    também www., //, esquemas malformados e esquemas proibidos sem depender desta lista.
+ *  - tlds_reconhecidos: terminações (com, br, io...) que fazem uma palavra solta do texto valer como endereço SEM caminho ("evil.com" sem https://). Com caminho
+ *    ("evil.xyz/login"), www., //, IP nu, esquemas malformados e proibidos, QUALQUER terminação vale e esta lista não é consultada: ela só protege o endereço pelado e o
+ *    administrador a ajusta (ampliar protege mais, reduzir poupa texto com ponto colado).
  *  - verificar_destino: liga a verificação de DNS e de redirecionamento (critérios 6 e 7); desligar é decisão do administrador. timeout_s: espera de cada consulta.
  */
 const ALLOWED_KEY = 'marketing.url.dominios_permitidos';
@@ -28,7 +29,7 @@ const URL_SETTING_DEFAULTS = Object.freeze({
   [MAX_LENGTH_KEY]: 2048,
   [VERIFY_KEY]: true,
   [TIMEOUT_KEY]: 5,
-  [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang',
+  [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang, in, fr, es, it, ng, nl, ch, se, jp, kr, au, ca, mx, cl, pe, uy, eu, za, tr, ir, id, vn, sg, hk, tw, su, gov, edu, mil, zip, mov, ninja, sbs, cfd, rest, bond, museum, men, loan, win, bid, review, stream, download, cam, monster, quest, party, trade, date, science, accountant, racing, рф',
 });
 
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
@@ -49,7 +50,7 @@ const validateDomains = (allowNone) => (key, value) => {
   }
 };
 
-const TLD_RE = /^[a-z]{2,24}$/;
+const TLD_RE = /^(?:xn--[a-z0-9-]{2,59}|\p{L}{2,24})$/u;
 const parseTlds = (text) => [...new Set(String(text === undefined || text === null ? '' : text).split(',').map((t) => t.trim().toLowerCase().replace(/^\./, '')).filter(Boolean))];
 const DEFAULT_TLDS = Object.freeze(parseTlds(URL_SETTING_DEFAULTS[TLDS_KEY]));
 

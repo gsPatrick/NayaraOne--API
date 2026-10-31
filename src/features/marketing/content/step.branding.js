@@ -4,6 +4,7 @@ const repo = require('./pipeline.repository');
 const { sha256, canonicalJson } = require('./sourceStamp');
 const { variableMissing, contentInvalid } = require('./pipeline.errors');
 const { DEFINITIONS } = require('./types/definitions');
+const security = require('../security');
 
 const ALIASES = Object.freeze({ preco: ['precoVenda', 'precoLocacao'] });
 const NBSP = new RegExp(String.fromCharCode(92) + 'u00a0|' + String.fromCharCode(92) + 'u202f', 'g');
@@ -60,6 +61,7 @@ async function brandingStep({ item, version, tenant, actor, transaction }, input
   const body = version.body_json;
   const facts = version.facts_snapshot_json || {};
   const renderizado = renderTemplate(template, { variables: input && input.variables, facts, body, item });
+  await security.assertUrlsAllowed(renderizado, { tenant, transaction }); // M9-D433: a variável informada no pedido não leva URL fora da regra ao corpo renderizado
   const nextBody = { ...body, renderizado, marca: template.brand_tokens_json || {}, templateCode: template.code };
   const contentHash = sha256(canonicalJson({ body: nextBody, facts, template: [template.id, template.version_no, template.content_hash] }));
   const created = await repo.insertNextVersion(tenant, actor, version, {

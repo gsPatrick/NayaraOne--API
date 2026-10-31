@@ -33,12 +33,15 @@ async function factualStep({ item, version, tenant, transaction, now }) {
   const config = await readFactualConfig(tenant, transaction);
   const options = { ...config, contentDate: await companyDateParts(now || new Date(), tenant, transaction) };
   // As URLs saem do texto antes da conferência dos fatos: o número de um endereço ("/imovel/1") não é afirmação sobre o imóvel; elas têm a própria regra, abaixo.
-  const result = validateAgainstFacts(security.extractUrls(text, await security.readUrlConfig(tenant, transaction)).reduce((acc, url) => acc.split(url).join(' '), text), version.facts_snapshot_json || {}, options);
+  const urlConfig = await security.readUrlConfig(tenant, transaction);
+  const result = validateAgainstFacts(security.stripUrls(text, urlConfig), version.facts_snapshot_json || {}, options);
   const isBlog = Boolean(item && item.type === 'EDUCATIONAL_BLOG');
-  // M9-D433: ocorrência/reclamação interna no texto e URL externa fora da regra reprovam (o blog tem a regra própria de fontes da M9-D427).
-  const guardFindings = isBlog ? [] : [
-    ...checkInternalReference(text, options.termosInternos || parseTerms(DEFAULT_INTERNAL_TERMS)),
-    ...(await security.findDisallowedUrls(text, { tenant, transaction })).map(urlFinding),
+  // M9-D433: ocorrência/reclamação interna no texto reprova (o blog tem a regra própria de fontes da M9-D427); URL externa fora da regra reprova em TODO texto que sai
+  // ao público: o texto (blog inclusive), o título (vira assunto de e-mail e título da publicação) e o corpo já renderizado com a marca.
+  const publicTexts = [text, item && item.title, body.renderizado].filter((v) => typeof v === 'string' && v.length > 0).join('\n');
+  const guardFindings = [
+    ...(isBlog ? [] : checkInternalReference(text, options.termosInternos || parseTerms(DEFAULT_INTERNAL_TERMS))),
+    ...(await security.findDisallowedUrls(publicTexts, { tenant, transaction, config: urlConfig })).map(urlFinding),
   ];
   const blog = await blogFindings({ item, version, tenant, transaction });
   const own = Array.isArray(result.findings) ? result.findings : [];

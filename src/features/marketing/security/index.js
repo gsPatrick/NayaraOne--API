@@ -6,7 +6,7 @@
  * marketing.guards.js (assertMassSendAllowed). Fachada: o resto do Marketing importa só daqui.
  */
 const { validateExternalUrl } = require('./validateExternalUrl');
-const { extractUrls, findDisallowedUrls, assertUrlsAllowed } = require('./urlText');
+const { extractUrls, stripUrls, findDisallowedUrls, assertUrlsAllowed } = require('./urlText');
 const { URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig } = require('./url.settings');
 const { handleCompromised } = require('./compromise.service');
 const { isAuthRevoked, reportAuthRevoked } = require('./compromise.signal');
@@ -20,6 +20,6 @@ async function trackingUrlValidator(rawUrl, ctx) {
 }
 
 module.exports = {
-  validateExternalUrl, extractUrls, findDisallowedUrls, assertUrlsAllowed, trackingUrlValidator, URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig, URL_REASONS: REASONS,
+  validateExternalUrl, extractUrls, stripUrls, findDisallowedUrls, assertUrlsAllowed, trackingUrlValidator, URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig, URL_REASONS: REASONS,
   handleCompromised, isAuthRevoked, reportAuthRevoked, recipientExportGuard, looksLikeExport,
 };
