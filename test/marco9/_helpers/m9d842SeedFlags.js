@@ -12,4 +12,7 @@ async function killSwitchProbe() {
   return { killSwitchProbe: PROBE };
 }
 
-module.exports = { killSwitchProbe };
+/** Chaves de kill switch que os exemplos do contrato criam (`${code}` = qa.contrato.<n>): o commit fica no banco e o probe só existia neste processo, então o contract test apaga ao terminar. */
+const CONTRACT_SWITCH_PATTERNS = ['qa.contrato.%'];
+
+module.exports = { killSwitchProbe, CONTRACT_SWITCH_PATTERNS };

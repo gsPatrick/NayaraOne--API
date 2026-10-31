@@ -4,7 +4,8 @@
 //   node scripts/withDisposableDb.js --port <55000-55999> -- env CI_TENANT_USERS_PASSWORD=... bash -c \
 //     "node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node --test --test-concurrency=1 test/m9d801.calendario.http.test.js"
 
-process.env.PORT = process.env.M9D801_HTTP_TEST_PORT || '21651';
+// Porta efêmera: a fixa 21651 colidia com outros testes e o login batia em servidor alheio.
+process.env.PORT = process.env.M9D801_HTTP_TEST_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

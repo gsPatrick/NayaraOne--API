@@ -2,7 +2,7 @@
 
 // M9-D872 — acionar e restaurar o kill switch pela API real (banco descartável): acionar sem MFA, restaurar com MFA, motivo, auditoria, sem segundo aprovador, confirmação por nível
 // (linha 14 do inventário da M9-D852), impacto, isolamento e permissão. Nunca chama endpoint de MFA.
-process.env.PORT = process.env.M9D872_HTTP_TEST_PORT || '21872';
+process.env.PORT = process.env.M9D872_HTTP_TEST_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

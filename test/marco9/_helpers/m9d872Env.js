@@ -28,4 +28,8 @@ const insertDrill = (tenant, tx, flag, { daysAgo = 0, environment = 'HOMOLOG', r
 );
 const stateOf = async (tenant, flag, tx) => { const row = await env.repo.findAnywhere(tenant, flag.id, tx); return { value: row.value, verification: row.verification_state, version: row.version }; };
 
-module.exports = { ...env, probes, drill, cycle, status, PROBE, behavior, registerTestProbe, stopsWhenTriggered, mkSwitch, drillsOf, insertDrill, stateOf };
+const { purgeKillSwitchResidue } = require('./killSwitchResidue');
+/** Tira do banco os kill switches de teste commitados por outros arquivos (o ciclo varre todos os switches da empresa). Chamar no before. */
+const isolateKillSwitches = () => purgeKillSwitchResidue();
+
+module.exports = { ...env, isolateKillSwitches, probes, drill, cycle, status, PROBE, behavior, registerTestProbe, stopsWhenTriggered, mkSwitch, drillsOf, insertDrill, stateOf };

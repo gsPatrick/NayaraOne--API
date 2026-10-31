@@ -10,7 +10,7 @@ const env = require('../_helpers/m9d872Env');
 
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
-before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
+before(async () => { if (env.DISPOSABLE) { await env.isolateKillSwitches(); tenants = await env.loadTenants(); } });
 beforeEach(() => { env.registerTestProbe('1'); env.behavior.calls = 0; });
 after(async () => { await env.sequelize.close(); });
 const run = (fn, tenant = tenants.A) => env.withRollbackTenantTransaction(tenant, fn);

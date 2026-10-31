@@ -2,7 +2,7 @@
 
 // M9-D842 — o contract test de verdade: cada exemplo do contrato (positivo e negativo) é chamado na API real, em banco descartável, e a resposta é conferida contra o OpenAPI
 // (status documentado, esquema, cabeçalhos, formato único de erro, código no catálogo). Grava o relatório JSON e JUnit para o CI.
-process.env.PORT = process.env.M9D842_HTTP_TEST_PORT || '21842';
+process.env.PORT = process.env.M9D842_HTTP_TEST_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const fs = require('node:fs');
 const { test, before, after } = require('node:test');
@@ -11,6 +11,8 @@ const api = require('../../../src/features/core-governance/api-governance/contra
 const env = require('../_helpers/m9d842Env');
 const { runSeeds } = require('../_helpers/m9d842Seeds');
 const { addConfirmation } = require('../_helpers/m9d842Confirm');
+const { CONTRACT_SWITCH_PATTERNS } = require('../_helpers/m9d842SeedFlags');
+const { purgeKillSwitchResidue } = require('../_helpers/killSwitchResidue');
 
 const doc = env.loadContract(env.CONTRACT_FILE);
 const { examples, findings: loadFindings } = api.loadExamples(env.EXAMPLES_DIR);
@@ -46,6 +48,7 @@ after(async () => {
   api.writeReports(report, process.env.CONTRACT_REPORT_DIR || require('node:path').resolve(__dirname, '../../../docs/evidencias/ci'));
   if (started) await started.restore();
   await env.cleanExports().catch(() => {});
+  await purgeKillSwitchResidue(CONTRACT_SWITCH_PATTERNS).catch(() => {}); // o probe do contrato só existia neste processo; o switch não pode sobrar
   await env.adminQuery("DELETE FROM core.mfa_credentials WHERE user_id IN (SELECT id FROM core.users WHERE email LIKE 'ci-%@ci.nayaraone.test')").catch(() => {});
   await require('../../../src/models').sequelize.close().catch(() => {});
   setTimeout(() => process.exit(process.exitCode || 0), 300);
