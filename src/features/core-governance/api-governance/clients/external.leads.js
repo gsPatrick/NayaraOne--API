@@ -5,11 +5,11 @@ const { createPerson } = require('../../../people/person.service');
 const { createOpportunity } = require('../../../crm/opportunity.service');
 const { Property } = require('../../../../models');
 const { inTenantTx } = require('../consumers/tenantTx');
+const { isEmailFormat } = require('../../../../shared/redaction');
 const E = require('./clients.errors');
 const S = require('./clients.settings');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Confere o corpo do lead; devolve { name, email, phone, message, propertyId } limpos ou lança 422 com os problemas por campo. */
 function checkLead(body) {
@@ -17,7 +17,7 @@ function checkLead(body) {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (name.length < 2 || name.length > 160) problems.push({ field: 'name', reason: 'informe o nome (2 a 160 caracteres)' });
   const email = body.email === undefined || body.email === null ? null : String(body.email).trim().toLowerCase();
-  if (email !== null && (!EMAIL.test(email) || email.length > 254)) problems.push({ field: 'email', reason: 'informe um e-mail válido' });
+  if (email !== null && (!isEmailFormat(email) || email.length > 254)) problems.push({ field: 'email', reason: 'informe um e-mail válido' });
   const phone = body.phone === undefined || body.phone === null ? null : String(body.phone).replace(/\D/g, '');
   if (phone !== null && (phone.length < 10 || phone.length > 13)) problems.push({ field: 'phone', reason: 'informe o telefone com DDD (10 a 13 dígitos)' });
   if (email === null && phone === null) problems.push({ field: 'contact', reason: 'informe e-mail ou telefone' });

@@ -1,14 +1,10 @@
 'use strict';
 
-const { rx, luhnValid, cpfValid, cnpjValid, maskCpf, maskCnpj } = require('../../../../shared/redaction');
+const { rx, cpfValid, cnpjValid, containsCardNumber, maskCpf, maskCnpj } = require('../../../../shared/redaction');
 const { PAN_BODY } = require('./inbound.constants');
 
-/** O texto tem número de cartão (PAN válido por Luhn)? Candidato que é CPF ou CNPJ válido não conta. */
-function hasPan(text) {
-  let achou = false;
-  String(text).replace(rx('cardCandidate'), (m) => { if (luhnValid(m) && !cpfValid(m) && !cnpjValid(m)) achou = true; return m; });
-  return achou;
-}
+/** O texto tem número de cartão completo? A decisão mora na biblioteca de redaction. */
+const hasPan = containsCardNumber;
 
 /**
  * analyzePii(texto) — detecta CPF, CNPJ, cartão e conta/agência (M9-D235 3.1 item 3), SÓ com a biblioteca de redaction. Devolve { text, types, pan }:

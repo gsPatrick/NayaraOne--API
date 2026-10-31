@@ -105,3 +105,16 @@ test('redaction_palavra_de_credencial_seguida_de_valor_com_cara_de_segredo', () 
   assert.equal(redactText('falha com token SECRET-CANARY-7f3a ok'), `falha com token ${REDACTED} ok`);
   assert.equal(redactText('o token expirado ontem'), 'o token expirado ontem', 'palavra comum depois de "token" fica');
 });
+
+test('redaction_validadores_de_email_e_cartao_moram_na_biblioteca', () => {
+  const { isEmailFormat, containsCardNumber } = require('../../../src/shared/redaction');
+  assert.equal(isEmailFormat('a@b.com'), true);
+  assert.equal(isEmailFormat('a@b'), false, 'domínio sem ponto só passa no modo frouxo');
+  assert.equal(isEmailFormat('a@b', { requireDot: false }), true);
+  assert.equal(isEmailFormat('a b@c.com'), false);
+  assert.equal(isEmailFormat(null), false);
+  assert.equal(containsCardNumber('cartao 4111 1111 1111 1111 ok'), true);
+  assert.equal(containsCardNumber('numero 4111 1111 1111 1112 nao passa'), false);
+  assert.equal(containsCardNumber('cpf 529.982.247-25'), false, 'CPF válido não é cartão');
+  assert.equal(containsCardNumber(undefined), false);
+});

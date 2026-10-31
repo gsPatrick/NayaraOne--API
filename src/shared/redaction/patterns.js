@@ -37,6 +37,7 @@ const SOURCES = Object.freeze({
   cpfLoose: '\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}',
   cnpjLoose: '\\d{2}\\.?\\d{3}\\.?\\d{3}\\/?\\d{4}-?\\d{2}',
   emailLoose: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
+  emailSimple: '[^\\s@]+@[^\\s@]+',
   // Perfil `ai` (M9-D027): tipos além de documento/cartão/e-mail/telefone. Os rótulos ("RG", "conta", "agência", "pix") evitam
   // mascarar número comum; o que tem formato próprio (linha digitável, CEP com hífen) dispensa rótulo.
   rgLabeled: '(\\bRG\\b\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{1,2}\\.?\\d{3}\\.?\\d{3}-?[\\dxX]\\b)',

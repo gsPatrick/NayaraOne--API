@@ -1,6 +1,6 @@
 'use strict';
 
-const { rx, SOURCES } = require('./patterns');
+const { rx, SOURCES, luhnValid, cpfValid, cnpjValid } = require('./patterns');
 
 /** Detectores (sem trocar nada): quem precisa decidir "isto parece segredo/e-mail/documento" chama estes. */
 
@@ -26,6 +26,16 @@ function containsSecretLike(value) {
 
 const containsEmail = (value) => rx('emailLoose', '').test(String(value || ''));
 
+/** O valor INTEIRO tem formato de e-mail? `requireDot: false` aceita domínio sem ponto (regra mais frouxa dos cadastros de consumidor da API). */
+const isEmailFormat = (value, { requireDot = true } = {}) => new RegExp(`^${SOURCES[requireDot ? 'emailLoose' : 'emailSimple']}$`).test(String(value ?? ''));
+
+/** O texto tem número de cartão completo (candidato válido pelo algoritmo do cartão)? Candidato que é CPF ou CNPJ válido não conta. */
+function containsCardNumber(text) {
+  let achou = false;
+  String(text ?? '').replace(rx('cardCandidate'), (m) => { if (luhnValid(m) && !cpfValid(m) && !cnpjValid(m)) achou = true; return m; });
+  return achou;
+}
+
 /** CPF e CNPJ (com ou sem pontuação) encontrados em um texto: { cpf, cnpj } com o primeiro de cada. */
 function findDocumentNumbers(text) {
   const source = String(text || '');
@@ -34,4 +44,4 @@ function findDocumentNumbers(text) {
   return { cpf: cpf ? cpf[0] : null, cnpj: cnpj ? cnpj[0] : null };
 }
 
-module.exports = { looksLikeEmbeddedSecret, containsSecretLike, containsEmail, findDocumentNumbers };
+module.exports = { looksLikeEmbeddedSecret, containsSecretLike, containsEmail, isEmailFormat, containsCardNumber, findDocumentNumbers };

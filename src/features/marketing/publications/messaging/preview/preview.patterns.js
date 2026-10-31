@@ -5,10 +5,13 @@
  * é a mesma do texto original, porque a troca de letra acentuada preserva o tamanho). Padrões de trecho (CPF, CNPJ, número de contrato, endereço
  * completo) podem ser trocados por [REDIGIDO]; padrões de frase (valor de dívida, saldo, motivo de restrição, saúde) não: a frase inteira é o dado sensível.
  */
+const { SOURCES } = require('../../../../../shared/redaction');
+
 const fold = (text) => String(text === undefined || text === null ? '' : text).normalize('NFC').replace(/[À-ſ]/g, (c) => c.normalize('NFD')[0]).toLowerCase();
 
 const CPF_RE = /(?<![\d.])\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}(?![\d])/g;
-const CNPJ_RE = /(?<![\d.])\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}(?![\d])/g;
+// Formato do CNPJ vem da biblioteca única de redaction (M9-D246); aqui só os limites do trecho.
+const CNPJ_RE = new RegExp(`(?<![\\d.])${SOURCES.cnpjLoose}(?![\\d])`, 'g');
 const ADDRESS_RE = /\b(?:rua|avenida|av|alameda|travessa|rodovia|estrada)\.?\s+[a-z0-9 ]{2,60}?,?\s*(?:n[o.]?\s*)?\d{1,5}\b/g;
 const MONEY_RE = /r\$\s*\d[\d.,]*|\b\d[\d.,]*\s*(?:reais|real)\b/;
 

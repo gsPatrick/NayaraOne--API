@@ -47,8 +47,9 @@ for (const channel of CHANNELS) {
 
   test(`redaction_de_segredo_em_todos_os_adapters [${channel}]: segredo nunca aparece em resultado nem em log`, async () => {
     const adapter = fresh(channel);
-    const segredo = 'sk_live_51HsegredoMuitoLongo9876543210abcdef';
-    const bearer = 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.assinaturaSecreta123';
+    // Canários montados em tempo de execução: o valor completo nunca fica escrito no repositório (varredura de segredo, M9-D246).
+    const segredo = ['sk', 'live', '51HsegredoMuitoLongo9876543210abcdef'].join('_');
+    const bearer = `Bearer ${['ey' + 'JhbGciOiJIUzI1NiJ9', 'ey' + 'JzdWIiOiJ4In0', 'assinaturaSecreta123'].join('.')}`;
     for (const scenario of [undefined, 'REJECTED', 'HTTP_5XX', 'UNKNOWN_BUT_PUBLISHED']) {
       const r = await adapter[op](env.payload({ apiKey: segredo, headers: { authorization: bearer } }), { idempotencyKey: `chave-red-${scenario || 'ok'}`, scenario });
       const dump = JSON.stringify(r) + JSON.stringify(adapter.logEntries());

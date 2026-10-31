@@ -3,6 +3,7 @@
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { getSetting } = require('../../../settings/settings.service');
 const { pageResult, parsePagination } = require('../standards/pagination.helper');
+const { isEmailFormat } = require('../../../../shared/redaction');
 const E = require('./consumers.errors');
 const S = require('./consumers.settings');
 const repository = require('./consumers.repository');
@@ -52,7 +53,7 @@ async function registerConsumer({ tenant, actorUserId, name, kind, ownerUserId, 
   if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) problems.push({ field: 'name', reason: 'informe o nome (até 120 caracteres)' });
   if (!EXTERNAL_KINDS.includes(kind)) problems.push({ field: 'kind', reason: `use ${EXTERNAL_KINDS.join(' ou ')}` });
   if (typeof ownerUserId !== 'string' || !UUID.test(ownerUserId) || !(await repository.isActiveMember(tenant.companyId, ownerUserId, transaction))) problems.push({ field: 'ownerUserId', reason: 'o responsável deve ser usuário ativo da empresa' });
-  if (contactEmail !== null && (typeof contactEmail !== 'string' || !/^[^\s@]+@[^\s@]+$/.test(contactEmail) || contactEmail.length > 254)) problems.push({ field: 'contactEmail', reason: 'e-mail inválido' });
+  if (contactEmail !== null && (typeof contactEmail !== 'string' || !isEmailFormat(contactEmail, { requireDot: false }) || contactEmail.length > 254)) problems.push({ field: 'contactEmail', reason: 'e-mail inválido' });
   if (!Number.isInteger(apiVersionUsed) || apiVersionUsed < 1) problems.push({ field: 'apiVersionUsed', reason: 'major inválida' });
   if (problems.length) throw E.consumerInvalid({ problems });
   const row = await repository.insertConsumer({ groupId: tenant.groupId, companyId: tenant.companyId, name: name.trim(), kind, ownerUserId, contactEmail, apiVersionUsed, clientId }, transaction);

@@ -6,8 +6,9 @@ const { CHANNEL_META } = require('../channels');
 const { assertChannelAdapter } = require('../ChannelAdapter');
 const { SCENARIOS } = require('../sandbox/sandbox.scenarios');
 
-const SECRET_VALUE = 'sk_live_51HsegredoMuitoLongo9876543210abcdef';
-const BEARER_VALUE = 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.assinaturaSecreta123';
+// Canários montados em tempo de execução: o valor completo nunca fica escrito no repositório (varredura de segredo, M9-D246).
+const SECRET_VALUE = ['sk', 'live', '51HsegredoMuitoLongo9876543210abcdef'].join('_');
+const BEARER_VALUE = `Bearer ${['ey' + 'JhbGciOiJIUzI1NiJ9', 'ey' + 'JzdWIiOiJ4In0', 'assinaturaSecreta123'].join('.')}`;
 const WEBHOOK_SECRET = 'segredo-do-contrato-de-canal';
 const SAMPLE = Object.freeze({ to: '+5511999990000', texto: 'Olá, conheça o imóvel' });
 
