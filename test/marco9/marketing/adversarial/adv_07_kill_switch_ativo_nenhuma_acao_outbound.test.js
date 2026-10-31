@@ -2,6 +2,7 @@
 
 // M9-D436 adv_07 (Caderno §16: "Kill switch ativo -> nenhuma ação outbound"). Kill switch global ligado; um lead novo, uma publicação agendada e um step de campanha são disparados: nenhuma
 // chamada ao adapter, runs BLOCKED KILL_SWITCH, jobs PENDING, steps SCHEDULED e as tarefas internas criadas. Cenário da dona (M9-D425), sem lógica própria. Banco descartável.
+const { allowTestUrls } = require('../../_helpers/mktUrlPolicy');
 const { test, before, beforeEach, afterEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../../../../src/models');
@@ -23,6 +24,7 @@ after(async () => { offVault(); await sequelize.close(); });
 
 test('adv_07_kill_switch_ativo_nenhuma_acao_outbound: lead novo, publicação agendada e step de campanha', async () => {
   await leads.withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     await leads.install(t, A, 'LEAD-NOVO');
     const lead = await leads.lead(t, A, {});

@@ -4,6 +4,7 @@
 // com a action_key sha256 como chave de idempotência, gravando SENT, BLOCKED ou FAILED; a mensagem do CRM leva a finalidade e o status do canal; o horário de
 // silêncio adia o destinatário sem perdê-lo. Banco descartável, transação com rollback, sandbox determinístico.
 
+const { allowTestUrls } = require('../_helpers/mktUrlPolicy');
 const { test, before, beforeEach, afterEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../../../src/models');
@@ -39,6 +40,7 @@ const messageOf = (t, personId) => q(t, "SELECT status, purpose, action_key, ext
 
 test('step_de_campanha_enviado_pelo_adapter_real_grava_sent_blocked_ou_failed', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const ok = await readyPerson(t, A);
     const suppressed = await readyPerson(t, A);
@@ -72,6 +74,7 @@ test('step_de_campanha_falha_com_o_codigo_da_regra_e_o_corpo_do_email_nao_e_prev
     assert.deepEqual((await deliveries(t, c1.id)).map((d) => [d.status, d.reason]), [['FAILED', 'MKT_UNSUBSCRIBE_REQUIRED']]);
     assert.equal((await messageOf(t, p1)).length, 0, 'recusado: nenhuma mensagem aceita');
     // o preview do e-mail é o assunto (o nome da campanha) e o pré-cabeçalho: dado sensível só no corpo não impede o envio
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const p2 = await readyPerson(t, A);
     const c2 = await scheduleFor(t, [p2], { body: 'Sua parcela de R$ 1.250,00 vence amanhã.' });
@@ -83,6 +86,7 @@ test('step_de_campanha_falha_com_o_codigo_da_regra_e_o_corpo_do_email_nao_e_prev
 
 test('quiet_hours_reagenda_sem_perder', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const p = await readyPerson(t, A);
     const campaign = await scheduleFor(t, [p]);

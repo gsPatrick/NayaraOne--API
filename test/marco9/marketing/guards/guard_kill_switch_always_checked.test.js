@@ -2,6 +2,7 @@
 
 // M9-D440 guard_kill_switch_always_checked (Guia §14: "Não permitir automação sem kill switch"). Estática: runner, retomada do runner, worker, disparador de campanha, porta de saída de canal, envio de
 // mensagem e agendamento consultam o kill switch. Dinâmica: com o kill switch global ligado, runner, worker e campanha não chamam o adapter (espião: zero) e, desligado, o job pendente é processado.
+const { allowTestUrls } = require('../../_helpers/mktUrlPolicy');
 const { test, before, beforeEach, afterEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../../../../src/models');
@@ -39,6 +40,7 @@ test('guard_kill_switch_always_checked: o runner sem a consulta ao kill switch �
 
 test('guard_kill_switch_always_checked: com o kill switch global ligado, runner, worker e campanha não chamam o adapter; desligado, o job pendente sai', async () => {
   await leads.withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     await leads.install(t, A, 'LEAD-NOVO');
     const lead = await leads.lead(t, A, {});

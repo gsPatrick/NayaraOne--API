@@ -2,6 +2,7 @@
 
 // M9-D440 guard_replay_is_safe (Guia §14: "Não duplicar post/mensagem em replay"). Estática: as âncoras de idempotência de cada fluxo existem no código. Dinâmica: cada fluxo é reexecutado 3 vezes e a
 // contagem de mensagens e posts fica em 1 (runner, mensagem direta, agendamento e worker, step de campanha por destinatário e pedido de avaliação).
+const { allowTestUrls } = require('../../_helpers/mktUrlPolicy');
 const { test, before, beforeEach, afterEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize } = require('../../../../src/models');
@@ -83,6 +84,7 @@ test('guard_replay_is_safe: agendar o mesmo post e rodar o worker 3 vezes = 1 jo
 
 test('guard_replay_is_safe: o step da campanha reexecutado 3 vezes envia 1 vez por destinatário', async () => {
   await leads.withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const people = [await leads.readyPerson(t, A), await leads.readyPerson(t, A)];
     const campaign = await adv.scheduledCampaign(t, A, people);

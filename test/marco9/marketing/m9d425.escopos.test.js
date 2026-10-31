@@ -11,6 +11,7 @@ const campaigns = require('../../../src/features/marketing/campaigns/campaigns.s
 const lifecycle = require('../../../src/features/marketing/campaigns/lifecycle.service');
 const { registerCampaignSendPort, clearCampaignSendPort } = require('../../../src/features/marketing/campaigns/sendPort');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
+const { allowTestUrls } = require('../_helpers/mktUrlPolicy');
 const env = require('../_helpers/m9d425Env');
 const { useTempSecretStore } = require('../_helpers/mktSecretStore');
 
@@ -152,6 +153,7 @@ test('desativacao_nao_apaga_configuracao', async () => {
 
 test('jobs_pendentes_sao_processados_apos_reativar', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const person = await readyPerson(t, A);
     const campaign = await schedule(t, [person]);
@@ -172,6 +174,7 @@ test('jobs_pendentes_sao_processados_apos_reativar', async () => {
 
 test('kill_switch_de_canal_e_de_campanha_seguram_o_passo_e_o_ligado_no_meio_do_lote_nao_perde_destinatario', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const people = [await readyPerson(t, A), await readyPerson(t, A)];
     const byChannel = await schedule(t, people);

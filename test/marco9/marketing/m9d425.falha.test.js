@@ -11,6 +11,7 @@ const lifecycle = require('../../../src/features/marketing/campaigns/lifecycle.s
 const campaigns = require('../../../src/features/marketing/campaigns/campaigns.service');
 const { registerCampaignSendPort, clearCampaignSendPort } = require('../../../src/features/marketing/campaigns/sendPort');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
+const { allowTestUrls } = require('../_helpers/mktUrlPolicy');
 const env = require('../_helpers/m9d425Env');
 const { useTempSecretStore } = require('../_helpers/mktSecretStore');
 
@@ -74,6 +75,7 @@ test('sem_transacao_nao_ha_como_ler_e_bloqueia', async () => {
 
 test('disparo_de_campanha_com_estado_ilegivel_nao_envia_e_o_passo_continua_agendado', async () => {
   await withRollbackTenantTransaction(A, async (t) => {
+    await allowTestUrls(t, A); // M9-D433: o link de descadastro passa pela regra de URL externa
     await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', A, A.userId, t);
     const person = await readyPerson(t, A);
     const templateId = await env.makeTemplate(t, A, { channel: 'EMAIL', official: null, body: 'Conheça o Aurora, um lançamento novo.', variables: [] });
