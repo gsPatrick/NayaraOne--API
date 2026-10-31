@@ -41,7 +41,9 @@ async function buildAdapterCtx(connection, tenant, transaction, { adapterHosts =
     http: new IntegrationHttpClient({
       providerCode: connection.providerCode, connectionId: connection.id, timeouts, allowedHosts: [...egressHostsOf(connection, baseUrlHosts), ...privateHosts], privateHosts,
       environment: connection.environment, egressMode: egress.mode, onEgress: makeEgressRecorder(tenant, connection, transaction),
-      maxAttempts: 1, // M9-D216: a repetição é do Dispatch Service (por classe de erro), nunca escondida dentro da chamada
+      // M9-D216: leitura e operação idempotente repetem até `integration.dispatch.call_attempts.idempotent`; o que altera estado (emissão) faz UMA tentativa:
+      // a repetição dessa é do Dispatch Service (por classe de erro), nunca escondida dentro da chamada (INT-005).
+      maxAttempts: params.idempotentAttempts, stateChangeMaxAttempts: 1,
     }),
     secret: (purpose = 'dispatch', opts = {}) => readConnectionSecret(connection, tenant, { purpose, transaction, ...opts }),
   });

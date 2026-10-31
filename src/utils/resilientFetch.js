@@ -122,4 +122,4 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
   throw lastError;
 }
 
-module.exports = { resilientFetch, isRetryableError };
+module.exports = { resilientFetch, isRetryableError, repeatsBlindly };

@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('../../../utils/logger');
-const { resilientFetch } = require('../../../utils/resilientFetch');
+const { resilientFetch, repeatsBlindly } = require('../../../utils/resilientFetch');
 const { httpsRequestJson, createMtlsAgent } = require('./httpsTransport');
 const { resolveDestination, defaultResolver } = require('./destination.policy');
 const { pinnedFetch } = require('./pinnedFetch');
@@ -38,6 +38,8 @@ class IntegrationHttpClient {
     this.egressMode = resolveEgressMode({ mode: opts.egressMode, environment: this.environment });
     this.onEgress = typeof opts.onEgress === 'function' ? opts.onEgress : null;
     this.defaultMaxAttempts = Number.isInteger(opts.maxAttempts) && opts.maxAttempts >= 1 ? opts.maxAttempts : undefined;
+    // Tentativas de uma operação que ALTERA estado sem chave de idempotência (emissão, proposta): o contexto dos adapters usa 1 (INT-005); sem valor, vale `maxAttempts`.
+    this.stateChangeMaxAttempts = Number.isInteger(opts.stateChangeMaxAttempts) && opts.stateChangeMaxAttempts >= 1 ? opts.stateChangeMaxAttempts : undefined;
     // Resolvedor de DNS (M9-D245): padrão = DNS do sistema (em teste, nenhum); `null` desliga a resolução, uma função a substitui.
     this.resolver = opts.resolver === undefined ? defaultResolver() : opts.resolver;
     // Hosts exatos de rede própria que a empresa liberou para este fornecedor (M9-D244, N7): única exceção à recusa de destino privado.
@@ -48,7 +50,7 @@ class IntegrationHttpClient {
   scoped(hosts = []) {
     return new IntegrationHttpClient({
       providerCode: this.providerCode, connectionId: this.connectionId, timeouts: this.timeouts, allowedHosts: [...this.allowedHosts, ...hosts],
-      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, resolver: this.resolver, privateHosts: this.privateHosts,
+      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, stateChangeMaxAttempts: this.stateChangeMaxAttempts, resolver: this.resolver, privateHosts: this.privateHosts,
     });
   }
 
@@ -98,9 +100,11 @@ class IntegrationHttpClient {
   /** Chamada com timeout, tentativas só para erro transitório e circuit breaker (resilientFetch). */
   async request({ method = 'GET', url, headers, body, timeoutMs, maxAttempts, circuitKey, allowedHosts, idempotent }) {
     const d = await this.guard(url, method, allowedHosts);
+    // Leitura e operação idempotente usam `maxAttempts` do cliente; a que altera estado sem chave usa `stateChangeMaxAttempts` (M9-D216, N3 / INT-005).
+    const tentativas = maxAttempts ?? (repeatsBlindly({ method, headers, idempotent }) ? this.defaultMaxAttempts : (this.stateChangeMaxAttempts ?? this.defaultMaxAttempts));
     // Com connection, o circuito é o persistido (decidido pelo Dispatch Service, M9-D217): aqui nada é contado em memória.
     return resilientFetch({
-      circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: maxAttempts ?? this.defaultMaxAttempts, circuitManaged: Boolean(this.connectionId), idempotent,
+      circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: tentativas, circuitManaged: Boolean(this.connectionId), idempotent,
       fetchImpl: d.pin ? (u, i) => pinnedFetch(u, i, d.pin) : (u, i) => fetch(u, { ...i, redirect: 'manual' }), // DNS fixado (M9-D245); sem endereço fixado, também sem seguir redirecionamento (M9-D244, N9)
     });
   }

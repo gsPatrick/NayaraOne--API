@@ -35,7 +35,8 @@ test('retry_http_do_adapter_faz_uma_tentativa', async () => {
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
     return buildAdapterCtx({ id: '00000000-0000-4000-8000-0000000d0216', providerCode: 'qa-m9', environment: 'SANDBOX', policyJson: {}, configJson: {} }, { groupId: tenant.groupId, companyId: tenant.companyId }, t, { adapterHosts: hosts });
   });
-  assert.equal(ctx.http.defaultMaxAttempts, 1);
+  assert.equal(ctx.http.stateChangeMaxAttempts, 1, 'o que altera estado faz uma tentativa');
+  assert.equal(ctx.http.defaultMaxAttempts, 3, 'leitura e operação idempotente seguem o parâmetro da empresa (N3)');
   chamadas = simular(503);
   await ctx.http.request({ method: 'POST', url, circuitKey: 'qa-m9-d216-c' });
   assert.equal(chamadas.length, 1, 'ctx.http dos adapters: uma tentativa');
