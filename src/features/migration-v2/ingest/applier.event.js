@@ -35,6 +35,18 @@ const camel = (row) => ({
   batchId: row.batch_id, position: row.last_position, sourceDeleted: row.source_deleted,
 });
 
+/**
+ * Replay de evento já aplicado (descartado pela chave de idempotência) sobre registro cujo conteúdo de origem foi descartado depois da reconciliação (payload.purge.js): se a linha
+ * relida tem o MESMO hash do registro, devolve o conteúdo ao registro, e a raiz do lote de replay sai igual à do original. Linha com outro hash ou registro com conteúdo: nada muda.
+ */
+async function restorePayload(ctx, source, event, existing) {
+  if (!existing || existing.source_payload !== null || !existing.row_hash || event.op === OPS.DELETE || event.canonical || ![...MIGRATED_STATES].includes(existing.state)) return null;
+  const temporal = await temporalContext(ctx, source.entity);
+  const { row } = normalizeTemporal(mapRow(event.record, source.config && source.config.columnMap), temporal.schema, temporal.options);
+  if (rowHash(row) !== existing.row_hash) return null;
+  return records.upsert(ctx.tenant, source, event.sourceKey, { ...camel(existing), payload: row }, ctx.transaction);
+}
+
 /** Eventos I e U: upsert pela chave externa, com as regras de delta da M9-D901 §3.1 (EXCLUDED ignora; QUARANTINED/PENDING_REVIEW só atualizam o conteúdo de origem). */
 async function applyUpsert(ctx, source, event, existing) {
   const mapped = event.canonical ? event.record : mapRow(event.record, source.config && source.config.columnMap); // `canonical`: registro PENDING relido do banco (já mapeado)
@@ -49,7 +61,7 @@ async function applyUpsert(ctx, source, event, existing) {
     return { outcome: 'kept', record: saved };
   }
   if (existing && MIGRATED_STATES.includes(existing.state) && existing.row_hash === hash && !existing.source_deleted) {
-    const saved = await records.upsert(ctx.tenant, source, event.sourceKey, { ...camel(existing), position: event.position }, ctx.transaction);
+    const saved = await records.upsert(ctx.tenant, source, event.sourceKey, { ...camel(existing), payload: row, position: event.position }, ctx.transaction); // payload: o hash igual garante o mesmo conteúdo; devolve o que o descarte da D900 tirou, para o replay dar a mesma raiz
     return { outcome: 'unchanged', record: saved };
   }
   const verdict = temporalVerdict || await getTarget(source.entity).assess(ctx.tenant, row, existing && existing.target_entity_id, ctx.transaction);
@@ -68,4 +80,4 @@ function applyEvent(ctx, source, event, existing) {
   return event.op === OPS.DELETE ? applyDelete(ctx, source, event, existing) : applyUpsert(ctx, source, event, existing);
 }
 
-module.exports = { applyEvent, applyUpsert, writeTarget };
+module.exports = { applyEvent, applyUpsert, writeTarget, restorePayload };

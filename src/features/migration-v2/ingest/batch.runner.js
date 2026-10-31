@@ -21,6 +21,7 @@ async function loadSettings(tenant) {
     overlapSeconds: await numberSetting(tenant, KEYS.OVERLAP_S, transaction),
     maxAttempts: await numberSetting(tenant, KEYS.MAX_ATTEMPTS, transaction),
     timeoutMinutes: await numberSetting(tenant, KEYS.BATCH_TIMEOUT_MIN, transaction),
+    maxInProcess: await numberSetting(tenant, KEYS.EXEC_PER_PROCESS, transaction),
   }));
 }
 

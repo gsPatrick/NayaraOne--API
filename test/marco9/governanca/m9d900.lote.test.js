@@ -113,7 +113,7 @@ test('m9d900 dois lotes simultâneos na mesma fonte: um vence', { skip: skip() }
   flakyTarget({ failAt: 9999, delayMs: 700 });
   const source = await legacy.source();
   const settings = await loadSettings(A());
-  const run = await env.openTenantTx(A(), (tx) => require('../../../src/features/migration-v2/ingest/runs.service').createRun(A(), { userId: A().userId }, { sourceSystem: legacy.system }, tx));
+  const run = await env.closedRun(A(), { sourceSystem: legacy.system });
   const plan = () => ({ fromToken: null, toToken: '9', events: legacy.fake.state.events });
   const first = runBatch(A(), { userId: A().userId }, run.runId, source, plan(), { settings });
   await new Promise((resolve) => setTimeout(resolve, 300));
@@ -130,7 +130,7 @@ test('m9d900 dois lotes simultâneos na mesma fonte: um vence', { skip: skip() }
 test('m9d900 o índice único também barra o segundo lote RUNNING da fonte', { skip: skip() }, async () => {
   const legacy = await loaded(1);
   const source = await legacy.source();
-  const run = await env.openTenantTx(A(), (tx) => require('../../../src/features/migration-v2/ingest/runs.service').createRun(A(), { userId: A().userId }, { sourceSystem: legacy.system }, tx));
+  const run = await env.closedRun(A(), { sourceSystem: legacy.system });
   const open = () => env.openTenantTx(A(), async (tx) => batchRepository.insert(A(), { runId: run.runId, source, fromToken: null, toToken: '1' }, tx));
   const [one, two] = [await open(), await open()];
   await env.openTenantTx(A(), (tx) => batchRepository.transition(A(), one.id, 'RUNNING', {}, tx));

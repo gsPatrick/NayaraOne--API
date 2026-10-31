@@ -13,6 +13,10 @@ module.exports = {
   connectorMissing: (name) => govError(422, 'GOV_MIG_CONNECTOR_MISSING', 'A fonte não tem um conector configurado.', { connector: name || null }),
   secretMissing: () => govError(422, 'GOV_MIG_SECRET_MISSING', 'A credencial da fonte não está disponível no ambiente.'),
   targetMissing: (entity) => govError(422, 'GOV_MIG_TARGET_MISSING', 'Não há destino configurado para esta entidade.', { entity }),
+  runAlreadyActive: () => govError(409, 'GOV_MIG_RUN_ALREADY_ACTIVE', 'Já existe uma execução desta fonte em andamento.'),
+  runLimit: () => govError(429, 'GOV_MIG_RUN_LIMIT', 'Há execuções demais em andamento nesta empresa; aguarde alguma terminar.'),
+  legacyScopeInvalid: () => govError(422, 'GOV_MIG_LEGACY_SCOPE_INVALID', 'Informe o código desta empresa no sistema antigo em Configurações > Governança.'),
+  legacyScopeRequired: () => govError(422, 'GOV_MIG_LEGACY_SCOPE_REQUIRED', 'O grupo tem mais de uma empresa: ligue o filtro por empresa do sistema antigo antes de migrar.'),
   batchNotFound: () => govNotFound('Lote não encontrado.'),
   runNotFound: () => govNotFound('Execução não encontrada.'),
 };

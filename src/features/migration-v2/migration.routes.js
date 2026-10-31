@@ -41,6 +41,7 @@ const router = Router();
 router.use('/migration', authMiddleware, tenantMiddleware);
 // M9-D902: a execução da última carga delta e o GO/NO-GO são decisões do corte: só R ou A da atividade do RACI
 router.post('/migration/runs', requireRunPermission, requireRaci('LAST_DELTA_LOAD', { when: (req) => Boolean(req.body && req.body.lastDelta === true) }), catchAsync(controller.createRun));
+router.post('/migration/batches/:id/replay', requireRunPermission, catchAsync(controller.replay)); // M9-D900: replay de um lote já aplicado, como NOVO lote
 router.get('/migration/control-tower', requireRunPermission, catchAsync(controlController.getTower));
 router.post('/migration/records/:id/resolve', requireRunPermission, catchAsync(controlController.resolveRecord));
 router.get('/migration/raci', requireRunPermission, catchAsync(raciController.getMatrix));

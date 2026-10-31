@@ -7,7 +7,7 @@ const errors = require('./ingest.errors');
 const sources = require('./source.repository');
 const batches = require('./batch.repository');
 const records = require('./record.repository');
-const { applyEvent } = require('./applier.event');
+const { applyEvent, restorePayload } = require('./applier.event');
 const { batchRoot } = require('./batch.hash');
 const { loadSchema } = require('../integrity/schema.repository');
 const { replaceLeaves } = require('../integrity/leaves.repository');
@@ -56,7 +56,12 @@ async function applyBatch(tenant, actor, batch, events, transaction) {
   const counts = { events: events.length, skipped: 0, migrated: 0, unchanged: 0, deleted: 0, quarantined: 0, review: 0, kept: 0, ignored: 0 };
   for (const event of events) {
     const idem = idemOf(event);
-    if (applied.has(idem)) { counts.skipped += 1; continue; }
+    if (applied.has(idem)) {
+      counts.skipped += 1;
+      const restored = await restorePayload(ctx, source, event, known.get(event.sourceKey)); // conteúdo descartado após reconciliar volta no replay (hash igual)
+      if (restored) known.set(event.sourceKey, restored);
+      continue;
+    }
     const { outcome, record } = await applyEvent(ctx, source, event, known.get(event.sourceKey));
     known.set(event.sourceKey, record);
     counts[outcome] += 1;

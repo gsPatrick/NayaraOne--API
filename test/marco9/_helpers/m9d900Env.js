@@ -82,9 +82,19 @@ async function run(tenant, { sourceSystem, entity, lastDelta = false } = {}) {
   return { runId, result: await executeRun(tenant, runId) };
 }
 
+/**
+ * Execução registrada (createRun) mas encerrada na hora, para testes que só precisam de um `runId` válido nos lotes que aplicam à mão. A M9-D900 limita as execuções ativas por empresa,
+ * e uma QUEUED esquecida travaria os pedidos seguintes de todos os testes que dividem o banco.
+ */
+async function closedRun(tenant, body) {
+  const { runId } = await openTenantTx(tenant, (tx) => runsService.createRun(tenant, { userId: tenant.userId }, body, tx));
+  await adminQuery("UPDATE governance.mig_runs SET status = 'SUCCEEDED', finished_at = now() WHERE id = $1", [runId]);
+  return { runId };
+}
+
 const q = async (sql, params) => (await adminQuery(sql, params)).rows;
 const batchesOf = (system) => q('SELECT * FROM governance.mig_batches WHERE source_system = $1 ORDER BY created_at, id', [system]);
 const recordsOf = (system) => q('SELECT * FROM governance.mig_records WHERE source_system = $1 ORDER BY source_key', [system]);
 const keysOf = (system) => q("SELECT idempotency_key FROM governance.mig_event_keys WHERE idempotency_key LIKE $1 ORDER BY 1", [`${system}:%`]);
 
-module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, cnpj, installSource, run, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };
+module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, cnpj, installSource, run, closedRun, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };

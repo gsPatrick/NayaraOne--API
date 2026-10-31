@@ -18,6 +18,7 @@ const { markMissingKeys } = require('./deletions');
 const { ensureSeeded } = require('../seeds/sources.seed');
 const { assertMode } = require('./modes');
 const clockGate = require('../clock/clock.gate');
+const limiter = require('./run.limiter');
 
 const COUNT_KEYS = ['events', 'skipped', 'migrated', 'unchanged', 'deleted', 'quarantined', 'review', 'kept', 'ignored'];
 const emptyTotals = () => Object.fromEntries(COUNT_KEYS.map((key) => [key, 0]));
@@ -65,16 +66,26 @@ async function runSource(tenant, actor, run, sourceRow, settings) {
 
 /**
  * Executa uma execução QUEUED (POST /migration/runs): reivindica a execução (QUEUED -> RUNNING, uma só vence), percorre as fontes escolhidas e fecha com SUCCEEDED ou FAILED
- * (alguma fonte parou por erro ou lote abortado). Devolve o resumo, ou null se outra instância já a reivindicou.
+ * (alguma fonte parou por erro ou lote abortado). Devolve o resumo, ou null se outra instância já a reivindicou ou se este processo já roda o máximo de execuções
+ * (`migracao.execucao.max_no_processo`): nesse caso ela continua QUEUED e o job a retoma.
  */
 async function executeRun(tenant, runId) {
+  const settings = await loadSettings(tenant);
+  if (!limiter.tryAcquire(settings.maxInProcess)) return null;
+  try {
+    return await executeClaimed(tenant, runId, settings);
+  } finally {
+    limiter.release();
+  }
+}
+
+async function executeClaimed(tenant, runId, settings) {
   const claimed = await openTenantTx(tenant, (transaction) => runs.claim(tenant, runId, transaction));
   if (!claimed) return null;
   const actor = { userId: claimed.requested_by || null };
   const summary = { runId, sources: [] };
   let failure = null;
   try {
-    const settings = await loadSettings(tenant);
     const list = await openTenantTx(tenant, async (transaction) => {
       await ensureSeeded(tenant, transaction);
       return sources.list(tenant, { sourceSystem: claimed.source_system, entity: claimed.entity }, transaction);

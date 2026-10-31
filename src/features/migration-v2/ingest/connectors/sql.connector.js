@@ -15,7 +15,7 @@ const TS = (column) => `to_char(${ident(column)} AT TIME ZONE 'UTC', 'YYYY-MM-DD
  * Conector SQL somente leitura. `config`: relation (tabela/visão com a linha completa), keyColumn, updatedAtColumn (WATERMARK), e para CDC logRelation + positionColumn + opColumn
  * (a tabela de log traz a chave, a posição, a operação e as colunas da linha). Só SELECT; o endereço do banco sai da variável de ambiente nomeada em `secret_ref`.
  */
-async function createSqlConnector(source) {
+async function createSqlConnector(source, scope = null) {
   const config = source.config || {};
   const url = source.secret_ref ? process.env[source.secret_ref] : null;
   if (!url) throw errors.secretMissing();
@@ -23,6 +23,9 @@ async function createSqlConnector(source) {
   await client.connect();
   await client.query('SET default_transaction_read_only = on');
   const key = ident(config.keyColumn);
+  // filtro de empresa (company.scope.js): condição extra e valor, na posição `n` dos parâmetros da consulta
+  const scoped = (n) => (scope ? ` AND ${ident(scope.column)}::text = $${n}` : '');
+  const scopeArgs = scope ? [scope.value] : [];
 
   const strip = (row, drop) => { const out = { ...row }; for (const column of drop) delete out[column]; return out; };
 
@@ -31,8 +34,8 @@ async function createSqlConnector(source) {
       const position = ident(config.positionColumn);
       const { rows } = await client.query(
         `SELECT ${position}::text AS "__position", ${ident(config.opColumn)} AS "__op", ${key}::text AS "__key", * FROM ${relation(config.logRelation)}
-          WHERE ${position} > $1::numeric AND ($2::numeric IS NULL OR ${position} <= $2::numeric) ORDER BY ${position} LIMIT $3`,
-        [after || '0', upTo || null, limit]
+          WHERE ${position} > $1::numeric AND ($2::numeric IS NULL OR ${position} <= $2::numeric)${scoped(4)} ORDER BY ${position} LIMIT $3`,
+        [after || '0', upTo || null, limit, ...scopeArgs]
       );
       return rows.map((row) => ({ sourceKey: row.__key, op: row.__op, position: row.__position, record: strip(row, ['__position', '__op', '__key', config.positionColumn, config.opColumn]) }));
     },
@@ -40,25 +43,25 @@ async function createSqlConnector(source) {
       const { rows } = await client.query(
         `SELECT ${TS(config.updatedAtColumn)} AS "__ts", ${key}::text AS "__key", * FROM ${relation(config.relation)}
           WHERE (${ident(config.updatedAtColumn)}, ${key}::text) > ($1::timestamptz, $2::text)
-            AND ($3::timestamptz IS NULL OR (${ident(config.updatedAtColumn)}, ${key}::text) <= ($3::timestamptz, $4::text)) ORDER BY ${ident(config.updatedAtColumn)}, ${key}::text LIMIT $5`,
-        [afterTs || '-infinity', afterKey || '', upTo ? upTo.ts : null, upTo ? upTo.key : null, limit]
+            AND ($3::timestamptz IS NULL OR (${ident(config.updatedAtColumn)}, ${key}::text) <= ($3::timestamptz, $4::text))${scoped(6)} ORDER BY ${ident(config.updatedAtColumn)}, ${key}::text LIMIT $5`,
+        [afterTs || '-infinity', afterKey || '', upTo ? upTo.ts : null, upTo ? upTo.key : null, limit, ...scopeArgs]
       );
       return rows.map((row) => ({ sourceKey: row.__key, updatedAt: row.__ts, record: strip(row, ['__ts', '__key']) }));
     },
     async readAllRows({ afterKey, upToKey, limit }) {
       const { rows } = await client.query(
-        `SELECT ${key}::text AS "__key", * FROM ${relation(config.relation)} WHERE ${key}::text > $1 AND ($2::text IS NULL OR ${key}::text <= $2) ORDER BY ${key}::text LIMIT $3`,
-        [afterKey || '', upToKey || null, limit]
+        `SELECT ${key}::text AS "__key", * FROM ${relation(config.relation)} WHERE ${key}::text > $1 AND ($2::text IS NULL OR ${key}::text <= $2)${scoped(4)} ORDER BY ${key}::text LIMIT $3`,
+        [afterKey || '', upToKey || null, limit, ...scopeArgs]
       );
       return rows.map((row) => ({ sourceKey: row.__key, record: strip(row, ['__key']) }));
     },
     async listKeys() {
-      const { rows } = await client.query(`SELECT ${key}::text AS k FROM ${relation(config.relation)} ORDER BY 1`);
+      const { rows } = await client.query(`SELECT ${key}::text AS k FROM ${relation(config.relation)} WHERE true${scoped(1)} ORDER BY 1`, scopeArgs);
       return rows.map((row) => row.k);
     },
     /** Contagem de linhas da origem (`SELECT count(*)`), conferida com o destino pelo ensaio DRY3 (M9-D908 §3.3). */
     async countRows() {
-      const { rows } = await client.query(`SELECT count(*)::text AS n FROM ${relation(config.relation)}`);
+      const { rows } = await client.query(`SELECT count(*)::text AS n FROM ${relation(config.relation)} WHERE true${scoped(1)}`, scopeArgs);
       return Number(rows[0].n);
     },
     /** Relógio do banco do sistema antigo (`SELECT now()`), conferido contra os demais pela validação de relógio (M9-D908 §3.1). */

@@ -62,4 +62,24 @@ function listQueued(tenant, transaction) {
   return select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND status = 'QUEUED' ORDER BY created_at LIMIT 20`, { companyId: tenant.companyId }, transaction);
 }
 
-module.exports = { insert, get, latest, claim, finish, pause, resume, listPaused, listQueued };
+/** Serializa os pedidos de execução da empresa até o fim da transação: a contagem de ativas e o insert não se atropelam. */
+async function lockCompany(tenant, transaction) {
+  await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))', { transaction, replacements: { key: `mig_run_request:${tenant.companyId}` } });
+}
+
+/**
+ * Execuções ativas (QUEUED, RUNNING ou PAUSED, ainda dentro do prazo `expireMinutes`) da empresa: `total` e as que miram a mesma fonte (`overlapping`). Pedido sem sistema ou
+ * sem entidade mira todas, então cruza com qualquer outro.
+ */
+async function countActive(tenant, { sourceSystem, entity, expireMinutes }, transaction) {
+  const [row] = await select(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE (:sourceSystem::text IS NULL OR source_system IS NULL OR source_system = :sourceSystem) AND (:entity::text IS NULL OR entity IS NULL OR entity = :entity))::int AS overlapping
+       FROM governance.mig_runs
+      WHERE company_id = :companyId AND status IN ('QUEUED', 'RUNNING', 'PAUSED') AND COALESCE(started_at, created_at) > now() - make_interval(mins => :expireMinutes::int)`,
+    { companyId: tenant.companyId, sourceSystem: sourceSystem || null, entity: entity || null, expireMinutes }, transaction
+  );
+  return row;
+}
+
+module.exports = { lockCompany, countActive, insert, get, latest, claim, finish, pause, resume, listPaused, listQueued };

@@ -36,6 +36,13 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.lote.max_tentativas` | 3 | `batch.runner.runBatch` (falhas seguidas até ABORTED) |
 | `migracao.lote.timeout_min` | 30 | `batch.runner.releaseStale` (lote RUNNING sem fim vira FAILED) |
 | `migracao.eta.janela_lotes` | 5 | `control/eta.service` (quantos lotes entram na vazão do ETA) |
+| `migracao.execucao.max_por_fonte` | 1 | `ingest/runs.service` (execuções ativas da mesma fonte; acima, 409 `GOV_MIG_RUN_ALREADY_ACTIVE`) |
+| `migracao.execucao.max_por_empresa` | 3 | `ingest/runs.service` (teto de ativas da empresa; acima, 429 `GOV_MIG_RUN_LIMIT`) |
+| `migracao.execucao.max_no_processo` | 5 | `ingest/batch.runner.loadSettings` e `ingest/run.limiter` (teto de execuções rodando no processo; as demais ficam QUEUED para o job) |
+| `migracao.execucao.expira_min` | 720 | `ingest/runs.service` (execução ativa mais velha que isso deixa de contar) |
+| `migracao.legado.filtrar_por_empresa`, `.coluna_empresa`, `.codigo_empresa` | desligado, `empresa_id`, `A_DEFINIR` | `ingest/connectors/company.scope` (filtro de empresa em toda leitura do legado) |
+| `migracao.legado.exigir_filtro_multiempresa` | ligado | `ingest/connectors/company.scope` (grupo com várias empresas sem filtro: 422 `GOV_MIG_LEGACY_SCOPE_REQUIRED`) |
+| `migracao.payload.retencao_dias` | 30 | `ingest/payload.purge` (dias, depois de RECONCILED, até anular `mig_records.source_payload`; job `migrationRunJob`) |
 | `migracao.paralelo.intervalo_min` | 60 | `parallel/window.service` (intervalo padrão de uma janela criada sem `intervalMin`) |
 | `migracao.paralelo.fuso` | America/Sao_Paulo | `parallel/window.service` (datas da janela sem fuso) e `parallel/runner` (regra DATE) |
 | `migracao.paralelo.timeout_min` | 30 | `parallel/runner.reserve` (execução RUNNING sem fim vira FAILED) |
@@ -63,4 +70,5 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 - Variável de ambiente `MIGRATION_LEGACY_DB_URL`: endereço somente leitura da área `legado` (nunca em arquivo versionado).
 - `MIGRATION_RUN_JOB_DISABLED=true` desliga o job que retoma execuções QUEUED.
 - `PARALLEL_COMPARE_JOB_DISABLED=true` desliga o job da comparação paralela (M9-D903).
-- Replay: `replay.replayBatch(tenant, actor, batchId)`.
+- Replay: `POST /migration/batches/:id/replay` (permissão `governance:migration:run`) ou `replay.replayBatch(tenant, actor, batchId)`: novo lote com `replay_of`, mesmo `root_hash`, original intacto.
+- Limites: o `POST /migration/runs` é serializado por empresa (`pg_advisory_xact_lock`) e recusado acima dos limites `migracao.execucao.*`; o legado é lido com o filtro de empresa quando o grupo tem várias.

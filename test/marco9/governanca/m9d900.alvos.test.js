@@ -18,13 +18,17 @@ before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
 after(async () => { await env.sequelize.close(); });
 const A = () => tenants.A;
 
-test('m9d900 os parâmetros da migração (quatro da D900 e a janela do ETA da D901) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
-  assert.deepEqual(INGEST_SETTING_DEFAULTS, { 'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30, 'migracao.eta.janela_lotes': 5 });
+test('m9d900 os parâmetros da migração (da D900, a janela do ETA da D901, os limites de execução, o filtro de empresa do legado e o descarte do conteúdo) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
+  assert.deepEqual(INGEST_SETTING_DEFAULTS, {
+    'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30, 'migracao.eta.janela_lotes': 5,
+    'migracao.execucao.max_por_fonte': 1, 'migracao.execucao.max_por_empresa': 3, 'migracao.execucao.max_no_processo': 5, 'migracao.execucao.expira_min': 720,
+    'migracao.legado.filtrar_por_empresa': false, 'migracao.legado.coluna_empresa': 'empresa_id', 'migracao.legado.codigo_empresa': 'A_DEFINIR', 'migracao.legado.exigir_filtro_multiempresa': true, 'migracao.payload.retencao_dias': 30,
+  });
   for (const key of Object.values(KEYS)) assert.ok(SETTINGS_SCHEMA[key], `${key} no SETTINGS_SCHEMA`);
   for (const key of Object.values(KEYS)) {
      
     const value = await env.openTenantTx(A(), (tx) => getSetting(key, A(), tx, INGEST_SETTING_DEFAULTS[key]));
-    assert.equal(Number(value), INGEST_SETTING_DEFAULTS[key], key);
+    assert.equal(typeof INGEST_SETTING_DEFAULTS[key] === 'number' ? Number(value) : value, INGEST_SETTING_DEFAULTS[key], key);
   }
   const csv = fs.readFileSync(path.resolve(__dirname, '../../../../Maturacao/demandas/parametros.csv'), 'utf8');
   for (const key of Object.values(KEYS)) assert.ok(csv.includes(`"${key}"`), `${key} no catálogo parametros.csv`);
@@ -36,6 +40,10 @@ test('m9d900 toda parametrização declarada é lida por código de produção',
   const runner = read('ingest/batch.runner.js');
   for (const name of ['OVERLAP_S', 'BATCH_SIZE', 'MAX_ATTEMPTS', 'BATCH_TIMEOUT_MIN']) assert.match(runner, new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo executor`);
   assert.match(read('control/eta.service.js'), /KEYS\.ETA_WINDOW/, 'KEYS.ETA_WINDOW lido pela Torre de controle');
+  assert.match(runner, /KEYS\.EXEC_PER_PROCESS/, 'teto do processo lido pelo executor');
+  for (const name of ['EXEC_PER_SOURCE', 'EXEC_PER_COMPANY', 'EXEC_EXPIRE_MIN']) assert.match(read('ingest/runs.service.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido ao aceitar a execução`);
+  for (const name of ['LEGACY_FILTER', 'LEGACY_COLUMN', 'LEGACY_VALUE', 'LEGACY_REQUIRE']) assert.match(read('ingest/connectors/company.scope.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo filtro de empresa`);
+  assert.match(read('ingest/payload.purge.js'), /KEYS\.PAYLOAD_DAYS/, 'prazo de descarte lido pelo job');
 });
 
 test('m9d900 toda fonte semeada tem destino, modo válido e motivo da escolha', () => {

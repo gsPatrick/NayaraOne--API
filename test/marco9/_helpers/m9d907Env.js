@@ -29,9 +29,9 @@ const decide = async (tenant, decision, extra = {}) => {
 const getReport = (tenant, query = {}) => tx(tenant, (tn, t) => report.getReport(tn, query, t));
 const resolveItem = (tenant, id, body = {}) => tx(tenant, (tn, t) => items.resolveItem(tn, actor(tenant), id, body, t));
 const record = (tenant, op) => tx(tenant, (tn, t) => logService.recordExternalOp(tn, op, t));
-// Execução sem fonte nem entidade só para a Torre olhar a empresa toda: sem ela a Torre usa a execução mais recente, que pode ser de outro teste e filtrar os blockers.
+// Execução sem fonte nem entidade só para a Torre olhar a empresa toda: sem ela a Torre usa a execução mais recente, que pode ser de outro teste e filtrar os blockers. Já nasce encerrada: a M9-D900 conta as execuções ativas da empresa.
 const towerBlockers = async (tenant, code) => {
-  const runId = (await adminQuery("INSERT INTO governance.mig_runs (group_id, company_id, status) VALUES ($1, $2, 'QUEUED') RETURNING id", [tenant.groupId, tenant.companyId])).rows[0].id;
+  const runId = (await adminQuery("INSERT INTO governance.mig_runs (group_id, company_id, status, finished_at) VALUES ($1, $2, 'SUCCEEDED', now()) RETURNING id", [tenant.groupId, tenant.companyId])).rows[0].id;
   return (await tx(tenant, (tn, t) => tower.getTower(tn, actor(tenant), { runId }, t))).blockers.filter((b) => !code || b.code === code);
 };
 

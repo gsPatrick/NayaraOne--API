@@ -35,10 +35,14 @@ async function insertRecord(tenant, system, entity, { key, state, payload = null
   return row;
 }
 
-/** Execução QUEUED só para delimitar o escopo da Torre (sistema e entidade opcionais). */
+/**
+ * Execução só para delimitar o escopo da Torre (sistema e entidade opcionais). É encerrada logo depois de criada: a M9-D900 limita as execuções ativas por empresa e fonte, e uma
+ * execução QUEUED esquecida travaria os pedidos seguintes de todos os testes que dividem o banco.
+ */
 async function newRun(tenant, system, entity) {
   const runsService = require('../../../src/features/migration-v2/ingest/runs.service');
   const { runId } = await openTenantTx(tenant, (tx) => runsService.createRun(tenant, { userId: tenant.userId }, { sourceSystem: system, entity }, tx));
+  await q("UPDATE governance.mig_runs SET status = 'SUCCEEDED', finished_at = now() WHERE id = $1", [runId]);
   return runId;
 }
 
