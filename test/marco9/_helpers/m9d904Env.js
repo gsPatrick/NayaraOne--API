@@ -7,6 +7,7 @@ const blockersProviders = require('../../../src/features/migration-v2/control/bl
 const canary = require('../../../src/features/migration-v2/canary/canary.service');
 const base = require('./m9d904Base');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
+const { cleanMigration } = require('./m9d900Clean');
 
 const { openTenantTx, adminQuery } = env;
 const tenantOf = (tenant) => ({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId });
@@ -51,8 +52,10 @@ const percentOf = async (tenant, sector) => { const row = await flagRow(tenant, 
 const auditOf = async (tenant, action) => (await adminQuery('SELECT * FROM audit.audit_log WHERE company_id = $1 AND action = $2 ORDER BY occurred_at', [tenant.companyId, action])).rows;
 const fail = (promise) => promise.then(() => null, (err) => ({ status: err.statusCode, code: err.code, message: err.message, details: err.details }));
 
-/** Apaga o que os testes criaram: flags do canary, parâmetros, papéis e usuários de teste. */
+/** Apaga o que os testes criaram: resíduo da migração, flags do canary, parâmetros, papéis e usuários de teste. */
 async function cleanup(tenant) {
+  // o gate do canary vê a quarentena e os lotes de PERSON/SUPPLIER/PROPERTY da empresa inteira: o que testes de outras demandas (m9d900 a m9d906) deixaram não pode pesar aqui (hermético)
+  if (env.DISPOSABLE) await cleanMigration();
   await base.removeBase(tenant);
   await adminQuery("DELETE FROM governance.flag_versions WHERE company_id = $1 AND key LIKE 'migracao.setor.%'", [tenant.companyId]);
   await adminQuery("DELETE FROM governance.config_entries WHERE company_id = $1 AND key LIKE 'migracao.setor.%'", [tenant.companyId]);
