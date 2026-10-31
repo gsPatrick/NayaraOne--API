@@ -28,6 +28,33 @@ test('m9d940 DRY3 não aprovado reprova o fechamento', () => {
   }
 });
 
+test('m9d940 relatório DRY3 sem assinatura, editado à mão ou sem chave reprova o fechamento', () => {
+  const amb = kit.ambiente();
+  const arquivo = amb.cfg.dry3.arquivo;
+  // sem assinatura
+  kit.escrever(arquivo, kit.relatorioDry3({}, {}, { assinar: false }));
+  let r = kit.fechar(amb, itens('dry3'));
+  falhou(r, 'DRY3');
+  assert.match(kit.linha(r, 'DRY3'), /sem assinatura/);
+  // editado à mão depois de assinado (o critério vermelho virou verde)
+  const assinado = kit.relatorioDry3({ conclusion: 'REPROVADO' }, { blockers_zero: { ok: false, count: 1 } });
+  kit.escrever(arquivo, { ...assinado, conclusion: 'APROVADO', criteria: { ...assinado.criteria, blockers_zero: { ok: true, count: 0 } } });
+  r = kit.fechar(amb, itens('dry3'));
+  falhou(r, 'DRY3');
+  assert.match(kit.linha(r, 'DRY3'), /assinatura não confere/);
+  // assinado com outra chave
+  kit.escrever(arquivo, kit.relatorioDry3());
+  r = kit.fechar(amb, itens('dry3'), { MIGRATION_DRY3_SIGNING_KEY: 'outra-chave-de-teste-diferente' });
+  falhou(r, 'DRY3');
+  // sem chave configurada o fechamento não consegue conferir: erro de leitura (exit 2)
+  r = kit.fechar(amb, itens('dry3'), { MIGRATION_DRY3_SIGNING_KEY: '' });
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.stderr, /GOV_DOD_F_INVALID/);
+  // íntegro e com a chave: aprova
+  r = kit.fechar(amb, itens('dry3'));
+  assert.equal(r.status, 0, r.out);
+});
+
 test('m9d940 KPI ou campo de migração sem lineage reprova o fechamento', () => {
   const real = kit.RAIZ;
   const mapa = JSON.parse(fs.readFileSync(path.join(real, 'docs/governance/migration-field-map.json'), 'utf8'));
