@@ -1,0 +1,683 @@
+{
+  "commit": "4c5e50e79e69209376222c3a09fe769cce7c6911",
+  "dirty": true,
+  "date": "2026-10-28T15:56:50.247Z",
+  "durationSeconds": 12.595,
+  "exitCode": 0,
+  "checks": [
+    {
+      "name": "origem: saldo por item/local = soma dos movimentos do ledger",
+      "ok": true,
+      "detail": "3 saldos (soma 289.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0"
+    },
+    {
+      "name": "origem: nenhum saldo negativo",
+      "ok": true,
+      "detail": "0 negativo(s)"
+    },
+    {
+      "name": "origem: sem duplicidade (idempotência de movimento/recebimento, NF por empresa)",
+      "ok": true,
+      "detail": "movimentos 0, recebimentos 0, NF 0"
+    },
+    {
+      "name": "origem: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito)",
+      "ok": true,
+      "detail": "2 itens de pedido, 0 divergente(s)"
+    },
+    {
+      "name": "origem: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro",
+      "ok": true,
+      "detail": "2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0"
+    },
+    {
+      "name": "origem: divergências ligadas a itens de recebimento existentes",
+      "ok": true,
+      "detail": "2 divergência(s), 2 aberta(s), 0 órfã(s)"
+    },
+    {
+      "name": "origem: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor",
+      "ok": true,
+      "detail": "1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0"
+    },
+    {
+      "name": "origem: ativos de patrimônio com local/item existentes",
+      "ok": true,
+      "detail": "5 ativo(s), valor de aquisição total 9281.60"
+    },
+    {
+      "name": "origem: empréstimos — aberto tem responsável, destino e prazo e o ativo está emprestado; devolvido tem data e condição",
+      "ok": true,
+      "detail": "3 empréstimo(s), 1 aberto(s); sem responsável/prazo 0, ativo fora de empréstimo 0, devolvido incompleto 0, sem ativo 0"
+    },
+    {
+      "name": "origem: ordens de manutenção — ligadas a ativo existente; aberta mantém o ativo em manutenção; origem = devolução danificada do mesmo ativo",
+      "ok": true,
+      "detail": "1 ordem(ns), 1 aberta(s); sem ativo 0, ativo fora de manutenção 0, origem inválida 0"
+    },
+    {
+      "name": "origem: perdas — em análise não baixou saldo; aprovada tem o movimento LOSS da mesma quantidade; toda perda tem arquivo de evidência existente",
+      "ok": true,
+      "detail": "2 caso(s): 1 em análise, 1 aprovado(s); em análise que baixou saldo 0, aprovada sem movimento correto 0, evidência ausente 0"
+    },
+    {
+      "name": "origem: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste",
+      "ok": true,
+      "detail": "2 contagem(ns) (1 fechada(s), 1 aberta(s)), 3 item(ns), 2 com divergência; incoerentes 0, saldo alterado sem ajuste 0, aberta com ajuste 0"
+    },
+    {
+      "name": "origem: propostas de ajuste — pendente não moveu saldo; aprovada tem o movimento",
+      "ok": true,
+      "detail": "1 proposta(s), 1 pendente(s); pendente que moveu saldo 0, aprovada sem movimento 0"
+    },
+    {
+      "name": "origem: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura",
+      "ok": true,
+      "detail": "3 sinistro(s): 1 aberto(s), 1 submetido(s), 1 liquidado(s); liquidado sem lançamento correto 0, lançamento sem liquidar 0, submetido sem envio 0, sem evento de abertura 0, liquidado sem evento 0"
+    },
+    {
+      "name": "destino: saldo por item/local = soma dos movimentos do ledger",
+      "ok": true,
+      "detail": "3 saldos (soma 289.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0"
+    },
+    {
+      "name": "destino: nenhum saldo negativo",
+      "ok": true,
+      "detail": "0 negativo(s)"
+    },
+    {
+      "name": "destino: sem duplicidade (idempotência de movimento/recebimento, NF por empresa)",
+      "ok": true,
+      "detail": "movimentos 0, recebimentos 0, NF 0"
+    },
+    {
+      "name": "destino: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito)",
+      "ok": true,
+      "detail": "2 itens de pedido, 0 divergente(s)"
+    },
+    {
+      "name": "destino: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro",
+      "ok": true,
+      "detail": "2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0"
+    },
+    {
+      "name": "destino: divergências ligadas a itens de recebimento existentes",
+      "ok": true,
+      "detail": "2 divergência(s), 2 aberta(s), 0 órfã(s)"
+    },
+    {
+      "name": "destino: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor",
+      "ok": true,
+      "detail": "1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0"
+    },
+    {
+      "name": "destino: ativos de patrimônio com local/item existentes",
+      "ok": true,
+      "detail": "5 ativo(s), valor de aquisição total 9281.60"
+    },
+    {
+      "name": "destino: empréstimos — aberto tem responsável, destino e prazo e o ativo está emprestado; devolvido tem data e condição",
+      "ok": true,
+      "detail": "3 empréstimo(s), 1 aberto(s); sem responsável/prazo 0, ativo fora de empréstimo 0, devolvido incompleto 0, sem ativo 0"
+    },
+    {
+      "name": "destino: ordens de manutenção — ligadas a ativo existente; aberta mantém o ativo em manutenção; origem = devolução danificada do mesmo ativo",
+      "ok": true,
+      "detail": "1 ordem(ns), 1 aberta(s); sem ativo 0, ativo fora de manutenção 0, origem inválida 0"
+    },
+    {
+      "name": "destino: perdas — em análise não baixou saldo; aprovada tem o movimento LOSS da mesma quantidade; toda perda tem arquivo de evidência existente",
+      "ok": true,
+      "detail": "2 caso(s): 1 em análise, 1 aprovado(s); em análise que baixou saldo 0, aprovada sem movimento correto 0, evidência ausente 0"
+    },
+    {
+      "name": "destino: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste",
+      "ok": true,
+      "detail": "2 contagem(ns) (1 fechada(s), 1 aberta(s)), 3 item(ns), 2 com divergência; incoerentes 0, saldo alterado sem ajuste 0, aberta com ajuste 0"
+    },
+    {
+      "name": "destino: propostas de ajuste — pendente não moveu saldo; aprovada tem o movimento",
+      "ok": true,
+      "detail": "1 proposta(s), 1 pendente(s); pendente que moveu saldo 0, aprovada sem movimento 0"
+    },
+    {
+      "name": "destino: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura",
+      "ok": true,
+      "detail": "3 sinistro(s): 1 aberto(s), 1 submetido(s), 1 liquidado(s); liquidado sem lançamento correto 0, lançamento sem liquidar 0, submetido sem envio 0, sem evento de abertura 0, liquidado sem evento 0"
+    },
+    {
+      "name": "36 tabelas idênticas na origem e no destino",
+      "ok": true,
+      "detail": "74 linhas no total"
+    },
+    {
+      "name": "inventory.tool_loans: 3 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 3 (48f49e68947a…), destino 3 (48f49e68947a…)"
+    },
+    {
+      "name": "inventory.maintenance_orders: 1 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 1 (a7af95c6ae0f…), destino 1 (a7af95c6ae0f…)"
+    },
+    {
+      "name": "inventory.loss_cases: 2 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 2 (af4c6432a8e0…), destino 2 (af4c6432a8e0…)"
+    },
+    {
+      "name": "inventory.counts: 2 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 2 (ef6de444edc5…), destino 2 (ef6de444edc5…)"
+    },
+    {
+      "name": "inventory.count_items: 3 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 3 (9d3c66005a64…), destino 3 (9d3c66005a64…)"
+    },
+    {
+      "name": "inventory.adjustment_proposals: 1 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 1 (ed5d75620617…), destino 1 (ed5d75620617…)"
+    },
+    {
+      "name": "procurement.insurance_claims: 3 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 3 (769169bb2c1f…), destino 3 (769169bb2c1f…)"
+    },
+    {
+      "name": "procurement.insurance_claim_events: 6 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 6 (e8f44b5dd3d8…), destino 6 (e8f44b5dd3d8…)"
+    },
+    {
+      "name": "procurement.insurance_provider_submissions (sinistros): 2 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 2 (76108899470c…), destino 2 (76108899470c…)"
+    },
+    {
+      "name": "finance.financial_entries (indenizações de sinistro): 1 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 1 (64588b8a6591…), destino 1 (64588b8a6591…)"
+    },
+    {
+      "name": "procurement.supplier_qualifications: 1 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 1 (9d1f07196836…), destino 1 (9d1f07196836…)"
+    },
+    {
+      "name": "people.files (anexos do Marco 7): 5 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 5 (628ee284599c…), destino 5 (628ee284599c…)"
+    },
+    {
+      "name": "people.file_links (anexos do Marco 7): 2 linha(s) na origem e no destino, conteúdo idêntico",
+      "ok": true,
+      "detail": "origem 2 (174a14d16d95…), destino 2 (174a14d16d95…)"
+    },
+    {
+      "name": "5 anexo(s) vinculados (sinistro/apólice, qualificação de fornecedor, perda, movimento) abertos no storage restaurado, com SHA-256 e tamanho iguais ao cadastro",
+      "ok": true,
+      "detail": "5/5 conferem; vínculos: sinistro/apólice, qualificação de fornecedor, perda, movimento"
+    },
+    {
+      "name": "cadastro dos anexos (people.files) idêntico na origem e no destino",
+      "ok": true,
+      "detail": "5 arquivo(s)"
+    },
+    {
+      "name": "todo vínculo de anexo aponta para um arquivo existente",
+      "ok": true,
+      "detail": "6 vínculo(s), 0 órfão(s)"
+    },
+    {
+      "name": "sem a chave, com chave errada e com blob adulterado o anexo NÃO abre",
+      "ok": true,
+      "detail": "sem chave: FILES_CRYPTO_CONFIG_MISSING; chave errada: Error; adulterado: Error"
+    },
+    {
+      "name": "role de runtime sem SUPERUSER/BYPASSRLS",
+      "ok": true,
+      "detail": "superuser=false bypassrls=false"
+    },
+    {
+      "name": "sem contexto de tenant a role de runtime não vê nenhum saldo",
+      "ok": true,
+      "detail": "0 linha(s) visíveis"
+    },
+    {
+      "name": "com o SET LOCAL do tenant vê os saldos restaurados",
+      "ok": true,
+      "detail": "3 de 3"
+    },
+    {
+      "name": "pedido de compra restaurado",
+      "ok": true,
+      "detail": "status OPEN"
+    },
+    {
+      "name": "2 recebimentos confirmados com payable",
+      "ok": true,
+      "detail": "2 recebimentos, 2 payables"
+    },
+    {
+      "name": "divergências do recebimento restauradas",
+      "ok": true,
+      "detail": "OVER_RECEIPT, PRICE_MISMATCH"
+    },
+    {
+      "name": "requisição de material restaurada",
+      "ok": true,
+      "detail": "status ISSUED"
+    },
+    {
+      "name": "apólice e parcelas restauradas",
+      "ok": true,
+      "detail": "ACTIVE, 1 parcela(s)"
+    },
+    {
+      "name": "ativos de patrimônio restaurados",
+      "ok": true,
+      "detail": "2/2"
+    },
+    {
+      "name": "empréstimos restaurados: 1 aberto, 1 devolvido OK, 1 devolvido danificado",
+      "ok": true,
+      "detail": "OPEN/-, RETURNED/OK, RETURNED/DAMAGED"
+    },
+    {
+      "name": "ordem de manutenção aberta pela devolução danificada restaurada",
+      "ok": true,
+      "detail": "OPEN, empréstimo de origem confere"
+    },
+    {
+      "name": "casos de perda restaurados: 1 em análise sem movimento, 1 aprovado com o movimento LOSS",
+      "ok": true,
+      "detail": "OPEN / APPROVED"
+    },
+    {
+      "name": "contagens restauradas: 1 fechada com divergência, 1 aberta; proposta de ajuste pendente",
+      "ok": true,
+      "detail": "2 item(ns) divergente(s)"
+    },
+    {
+      "name": "sinistros restaurados: aberto, submetido e liquidado com o lançamento do Financeiro",
+      "ok": true,
+      "detail": "OPEN, SUBMITTED, SETTLED"
+    }
+  ],
+  "tables": {
+    "inventory.adjustment_proposals": {
+      "rows": 1,
+      "sha256": "ed5d7562061779235c8c75d8b883969d4c3349e315884616653ed047a110b14e"
+    },
+    "inventory.asset_movements": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.assets": {
+      "rows": 5,
+      "sha256": "91387499dd085aa58cbe63d67d26240c03c1b7fb8f64f2e316f335d9c5b4e40a"
+    },
+    "inventory.count_items": {
+      "rows": 3,
+      "sha256": "9d3c66005a64dc9eea839e901e391ffaf57e2cac28c95edbc12e64d03b3e91e2"
+    },
+    "inventory.counts": {
+      "rows": 2,
+      "sha256": "ef6de444edc5de79697758a435c8cdbffbd6f36d596414d2099c90ee3581bc26"
+    },
+    "inventory.inventory_items": {
+      "rows": 2,
+      "sha256": "8edbdca7636adc0b4c667896ce31555dc02e30b7c683518dfb328fbe0de34bbc"
+    },
+    "inventory.inventory_movements": {
+      "rows": 10,
+      "sha256": "e95ae13b8ad924ca7fff5f3ee5884207debbae63d2d418575c5180c096b22858"
+    },
+    "inventory.locations": {
+      "rows": 2,
+      "sha256": "ca2e7062e6f7cb49e2a799a7d6a0262144e31cf9e9c28181e74c4ee84a79cd18"
+    },
+    "inventory.loss_cases": {
+      "rows": 2,
+      "sha256": "af4c6432a8e0bf03b5b8681e2b9e7bec96727e46c2d3cbb00cd7e4acca711b9f"
+    },
+    "inventory.maintenance_orders": {
+      "rows": 1,
+      "sha256": "a7af95c6ae0fcdd1173e60b8109fdee04e607145c7318190f204937ffbc31a68"
+    },
+    "inventory.receipt_items": {
+      "rows": 3,
+      "sha256": "e9938c3848c4f7d523f36345ced4130962c1d9417c1815f495538987c83a8d9a"
+    },
+    "inventory.receipts": {
+      "rows": 2,
+      "sha256": "0446b0a170ac2097597eed7ae3d5911d46c4a4da5888b7a8393b4b85fe459c4e"
+    },
+    "inventory.requisition_items": {
+      "rows": 1,
+      "sha256": "e4ac85314dd9630943871e9997f74d83e82f1cb028d0ab296b673a21a772fcd5"
+    },
+    "inventory.requisitions": {
+      "rows": 1,
+      "sha256": "0ddd74eaf562fcecf730d16f00f04e372709db5f2c582d0108ae2410f1453668"
+    },
+    "inventory.stock_balances": {
+      "rows": 3,
+      "sha256": "4a0cfb37bb4ffc2c9e19deb3c997aa975fa92ac33c63eea78e92568f0dceb639"
+    },
+    "inventory.tool_loans": {
+      "rows": 3,
+      "sha256": "48f49e68947aa4e8dd7dd302857a94fc75e8289ed8c37d3da6c31dddab31bbfa"
+    },
+    "procurement.goods_receipt_items": {
+      "rows": 3,
+      "sha256": "6b766edea7c795eda8a3afa6a1388f979cbbbc09a2cf17cf1a96868779f9050a"
+    },
+    "procurement.goods_receipts": {
+      "rows": 2,
+      "sha256": "a6760fcc0e90070516a907615d1ba58f525391a784c54521ac63ea7a3bb753b9"
+    },
+    "procurement.insurance_claim_events": {
+      "rows": 6,
+      "sha256": "e8f44b5dd3d8fc49efd2f7e1f8590a1a735a208683a5f3d70f9d0abbe5ba2ea7"
+    },
+    "procurement.insurance_claims": {
+      "rows": 3,
+      "sha256": "769169bb2c1f400f7b33b7d248770c88e56fa781ee40b6b8bd2a9d6986d6f20a"
+    },
+    "procurement.insurance_coverages": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_installments": {
+      "rows": 1,
+      "sha256": "2574c073b5a96599a1d29b5b20e0cba0d6fe554cc1b294835dada04f7b1e6567"
+    },
+    "procurement.insurance_policies": {
+      "rows": 1,
+      "sha256": "19d331a6ff86e738544aef779d58406e3eaab0d5586604887cfe2e5a42abbe36"
+    },
+    "procurement.insurance_policy_parties": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_provider_submissions": {
+      "rows": 3,
+      "sha256": "1c73b7ef9d7d6887abec91cde84e40cf829ef79ad85f90bdf89f6505fb4935d3"
+    },
+    "procurement.insurance_renewal_tasks": {
+      "rows": 1,
+      "sha256": "2cc1039f13b5b610ad3872a57a4c5f1752d790b4cf6d05f4e623e47805a34697"
+    },
+    "procurement.purchase_order_items": {
+      "rows": 2,
+      "sha256": "d3511b0989411d395dc8a2f844c95c3821591af92f3c8064a13b41c463a48b47"
+    },
+    "procurement.purchase_orders": {
+      "rows": 1,
+      "sha256": "705eaa94ac285984a2955f7cb0a2a187b9ae4e4e30f6fb99c19b11e05da76e97"
+    },
+    "procurement.purchase_request_items": {
+      "rows": 2,
+      "sha256": "c095b63bf7137ab885253fa3482146d3353a007bfbb0498f3083e1fbeb26776f"
+    },
+    "procurement.purchase_requests": {
+      "rows": 1,
+      "sha256": "40430cbb3e7da45fa3360b5ed3533f984e199100f11c0763ab6289f162bc8bd8"
+    },
+    "procurement.quotations": {
+      "rows": 1,
+      "sha256": "922dee294748f9323b035d07944e31c2b9cf02b116e995171c601bb7e45b2ae7"
+    },
+    "procurement.receipt_discrepancies": {
+      "rows": 2,
+      "sha256": "fb5a9bf0a83f39c2d674dee368688e55ebbd92ea861978efe0541c54650a76c7"
+    },
+    "procurement.supplier_evaluations": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.supplier_offer_items": {
+      "rows": 2,
+      "sha256": "f89ad376f72cb8ba6f43d064da99c2e5e79dce666b1b6b6a6f086c960bfb6c74"
+    },
+    "procurement.supplier_offers": {
+      "rows": 1,
+      "sha256": "bc2f52aa0e5edfde348402beb239cb650b92391cc8224c1b46adc04c1b7ab133"
+    },
+    "procurement.supplier_qualifications": {
+      "rows": 1,
+      "sha256": "9d1f07196836319777c279e520612020f3572bc36929f2f834e3357bb1e5141f"
+    }
+  },
+  "complementoOrigemDestino": {
+    "inventory.tool_loans": {
+      "origem": {
+        "rows": 3,
+        "sha256": "48f49e68947aa4e8dd7dd302857a94fc75e8289ed8c37d3da6c31dddab31bbfa"
+      },
+      "destino": {
+        "rows": 3,
+        "sha256": "48f49e68947aa4e8dd7dd302857a94fc75e8289ed8c37d3da6c31dddab31bbfa"
+      }
+    },
+    "inventory.maintenance_orders": {
+      "origem": {
+        "rows": 1,
+        "sha256": "a7af95c6ae0fcdd1173e60b8109fdee04e607145c7318190f204937ffbc31a68"
+      },
+      "destino": {
+        "rows": 1,
+        "sha256": "a7af95c6ae0fcdd1173e60b8109fdee04e607145c7318190f204937ffbc31a68"
+      }
+    },
+    "inventory.loss_cases": {
+      "origem": {
+        "rows": 2,
+        "sha256": "af4c6432a8e0bf03b5b8681e2b9e7bec96727e46c2d3cbb00cd7e4acca711b9f"
+      },
+      "destino": {
+        "rows": 2,
+        "sha256": "af4c6432a8e0bf03b5b8681e2b9e7bec96727e46c2d3cbb00cd7e4acca711b9f"
+      }
+    },
+    "inventory.counts": {
+      "origem": {
+        "rows": 2,
+        "sha256": "ef6de444edc5de79697758a435c8cdbffbd6f36d596414d2099c90ee3581bc26"
+      },
+      "destino": {
+        "rows": 2,
+        "sha256": "ef6de444edc5de79697758a435c8cdbffbd6f36d596414d2099c90ee3581bc26"
+      }
+    },
+    "inventory.count_items": {
+      "origem": {
+        "rows": 3,
+        "sha256": "9d3c66005a64dc9eea839e901e391ffaf57e2cac28c95edbc12e64d03b3e91e2"
+      },
+      "destino": {
+        "rows": 3,
+        "sha256": "9d3c66005a64dc9eea839e901e391ffaf57e2cac28c95edbc12e64d03b3e91e2"
+      }
+    },
+    "inventory.adjustment_proposals": {
+      "origem": {
+        "rows": 1,
+        "sha256": "ed5d7562061779235c8c75d8b883969d4c3349e315884616653ed047a110b14e"
+      },
+      "destino": {
+        "rows": 1,
+        "sha256": "ed5d7562061779235c8c75d8b883969d4c3349e315884616653ed047a110b14e"
+      }
+    },
+    "procurement.insurance_claims": {
+      "origem": {
+        "rows": 3,
+        "sha256": "769169bb2c1f400f7b33b7d248770c88e56fa781ee40b6b8bd2a9d6986d6f20a"
+      },
+      "destino": {
+        "rows": 3,
+        "sha256": "769169bb2c1f400f7b33b7d248770c88e56fa781ee40b6b8bd2a9d6986d6f20a"
+      }
+    },
+    "procurement.insurance_claim_events": {
+      "origem": {
+        "rows": 6,
+        "sha256": "e8f44b5dd3d8fc49efd2f7e1f8590a1a735a208683a5f3d70f9d0abbe5ba2ea7"
+      },
+      "destino": {
+        "rows": 6,
+        "sha256": "e8f44b5dd3d8fc49efd2f7e1f8590a1a735a208683a5f3d70f9d0abbe5ba2ea7"
+      }
+    },
+    "procurement.insurance_provider_submissions (sinistros)": {
+      "origem": {
+        "rows": 2,
+        "sha256": "76108899470c6efe0dff0a71f839c28eec3ca0db324df11ebea7e2ded9060879"
+      },
+      "destino": {
+        "rows": 2,
+        "sha256": "76108899470c6efe0dff0a71f839c28eec3ca0db324df11ebea7e2ded9060879"
+      }
+    },
+    "finance.financial_entries (indenizações de sinistro)": {
+      "origem": {
+        "rows": 1,
+        "sha256": "64588b8a65911b5806ae412b593931ff17ac0a0abe8608f96c496a176f70091e"
+      },
+      "destino": {
+        "rows": 1,
+        "sha256": "64588b8a65911b5806ae412b593931ff17ac0a0abe8608f96c496a176f70091e"
+      }
+    },
+    "procurement.supplier_qualifications": {
+      "origem": {
+        "rows": 1,
+        "sha256": "9d1f07196836319777c279e520612020f3572bc36929f2f834e3357bb1e5141f"
+      },
+      "destino": {
+        "rows": 1,
+        "sha256": "9d1f07196836319777c279e520612020f3572bc36929f2f834e3357bb1e5141f"
+      }
+    },
+    "people.files (anexos do Marco 7)": {
+      "origem": {
+        "rows": 5,
+        "sha256": "628ee284599c8d29b30496abb5a5cf249486e38f000aa8a853d26258d322c798"
+      },
+      "destino": {
+        "rows": 5,
+        "sha256": "628ee284599c8d29b30496abb5a5cf249486e38f000aa8a853d26258d322c798"
+      }
+    },
+    "people.file_links (anexos do Marco 7)": {
+      "origem": {
+        "rows": 2,
+        "sha256": "174a14d16d9581af579c8628d0f2d084df2c118c111b92bf0321bf8edd9010dd"
+      },
+      "destino": {
+        "rows": 2,
+        "sha256": "174a14d16d9581af579c8628d0f2d084df2c118c111b92bf0321bf8edd9010dd"
+      }
+    }
+  },
+  "anexos": {
+    "executadoEm": "2026-10-28T15:57:02.181Z",
+    "escopo": "Anexos vinculados a perdas, qualificação de fornecedor, apólice e sinistro do Marco 7 (drill de restore em banco/storage descartáveis)",
+    "arquivosTestados": [
+      {
+        "arquivo": "apolice-assinada.pdf",
+        "tipo": "application/pdf",
+        "vinculos": [
+          "sinistro/apólice (InsurancePolicy)"
+        ],
+        "bytesDoCadastro": 72,
+        "bytesAbertos": 72,
+        "abriu": true,
+        "sha256Confere": true,
+        "tamanhoConfere": true,
+        "sha256IndependenteConfere": true,
+        "blobCifradoIgualOrigemDestino": true,
+        "sha256": "2182730e9b6f9c6e27ae990accdd5a37bc76019c05de29ea8b326cc75d59bb08"
+      },
+      {
+        "arquivo": "doc-fornecedor-1793203019082.pdf",
+        "tipo": "application/pdf",
+        "vinculos": [
+          "qualificação de fornecedor"
+        ],
+        "bytesDoCadastro": 21,
+        "bytesAbertos": 21,
+        "abriu": true,
+        "sha256Confere": true,
+        "tamanhoConfere": true,
+        "sha256IndependenteConfere": null,
+        "blobCifradoIgualOrigemDestino": true,
+        "sha256": "5e6f07d65a629abf3fdfed6da864df5f21c3b6f0cb87cdb2982ae5f09687c0f2"
+      },
+      {
+        "arquivo": "evidencia-perda-decidida.pdf",
+        "tipo": "application/pdf",
+        "vinculos": [
+          "perda",
+          "movimento (evidência)"
+        ],
+        "bytesDoCadastro": 93,
+        "bytesAbertos": 93,
+        "abriu": true,
+        "sha256Confere": true,
+        "tamanhoConfere": true,
+        "sha256IndependenteConfere": true,
+        "blobCifradoIgualOrigemDestino": true,
+        "sha256": "21271b4d8784cd338b2f60d05d0b5c9be53ca11625711476cb85706d601bcf83"
+      },
+      {
+        "arquivo": "evidencia-perda-em-analise.pdf",
+        "tipo": "application/pdf",
+        "vinculos": [
+          "perda"
+        ],
+        "bytesDoCadastro": 111,
+        "bytesAbertos": 111,
+        "abriu": true,
+        "sha256Confere": true,
+        "tamanhoConfere": true,
+        "sha256IndependenteConfere": true,
+        "blobCifradoIgualOrigemDestino": true,
+        "sha256": "7e81cf36b84dec7fbdf074a251fd4ef33d88eed46a255a76dbfe986da847652b"
+      },
+      {
+        "arquivo": "laudo-sinistro-liquidado.pdf",
+        "tipo": "application/pdf",
+        "vinculos": [
+          "sinistro/apólice (InsuranceClaim)"
+        ],
+        "bytesDoCadastro": 100,
+        "bytesAbertos": 100,
+        "abriu": true,
+        "sha256Confere": true,
+        "tamanhoConfere": true,
+        "sha256IndependenteConfere": true,
+        "blobCifradoIgualOrigemDestino": true,
+        "sha256": "1c6bfaf1ec0eefcfb7c8ca0a95c0d4ae60027609c87aa17b593b2fa8e8596434"
+      }
+    ],
+    "todosAbriramEConferem": true,
+    "semChave": {
+      "recusou": true,
+      "codigo": "FILES_CRYPTO_CONFIG_MISSING"
+    },
+    "chaveErrada": {
+      "recusou": true,
+      "codigo": "Error"
+    },
+    "blobAdulterado": {
+      "recusou": true,
+      "codigo": "Error"
+    },
+    "observacao": "A chave FILES_ENCRYPTION_KEY não vai dentro do backup. Sem a mesma chave os arquivos restaurados não abrem."
+  }
+}

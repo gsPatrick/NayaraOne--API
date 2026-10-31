@@ -41,16 +41,42 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'unit_of_measure',
       },
+      itemType: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'CONSUMABLE',
+        field: 'item_type',
+        comment: 'CONSUMABLE|TOOL|ASSET|SERVICE_ITEM',
+      },
+      // BUG REAL CORRIGIDO (rodada 47): contrato (TAB-0750) exige numeric(18,4) — DECIMAL(9,6)
+      // dava overflow em qualquer item com estoque acima de ~999 unidades.
       quantityOnHand: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: false,
         defaultValue: 0,
         field: 'quantity_on_hand',
       },
       minimumQuantity: {
-        type: DataTypes.DECIMAL(9, 6),
+        type: DataTypes.DECIMAL(18, 4),
         allowNull: true,
         field: 'minimum_quantity',
+      },
+      averageCost: {
+        type: DataTypes.DECIMAL(18, 6),
+        allowNull: true,
+        field: 'average_cost',
+      },
+      status: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: 'ACTIVE',
+        field: 'status',
+      },
+      allowNegativeStock: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'allow_negative_stock',
       },
       lockVersion: {
         type: DataTypes.INTEGER,

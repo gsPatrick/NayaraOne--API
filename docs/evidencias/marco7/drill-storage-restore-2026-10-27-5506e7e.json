@@ -1,0 +1,47 @@
+{
+  "executadoEm": "2026-10-27T12:18:44.109Z",
+  "arquivosNoBackup": 10214,
+  "arquivosTestados": [
+    {
+      "arquivo": "EVID M8 sem-renda.pdf",
+      "tipo": "application/pdf",
+      "bytesDoCadastro": 726,
+      "bytesAbertos": 726,
+      "abriu": true,
+      "sha256Confere": true,
+      "sha256": "05fc0c9cad8036bb260fcab272a13a752c113363d88ef2dab41ea3f26cf2e468"
+    },
+    {
+      "arquivo": "EVID M8 ilegivel.png",
+      "tipo": "image/png",
+      "bytesDoCadastro": 4538,
+      "bytesAbertos": 4538,
+      "abriu": true,
+      "sha256Confere": true,
+      "sha256": "5298f549dda572d780f9773b6d55d1f952c64184e1a2e3c08f9a8281c8ca8a5d"
+    },
+    {
+      "arquivo": "EVID M8 rg-cpf.pdf",
+      "tipo": "application/pdf",
+      "bytesDoCadastro": 699,
+      "bytesAbertos": 699,
+      "abriu": true,
+      "sha256Confere": true,
+      "sha256": "75356586b6a1e648a7bf2c6c1b996027fea748a0200a17fed82ff2f7d8455eb6"
+    }
+  ],
+  "todosAbriramEConferem": true,
+  "semChave": {
+    "recusou": true,
+    "codigo": "FILES_CRYPTO_CONFIG_MISSING"
+  },
+  "chaveErrada": {
+    "recusou": true,
+    "codigo": "Error"
+  },
+  "blobAdulterado": {
+    "recusou": true,
+    "codigo": "Error"
+  },
+  "observacao": "A chave FILES_ENCRYPTION_KEY não vai dentro do backup. Sem a mesma chave os arquivos restaurados não abrem."
+}

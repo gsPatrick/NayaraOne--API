@@ -46,11 +46,23 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'contract_id',
       },
+      constructionProjectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'construction_project_id',
+        comment: 'Dimensão de origem Obras (M6-97) — só preenchida quando o lançamento nasce de uma medição/obra.',
+      },
       chartOfAccountId: {
         type: DataTypes.UUID,
         allowNull: true,
         field: 'chart_of_account_id',
         comment: 'Classificação contábil opcional (finance.chart_of_accounts — M4-01)',
+      },
+      chartOfAccountVersionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'chart_of_account_version_id',
+        comment: '§4: versão da conta vigente na data do fato (finance.chart_of_account_versions)',
       },
       isThirdPartyFunds: {
         type: DataTypes.BOOLEAN,
@@ -65,6 +77,19 @@ module.exports = (sequelize) => {
         field: 'third_party_reference',
         comment: 'Identificação do titular/origem do dinheiro de terceiro (ex.: "Caução contrato X")',
       },
+      // F04 — devolução/compensação de dinheiro de terceiro aponta para o recebimento de origem.
+      thirdPartyOriginEntryId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_origin_entry_id' },
+      // F04 — titular do dinheiro de terceiro (pessoa parte do contrato).
+      thirdPartyHolderPersonId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_holder_person_id' },
+      // F03 — como um PAYABLE com conta bancária foi liquidado: BANK_CONFIRMED | MANUAL_WITH_EVIDENCE.
+      settlementMethod: { type: DataTypes.STRING(32), allowNull: true, field: 'settlement_method' },
+      settlementEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'settlement_evidence_file_id' },
+      settlementReason: { type: DataTypes.TEXT, allowNull: true, field: 'settlement_reason' },
+      settlementEvidenceAttachedBy: { type: DataTypes.UUID, allowNull: true, field: 'settlement_evidence_attached_by' },
+      settlementEvidenceAttachedAt: { type: DataTypes.DATE, allowNull: true, field: 'settlement_evidence_attached_at' },
+      // RETURN (devolução em dinheiro) | COMPENSATION (abate de dívida do titular, sem caixa).
+      thirdPartyReleaseType: { type: DataTypes.STRING(16), allowNull: true, field: 'third_party_release_type' },
+      thirdPartyCompensatedEntryId: { type: DataTypes.UUID, allowNull: true, field: 'third_party_compensated_entry_id' },
       entryType: {
         type: DataTypes.STRING(16),
         allowNull: false,

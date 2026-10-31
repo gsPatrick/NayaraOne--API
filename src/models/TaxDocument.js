@@ -36,6 +36,14 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'financial_entry_id',
       },
+      // Marco 8 Fase 12 (migration 351) — vincula a NFS-e emitida ao pedido de emissão do
+      // Correspondente Bancário. Nullable: os outros documentType (DIMOB, WITHHOLDING_RECEIPT)
+      // não têm InvoiceRequest de origem.
+      invoiceRequestId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'invoice_request_id',
+      },
       documentType: {
         type: DataTypes.STRING(32),
         allowNull: false,
@@ -57,6 +65,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'amount',
       },
+      // Marco 8 (migration 634) — XML/PDF/ID oficial da NFS-e preservados com hash de integridade.
+      xmlContent: { type: DataTypes.TEXT, allowNull: true, field: 'xml_content' },
+      xmlSha256: { type: DataTypes.STRING(64), allowNull: true, field: 'xml_sha256' },
+      pdfContent: { type: DataTypes.BLOB, allowNull: true, field: 'pdf_content' },
+      pdfSha256: { type: DataTypes.STRING(64), allowNull: true, field: 'pdf_sha256' },
+      verificationCode: { type: DataTypes.STRING(64), allowNull: true, field: 'verification_code' },
       fileId: {
         type: DataTypes.UUID,
         allowNull: true,

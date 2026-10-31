@@ -4,7 +4,13 @@ const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
 const { assertOutcomeReason } = require('./opportunityOutcomeReason.validator');
-const { publishOpportunityCreated, publishOpportunityStageChanged } = require('./opportunityEvents.service');
+const {
+  publishOpportunityCreated,
+  publishOpportunityStageChanged,
+  publishOpportunityCreatedEvent,
+  publishOpportunityWon,
+  publishOpportunityLost,
+} = require('./opportunityEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const TEMPERATURES = ['COLD', 'WARM', 'HOT'];
@@ -75,6 +81,9 @@ async function createOpportunity(payload, actorUserId, transaction) {
   );
 
   await publishOpportunityCreated(opportunity, transaction);
+  await publishOpportunityCreatedEvent(opportunity, transaction);
+  if (opportunity.stage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
+  if (opportunity.stage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
 
   await registrarAuditoria(
     {
@@ -93,11 +102,22 @@ async function createOpportunity(payload, actorUserId, transaction) {
   return opportunity;
 }
 
+// CRM-TS-012 / item 17 do Caderno (seção 18, "Antifraude e segurança": "Corretor visualizar
+// carteira alheia — Escopo conforme política de equipe"): sem `ownerScope`, o comportamento é
+// o de sempre (ver tudo) — quem decide o escopo é o CONTROLLER, a partir de
+// `req.auth.permissions` (ver crm.controller.js). Dois valores possíveis:
+//   - 'OWN'  → só oportunidades onde ownerUserId === ownerScope.userId.
+//   - 'ALL'  (ou ausente) → sem filtro extra, vê tudo da empresa (fallback sem regressão para
+//     quem só tem a permissão legada `crm:opportunities:read`, sem nenhuma das duas novas
+//     permissões de escopo granular `crm:opportunities:read:own`/`:all`).
 async function listOpportunities(transaction, filters = {}) {
   const where = {};
   if (filters.stage) where.stage = String(filters.stage).toUpperCase();
   if (filters.personId) where.personId = filters.personId;
   if (filters.propertyId) where.propertyId = filters.propertyId;
+  if (filters.ownerScope && filters.ownerScope.mode === 'OWN') {
+    where.ownerUserId = filters.ownerScope.userId;
+  }
   return Opportunity.findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
@@ -178,6 +198,8 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
 
   if (stage !== undefined && nextStage !== previousStage) {
     await publishOpportunityStageChanged(opportunity, previousStage, transaction);
+    if (nextStage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
+    if (nextStage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
   }
 
   const stageChanged = stage !== undefined && nextStage !== previousStage;

@@ -1,0 +1,35 @@
+[withDisposableDb] cluster descartável 127.0.0.1:5462/drill_app pronto (296 migrations, GRANT em 14 schemas) em 9.7 s
+# Carga Estoque/Compras — LEVE (CI); concorrência 8; pool 24
+--- SETUP (serviços reais, commitado) ---
+  12 itens (2 quentes com saldo 40), 3 depósitos, 10 pedidos abertos.
+--- CARGA: 550 tarefas, 8 em paralelo ---
+
+650 operações em 2.1 s (303 op/s)
+
+| Operação | n | ok | recusas de negócio | inesperados | p50 ms | p95 ms | p99 ms | máx ms |
+|---|---:|---:|---|---|---:|---:|---:|---:|
+| leitura: histórico de movimentos | 60 | 60 | — | — | 10.2 | 14.9 | 17.1 | 17.1 |
+| leitura: saldos do item | 60 | 60 | — | — | 7.1 | 10.5 | 12.3 | 12.3 |
+| movimento IN | 52 | 52 | — | — | 26.1 | 94.6 | 112.9 | 112.9 |
+| movimento OUT | 141 | 49 | INVENTORY_INSUFFICIENT_BALANCE: 92 | — | 17.1 | 53.0 | 98.7 | 151.2 |
+| movimento TRANSFER | 107 | 67 | INVENTORY_INSUFFICIENT_BALANCE: 40 | — | 22.9 | 65.4 | 112.0 | 119.4 |
+| recebimento de compra | 50 | 50 | — | — | 70.6 | 158.6 | 180.5 | 180.5 |
+| replay de movimento | 20 | 13 | INVENTORY_INSUFFICIENT_BALANCE: 7 | — | 16.7 | 46.3 | 76.9 | 76.9 |
+| replay de recebimento | 10 | 10 | — | — | 71.4 | 123.5 | 123.5 | 123.5 |
+| requisição: aprovar | 50 | 50 | — | — | 7.5 | 11.9 | 13.3 | 13.3 |
+| requisição: criar | 50 | 50 | — | — | 15.6 | 66.9 | 75.2 | 75.2 |
+| requisição: entregar | 50 | 50 | — | — | 30.3 | 49.4 | 54.8 | 54.8 |
+
+--- GATES ---
+  ✅ zero saldo negativo — 0
+  ✅ saldo = soma do ledger em todo item/local — 0 divergente(s)
+  ✅ zero movimento duplicado (idempotencyKey) — 0
+  ✅ zero recebimento duplicado (chave e NF) — chave 0, NF 0
+  ✅ zero payable duplicado / recebimento sem payable — duplicado 0, sem payable 0
+  ✅ recebimentos gravados = 50 (replays não somam) — 50
+  ✅ recebido por item de pedido = soma dos recebimentos — 0
+  ✅ zero erro inesperado — 0
+  ✅ p95 < 300 ms em todas as operações com n >= 50 — maior p95 (n >= 50): 158.6 ms
+
+281 movimentos no ledger ao final. Duração total 2.8 s.
+[withDisposableDb] cluster parado e diretório temporário apagado.

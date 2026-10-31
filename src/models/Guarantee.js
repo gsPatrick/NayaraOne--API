@@ -70,6 +70,21 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      // FIX AUD-009 (auditoria externa, 09/10/2026): a coluna "replaced_by_guarantee_id"
+      // (migration 20260101000289) JÁ existe fisicamente neste banco (confirmado via
+      // information_schema.columns), mas a nota de ambiente que acompanhava este arquivo dizia
+      // o contrário e o campo tinha ficado fora do model — mesmo padrão de bug do fallback de
+      // bootstrap encontrado em construction/projects.service.js#hasOpenCriticalNonconformity.
+      // Resultado prático: `replaceGuarantee` (guarantees.service.js) atribuía
+      // `oldGuarantee.replacedByGuaranteeId` só na instância em memória — nunca persistia, então
+      // o vínculo "quem substituiu quem" (Caderno Anexo I "9. Garantias locatícias" —
+      // "contrato não perde histórico quando a garantia é substituída") só existia no JSON de
+      // auditoria, não na própria linha da garantia antiga.
+      replacedByGuaranteeId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'replaced_by_guarantee_id',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

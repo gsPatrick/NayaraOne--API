@@ -34,6 +34,14 @@ const { verifyAccessToken } = require('../utils/jwt');
  * `SET LOCAL` antes de buscar a sessão — sem isso, precisaríamos remover o RLS da tabela
  * (pior) ou usar uma segunda conexão privilegiada (reintroduziria o mesmo risco do TEC-03/04).
  */
+// Cada router de feature faz `router.use(authMiddleware)` e todos são montados em '/v1', então
+// uma requisição para o router N passava pelo authMiddleware dos N-1 routers anteriores — no
+// financeiro eram 12 validações de sessão (5 round-trips cada, ~125 ms por ida ao Postgres
+// remoto) ≈ 7,5 s antes do handler. A validação passa a valer uma vez por requisição: se ESTE
+// middleware já validou ESTE mesmo token nesta requisição, segue direto (req.auth foi gravado por
+// ele). Nada vindo do cliente é confiado — a marca fica num WeakMap interno, não no req.
+const verifiedTokenByRequest = new WeakMap();
+
 async function authMiddleware(req, res, next) {
   const header = req.header('authorization') || req.header('Authorization');
   if (!header || !header.startsWith('Bearer ')) {
@@ -43,6 +51,10 @@ async function authMiddleware(req, res, next) {
   const token = header.slice('Bearer '.length).trim();
   if (!token) {
     return next(AppError.unauthorized('Token de acesso ausente.', 'MISSING_ACCESS_TOKEN'));
+  }
+
+  if (req.auth && verifiedTokenByRequest.get(req) === token) {
+    return next();
   }
 
   let payload;
@@ -63,8 +75,11 @@ async function authMiddleware(req, res, next) {
       // require tardio pra evitar dependência circular (models -> ... -> middlewares).
       const { Session, sequelize } = require('../models');
       const session = await sequelize.transaction(async (transaction) => {
-        await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: payload.group_id }, transaction });
-        await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: payload.company_id }, transaction });
+        // set_config(..., true) = SET LOCAL; os dois cabem numa única ida ao banco.
+        await sequelize.query(
+          "SELECT set_config('app.group_id', :groupId, true), set_config('app.company_id', :companyId, true)",
+          { replacements: { groupId: payload.group_id, companyId: payload.company_id }, transaction }
+        );
         return Session.findByPk(payload.session_id, { transaction });
       });
       if (!session || session.revokedAt || session.expiresAt < new Date()) {
@@ -83,11 +98,13 @@ async function authMiddleware(req, res, next) {
 
   req.auth = {
     userId: payload.sub,
+    sessionId: payload.session_id || null,
     groupId: payload.group_id,
     companyId: payload.company_id,
     roles: payload.roles || [],
     permissions: payload.permissions || [],
   };
+  verifiedTokenByRequest.set(req, token);
 
   return next();
 }
@@ -99,14 +116,15 @@ async function authMiddleware(req, res, next) {
  * na lista resolvida no login, a requisição é bloqueada com 403 — nunca com bypass silencioso.
  */
 function requirePermission(permissionCode) {
-  return function requirePermissionMiddleware(req, res, next) {
+  const middleware = function requirePermissionMiddleware(req, res, next) {
     if (!req.auth) {
       return next(AppError.unauthorized('Contexto de autenticação ausente.', 'AUTH_CONTEXT_MISSING'));
     }
     if (!req.auth.permissions.includes(permissionCode)) {
       return next(
         AppError.forbidden(
-          `Permissão ausente: ${permissionCode}.`,
+          // A permissão exigida segue em details.required (para o suporte); o texto que a pessoa vê não traz código técnico.
+          'Você não tem permissão para realizar esta ação. Peça o acesso a quem administra o seu perfil.',
           'PERMISSION_DENIED',
           { required: permissionCode }
         )
@@ -114,6 +132,10 @@ function requirePermission(permissionCode) {
     }
     return next();
   };
+  // Marca a permissão exigida para que a matriz de permissões da API (scripts/gerarMatrizPermissoes.js)
+  // seja gerada do código real, nunca digitada à mão.
+  middleware.requiredPermission = permissionCode;
+  return middleware;
 }
 
 /**

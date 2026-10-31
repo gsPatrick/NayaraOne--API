@@ -67,6 +67,25 @@ const RULES = [
     conditionAstJson: { fact: 'rentAdjustmentRuleActive', op: '==', value: true },
     actionJson: { appliedEqualsRawByDefault: true },
   },
+  // REG-LOC-004 (conferência Nayara 18/10/2026 — "cadência via Motor de Regras"): régua de
+  // cobrança por etapas. Etapas e prazos padrão documentados em
+  // src/features/billing/collectionCadence.service.js; ajustáveis por nova versão publicada.
+  {
+    code: 'REG-LOC-004',
+    name: 'Cadência de cobrança de locação',
+    description: 'Etapas da régua de cobrança de uma competência de locação (lembrete, avisos, tarefa, escalonamento jurídico).',
+    domain: 'finance',
+    conditionAstJson: { fact: 'collectionCadenceRuleActive', op: '==', value: true },
+    actionJson: {
+      steps: [
+        { code: 'REMINDER_D-3', offsetDays: -3, action: 'NOTIFY' },
+        { code: 'NOTICE_D1', offsetDays: 1, action: 'NOTIFY' },
+        { code: 'NOTICE_D5', offsetDays: 5, action: 'NOTIFY' },
+        { code: 'TASK_D15', offsetDays: 15, action: 'TASK' },
+        { code: 'LEGAL_D30', offsetDays: 30, action: 'ESCALATE_LEGAL' },
+      ],
+    },
+  },
 ];
 
 function hashCondition(conditionAstJson) {

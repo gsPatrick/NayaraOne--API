@@ -2,6 +2,7 @@
 
 const { Visit, Property, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { publishDomainEvent } = require('../../engines/events/outbox');
 
 const VISIT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'DONE', 'CANCELED', 'NO_SHOW'];
 
@@ -57,7 +58,7 @@ async function createVisit(payload, actorUserId, transaction) {
 
   assertNotScheduledInThePast(scheduledAt, normalizedStatus);
 
-  return Visit.create(
+  const visit = await Visit.create(
     {
       groupId,
       companyId,
@@ -73,6 +74,25 @@ async function createVisit(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+
+  // Registro retroativo de visita que já aconteceu (status DONE direto na criação) também
+  // dispara crm.visit.completed — não só a transição via updateVisit.
+  if (normalizedStatus === 'DONE') {
+    await publishDomainEvent(
+      {
+        groupId,
+        companyId,
+        aggregateType: 'Visit',
+        aggregateId: visit.id,
+        eventType: 'crm.visit.completed',
+        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId },
+        idempotencyKey: `crm.visit.completed:${visit.id}`,
+      },
+      transaction
+    );
+  }
+
+  return visit;
 }
 
 async function listVisits(transaction, filters = {}) {
@@ -92,6 +112,7 @@ async function getVisit(id, transaction) {
 
 async function updateVisit(id, payload, actorUserId, transaction) {
   const visit = await getVisit(id, transaction);
+  const previousStatus = visit.status;
   const { scheduledAt, status, feedback, agentUserId } = payload;
   if (scheduledAt !== undefined) visit.scheduledAt = scheduledAt;
   if (status !== undefined) {
@@ -108,6 +129,24 @@ async function updateVisit(id, payload, actorUserId, transaction) {
   if (scheduledAt !== undefined) assertNotScheduledInThePast(visit.scheduledAt, visit.status);
   visit.updatedBy = actorUserId || null;
   await visit.save({ transaction });
+
+  // Caderno (seção 17, "Eventos mínimos"): crm.visit.completed — dispara só na TRANSIÇÃO para
+  // DONE (não reemite se a visita já estava DONE e outro campo foi editado).
+  if (status !== undefined && visit.status === 'DONE' && previousStatus !== 'DONE') {
+    await publishDomainEvent(
+      {
+        groupId: visit.groupId,
+        companyId: visit.companyId,
+        aggregateType: 'Visit',
+        aggregateId: visit.id,
+        eventType: 'crm.visit.completed',
+        payload: { id: visit.id, propertyId: visit.propertyId, personId: visit.personId, opportunityId: visit.opportunityId },
+        idempotencyKey: `crm.visit.completed:${visit.id}`,
+      },
+      transaction
+    );
+  }
+
   return visit;
 }
 

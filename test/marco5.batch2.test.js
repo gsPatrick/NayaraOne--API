@@ -17,7 +17,7 @@ const crypto = require('crypto');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const propertiesService = require('../src/features/properties/properties.service');
@@ -147,7 +147,8 @@ async function buildSignedLease(transaction, { withProperty = false } = {}) {
   await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
   await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, transaction);
 
-  await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   const file = await createDocumentFile(transaction);
   const version = await contractVersionsService.createContractVersion(
     contract.id,
@@ -183,6 +184,10 @@ test('M5-10: SIGNED forjado (sem documento nem assinatura) NÃO vira ACTIVE — 
       transaction
     );
     contract.status = 'SIGNED';
+    // Dispensa o checklist documental pra isolar exatamente o gate de ativação que este teste
+    // quer provar — sem isso, assertDocumentRequirementsGate (que roda em TODA transição, antes
+    // do gate de ativação) bloqueia primeiro com LEGAL_REQUIREMENTS_PENDING.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
 
     await assert.rejects(
       () => contractsService.transitionContractStatus(contract, 'ACTIVE', tenant.userId, transaction),
@@ -213,6 +218,7 @@ test('M5-10: contrato com documento mas com assinatura ainda PENDENTE não é at
     const lessee = await createPerson(transaction, 'M5-10 Locatário');
     await contractsService.addContractParty(contract.id, { personId: landlord.id, partyRole: 'LANDLORD' }, tenant.userId, transaction);
     await contractsService.addContractParty(contract.id, { personId: lessee.id, partyRole: 'TENANT' }, tenant.userId, transaction);
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const file = await createDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(
@@ -250,7 +256,7 @@ test('M5-10: garantia cadastrada mas NENHUMA ACTIVE bloqueia a ativação; sem n
     const fiador = await createPerson(transaction, 'M5-10 Fiador');
     const guarantee = await guaranteesService.createGuarantee(
       comGarantia.contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, value: 7500 },
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, value: 7500, endsAt: new Date(Date.now() + 365 * 86400000) },
       tenant.userId,
       transaction
     );
@@ -499,6 +505,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     await contractsService.addContractParty(contract.id, { personId: guarantor.id, partyRole: 'GUARANTOR' }, tenant.userId, transaction);
 
     // 4) Versão com documento REAL (File) + hash verificável.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     const contractFile = await createDocumentFile(transaction, 'e2e-lease');
     const content = `E2E — CONTRATO DE LOCAÇÃO ${suffix}\nAluguel: R$ 2.800,00`;
@@ -517,7 +524,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     // 6) Garantia (fiador) ACTIVE.
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date() },
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date(), endsAt: new Date(Date.now() + 365 * 86400000) },
       tenant.userId,
       transaction
     );
@@ -605,7 +612,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED');
         return true;
@@ -627,7 +634,12 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     assert.equal(inspectionSignatures.length, 3);
 
     // 12) Agora a chave sai — com quem entregou, quem recebeu e quando.
-    const released = await keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(
+      keyDelivery.id,
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: lessee.id },
+      tenant.userId,
+      transaction
+    );
     assert.equal(released.status, 'RELEASED');
     assert.equal(released.deliveredToPersonId, lessee.id);
     assert.equal(released.deliveredByUserId, tenant.userId);
@@ -680,7 +692,7 @@ test('M5-34: jornada E2E jurídica — processo, prazo, alerta, escalonamento, d
     // 2) Prazo processual que vence em 12h -> severidade DUE_SOON.
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
       tenant.userId,
       transaction
     );

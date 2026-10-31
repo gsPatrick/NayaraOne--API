@@ -62,11 +62,28 @@ module.exports = (sequelize) => {
         field: 'rule_version_id',
         comment: "Rastreabilidade: versão da regra que gerou o valor (core.rule_versions)",
       },
+      sourceEntryId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'source_entry_id',
+        comment: 'Fato gerador (§14): lançamento a receber que origina o direito à comissão',
+      },
+      component: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'component',
+        comment: 'BROKER|MANAGER|CORRESPONDENT — componentes separados (§14)',
+      },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
         defaultValue: 'PENDING',
         field: 'status',
+      },
+      idempotencyKey: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'idempotency_key',
       },
       lockVersion: {
         type: DataTypes.INTEGER,

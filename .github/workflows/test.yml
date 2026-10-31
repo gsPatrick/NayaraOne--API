@@ -6,11 +6,25 @@ name: CI
 # mock), roda migrations + seeds + a suíte de testes completa a cada push/PR, e falha o
 # build se qualquer teste falhar — evidência objetiva e verificável no próprio GitHub Actions.
 
+# GAP REAL CORRIGIDO (auditoria complementar Marcos 4/5, Nayara, 14/10/2026, Seção 5 item #3:
+# "Logs e artefatos do CI do hash correspondente... Não basta o número agregado 'verde'"): até
+# aqui o trigger só cobria `main`, então o CI nunca rodou contra a branch de trabalho real
+# `marco-6-e-7-homologado-nayara` — o hash auditado pela cliente nunca teve uma execução deste
+# workflow correspondente. Adicionado o push/PR dessa branch também, sem remover `main`.
 on:
   push:
-    branches: [main]
+    branches: [main, marco-6-e-7-homologado-nayara]
   pull_request:
-    branches: [main]
+    branches: [main, marco-6-e-7-homologado-nayara]
+  # Disparo manual (Actions > CI > Run workflow): reexecuta lint, migrations, seeds e a suíte
+  # inteira no commit/branch escolhido, sem deploy. O deploy de produção só roda no disparo
+  # manual se `deploy_production` for marcado (e ainda passa pela aprovação do environment).
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: 'Também disparar o deploy de produção (exige aprovação do environment production)'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -31,6 +45,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # Antivírus real para os testes dos Marcos 3 e 8 (ClamAV, imagem oficial). Só os testes dos
+      # motores reais o usam (conectam em 127.0.0.1:3310 e definem as variáveis por conta própria);
+      # o restante da suíte segue com os adaptadores de laboratório.
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+
     env:
       NODE_ENV: development
       # DATABASE_URL fica sem o usuário fixo aqui de propósito — é definida passo a passo
@@ -46,12 +68,45 @@ jobs:
       JWT_REFRESH_TTL: 7d
       PII_HASH_SECRET: ci-pii-hash-secret-not-for-production
       MFA_ENCRYPTION_KEY: 47f62af2f91a7ac9bb6ca3db95498c3ab311d033dd97f7e101b062a84c4781e0
-      APP_API_PREFIX: /api/v1
+      # FIX (18/10/2026): a criptografia de arquivo em repouso (files.encryptionAtRest, desta
+      # rodada do Marco 8) exige esta chave — sem ela, 100 testes que tocam upload/evidência
+      # falhavam no CI com FILES_CRYPTO_CONFIG_MISSING (run 39123721868). Chave exclusiva do
+      # CI, sem relação com qualquer ambiente real.
+      FILES_ENCRYPTION_KEY: 9c1d41a6e7b8f2035d6a9c0e4b7f81d2c3a5e8f0b1d4c7a9e2f5b8d1c4a7e0f3
+      # GAP REAL CORRIGIDO (CI quebrado, 08/10/2026): com "/api/v1" aqui, o app monta as rotas
+      # versionadas (router.use('/v1', ...) dentro de src/routes/index.js) sob
+      # "/api/v1" + "/v1" = "/api/v1/v1/...". Os testes HTTP reais que sobem o app numa porta
+      # alternativa (construction.httpRoutes, inventory.nay.httpRoutes, procurement.httpRoutes)
+      # batem direto em "/api/v1/..." (mesmo valor usado em produção/.env local, que é "/api"),
+      # então toda rota dava 404. Alinhado com .env/.env.example ("/api"), igual ao ambiente que
+      # roda localmente e em produção.
+      APP_API_PREFIX: /api
       PORT: 3011
+      # Conferência Nayara 18/10/2026, roteiro item 4: senha dos usuários FICTÍCIOS do seed de
+      # dois tenants (scripts/seed-ci-two-tenants.js). Só existe dentro do Postgres descartável
+      # deste job; mesma categoria dos demais segredos "not-for-production" acima.
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Conferência Nayara 18/10/2026, E01: o artifact do run 39127433976 se chamava
+      # test-results-14e9580c… e não test-results-8f7c97c…. Causa: aquele run foi disparado pelo
+      # evento pull_request, em que github.sha é o commit de MERGE TEMPORÁRIO que o GitHub cria
+      # (refs/pull/1/merge, "Merge 8f7c97c into 19f5918"), não o commit da branch. Daqui em
+      # diante o nome do artifact e o cabeçalho do log usam o commit real da branch: o head do PR
+      # em pull_request, e github.sha em push. O sha do merge fica registrado ao lado, para
+      # conferência.
+      - name: Identificar o commit avaliado (evidência)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "EVIDENCE_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+            echo "EVIDENCE_MERGE_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          else
+            echo "EVIDENCE_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+            echo "EVIDENCE_MERGE_SHA=" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -61,6 +116,55 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Leitura real de documentos (Tesseract em português e poppler) e espera pelo ClamAV. Sem isto,
+      # os 7 testes dos motores reais ficariam pulados. Se o antivírus não responder, o build FALHA,
+      # para o pulo nunca passar despercebido.
+      - name: Instalar o leitor de documentos e aguardar o antivírus
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-por poppler-utils libtiff-tools
+          tesseract --version | head -1
+          pdftotext -v 2>&1 | head -1
+          for i in $(seq 1 120); do
+            if (exec 3<>/dev/tcp/127.0.0.1/3310 && printf 'PING\n' >&3 && timeout 3 head -n1 <&3 | grep -q PONG) 2>/dev/null; then
+              echo "clamd respondeu PONG (tentativa $i)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::o ClamAV não respondeu em 10 minutos"
+          exit 1
+
+      # Guia §13 (Marco 7): lint. ESLint com as regras recomendadas, nada desligado; falha com
+      # qualquer erro fora da linha de base dos arquivos dos Marcos 4/5 (scripts/lint-baseline.json,
+      # teto por arquivo que só pode descer).
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      # Guia §13: "typecheck". O projeto é JavaScript (sem TypeScript); a checagem possível é de
+      # sintaxe de todos os arquivos (node --check) — pega arquivo que nem carrega antes da suíte.
+      - name: Typecheck (node --check; o projeto é JavaScript, sem TypeScript)
+        run: npm run syntax-check
+
+      # M6-96: scanner de hard-code cobrindo o módulo de Obras — vigia contra regressão de
+      # margem/comissão/valor monetário fixado em código em vez de vir do Motor de Regras.
+      - name: Scanner de hard-code (Obras/Construction)
+        run: node scripts/scanConstructionHardcode.js
+
+      # Caderno Técnico, página 165, item 13 ("segurança/antifraude do módulo de Obras") — a
+      # auditora externa pediu evidência de "security scan" pro Marco 6. Dois steps novos:
+      # SAST simples (regex sobre src/, sem AST, mesma filosofia do scanner de hard-code acima)
+      # e scan de dependências (npm audit contra prod deps apenas — devDependencies não vão pro
+      # runtime). Resultado real documentado em scripts/README-security.md.
+      - name: SAST simples (padrões perigosos conhecidos em src/)
+        run: node scripts/sastScan.js
+
+      # securityScan.js falha o build (exit 1) só para HIGH/CRITICAL com fix disponível
+      # ignorado — moderate/low viram warning no log, não bloqueiam (ver comentário no topo do
+      # script pro motivo da escolha e o resultado real rodado em 08/10/2026).
+      - name: Security scan (npm audit — dependências de produção)
+        run: node scripts/securityScan.js
 
       # FIX (18/09/2026, achado pela cliente ao pedir análise externa do job de CI): o usuário
       # POSTGRES_USER do container oficial postgres:16 (nayara_ci) é o usuário INICIAL do
@@ -89,7 +193,16 @@ jobs:
           node scripts/seed-dev.js
           node scripts/seedBillingRules.js
           node scripts/seedRealEstateRules.js
+          # Roteiro item 4 (Nayara, 18/10/2026): dois tenants fictícios com perfis
+          # maker/checker/leitura. Provado por test/ciTwoTenantsProfiles.test.js.
+          node scripts/seed-ci-two-tenants.js
 
+      # GAP REAL CORRIGIDO (auditoria de entrega Marco 6/7, 08/10/2026): o schema "procurement"
+      # (migration 20260101000267, Compras/Seguros) nunca estava nesta lista — toda a suíte de
+      # procurement/insurance falharia aqui com "permission denied for schema procurement" por
+      # faltar GRANT, mesmo com migrations/seed corretos. Mesma classe de bug já documentada
+      # acima pro usuário superuser do Postgres: um schema novo só existe de verdade no CI
+      # depois de entrar nesta lista.
       - name: Criar usuário de privilégio mínimo (nayara_ci_app)
         env:
           PGPASSWORD: nayara_ci_password
@@ -102,15 +215,170 @@ jobs:
               END IF;
             END $$;
           SQL
-          for schema in ai audit construction core crm finance integration inventory legal people real_estate; do
+          # FIX (18/10/2026): a lista de schemas era hardcoded e o schema "correspondent"
+          # (Marco 8) ficou de fora — 395 testes falhavam com "permission denied for schema
+          # correspondent" no run 39123218154. Agora os schemas são enumerados do catálogo:
+          # qualquer schema novo criado por migration entra automaticamente, sem manutenção
+          # manual desta lista.
+          for schema in $(psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -t -A -c "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname NOT IN ('information_schema')"); do
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"$schema\" TO nayara_ci_app;"
             psql -h localhost -p 5432 -U nayara_ci -d nayara_one_ci -v ON_ERROR_STOP=1 -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"$schema\" TO nayara_ci_app;"
           done
 
+      # Mesmo pedido acima: grava a saída completa (nome + resultado de cada teste do reporter
+      # "spec" do Node, mais o resumo "# pass"/"# fail" com contagem exata) em arquivo, e sobe
+      # como artifact do run — fica baixável e comprovável por hash/commit depois do workflow
+      # terminar, não só visível (e perdível) no log ao vivo do Actions.
       - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
         env:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
-        run: npm test
+          # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js
+          # (harness HTTP) dispara os ~16 jobs periódicos de setInterval — as guardas de app.js
+          # são todas `NODE_ENV !== 'test'`. Os timers continuam vivos depois do fim da suíte e
+          # o processo node NUNCA sai: o step ficava pendurado até o timeout de 6h do runner
+          # (visto nos runs 39098788633 e anteriores — loop infinito de "ConnectionManager was
+          # closed" dos jobs depois do sequelize.close() do teste). O resto do workflow
+          # (migrations/seed) continua em development de propósito: runMigrationsOnBoot e afins
+          # não são afetados.
+          NODE_ENV: test
+        run: |
+          set -o pipefail
+          {
+            echo "# Nayara One — resultado individual da suíte de testes (CI)"
+            echo "# evento: ${{ github.event_name }}"
+            echo "# commit avaliado (branch): ${EVIDENCE_SHA}"
+            echo "# commit de merge temporário do PR (só em pull_request): ${EVIDENCE_MERGE_SHA:-n/a}"
+            echo "# run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "# usuário do banco na suíte: nayara_ci_app (NOSUPERUSER NOBYPASSRLS)"
+            echo "#"
+          } > test-results.log
+          bash scripts/ci-estagios-marco8.sh test-results.log
+
+      # Conferência Nayara 19/10/2026: o log de teste não pode carregar segredo. A API agora
+      # redige Authorization/Cookie/tokens nos logs de requisição; este passo FALHA o build se
+      # algum JWT ou string de conexão reaparecer no log versionável.
+      - name: Verificar que o log de testes não contém segredos
+        if: always()
+        run: |
+          if grep -nE 'Bearer ey|eyJ|postgres://[^ ]*:[^ ]*@' test-results.log | grep -v 'nayara_ci_app_password' | head -5 | grep -q .; then
+            echo "::error::test-results.log contém padrão de segredo (JWT ou string de conexão)"; exit 1
+          fi
+          echo "test-results.log sem padrões de segredo (Bearer ey, eyJ, string de conexão)."
+
+      # E01 (Nayara, 18/10/2026): a API de download de artifacts do GitHub exige login mesmo em
+      # repositório público (a auditora recebeu HTTP 403). O resumo do job, ao contrário, é
+      # visível na página pública do run — então a contagem e a lista de falhas ficam ali também.
+      - name: Resumo público do resultado (visível na página do run, sem login)
+        if: always()
+        run: |
+          {
+            echo "## Resultado da suíte de testes"
+            echo ""
+            echo "- Evento: \`${{ github.event_name }}\`"
+            echo "- Commit avaliado: \`${EVIDENCE_SHA}\`"
+            [ -n "${EVIDENCE_MERGE_SHA}" ] && echo "- Commit de merge temporário do PR: \`${EVIDENCE_MERGE_SHA}\`"
+            echo "- Artifact: \`test-results-${EVIDENCE_SHA}\`"
+            echo ""
+            echo '```'
+            grep -E '^ℹ (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)' test-results.log | tail -8 || echo "(contagem indisponível)"
+            echo '```'
+            if grep -qE '^✖' test-results.log; then
+              echo ""
+              echo "### Testes com falha"
+              echo '```'
+              grep -E '^✖' test-results.log | sort -u | head -100
+              echo '```'
+            fi
+            if grep -qE '# SKIP|^﹣' test-results.log; then
+              echo ""
+              echo "### Testes pulados"
+              echo '```'
+              grep -E '^﹣' test-results.log | sort -u | head -100
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Guia §1/§14 (Marco 7): etapa de carga leve + gates. Movimentações concorrentes,
+      # recebimentos com replays, requisições e leituras pela camada de serviço, com a role de
+      # privilégio mínimo. Falha se houver saldo negativo, duplicidade, saldo ≠ ledger, erro
+      # inesperado ou p95 acima de 300 ms. Os failure drills (test/inventory.failureDrills.test.js)
+      # já rodam dentro da suíte acima (CI=true).
+      - name: Carga leve Estoque/Compras (gates de p95, saldo e duplicidade)
+        env:
+          DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
+          NODE_ENV: test
+        run: |
+          node scripts/loadTestInventoryProcurement.js --light --concurrency 8 --json load-test-light.json | tee load-test-light.log
+          { echo "## Carga leve Estoque/Compras"; echo '```'; sed -n '/| Opera/,/GATES/p;/✅\|❌/p' load-test-light.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar artifact com resultado individual dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ env.EVIDENCE_SHA }}
+          path: |
+            test-results.log
+            load-test-light.json
+            load-test-light.log
+          retention-days: 90
+
+  # Caderno do Marco 8: depois da suíte e da varredura de segredo vêm DEV e LAB.
+  # O endereço é secret do repositório. Sem ele o job registra o aviso e não inventa host.
+  deploy-dev:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar deploy da API no DEV
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEV_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::DEV_API_DEPLOY_HOOK_URL não configurado — etapa DEV do caderno registrada, sem host inventado."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"
+          echo "Deploy DEV disparado para ${GITHUB_SHA}"
+
+  # Guia §13: deploy_LAB automático e production_approval. Ver docs/runbooks/CI_CD.md para criar
+  # os environments "lab" e "production" (este com required reviewers) e os secrets. Sem o secret
+  # o job termina verde com um aviso — nunca quebra o CI por falta de alvo.
+  deploy-lab:
+    needs: [test, deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
+    runs-on: ubuntu-latest
+    environment: lab
+    steps:
+      - name: Disparar deploy da API no LAB
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::LAB_API_DEPLOY_HOOK_URL não configurado no environment 'lab' — deploy pulado (docs/runbooks/CI_CD.md)."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"
+          echo "Deploy LAB disparado para ${GITHUB_SHA}"
+
+  deploy-production:
+    needs: test
+    if: (github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # O environment "production" com required reviewers pausa este job até a aprovação manual.
+    environment: production
+    steps:
+      - name: Disparar deploy de produção (após aprovação manual)
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.PRODUCTION_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::PRODUCTION_API_DEPLOY_HOOK_URL não configurado no environment 'production' — deploy pulado."
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' \
+            -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"github-actions\"}"

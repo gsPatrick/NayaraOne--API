@@ -59,4 +59,22 @@ async function registrarAuditoria(
   });
 }
 
-module.exports = { registrarAuditoria };
+/**
+ * registrarTentativaBloqueada — mesma trilha de registrarAuditoria, mas para o momento em que
+ * uma operação é REJEITADA por controle de segregação de função/alçada/antifraude (ex.:
+ * autoaprovação, ajuste de alto valor sem evidência, segunda aprovação de compra sem segundo
+ * aprovador). GAP REAL CORRIGIDO (auditoria "mais um ciclo de 5", 2026-10-08): o contrato
+ * (Anexo A, matriz de risco antifraude — "Usuário aprovando própria solicitação → Bloquear
+ * quando segregação exigir", "Tentativa de apagar prova/auditoria → Bloquear e alertar") trata
+ * a TENTATIVA de burlar esses controles como evento que precisa de trilha, não só um erro HTTP
+ * momentâneo que desaparece sem deixar rastro — sem isso, não dá pra detectar um padrão
+ * repetido de tentativa de burla nem produzir evidência pra investigação de incidente.
+ */
+async function registrarTentativaBloqueada({ groupId, companyId, actorUserId, action, entityType, entityId, beforeJson, reason }, transaction) {
+  return registrarAuditoria(
+    { groupId, companyId, actorUserId, action: `${action}.blocked`, entityType, entityId, beforeJson, afterJson: null, reason },
+    transaction
+  );
+}
+
+module.exports = { registrarAuditoria, registrarTentativaBloqueada };

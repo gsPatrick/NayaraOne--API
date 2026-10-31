@@ -52,7 +52,10 @@ function publishFinancialEntryCreated(entry, transaction) {
   );
 }
 
-function publishFinancialEntrySettled(entry, transaction) {
+async function publishFinancialEntrySettled(entry, transaction) {
+  await publishCadernoEvent(
+    entry.nature === 'RECEIVABLE' ? 'finance.receipt.completed' : 'finance.payment.completed',
+    'FinancialEntry', entry, { id: entry.id, amount: entry.amount, settledAt: entry.settledAt, nature: entry.nature, entryType: entry.entryType }, null, transaction);
   return publishDomainEvent(
     {
       groupId: entry.groupId,
@@ -67,7 +70,9 @@ function publishFinancialEntrySettled(entry, transaction) {
   );
 }
 
-function publishFinancialEntryReversed(originalEntry, reversalEntry, transaction) {
+async function publishFinancialEntryReversed(originalEntry, reversalEntry, transaction) {
+  await publishCadernoEvent('finance.payment.reversed', 'FinancialEntry', originalEntry,
+    { originalEntryId: originalEntry.id, reversalEntryId: reversalEntry.id, amount: reversalEntry.amount }, null, transaction);
   return publishDomainEvent(
     {
       groupId: originalEntry.groupId,
@@ -82,7 +87,10 @@ function publishFinancialEntryReversed(originalEntry, reversalEntry, transaction
   );
 }
 
-function publishReconciliationMatched(reconciliation, transaction) {
+async function publishReconciliationMatched(reconciliation, transaction) {
+  await publishCadernoEvent('finance.reconciliation.completed', 'Reconciliation', reconciliation,
+    { id: reconciliation.id, financialEntryId: reconciliation.financialEntryId, bankTransactionId: reconciliation.bankTransactionId },
+    `${reconciliation.financialEntryId}:${reconciliation.bankTransactionId}`, transaction);
   return publishDomainEvent(
     {
       groupId: reconciliation.groupId,
@@ -170,7 +178,91 @@ function publishOwnerRepasseCreated(repasse, transaction) {
   );
 }
 
+// F02 — Guia §12: "emit finance.period.closed".
+function publishPeriodClosed(closure, snapshot, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: closure.groupId,
+      companyId: closure.companyId,
+      aggregateType: 'PeriodClosure',
+      aggregateId: closure.id,
+      eventType: 'finance.period.closed',
+      payload: { id: closure.id, referenceMonth: closure.referenceMonth, snapshotId: snapshot.id, snapshotHash: snapshot.snapshotHash },
+      idempotencyKey: `finance.period.closed:${snapshot.id}`,
+    },
+    transaction
+  );
+}
+
+// F04 — Caderno §13: "Devolução/compensação cria evento e ledger próprio".
+function publishThirdPartyFundsReleased(entry, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: entry.groupId,
+      companyId: entry.companyId,
+      aggregateType: 'FinancialEntry',
+      aggregateId: entry.id,
+      eventType: 'finance.third_party_funds.released',
+      payload: {
+        id: entry.id,
+        originEntryId: entry.thirdPartyOriginEntryId,
+        contractId: entry.contractId,
+        holderPersonId: entry.thirdPartyHolderPersonId,
+        amount: entry.amount,
+      },
+      idempotencyKey: `finance.third_party_funds.released:${entry.id}`,
+    },
+    transaction
+  );
+}
+
+
+// Guia do Centro Financeiro §14 ("Eventos mínimos") — nomes LITERAIS do caderno. Os eventos
+// técnicos acima (finance.entry.settled etc.) continuam existindo; estes publicam também o nome
+// exigido pelo caderno, na mesma transação, para quem consome o outbox pelo nome contratual.
+function publishCadernoEvent(eventType, aggregateType, aggregate, payload, keySuffix, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: aggregate.groupId,
+      companyId: aggregate.companyId,
+      aggregateType,
+      aggregateId: aggregate.id,
+      eventType,
+      payload,
+      idempotencyKey: `${eventType}:${keySuffix || aggregate.id}`,
+    },
+    transaction
+  );
+}
+
+function publishPaymentPrepared(intent, transaction) {
+  return publishCadernoEvent('finance.payment.prepared', 'PaymentIntent', intent,
+    { id: intent.id, financialEntryId: intent.financialEntryId, amount: intent.amount, snapshotHash: intent.snapshotHash }, null, transaction);
+}
+
+function publishPaymentApproved(intent, transaction) {
+  return publishCadernoEvent('finance.payment.approved', 'PaymentIntent', intent,
+    { id: intent.id, financialEntryId: intent.financialEntryId, approvedByUserId: intent.approvedByUserId }, null, transaction);
+}
+
+function publishOwnerRepassCompleted(repasse, transaction) {
+  return publishCadernoEvent('finance.owner_repass.completed', 'OwnerRepass', repasse,
+    { id: repasse.id, netAmount: repasse.netAmount, referenceMonth: repasse.referenceMonth, settlementMethod: repasse.paymentSettlementMethod }, null, transaction);
+}
+
+function publishAnomalyOpened(anomalyCase, transaction) {
+  return publishCadernoEvent('finance.anomaly.opened', 'AnomalyCase', anomalyCase,
+    { id: anomalyCase.id, caseType: anomalyCase.caseType, riskLevel: anomalyCase.riskLevel }, null, transaction);
+}
+
 module.exports = {
+  publishCadernoEvent,
+  publishPaymentPrepared,
+  publishPaymentApproved,
+  publishOwnerRepassCompleted,
+  publishAnomalyOpened,
+  publishPeriodClosed,
+  publishThirdPartyFundsReleased,
   publishBankAccountCreated,
   publishBankAccountSensitiveDataChanged,
   publishFinancialEntryCreated,
