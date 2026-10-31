@@ -3551,6 +3551,7 @@
    "entity",
    "error",
    "finished_at",
+   "kind",
    "last_delta",
    "requested_by",
    "source_system",
