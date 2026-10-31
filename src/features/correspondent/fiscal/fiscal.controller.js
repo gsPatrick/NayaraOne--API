@@ -6,6 +6,7 @@ const nfseService = require('./nfse.service');
 const dimobService = require('./dimob.service');
 const reconciliationService = require('./reconciliation.service');
 const exportService = require('./accountingExport.service');
+const { moved } = require('../../core-governance/dlp/exports/export.errors');
 const obligationsService = require('./obligations.service');
 const AppError = require('../../../utils/AppError');
 const { getFiscalSettings } = require('../commissionSplit.service');
@@ -122,13 +123,9 @@ const downloadInvoiceFile = (kind) =>
     return res.status(200).send(file.buffer);
   });
 
-const downloadDimobFile = catchAsync(async (req, res) => {
-  const file = await req.withTenantTransaction((t) =>
-    dimobService.exportDimobFile(req.params.id, req.auth.userId, req.auth.groupId, req.auth.companyId, t)
-  );
-  res.setHeader('Content-Type', file.contentType);
-  res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
-  return res.status(200).send(file.content);
+// Desde o M9-D822 o arquivo da DIMOB sai por POST /exports (resourceType correspondent.dimob); a rota antiga só informa o novo caminho e não gera arquivo.
+const downloadDimobFile = catchAsync(async () => {
+  throw moved();
 });
 
 const listDimobRecords = catchAsync(async (req, res) => {
