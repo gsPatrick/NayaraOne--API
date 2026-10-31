@@ -48,6 +48,7 @@ before(async () => {
 
 after(async () => {
   if (DISPOSABLE && tenants) await setPermission(ROLES.gestor, false);
+  if (DISPOSABLE) await require('../_helpers/m9d900Clean').cleanMigration(); // não deixa quarentena nem lote de PERSON para o gate do canary (M9-D904)
   if (appLoaded) {
     await require('../../../src/models').sequelize.close().catch(() => {});
     setTimeout(() => process.exit(0), 300);

@@ -8,7 +8,7 @@ const env = require('../_helpers/m9d901Env');
 let tenants; let rUser; let oUser;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) { tenants = await env.loadTenants(); rUser = await env.committedUser(tenants.A); oUser = await env.committedUser(tenants.A); } });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 const accountable = () => ({ userId: A().userId, roles: [] });
 const responsible = () => ({ userId: rUser.id, roles: ['FINANCEIRO'] });

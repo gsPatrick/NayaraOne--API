@@ -9,7 +9,7 @@ const providers = require('../../../src/features/migration-v2/control/blockers.p
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 
 test('m9d901 provedor registrado abre e fecha blocker na Torre', { skip: skip() }, async () => {
   const A = tenants.A;

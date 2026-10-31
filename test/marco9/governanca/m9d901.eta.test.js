@@ -10,7 +10,7 @@ let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 const setWindow = (n) => env.openTenantTx(tenants.A, (tx) => upsertSetting('migracao.eta.janela_lotes', n, tenants.A, tenants.A.userId, tx));
 before(async () => { if (env.DISPOSABLE) { tenants = await env.loadTenants(); await setWindow(5); } });
-after(async () => { if (env.DISPOSABLE) await setWindow(5); await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) { await setWindow(5); await env.cleanMigration(); } await env.sequelize.close(); });
 const A = () => tenants.A;
 const at = (minutesAgo) => new Date(Date.now() - minutesAgo * 60000).toISOString();
 

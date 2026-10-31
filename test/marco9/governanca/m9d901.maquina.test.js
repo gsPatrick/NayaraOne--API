@@ -10,7 +10,7 @@ const transitions = require('../../../src/features/migration-v2/control/record.t
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 const ALL = ['PENDING', 'MIGRATED', 'RECONCILED', 'QUARANTINED', 'PENDING_REVIEW', 'EXCLUDED'];
 const ALLOWED = {

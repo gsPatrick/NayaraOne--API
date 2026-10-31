@@ -8,7 +8,7 @@ const env = require('../_helpers/m9d901Env');
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 const live = async (system) => Object.fromEntries((await env.q('SELECT state, count(*)::int AS n FROM governance.mig_records WHERE company_id = $1 AND source_system = $2 GROUP BY state', [A().companyId, system])).map((r) => [r.state, r.n]));
 

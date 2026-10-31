@@ -8,7 +8,7 @@ const env = require('../_helpers/m9d901Env');
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 
 test('m9d901 Control Tower totals fecham com o total', { skip: skip() }, async () => {

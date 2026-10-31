@@ -8,7 +8,7 @@ const env = require('../_helpers/m9d901Env');
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 
 test('m9d901 isolamento entre empresas', { skip: skip() }, async () => {
   const { A, B } = tenants;
