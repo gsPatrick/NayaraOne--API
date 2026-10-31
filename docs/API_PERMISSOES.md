@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 799. Rotas só com login ou públicas: 42.
+Rotas com permissão exigida: 816. Rotas só com login ou públicas: 42.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -10,12 +10,26 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 
 | Método | Caminho | Permissão exigida | MFA recente |
 |---|---|---|---|
-| `POST` | `/api/v1/admin/integrations/errors/:id/resolve` | `integration:retry` | não |
-| `GET` | `/api/v1/admin/integrations/errors` | `integration:read` | não |
-| `POST` | `/api/v1/admin/integrations/registry/connections/:id/transition` | `integration:manage` | não |
-| `POST` | `/api/v1/admin/integrations/registry/connections/:id/release` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/:provider/health` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/:provider/rotate-secret` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/:provider/test-connection` | `integration:test` | não |
+| `GET` | `/api/v1/admin/integrations/alerts` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/catalog` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/connections/:id/release` | `integration:manage` | não |
-| `GET` | `/api/v1/admin/integrations/registry/release-gate` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/contingency/dispatches/:id/switch` | `integration:manage` | sim |
+| `GET` | `/api/v1/admin/integrations/contingency` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/dispatches/:id` | `integration:read` | não |
+| `POST` | `/api/v1/admin/integrations/email/inbound/:id/link` | `integration:manage` | não |
+| `GET` | `/api/v1/admin/integrations/email/inbound/:id` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/email/inbound` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/errors/:id/impact` | `integration:retry` | não |
+| `POST` | `/api/v1/admin/integrations/errors/:id/resolve` | `integration:retry` | não |
+| `POST` | `/api/v1/admin/integrations/errors/:id/retry` | `integration:retry` | não |
+| `GET` | `/api/v1/admin/integrations/errors` | `integration:read` | não |
+| `GET` | `/api/v1/admin/integrations/registry/connections/:id/impact` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections/:id/release` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections/:id/swap` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/registry/connections/:id/transition` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:read` | não |
 | `PATCH` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/connections` | `integration:read` | não |
@@ -23,19 +37,14 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/admin/integrations/registry/providers/:code` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/providers` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:manage` | não |
-| `GET` | `/api/v1/admin/integrations/catalog` | `integration:read` | não |
-| `GET` | `/api/v1/admin/integrations/contingency` | `integration:read` | não |
-| `POST` | `/api/v1/admin/integrations/email/inbound/:id/link` | `integration:manage` | não |
-| `GET` | `/api/v1/admin/integrations/email/inbound/:id` | `integration:read` | não |
-| `GET` | `/api/v1/admin/integrations/email/inbound` | `integration:read` | não |
-| `POST` | `/api/v1/admin/integrations/registry/connections/:id/swap` | `integration:manage` | não |
-| `POST` | `/api/v1/admin/integrations/contingency/dispatches/:id/switch` | `integration:manage` | sim |
+| `GET` | `/api/v1/admin/integrations/registry/release-gate` | `integration:read` | não |
 | `GET` | `/api/v1/admin/integrations` | `integration:read` | não |
 | `POST` | `/api/v1/ai/agents/:code/chat` | `ai:use` | não |
 | `POST` | `/api/v1/ai/agents/:code/versions/:version/activate` | `ai:admin` | não |
 | `PUT` | `/api/v1/ai/agents/:code/versions/:version/activate` | `ai:admin` | não |
 | `POST` | `/api/v1/ai/agents/:code/versions/:version/homologate` | `ai:evaluate` | não |
-| `POST` | `/api/v1/ai/agents/:code/versions/:version/retire` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/agents/:code/versions/:version/impact` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/agents/:code/versions/:version/retire` | `ai:admin` | sim |
 | `PUT` | `/api/v1/ai/agents/:code/versions/:version/tools` | `ai:admin` | não |
 | `GET` | `/api/v1/ai/agents/:code/versions/:version` | `ai:admin|ai:evaluate` | não |
 | `PATCH` | `/api/v1/ai/agents/:code/versions/:version` | `ai:admin` | não |
@@ -45,25 +54,61 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PUT` | `/api/v1/ai/budgets/:id` | `ai:budget` | não |
 | `GET` | `/api/v1/ai/budgets` | `ai:audit|ai:budget` | não |
 | `POST` | `/api/v1/ai/budgets` | `ai:budget` | não |
+| `POST` | `/api/v1/ai/deterministic/:tool` | `ai:read` | não |
+| `GET` | `/api/v1/ai/deterministic` | `ai:read` | não |
+| `POST` | `/api/v1/ai/evaluations/:id/homologate` | `ai:evaluate` | não |
+| `GET` | `/api/v1/ai/evaluations/:id` | `ai:evaluate` | não |
+| `POST` | `/api/v1/ai/evaluations/run` | `ai:evaluate` | não |
+| `GET` | `/api/v1/ai/evaluations` | `ai:evaluate` | não |
 | `PUT` | `/api/v1/ai/files/:fileId/classification` | `ai:admin`, `governance:classification:manage` | não |
+| `POST` | `/api/v1/ai/golden-candidates/:id/approve` | `ai:evaluate` | não |
+| `POST` | `/api/v1/ai/golden-candidates/:id/reject` | `ai:evaluate` | não |
+| `GET` | `/api/v1/ai/golden-candidates` | `ai:evaluate` | não |
 | `GET` | `/api/v1/ai/ingestions/:id` | `ai:use|ai:audit|ai:admin` | não |
 | `POST` | `/api/v1/ai/ingestions` | `ai:use|ai:admin` | não |
+| `POST` | `/api/v1/ai/knowledge/:id/homologate` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/knowledge/:id/revoke` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/knowledge/:id` | `ai:admin` | não |
+| `PATCH` | `/api/v1/ai/knowledge/:id` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/knowledge` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/knowledge` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/memories/:id/correct` | `ai:use|ai:admin` | não |
+| `POST` | `/api/v1/ai/memories/:id/invalidate` | `ai:use|ai:admin` | não |
+| `DELETE` | `/api/v1/ai/memories/:id` | `ai:use` | não |
+| `GET` | `/api/v1/ai/memories/:id` | `ai:use|ai:audit|ai:admin` | não |
+| `GET` | `/api/v1/ai/memories` | `ai:use|ai:audit|ai:admin` | não |
+| `POST` | `/api/v1/ai/memories` | `ai:use|ai:admin` | não |
+| `POST` | `/api/v1/ai/recommendations/:id/accept` | `ai:approve|ai:read` | não |
+| `POST` | `/api/v1/ai/recommendations/:id/reject` | `ai:approve` | não |
+| `POST` | `/api/v1/ai/recommendations/:id/reject` | `ai:approve` | não |
+| `GET` | `/api/v1/ai/recommendations/:id` | `ai:read|ai:audit` | não |
+| `GET` | `/api/v1/ai/recommendations` | `ai:read|ai:audit` | não |
+| `GET` | `/api/v1/ai/release-gates` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/release-gates` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/runs/:id/feedback` | `ai:use` | não |
 | `GET` | `/api/v1/ai/runs/:id` | `ai:read|ai:audit` | não |
 | `POST` | `/api/v1/ai/runs` | `ai:use` | não |
+| `PATCH` | `/api/v1/ai/service-identities/:id` | `ai:admin` | não |
+| `GET` | `/api/v1/ai/service-identities` | `ai:admin` | não |
+| `POST` | `/api/v1/ai/service-identities` | `ai:admin` | não |
 | `GET` | `/api/v1/ai/status` | `ai:read` | não |
+| `GET` | `/api/v1/ai/tools` | `ai:admin` | não |
 | `GET` | `/api/v1/analytics/access-log` | `analytics:audit:read` | não |
-| `GET` | `/api/v1/analytics/alerts` | `analytics:read` | não |
 | `POST` | `/api/v1/analytics/alerts/:id/ack` | `analytics:alert:ack` | não |
+| `GET` | `/api/v1/analytics/alerts` | `analytics:read` | não |
 | `GET` | `/api/v1/analytics/dashboards/:code` | `analytics:read` | não |
-| `POST` | `/api/v1/analytics/dashboards` | `analytics:manage` | não |
 | `POST` | `/api/v1/analytics/dashboards/health/thresholds` | `analytics:manage` | não |
-| `POST` | `/api/v1/analytics/exports` | `analytics:export` | não |
+| `POST` | `/api/v1/analytics/dashboards` | `analytics:manage` | não |
 | `GET` | `/api/v1/analytics/exports/:id/download` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/exports/:id/file` | `analytics:export` | não |
+| `POST` | `/api/v1/analytics/exports` | `analytics:export` | não |
 | `GET` | `/api/v1/analytics/metrics/:code/drilldown` | `analytics:read` | não |
-| `POST` | `/api/v1/api-governance/clients/:id/revoke` | `governance:api:manage` | não |
+| `GET` | `/api/v1/analytics/metrics/:code` | `analytics:read` | não |
+| `GET` | `/api/v1/api-governance/clients/:id/impact` | `governance:api:manage` | não |
+| `POST` | `/api/v1/api-governance/clients/:id/revoke` | `governance:api:manage` | sim |
+| `POST` | `/api/v1/api-governance/clients/impact` | `governance:api:manage` | não |
 | `GET` | `/api/v1/api-governance/clients` | `governance:api:read` | não |
-| `POST` | `/api/v1/api-governance/clients` | `governance:api:manage` | não |
+| `POST` | `/api/v1/api-governance/clients` | `governance:api:manage` | sim |
 | `GET` | `/api/v1/api-governance/consumers` | `governance:api:read` | não |
 | `POST` | `/api/v1/api-governance/deprecations/:id/cancel` | `governance:api:manage` | não |
 | `GET` | `/api/v1/api-governance/deprecations` | `governance:api:read` | não |
@@ -79,6 +124,15 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/assets` | `inventory:create` | não |
 | `GET` | `/api/v1/audit-log/:id` | `audit:read` | não |
 | `GET` | `/api/v1/audit-log` | `audit:read` | não |
+| `GET` | `/api/v1/bcp/form-templates/:sector/:formType/print` | `governance:bcp:record` | não |
+| `GET` | `/api/v1/bcp/form-templates` | `governance:bcp:record` | não |
+| `PATCH` | `/api/v1/bcp/manual-operations/:id` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/manual-operations/import` | `governance:bcp:import` | não |
+| `GET` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
+| `POST` | `/api/v1/bcp/reconciliations/:id/decide` | `governance:bcp:approve` | não |
+| `GET` | `/api/v1/bcp/reconciliations` | `governance:bcp:import` | não |
+| `GET` | `/api/v1/bcp` | `governance:bcp:record` | não |
 | `GET` | `/api/v1/billing/collection-cadence/steps` | `billing:read` | não |
 | `POST` | `/api/v1/billing/collection-cadence/versions` | `billing:cadence:manage` | não |
 | `GET` | `/api/v1/billing/collection-cadence` | `billing:read` | não |
@@ -113,17 +167,15 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/billing/utility-obligations/:id` | `billing:read` | não |
 | `GET` | `/api/v1/billing/utility-obligations` | `billing:read` | não |
 | `POST` | `/api/v1/billing/utility-obligations` | `billing:create` | não |
+| `GET` | `/api/v1/calendar/commitments/:id` | `governance:calendar:read` | não |
+| `PATCH` | `/api/v1/calendar/commitments/:id` | `governance:calendar:read` | não |
+| `POST` | `/api/v1/calendar/commitments` | `governance:calendar:read` | não |
+| `DELETE` | `/api/v1/calendar/items/:id` | `governance:calendar:read` | não |
+| `PATCH` | `/api/v1/calendar/items/:id` | `governance:calendar:read` | não |
+| `PUT` | `/api/v1/calendar/items/:id` | `governance:calendar:read` | não |
+| `GET` | `/api/v1/calendar` | `governance:calendar:read` | não |
 | `PATCH` | `/api/v1/carts/:cartId/items` | `crm:opportunities:update` | não |
 | `POST` | `/api/v1/carts/:cartId/share-link` | `crm:opportunities:update` | não |
-| `GET` | `/api/v1/bcp/form-templates/:sector/:formType/print` | `governance:bcp:record` | não |
-| `GET` | `/api/v1/bcp/form-templates` | `governance:bcp:record` | não |
-| `PATCH` | `/api/v1/bcp/manual-operations/:id` | `governance:bcp:record` | não |
-| `POST` | `/api/v1/bcp/manual-operations/import` | `governance:bcp:import` | não |
-| `GET` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
-| `POST` | `/api/v1/bcp/manual-operations` | `governance:bcp:record` | não |
-| `POST` | `/api/v1/bcp/reconciliations/:id/decide` | `governance:bcp:approve` | não |
-| `GET` | `/api/v1/bcp/reconciliations` | `governance:bcp:import` | não |
-| `GET` | `/api/v1/bcp` | `governance:bcp:record` | não |
 | `DELETE` | `/api/v1/companies/:id` | `companies:delete` | não |
 | `GET` | `/api/v1/companies/:id` | `companies:read` | não |
 | `PATCH` | `/api/v1/companies/:id` | `companies:update` | não |
@@ -178,6 +230,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/construction/projects/:id/daily-reports` | `construction:create` | não |
 | `POST` | `/api/v1/construction/projects/:id/deliver` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/projects/:id/health` | `construction:read` | não |
+| `GET` | `/api/v1/construction/projects/:id/impact` | `construction:update` | não |
 | `GET` | `/api/v1/construction/projects/:id/loss-records` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/loss-records` | `construction:create` | não |
 | `GET` | `/api/v1/construction/projects/:id/material-requests` | `construction:read` | não |
@@ -220,9 +273,33 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/crm/proposals/:id` | `crm:proposals:read` | não |
 | `GET` | `/api/v1/crm/proposals` | `crm:proposals:read` | não |
 | `POST` | `/api/v1/crm/proposals` | `crm:proposals:create` | não |
+| `GET` | `/api/v1/data-classification/legacy-review` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
+| `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
+| `POST` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
+| `PUT` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
+| `POST` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
+| `PUT` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
+| `GET` | `/api/v1/data-lineage` | `governance:lineage:manage` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
+| `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
+| `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
+| `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/domains` | `governance:data-quality:read` | não |
+| `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
+| `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
+| `GET` | `/api/v1/data-quality` | `governance:data-quality:read` | não |
+| `POST` | `/api/v1/dlp/anomalies/:id/review` | `governance:dlp:admin` | não |
+| `GET` | `/api/v1/dlp/anomalies` | `governance:dlp:admin` | não |
+| `PUT` | `/api/v1/dlp/policies/:classification/:action` | `governance:dlp:admin` | não |
+| `GET` | `/api/v1/dlp/policies` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/dlp/share-links/:id/impact` | `governance:dlp:export` | não |
 | `POST` | `/api/v1/dlp/share-links/:id/revoke` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/dlp/share-links` | `governance:dlp:export` | não |
 | `POST` | `/api/v1/dlp/share-links` | `governance:dlp:export` | não |
+| `GET` | `/api/v1/dlp` | `governance:dlp:admin` | não |
 | `GET` | `/api/v1/exports/:id/download` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/:id` | `governance:dlp:export` | não |
 | `GET` | `/api/v1/exports/catalog` | `governance:dlp:export` | não |
@@ -271,42 +348,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/cost-centers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/cost-centers` | `finance:create` | não |
 | `POST` | `/api/v1/finance/entries/:id/clear-manual-review` | `finance:approve` | sim |
+| `GET` | `/api/v1/finance/entries/:id/impact` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
-| `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
-| `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
-| `GET` | `/api/v1/data-classification/legacy-review` | `governance:data-quality:read` | não |
-| `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
-| `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
-| `governance:data-quality:read` | LOW | `GET /api/v1/data-classification/legacy-review`, `GET /api/v1/data-classification`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
-| `governance:classification:manage` | HIGH | `PUT /api/v1/ai/files/:fileId/classification`, `PUT /api/v1/data-classification`, `PUT /api/v1/files/:id/classification` |
-| `POST` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
-| `PUT` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
-| `POST` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
-| `PUT` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
-| `GET` | `/api/v1/data-lineage` | `governance:lineage:manage` | não |
-| `GET` | `/api/v1/data-quality/bulk-changes/:id` | `governance:data-quality:bulk` | não |
-| `POST` | `/api/v1/data-quality/bulk-changes/impact` | `governance:data-quality:bulk` | não |
-| `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
-| `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
-| `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
-| `GET` | `/api/v1/data-quality/domains` | `governance:data-quality:read` | não |
-| `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
-| `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
-| `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
-| `GET` | `/api/v1/data-quality` | `governance:data-quality:read` | não |
-| `POST` | `/api/v1/dlp/anomalies/:id/review` | `governance:dlp:admin` | não |
-| `GET` | `/api/v1/dlp/anomalies` | `governance:dlp:admin` | não |
-| `PUT` | `/api/v1/dlp/policies/:classification/:action` | `governance:dlp:admin` | não |
-| `GET` | `/api/v1/dlp/policies` | `governance:dlp:export` | não |
-| `GET` | `/api/v1/dlp/share-links/:id/impact` | `governance:dlp:export` | não |
-| `GET` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | não |
-| `POST` | `/api/v1/data-quality/bulk-changes` | `governance:data-quality:bulk` | sim |
-| `PUT` | `/api/v1/data-quality/domains/:code/assignments` | `governance:data-quality:manage` | não |
-| `GET` | `/api/v1/data-quality/domains` | `governance:data-quality:read` | não |
-| `POST` | `/api/v1/data-quality/queue/:id/decision` | `governance:data-quality:manage` | não |
-| `GET` | `/api/v1/data-quality/queue/:id/impact` | `governance:data-quality:read` | não |
-| `GET` | `/api/v1/data-quality/queue` | `governance:data-quality:read` | não |
-| `GET` | `/api/v1/data-quality` | `governance:data-quality:read` | não |
 | `POST` | `/api/v1/finance/entries/:id/settle-partial` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence/detach` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence` | `finance:settle` | não |
@@ -335,6 +378,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/payment-intents/:id/approve` | `finance:approve` | não |
 | `POST` | `/api/v1/finance/payment-intents/:id/cancel` | `finance:update` | não |
 | `POST` | `/api/v1/finance/payment-intents/:id/execute` | `finance:settle` | sim |
+| `GET` | `/api/v1/finance/payment-intents/:id/impact` | `finance:update` | não |
 | `POST` | `/api/v1/finance/payment-intents/:id/reconcile` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/payment-intents/:id/resolve-uncertainty` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/payment-intents/:id/submit-to-bank` | `finance:settle` | sim |
@@ -390,6 +434,12 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/financing-cases/nay/stalled` | `correspondent:read` | não |
 | `GET` | `/api/v1/financing-cases` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases` | `correspondent:create` | não |
+| `PATCH` | `/api/v1/finops/budgets/:id` | `governance:finops:manage` | não |
+| `GET` | `/api/v1/finops/budgets` | `governance:finops:read` | não |
+| `POST` | `/api/v1/finops/budgets` | `governance:finops:manage` | não |
+| `GET` | `/api/v1/finops/degradation-policies` | `governance:finops:read` | não |
+| `PUT` | `/api/v1/finops/degradation-policies` | `governance:finops:manage` | não |
+| `GET` | `/api/v1/finops/health` | `governance:finops:read` | não |
 | `POST` | `/api/v1/fiscal/dimob-batches/:id/close` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/dimob-batches/:id/file` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/dimob-batches/:id/records` | `correspondent:fiscal` | não |
@@ -415,6 +465,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/fiscal/reconciliations/:id/resolve` | `correspondent:fiscal` | não |
 | `POST` | `/api/v1/fiscal/reconciliations/run` | `correspondent:fiscal` | não |
 | `GET` | `/api/v1/fiscal/reconciliations` | `correspondent:fiscal` | não |
+| `POST` | `/api/v1/governance/permissions/apply-default` | `roles:update` | não |
+| `GET` | `/api/v1/governance/permissions` | `roles:read` | não |
 | `DELETE` | `/api/v1/groups/:id` | `groups:delete` | não |
 | `GET` | `/api/v1/groups/:id` | `groups:read` | não |
 | `PATCH` | `/api/v1/groups/:id` | `groups:update` | não |
@@ -465,6 +517,11 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/inventory/requisitions/:id` | `inventory:read` | não |
 | `GET` | `/api/v1/inventory/requisitions` | `inventory:read` | não |
 | `POST` | `/api/v1/inventory/requisitions` | `inventory:create` | não |
+| `GET` | `/api/v1/legal-holds/:id/impact` | `governance:legal-hold:manage` | não |
+| `POST` | `/api/v1/legal-holds/:id/release` | `governance:legal-hold:manage` | sim |
+| `GET` | `/api/v1/legal-holds/:id` | `governance:legal-hold:manage` | não |
+| `GET` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
+| `POST` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
 | `POST` | `/api/v1/legal/amendments/:id/sign` | `legal:update` | não |
 | `GET` | `/api/v1/legal/amendments/:id` | `legal:read` | não |
 | `POST` | `/api/v1/legal/cases/:id/deadlines` | `legal:create` | não |
@@ -498,6 +555,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/contracts/:id/amendments` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contracts/:id/close` | `legal:approve` | não |
 | `PATCH` | `/api/v1/legal/contracts/:id/correct` | `legal:update` | sim |
+| `GET` | `/api/v1/legal/contracts/:id/impact` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/contracts/:id/parties` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contracts/:id/parties` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contracts/:id/reactivate` | `legal:approve` | não |
@@ -517,11 +575,6 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/deadlines` | `legal:read` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id/access-log` | `legal:read` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id/export` | `legal:read` | não |
-| `GET` | `/api/v1/legal-holds/:id/impact` | `governance:legal-hold:manage` | não |
-| `POST` | `/api/v1/legal-holds/:id/release` | `governance:legal-hold:manage` | sim |
-| `GET` | `/api/v1/legal-holds/:id` | `governance:legal-hold:manage` | não |
-| `GET` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
-| `POST` | `/api/v1/legal-holds` | `governance:legal-hold:manage` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id` | `legal:read` | não |
 | `DELETE` | `/api/v1/legal/guarantees/:id` | `legal:update` | não |
 | `GET` | `/api/v1/legal/guarantees/:id` | `legal:read` | não |
@@ -564,20 +617,64 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/notices` | `legal:create` | não |
 | `POST` | `/api/v1/legal/requirements/:requirementId/waive` | `legal:waive` | não |
 | `PATCH` | `/api/v1/legal/requirements/:requirementId` | `legal:update` | não |
+| `POST` | `/api/v1/legal/signature-envelopes/:id/switch-provider` | `legal:sign` | sim |
 | `POST` | `/api/v1/legal/signatures/:externalSignatureId/webhook` | `legal:sign` | não |
 | `POST` | `/api/v1/legal/signatures/:id/cancel` | `legal:sign` | não |
 | `GET` | `/api/v1/legal/signatures/:id/status` | `legal:sign` | não |
 | `POST` | `/api/v1/maintenance-orders/:id/close` | `inventory:update` | não |
+| `PATCH` | `/api/v1/maintenance-orders/:id/schedule` | `inventory:update` | não |
 | `GET` | `/api/v1/maintenance-orders` | `inventory:read` | não |
 | `POST` | `/api/v1/maintenance-orders` | `inventory:create` | não |
+| `GET` | `/api/v1/marketing/attribution` | `marketing:attribution:read` | não |
+| `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
+| `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
+| `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
+| `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
+| `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
+| `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |
+| `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
+| `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
+| `POST` | `/api/v1/marketing/kill-switch/impact` | `marketing:killswitch:manage` | não |
+| `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
+| `POST` | `/api/v1/marketing/media/:id/authorize` | `marketing:content:approve` | não |
+| `POST` | `/api/v1/marketing/publications/:id/cancel` | `marketing:content:publish` | não |
+| `GET` | `/api/v1/marketing/publications/:id/impact` | `marketing:content:publish` | não |
+| `GET` | `/api/v1/marketing/publications` | `marketing:content:read` | não |
+| `GET` | `/api/v1/marketing/seo/sitemap` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/templates/:id/publish` | `marketing:template:manage` | não |
+| `GET` | `/api/v1/marketing/templates` | `marketing:content:read` | não |
+| `POST` | `/api/v1/marketing/templates` | `marketing:template:manage` | não |
+| `POST` | `/api/v1/marketing/tracking-links` | `marketing:campaign:manage` | não |
 | `DELETE` | `/api/v1/memberships/:id` | `memberships:delete` | sim |
 | `GET` | `/api/v1/memberships/:userId/effective-permissions` | `memberships:read` | não |
 | `GET` | `/api/v1/memberships` | `memberships:read` | não |
 | `POST` | `/api/v1/memberships` | `memberships:create` | sim |
+| `POST` | `/api/v1/messages/:id/refresh-status` | `crm:messages:update` | não |
+| `POST` | `/api/v1/messages/:id/send-alternate` | `crm:messages:create` | não |
 | `PATCH` | `/api/v1/messages/:id/status` | `crm:messages:update` | não |
 | `GET` | `/api/v1/messages/:id` | `crm:messages:read` | não |
+| `POST` | `/api/v1/messages/send` | `crm:messages:create` | não |
 | `GET` | `/api/v1/messages` | `crm:messages:read` | não |
 | `POST` | `/api/v1/messages` | `crm:messages:create` | não |
+| `POST` | `/api/v1/migration/canary/:sector/advance` | `governance:migration:run`, `governance:flags:manage` | não |
+| `GET` | `/api/v1/migration/canary/:sector/impact` | `governance:migration:run`, `governance:flags:manage` | não |
+| `POST` | `/api/v1/migration/canary/:sector/rollback` | `governance:migration:run`, `governance:flags:manage` | sim |
+| `GET` | `/api/v1/migration/canary` | `governance:migration:run` | não |
+| `GET` | `/api/v1/migration/control-tower` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/cutover/decision` | `governance:migration:admin` | não |
+| `GET` | `/api/v1/migration/dry-runs/:id/report` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/dry-runs` | `governance:migration:run` | não |
+| `GET` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
+| `PUT` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
+| `GET` | `/api/v1/migration/parallel/windows/:id` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/parallel/windows` | `governance:migration:run` | não |
+| `GET` | `/api/v1/migration/raci` | `governance:migration:run` | não |
+| `PUT` | `/api/v1/migration/raci` | `governance:migration:admin` | não |
+| `POST` | `/api/v1/migration/records/:id/resolve` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/rollback-items/:id/resolve` | `governance:migration:admin` | não |
+| `GET` | `/api/v1/migration/rollback-report` | `governance:migration:admin` | não |
+| `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
 | `POST` | `/api/v1/offers/:id/publish` | `properties:update` | não |
 | `POST` | `/api/v1/opportunities/:id/carts` | `crm:opportunities:update` | não |
 | `GET` | `/api/v1/opportunities/:id/tasks` | `crm:tasks:read` | não |
@@ -612,7 +709,6 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `DELETE` | `/api/v1/people/:id` | `people:delete` | não |
 | `GET` | `/api/v1/people/:id` | `people:read` | não |
 | `PATCH` | `/api/v1/people/:id` | `people:update` | não |
-| `PATCH` | `/api/v1/maintenance-orders/:id/schedule` | `inventory:update` | não |
 | `GET` | `/api/v1/people/duplicates` | `people:read` | não |
 | `GET` | `/api/v1/people` | `people:read` | não |
 | `POST` | `/api/v1/people` | `people:create` | não |
@@ -635,93 +731,21 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/procurement/insurance-policies/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/insurance-policies` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/insurance-policies` | `procurement:create` | não |
+| `POST` | `/api/v1/procurement/insurance-renewal-tasks/:id/complete` | `procurement:approve` | não |
+| `POST` | `/api/v1/procurement/insurance-tasks/:id/cancel` | `procurement:approve` | não |
+| `POST` | `/api/v1/procurement/insurance-tasks/:id/complete` | `procurement:approve` | não |
+| `GET` | `/api/v1/procurement/insurance-tasks` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/offers/:id/award` | `procurement:approve` | não |
 | `POST` | `/api/v1/procurement/purchase-orders/:id/cancel` | `procurement:approve` | não |
 | `GET` | `/api/v1/procurement/purchase-orders/:id/goods-receipts` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/purchase-orders/:id/goods-receipts` | `procurement:create` | não |
+| `GET` | `/api/v1/procurement/purchase-orders/:id/impact` | `procurement:approve` | não |
 | `GET` | `/api/v1/procurement/purchase-orders/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/purchase-orders` | `procurement:read` | não |
-| `GET` | `/api/v1/marketing/attribution` | `marketing:attribution:read` | não |
-| `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
-| `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
-| `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
-| `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
-| `GET` | `/api/v1/marketing/attribution` | `marketing:attribution:read` | não |
-| `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
-| `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
-| `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
-| `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |
-| `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
-| `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
-| `POST` | `/api/v1/migration/canary/:sector/advance` | `governance:migration:run`, `governance:flags:manage` | não |
-| `GET` | `/api/v1/migration/canary/:sector/impact` | `governance:migration:run`, `governance:flags:manage` | não |
-| `POST` | `/api/v1/migration/canary/:sector/rollback` | `governance:migration:run`, `governance:flags:manage` | sim |
-| `GET` | `/api/v1/migration/canary` | `governance:migration:run` | não |
-| `GET` | `/api/v1/migration/control-tower` | `governance:migration:run` | não |
-| `POST` | `/api/v1/migration/cutover/decision` | `governance:migration:admin` | não |
-| `GET` | `/api/v1/migration/dry-runs/:id/report` | `governance:migration:run` | não |
-| `POST` | `/api/v1/migration/dry-runs` | `governance:migration:run` | não |
-| `GET` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
-| `PUT` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
-| `GET` | `/api/v1/migration/parallel/windows/:id` | `governance:migration:run` | não |
-| `POST` | `/api/v1/migration/parallel/windows` | `governance:migration:run` | não |
-| `GET` | `/api/v1/migration/raci` | `governance:migration:run` | não |
-| `PUT` | `/api/v1/migration/raci` | `governance:migration:admin` | não |
-| `POST` | `/api/v1/migration/records/:id/resolve` | `governance:migration:run` | não |
-| `POST` | `/api/v1/migration/rollback-items/:id/resolve` | `governance:migration:admin` | não |
-| `GET` | `/api/v1/migration/rollback-report` | `governance:migration:admin` | não |
-| `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
-| `POST` | `/api/v1/marketing/media/:id/authorize` | `marketing:content:approve` | não |
-| `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
-| `POST` | `/api/v1/marketing/kill-switch/impact` | `marketing:killswitch:manage` | não |
-| `GET` | `/api/v1/marketing/publications` | `marketing:content:read` | não |
-| `GET` | `/api/v1/marketing/publications/:id/impact` | `marketing:content:publish` | não |
-| `POST` | `/api/v1/marketing/publications/:id/cancel` | `marketing:content:publish` | não |
-| `GET` | `/api/v1/marketing/seo/sitemap` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates/:id/publish` | `marketing:template:manage` | não |
-| `GET` | `/api/v1/marketing/templates` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates` | `marketing:template:manage` | não |
-| `POST` | `/api/v1/marketing/tracking-links` | `marketing:campaign:manage` | não |
-| `GET` | `/api/v1/marketing/attribution` | `marketing:attribution:read` | não |
-| `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
-| `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
-| `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
-| `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |
-| `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
-| `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
-| `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
-| `POST` | `/api/v1/marketing/kill-switch/impact` | `marketing:killswitch:manage` | não |
-| `GET` | `/api/v1/marketing/publications` | `marketing:content:read` | não |
-| `GET` | `/api/v1/marketing/publications/:id/impact` | `marketing:content:publish` | não |
-| `POST` | `/api/v1/marketing/publications/:id/cancel` | `marketing:content:publish` | não |
-| `GET` | `/api/v1/marketing/seo/sitemap` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates/:id/publish` | `marketing:template:manage` | não |
-| `GET` | `/api/v1/marketing/templates` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates` | `marketing:template:manage` | não |
-| `POST` | `/api/v1/marketing/tracking-links` | `marketing:campaign:manage` | não |
-| `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |
-| `POST` | `/api/v1/marketing/content/:id/schedule` | `marketing:content:publish` | não |
-| `GET` | `/api/v1/marketing/content/:id` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/content` | `marketing:content:write` | não |
-| `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
-| `GET` | `/api/v1/marketing/publications` | `marketing:content:read` | não |
-| `GET` | `/api/v1/marketing/seo/sitemap` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates/:id/publish` | `marketing:template:manage` | não |
-| `GET` | `/api/v1/marketing/templates` | `marketing:content:read` | não |
-| `POST` | `/api/v1/marketing/templates` | `marketing:template:manage` | não |
-| `POST` | `/api/v1/marketing/tracking-links` | `marketing:campaign:manage` | não |
 | `POST` | `/api/v1/procurement/purchase-requests/:id/decide` | `procurement:approve` | não |
 | `POST` | `/api/v1/procurement/purchase-requests/:id/quotations` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/purchase-requests/:id` | `procurement:read` | não |
 | `GET` | `/api/v1/procurement/purchase-requests` | `procurement:read` | não |
-| `PATCH` | `/api/v1/tasks/:id` | `crm:tasks:create` | não |
 | `POST` | `/api/v1/procurement/purchase-requests` | `procurement:create` | não |
 | `GET` | `/api/v1/procurement/quotations/:id/compare` | `procurement:read` | não |
 | `POST` | `/api/v1/procurement/quotations/:id/offers` | `procurement:create` | não |
@@ -732,9 +756,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/procurement/supplier-qualifications` | `procurement:create` | não |
 | `DELETE` | `/api/v1/properties/:id/documents/:documentId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/documents` | `properties:read` | não |
-| `POST` | `/api/v1/messages/send` | `crm:messages:create` | não |
-| `POST` | `/api/v1/messages/:id/refresh-status` | `crm:messages:update` | não |
 | `POST` | `/api/v1/properties/:id/documents` | `properties:update` | não |
+| `GET` | `/api/v1/properties/:id/impact` | `properties:delete` | não |
 | `DELETE` | `/api/v1/properties/:id/media/:mediaId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/media` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/media` | `properties:update` | não |
@@ -766,12 +789,15 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/radar/:id` | `radar:update` | não |
 | `GET` | `/api/v1/radar` | `radar:read` | não |
 | `POST` | `/api/v1/radar` | `radar:create` | não |
+| `POST` | `/api/v1/retention/dry-run` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
+| `PUT` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
+| `POST` | `/api/v1/retention/runs/:id/apply` | `governance:retention:manage` | sim |
+| `GET` | `/api/v1/retention/runs/:id/impact` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/runs/:id` | `governance:retention:manage` | não |
+| `GET` | `/api/v1/retention/runs` | `governance:retention:manage` | não |
 | `DELETE` | `/api/v1/roles/:id` | `roles:delete` | sim |
 | `GET` | `/api/v1/roles/:id` | `roles:read` | não |
-| `POST` | `/api/v1/procurement/insurance-renewal-tasks/:id/complete` | `procurement:approve` | não |
-| `GET` | `/api/v1/procurement/insurance-tasks` | `procurement:read` | não |
-| `POST` | `/api/v1/procurement/insurance-tasks/:id/cancel` | `procurement:approve` | não |
-| `POST` | `/api/v1/procurement/insurance-tasks/:id/complete` | `procurement:approve` | não |
 | `PATCH` | `/api/v1/roles/:id` | `roles:update` | sim |
 | `GET` | `/api/v1/roles` | `roles:read` | não |
 | `POST` | `/api/v1/roles` | `roles:create` | sim |
@@ -779,6 +805,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PUT` | `/api/v1/settings/:key` | `settings:update` | não |
 | `GET` | `/api/v1/settings/integrations/status` | `settings:read` | não |
 | `GET` | `/api/v1/settings` | `settings:read` | não |
+| `PATCH` | `/api/v1/tasks/:id` | `crm:tasks:create` | não |
 | `POST` | `/api/v1/tool-loans/:id/return` | `inventory:update` | não |
 | `GET` | `/api/v1/tool-loans` | `inventory:read` | não |
 | `DELETE` | `/api/v1/units/:id` | `units:delete` | não |
@@ -786,6 +813,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/units/:id` | `units:update` | não |
 | `GET` | `/api/v1/units` | `units:read` | não |
 | `POST` | `/api/v1/units` | `units:create` | não |
+| `PATCH` | `/api/v1/users/:id/deactivate` | `users:update` | sim |
+| `GET` | `/api/v1/users/:id/impact` | `users:update` | não |
 | `PATCH` | `/api/v1/users/:id/set-password` | `users:update` | sim |
 | `DELETE` | `/api/v1/users/:id` | `users:delete` | não |
 | `GET` | `/api/v1/users/:id` | `users:read` | não |
@@ -798,42 +827,6 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/visits` | `crm:visits:read` | não |
 | `POST` | `/api/v1/visits` | `crm:visits:create` | não |
 
-## Rotas só com login ou públicas
-
-| Método | Caminho | Permissão exigida | MFA recente |
-|---|---|---|---|
-| `GET` | `/api/health` | público (saúde do serviço) | não |
-| `GET` | `/api/v1/api-external/contracts` | token de cliente com o scope `contracts:read` | não |
-| `POST` | `/api/v1/api-external/leads` | token de cliente com o scope `leads:write` | não |
-| `POST` | `/api/v1/api-external/oauth/token` | público (troca client id e segredo por token de cliente) | não |
-| `GET` | `/api/v1/api-external/properties` | token de cliente com o scope `properties:read` | não |
-| `GET` | `/api/v1/auth/companies` | só login | não |
-| `POST` | `/api/v1/auth/login` | público (obtém ou renova o token) | não |
-| `POST` | `/api/v1/auth/logout` | só login | não |
-| `POST` | `/api/v1/auth/refresh` | público (obtém ou renova o token) | não |
-| `POST` | `/api/v1/auth/switch-company` | só login | não |
-| `POST` | `/api/v1/correspondent/webhooks/financing/:provider` | público; autenticidade pela assinatura do provider | não |
-| `POST` | `/api/v1/crm/carts/public/:token/properties/:propertyId/click` | público; acesso pelo token do link | não |
-| `GET` | `/api/v1/crm/carts/public/:token` | público; acesso pelo token do link | não |
-| `GET` | `/api/v1/dlp/print-events/:id/pdf` | só login | não |
-| `POST` | `/api/v1/dlp/print-events` | só login | não |
-| `GET` | `/api/v1/files/:id/content` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `GET` | `/api/v1/files/:id/download` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `POST` | `/api/v1/retention/dry-run` | `governance:retention:manage` | não |
-| `GET` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
-| `PUT` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
-| `POST` | `/api/v1/retention/runs/:id/apply` | `governance:retention:manage` | sim |
-| `GET` | `/api/v1/retention/runs/:id/impact` | `governance:retention:manage` | não |
-| `GET` | `/api/v1/retention/runs/:id` | `governance:retention:manage` | não |
-| `GET` | `/api/v1/retention/runs` | `governance:retention:manage` | não |
-| `GET` | `/api/v1/files/:id` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `POST` | `/api/v1/files/download-batch` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `GET` | `/api/v1/files/downloads/:jobId` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `POST` | `/api/v1/files` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
-| `POST` | `/api/v1/finance/webhooks/bank-payment` | público; autenticidade pela assinatura do provider | não |
-| `GET` | `/api/v1/health/db` | público (saúde do serviço) | não |
-| `POST` | `/api/v1/legal/webhooks/clicksign` | público; autenticidade pela assinatura do provider | não |
-| `GET` | `/api/v1/ping` | público (saúde do serviço) | não |
 ## Catálogo de permissões de governança (governance:*)
 
 Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda não foi ligada por uma demanda do bloco.
@@ -841,6 +834,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | Permissão | Risco | Rotas que a exigem |
 |---|---|---|
 | `governance:calendar:read` | LOW | `GET /api/v1/calendar/commitments/:id`, `PATCH /api/v1/calendar/commitments/:id`, `POST /api/v1/calendar/commitments`, `DELETE /api/v1/calendar/items/:id`, `PATCH /api/v1/calendar/items/:id`, `PUT /api/v1/calendar/items/:id`, `GET /api/v1/calendar` |
+| `governance:data-quality:read` | LOW | `GET /api/v1/data-classification/legacy-review`, `GET /api/v1/data-classification`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
 | `governance:data-quality:manage` | MEDIUM | `PUT /api/v1/data-quality/domains/:code/assignments`, `POST /api/v1/data-quality/queue/:id/decision` |
 | `governance:data-quality:bulk` | CRITICAL | `GET /api/v1/data-quality/bulk-changes/:id`, `POST /api/v1/data-quality/bulk-changes/impact`, `GET /api/v1/data-quality/bulk-changes`, `POST /api/v1/data-quality/bulk-changes` |
 | `governance:lineage:manage` | HIGH | `POST /api/v1/data-lineage/edges`, `PUT /api/v1/data-lineage/edges`, `POST /api/v1/data-lineage/nodes`, `PUT /api/v1/data-lineage/nodes`, `GET /api/v1/data-lineage` |
@@ -857,14 +851,53 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:flags:manage` | CRITICAL | `POST /api/v1/feature-flags/impact`, `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags`, `POST /api/v1/migration/canary/:sector/advance`, `GET /api/v1/migration/canary/:sector/impact`, `POST /api/v1/migration/canary/:sector/rollback` |
 | `governance:migration:run` | CRITICAL | `POST /api/v1/migration/canary/:sector/advance`, `GET /api/v1/migration/canary/:sector/impact`, `POST /api/v1/migration/canary/:sector/rollback`, `GET /api/v1/migration/canary`, `GET /api/v1/migration/control-tower`, `GET /api/v1/migration/dry-runs/:id/report`, `POST /api/v1/migration/dry-runs`, `GET /api/v1/migration/parallel/windows/:id`, `POST /api/v1/migration/parallel/windows`, `GET /api/v1/migration/raci`, `POST /api/v1/migration/records/:id/resolve`, `POST /api/v1/migration/runs` |
 | `governance:migration:admin` | CRITICAL | `POST /api/v1/migration/cutover/decision`, `GET /api/v1/migration/external-ops`, `PUT /api/v1/migration/external-ops`, `PUT /api/v1/migration/raci`, `POST /api/v1/migration/rollback-items/:id/resolve`, `GET /api/v1/migration/rollback-report` |
+| `governance:classification:manage` | HIGH | `PUT /api/v1/ai/files/:fileId/classification`, `PUT /api/v1/data-classification`, `PUT /api/v1/files/:id/classification` |
 | `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
 | `governance:legal-hold:manage` | CRITICAL | `GET /api/v1/legal-holds/:id/impact`, `POST /api/v1/legal-holds/:id/release`, `GET /api/v1/legal-holds/:id`, `GET /api/v1/legal-holds`, `POST /api/v1/legal-holds` |
 
+## Rotas só com login ou públicas
+
+| Método | Caminho | Permissão exigida | MFA recente |
+|---|---|---|---|
+| `GET` | `/api/health` | público (saúde do serviço) | não |
+| `POST` | `/api/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
+| `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
+| `GET` | `/api/t/:shortCode` | só login | não |
+| `GET` | `/api/v1/api-external/contracts` | token de cliente com o scope `contracts:read` | não |
+| `POST` | `/api/v1/api-external/leads` | token de cliente com o scope `leads:write` | não |
+| `POST` | `/api/v1/api-external/oauth/token` | público (troca client id e segredo por token de cliente) | não |
+| `GET` | `/api/v1/api-external/properties` | token de cliente com o scope `properties:read` | não |
+| `GET` | `/api/v1/auth/companies` | só login | não |
+| `POST` | `/api/v1/auth/login` | público (obtém ou renova o token) | não |
+| `POST` | `/api/v1/auth/logout` | só login | não |
+| `POST` | `/api/v1/auth/refresh` | público (obtém ou renova o token) | não |
+| `POST` | `/api/v1/auth/switch-company` | só login | não |
+| `POST` | `/api/v1/correspondent/webhooks/financing/:provider` | público; autenticidade pela assinatura do provider | não |
+| `POST` | `/api/v1/crm/carts/public/:token/properties/:propertyId/click` | público; acesso pelo token do link | não |
+| `GET` | `/api/v1/crm/carts/public/:token` | público; acesso pelo token do link | não |
+| `POST` | `/api/v1/dlp/copy-events` | só login | não |
+| `GET` | `/api/v1/dlp/print-events/:id/pdf` | só login | não |
+| `POST` | `/api/v1/dlp/print-events` | só login | não |
+| `GET` | `/api/v1/files/:id/content` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `GET` | `/api/v1/files/:id/download` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `GET` | `/api/v1/files/:id` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `POST` | `/api/v1/files/download-batch` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `GET` | `/api/v1/files/downloads/:jobId` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `POST` | `/api/v1/files` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `POST` | `/api/v1/finance/webhooks/bank-payment` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/v1/health/db` | público (saúde do serviço) | não |
+| `POST` | `/api/v1/legal/webhooks/clicksign` | público; autenticidade pela assinatura do provider | não |
+| `POST` | `/api/v1/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
+| `POST` | `/api/v1/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/v1/ping` | público (saúde do serviço) | não |
 | `POST` | `/api/v1/procurement/webhooks/insurance` | público; autenticidade pela assinatura do provider | não |
+| `GET` | `/api/v1/public/properties/:publicId` | público; página do imóvel no site (M9-D427), só dado publicável | não |
 | `GET` | `/api/v1/public/share/:token` | só login | não |
 | `POST` | `/api/v1/users/me/mfa/confirm` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/disable` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/verify` | só login (o próprio usuário) | não |
+| `POST` | `/api/v1/webhooks/:provider/:channel` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/version` | público (saúde do serviço) | não |
 | `POST` | `/api/webhooks/:provider/:channel` | público; autenticidade pela assinatura do provider | não |
