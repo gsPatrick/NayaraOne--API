@@ -23,7 +23,7 @@ const admin = () => comPerm(ctxDe(tenantA), 'ai:use', 'ai:admin');
 const pedir = (ctx, url, tx, extra = {}) => rag.ingest(ctx, { sourceKind: 'URL', sourceRef: url, classification: 'INTERNAL', ...extra }, tx, { fetchOptions: env.hooks });
 const liberar = async (ctx, tx, { rag: dominios, ssrf }) => {
   if (dominios) await upsertSetting('ia.rag.dominios_permitidos', dominios, ctx, ctx.userId, tx);
-  if (ssrf) await upsertSetting('integration.ssrf.fetch_allowlist', ssrf, ctx, ctx.userId, tx);
+  if (ssrf) await upsertSetting('integration.ssrf.fetch_allowlist', ssrf, ctx, ctx.userId, tx, { platform: true });
 };
 
 test('m9d022_url_fora_da_allowlist_bloqueada', async () => {

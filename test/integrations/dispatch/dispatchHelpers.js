@@ -44,7 +44,7 @@ async function conexao(tenant, domain = 'BANK') {
   return comTenant(tenant, (t) => registry.createConnection({ providerCode: provider.code, environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}` }, ctxDe(tenant), t));
 }
 
-const config = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+const config = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t, { platform: true })); // fixture de plataforma: grava também as chaves só da plataforma
 
 /** Cria um envio (commit). */
 function criar(tenant, connectionId, key, extra = {}) {

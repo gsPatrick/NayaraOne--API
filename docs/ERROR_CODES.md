@@ -133,6 +133,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FLAG_NOT_FOUND` | 404 | Chave não encontrada. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_OWNER_INVALID` | 422 | O responsável deve ser uma pessoa ativa desta empresa. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_OWNER_REQUIRED` | 422 | Informe o responsável pela chave. | feature-flags | 1.3.0 | não |
+| `GOV_FLAG_PLATFORM_ONLY` | 403 | Este parâmetro só é alterado pela equipe da plataforma. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_REASON_REQUIRED` | 422 | Informe o motivo da alteração. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_SOURCE_LOCKED` | 422 | Esta configuração vem das Configurações da empresa: só valor, responsável, risco e descrição podem mudar aqui. | feature-flags | 1.3.0 | não |
 | `GOV_FLAG_VALIDITY_INVALID` | 422 | O fim da validade deve ser após o início. | feature-flags | 1.3.0 | não |

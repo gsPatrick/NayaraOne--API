@@ -18,7 +18,7 @@ const SECRET_SETTINGS_SCHEMA = Object.freeze({
       }
     },
   },
-  'integration.secret.require_company_prefix': { type: 'boolean' },
+  'integration.secret.require_company_prefix': { type: 'boolean', platformOnly: true },
   'integration.secret.mfa_on_bank_secret_change': { type: 'boolean' },
 });
 

@@ -46,12 +46,12 @@ test('g2_baseurl_na_edicao_tambem_e_conferida', async () => {
 });
 
 test('g2_parametro_provider_hosts_amplia_so_o_fornecedor_nomeado', async () => {
-  const salvar = (v) => withRollbackTenantTransaction(tenant, async (t) => { await upsertSetting('integration.egress.provider_hosts', v, tenant, tenant.userId, t); });
+  const salvar = (v) => withRollbackTenantTransaction(tenant, async (t) => { await upsertSetting('integration.egress.provider_hosts', v, tenant, tenant.userId, t, { platform: true }); });
   for (const ruim of ['sem-formato', 'signature-clicksign:10.0.0.5', 'signature-clicksign:servidor.internal', 'signature-clicksign:https://x.com', 'signature-clicksign:']) {
     await assert.rejects(salvar(ruim), (e) => e.code === 'SETTING_INVALID_VALUE', ruim);
   }
   await withRollbackTenantTransaction(tenant, async (t) => {
-    await upsertSetting('integration.egress.provider_hosts', 'signature-clicksign:clicksign.parceiro.example', tenant, tenant.userId, t);
+    await upsertSetting('integration.egress.provider_hosts', 'signature-clicksign:clicksign.parceiro.example', tenant, tenant.userId, t, { platform: true });
     const c = await registry.createConnection(novaConexao({ providerCode: 'signature-clicksign', configJson: { baseUrl: 'https://clicksign.parceiro.example/api/v3' } }), ctx, t);
     assert.ok(c.id, 'o host liberado no parâmetro vale para o fornecedor nomeado');
     await recusa(registry.createConnection(novaConexao({ providerCode: 'signature-zapsign', configJson: { baseUrl: 'https://clicksign.parceiro.example/api/v1' } }), ctx, t), 'INTEGRATION_CONFIG_INVALID');

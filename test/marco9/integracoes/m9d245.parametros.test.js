@@ -22,7 +22,7 @@ const comEmpresa = (fn) => comTenant(tenant, (t) => fn({ ...dados(), transaction
 const rejeita = (code, status) => (e) => e.code === code && (!status || e.statusCode === status);
 
 test('ssrf_parametros_da_empresa_validados_e_lidos: formato inválido é recusado, o válido muda o comportamento da busca', async () => {
-  const salvar = (k, v) => comTenant(tenant, (t) => upsertSetting(k, v, tenant, tenant.userId, t));
+  const salvar = (k, v) => comTenant(tenant, (t) => upsertSetting(k, v, tenant, tenant.userId, t, { platform: true }));
   for (const [k, v] of [['integration.ssrf.allowed_schemes', 'http'], ['integration.ssrf.allowed_schemes', 'https,ftp'], ['integration.ssrf.max_redirects', 9], ['integration.ssrf.max_bytes', 10],
     ['integration.ssrf.fetch_allowlist', 'sem-formato'], ['integration.ssrf.fetch_allowlist', 'fluxo:'], ['integration.ssrf.fetch_allowlist', 'Fluxo Ruim:a.example.com'], ['integration.ssrf.fetch_allowlist', 'portal_photo:nao_e_host'],
     ['integration.ssrf.allowed_ports', '99999'], ['integration.ssrf.content_types', 'text/html'], ['integration.ssrf.timeout_ms', 10]]) {

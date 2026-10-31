@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { runSettingGuard } = require('./settingGuards');
+const { isPlatformOnly } = require('./settingPlatform');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
 const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
@@ -544,12 +545,17 @@ async function getDecryptedSetting(key, tenant, transaction, defaultValue = null
  * tenant. Fail closed: chave desconhecida ou valor fora do schema é rejeitado com AppError 400
  * ANTES de qualquer escrita no banco.
  */
-async function upsertSetting(key, value, tenant, actorUserId, transaction) {
+// `options.platform`: quem grava declara ter integration:platform (obrigatório para chave `platformOnly`).
+async function upsertSetting(key, value, tenant, actorUserId, transaction, options = {}) {
   if (!tenant || !tenant.groupId || !tenant.companyId) {
     throw AppError.badRequest('Contexto de tenant (groupId/companyId) é obrigatório para configurar settings.', 'SETTING_TENANT_REQUIRED');
   }
 
   validateAgainstSchema(key, value);
+  // Chave só da plataforma (settingPlatform.js): vale na camada de escrita, para todo caminho; sem `options.platform` a gravação é recusada.
+  if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
+    throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
+  }
   // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
   await runSettingGuard(key, value, tenant, actorUserId, transaction);
 

@@ -19,7 +19,7 @@ after(async () => { await teardownEnv(tenant); await sequelize.close(); });
 
 const KEY = 'integration.egress.private_hosts';
 const recusa = (p, code) => assert.rejects(p, (e) => { assert.equal(e.code, code); return true; });
-const salvar = (t, v) => upsertSetting(KEY, v, tenant, tenant.userId, t);
+const salvar = (t, v) => upsertSetting(KEY, v, tenant, tenant.userId, t, { platform: true });
 const s3 = (endpoint, extra = {}) => novaConexao({ providerCode: 'storage-s3', configJson: { endpoint, bucket: 'nayara-docs', pathStyle: true, ...extra } });
 
 test('n7_parametro_valida_formato_e_nunca_aceita_loopback_metadados_curinga_nem_porta', async () => {

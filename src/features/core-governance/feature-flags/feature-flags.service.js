@@ -8,7 +8,7 @@ const E = require('./flags.errors');
 const { parseCreate, parsePatch, parseReason, isMissing } = require('./flags.input');
 const { readFlagsParams } = require('./flags.params');
 const { viewOf, snapshotOf } = require('./flags.view');
-const { liveValues, absorbTenantSettings, writeThrough } = require('./flags.settings.adapter');
+const { liveValues, absorbTenantSettings, writeThrough, assertNotPlatformOnly } = require('./flags.settings.adapter');
 const repo = require('./flags.repository');
 const { assertWritable } = require('./flags.protected');
 
@@ -61,6 +61,7 @@ async function createEntry(tenant, body, actorUserId, transaction, { trustedOwne
   const params = await readFlagsParams(tenant, transaction);
   const input = parseCreate(body, tenant, params);
   assertWritable(input.key, owner);
+  assertNotPlatformOnly(input.key);
   if (!trustedOwner) await assertOwnerActive(tenant, input.ownerUserId, transaction);
   const otherKind = input.kind === KINDS.FLAG ? KINDS.CONFIG : KINDS.FLAG;
   if (await repo.keyExistsInKind(tenant, otherKind, input.key, transaction)) throw E.duplicate();
@@ -86,6 +87,7 @@ async function updateEntry(tenant, body, actorUserId, transaction, { now = new D
   const b = body && typeof body === 'object' ? body : {};
   const row = await locateEntry(tenant, b, transaction);
   assertWritable(row.key, owner);
+  assertNotPlatformOnly(row.key);
   const reason = parseReason(b.reason);
   if (b.version !== undefined && b.version !== row.version) throw E.versionConflict({ currentVersion: row.version, sentVersion: b.version });
   const params = await readFlagsParams(tenant, transaction);

@@ -3,6 +3,8 @@
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../settings/settings.service');
+const { isPlatformOnly } = require('../../settings/settingPlatform');
+const E = require('./flags.errors');
 const { KEY_RE, KEY_MAX, SOURCES } = require('./flags.constants');
 const repo = require('./flags.repository');
 
@@ -51,7 +53,12 @@ async function absorbTenantSettings(tenant, actorUserId, params, transaction) {
   return created;
 }
 
+/** Parâmetro só da plataforma (SETTINGS_SCHEMA `platformOnly`) não muda por aqui: o registro nunca declara a permissão de plataforma (M9-D870 R3-M1). 403 antes de gravar qualquer coisa. */
+function assertNotPlatformOnly(key) {
+  if (isPlatformOnly(SETTINGS_SCHEMA[key])) throw E.platformOnly();
+}
+
 /** Grava o valor na configuração da empresa pelo serviço existente (validação do dicionário e trava do dono da regra incluídas). */
 const writeThrough = (tenant, key, value, actorUserId, transaction) => upsertSetting(key, value, { groupId: tenant.groupId, companyId: tenant.companyId }, actorUserId, transaction);
 
-module.exports = { liveValues, absorbTenantSettings, writeThrough, absorbable };
+module.exports = { liveValues, absorbTenantSettings, writeThrough, absorbable, assertNotPlatformOnly };

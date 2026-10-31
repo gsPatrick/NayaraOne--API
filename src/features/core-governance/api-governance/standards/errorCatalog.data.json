@@ -889,6 +889,13 @@
       "since": "1.3.0",
       "deprecated": false
     },
+    "GOV_FLAG_PLATFORM_ONLY": {
+      "status": 403,
+      "message": "Este parâmetro só é alterado pela equipe da plataforma.",
+      "module": "feature-flags",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_FLAG_REASON_REQUIRED": {
       "status": 422,
       "message": "Informe o motivo da alteração.",

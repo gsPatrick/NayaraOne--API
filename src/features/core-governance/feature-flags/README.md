@@ -68,3 +68,5 @@ Um módulo pode registrar chaves que só ele escreve (`flags.protected.registerP
 
 ## Como diagnosticar
 Use o `traceId` da resposta de erro (igual ao cabeçalho `X-Correlation-Id`) para achar a requisição nos logs e no registro de auditoria. Módulo respondendo 403 `GOV_MODULE_DISABLED`: conferir a chave `governanca.modulos.feature_flags.habilitado` em Configurações > Governança.
+
+Parâmetros só da plataforma (reabertura R3-M1): chave do SETTINGS_SCHEMA com `platformOnly: true` (destino de saída de rede, hosts de fornecedor, política SSRF, prefixo de segredo) só grava quando quem chama declara `integration:platform` (`upsertSetting(..., { platform: true })`, regra em `settings/settingPlatform.js`, na camada de escrita). O registro nunca a declara: PATCH e POST `/feature-flags` dessas chaves respondem 403 `GOV_FLAG_PLATFORM_ONLY` antes de gravar; o PUT `/settings/:key` exige a permissão na rota e na escrita (`SETTING_PLATFORM_ONLY`). Teste: `m9d870.plataforma`, que enumera todas as chaves marcadas.

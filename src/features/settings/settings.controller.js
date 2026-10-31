@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const AppError = require('../../utils/AppError');
 const settingsService = require('./settings.service');
+const { optionsFromAuth } = require('./settingPlatform');
 
 function tenantFromAuth(req) {
   return { groupId: req.auth.groupId, companyId: req.auth.companyId };
@@ -26,7 +27,7 @@ const upsertSetting = catchAsync(async (req, res) => {
     throw AppError.badRequest('O campo "value" é obrigatório.', 'SETTING_VALIDATION');
   }
   const item = await req.withTenantTransaction((t) =>
-    settingsService.upsertSetting(req.params.key, req.body.value, tenantFromAuth(req), req.auth.userId, t)
+    settingsService.upsertSetting(req.params.key, req.body.value, tenantFromAuth(req), req.auth.userId, t, optionsFromAuth(req.auth))
   );
   return success(res, { data: item });
 });
