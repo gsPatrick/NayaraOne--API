@@ -11,6 +11,7 @@ const { serializeConnection, auditar, exigirMfaEmProducao } = require('./registr
 const { validarSecretRefDaConexao } = require('../secrets/secretRefRules');
 const { exigirMfaSegredoBank } = require('../secrets/secretPolicy');
 const { validarRegrasIA, exigirSegredoParaAtivarIA } = require('./connections.aiRules');
+const { validarEnderecosDaConfig } = require('./connections.urlRules');
 const { validatePolicyJson } = require('../dispatch/retry/retry.limits');
 const { generateChannelToken } = require('../webhooks/webhooks.channel');
 const { CHANNEL_RE } = require('../webhooks/webhooks.resolve');
@@ -64,6 +65,7 @@ async function createConnection(payload, ctx, transaction, opts = {}) {
   validatePolicyJson(policyJson);
   conferirConfigContraSchema(provider, configJson);
   validarRegrasIA(provider, configJson, null, ctx);
+  await validarEnderecosDaConfig(provider, configJson, { ...ctx, environment: p.environment }, transaction); // M9-D245
   const apiVersion = texto(p.apiVersion, 'versão da API', 16);
   conferirVersao(provider, apiVersion);
   const secretRef = texto(p.secretRef, 'referência do cofre', 160);
@@ -142,7 +144,11 @@ async function updateConnection(id, patch, ctx, transaction, opts = {}) {
   const antes = serializeConnection(c);
   const provider = await carregarProvider(c.providerCode, transaction);
   if (p.label !== undefined) c.label = texto(p.label, 'nome', 80, { obrigatorio: true });
-  if (p.configJson !== undefined) { conferirConfigContraSchema(provider, p.configJson); validarRegrasIA(provider, p.configJson, c.configJson, ctx); c.configJson = p.configJson; }
+  if (p.configJson !== undefined) {
+    conferirConfigContraSchema(provider, p.configJson); validarRegrasIA(provider, p.configJson, c.configJson, ctx);
+    await validarEnderecosDaConfig(provider, p.configJson, { ...ctx, environment: c.environment }, transaction); // M9-D245
+    c.configJson = p.configJson;
+  }
   if (p.policyJson !== undefined) { validatePolicyJson(p.policyJson); c.policyJson = p.policyJson; }
   if (p.apiVersion !== undefined) { const v = texto(p.apiVersion, 'versão da API', 16); conferirVersao(provider, v); c.apiVersion = v; }
   if (p.secretRef !== undefined) {

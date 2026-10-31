@@ -3,6 +3,7 @@
 const AppError = require('../../../../utils/AppError');
 const { circuitProblems } = require('../../health/circuitPolicy');
 const { contingencyProblems } = require('../../contingency/contingency.policyRules');
+const { validateEgressHostList } = require('../../http/egressHostRules');
 
 /**
  * Limites da política de envio (M9-D216 seção 6): impedem configuração destrutiva (zero tentativas, atraso de anos, jitter que
@@ -35,7 +36,7 @@ function checkSection(section, name, limits, problemas) {
   }
 }
 
-/** Valida as seções `retry`, `rate_limit` e `circuit` de uma política (as demais chaves, como egressHosts, são de outras demandas). 422 INTEGRATION_POLICY_INVALID. */
+/** Valida as seções `retry`, `rate_limit` e `circuit` de uma política (`egressHosts` é conferida pela M9-D245: só nomes públicos). 422 INTEGRATION_POLICY_INVALID. */
 function validatePolicyJson(policy) {
   if (policy === undefined || policy === null) return;
   if (typeof policy !== 'object' || Array.isArray(policy)) throw invalid(['política: esperado um objeto']);
@@ -43,6 +44,7 @@ function validatePolicyJson(policy) {
   checkSection(policy.retry, 'retry', RETRY_LIMITS, problemas);
   checkSection(policy.rate_limit, 'rate_limit', RATE_LIMIT_LIMITS, problemas);
   problemas.push(...circuitProblems(policy.circuit)); // M9-D217: limiar, cooldown e chamadas de teste do circuito
+  problemas.push(...validateEgressHostList(policy.egressHosts)); // M9-D245: IP e nome interno nunca entram na lista de saída
   problemas.push(...contingencyProblems(policy.contingency)); // M9-D226: modo, prazo da fila, alternativo e papéis da contingência
   const r = policy.retry;
   if (r && Number.isInteger(r.base_delay_ms) && Number.isInteger(r.cap_delay_ms) && r.cap_delay_ms < r.base_delay_ms) problemas.push('retry.cap_delay_ms: não pode ser menor que base_delay_ms');

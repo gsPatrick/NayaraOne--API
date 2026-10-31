@@ -9,6 +9,7 @@ const { notFound, integrity } = require('./storage.errors');
 const { clampTtl } = require('./storage.signedUrl');
 const { signRequest, presignUrl } = require('./storage.s3.sigv4');
 const defaults = require('./storage.defaults');
+const { s3Target } = require('./storage.s3.target');
 
 const STATUS = Object.freeze({ STORED: 'STORED', FOUND: 'FOUND', DELETED: 'DELETED', OK: 'OK' });
 
@@ -40,9 +41,7 @@ class StorageS3Adapter extends StorageAdapter {
 
   /** host e caminho do objeto conforme o estilo (path-style ou virtual-hosted) da connection. */
   target(ctx, key) {
-    const c = ctx.connection.config || {};
-    const style = c.pathStyle === true;
-    return { host: style ? c.endpoint : `${c.bucket}.${c.endpoint}`, path: style ? `/${c.bucket}/${key}` : `/${key}`, region: c.region || 'us-east-1' };
+    return s3Target(ctx.connection.config, key);
   }
 
   async call(ctx, method, key, { body = Buffer.alloc(0), headers = {} } = {}) {

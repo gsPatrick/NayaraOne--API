@@ -6,6 +6,8 @@ const { wrapLegacy, mapFrom, verifyOp, hmacVerify } = require('../legacyWrap');
 const { signatureEvent, KINDS } = require('../../providers/signature/sandbox/signature.sandbox.event');
 const { ContractVersion } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
+const { assertConfiguredBaseUrl } = require('../../http/configUrl.policy');
+const { baseHostsOf } = require('../../http/providerBaseHosts');
 
 const STATUS = { PENDING: 'PENDING', SIGNED: 'SIGNER_SIGNED', CLOSED: 'COMPLETED', RUNNING: 'PENDING', DRAFT: 'PENDING', CANCELLED: 'CANCELED', CANCELED: 'CANCELED', COMPLETED: 'COMPLETED', VALID: 'VALID', INVALID: 'INVALID' };
 
@@ -62,15 +64,28 @@ function eventoClicksign(payload) {
   });
 }
 
+/** Hosts de cada fornecedor (produção e sandbox): a URL base da conexão só vale se o host for um deles ou constar em `integration.egress.provider_hosts` (M9-D245). */
+const CLICKSIGN_HOSTS = baseHostsOf('signature-clicksign');
+const ZAPSIGN_HOSTS = baseHostsOf('signature-zapsign');
+
+/** URL base da configuração da conexão, já conferida (https, host público, host da lista do fornecedor); sem URL, vale o padrão do adaptador. */
+function baseUrlConfigurada(ctx, hostsDoFornecedor) {
+  const baseUrl = ctx.connection.config?.baseUrl;
+  if (baseUrl === undefined || baseUrl === null || baseUrl === '') return undefined;
+  assertConfiguredBaseUrl({ baseUrl: String(baseUrl), allowedHosts: ctx.baseUrlHosts || hostsDoFornecedor, environment: ctx.connection.environment });
+  return baseUrl;
+}
+
 /** signature-clicksign: o token vem do cofre (SecretStore) quando a primeira operação roda; nada de rede no healthCheck. */
 const SignatureClicksignContractAdapter = wrapLegacy({
   Port: SignatureAdapter,
   className: 'SignatureClicksignContractAdapter',
   code: 'signature-clicksign',
+  hosts: CLICKSIGN_HOSTS,
   capabilities: CAPABILITIES,
   makeLegacy: async (ctx) => {
     const segredo = await ctx.secret('dispatch');
-    return new ClicksignSignatureAdapter({ apiToken: segredo.value.reveal(), baseUrl: ctx.connection.config?.baseUrl });
+    return new ClicksignSignatureAdapter({ apiToken: segredo.value.reveal(), baseUrl: baseUrlConfigurada(ctx, CLICKSIGN_HOSTS) });
   },
   mapper: mapFrom(STATUS),
   webhookHeader: 'content-hmac',
@@ -88,10 +103,11 @@ const SignatureZapSignContractAdapter = wrapLegacy({
   Port: SignatureAdapter,
   className: 'SignatureZapSignContractAdapter',
   code: 'signature-zapsign',
+  hosts: ZAPSIGN_HOSTS,
   capabilities: CAPABILITIES,
   makeLegacy: async (ctx) => {
     const segredo = await ctx.secret('dispatch');
-    return new ZapSignSignatureAdapter({ apiToken: segredo.value.reveal(), baseUrl: ctx.connection.config?.baseUrl });
+    return new ZapSignSignatureAdapter({ apiToken: segredo.value.reveal(), baseUrl: baseUrlConfigurada(ctx, ZAPSIGN_HOSTS) });
   },
   mapper: mapFrom(STATUS),
   webhookHeader: 'x-zapsign-signature',
