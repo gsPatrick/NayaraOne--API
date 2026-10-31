@@ -34,7 +34,7 @@ class HttpModelAdapter extends AIProviderAdapter {
   baseUrl() {
     const custom = this.config().baseUrl;
     if (custom) {
-      assertBaseUrlAllowed({ baseUrl: String(custom), defaultBaseUrl: this.defaultBaseUrl(), egressHosts: (this.ctx && this.ctx.policy && this.ctx.policy.egressHosts) || [], providerCode: this.providerCode() });
+      assertBaseUrlAllowed({ baseUrl: String(custom), defaultBaseUrl: this.defaultBaseUrl(), egressHosts: (this.ctx && this.ctx.baseUrlHosts) || [], providerCode: this.providerCode() });
     }
     return String(custom || this.defaultBaseUrl()).replace(/\/+$/, '');
   }

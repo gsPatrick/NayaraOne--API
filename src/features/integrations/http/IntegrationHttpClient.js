@@ -44,13 +44,15 @@ class IntegrationHttpClient {
     this.resolver = opts.resolver === undefined ? defaultResolver() : opts.resolver;
     // Hosts exatos de rede própria que a empresa liberou para este fornecedor (M9-D244, N7): única exceção à recusa de destino privado.
     this.privateHosts = [...(opts.privateHosts || [])].map((h) => String(h).toLowerCase());
+    // Portas de saída permitidas (R3-M3): padrão 443; o parâmetro integration.ssrf.allowed_ports (só da plataforma) chega pelo contexto do adapter.
+    this.allowedPorts = Array.isArray(opts.allowedPorts) && opts.allowedPorts.length ? [...opts.allowedPorts] : undefined;
   }
 
   /** Cópia do cliente com hosts a mais (os da configuração validada do adapter, ex.: a URL base do fornecedor). */
   scoped(hosts = []) {
     return new IntegrationHttpClient({
       providerCode: this.providerCode, connectionId: this.connectionId, timeouts: this.timeouts, allowedHosts: [...this.allowedHosts, ...hosts],
-      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, stateChangeMaxAttempts: this.stateChangeMaxAttempts, resolver: this.resolver, privateHosts: this.privateHosts,
+      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, stateChangeMaxAttempts: this.stateChangeMaxAttempts, resolver: this.resolver, privateHosts: this.privateHosts, allowedPorts: this.allowedPorts,
     });
   }
 
@@ -89,7 +91,7 @@ class IntegrationHttpClient {
   /** Destino público (M9-D245), em qualquer modo: recusa e registra o bloqueio; devolve { pin } com o endereço validado a que a conexão se prende. */
   async checkDestination(url, method) {
     try {
-      const r = await resolveDestination(url, { environment: this.environment, resolver: this.resolver, privateHosts: this.privateHosts });
+      const r = await resolveDestination(url, { environment: this.environment, resolver: this.resolver, privateHosts: this.privateHosts, allowedPorts: this.allowedPorts });
       return { pin: r.pin };
     } catch (err) {
       await this.notify({ decision: 'BLOCKED', code: err.code, host: hostOf(url), method });

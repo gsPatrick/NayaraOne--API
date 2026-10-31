@@ -7,6 +7,7 @@ const { readEgressParams } = require('../http/egress.params');
 const { makeEgressRecorder } = require('../http/egress.record');
 const { readProviderHosts } = require('../http/providerHosts.params');
 const { readPrivateHosts } = require('../http/privateHosts.params');
+const { readSsrfParams } = require('../http/ssrf/ssrf.params');
 const { hostPatternProblem } = require('../http/egressHostRules');
 
 /**
@@ -27,6 +28,7 @@ async function buildAdapterCtx(connection, tenant, transaction, { adapterHosts =
   const baseUrlHosts = [...new Set([...(adapterHosts || []), ...(await readProviderHosts(connection.providerCode, tenant, transaction))])];
   // Hosts de rede própria que a empresa liberou para este fornecedor (M9-D244, N7): entram na lista de saída e na exceção de destino, só deles.
   const privateHosts = await readPrivateHosts(connection.providerCode, tenant, transaction);
+  const { allowedPorts } = await readSsrfParams(tenant, transaction); // portas de saída (padrão 443; só a plataforma muda)
   const timeouts = { readMs: params.readTimeoutMs, writeMs: params.writeTimeoutMs };
   return Object.freeze({
     connection: Object.freeze({
@@ -39,7 +41,7 @@ async function buildAdapterCtx(connection, tenant, transaction, { adapterHosts =
     timeouts,
     healthCheckTimeoutMs: params.healthCheckTimeoutMs,
     http: new IntegrationHttpClient({
-      providerCode: connection.providerCode, connectionId: connection.id, timeouts, allowedHosts: [...egressHostsOf(connection, baseUrlHosts), ...privateHosts], privateHosts,
+      providerCode: connection.providerCode, connectionId: connection.id, timeouts, allowedHosts: [...egressHostsOf(connection, baseUrlHosts), ...privateHosts], privateHosts, allowedPorts,
       environment: connection.environment, egressMode: egress.mode, onEgress: makeEgressRecorder(tenant, connection, transaction),
       // M9-D216: leitura e operação idempotente repetem até `integration.dispatch.call_attempts.idempotent`; o que altera estado (emissão) faz UMA tentativa:
       // a repetição dessa é do Dispatch Service (por classe de erro), nunca escondida dentro da chamada (INT-005).

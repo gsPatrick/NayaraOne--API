@@ -24,7 +24,7 @@ function ctxFalso(handler) {
     chamadas,
     ctx: {
       connection: { id: 'conn-1', providerCode: 'x', environment: 'PRODUCTION', apiVersion: null, config: { baseUrl: 'https://gateway.exemplo.com.br/v1/' } },
-      policy: {}, timeouts: { readMs: 1000, writeMs: 1000 }, healthCheckTimeoutMs: 1000,
+      policy: {}, baseUrlHosts: ['gateway.exemplo.com.br'], timeouts: { readMs: 1000, writeMs: 1000 }, healthCheckTimeoutMs: 1000, // host da lista fechada da plataforma (M9-D244 R3-L5)
       http: { request: async (req) => { chamadas.push(req); return handler(req); } },
       secret: async () => ({ value: { reveal: () => SEGREDO } }),
     },

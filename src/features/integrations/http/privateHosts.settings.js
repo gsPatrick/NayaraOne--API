@@ -4,6 +4,7 @@ const net = require('node:net');
 const AppError = require('../../../utils/AppError');
 const { parseList } = require('./sdkPolicy');
 const { isBlockedIp } = require('./ssrf/ipRanges');
+const { isMetadataName } = require('./metadataNames');
 
 const CODE = /^[a-z][a-z0-9_-]{1,47}$/;
 const NOME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
@@ -16,6 +17,7 @@ function privateHostProblem(host) {
   if (net.isIP(h)) return isBlockedIp(h, { allowPrivate: true }) ? 'faixa que nunca pode ser liberada (loopback, metadados da nuvem, link-local ou reservada)' : null;
   if (!NOME.test(h)) return 'use só o nome do host (sem curinga, esquema, porta ou caminho)';
   if (h === 'localhost' || h.endsWith('.localhost')) return 'localhost nunca pode ser liberado';
+  if (isMetadataName(h)) return 'nome de metadados da nuvem ou de serviço interno do orquestrador nunca pode ser liberado';
   const ultimo = h.split('.').pop();
   if (/^[0-9]+$/.test(ultimo) || /^0x[0-9a-f]*$/.test(ultimo)) return 'forma numérica de endereço não é aceita: use o IP completo ou o nome';
   return null;

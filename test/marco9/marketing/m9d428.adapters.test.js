@@ -16,7 +16,8 @@ function real(network, handler, opts = {}) {
   const calls = [];
   const ctx = {
     connection: { id: 'conn-social', providerCode: 'social-x', environment: 'PRODUCTION', apiVersion: null, config: { baseUrl: 'https://rede.exemplo.com.br/v1/' } },
-    policy: {}, timeouts: { readMs: 1000, writeMs: 1000 }, healthCheckTimeoutMs: 1000,
+    policy: {}, baseUrlHosts: ['rede.exemplo.com.br'], // host da lista fechada da plataforma (M9-D244 R3-L5)
+    timeouts: { readMs: 1000, writeMs: 1000 }, healthCheckTimeoutMs: 1000,
     http: { request: async (req) => { calls.push(req); return handler(req); } },
     secret: async () => ({ value: { reveal: () => TOKEN } }),
   };

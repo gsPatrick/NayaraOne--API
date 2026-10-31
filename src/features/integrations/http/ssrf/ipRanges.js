@@ -10,9 +10,13 @@ const V4 = [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24],
   ['192.0.2.0', 24], ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
   ['224.0.0.0', 4], ['240.0.0.0', 4],
+  // Metadados de nuvem fora das faixas acima (R3-M3): Azure (WireServer 168.63.129.16). Os de AWS, GCP, Oracle e Alibaba já caem em link-local, 192.0.0.0/24 e CGNAT.
+  ['168.63.129.16', 32],
 ];
 const V6 = [
   ['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8],
+  // Metadados da AWS em IPv6 (fd00:ec2::254): está dentro de fc00::/7 (rede própria liberável), por isso entra aqui como faixa que NUNCA se libera.
+  ['fd00:ec2::', 32],
 ];
 // Faixas de rede PRÓPRIA (RFC 1918 e ULA): só uma exceção explícita da empresa para um host nomeado as libera (M9-D244, parâmetro integration.egress.private_hosts).
 const PRIVADAS_V4 = new Set(['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);

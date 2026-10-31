@@ -46,6 +46,7 @@ expor('CATALOG_SETTINGS_SCHEMA', () => require('./providers/catalog.settings').C
 expor('catalogLegacy', () => require('./providers/catalog.legacy'));
 expor('compromiseDomainConnections', () => require('./registry/connections.compromise').compromiseDomainConnections); // M9-D433: conta comprometida
 expor('egressPolicy', () => require('./http/egressPolicy')); // M9-D210: política de saída para o adapter de IA (baseUrl.policy)
+expor('assertConfiguredBaseUrl', () => require('./http/configUrl.policy').assertConfiguredBaseUrl); // M9-D244 R3-M3: URL base da conexão contra a lista fechada da plataforma (Marketing)
 expor('urlProbe', () => require('./http/ssrf/ssrfProbe')); // M9-D433: destino público e redirecionamento (Marketing)
 
 module.exports = api;

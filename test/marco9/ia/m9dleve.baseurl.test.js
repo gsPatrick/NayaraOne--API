@@ -9,7 +9,8 @@ class Fake extends HttpModelAdapter {
   defaultBaseUrl() { return 'https://api.fornecedor.test'; }
   providerCode() { return 'FAKE'; }
 }
-const adapter = (baseUrl, egressHosts) => new Fake({ connection: { config: baseUrl ? { baseUrl } : {} }, policy: egressHosts ? { egressHosts } : {} });
+// `hostsDaPlataforma` = ctx.baseUrlHosts (integration.egress.provider_hosts, só da plataforma); `egressHosts` = policy da conexão, que a empresa edita e NÃO amplia a lista (M9-D244 R3-L5).
+const adapter = (baseUrl, hostsDaPlataforma, egressHosts) => new Fake({ connection: { config: baseUrl ? { baseUrl } : {} }, baseUrlHosts: hostsDaPlataforma || [], policy: egressHosts ? { egressHosts } : {} });
 
 function emAmbiente(nodeEnv, fn) {
   const antes = process.env.NODE_ENV;
@@ -27,8 +28,9 @@ test('m9dleve4_producao_recusa_host_fora_da_lista', () => {
   });
 });
 
-test('m9dleve4_producao_aceita_host_da_lista_do_administrador', () => {
+test('m9dleve4_producao_aceita_host_da_lista_da_plataforma_e_nao_o_da_politica_da_conexao', () => {
   emAmbiente('production', () => {
+    assert.throws(() => adapter('https://proxy.interno.test/v1', [], ['proxy.interno.test']).baseUrl(), (e) => e.code === 'AI_PROVIDER_BASEURL_NOT_ALLOWED', 'a lista de saída da conexão não escolhe o destino da chave');
     assert.equal(adapter('https://proxy.interno.test/v1', ['proxy.interno.test']).baseUrl(), 'https://proxy.interno.test/v1');
     assert.equal(adapter('https://a.proxy.test', ['*.proxy.test']).baseUrl(), 'https://a.proxy.test');
   });

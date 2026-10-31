@@ -1,5 +1,6 @@
 'use strict';
 
+const { assertConfiguredBaseUrl } = require('../../../../integrations');
 const { ChannelAdapter } = require('../ChannelAdapter');
 const { MODES } = require('../channels');
 const { invalid } = require('../channel.errors');
@@ -36,6 +37,8 @@ class RealChannelAdapter extends ChannelAdapter {
   endpoints() {
     const base = String((this.ctx.connection.config || {}).baseUrl || '');
     if (!/^https:\/\/[^\s]+$/i.test(base)) throw invalid('A URL base do canal precisa ser https.', { campo: 'baseUrl' });
+    // R3-M3/R3-L5: o destino do token do canal não é escolhido pela empresa: o host da URL base precisa estar na lista fechada da plataforma (integration.egress.provider_hosts), em qualquer modo de saída.
+    assertConfiguredBaseUrl({ baseUrl: base, allowedHosts: this.ctx.baseUrlHosts || [], environment: this.ctx.connection.environment });
     return endpointsFor(this.channel, base);
   }
 
