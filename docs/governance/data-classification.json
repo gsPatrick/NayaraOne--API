@@ -3422,6 +3422,12 @@
    "status",
    "validation_errors"
   ],
+  "governance.mig_batch_leaves": [
+   "batch_id",
+   "leaf_hash_source",
+   "leaf_hash_target",
+   "source_key"
+  ],
   "governance.mig_batches": [
    "attempts",
    "entity",
@@ -3432,11 +3438,38 @@
    "root_hash",
    "row_count",
    "run_id",
+   "source_count",
    "source_id",
+   "source_root",
    "source_system",
    "started_at",
    "status",
-   "to_token"
+   "target_count",
+   "target_root",
+   "to_token",
+   "verified_at"
+  ],
+  "governance.mig_blockers": [
+   "closed_at",
+   "code",
+   "detail",
+   "entity",
+   "owner",
+   "ref",
+   "since"
+  ],
+  "governance.mig_counters": [
+   "entity",
+   "n",
+   "source_system",
+   "state"
+  ],
+  "governance.mig_entity_schema": [
+   "entity",
+   "field",
+   "position",
+   "scale",
+   "type"
   ],
   "governance.mig_event_keys": [
    "batch_id",
@@ -5255,15 +5288,6 @@
   ]
  },
  "overrides": {
-  "integration.outbox_events.classification": {
-   "ownerDomain": "CLASSIFICACAO_TECNICA",
-   "purpose": "OPERACAO_INTERNA",
-   "classification": "LOW",
-   "exportability": "ALLOWED",
-   "aiAllowed": true
-  }
- }
-}
   "governance.legal_holds.matter_ref": {
    "classification": "HIGH",
    "purpose": "OBRIGACAO_LEGAL",
@@ -5300,3 +5324,12 @@
    "aiAllowed": false,
    "ownerDomain": "CONTRATOS"
   },
+  "integration.outbox_events.classification": {
+   "ownerDomain": "CLASSIFICACAO_TECNICA",
+   "purpose": "OPERACAO_INTERNA",
+   "classification": "LOW",
+   "exportability": "ALLOWED",
+   "aiAllowed": true
+  }
+ }
+}
