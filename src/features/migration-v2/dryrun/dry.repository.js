@@ -25,11 +25,6 @@ async function get(tenant, id, transaction) {
 
 const running = async (tenant, transaction) => (await select(`SELECT ${COLUMNS} FROM governance.mig_dry_reports WHERE company_id = :companyId AND status = 'RUNNING'`, { companyId: tenant.companyId }, transaction))[0] || null;
 
-/** O relatório concluído mais recente (a base da prontidão do GO). */
-const latestCompleted = async (tenant, transaction) => (await select(
-  `SELECT ${COLUMNS} FROM governance.mig_dry_reports WHERE company_id = :companyId AND status = 'COMPLETED' ORDER BY finished_at DESC, id DESC LIMIT 1`, { companyId: tenant.companyId }, transaction
-))[0] || null;
-
 /** Grava o progresso (campos JSON do relatório) sem mexer no estado. */
 async function save(tenant, id, parts, transaction) {
   const sets = Object.keys(parts).filter((key) => JSON_FIELDS[key]).map((key) => `${JSON_FIELDS[key]} = CAST(:${key} AS jsonb)`);
@@ -48,4 +43,4 @@ async function finish(tenant, id, { status, conclusion, parts }, transaction) {
   );
 }
 
-module.exports = { open, get, running, latestCompleted, save, finish };
+module.exports = { open, get, running, save, finish };

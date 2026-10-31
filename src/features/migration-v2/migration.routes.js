@@ -12,7 +12,8 @@ const { govError } = require('../core-governance/governance.errors');
 const { registerCanaryRoutes } = require('./canary/canary.routes');
 const rollbackController = require('./rollback/rollback.controller');
 const dryController = require('./dryrun/dry.controller');
-require('./dryrun'); // M9-D908: prontidão do GO (simulação de rollback no DRY3) e blocker de relógio da Torre
+const dryRun = require('./dryrun');
+dryRun.install(); // M9-D908: prontidão do GO (relatório exportado do DRY3) e blocker de relógio da Torre, registrados explicitamente
 require('./rollback'); // M9-D907: gancho do rollback de setor e blockers do plano de rollback
 
 const RUN_PERMISSION = 'governance:migration:run';

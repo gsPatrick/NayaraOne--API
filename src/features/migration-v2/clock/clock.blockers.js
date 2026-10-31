@@ -22,6 +22,7 @@ async function clockBlockers(tenant, scope, transaction) {
   }];
 }
 
-providers.register('migration-clock', clockBlockers);
+/** Registro explícito no ponto de extensão da Torre (idempotente), chamado pela montagem das rotas. */
+const install = () => providers.register('migration-clock', clockBlockers);
 
-module.exports = { CODES, clockBlockers };
+module.exports = { CODES, clockBlockers, install };

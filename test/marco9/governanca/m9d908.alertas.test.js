@@ -108,14 +108,15 @@ test('m9d908 RACI incompleta bloqueia o avanço do canary no ensaio', { skip: sk
 });
 
 test('m9d908 o GO só vale com a simulação de rollback executada no DRY3', { skip: skip() }, async () => {
+  process.env.MIGRATION_DRY3_REPORT_PATH = '/nao/existe/dry3-report.json'; // sem relatório exportado (o ajudante só cria um verde quando não há caminho)
   const none = await env.fail(env.decide(A, 'GO'));
   assert.deepEqual([none.status, none.code], [409, 'GOV_CUTOVER_NOT_READY']);
-  assert.ok(none.details.gaps.some((g) => g.code === 'GOV_MIG_DRY3_ROLLBACK_NOT_SIMULATED' && g.detail.dryRunId === null), 'lacuna { code, detail } sem nenhum ensaio');
+  assert.ok(none.details.gaps.some((g) => g.code === 'GOV_MIG_DRY3_ROLLBACK_NOT_SIMULATED' && g.detail.reportId === null), 'lacuna { code, detail } sem nenhum relatório exportado');
   // ensaio concluído, mas com a simulação de rollback vermelha: continua recusado
   await env.markRollbackSimulated(A, false);
   const red = await env.fail(env.decide(A, 'GO'));
   assert.equal(red.code, 'GOV_CUTOVER_NOT_READY');
-  assert.ok(red.details.gaps.some((g) => g.code === 'GOV_MIG_DRY3_ROLLBACK_NOT_SIMULATED' && g.detail.dryRunId));
+  assert.ok(red.details.gaps.some((g) => g.code === 'GOV_MIG_DRY3_ROLLBACK_NOT_SIMULATED' && g.detail.reportId));
   assert.equal((await env.adminQuery('SELECT count(*)::int AS n FROM governance.cutover_decisions WHERE company_id = $1', [A.companyId])).rows[0].n, 0, 'nenhuma decisão foi gravada');
   // o ensaio de verdade, com a simulação concluída, libera o GO e define T0
   const s = await env.scenario(A);

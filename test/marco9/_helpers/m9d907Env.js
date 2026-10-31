@@ -67,7 +67,7 @@ async function markRollbackSimulated(tenant, ok = true) {
 
 /** Apaga o relatório exportado do teste e solta o caminho (o GO volta a não encontrar relatório). */
 function dropExportedReport() {
-  if (process.env.MIGRATION_DRY3_REPORT_PATH) fs.rmSync(process.env.MIGRATION_DRY3_REPORT_PATH, { force: true });
+  try { if (process.env.MIGRATION_DRY3_REPORT_PATH) fs.rmSync(process.env.MIGRATION_DRY3_REPORT_PATH, { force: true }); } catch (_err) { /* caminho de teste inexistente (ENOTDIR): nada a apagar */ }
   delete process.env.MIGRATION_DRY3_REPORT_PATH;
 }
 

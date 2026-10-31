@@ -1,7 +1,13 @@
 'use strict';
 
 const service = require('./dry.service');
-require('./dry.readiness'); // M9-D908: o GO exige a simulação de rollback executada no DRY3
-require('../clock/clock.blockers'); // M9-D908: o relógio fora do limite abre blocker na Torre de controle
+const readinessHook = require('./dry.readiness');
+const clockBlockers = require('../clock/clock.blockers');
 
-module.exports = { ...service, runDryRun: require('./dry.orchestrator').runDryRun };
+/** Registro explícito dos ganchos da M9-D908 (idempotente): o GO exige a simulação de rollback do DRY3 e o relógio fora do limite abre blocker na Torre de controle. */
+function install() {
+  readinessHook.install();
+  clockBlockers.install();
+}
+
+module.exports = { ...service, runDryRun: require('./dry.orchestrator').runDryRun, install };

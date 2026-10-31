@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { sign } = require('./dry.signature');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DEFAULT_FILE = path.join('docs', 'governance', 'dry3-report.json');
@@ -17,7 +18,7 @@ function currentCommit() {
 const exportPath = () => (process.env.MIGRATION_DRY3_REPORT_PATH ? path.resolve(process.env.MIGRATION_DRY3_REPORT_PATH) : path.join(REPO_ROOT, DEFAULT_FILE));
 
 /**
- * Exporta a conclusão do DRY3 (M9-D908 §3.4) para o arquivo que o fechamento do bloco F (M9-D940) lê: conclusion, criteria, commit e generated_at. O arquivo não leva dado
+ * Exporta a conclusão do DRY3 (M9-D908 §3.4) para o arquivo que o fechamento do bloco F (M9-D940) lê: conclusion, criteria, commit e generated_at, mais report_id e a assinatura. O arquivo não leva dado
  * pessoal (só contagens, códigos e nomes de critério). Escrita atômica (arquivo temporário e renomeação).
  */
 function exportReport(report) {
@@ -29,6 +30,7 @@ function exportReport(report) {
     generated_at: new Date().toISOString(),
     report_id: report.id,
   };
+  Object.assign(body, sign(body)); // assinatura HMAC com a chave do ambiente: o GO só aceita relatório assinado e intacto (sem chave, o arquivo sai sem assinatura)
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);

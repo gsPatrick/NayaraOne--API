@@ -18,6 +18,8 @@ const PARAM_PREFIXES = ['migracao.relogio.%', 'migracao.fuso%', 'migracao.dry3.%
 function useTempExport() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d908-'));
   process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
+  process.env.MIGRATION_DRY3_SIGNING_KEY = 'chave-de-teste-nao-usar-em-producao'; // só de teste: assina o relatório exportado
+  dry.install();
   return { file: process.env.MIGRATION_DRY3_REPORT_PATH, read: () => JSON.parse(fs.readFileSync(process.env.MIGRATION_DRY3_REPORT_PATH, 'utf8')), exists: () => fs.existsSync(process.env.MIGRATION_DRY3_REPORT_PATH) };
 }
 
@@ -35,7 +37,7 @@ async function quiesce(tenant) {
   await adminQuery("UPDATE governance.mig_records SET state = 'EXCLUDED' WHERE company_id = $1 AND state IN ('QUARANTINED', 'PENDING_REVIEW', 'MIGRATED')", [c]);
   await adminQuery("UPDATE governance.mig_batches SET status = 'ABORTED' WHERE company_id = $1 AND status IN ('APPLIED', 'HASH_MISMATCH')", [c]);
   await adminQuery('UPDATE governance.mig_blockers SET closed_at = now() WHERE company_id = $1 AND closed_at IS NULL', [c]);
-  await adminQuery("UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now(), error = 'QA-M9: execução pausada encerrada pelo teste' WHERE company_id = $1 AND status = 'PAUSED'", [c]);
+  await adminQuery("UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now(), error = 'QA-M9: execução pendente encerrada pelo teste' WHERE company_id = $1 AND status IN ('PAUSED', 'QUEUED', 'RUNNING')", [c]);
 }
 
 /** Apaga o que a demanda grava na empresa e restaura o que o teste mexeu. */
