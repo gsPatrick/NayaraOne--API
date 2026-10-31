@@ -14,6 +14,7 @@ const { FINOPS_SETTING_DEFAULTS, FINOPS_SETTINGS_SCHEMA } = require('./finops/fi
 const { FLAGS_SETTING_DEFAULTS, FLAGS_SETTINGS_SCHEMA } = require('./feature-flags/flags.settings');
 const { PARALLEL_SETTINGS_SCHEMA } = require('../migration-v2/parallel/parallel.settings');
 const { CANARY_SETTINGS_SCHEMA } = require('../migration-v2/canary/canary.settings');
+const { ROLLBACK_SETTINGS_SCHEMA } = require('../migration-v2/rollback/rollback.settings');
 const { INGEST_SETTINGS_SCHEMA } = require('../migration-v2/ingest/ingest.settings'); // chaves migracao.*: os padrões ficam em ingest.settings (o catálogo de defaults abaixo é só de governanca.*)
 
 /**
@@ -78,6 +79,7 @@ const GOVERNANCE_SETTINGS_SCHEMA = {
   ...INGEST_SETTINGS_SCHEMA,
   ...PARALLEL_SETTINGS_SCHEMA,
   ...CANARY_SETTINGS_SCHEMA,
+  ...ROLLBACK_SETTINGS_SCHEMA,
   [ERRORS_EXCEPTIONS_KEY]: { type: 'string' },
   [PROFILES_MANAGEMENT_KEY]: { type: 'string' },
   [PROFILES_FINANCE_KEY]: { type: 'string' },

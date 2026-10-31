@@ -12,6 +12,7 @@ const { syncBlockers } = require('./blockers.sync');
 const { computeEta } = require('./eta.service');
 const providers = require('./blockers.providers');
 require('../parallel/blockers.provider'); // registra os blockers da comparação paralela (M9-D903) no ponto de extensão
+require('../rollback/blockers.provider'); // registra os blockers do plano de rollback (M9-D907) no ponto de extensão
 
 /** A execução pedida (404 se não existir nesta empresa) ou a mais recente; sem nenhuma execução, o escopo é a empresa toda. */
 async function pickRun(tenant, runId, transaction) {

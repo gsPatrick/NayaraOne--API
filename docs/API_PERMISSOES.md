@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 791. Rotas só com login ou públicas: 37.
+Rotas com permissão exigida: 796. Rotas só com login ou públicas: 37.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -661,11 +661,16 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/migration/canary/:sector/rollback` | `governance:migration:run`, `governance:flags:manage` | sim |
 | `GET` | `/api/v1/migration/canary` | `governance:migration:run` | não |
 | `GET` | `/api/v1/migration/control-tower` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/cutover/decision` | `governance:migration:admin` | não |
+| `GET` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
+| `PUT` | `/api/v1/migration/external-ops` | `governance:migration:admin` | não |
 | `GET` | `/api/v1/migration/parallel/windows/:id` | `governance:migration:run` | não |
 | `POST` | `/api/v1/migration/parallel/windows` | `governance:migration:run` | não |
 | `GET` | `/api/v1/migration/raci` | `governance:migration:run` | não |
 | `PUT` | `/api/v1/migration/raci` | `governance:migration:admin` | não |
 | `POST` | `/api/v1/migration/records/:id/resolve` | `governance:migration:run` | não |
+| `POST` | `/api/v1/migration/rollback-items/:id/resolve` | `governance:migration:admin` | não |
+| `GET` | `/api/v1/migration/rollback-report` | `governance:migration:admin` | não |
 | `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
 | `POST` | `/api/v1/marketing/media/:id/authorize` | `marketing:content:approve` | não |
 | `POST` | `/api/v1/marketing/kill-switch` | `marketing:killswitch:manage` | não |
@@ -843,7 +848,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `governance:finops:manage` | HIGH | `PATCH /api/v1/finops/budgets/:id`, `POST /api/v1/finops/budgets`, `PUT /api/v1/finops/degradation-policies` |
 | `governance:flags:manage` | CRITICAL | `POST /api/v1/feature-flags/impact`, `GET /api/v1/feature-flags`, `PATCH /api/v1/feature-flags`, `POST /api/v1/feature-flags`, `POST /api/v1/migration/canary/:sector/advance`, `GET /api/v1/migration/canary/:sector/impact`, `POST /api/v1/migration/canary/:sector/rollback` |
 | `governance:migration:run` | CRITICAL | `POST /api/v1/migration/canary/:sector/advance`, `GET /api/v1/migration/canary/:sector/impact`, `POST /api/v1/migration/canary/:sector/rollback`, `GET /api/v1/migration/canary`, `GET /api/v1/migration/control-tower`, `GET /api/v1/migration/parallel/windows/:id`, `POST /api/v1/migration/parallel/windows`, `GET /api/v1/migration/raci`, `POST /api/v1/migration/records/:id/resolve`, `POST /api/v1/migration/runs` |
-| `governance:migration:admin` | CRITICAL | `PUT /api/v1/migration/raci` |
+| `governance:migration:admin` | CRITICAL | `POST /api/v1/migration/cutover/decision`, `GET /api/v1/migration/external-ops`, `PUT /api/v1/migration/external-ops`, `PUT /api/v1/migration/raci`, `POST /api/v1/migration/rollback-items/:id/resolve`, `GET /api/v1/migration/rollback-report` |
 | `governance:retention:manage` | HIGH | `POST /api/v1/retention/dry-run`, `GET /api/v1/retention/policies`, `PUT /api/v1/retention/policies`, `POST /api/v1/retention/runs/:id/apply`, `GET /api/v1/retention/runs/:id/impact`, `GET /api/v1/retention/runs/:id`, `GET /api/v1/retention/runs` |
 | `governance:legal-hold:manage` | CRITICAL | `GET /api/v1/legal-holds/:id/impact`, `POST /api/v1/legal-holds/:id/release`, `GET /api/v1/legal-holds/:id`, `GET /api/v1/legal-holds`, `POST /api/v1/legal-holds` |
 

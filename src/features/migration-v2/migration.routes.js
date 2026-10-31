@@ -10,6 +10,8 @@ const controlController = require('./control/control.controller');
 const parallelController = require('./parallel/parallel.controller');
 const { govError } = require('../core-governance/governance.errors');
 const { registerCanaryRoutes } = require('./canary/canary.routes');
+const rollbackController = require('./rollback/rollback.controller');
+require('./rollback'); // M9-D907: gancho do rollback de setor e blockers do plano de rollback
 
 const RUN_PERMISSION = 'governance:migration:run';
 const ADMIN_PERMISSION = 'governance:migration:admin';
@@ -41,5 +43,10 @@ router.put('/migration/raci', requireAdminPermission, catchAsync(raciController.
 router.post('/migration/parallel/windows', requireRunPermission, catchAsync(parallelController.createWindow));
 router.get('/migration/parallel/windows/:id', requireRunPermission, catchAsync(parallelController.getWindow));
 registerCanaryRoutes(router, { requireRun: requireRunPermission, requireFlags: requireFlagsPermission }); // M9-D904: avançar e reverter exigem as duas permissões juntas
+router.get('/migration/external-ops', requireAdminPermission, catchAsync(rollbackController.listTypes)); // M9-D907
+router.put('/migration/external-ops', requireAdminPermission, catchAsync(rollbackController.putTypes));
+router.post('/migration/cutover/decision', requireAdminPermission, catchAsync(rollbackController.decide));
+router.get('/migration/rollback-report', requireAdminPermission, catchAsync(rollbackController.getReport));
+router.post('/migration/rollback-items/:id/resolve', requireAdminPermission, catchAsync(rollbackController.resolveItem));
 
 module.exports = router;

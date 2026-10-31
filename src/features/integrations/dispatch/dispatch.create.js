@@ -8,6 +8,7 @@ const { readDispatchParams } = require('./dispatch.params');
 const { keyRequired } = require('./dispatch.errors');
 const { auditarMudanca } = require('./dispatch.audit');
 const { CRITICALITY_OPS } = require('./dispatch.constants');
+const { recordFromDispatch } = require('../../migration-v2/rollback/log.service');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -65,6 +66,7 @@ async function createDispatch(ctx, d, transaction) {
     return { dispatch: existente, created: false };
   }
   const dispatch = await IntegrationDispatch.findByPk(rows[0].id, { transaction });
+  await recordFromDispatch(ctx, dispatch, { snapshot: d.snapshot, criticalityOp }, transaction); // M9-D907: após o GO, envio sem registro de operação externa não sai
   await auditarMudanca(ctx, null, dispatch, 'Envio registrado antes da chamada externa.', transaction);
   return { dispatch, created: true };
 }

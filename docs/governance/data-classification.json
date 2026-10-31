@@ -3152,6 +3152,12 @@
    "sort_order",
    "title"
   ],
+  "governance.cutover_decisions": [
+   "decided_at",
+   "decided_by",
+   "decision",
+   "reason"
+  ],
   "governance.cutover_raci": [
    "activity_code",
    "raci",
@@ -3262,6 +3268,25 @@
    "row_count",
    "status",
    "watermark"
+  ],
+  "governance.external_op_log": [
+   "amount_cents",
+   "dispatch_id",
+   "entity",
+   "executed_at",
+   "op_type",
+   "reference",
+   "type_id"
+  ],
+  "governance.external_op_types": [
+   "code",
+   "compensation",
+   "entity",
+   "module",
+   "operations",
+   "owner",
+   "procedure",
+   "reversibility"
   ],
   "governance.feature_flags": [
    "allowed_values",
@@ -3670,6 +3695,15 @@
    "secondary_id",
    "status",
    "survivor_id"
+  ],
+  "governance.rollback_items": [
+   "compensation_ref",
+   "log_id",
+   "resolution_note",
+   "resolved_at",
+   "resolved_by",
+   "sector",
+   "state"
   ],
   "governance.share_links": [
    "access_count",

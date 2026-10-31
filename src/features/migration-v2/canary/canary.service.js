@@ -9,6 +9,7 @@ const gate = require('./canary.gate');
 const members = require('./canary.members');
 const { pickTarget } = require('./canary.steps');
 const { runRollbackHooks } = require('./canary.hooks');
+require('../rollback'); // M9-D907: registra o gancho que cria os rollback_items no rollback de setor
 
 function assertSector(sector) {
   if (!isSector(sector)) throw errors.sectorUnknown(sector);

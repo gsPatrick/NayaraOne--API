@@ -38,6 +38,14 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.canary.etapas` | 5,25,50,100 | `canary/canary.params.readStages` (etapas do avanço) |
 | `migracao.canary.exigir_comparacao` | ligado | `canary/canary.params.readRequireComparison` (comparação paralela obrigatória por entidade migrável) |
 | `migracao.setor.<setor>.entidades` (seis chaves) | ver `canary/canary.settings.js` | `canary/canary.params.readEntities` (a quais entidades os blockers da Torre pertencem ao setor) |
+| `migracao.rollback.itens_por_pagina` | 100 | `rollback/report.service.getReport` (operações listadas por página ao abrir um tipo) |
+
+## Plano para operações externas no rollback (M9-D907)
+
+- `rollback/`: inventário (`governance.external_op_types`, semeado por empresa), decisão do GO (`governance.cutover_decisions`; T0 = a última decisão GO), registro (`governance.external_op_log`, gravado por `createDispatch` na mesma transação do envio) e itens (`governance.rollback_items`, criados pelo gancho `external-ops` do rollback de setor da D904).
+- Rotas (`governance:migration:admin`): `GET|PUT /migration/external-ops`, `POST /migration/cutover/decision`, `GET /migration/rollback-report[?type=&page=]`, `POST /migration/rollback-items/:id/resolve`.
+- Blockers da Torre: `GOV_ROLLBACK_COMPENSATION_REQUIRED` (tipo sem plano) e `GOV_ROLLBACK_PENDING` (compensação pendente de um rollback de setor).
+- Ponto de extensão: `rollback/readiness.register(nome, fn)` acrescenta pré-requisitos ao GO (a M9-D908 registra a simulação de rollback no DRY3).
 
 ## Operação
 
