@@ -148,8 +148,12 @@ test('metricas_coletadas_em_d0_d1_e_d7', async () => {
       assert.deepEqual(Object.keys(row.metrics_json.metrics).sort(), ['engagements', 'impressions', 'reach']);
       assert.ok(row.metrics_json.collectedAt);
     }
-    const list = await require('../../../src/features/marketing/publications').service.listPublications(ctx.tenant, { channel: 'INSTAGRAM' }, t);
-    assert.deepEqual(Object.keys(list.items[0].metrics).sort(), ['engagements', 'impressions', 'reach'], 'a lista mostra as métricas da última coleta');
+    // a lista é da empresa inteira (publicações de outros arquivos podem existir): localizo a publicação deste teste pelo id, na janela do seu horário
+    const [{ scheduled_at: scheduledAt }] = await env.fx.q(t, 'SELECT scheduled_at FROM marketing.publication_jobs WHERE id = :id', { id: jobId });
+    const list = await require('../../../src/features/marketing/publications').service.listPublications(ctx.tenant, { channel: 'INSTAGRAM', from: new Date(new Date(scheduledAt).getTime() - 1000).toISOString(), to: new Date(new Date(scheduledAt).getTime() + 1000).toISOString() }, t);
+    const mine = list.items.find((item) => item.id === jobId);
+    assert.ok(mine, 'a publicação do teste aparece na lista');
+    assert.deepEqual(Object.keys(mine.metrics).sort(), ['engagements', 'impressions', 'reach'], 'a lista mostra as métricas da última coleta');
     const siteId = s.jobs.find((j) => j.channel === 'SITE').id;
     assert.equal((await metricRows(t, siteId)).length, 0, 'canal sem getMetrics não é consultado');
   });

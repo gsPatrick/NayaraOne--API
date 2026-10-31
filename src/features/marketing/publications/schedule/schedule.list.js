@@ -32,7 +32,7 @@ function formatLocal(date, zone) {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${match && match[1] ? match[1] : 'Z'}`;
 }
 
-/** Métricas do último resultado: a coleta do worker (M9-D411) guarda os números em `metrics_json.metrics`; o resultado antigo guarda o objeto direto. */
+/** Métricas do último resultado (empate de tentativa e horário: vale a coleta de métricas mais recente, e o resultado da publicação só se não houver coleta): a coleta do worker (M9-D411) guarda os números em `metrics_json.metrics`; o resultado antigo guarda o objeto direto. */
 const metricsOf = (r) => (r.outcome === 'METRICS' ? (r.metrics_json || {}).metrics || {} : r.metrics_json || {});
 
 /** "Publicado" só quando o canal confirmou que está no ar (M9-D411 item 8): job PUBLISHED. Post aceito e ainda em processamento aparece como "Em processamento no canal". */
@@ -72,7 +72,7 @@ async function listPublications(tenant, query, transaction) {
        JOIN marketing.content_versions v ON v.id = j.content_version_id AND v.company_id = j.company_id
        JOIN marketing.content_items i ON i.id = v.content_item_id AND i.company_id = v.company_id
        LEFT JOIN LATERAL (SELECT external_url, metrics_json, outcome FROM marketing.publication_results pr WHERE pr.job_id = j.id AND pr.company_id = j.company_id
-                           ORDER BY pr.attempt_no DESC, pr.occurred_at DESC LIMIT 1) r ON true
+                           ORDER BY pr.attempt_no DESC, pr.occurred_at DESC, pr.metrics_json->>'collectedAt' DESC NULLS LAST, pr.id DESC LIMIT 1) r ON true
       WHERE ${where} ORDER BY j.scheduled_at, j.id LIMIT :limit OFFSET :offset`
   );
   const zone = (await cadence.getMarketingParam(cadence.QUIET_HOURS_KEY, tenant, transaction)).timeZone; // fuso da empresa (M9-D417), padrão America/Sao_Paulo
