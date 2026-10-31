@@ -23,6 +23,7 @@ const { startDataQualityMergeDetectionJob } = require('./src/engines/jobs/dataQu
 const { startDataQualityScanJob } = require('./src/engines/jobs/dataQualityScanJob');
 const { startMigrationRunJob } = require('./src/engines/jobs/migrationRunJob');
 const { startParallelCompareJob } = require('./src/engines/jobs/parallelCompareJob');
+const { startMigrationClockJob, registerNtpReader } = require('./src/engines/jobs/migrationClockJob');
 const { startRetentionJob } = require('./src/engines/jobs/retentionJob');
 const { startFinopsCollectJob } = require('./src/engines/jobs/finopsCollectJob');
 const { startFinopsDetectorsJob } = require('./src/engines/jobs/finopsDetectorsJob');
@@ -241,6 +242,13 @@ if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_RUN_JOB_DISABLED !=
 // Comparação paralela antigo x novo (M9-D903): confere a cada minuto as janelas definidas; PARALLEL_COMPARE_JOB_DISABLED=true desliga no processo.
 if (process.env.NODE_ENV !== 'test' && process.env.PARALLEL_COMPARE_JOB_DISABLED !== 'true') {
   startParallelCompareJob();
+}
+// Validação de relógio da migração (M9-D908): o NTP entra na conferência antes de cada lote; o job repete a conferência e retoma o aplicador pausado. MIGRATION_CLOCK_JOB_DISABLED=true desliga o job.
+if (process.env.NODE_ENV !== 'test') {
+  registerNtpReader();
+}
+if (process.env.NODE_ENV !== 'test' && process.env.MIGRATION_CLOCK_JOB_DISABLED !== 'true') {
+  startMigrationClockJob();
 }
 
 if (process.env.NODE_ENV !== 'test' && process.env.API_DEPRECATION_JOB_DISABLED !== 'true') {

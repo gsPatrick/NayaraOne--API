@@ -46,6 +46,17 @@ const setRaci = (tenant, activity, entries) => openTenantTx(tenant, (tx) => raci
 /** Deixa a atividade da reconciliação final com o usuário como A (e um perfil como R). */
 const setReconciliationRaci = (tenant, accountableUserId, responsible) => setRaci(tenant, ACTIVITY, [{ userId: accountableUserId, raci: 'A' }, ...responsible]);
 
+/** Dez atividades do RACI do corte, todas completas (um A e um R): o avanço do canary exige a RACI completa (M9-D908 §3.5). */
+const RACI_ACTIVITIES = ['FREEZE_LEGACY_WRITES', 'LAST_DELTA_LOAD', 'FINAL_RECONCILIATION', 'PARALLEL_COMPARE_CLOSE', 'SECTOR_ACTIVATION', 'CLOCK_TZ_CHECK', 'GO_NO_GO', 'ROLLBACK_EXECUTION', 'USER_COMMUNICATION', 'LEGACY_DECOMMISSION'];
+async function completeRaci(tenant) {
+  const matrix = await openTenantTx(tenant, (tx) => raci.getMatrix(tenant, tx));
+  const done = new Set(matrix.activities.filter((activity) => activity.complete).map((activity) => activity.code));
+  for (const activity of RACI_ACTIVITIES.filter((code) => !done.has(code))) { // só completa o que falta: a RACI que o teste montou fica como está
+     
+    await setRaci(tenant, activity, [{ role: 'ADMIN', raci: 'A' }, { role: 'GESTOR', raci: 'R' }]);
+  }
+}
+
 const getTower = (tenant, runId) => openTenantTx(tenant, (tx) => tower.getTower(tenant, { userId: tenant.userId }, { runId }, tx));
 const resolve = (tenant, actor, recordId, body) => openTenantTx(tenant, (tx) => resolver.resolveRecord(tenant, actor, recordId, body, tx));
 const recount = (tenant) => openTenantTx(tenant, (tx) => counters.recount(tenant, tx));
@@ -68,4 +79,4 @@ async function insertBatch(tenant, system, entity, { rows, minutes, status = 'AP
   return row;
 }
 
-module.exports = { ...env, ACTIVITY, seedRecords, insertRecord, newRun, setRaci, setReconciliationRaci, getTower, resolve, recount, committedUser, fail, openBlockers, codesOf, stateOf, insertBatch, raci };
+module.exports = { ...env, ACTIVITY, seedRecords, insertRecord, newRun, setRaci, completeRaci, RACI_ACTIVITIES, setReconciliationRaci, getTower, resolve, recount, committedUser, fail, openBlockers, codesOf, stateOf, insertBatch, raci };

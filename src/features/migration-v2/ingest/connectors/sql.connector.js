@@ -56,6 +56,16 @@ async function createSqlConnector(source) {
       const { rows } = await client.query(`SELECT ${key}::text AS k FROM ${relation(config.relation)} ORDER BY 1`);
       return rows.map((row) => row.k);
     },
+    /** Contagem de linhas da origem (`SELECT count(*)`), conferida com o destino pelo ensaio DRY3 (M9-D908 §3.3). */
+    async countRows() {
+      const { rows } = await client.query(`SELECT count(*)::text AS n FROM ${relation(config.relation)}`);
+      return Number(rows[0].n);
+    },
+    /** Relógio do banco do sistema antigo (`SELECT now()`), conferido contra os demais pela validação de relógio (M9-D908 §3.1). */
+    async readClock() {
+      const { rows } = await client.query('SELECT now() AS now');
+      return rows[0].now;
+    },
     close: () => client.end(),
   };
 }

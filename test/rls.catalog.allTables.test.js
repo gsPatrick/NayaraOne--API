@@ -1106,3 +1106,17 @@ test('M9-D907: external_op_types, external_op_log, rollback_items e cutover_deci
     if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
   }
 });
+
+// M9-D908: conferências de relógio, relatórios do ensaio DRY3 e reserva dos alertas da migração (governance.mig_clock_checks, mig_dry_reports, mig_alert_log) são da EMPRESA: RLS + FORCE RLS, tenant_isolation e GRANT ao runtime.
+test('M9-D908: mig_clock_checks, mig_dry_reports e mig_alert_log têm RLS, FORCE RLS, política tenant_isolation e GRANT ao runtime', async () => {
+  const tables = ['mig_clock_checks', 'mig_dry_reports', 'mig_alert_log'];
+  const [rows] = await sequelize.query(`SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+      (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_isolation') AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'governance' AND c.relname IN (:tables) ORDER BY 1`, { replacements: { tables } });
+  assert.equal(rows.length, tables.length, 'as três tabelas existem');
+  for (const r of rows) assert.deepEqual([r.relrowsecurity, r.relforcerowsecurity, r.policies], [true, true, 1], `governance.${r.relname}`);
+  for (const t of tables) {
+    const [grants] = await sequelize.query(`SELECT has_table_privilege('nayara_runtime', 'governance.${t}', 'INSERT') AS ins WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime')`);
+    if (grants.length) assert.equal(grants[0].ins, true, `GRANT ao runtime em governance.${t}`);
+  }
+});

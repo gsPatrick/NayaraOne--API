@@ -32,14 +32,15 @@ async function addSectorUsers(tenant, sector, count) {
 }
 
 /** Entidades que pertencem ao setor neste teste (o parâmetro migracao.setor.<setor>.entidades). */
-const setEntities = (tenant, sector, names) => setParam(tenant, `migracao.setor.${sector.toLowerCase()}.entidades`, names.join(','));
+const setEntities = async (tenant, sector, names) => { await env.completeRaci(tenant); return setParam(tenant, `migracao.setor.${sector.toLowerCase()}.entidades`, names.join(',')); };
 
 /** Blocker de uma entidade na Torre (provedor registrado, como as demandas D903/D907/D908 fazem). Devolve a função que o remove. */
 function openBlocker(entity, ref = 'qa904-1') {
   return blockersProviders.register(`qa-m9d904-${entity}-${ref}`, async () => [{ code: 'GOV_MIG_QA904', entity, ref, owner: null, detail: { motivo: 'teste' } }]);
 }
 
-const advance = (tenant, sector, body = {}) => openTenantTx(tenant, (tx) => canary.advance(tenantOf(tenant), sector, body, tx));
+/** Avanço do setor com a RACI do corte completa (o avanço exige, M9-D908 §3.5); o setRaci da SECTOR_ACTIVATION do próprio teste vale se vier depois. */
+const advance = async (tenant, sector, body = {}) => { await env.completeRaci(tenant); return openTenantTx(tenant, (tx) => canary.advance(tenantOf(tenant), sector, body, tx)); };
 const rollback = (tenant, sector, body = {}) => openTenantTx(tenant, (tx) => canary.rollback(tenantOf(tenant), sector, body, tx));
 const status = (tenant) => openTenantTx(tenant, (tx) => canary.status(tenantOf(tenant), tx));
 const flagRow = async (tenant, sector) => (await adminQuery('SELECT * FROM governance.config_entries WHERE company_id = $1 AND key = $2', [tenant.companyId, `migracao.setor.${sector.toLowerCase()}.novo_sistema`])).rows[0] || null;

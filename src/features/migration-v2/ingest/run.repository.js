@@ -41,9 +41,25 @@ async function finish(tenant, id, status, summary, error, transaction) {
   );
 }
 
+/** RUNNING -> PAUSED (relógios fora do limite, M9-D908): sem fim, para o job de retomada achá-la; o checkpoint de cada fonte fica onde estava. */
+async function pause(tenant, id, summary, transaction) {
+  await sequelize.query(
+    "UPDATE governance.mig_runs SET status = 'PAUSED', finished_at = NULL, summary = CAST(:summary AS jsonb), error = NULL WHERE company_id = :companyId AND id = :id AND status = 'RUNNING'",
+    { transaction, replacements: { companyId: tenant.companyId, id, summary: JSON.stringify(summary) } }
+  );
+}
+
+/** PAUSED -> QUEUED atomicamente: só quem retoma primeiro vence. */
+async function resume(tenant, id, transaction) {
+  const [row] = await select("UPDATE governance.mig_runs SET status = 'QUEUED' WHERE company_id = :companyId AND id = :id AND status = 'PAUSED' RETURNING id", { companyId: tenant.companyId, id }, transaction);
+  return Boolean(row);
+}
+
+const listPaused = (tenant, transaction) => select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND status = 'PAUSED' ORDER BY created_at LIMIT 20`, { companyId: tenant.companyId }, transaction);
+
 /** Execuções QUEUED da empresa, mais antigas primeiro (o job as retoma se a partida imediata se perdeu). */
 function listQueued(tenant, transaction) {
   return select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND status = 'QUEUED' ORDER BY created_at LIMIT 20`, { companyId: tenant.companyId }, transaction);
 }
 
-module.exports = { insert, get, latest, claim, finish, listQueued };
+module.exports = { insert, get, latest, claim, finish, pause, resume, listPaused, listQueued };

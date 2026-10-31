@@ -11,6 +11,8 @@ const parallelController = require('./parallel/parallel.controller');
 const { govError } = require('../core-governance/governance.errors');
 const { registerCanaryRoutes } = require('./canary/canary.routes');
 const rollbackController = require('./rollback/rollback.controller');
+const dryController = require('./dryrun/dry.controller');
+require('./dryrun'); // M9-D908: prontidão do GO (simulação de rollback no DRY3) e blocker de relógio da Torre
 require('./rollback'); // M9-D907: gancho do rollback de setor e blockers do plano de rollback
 
 const RUN_PERMISSION = 'governance:migration:run';
@@ -48,5 +50,7 @@ router.put('/migration/external-ops', requireAdminPermission, catchAsync(rollbac
 router.post('/migration/cutover/decision', requireAdminPermission, catchAsync(rollbackController.decide));
 router.get('/migration/rollback-report', requireAdminPermission, catchAsync(rollbackController.getReport));
 router.post('/migration/rollback-items/:id/resolve', requireAdminPermission, catchAsync(rollbackController.resolveItem));
+router.post('/migration/dry-runs', requireRunPermission, catchAsync(dryController.start)); // M9-D908
+router.get('/migration/dry-runs/:id/report', requireRunPermission, catchAsync(dryController.report));
 
 module.exports = router;

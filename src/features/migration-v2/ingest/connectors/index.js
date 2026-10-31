@@ -9,6 +9,7 @@ const { createSqlConnector } = require('./sql.connector');
  *  - readRows({ afterTs, afterKey, upTo?, limit }) -> [{ sourceKey, updatedAt, record }] em ordem (updatedAt, sourceKey), estritamente depois do par informado (WATERMARK)
  *  - readAllRows({ afterKey, upToKey?, limit }) -> [{ sourceKey, record }] em ordem de chave (FULL_DIFF)
  *  - listKeys() -> todas as chaves existentes hoje na origem (comparação de exclusões)
+ *  - countRows() -> número de linhas existentes hoje na origem (opcional; o ensaio DRY3 recorre a listKeys quando falta) e readClock() -> instante atual do relógio da origem (opcional; sem ele a fonte não entra na validação de relógio)
  *  - close()
  * O conector `SQL` (padrão) lê tabelas/visões do legado por uma conexão somente leitura cujo endereço vem da variável de ambiente NOMEADA em `secret_ref`; nenhum segredo
  * fica na fonte nem em arquivo. Outros conectores se registram por nome (`register`), por exemplo um de arquivo ou de API.

@@ -65,4 +65,4 @@ async function getWindow(tenant, id, transaction) {
   return { row, rules: await windows.listRules(tenant, id, transaction) };
 }
 
-module.exports = { createWindow, getWindow, view, setting };
+module.exports = { createWindow, getWindow, view, setting, mappedFields };

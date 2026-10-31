@@ -59,6 +59,7 @@ test('m9d907 PUT /migration/external-ops: 422 com a mensagem do livro e, depois,
 test('m9d907 decisão do GO, relatório com paginação e resolução com 409 pela API; o parâmetro define a página', async (t) => {
   if (h.skip) return t.skip(h.skip);
   assert.equal((await call('gestor', 'POST', '/migration/cutover/decision', { decision: 'x' })).body.error.code, 'GOV_CUTOVER_DECISION_INVALID');
+  await env.markRollbackSimulated(A); // M9-D908: o GO pela API exige a simulação de rollback do DRY3
   const go = await call('gestor', 'POST', '/migration/cutover/decision', { decision: 'GO', reason: 'Ensaio.' });
   assert.equal(go.status, 200, JSON.stringify(go.body));
   assert.ok(go.body.data.t0);

@@ -3447,6 +3447,12 @@
    "status",
    "validation_errors"
   ],
+  "governance.mig_alert_log": [
+   "alert_key",
+   "alert_type",
+   "recipients",
+   "window_id"
+  ],
   "governance.mig_batch_leaves": [
    "batch_id",
    "leaf_hash_source",
@@ -3483,11 +3489,38 @@
    "ref",
    "since"
   ],
+  "governance.mig_clock_checks": [
+   "checked_at",
+   "context",
+   "drift_ms",
+   "dry_run_id",
+   "max_drift_ms",
+   "readings",
+   "run_id",
+   "status"
+  ],
   "governance.mig_counters": [
    "entity",
    "n",
    "source_system",
    "state"
+  ],
+  "governance.mig_dry_reports": [
+   "blockers",
+   "commit_hash",
+   "conclusion",
+   "criteria",
+   "errors",
+   "finished_at",
+   "kind",
+   "phases",
+   "quarantine",
+   "requested_by",
+   "run_ids",
+   "samples",
+   "started_at",
+   "status",
+   "volumes"
   ],
   "governance.mig_entity_schema": [
    "entity",

@@ -5,6 +5,8 @@ const { mapRow, rowHash } = require('./row.canonical');
 const records = require('./record.repository');
 const { getTarget } = require('./targets');
 const externalRefs = require('../externalRefs.service');
+const { normalizeTemporal } = require('../timezone/timezone.normalize');
+const { temporalContext } = require('../timezone/timezone.context');
 
 const MIGRATED_STATES = [RECORD.MIGRATED, RECORD.RECONCILED];
 const KEPT_STATES = [RECORD.QUARANTINED, RECORD.PENDING_REVIEW];
@@ -35,7 +37,9 @@ const camel = (row) => ({
 
 /** Eventos I e U: upsert pela chave externa, com as regras de delta da M9-D901 §3.1 (EXCLUDED ignora; QUARANTINED/PENDING_REVIEW só atualizam o conteúdo de origem). */
 async function applyUpsert(ctx, source, event, existing) {
-  const row = event.canonical ? event.record : mapRow(event.record, source.config && source.config.columnMap); // `canonical`: registro PENDING relido do banco (já mapeado)
+  const mapped = event.canonical ? event.record : mapRow(event.record, source.config && source.config.columnMap); // `canonical`: registro PENDING relido do banco (já mapeado)
+  const temporal = await temporalContext(ctx, source.entity); // M9-D908 §3.2: data sem hora fica no dia civil; data e hora sem fuso vai a UTC pelo fuso de origem
+  const { row, verdict: temporalVerdict } = normalizeTemporal(mapped, temporal.schema, temporal.options);
   const hash = rowHash(row);
   const base = { payload: row, rowHash: hash, batchId: ctx.batch.id, position: event.position, sourceDeleted: false };
   if (existing && existing.state === RECORD.EXCLUDED) return { outcome: 'ignored', record: existing };
@@ -48,7 +52,7 @@ async function applyUpsert(ctx, source, event, existing) {
     const saved = await records.upsert(ctx.tenant, source, event.sourceKey, { ...camel(existing), position: event.position }, ctx.transaction);
     return { outcome: 'unchanged', record: saved };
   }
-  const verdict = await getTarget(source.entity).assess(ctx.tenant, row, existing && existing.target_entity_id, ctx.transaction);
+  const verdict = temporalVerdict || await getTarget(source.entity).assess(ctx.tenant, row, existing && existing.target_entity_id, ctx.transaction);
   const version = existing ? existing.source_version + (existing.row_hash === hash ? 0 : 1) : 1;
   if (verdict) {
     const saved = await records.upsert(ctx.tenant, source, event.sourceKey, { ...base, state: verdict.state, reason: verdict.reason, sourceVersion: version, targetEntityId: existing && existing.target_entity_id }, ctx.transaction);

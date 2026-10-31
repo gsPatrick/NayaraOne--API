@@ -5,6 +5,7 @@ const logger = require('../../../utils/logger');
 const windows = require('./window.repository');
 const { tickWindow } = require('./runner');
 const tower = require('../control/tower.service');
+const { alertOverdueWindows } = require('../alerts/window.overdue');
 
 /**
  * parallelCompareJob por empresa (M9-D903 §5): olha as janelas SCHEDULED e RUNNING e roda a comparação das que estão na hora; depois de cada execução concluída leva as
@@ -30,6 +31,11 @@ async function runParallelCompare(tenant, { now = new Date() } = {}) {
       total.failed += 1;
       logger.error({ windowId: window.id, err: err.message }, 'migration.parallel.job.window.failed');
     }
+  }
+  try {
+    total.alerts = (await alertOverdueWindows(tenant, { now })).length; // M9-D908 §3.5: janela RUNNING além do prazo avisa o A de PARALLEL_COMPARE_CLOSE
+  } catch (err) {
+    logger.error({ err: err.message }, 'migration.parallel.overdue.failed');
   }
   return total;
 }

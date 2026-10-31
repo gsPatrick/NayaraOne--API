@@ -17,13 +17,14 @@ const { loadSchema } = require('../integrity/schema.repository');
 const { markMissingKeys } = require('./deletions');
 const { ensureSeeded } = require('../seeds/sources.seed');
 const { assertMode } = require('./modes');
+const clockGate = require('../clock/clock.gate');
 
 const COUNT_KEYS = ['events', 'skipped', 'migrated', 'unchanged', 'deleted', 'quarantined', 'review', 'kept', 'ignored'];
 const emptyTotals = () => Object.fromEntries(COUNT_KEYS.map((key) => [key, 0]));
 
 /** Executa a leitura de UMA fonte até esgotá-la, um lote por vez (M9-D900 §3). Devolve o resumo da fonte; erro vira `error` e interrompe só esta fonte. */
 async function runSource(tenant, actor, run, sourceRow, settings) {
-  const summary = { source: sourceRow.source_system, entity: sourceRow.entity, mode: sourceRow.mode, batches: 0, deletedBySource: 0, totals: emptyTotals(), error: null };
+  const summary = { source: sourceRow.source_system, entity: sourceRow.entity, mode: sourceRow.mode, batches: 0, deletedBySource: 0, totals: emptyTotals(), error: null, paused: false };
   let connector = null;
   try {
     const source = await openTenantTx(tenant, async (transaction) => {
@@ -42,12 +43,18 @@ async function runSource(tenant, actor, run, sourceRow, settings) {
       else if (source.mode === MODES.WATERMARK) plan = await watermark.plan(connector, { cursor, limit: settings.batchSize });
       else plan = await fulldiff.plan(connector, source, { cursor, limit: settings.batchSize });
       if (!plan) break;
+      await clockGate.beforeBatch(tenant, { runId: run.id, source, connector }); // M9-D908: relógio fora do limite pausa o aplicador antes do lote
        
       add(await runBatch(tenant, actor, run.id, source, plan, { settings }));
       cursor = plan.toToken;
     }
     if (source.mode === MODES.FULL_DIFF || (source.mode === MODES.WATERMARK && run.last_delta)) summary.deletedBySource = await markMissingKeys(tenant, actor, run.id, source, connector, settings);
   } catch (err) {
+    if (clockGate.isClockPause(err)) {
+      summary.paused = { code: err.code, driftMs: err.details && err.details.driftMs };
+      logger.warn({ runId: run.id, source: sourceRow.source_system, code: err.code }, 'migration.run.paused');
+      return summary;
+    }
     summary.error = { code: err.code || 'ERROR', message: String(err.message || err).slice(0, 500) };
     logger.error({ runId: run.id, source: sourceRow.source_system, err: summary.error }, 'migration.source.failed');
   } finally {
@@ -80,6 +87,16 @@ async function executeRun(tenant, runId) {
     failure = String(err.message || err).slice(0, 500);
   }
   const failed = Boolean(failure) || summary.sources.some((item) => item.error);
+  if (!failed && summary.sources.some((item) => item.paused)) {
+    await openTenantTx(tenant, async (transaction) => {
+      await runs.pause(tenant, runId, summary, transaction);
+      await registrarAuditoria({
+        groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: actor.userId, action: 'migration.run.paused', entityType: 'MigRun', entityId: runId,
+        afterJson: { sources: summary.sources.filter((item) => item.paused).map((item) => ({ source: item.source, entity: item.entity, ...item.paused })) }, reason: 'Execução pausada: os relógios diferem além do permitido.',
+      }, transaction);
+    });
+    return { ...summary, status: 'PAUSED' };
+  }
   await openTenantTx(tenant, async (transaction) => {
     await runs.finish(tenant, runId, failed ? RUN.FAILED : RUN.SUCCEEDED, summary, failure, transaction);
     await registrarAuditoria({
