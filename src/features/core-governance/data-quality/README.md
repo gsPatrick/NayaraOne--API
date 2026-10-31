@@ -90,6 +90,16 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.
 - Decisões de implementação do bloco: `Maturacao/demandas/decisoes-de-implementacao.md`.
 
+### Aplicação do registro em execução (M9-D915, código em `data-quality/fieldAccess.*` e `aiAccess.guard.js`)
+`fieldAccess.resolveField` aplica máscara, exportabilidade e `ai_allowed` do registro em tela, API, exportação, impressão, IA e log (falha na consulta mascara tudo). Parâmetros, todos lidos por `getSetting` e editáveis em Configurações > Governança:
+
+| Parâmetro | Padrão | Quem lê | O que controla |
+|---|---|---|---|
+| `governanca.dlp.mascara.texto_total` | `••••••` | `fieldAccess.service.js` (`maskTextOf`) e `fieldAccess.view.js` | texto da máscara total (FULL), de 1 a 40 caracteres. |
+| `governanca.ia.agentes_claro` | vazia | `fieldAccess.service.js` (`parseAgents`) e `aiAccess.guard.js` | lista fechada de agentes que recebem em claro campo LOW ou MEDIUM com `ai_allowed`; vazia = ninguém. |
+| `governanca.dlp.view.tabelas` | ver `fieldAccess.settings.js` | `fieldAccess.view.js` (`tablesOf`) | tabelas do registro de cada tipo de recurso das rotas com política de VIEW, formato `tipo: schema.tabela, schema.tabela; outro.tipo: ...`. |
+| `governanca.dlp.view.campos` | ver `dlp/view.settings.js` | `dlp/view.fields.js` (`fieldsOf`), somado aos campos do registro por `fieldAccess.wiring.js` | campos sensíveis por tipo de recurso, além dos que o registro já classifica como HIGH ou RESTRICTED; a classe mais alta vale. |
+
 ## Como testar
 `node scripts/withDisposableDb.js --port <porta> -- ...` com `test/m9d800.alicerceGovernanca.test.js` (alicerce) e os testes da demanda dona. Nunca contra o banco do `.env`.
 

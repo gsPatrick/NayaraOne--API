@@ -12,7 +12,7 @@ const ADR = path.join(RAIZ, 'docs', 'governance', 'adr');
 /** Módulo = pasta, segmento do prefixo `governanca.<segmento>.` e o runbook que o opera. */
 const MODULOS = Object.freeze([
   { pasta: 'calendar', segmentos: ['calendario'], runbook: 'calendario.md' },
-  { pasta: 'data-quality', segmentos: ['dados', 'retencao', 'legal_hold'], runbook: 'dados-mestres.md' },
+  { pasta: 'data-quality', segmentos: ['dados', 'retencao', 'legal_hold', 'ia'], runbook: 'dados-mestres.md' },
   { pasta: 'lineage', segmentos: ['lineage'], runbook: 'lineage.md' },
   { pasta: 'dlp', segmentos: ['dlp'], runbook: 'dlp.md' },
   { pasta: 'bcp', segmentos: ['bcp'], runbook: 'bcp.md' },
