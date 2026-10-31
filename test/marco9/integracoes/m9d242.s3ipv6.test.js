@@ -20,7 +20,7 @@ const IPV6 = ['fd00::5', 'fd12:3456:789a::1', '2001:db8::10', 'fe80::1', 'fd00:0
 
 test('s3_endpoint_ipv6_literal_e_recusado_na_gravacao_mesmo_liberado_como_rede_propria', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    await upsertSetting('integration.egress.private_hosts', 'storage-s3:minio.empresa.lan,10.0.0.5,fd00::5,fd12:3456:789a::1', tenant, tenant.userId, t);
+    await upsertSetting('integration.egress.private_hosts', 'storage-s3:minio.empresa.lan,10.0.0.5,fd00::5,fd12:3456:789a::1', tenant, tenant.userId, t, { platform: true });
     for (const endpoint of IPV6) {
       await assert.rejects(registry.createConnection(s3(endpoint), ctx, t), (e) => e.code === 'INTEGRATION_CONFIG_INVALID', endpoint);
     }
