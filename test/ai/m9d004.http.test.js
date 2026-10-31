@@ -49,8 +49,14 @@ before(async () => {
   const { emailFor } = require('../../scripts/seed-ci-two-tenants');
   const password = process.env.CI_TENANT_USERS_PASSWORD;
   // GESTOR cria e ativa (ai:admin), CHECKER homologa (ai:evaluate), LEITURA só consulta (ai:use). Nenhuma delas chama MFA.
+  // Outros arquivos do mesmo cluster deixam permissões ai:* nesses perfis: parte-se de um estado conhecido (só ai:* é revogado).
+  await admin(
+    `DELETE FROM core.role_permissions rp USING core.roles r, core.permissions p
+      WHERE rp.role_id = r.id AND rp.permission_id = p.id AND r.name = ANY($1::text[]) AND p.code LIKE 'ai:%'`,
+    [['CI GESTOR', 'CI CHECKER', 'CI LEITURA']]
+  );
   await grant('CI GESTOR', ['ai:admin', 'ai:use', 'ai:read', 'settings:read', 'settings:update']);
-  await grant('CI CHECKER', ['ai:evaluate', 'ai:use', 'ai:admin']) // com ai:admin também, para provar que quem homologou não ativa;
+  await grant('CI CHECKER', ['ai:evaluate', 'ai:use', 'ai:admin']); // com ai:admin também, para provar que quem homologou não ativa
   await grant('CI LEITURA', ['ai:use']);
   require('../../app');
   appLoaded = true;
@@ -67,6 +73,10 @@ before(async () => {
     assert.equal(res.status, 200, `login ${tenant}/${profile}`);
     tokens[`${tenant}:${profile}`] = data.data.accessToken;
   }
+  // Estado inicial conhecido dos parâmetros que o arquivo assume (chave geral desligada, regras de agente no padrão).
+  for (const tenant of ['A', 'B']) await call('PUT', '/settings/ia.habilitada', tokens[`${tenant}:gestor`], { value: false });
+  await call('PUT', '/settings/ia.agente.segregacao_funcoes', tokens['A:gestor'], { value: true });
+  await call('PUT', '/settings/ia.agente.avaliacao_verde_obrigatoria', tokens['A:gestor'], { value: true });
 });
 
 after(async () => {
