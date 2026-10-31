@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D810 — a semente do registro (cinco áreas com linhas hoje; MIGRATION chega com a M9-D914 pelo mesmo carregador) e o gerador único.
+// M9-D810 — a semente do registro (as seis áreas obrigatórias; MIGRATION chegou com a M9-D914 pelo mesmo carregador) e o gerador único.
 const fs = require('node:fs');
 const path = require('node:path');
 const { test, before, after } = require('node:test');
@@ -48,13 +48,14 @@ test('m9d810 a semente é verdadeira: campos, tabelas e eventos existem no siste
     const edges = all.edges.filter((e) => e.source === 'SEED');
     const columns = new Set((await env.query("SELECT table_schema || '.' || table_name || '.' || column_name AS c FROM information_schema.columns", {}, tx)).map((r) => r.c));
     const tables = new Set([...columns].map((c) => c.split('.').slice(0, 2).join('.')));
-    for (const n of nodes.filter((x) => x.nodeType === 'SOURCE_FIELD')) assert.ok(columns.has(n.code), `coluna inexistente: ${n.code}`);
+    // a coluna do sistema antigo (área MIGRATION, M9-D914) mora no banco do legado, não neste: quem a confere é o teste do mapa (m9d914.mapa)
+    for (const n of nodes.filter((x) => x.nodeType === 'SOURCE_FIELD' && x.area !== 'MIGRATION')) assert.ok(columns.has(n.code), `coluna inexistente: ${n.code}`);
     for (const n of nodes.filter((x) => x.nodeType === 'READ_MODEL')) assert.ok(tables.has(n.code), `tabela inexistente: ${n.code}`);
     const { listReadModels } = require('../../../src/features/analytics/read-models/readModel.registry');
     require('../../../src/features/analytics');
     const eventsOf = new Map(listReadModels().map((m) => [`analytics.${m.name}`, new Set(m.eventTypes)]));
-    // onde o código grava a auditoria que cada evento de lineage nomeia: a DIMOB (lote) e o ciclo do arquivo das exportações (M9-D822)
-    const auditSource = ['features/correspondent/fiscal/dimob.service.js', 'features/core-governance/dlp/exports/export.audit.js'].map((f) => fs.readFileSync(path.join(__dirname, '../../../src', f), 'utf8')).join('\n');
+    // onde o código grava a auditoria que cada evento de lineage nomeia: a DIMOB (lote), o ciclo do arquivo das exportações (M9-D822) e o lote aplicado da migração (M9-D900)
+    const auditSource = ['features/correspondent/fiscal/dimob.service.js', 'features/core-governance/dlp/exports/export.audit.js', 'features/migration-v2/ingest/applier.js'].map((f) => fs.readFileSync(path.join(__dirname, '../../../src', f), 'utf8')).join('\n');
     for (const e of edges.filter((x) => x.from.nodeType === 'EVENT')) {
       const known = eventsOf.get(e.to.code);
       if (known) assert.ok(known.has(e.from.code), `${e.from.code} não alimenta ${e.to.code}`);

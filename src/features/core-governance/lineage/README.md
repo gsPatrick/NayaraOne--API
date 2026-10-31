@@ -7,7 +7,7 @@ Registro de linhagem: de onde vem cada KPI e cada dado crítico (campo de origem
 - `lineage.constants|errors|rules|input`: vocabulário, erros, regras de camada e criticidade, leitura dos corpos.
 - `lineage.coverage.js`: cobertura pura (usada pela API e pelo portão). `lineage.gate.js`: regras do portão. `lineage.catalog.js`: catálogo de indicadores = tabela de criticidade do BI (campo `area` de cada entrada).
 - `lineage.repository|service|controller|routes`: acesso ao banco e HTTP. `lineage.seed.js`: carregador de sementes. `lineage.registryFormat|registryFile.js`: formato e geração do arquivo versionado.
-- `seeds/*.seed.js`: sementes (`{ code, build() -> { nodes, edges } }`), uma por área: `money`, `contract`, `commission`, `execKpi` (derivam da tabela de criticidade do BI, das especificações de origem e do registro de read models) e `dimob`. `kit/`: ajudantes das sementes. Demanda nova que cria KPI, exportação ou entidade migrada entrega o seu `*.seed.js` aqui e roda `npm run sync:lineage`; ninguém cria outro arquivo ou gerador.
+- `seeds/*.seed.js`: sementes (`{ code, build() -> { nodes, edges } }`), uma por área: `money`, `contract`, `commission`, `execKpi` (derivam da tabela de criticidade do BI, das especificações de origem e do registro de read models) e `dimob`. A área `MIGRATION` (M9-D914) vem de `seeds/migration.seed.js`, que lê o mapa de campos `docs/governance/migration-field-map.json` (via `kit/migrationMap.js`) e o catálogo da migração (`kit/migration.constants.js` e `kit/migrationCatalog.js`: o evento `migration.batch.applied`, os read models `governance.mig_records|mig_batches|mig_blockers`, as métricas `MIG_*` e os relatórios `EXPORT_MIG_RECONCILIATION|DISPOSAL`). `kit/`: ajudantes das sementes. Demanda nova que cria KPI, exportação ou entidade migrada entrega o seu `*.seed.js` aqui e roda `npm run sync:lineage`; ninguém cria outro arquivo ou gerador.
 
 ## Tabelas
 Schema `governance`, RLS + FORCE por grupo (`tenant_isolation` por `group_id`), GRANT ao role de runtime só se ele existir:
@@ -34,7 +34,7 @@ Aba Governança em /painel/configuracoes:
 - `governanca.lineage.dominios_adicionais` (padrão `TECNOLOGIA`): domínios responsáveis aceitos além dos de `governanca.dados.dominios`.
 
 ## Decisões (ADR)
-`Maturacao/demandas/decisoes-de-implementacao.md` (DI-D810-1 a 7 e DI-D811-1 e 2). K4/K5: código novo com prefixo `GOV_` e `error.traceId`. A semente MIGRATION chega com a M9-D914 pelo mesmo carregador.
+`Maturacao/demandas/decisoes-de-implementacao.md` (DI-D810-1 a 7 e DI-D811-1 e 2). K4/K5: código novo com prefixo `GOV_` e `error.traceId`. A semente MIGRATION (M9-D914, DI-D914-1 a 5) usa o mesmo carregador. Mapa de campos: uma linha por campo do legado (`entity`, `sourceSystem`, `sourceField` = `<tabela>.<coluna>`, `domainField`, `critical`); só as linhas `critical: true` viram nó. Campo novo ou alterado no mapa exige `npm run sync:lineage` no mesmo commit (o portão acusa `GOV_LINEAGE_MAP_DRIFT`; campo crítico sem caminho até uma métrica, passando pelo evento do lote, é `GOV_LINEAGE_UNCOVERED`).
 
 ## Como testar
 `node scripts/withDisposableDb.js --port <porta> -- ...` com `test/marco9/governanca/m9d810.*.test.js` e `m9d811.*.test.js` (o portão e as regras puras rodam sem banco). Nunca contra o banco do `.env`.

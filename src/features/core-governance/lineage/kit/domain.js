@@ -29,4 +29,23 @@ function domainFieldOf(qualifiedColumn) {
   return `${schema}.${model.name}.${attribute ? attribute[0] : camel(column)}`;
 }
 
-module.exports = { domainFieldOf };
+const snake = (attribute) => attribute.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
+/**
+ * Inverso de `domainFieldOf` (M9-D914): `schema.Entidade.atributo` -> `schema.tabela.coluna`, ou null se a entidade ou o atributo não existem. Sem modelo para a tabela
+ * (`core.external_refs.sourceKey`), o campo de domínio já nomeia a tabela e a coluna é o atributo em snake_case; só vale se a tabela existe no banco do modelo (devolve o texto).
+ */
+function qualifiedColumnOf(domainField) {
+  const [schema, entity, attribute] = String(domainField).split('.');
+  if (!schema || !entity || !attribute) return null;
+  byTable = byTable || loadModels();
+  for (const [key, model] of byTable) {
+    if (!key.startsWith(`${schema}.`) || model.name !== entity) continue;
+    const def = model.rawAttributes[attribute];
+    return def ? `${key}.${def.field || attribute}` : null;
+  }
+  const table = [...byTable.keys()].find((key) => key === `${schema}.${entity}`);
+  return table ? `${table}.${snake(attribute)}` : `${schema}.${entity}.${snake(attribute)}`;
+}
+
+module.exports = { domainFieldOf, qualifiedColumnOf };

@@ -2,12 +2,16 @@
 
 const { AREA, NODE } = require('./lineage.constants');
 const { listCriticalityRows } = require('../../analytics/metrics/seed/criticality.table');
+const migration = require('./kit/migrationCatalog');
 
 /**
- * Catálogo de indicadores do código que o lineage cobra: a tabela de criticidade do BI (M9-D712), onde cada entrada carrega `area`. Função pura (sem banco),
+ * Catálogo de indicadores do código que o lineage cobra: a tabela de criticidade do BI (M9-D712), onde cada entrada carrega `area`, mais as métricas e os relatórios da migração (M9-D914). Função pura (sem banco),
  * por isso o portão de CI a usa sem subir o aplicativo.
  */
-const catalogEntries = () => listCriticalityRows().map((row) => ({ nodeType: 'METRIC', code: row.code, criticality: row.criticality, area: row.area }));
+const catalogEntries = () => [
+  ...listCriticalityRows().map((row) => ({ nodeType: 'METRIC', code: row.code, criticality: row.criticality, area: row.area })),
+  ...migration.catalogEntries(), // M9-D914: métricas da Torre de migração e relatórios de reconciliação e descarte
+];
 
 /** Aplica o parâmetro de KPIs críticos (lista de códigos, ou `null` = todos) aos KPIs EXECUTIVOS; as demais áreas obrigatórias nunca saem. */
 function applyCriticalKpiList(entries, list) {

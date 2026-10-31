@@ -31,7 +31,9 @@ function registryFor(codes, { exportCode = null, drop = null, blank = null } = {
 }
 const catalogOf = (codes, extra = {}) => codes.map((code) => ({ code, criticality: 'CRITICAL', area: 'EXEC_KPI', ...extra[code] }));
 function check(registry, catalog, extra = []) {
-  const res = spawnSync(process.execPath, [SCRIPT, '--registry', write(registry), '--catalog', write(catalog), ...extra], { encoding: 'utf8' });
+  // sem --map o portão lê o mapa real de docs/governance (M9-D914), que não vale para os registros de mentira destes testes: o padrão aqui é "sem mapa"
+  const noMap = extra.includes('--map') ? [] : ['--map', path.join(dir, 'sem-mapa-padrao.json')];
+  const res = spawnSync(process.execPath, [SCRIPT, '--registry', write(registry), '--catalog', write(catalog), ...noMap, ...extra], { encoding: 'utf8' });
   return { status: res.status, out: `${res.stdout}${res.stderr}` };
 }
 const CODES = ['fin.a', 'fin.b', 'crm.c'];
@@ -88,6 +90,11 @@ test('m9d811 divergência entre o mapa de migração e o registro reprova', () =
   registry.nodes.push({ nodeType: 'SOURCE_FIELD', code: 'LEGADO.pessoas.nome', description: 'Nome no legado', ownerDomain: 'CRM', criticality: 'CRITICAL', area: 'MIGRATION' });
   registry.nodes.push({ nodeType: 'DOMAIN_FIELD', code: 'people.persons.legal_name', description: 'Nome', ownerDomain: 'CRM', criticality: 'CRITICAL', area: 'MIGRATION' });
   registry.edges.push({ from: { nodeType: 'SOURCE_FIELD', code: 'LEGADO.pessoas.nome' }, to: { nodeType: 'DOMAIN_FIELD', code: 'people.persons.legal_name' }, transformation: 'cópia' });
+  // caminho completo até uma métrica pela auditoria do lote (M9-D914): o campo crítico do mapa precisa chegar ao fim
+  for (const [nodeType, code] of [['EVENT', 'migration.batch.applied'], ['READ_MODEL', 'governance.mig_records'], ['METRIC', 'MIG_TESTE']]) registry.nodes.push({ nodeType, code, description: `Nó ${code}`, ownerDomain: 'CRM', criticality: 'CRITICAL', area: 'MIGRATION' });
+  registry.edges.push({ from: { nodeType: 'DOMAIN_FIELD', code: 'people.persons.legal_name' }, to: { nodeType: 'EVENT', code: 'migration.batch.applied' }, transformation: 'lote' });
+  registry.edges.push({ from: { nodeType: 'EVENT', code: 'migration.batch.applied' }, to: { nodeType: 'READ_MODEL', code: 'governance.mig_records' }, transformation: 'lote' });
+  registry.edges.push({ from: { nodeType: 'READ_MODEL', code: 'governance.mig_records' }, to: { nodeType: 'METRIC', code: 'MIG_TESTE' }, transformation: 'contagem' });
   const same = check(registry, catalogOf(CODES), ['--map', write([mig('pessoas.nome')])]);
   assert.equal(same.status, 0, same.out);
   const drift = check(registry, catalogOf(CODES), ['--map', write([mig('pessoas.nome'), mig('pessoas.documento')])]);

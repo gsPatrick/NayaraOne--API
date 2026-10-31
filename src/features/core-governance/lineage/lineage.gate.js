@@ -1,7 +1,8 @@
 'use strict';
 
-const { AREAS, AREA, NODE, MANDATORY_AREAS, nodeKey } = require('./lineage.constants');
+const { AREAS, AREA, NODE, MANDATORY_AREAS, TARGET_TYPES, layerIndex, nodeKey, blank } = require('./lineage.constants');
 const { computeCoverage } = require('./lineage.coverage');
+const { EVENT_CODE } = require('./kit/migrationCatalog');
 
 /**
  * M9-D811 — regras do portão de CI, puras (o script só lê arquivos e imprime). Devolve { errors, critical, covered, uncovered }; cada erro é
@@ -31,6 +32,39 @@ function mapProblems(registry, map) {
   return drift.length ? [{ code: 'GOV_LINEAGE_MAP_DRIFT', message: 'O mapa de migração e o lineage divergem.', fields: [...new Set(drift)] }] : [];
 }
 
+/**
+ * Caminho completo de cada campo crítico do mapa (M9-D914): do campo do legado até uma métrica ou exportação, pelas cinco camadas, passando pelo evento migration.batch.applied e com responsável e descrição em todo nó.
+ * Campo cujo nó de origem existe mas não chega ao fim reprova com GOV_LINEAGE_UNCOVERED ("Campo de migração sem lineage: <campo>."); o nó que nem existe já é divergência do mapa.
+ */
+function pathProblems(registry, map) {
+  const byKey = new Map(registry.nodes.map((n) => [nodeKey(n.nodeType, n.code), n]));
+  const outgoing = new Map();
+  for (const e of registry.edges) {
+    const from = nodeKey(e.from.nodeType, e.from.code);
+    outgoing.set(from, [...(outgoing.get(from) || []), nodeKey(e.to.nodeType, e.to.code)]);
+  }
+  const memo = new Map();
+  const reaches = (key) => {
+    if (memo.has(key)) return memo.get(key);
+    memo.set(key, false);
+    const node = byKey.get(key);
+    let ok = false;
+    // a camada de evento do campo migrado é a auditoria por lote: o mesmo campo de domínio também alimenta eventos de outras áreas, que não contam
+    if (node && !blank(node.description) && !blank(node.ownerDomain) && !(node.nodeType === NODE.EVENT && node.code !== EVENT_CODE)) {
+      ok = TARGET_TYPES.includes(node.nodeType) || (outgoing.get(key) || []).some((next) => byKey.has(next) && layerIndex(byKey.get(next).nodeType) === layerIndex(node.nodeType) + 1 && reaches(next));
+    }
+    memo.set(key, ok);
+    return ok;
+  };
+  const out = [];
+  for (const row of map.filter((r) => r && r.critical !== false)) {
+    const code = String(row.sourceField).startsWith(`${row.sourceSystem}.`) ? String(row.sourceField) : `${row.sourceSystem}.${row.sourceField}`;
+    const key = nodeKey(NODE.SOURCE_FIELD, code);
+    if (byKey.has(key) && !reaches(key)) out.push({ code: 'GOV_LINEAGE_UNCOVERED', message: `Campo de migração sem lineage: ${code}.`, area: AREA.MIGRATION });
+  }
+  return out;
+}
+
 function evaluate({ registry, catalog, map = null }) {
   const problems = [...areaProblems(catalog)];
   const coverage = computeCoverage(registry, catalog.filter((entry) => AREAS.includes(entry.area)));
@@ -39,8 +73,8 @@ function evaluate({ registry, catalog, map = null }) {
     const what = node.missing.includes('ownerDomain') ? 'responsável' : 'descrição';
     problems.push({ code: 'GOV_LINEAGE_NODE_INCOMPLETE', message: `Nó de lineage sem ${what}: ${node.code}.`, missing: node.missing });
   }
-  if (map) problems.push(...mapProblems(registry, map));
+  if (map) problems.push(...mapProblems(registry, map), ...pathProblems(registry, map));
   return { errors: problems, critical: coverage.critical.length, covered: coverage.covered.length, uncovered: coverage.uncovered, percent: coverage.percent };
 }
 
-module.exports = { evaluate, areaProblems, mapProblems, MANDATORY_AREAS };
+module.exports = { evaluate, areaProblems, mapProblems, pathProblems, MANDATORY_AREAS };
