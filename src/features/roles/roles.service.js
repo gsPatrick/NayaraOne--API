@@ -3,6 +3,7 @@
 const { Role, Permission, RolePermission, UserMembership } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { assertNoPlatformPermission } = require('../../shared/platform-permissions');
 
 // "core"."roles" tem RLS (company_id = current_setting('app.company_id')), então toda query
 // aqui recebe `transaction` já aberta por `req.withTenantTransaction`.
@@ -35,6 +36,7 @@ async function assertPermissionsExist(permissionIds, transaction) {
   if (found.length !== unique.length) {
     throw AppError.badRequest('Uma ou mais permissões informadas não existem no catálogo.', 'ROLE_PERMISSION_NOT_FOUND');
   }
+  assertNoPlatformPermission(found.map((p) => p.code)); // R3-M2: permissão de plataforma nunca vai para papel de empresa
   return unique;
 }
 

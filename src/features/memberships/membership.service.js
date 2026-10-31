@@ -1,7 +1,8 @@
 'use strict';
 
-const { UserMembership, Role, Unit, Company } = require('../../models');
+const { UserMembership, Role, Unit, Company, RolePermission, Permission } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { PLATFORM_PERMISSION_CODES, assertNoPlatformPermission } = require('../../shared/platform-permissions');
 
 // CRUD puro de UserMembership. A resolução de roles/permissões efetivas vive em
 // effectivePermissions.service.js.
@@ -23,6 +24,9 @@ async function createMembership(payload, actorUserId, transaction) {
     if (!role) {
       throw AppError.badRequest('Papel (role) informado não pertence à empresa informada.', 'MEMBERSHIP_ROLE_MISMATCH');
     }
+    // R3-M2: ninguém é vinculado, pela API da empresa, a um papel que carregue permissão de plataforma.
+    const dadas = await RolePermission.findAll({ where: { roleId }, include: [{ model: Permission, as: 'permission', required: true, where: { code: PLATFORM_PERMISSION_CODES } }], transaction });
+    assertNoPlatformPermission(dadas.map((rp) => rp.permission.code));
   }
 
   // FIX (auditoria adversarial): faltava passar `transaction` — sem ela, esta query roda numa
