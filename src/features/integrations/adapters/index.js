@@ -15,11 +15,11 @@ const { INSURANCE_ADAPTERS } = require('./legacy/insurance.registry');
 const { FiscalSandboxContractAdapter } = require('./legacy/fiscal.adapters');
 const { registerAiAdapters } = require('../../ai/providers/builtIn');
 const { MessagingSandboxAdapter } = require('../providers/messaging/sandbox/messaging-sandbox.adapter');
+const { MessagingAltSandboxAdapter } = require('../providers/messaging/sandbox/messaging-alt-sandbox.adapter');
 const { PortalSandboxAdapter } = require('../providers/portal/sandbox/portal-sandbox.adapter');
 const { PortalZapSandboxAdapter } = require('../providers/portal/sandbox/portal-zap-sandbox.adapter');
 const { PortalVivaRealSandboxAdapter } = require('../providers/portal/sandbox/portal-vivareal-sandbox.adapter');
 const { PortalOlxSandboxAdapter } = require('../providers/portal/sandbox/portal-olx-sandbox.adapter');
-const { MessagingAltSandboxAdapter } = require('../providers/messaging/sandbox/messaging-alt-sandbox.adapter');
 const { AnalyticsSandboxAdapter } = require('../providers/analytics/sandbox/analytics-sandbox.adapter');
 const { SocialSandboxAdapter } = require('../providers/social/sandbox/social-sandbox.adapter');
 const { EmailSandboxAdapter } = require('../providers/email/sandbox/email-sandbox.adapter');
@@ -52,8 +52,8 @@ function registerBuiltInAdapters() {
   require('../site'); // M9-D259: páginas do site (reações ao envio confirmado ou falho, webhook do site, consulta de status na rodada do worker e dados da reconciliação)
   require('../social'); // M9-D239: verificação do worker (conteúdo ainda aprovado, kill switch) e dados da reconciliação do post
   installContingency(); // contingência das famílias e passo da rodada do worker (M9-D226)
+  require('../swap').installSwapDrain(); // drenagem da connection antiga numa troca de fornecedor (M9-D221)
   return registry.list();
 }
 
-  require('../swap').installSwapDrain(); // drenagem da connection antiga numa troca de fornecedor (M9-D221)
 module.exports = { registerBuiltInAdapters, BUILT_IN_ADAPTERS };
