@@ -31,7 +31,9 @@ async function comparisonScenario(tenant) {
   };
   const dispose = async () => {
     await env.q('DELETE FROM governance.parallel_windows WHERE id = $1', [window.id]);
-    await env.getTower(tenant, await env.newRun(tenant, legacy.system, ENTITY));
+    const scopeRun = await env.newRun(tenant, legacy.system, ENTITY);
+    await env.getTower(tenant, scopeRun);
+    await env.q("UPDATE governance.mig_runs SET status = 'SUCCEEDED' WHERE id = $1", [scopeRun]); // a execução só delimitou o escopo da Torre: não fica ativa e não pesa no teto de execuções da empresa
     restore();
     legacy.dispose();
   };

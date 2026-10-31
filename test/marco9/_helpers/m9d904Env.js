@@ -5,6 +5,7 @@
 const env = require('./m9d903Env');
 const blockersProviders = require('../../../src/features/migration-v2/control/blockers.providers');
 const canary = require('../../../src/features/migration-v2/canary/canary.service');
+const base = require('./m9d904Base');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 
 const { openTenantTx, adminQuery } = env;
@@ -40,7 +41,9 @@ function openBlocker(entity, ref = 'qa904-1') {
 }
 
 /** Avanço do setor com a RACI do corte completa (o avanço exige, M9-D908 §3.5); o setRaci da SECTOR_ACTIVATION do próprio teste vale se vier depois. */
-const advance = async (tenant, sector, body = {}) => { await env.completeRaci(tenant); return openTenantTx(tenant, (tx) => canary.advance(tenantOf(tenant), sector, body, tx)); };
+const advance = async (tenant, sector, body = {}) => { await env.completeRaci(tenant); await base.ensureCleanBase(tenant); return openTenantTx(tenant, (tx) => canary.advance(tenantOf(tenant), sector, body, tx)); };
+/** Avanço sem a comparação limpa das entidades reais: para os testes que tratam justamente delas. */
+const advanceRaw = async (tenant, sector, body = {}) => { await env.completeRaci(tenant); return openTenantTx(tenant, (tx) => canary.advance(tenantOf(tenant), sector, body, tx)); };
 const rollback = (tenant, sector, body = {}) => openTenantTx(tenant, (tx) => canary.rollback(tenantOf(tenant), sector, body, tx));
 const status = (tenant) => openTenantTx(tenant, (tx) => canary.status(tenantOf(tenant), tx));
 const flagRow = async (tenant, sector) => (await adminQuery('SELECT * FROM governance.config_entries WHERE company_id = $1 AND key = $2', [tenant.companyId, `migracao.setor.${sector.toLowerCase()}.novo_sistema`])).rows[0] || null;
@@ -50,6 +53,7 @@ const fail = (promise) => promise.then(() => null, (err) => ({ status: err.statu
 
 /** Apaga o que os testes criaram: flags do canary, parâmetros, papéis e usuários de teste. */
 async function cleanup(tenant) {
+  await base.removeBase(tenant);
   await adminQuery("DELETE FROM governance.flag_versions WHERE company_id = $1 AND key LIKE 'migracao.setor.%'", [tenant.companyId]);
   await adminQuery("DELETE FROM governance.config_entries WHERE company_id = $1 AND key LIKE 'migracao.setor.%'", [tenant.companyId]);
   await adminQuery("DELETE FROM core.tenant_settings WHERE company_id = $1 AND (key LIKE 'migracao.setor.%' OR key LIKE 'migracao.canary.%' OR key = 'governanca.bcp.setor_por_papel')", [tenant.companyId]);
@@ -60,4 +64,4 @@ async function cleanup(tenant) {
   created.users = []; created.roles.clear();
 }
 
-module.exports = { ...env, tenantOf, setParam, addSectorUsers, setEntities, openBlocker, advance, rollback, status, flagRow, percentOf, auditOf, fail, cleanup, canary };
+module.exports = { ...env, tenantOf, setParam, addSectorUsers, setEntities, openBlocker, advance, advanceRaw, rollback, status, flagRow, percentOf, auditOf, fail, cleanup, canary };

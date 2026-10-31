@@ -64,13 +64,15 @@ test('m9d904 comparação cuja última execução falhou nunca conta como limpa'
   } finally { await s.dispose(); }
 });
 
-test('m9d904 comparação de outra entidade não pesa sobre o setor', { skip: skip() }, async () => {
+test('m9d904 comparação de entidade migrável pesa sobre todos os setores, esteja ou não na lista dele', { skip: skip() }, async () => {
   await env.addSectorUsers(A, 'CORRESPONDENTE', 4);
   await env.setEntities(A, 'CORRESPONDENTE', ['QA904_SEM_DESTINO']);
   const s = await comparisonScenario(A);
   try {
     await s.pair('c-1', 'Contrato A', 'Contrato B');
     await env.tick(A, s.window.id, env.T0);
-    assert.equal((await env.advance(A, 'CORRESPONDENTE')).percent, 5, 'a diferença é de outra entidade, que não é deste setor');
+    const blocked = await env.fail(env.advance(A, 'CORRESPONDENTE'));
+    assert.deepEqual([blocked.status, blocked.code], [409, 'GOV_CANARY_BLOCKERS_OPEN'], 'a entidade tem destino na migração: a diferença trava qualquer setor, esteja ou não na lista dele');
   } finally { await s.dispose(); }
+  assert.equal((await env.advance(A, 'CORRESPONDENTE')).percent, 5, 'sem a diferença da entidade migrável, o setor avança');
 });

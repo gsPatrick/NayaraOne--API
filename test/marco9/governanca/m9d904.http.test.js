@@ -5,10 +5,11 @@
 // MFA, nunca token forjado).
 process.env.PORT = process.env.M9D904_HTTP_TEST_PORT || '21904';
 
-const { test, before, after, afterEach } = require('node:test');
+const { test, before, after, afterEach, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d904Env');
 const http = require('../_helpers/m9d806Http');
+const { grantRaci } = require('../_helpers/m9d902Raci');
 const { confirmationFor, grantRecentMfa, revokeRecentMfa } = require('../_helpers/m9d852Confirm');
 
 const RUN = 'governance:migration:run';
@@ -37,7 +38,9 @@ before(async () => {
   h.tokens.leitura = (await login('leitura')).token;
   h.tokens.checker = (await login('checker')).token;
   await env.cleanup(A);
+  await grantRaci(A, 'CI GESTOR', ['SECTOR_ACTIVATION', 'ROLLBACK_EXECUTION']); // avançar e reverter são decisões do corte: só R ou A (M9-D902)
 });
+beforeEach(async () => { if (h && !h.skip) await require('../_helpers/m9d904Base').ensureCleanBase(A); }); // comparação limpa das entidades reais: aqui só pesa o que o teste monta
 afterEach(async () => { if (h && !h.skip) { await env.cleanup(A); await revokeRecentMfa(A.userId); } });
 after(async () => { if (h && !h.skip) { await setGrants(false); await revokeRecentMfa(A.userId); await env.cleanup(A); } await http.stopHttp({}); });
 
