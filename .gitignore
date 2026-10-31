@@ -10,3 +10,4 @@ npm-debug.log*
 backups/
 scratchpad/
 .claude/
+!docs/evidencias/regressao/*.log
