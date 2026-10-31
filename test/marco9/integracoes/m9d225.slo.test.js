@@ -2,7 +2,7 @@
 
 // Marco 9, M9-D225 — SLO específico por criticidade: tabela de metas, medição de 30 dias por connection, exclusão de VALIDATION
 // e edição com piso e teto. HTTP real contra o app de teste; banco descartável (os testes COMMITAM).
-process.env.PORT = process.env.M9D225_SLO_PORT || '21651';
+process.env.PORT = process.env.M9D225_SLO_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
