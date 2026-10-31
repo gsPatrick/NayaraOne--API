@@ -1,5 +1,6 @@
 'use strict';
 
+const net = require('node:net');
 const AppError = require('../../../../utils/AppError');
 const { hostPatternProblem } = require('../../http/egressHostRules');
 
@@ -10,8 +11,10 @@ const REGION = /^[a-z0-9-]{2,30}$/;
 function s3ConfigProblems(config, { privateHosts = [] } = {}) {
   const c = config || {};
   const problemas = [];
-  const propria = typeof c.endpoint === 'string' && privateHosts.includes(c.endpoint.toLowerCase()); // rede própria liberada pela empresa (integration.egress.private_hosts)
-  const hostProblema = propria ? null : (typeof c.endpoint === 'string' && !c.endpoint.includes('*') ? hostPatternProblem(c.endpoint) : 'informe o endpoint como nome de host');
+  // IPv6 literal (com ou sem colchetes) nunca vira URL válida do SDK de armazenamento (ERR_INVALID_URL na execução): recusa já na gravação, mesmo que liberado como rede própria.
+  const ipv6 = typeof c.endpoint === 'string' && (net.isIPv6(c.endpoint.replace(/^\[|\]$/g, '')) || /[[\]:]/.test(c.endpoint));
+  const propria = !ipv6 && typeof c.endpoint === 'string' && privateHosts.includes(c.endpoint.toLowerCase()); // rede própria liberada pela empresa (integration.egress.private_hosts)
+  const hostProblema = ipv6 ? 'endereço IPv6 literal não é aceito: use o nome do host ou um IPv4' : propria ? null : (typeof c.endpoint === 'string' && !c.endpoint.includes('*') ? hostPatternProblem(c.endpoint) : 'informe o endpoint como nome de host');
   if (hostProblema) problemas.push(`endpoint: ${hostProblema}`);
   if (propria && c.pathStyle !== true) problemas.push('endpoint: o endereço de rede própria exige pathStyle (o nome do bucket não vira subdomínio)');
   if (typeof c.bucket !== 'string' || !BUCKET.test(c.bucket) || c.bucket.includes('..')) problemas.push('bucket: nome inválido (letras minúsculas, números, "." e "-", de 3 a 63)');
