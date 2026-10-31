@@ -44,9 +44,27 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Erros em que a requisição nem chegou ao fornecedor: seguro repetir mesmo uma operação que altera estado. */
+const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
+
+/**
+ * INT-005 (M9-D216, reabertura M2): uma operação que altera estado (POST, PUT, PATCH, DELETE) só é repetida às cegas se for idempotente:
+ * a chamada traz cabeçalho `Idempotency-Key` (a mesma chave vai em todas as tentativas) ou o chamador declara `idempotent: true`.
+ * Sem isso, só 429 (o fornecedor recusou sem processar) e falha de conexão antes do envio são repetidas; timeout, reset e 502/503/504
+ * podem ter sido processados e ficam para a consulta de reconciliação (UNKNOWN, M9-D215), nunca para um segundo envio.
+ */
+function repeatsBlindly({ method, headers, idempotent }) {
+  if (idempotent === true || SAFE_METHODS.has(String(method || 'GET').toUpperCase())) return true;
+  return Object.keys(headers || {}).some((h) => h.toLowerCase() === 'idempotency-key');
+}
+
+/** O fetch do Node embrulha a falha de rede em `TypeError: fetch failed`; o código (ECONNREFUSED, ENOTFOUND...) vem em `cause`. */
+const codeOf = (err) => (err && (err.code || (err.cause && err.cause.code))) || null;
+
 function isRetryableError(err) {
   if (err && err.code === 'TIMEOUT') return true;
-  if (err && ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(err.code)) return true;
+  if (['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(codeOf(err))) return true;
   if (err && err.name === 'AbortError') return true;
   return false;
 }
@@ -54,10 +72,11 @@ function isRetryableError(err) {
 /**
  * resilientFetch — chamada HTTP com timeout real (AbortController), retry classificado por
  * erro/status (nunca em 4xx de validação/auth — INT-006) e circuit breaker por provider
- * (INT-007). Uso: await resilientFetch({ circuitKey: 'insurance:portoseguro', url, method,
+ * (INT-007). Operação que altera estado sem chave de idempotência não é repetida às cegas (INT-005). Uso: await resilientFetch({ circuitKey: 'insurance:portoseguro', url, method,
  * headers, body, timeoutMs, maxAttempts }).
  */
-async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, timeoutMs = DEFAULT_TIMEOUT_MS, maxAttempts = DEFAULT_MAX_ATTEMPTS, circuitManaged = false }) {
+async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, timeoutMs = DEFAULT_TIMEOUT_MS, maxAttempts = DEFAULT_MAX_ATTEMPTS, circuitManaged = false, idempotent = false, fetchImpl = fetch }) {
+  const cego = repeatsBlindly({ method, headers, idempotent });
   const gate = circuitManaged ? null : admit(circuitKey);
   const registrar = (outcome) => { if (gate) record(circuitKey, { ...outcome, probe: gate.probe }); };
 
@@ -66,12 +85,12 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { method, headers, body, signal: controller.signal });
+      const response = await fetchImpl(url, { method, headers, body, signal: controller.signal });
       if (response.status >= 200 && response.status < 300) {
         registrar({ ok: true });
         return response;
       }
-      if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxAttempts) {
+      if (RETRYABLE_STATUS_CODES.has(response.status) && (cego || response.status === 429) && attempt < maxAttempts) {
         const retryAfterHeader = response.headers.get('retry-after');
         const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
         await sleep(retryAfterMs || DEFAULT_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 250));
@@ -89,7 +108,7 @@ async function resilientFetch({ circuitKey, url, method = 'GET', headers, body, 
       } else {
         lastError = err;
       }
-      if (isRetryableError(lastError) && attempt < maxAttempts) {
+      if (isRetryableError(lastError) && (cego || NOT_SENT_CODES.has(codeOf(lastError))) && attempt < maxAttempts) {
         await sleep(DEFAULT_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 250));
         continue;
       }
