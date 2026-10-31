@@ -42,7 +42,7 @@ Leitura de documentos: `brew install tesseract tesseract-lang poppler` (macOS) o
 
 ```bash
 git clone https://github.com/gsPatrick/NayaraOne--API.git && cd NayaraOne--API
-git checkout 081fc440681c54599a865eb48a01da755c96ff32     # ou o commit a avaliar
+git checkout 9c822f5536efc2b0534d58a637c30093d75352af     # código avaliado na rodada de evidência (ou o commit a avaliar)
 npm ci
 bash scripts/regressao-descartavel.sh ./regressao.log      # tudo, em 4 lotes
 ```
@@ -75,7 +75,7 @@ node scripts/withDisposableDb.js --port 55801 -- env CI_TENANT_USERS_PASSWORD=ci
 
 ## 5. Tempo esperado
 
-A suíte tem 244 arquivos e 1826 testes (commit 081fc440). Cada lote gasta cerca de 20 a 40 s para criar o cluster (migrations do zero) mais a execução dos testes. Na rodada de evidência (macOS, Apple Silicon, 4 lotes, `REGRESSAO_PARALELO=2`): lotes de 74 a 132 s de testes e **236 s no total**. Em série (`REGRESSAO_PARALELO=1`, padrão), conte de 6 a 10 minutos; em máquina mais lenta, até 30.
+A suíte tem 246 arquivos e 1837 testes (commit 9c822f55). Cada lote gasta cerca de 20 a 40 s para criar o cluster (migrations do zero) mais a execução dos testes. Na rodada de evidência (macOS, Apple Silicon, 4 lotes, `REGRESSAO_PARALELO=2`): **300 s no total**. Em série (`REGRESSAO_PARALELO=1`, padrão), conte de 6 a 10 minutos; em máquina mais lenta, até 30.
 
 ## 6. Como interpretar o log
 
@@ -87,3 +87,9 @@ A suíte tem 244 arquivos e 1826 testes (commit 081fc440). Cada lote gasta cerca
 - Falhas só de ambiente (ClamAV fora do ar, porta ocupada, disco cheio) aparecem como erro de conexão; corrija o ambiente e repita o lote.
 
 Evidências já geradas por rodadas anteriores estão em `docs/evidencias/regressao/` (esta rodada) e `docs/evidencias/ci/` (logs do CI no GitHub Actions).
+
+### Rodada de evidência vigente
+
+- Log: `docs/evidencias/regressao/regressao-9c822f55-test-results.log` (e `.sha256`): **1837 testes, 1837 passados, 0 falhas, 0 canceladas, 0 pulados** (246 arquivos, 4 lotes, 300 s), em checkout limpo, banco descartável com RLS real.
+- O log avalia o commit `9c822f5536efc2b0534d58a637c30093d75352af` (correção do responsável do prazo jurídico + script + este guia). Ele é publicado no commit **imediatamente seguinte**, que só adiciona/remove arquivos em `docs/` e não toca em código (confira com `git diff --stat 9c822f55 <commit-do-log>`); por isso a rodada vale para o código final da branch. O hash do commit que contém o log não pode constar nele.
+- O log da rodada antiga (commit 081fc440, 1826 testes) foi removido para não confundir; continua no histórico git.
