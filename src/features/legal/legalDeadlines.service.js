@@ -7,6 +7,7 @@ const { getLegalCase, getLegalCaseForUpdate } = require('./legalCases.service');
 const { publishLegalDeadlineCreated } = require('./legalEvents.service');
 const { assertCriticalDeadlineAccountability, normalizeNote } = require('./legalDeadlineAccountability');
 const { normalizeOptionalText, requireText } = require('./legalText');
+const { assertResponsibleInTenant } = require('./legalDeadlineResponsible');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -39,7 +40,8 @@ function assertValidDate(value, field) {
 
 async function createLegalDeadline(legalCaseId, payload, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  const { dueAt, responsibleUserId } = payload;
+  const { dueAt } = payload;
+  const responsibleUserId = await assertResponsibleInTenant(payload.responsibleUserId, legalCase, transaction);
   // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): criticidade.
   if (payload.criticality !== undefined && payload.criticality !== null && typeof payload.criticality !== 'string') {
     throw AppError.badRequest('"criticality" deve ser um texto.', 'LEGAL_DEADLINE_VALIDATION');
@@ -172,6 +174,24 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   }
   const changeReason = normalizeOptionalText(payload.changeReason, 'changeReason');
 
+  // Atribuicao/troca de responsavel pelo PATCH (antes o campo era ignorado em silencio e o
+  // responsavel anterior permanecia). null/'' remove; usuario precisa ter vinculo ativo na empresa.
+  const responsibleProvided = payload.responsibleUserId !== undefined;
+  const nextResponsible = responsibleProvided
+    ? await assertResponsibleInTenant(payload.responsibleUserId, deadline, transaction)
+    : deadline.responsibleUserId;
+  const responsibleChanged = responsibleProvided && (nextResponsible || null) !== (deadline.responsibleUserId || null);
+  if (responsibleChanged && !nextResponsible && deadline.status === 'PENDING' && new Date(deadline.dueAt).getTime() < Date.now()) {
+    throw AppError.badRequest(
+      'Um prazo pendente e já vencido precisa de um responsável definido, para que alguém seja notificado de verdade.',
+      'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
+    );
+  }
+  if (responsibleChanged && !nextResponsible && deadline.status === 'PENDING' && deadline.criticality === 'CRITICAL') {
+    const lockedCase = await getLegalCaseForUpdate(deadline.legalCaseId, transaction);
+    assertCriticalDeadlineAccountability({ responsibleUserId: null }, lockedCase);
+  }
+
   // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
   // DONE) era aceito sem nenhuma evidência nem nota documentando o que foi feito — "{status:
   // 'DONE'}" sozinho bastava. Fail closed: concluir exige pelo menos evidência OU nota.
@@ -238,10 +258,13 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
     deadline.firstOverdueAlertedAt = null;
     deadline.escalatedAt = null;
   }
+  // Novo responsavel precisa ser avisado do estado atual do prazo: zera so a ultima severidade alertada.
+  if (responsibleChanged) deadline.lastAlertedSeverity = null;
 
   if (status !== undefined) deadline.status = status;
   if (description !== undefined) deadline.description = description;
   if (dueAt !== undefined) deadline.dueAt = dueAt;
+  if (responsibleChanged) deadline.responsibleUserId = nextResponsible;
   if (conclusionEvidenceFileId !== undefined) deadline.conclusionEvidenceFileId = conclusionEvidenceFileId;
   if (noteProvided) deadline.conclusionNote = newNote;
   deadline.updatedBy = actorUserId || null;
@@ -257,7 +280,11 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
       entityId: deadline.id,
       beforeJson,
       afterJson: deadline.toJSON(),
-      reason: dueAtChanged ? changeReason : `Prazo ${deadline.id} atualizado.`,
+      reason: dueAtChanged
+        ? changeReason
+        : responsibleChanged
+          ? `Responsável do prazo ${deadline.id} alterado de ${beforeJson.responsibleUserId || 'ninguém'} para ${nextResponsible || 'ninguém'}${changeReason ? `: ${changeReason}` : '.'}`
+          : `Prazo ${deadline.id} atualizado.`,
     },
     transaction
   );
