@@ -4,6 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../settings/settings.service');
 const { isPlatformOnly } = require('../../settings/settingPlatform');
+const { restrictedPermissionOf } = require('../../settings/settingRestricted');
 const E = require('./flags.errors');
 const { KEY_RE, KEY_MAX, SOURCES } = require('./flags.constants');
 const repo = require('./flags.repository');
@@ -56,6 +57,8 @@ async function absorbTenantSettings(tenant, actorUserId, params, transaction) {
 /** Parâmetro só da plataforma (SETTINGS_SCHEMA `platformOnly`) não muda por aqui: o registro nunca declara a permissão de plataforma (M9-D870 R3-M1). 403 antes de gravar qualquer coisa. */
 function assertNotPlatformOnly(key) {
   if (isPlatformOnly(SETTINGS_SCHEMA[key])) throw E.platformOnly();
+  // Chaves da NAY (ai:admin) e metas de SLO (integration:manage) têm permissão própria que o registro não declara: só mudam pelas Configurações.
+  if (SETTINGS_SCHEMA[key] && restrictedPermissionOf(key)) throw E.keyProtected('Esta chave tem permissão própria (NAY ou integrações): altere-a em Configurações.');
 }
 
 /** Grava o valor na configuração da empresa pelo serviço existente (validação do dicionário e trava do dono da regra incluídas). */
