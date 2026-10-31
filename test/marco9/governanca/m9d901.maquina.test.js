@@ -69,7 +69,7 @@ test('m9d901 delta em registro PENDING_REVIEW mantém o estado e anota a mudanç
   legacy.dispose();
 });
 
-test('m9d901 delta em registro EXCLUDED é ignorado e quarentena abre blocker', { skip: skip() }, async () => {
+test('m9d901 quarentena abre blocker', { skip: skip() }, async () => {
   const legacy = await env.installSource(A(), { entity: 'PERSON' });
   legacy.fake.event('9', 'I', 1, valid({ legalName: '' }));
   await env.run(A(), { sourceSystem: legacy.system });
@@ -80,13 +80,24 @@ test('m9d901 delta em registro EXCLUDED é ignorado e quarentena abre blocker', 
   assert.ok(blocker, 'quarentena abre blocker');
   assert.equal(blocker.entity, 'PERSON');
   assert.equal(blocker.detail.count, 1);
-  assert.equal((await env.openBlockers(A(), 'GOV_MIG_QUARANTINE_OPEN')).filter((b) => b.entity === 'PERSON').length >= 1, true, 'gravado com o instante em que abriu');
+  assert.ok(blocker.since, 'gravado com o instante em que abriu');
+  assert.equal((await env.openBlockers(A(), 'GOV_MIG_QUARANTINE_OPEN')).filter((b) => b.entity === 'PERSON' && b.ref === legacy.system).length, 1);
   await env.q("UPDATE governance.mig_records SET state = 'EXCLUDED' WHERE id = $1", [bad.id]);
-  legacy.fake.event('9', 'U', 2, valid());
-  await env.run(A(), { sourceSystem: legacy.system });
-  const ignored = await env.stateOf(bad.id);
-  assert.deepEqual([ignored.state, ignored.source_version], ['EXCLUDED', bad.source_version], 'excluído é final');
   const after = await env.getTower(A(), await env.newRun(A(), legacy.system, 'PERSON'));
   assert.ok(!after.blockers.some((b) => b.code === 'GOV_MIG_QUARANTINE_OPEN'), 'o blocker fecha quando não há mais quarentena');
+  legacy.dispose();
+});
+
+test('m9d901 delta em registro EXCLUDED é ignorado e registrado como ignorado', { skip: skip() }, async () => {
+  const legacy = await env.installSource(A(), { entity: 'PERSON' });
+  legacy.fake.event('9', 'I', 1, valid({ legalName: '' }));
+  await env.run(A(), { sourceSystem: legacy.system });
+  const [bad] = await env.recordsOf(legacy.system);
+  await env.q("UPDATE governance.mig_records SET state = 'EXCLUDED' WHERE id = $1", [bad.id]);
+  legacy.fake.event('9', 'U', 2, valid());
+  const { result } = await env.run(A(), { sourceSystem: legacy.system });
+  const ignored = await env.stateOf(bad.id);
+  assert.deepEqual([ignored.state, ignored.source_version], ['EXCLUDED', bad.source_version], 'excluído é final');
+  assert.equal(result.sources[0].totals.ignored, 1, 'o delta ignorado fica registrado no resumo da execução');
   legacy.dispose();
 });
