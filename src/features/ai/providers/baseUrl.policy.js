@@ -1,6 +1,6 @@
 'use strict';
 
-const { hostOf, matchHost, assertSecureScheme } = require('../../integrations/http/egressPolicy');
+const { egressPolicy } = require('../../integrations');
 const { AiProviderError } = require('./providers.errors');
 
 const FREE_ENVS = ['test', 'development'];
@@ -13,10 +13,10 @@ const FREE_ENVS = ['test', 'development'];
 function assertBaseUrlAllowed({ baseUrl, defaultBaseUrl, egressHosts = [], providerCode, nodeEnv = process.env.NODE_ENV }) {
   if (FREE_ENVS.includes(nodeEnv)) return;
   const refuse = () => new AiProviderError('VALIDATION', { providerCode, upstreamCode: 'BASEURL_NOT_ALLOWED', code: 'AI_PROVIDER_BASEURL_NOT_ALLOWED', message: 'O endereço do provedor não está na lista de saída permitida.' });
-  try { assertSecureScheme(baseUrl, { nodeEnv }); } catch { throw refuse(); }
-  const host = hostOf(baseUrl);
-  const allowed = [hostOf(defaultBaseUrl), ...egressHosts];
-  if (!host || !allowed.some((p) => matchHost(p, host))) throw refuse();
+  try { egressPolicy.assertSecureScheme(baseUrl, { nodeEnv }); } catch { throw refuse(); }
+  const host = egressPolicy.hostOf(baseUrl);
+  const allowed = [egressPolicy.hostOf(defaultBaseUrl), ...egressHosts];
+  if (!host || !allowed.some((p) => egressPolicy.matchHost(p, host))) throw refuse();
 }
 
 module.exports = { assertBaseUrlAllowed };
