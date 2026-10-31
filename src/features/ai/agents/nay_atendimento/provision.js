@@ -1,6 +1,6 @@
 'use strict';
 
-const { provisionAgentVersion } = require('../kit');
+const { provisionAgentVersion } = require('../kit/provision');
 const { golden } = require('../../evaluations');
 const { DEFINITION } = require('./definition');
 const { GOLDEN_CASES } = require('./golden.cases');
