@@ -13,7 +13,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
-const { LegalDeadline, AuditLog, User, UserMembership } = require('../src/models');
+const { LegalDeadline, LegalCase, AuditLog, User, UserMembership } = require('../src/models');
 
 let tenant;
 before(async () => {
@@ -157,5 +157,48 @@ test('Remarcar (dueAt) continua exigindo motivo e preserva o responsavel', async
     const out = await legalDeadlinesService.updateLegalDeadline(d.id, { dueAt: novo, changeReason: 'Intimação adiada' }, tenant.userId, transaction);
     assert.equal(out.responsibleUserId, a.id);
     assert.equal(new Date(out.dueAt).getTime(), novo.getTime());
+  });
+});
+
+test('Remover responsavel de prazo CRITICAL sem responsavel efetivo (processo sem responsavel) e recusado (422)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await newUser(transaction);
+    const legalCase = await newCase(transaction);
+    const d = await newDeadline(legalCase, transaction, { responsibleUserId: a.id, criticality: 'CRITICAL' });
+    await LegalCase.update({ responsibleUserId: null }, { where: { id: legalCase.id }, transaction });
+    await assert.rejects(
+      () => legalDeadlinesService.updateLegalDeadline(d.id, { responsibleUserId: null }, tenant.userId, transaction),
+      expectCode('LEGAL_DEADLINE_CRITICAL_RESPONSIBLE_REQUIRED', 422)
+    );
+    assert.equal((await LegalDeadline.findByPk(d.id, { transaction })).responsibleUserId, a.id);
+  });
+});
+
+test('Trocar o responsavel zera lastAlertedSeverity; a troca sem changeReason continua valendo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await newUser(transaction);
+    const b = await newUser(transaction);
+    const d = await newDeadline(await newCase(transaction), transaction, { responsibleUserId: a.id });
+    await LegalDeadline.update({ lastAlertedSeverity: 'WARNING' }, { where: { id: d.id }, transaction });
+    const out = await legalDeadlinesService.updateLegalDeadline(d.id, { responsibleUserId: b.id }, tenant.userId, transaction);
+    assert.equal(out.responsibleUserId, b.id);
+    assert.equal((await LegalDeadline.findByPk(d.id, { transaction })).lastAlertedSeverity, null);
+  });
+});
+
+test('Mesmo UUID em maiusculas nao e mudanca: nao zera lastAlertedSeverity nem regrava o responsavel', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const a = await newUser(transaction);
+    const d = await newDeadline(await newCase(transaction), transaction, { responsibleUserId: a.id });
+    await LegalDeadline.update({ lastAlertedSeverity: 'WARNING' }, { where: { id: d.id }, transaction });
+    const out = await legalDeadlinesService.updateLegalDeadline(d.id, { responsibleUserId: a.id.toUpperCase() }, tenant.userId, transaction);
+    assert.equal(out.responsibleUserId, a.id);
+    const row = await LegalDeadline.findByPk(d.id, { transaction });
+    assert.equal(row.responsibleUserId, a.id);
+    assert.equal(row.lastAlertedSeverity, 'WARNING');
+    // Troca para outro usuario informado em maiusculas e gravada em minusculas.
+    const b = await newUser(transaction);
+    const swapped = await legalDeadlinesService.updateLegalDeadline(d.id, { responsibleUserId: b.id.toUpperCase() }, tenant.userId, transaction);
+    assert.equal(swapped.responsibleUserId, b.id);
   });
 });

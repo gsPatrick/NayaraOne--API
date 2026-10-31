@@ -16,8 +16,11 @@ async function assertResponsibleInTenant(responsibleUserId, { groupId, companyId
   if (typeof responsibleUserId !== 'string' || !UUID_RE.test(responsibleUserId)) {
     throw AppError.badRequest('"responsibleUserId" deve ser o identificador (UUID) de um usuário.', 'LEGAL_DEADLINE_VALIDATION');
   }
+  // UUID e case-insensitive: normaliza para minusculas, senao o mesmo usuario em maiusculas
+  // contaria como troca (e zeraria lastAlertedSeverity) ou seria gravado fora do padrao.
+  const normalizedId = responsibleUserId.toLowerCase();
   const membership = await UserMembership.findOne({
-    where: { userId: responsibleUserId, groupId, companyId, status: 'ACTIVE' },
+    where: { userId: normalizedId, groupId, companyId, status: 'ACTIVE' },
     transaction,
   });
   if (!membership) {
@@ -26,7 +29,7 @@ async function assertResponsibleInTenant(responsibleUserId, { groupId, companyId
       'LEGAL_DEADLINE_RESPONSIBLE_NOT_IN_TENANT'
     );
   }
-  return responsibleUserId;
+  return normalizedId;
 }
 
 module.exports = { assertResponsibleInTenant };

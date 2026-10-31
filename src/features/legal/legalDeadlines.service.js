@@ -154,8 +154,22 @@ async function getLegalDeadline(id, transaction) {
   return deadline;
 }
 
+/**
+ * Le o prazo com lock de linha respeitando a ordem unica de lock (processo primeiro, depois
+ * prazo): duas trocas simultaneas do mesmo prazo se serializam, e a segunda enxerga (e audita
+ * como `before`) o estado ja gravado pela primeira. O prazo e relido apos o lock, de modo que
+ * as checagens (vencido, CRITICAL, responsavel atual) usam o estado vigente, nao um stale.
+ */
+async function getLegalDeadlineLocked(id, transaction) {
+  const peek = await getLegalDeadline(id, transaction);
+  await getLegalCaseForUpdate(peek.legalCaseId, transaction);
+  const deadline = await LegalDeadline.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!deadline) throw AppError.notFound('Prazo jurídico não encontrado.', 'LEGAL_DEADLINE_NOT_FOUND');
+  return deadline;
+}
+
 async function updateLegalDeadline(id, payload, actorUserId, transaction) {
-  const deadline = await getLegalDeadline(id, transaction);
+  const deadline = await getLegalDeadlineLocked(id, transaction);
   const beforeJson = deadline.toJSON();
   const { dueAt, conclusionEvidenceFileId, conclusionNote } = payload;
   // Auditoria da cliente (Marco 5, item 3): o status e normalizado (caixa/espacos) e validado
