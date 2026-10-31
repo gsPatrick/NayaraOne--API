@@ -2,6 +2,7 @@
 
 const { RACI } = require('./raci.constants');
 const repo = require('./raci.repository');
+const errors = require('./raci.errors');
 const { ensureActivities } = require('./raci.seed');
 
 /**
@@ -21,4 +22,11 @@ async function rolesOf(tenant, actor, activityCode, transaction) {
 
 const isResponsibleOrAccountable = (roles) => roles[RACI.R] || roles[RACI.A];
 
-module.exports = { rolesOf, isResponsibleOrAccountable };
+/** Decisão do corte (M9-D902): o ator precisa ser R ou A da atividade; senão 403 GOV_MIG_RACI_FORBIDDEN com o código da atividade. Devolve os papéis do ator. */
+async function assertResponsibleOrAccountable(tenant, actor, activityCode, transaction) {
+  const roles = await rolesOf(tenant, actor, activityCode, transaction);
+  if (!isResponsibleOrAccountable(roles)) throw errors.activityForbidden(activityCode);
+  return roles;
+}
+
+module.exports = { rolesOf, isResponsibleOrAccountable, assertResponsibleOrAccountable };

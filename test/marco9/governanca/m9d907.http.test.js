@@ -8,6 +8,7 @@ const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d907Env');
 const http = require('../_helpers/m9d806Http');
+const { grantRaci } = require('../_helpers/m9d902Raci');
 
 const ADMIN = 'governance:migration:admin';
 const RUN = 'governance:migration:run';
@@ -29,6 +30,8 @@ before(async () => {
   if (h.skip) return;
   A = h.tenants.A;
   await env.cleanup(A);
+  await grantRaci(A, 'CI GESTOR', ['GO_NO_GO']); // o GO/NO-GO é decisão do corte: só R ou A (M9-D902)
+  await grantRaci(h.tenants.B, 'CI GESTOR', ['GO_NO_GO']);
 });
 afterEach(async () => { if (h && !h.skip) await env.cleanup(A); });
 after(async () => { if (h && !h.skip) { await grant('CI GESTOR', []); await grant('CI LEITURA', []); await env.cleanup(A); } await http.stopHttp({}); });

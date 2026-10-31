@@ -94,6 +94,7 @@ test('m9d902 editar o RACI exige governance:migration:admin', async (t) => {
 
 test('m9d902 a atividade "última carga delta" dispara a execução com lastDelta true', async (t) => {
   if (httpSkip) return t.skip(httpSkip);
+  await require('../_helpers/m9d902Raci').grantRaci({ ...tenants.A, userId: tenants.A.userId }, ROLES.gestor, ['LAST_DELTA_LOAD']); // a última carga delta é decisão do corte: só R ou A (M9-D902)
   const res = await call('gestor', 'POST', '/migration/runs', { sourceSystem: 'LEGADO_ERP', entity: 'PERSON', lastDelta: true });
   assert.equal(res.status, 202);
   const [row] = (await adminQuery('SELECT last_delta FROM governance.mig_runs WHERE id = $1', [res.body.data.runId])).rows;
