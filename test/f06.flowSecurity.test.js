@@ -306,13 +306,33 @@ const attackers = () => [
   ['empresa C (outro grupo)', otherGroupTenant],
 ];
 
+// M9-D920: a exportação do dossiê passa pelo guard da DLP (anexos HIGH por padrão): finalidade, justificativa e verificação em duas etapas recente.
+const EXPORT_QUERY = `?purpose=AUDITORIA&justification=${encodeURIComponent('Conferência da cadeia de custódia do dossiê pela auditoria.')}`;
+// core.mfa_step_ups tem uma linha por usuário e a RLS a prende à empresa: os tokens do teste usam o mesmo usuário em empresas diferentes, então o passo recente é movido
+// para a empresa de quem vai exportar (apaga na que estava e grava na de agora).
+let stepUpCompany = null;
+async function grantRecentMfa(ctx) {
+  const { MfaStepUp } = require('../src/models');
+  if (stepUpCompany && stepUpCompany.companyId !== ctx.companyId) {
+    await withTenantTransaction(stepUpCompany, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
+  }
+  await withTenantTransaction(ctx, async (transaction) => {
+    const stepUp = { verifiedAt: new Date(), expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
+    const [updated] = await MfaStepUp.update(stepUp, { where: { userId: tenant.userId }, transaction });
+    if (!updated) await MfaStepUp.create({ groupId: ctx.groupId, companyId: ctx.companyId, userId: tenant.userId, ...stepUp }, { transaction });
+  });
+  stepUpCompany = ctx;
+}
+
 test('F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia', async () => {
   for (const [label, attacker] of attackers()) {
     const own = fixtures[attacker.companyId];
-    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export`, attacker, ['legal:read']), 404, `${label} → dossiê de A`);
-    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export`, attacker, ['legal:read']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
+    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 404, `${label} → dossiê de A`);
+    await grantRecentMfa(attacker);
+    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
   }
-  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export`, tenant, ['legal:read']), 200, 'controle positivo: A exporta o próprio dossiê');
+  await grantRecentMfa(tenant);
+  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, tenant, ['legal:read']), 200, 'controle positivo: A exporta o próprio dossiê');
   const exported = await withTenantTransaction(tenant, (t) =>
     EvidencePackageAccessLog.count({ where: { evidencePackageId: A().evidencePackageId, action: 'EXPORTED' }, transaction: t })
   );

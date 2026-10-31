@@ -37,16 +37,18 @@ test('m9d022_arquivo_infectado_rejeitado', async () => {
 
 test('m9d022_sem_classificacao_recusado', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
+    // M9-D920: a classe do arquivo é obrigatória (padrão HIGH, conservador): o arquivo enviado sem classe expressa NASCE classificado e entra no índice com a classe HIGH
+    // (CONFIDENTIAL na visão antiga da NAY); quem tem governance:classification:manage ajusta e a reindexação leva a nova classe (nova versão).
     const f = await enviarPdf(tenantA, tx, { classificacao: null, linhas: ['Contrato de locação do Edifício Aurora.'] });
-    const out = await ingerirArquivo(admin(), f.id, tx);
-    assert.equal(out.ingestion.status, 'REJECTED'); assert.equal(out.ingestion.errorCode, 'AI_INGEST_UNCLASSIFIED'); assert.equal(out.ingestion.step, 'CLASSIFY');
-    assert.equal((await chunksDe(f.id, tx)).length, 0, 'a NAY não adivinha a classificação');
+    const first = await ingerirArquivo(admin(), f.id, tx);
+    assert.equal(first.ingestion.status, 'INDEXED'); assert.equal(first.ingestion.classification, 'CONFIDENTIAL', 'HIGH, a classe que o upload deu');
+    // Fonte sem classe nenhuma (URL sem classificação) continua recusada: a NAY não adivinha.
     assert.equal(rag.rejectionError('AI_INGEST_UNCLASSIFIED', 'x').message, 'Classifique o documento antes de indexá-lo.');
-    // Registrada a classificação, a mesma ingestão passa (nova versão, a recusa fica no histórico).
-    await rag.classifyFile(admin(), f.id, { classification: 'INTERNAL' }, tx);
-    const ok = await ingerirArquivo(admin(), f.id, tx);
-    assert.equal(ok.ingestion.status, 'INDEXED'); assert.equal(ok.ingestion.classification, 'INTERNAL');
-    assert.equal(ok.ingestion.sourceVersion, 2);
+    // Mudar a classe é registrar a nova (a reconciliação da M9-D023 leva a classe aos trechos já indexados; o conteúdo igual não gera outra versão).
+    const novo = await rag.classifyFile(admin(), f.id, { classification: 'INTERNAL' }, tx);
+    assert.equal(novo.classification, 'INTERNAL');
+    const again = await ingerirArquivo(admin(), f.id, tx);
+    assert.equal(again.ingestion.status, 'INDEXED'); assert.equal(again.ingestion.sourceVersion, 1, 'mesmo conteúdo: a mesma versão');
   });
 });
 

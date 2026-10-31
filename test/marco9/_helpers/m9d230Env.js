@@ -3,6 +3,7 @@
 // Apoio dos testes do WhatsApp (M9-D230): modelos aprovados na connection, consentimento, arquivos de mídia com antivírus e classificação, parâmetros da empresa e leitura de conversas.
 // Estende o apoio da mensageria do CRM (M9-D229). Roda em banco descartável (os testes COMMITAM). Quem usa define process.env.PORT ANTES de requerer este arquivo.
 const env = require('./m9d229Env');
+const dataClassification = require('../../../src/shared/data-classification/scale');
 const settingsService = require('../../../src/features/settings/settings.service');
 const personConsents = require('../../../src/features/people/personConsents.service');
 const filesService = require('../../../src/features/files/files.service');
@@ -26,14 +27,14 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 
 /**
  * Arquivo da empresa para anexar como mídia (padrão: PNG limpo e PUBLIC). O conteúdo é gravado de verdade pelo módulo de arquivos, no armazenamento de laboratório (que assina links);
- * antivírus, classificação, tipo e tamanho declarados são ajustados depois, como a verificação e quem classifica fariam.
+ * antivírus, classificação, tipo e tamanho declarados são ajustados depois, como a verificação e quem classifica fariam. M9-D920: a classificação é obrigatória (escala LOW a RESTRICTED; o vocabulário antigo é convertido) e `classificacao: null` deixa a classe que o upload deu (HIGH).
  */
 async function arquivo(tenant, { nome = `foto-${uniqueSuffix()}.png`, mime = 'image/png', bytes = 2048, scan = 'CLEAN', classificacao = 'PUBLIC' } = {}) {
   await parametro(tenant, 'integration.storage.default_provider', 'storage-sandbox');
   const gravado = await comTenant(tenant, (t) => filesService.uploadFile({
     groupId: tenant.groupId, companyId: tenant.companyId, fileName: `foto-${uniqueSuffix()}.png`, mimeType: 'image/png', contentBase64: PNG.toString('base64'), category: 'generic',
   }, tenant.userId, t));
-  await sql(tenant, 'UPDATE people.files SET file_name = :n, mime_type = :m, size_bytes = :b, scan_status = :s, classification = :c WHERE id = :id', { id: gravado.id, n: nome, m: mime, b: bytes, s: scan, c: classificacao });
+  await sql(tenant, 'UPDATE people.files SET file_name = :n, mime_type = :m, size_bytes = :b, scan_status = :s, classification = COALESCE(:c, classification) WHERE id = :id', { id: gravado.id, n: nome, m: mime, b: bytes, s: scan, c: dataClassification.normalize(classificacao) || null });
   return { id: gravado.id };
 }
 

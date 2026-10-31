@@ -80,6 +80,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_DLP_VOLUME_EXCEEDED` | 422 | O volume pedido excede o limite desta classificação. | core-governance | 1.0.0 | não |
 | `GOV_DOMAIN_INVALID` | 400 | Domínio de dados inválido. | data-quality | 1.0.0 | não |
 | `GOV_DOMAIN_OWNER_EXISTS` | 409 | Informe um único responsável (owner) por domínio. | data-quality | 1.0.0 | não |
+| `GOV_DOWNLOAD_ALREADY_USED` | 410 | Este endereço já foi usado. Faça um novo pedido. | dlp | 1.3.0 | não |
+| `GOV_DOWNLOAD_BATCH_INVALID` | 400 | Informe de 1 a <valor> arquivos, sem repetir. | dlp | 1.3.0 | não |
 | `GOV_DQ_FILTER_INVALID` | 400 | Filtro de qualidade inválido. | data-quality | 1.0.0 | não |
 | `GOV_ERROR_CODE_INCOMPLETE` | 422 | Entrada incompleta no catálogo de erros: <código>. | core-governance | 1.0.0 | não |
 | `GOV_ERROR_CODE_PREFIX` | 422 | Código fora do padrão GOV_: <código>. | core-governance | 1.0.0 | não |
@@ -111,6 +113,10 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_FIELD_ACTOR_INVALID` | 400 | Empresa do ator ausente. | data-quality | 1.3.0 | não |
 | `GOV_FIELD_CONTEXT_INVALID` | 400 | Contexto de acesso inválido. | data-quality | 1.3.0 | não |
 | `GOV_FIELD_ENTITY_INVALID` | 400 | Entidade inválida: use schema.tabela. | data-quality | 1.3.0 | não |
+| `GOV_FILE_CLASSIFICATION_FORBIDDEN` | 403 | Você não tem permissão para definir a classificação do arquivo. | dlp | 1.3.0 | não |
+| `GOV_FILE_CLASSIFICATION_INVALID` | 400 | Classificação inválida. Use LOW, MEDIUM, HIGH ou RESTRICTED. | dlp | 1.3.0 | não |
+| `GOV_FILE_WATERMARK_FAILED` | 422 | Não foi possível aplicar a marca d'água; o download foi recusado. | dlp | 1.3.0 | não |
+| `GOV_FILE_WATERMARK_UNSUPPORTED` | 422 | Este tipo de arquivo não aceita marca d'água. | dlp | 1.3.0 | não |
 | `GOV_FINOPS_AMOUNT_INVALID` | 422 | O valor do custo não pode ser negativo. | finops | 1.3.0 | não |
 | `GOV_FINOPS_COLLECTOR_FAILED` | 500 | O coletor de custo "<valor>" falhou; nenhum valor foi gravado e o último sucesso continua exibido. | finops | 1.3.0 | não |
 | `GOV_FINOPS_CRITICAL_NOT_DEGRADABLE` | 422 | Esta função é crítica e não pode ser degradada. | finops | 1.3.0 | não |
@@ -181,6 +187,8 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_OPENAPI_BREAKING_CHANGE` | 422 | Mudança incompatível dentro da major <valor>: <regra> em <caminho>. | core-governance | 1.0.0 | não |
 | `GOV_OPENAPI_INVALID` | 422 | O contrato OpenAPI é inválido: <valor>. | api-governance | 1.0.0 | não |
 | `GOV_OPENAPI_ROUTE_UNDOCUMENTED` | 422 | Rota sem documentação no contrato: <método> <caminho>. | core-governance | 1.0.0 | não |
+| `GOV_PRINT_RENDER_FAILED` | 500 | Não foi possível gerar o PDF de impressão. | dlp | 1.3.0 | não |
+| `GOV_PRINT_RESOURCE_INVALID` | 400 | Este tipo de documento não pode ser impresso por aqui. | dlp | 1.3.0 | não |
 | `GOV_QUEUE_DECISION_INVALID` | 400 | Decisão inválida para este item. | data-quality | 1.0.0 | não |
 | `GOV_QUEUE_ITEM_FINAL` | 409 | Este item já foi decidido. | data-quality | 1.0.0 | não |
 | `GOV_RATE_LIMITED` | 429 | Muitas requisições. Tente novamente em <N> segundos. | api-governance | 1.0.0 | não |

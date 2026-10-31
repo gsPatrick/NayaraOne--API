@@ -518,6 +518,20 @@
       "since": "1.0.0",
       "deprecated": false
     },
+    "GOV_DOWNLOAD_ALREADY_USED": {
+      "status": 410,
+      "message": "Este endereço já foi usado. Faça um novo pedido.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_DOWNLOAD_BATCH_INVALID": {
+      "status": 400,
+      "message": "Informe de 1 a <valor> arquivos, sem repetir.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
     "GOV_DQ_FILTER_INVALID": {
       "status": 400,
       "message": "Filtro de qualidade inválido.",
@@ -732,6 +746,34 @@
       "status": 400,
       "message": "Entidade inválida: use schema.tabela.",
       "module": "data-quality",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FILE_CLASSIFICATION_FORBIDDEN": {
+      "status": 403,
+      "message": "Você não tem permissão para definir a classificação do arquivo.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FILE_CLASSIFICATION_INVALID": {
+      "status": 400,
+      "message": "Classificação inválida. Use LOW, MEDIUM, HIGH ou RESTRICTED.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FILE_WATERMARK_FAILED": {
+      "status": 422,
+      "message": "Não foi possível aplicar a marca d'água; o download foi recusado.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_FILE_WATERMARK_UNSUPPORTED": {
+      "status": 422,
+      "message": "Este tipo de arquivo não aceita marca d'água.",
+      "module": "dlp",
       "since": "1.3.0",
       "deprecated": false
     },
@@ -1223,6 +1265,20 @@
       "message": "Rota sem documentação no contrato: <método> <caminho>.",
       "module": "core-governance",
       "since": "1.0.0",
+      "deprecated": false
+    },
+    "GOV_PRINT_RENDER_FAILED": {
+      "status": 500,
+      "message": "Não foi possível gerar o PDF de impressão.",
+      "module": "dlp",
+      "since": "1.3.0",
+      "deprecated": false
+    },
+    "GOV_PRINT_RESOURCE_INVALID": {
+      "status": 400,
+      "message": "Este tipo de documento não pode ser impresso por aqui.",
+      "module": "dlp",
+      "since": "1.3.0",
       "deprecated": false
     },
     "GOV_QUEUE_DECISION_INVALID": {

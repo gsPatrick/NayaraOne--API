@@ -48,7 +48,7 @@ async function quarentenaEAntivirus() {
   assert.equal(a.status, 'CLEAN');
   assert.ok(a.file_id);
   const [arq] = await env.sql(tenant, 'SELECT classification FROM people.files WHERE id = :id', { id: a.file_id });
-  assert.equal(arq.classification, 'CONFIDENTIAL');
+  assert.equal(arq.classification, 'HIGH', 'promovido como CONFIDENTIAL, que na escala do livro (M9-D920) é HIGH');
 }
 
 test('inbound_infectado_descartado_com_evento', async () => {

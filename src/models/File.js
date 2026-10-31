@@ -1,6 +1,7 @@
 'use strict';
 
 const { DataTypes } = require('sequelize');
+const dataClassification = require('../shared/data-classification/scale');
 
 /**
  * File — tabela "people"."files"
@@ -64,7 +65,8 @@ module.exports = (sequelize) => {
       },
       // Resultado do antivírus no envio (CLEAN) e quando rodou (migration 642).
       scanStatus: { type: DataTypes.STRING(16), allowNull: true, field: 'scan_status' },
-      classification: { type: DataTypes.STRING(12), allowNull: true, field: 'classification' },
+      // M9-D920: obrigatória, na escala do livro (LOW, MEDIUM, HIGH, RESTRICTED), padrão HIGH. O código antigo da NAY (M9-D022) ainda lê e grava PUBLIC/INTERNAL/CONFIDENTIAL (`legacyView`); o DLP lê com getDataValue.
+      classification: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'HIGH', field: 'classification', ...dataClassification.attributeOptions({ legacyView: true }) },
       // Onde o objeto foi gravado (M9-D242, migration 690): o fornecedor de armazenamento e a connection da empresa; nulos = disco local (arquivo anterior à D242).
       storageProvider: { type: DataTypes.STRING(48), allowNull: true, field: 'storage_provider' },
       storageConnectionId: { type: DataTypes.UUID, allowNull: true, field: 'storage_connection_id' },

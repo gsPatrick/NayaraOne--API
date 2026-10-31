@@ -167,10 +167,15 @@ async function uploadFile(payload, actorUserId, transaction) {
     transaction.afterRollbackCleanups = [...(transaction.afterRollbackCleanups || []), limpar];
   }
 
+  // M9-D920: classificação obrigatória; a explícita já foi conferida pelo controller (governance:classification:manage), senão a maior classe da entidade a que a categoria se liga ou HIGH.
+  const classification = payload.classification
+    || (await require('../core-governance/dlp/downloads/attachment.class').resolveUploadClass({ tenant: { groupId, companyId }, category: resolveCategory(category), transaction })); // eslint-disable-line global-require
+
   const file = await File.create(
     {
       groupId,
       companyId,
+      classification,
       storageKey,
       fileName,
       mimeType: mimeType || 'application/octet-stream',

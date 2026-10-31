@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 796. Rotas só com login ou públicas: 37.
+Rotas com permissão exigida: 797. Rotas só com login ou públicas: 42.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -45,7 +45,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PUT` | `/api/v1/ai/budgets/:id` | `ai:budget` | não |
 | `GET` | `/api/v1/ai/budgets` | `ai:audit|ai:budget` | não |
 | `POST` | `/api/v1/ai/budgets` | `ai:budget` | não |
-| `PUT` | `/api/v1/ai/files/:fileId/classification` | `ai:admin` | não |
+| `PUT` | `/api/v1/ai/files/:fileId/classification` | `ai:admin`, `governance:classification:manage` | não |
 | `GET` | `/api/v1/ai/ingestions/:id` | `ai:use|ai:audit|ai:admin` | não |
 | `POST` | `/api/v1/ai/ingestions` | `ai:use|ai:admin` | não |
 | `GET` | `/api/v1/ai/runs/:id` | `ai:read|ai:audit` | não |
@@ -231,6 +231,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
 | `PATCH` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
 | `POST` | `/api/v1/feature-flags` | `governance:flags:manage` | não |
+| `PUT` | `/api/v1/files/:id/classification` | `governance:classification:manage` | não |
 | `POST` | `/api/v1/finance/anomaly-cases/:id/resolve` | `finance:update` | não |
 | `GET` | `/api/v1/finance/anomaly-cases` | `finance:read` | não |
 | `POST` | `/api/v1/finance/approval-requests/:id/decide` | `finance:approve` | não |
@@ -277,7 +278,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
 | `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
 | `governance:data-quality:read` | LOW | `GET /api/v1/data-classification/legacy-review`, `GET /api/v1/data-classification`, `GET /api/v1/data-quality/domains`, `GET /api/v1/data-quality/queue/:id/impact`, `GET /api/v1/data-quality/queue`, `GET /api/v1/data-quality` |
-| `governance:classification:manage` | HIGH | `PUT /api/v1/data-classification` |
+| `governance:classification:manage` | HIGH | `PUT /api/v1/ai/files/:fileId/classification`, `PUT /api/v1/data-classification`, `PUT /api/v1/files/:id/classification` |
 | `POST` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
 | `PUT` | `/api/v1/data-lineage/edges` | `governance:lineage:manage` | não |
 | `POST` | `/api/v1/data-lineage/nodes` | `governance:lineage:manage` | não |
@@ -812,7 +813,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/correspondent/webhooks/financing/:provider` | público; autenticidade pela assinatura do provider | não |
 | `POST` | `/api/v1/crm/carts/public/:token/properties/:propertyId/click` | público; acesso pelo token do link | não |
 | `GET` | `/api/v1/crm/carts/public/:token` | público; acesso pelo token do link | não |
+| `GET` | `/api/v1/dlp/print-events/:id/pdf` | só login | não |
+| `POST` | `/api/v1/dlp/print-events` | só login | não |
 | `GET` | `/api/v1/files/:id/content` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `GET` | `/api/v1/files/:id/download` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
 | `POST` | `/api/v1/retention/dry-run` | `governance:retention:manage` | não |
 | `GET` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
 | `PUT` | `/api/v1/retention/policies` | `governance:retention:manage` | não |
@@ -821,6 +825,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/retention/runs/:id` | `governance:retention:manage` | não |
 | `GET` | `/api/v1/retention/runs` | `governance:retention:manage` | não |
 | `GET` | `/api/v1/files/:id` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `POST` | `/api/v1/files/download-batch` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
+| `GET` | `/api/v1/files/downloads/:jobId` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
 | `POST` | `/api/v1/files` | só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo | não |
 | `POST` | `/api/v1/finance/webhooks/bank-payment` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/v1/health/db` | público (saúde do serviço) | não |

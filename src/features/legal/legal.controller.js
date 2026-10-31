@@ -16,6 +16,7 @@ const keyDeliveriesService = require('./keyDeliveries.service');
 const legalCasesService = require('./legalCases.service');
 const legalDeadlinesService = require('./legalDeadlines.service');
 const evidencePackagesService = require('./evidencePackages.service');
+const { guardEvidenceExport } = require('../core-governance/dlp/downloads/dossier.guard');
 const contractAmendmentsService = require('./contractAmendments.service');
 const contractTemplatesService = require('./contractTemplates.service');
 const contractClausesService = require('./contractClauses.service');
@@ -748,9 +749,12 @@ const getEvidencePackage = catchAsync(async (req, res) => {
 
 // M5-29: export autocontido e verificável do dossiê (registra EXPORTED na cadeia de custódia).
 const exportEvidencePackage = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) =>
-    evidencePackagesService.exportEvidencePackage(req.params.id, req.auth.userId, t)
-  );
+  const data = await req.withTenantTransaction(async (t) => {
+    // M9-D920 (AUD-016): a exportação do dossiê herda a classe dos anexos e passa pelo guard da DLP (finalidade, justificativa e MFA conforme a classe) antes de sair.
+    const evidencePackage = await evidencePackagesService.getEvidencePackage(req.params.id, t);
+    await guardEvidenceExport({ tenant: { groupId: req.auth.groupId, companyId: req.auth.companyId }, auth: req.auth, ip: req.ip, evidencePackage, query: req.query, transaction: t });
+    return evidencePackagesService.exportEvidencePackage(req.params.id, req.auth.userId, t);
+  });
   return success(res, { data });
 });
 

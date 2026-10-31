@@ -2,18 +2,14 @@
 
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
-const AppError = require('../../utils/AppError');
 const filesService = require('./files.service');
 const fileAccessService = require('./fileAccess.service');
+const { rejectRestrictedUnlessAllowed } = require('./restrictedDocument.guard');
+const { contentDisposition } = require('./contentDisposition');
+const { contentAccess } = require('../core-governance/dlp/downloads/download.single');
+const { checkExplicitClass } = require('../core-governance/dlp/downloads/attachment.class');
 const { CaseDocument } = require('../../models');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-
-// Nome do arquivo no cabeçalho: versão simples (ASCII) para navegadores antigos e a versão UTF-8 (RFC 5987) com acentos.
-function contentDisposition(disposition, fileName) {
-  const clean = String(fileName || 'arquivo').replace(/[\r\n"\\]/g, '_');
-  const ascii = clean.normalize('NFKD').replace(/[^\x20-\x7e]/g, '_');
-  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
-}
 
 // Quem leu documento restrito (renda, extrato, identidade) fica registrado.
 async function auditRestrictedRead(file, auth, action, transaction) {
@@ -33,16 +29,8 @@ async function auditRestrictedRead(file, auth, action, transaction) {
  * diretamente o invariante do Caderno "corretor não lê extrato/renda de outro caso sem
  * permissão". Guarda aqui, no ponto único de leitura de bytes/metadado de qualquer arquivo —
  * nunca confiar só no filtro da listagem.
+ * (a regra em si fica em restrictedDocument.guard.js, que o DLP também usa.)
  */
-function rejectRestrictedUnlessAllowed(restricted, permissions) {
-  if (restricted && !(permissions || []).includes('correspondent:documents:read')) {
-    throw AppError.forbidden(
-      'Este arquivo é um documento restrito. Você não tem permissão para acessá-lo.',
-      'FILE_RESTRICTED_DOCUMENT'
-    );
-  }
-}
-
 async function assertNotRestrictedFile(fileId, permissions, transaction) {
   const restrictedLink = await CaseDocument.findOne({
     where: { fileId, classification: 'RESTRICTED' },
@@ -55,7 +43,8 @@ const uploadFile = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
     filesService.uploadFile(
       // O tenant do token sempre vence: groupId/companyId do corpo são ignorados (D1).
-      { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId },
+      // M9-D920: a classificação do corpo só vale para quem tem governance:classification:manage; sem ela, o upload calcula a classe (registro de classificação ou HIGH).
+      { ...req.body, classification: checkExplicitClass(req.body && req.body.classification, req.auth.permissions), groupId: req.auth.groupId, companyId: req.auth.companyId },
       req.auth.userId,
       t
     )
@@ -67,7 +56,7 @@ const getFileMetadata = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction(async (t) => {
     // A checagem de documento RESTRICTED vem na mesma consulta de vínculos (fileAccess.service).
     const { file, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
-    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
+    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions, file);
     if (restricted) await auditRestrictedRead(file, req.auth, 'files.read_restricted_metadata', t);
     return file;
   });
@@ -83,9 +72,18 @@ const getFileMetadata = catchAsync(async (req, res) => {
 const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction(async (t) => {
     const { file: metadata, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
-    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions);
+    rejectRestrictedUnlessAllowed(restricted, req.auth.permissions, metadata);
     const withContent = await filesService.getFileContent(req.params.id, t, req.auth.userId, metadata);
     if (restricted) await auditRestrictedRead(metadata, req.auth, 'files.read_restricted', t);
+    // M9-D920: HIGH em tela é leitura (VIEW); download=1 ou RESTRICTED passam pelo guard de DLP (justificativa, MFA, pedido registrado) e a marca d'água sai aqui.
+    const delivered = await contentAccess({
+      tenant: { groupId: req.auth.groupId, companyId: req.auth.companyId }, auth: req.auth, ip: req.ip, userAgent: req.get('user-agent'), file: withContent, restricted, query: req.query, transaction: t,
+    });
+    if (delivered) {
+      withContent.setDataValue('content', delivered.buffer);
+      withContent.setDataValue('mimeType', delivered.mimeType);
+      withContent.setDataValue('fileName', delivered.fileName);
+    }
     return withContent;
   });
   const total = file.content.length;

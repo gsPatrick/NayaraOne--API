@@ -6,6 +6,7 @@ const { File } = require('../../../../models');
 const { readExportParams } = require('./export.params');
 const repo = require('./export.repository');
 const { auditExport } = require('./export.audit');
+const grantRepo = require('../grants/grant.repository');
 
 const BATCH = 100;
 
@@ -29,7 +30,9 @@ async function expireCompany(tenant, transaction, { now = new Date() } = {}) {
     await repo.markFailed(tenant.companyId, job.id, 'GOV_EXPORT_TIMEOUT', transaction);
     await auditExport(job, 'failed', { actorUserId: null, after: { errorCode: 'GOV_EXPORT_TIMEOUT' }, reason: 'A geração da exportação passou do tempo máximo.' }, transaction);
   }
-  return { expired: due.length, timedOut: stale.length, storageKeys };
+  // M9-D920: o endereço de download de anexo e de impressão que ninguém usou até o prazo também vira EXPIRED.
+  const grantsExpired = await grantRepo.expireUnused(tenant.companyId, now, transaction);
+  return { expired: due.length, timedOut: stale.length, grantsExpired, storageKeys };
 }
 
 /** Apaga do disco os arquivos já expirados (depois do commit); falha só vai ao log, porque o pedido já está EXPIRED. */

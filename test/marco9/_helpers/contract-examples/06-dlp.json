@@ -33,6 +33,15 @@
     {"op": "GET /dlp/share-links/{id}/impact", "kind": "negative", "name": "perfil sem a permissão da operação", "as": "maker", "expect": 403, "params": {"id": "${linkId}"}},
     {"op": "POST /dlp/share-links/{id}/revoke", "kind": "positive", "name": "revoga o link", "as": "gestor", "expect": 200, "confirm": {"impact": "GET /dlp/share-links/{id}/impact"}, "params": {"id": "${linkId}"}},
     {"op": "POST /dlp/share-links/{id}/revoke", "kind": "negative", "name": "revogar de novo", "as": "gestor", "expect": 409, "params": {"id": "${linkId}"}},
-    {"op": "POST /dlp/share-links/{id}/revoke", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${linkId}"}}
+    {"op": "POST /dlp/share-links/{id}/revoke", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${linkId}"}},
+    {"op": "POST /dlp/print-events", "kind": "positive", "name": "pede a impressão do contrato (HIGH: finalidade, justificativa e MFA recente)", "as": "gestor", "expect": 201, "mfa": true, "body": {"resourceType": "legal.contract", "resourceId": "${contractId}", "purpose": "CLIENTE_SOLICITOU", "justification": "Cliente solicitou a via impressa do contrato para assinatura presencial."}, "capture": {"printId": "body.data.exportJobId", "printExp": "body.data.printUrl#exp", "printSig": "body.data.printUrl#sig"}},
+    {"op": "POST /dlp/print-events", "kind": "negative", "name": "tipo de documento que não se imprime por aqui", "as": "gestor", "expect": 400, "body": {"resourceType": "finance.entries", "resourceId": "${contractId}", "purpose": "CLIENTE_SOLICITOU", "justification": "Cliente solicitou a via impressa do contrato para assinatura presencial."}},
+    {"op": "POST /dlp/print-events", "kind": "negative", "name": "contrato que não existe", "as": "gestor", "expect": 404, "body": {"resourceType": "legal.contract", "resourceId": "00000000-0000-4000-8000-000000000000", "purpose": "CLIENTE_SOLICITOU", "justification": "Cliente solicitou a via impressa do contrato para assinatura presencial."}},
+    {"op": "POST /dlp/print-events", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401},
+    {"op": "GET /dlp/print-events/{id}/pdf", "kind": "negative", "name": "assinatura do endereço inválida", "as": "gestor", "expect": 403, "params": {"id": "${printId}"}, "query": {"exp": "${printExp}", "sig": "assinatura-adulterada"}},
+    {"op": "GET /dlp/print-events/{id}/pdf", "kind": "positive", "name": "baixa o PDF de impressão", "as": "gestor", "expect": 200, "params": {"id": "${printId}"}, "query": {"exp": "${printExp}", "sig": "${printSig}"}},
+    {"op": "GET /dlp/print-events/{id}/pdf", "kind": "negative", "name": "endereço já usado", "as": "gestor", "expect": 410, "params": {"id": "${printId}"}, "query": {"exp": "${printExp}", "sig": "${printSig}"}},
+    {"op": "GET /dlp/print-events/{id}/pdf", "kind": "negative", "name": "pedido que não existe", "as": "gestor", "expect": 404, "params": {"id": "${uuid}"}},
+    {"op": "GET /dlp/print-events/{id}/pdf", "kind": "negative", "name": "sem token", "as": "anon", "expect": 401, "params": {"id": "${printId}"}}
   ]
 }

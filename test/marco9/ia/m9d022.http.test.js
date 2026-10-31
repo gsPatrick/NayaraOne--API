@@ -12,7 +12,7 @@ const { montarPdf } = require('../_helpers/ragDocs');
 let env;
 before(async () => {
   if (!DISPOSABLE) return;
-  await grant('CI GESTOR', ['ai:admin', 'ai:use', 'ai:read', 'settings:read', 'settings:update']);
+  await grant('CI GESTOR', ['ai:admin', 'ai:use', 'ai:read', 'settings:read', 'settings:update', 'governance:classification:manage']);
   await grant('CI LEITURA', ['ai:use']);
   env = await startHttpEnv(Number(process.env.M9D022_HTTP_TEST_PORT) || 21722, [['B', 'gestor'], ['B', 'leitura'], ['A', 'gestor']]);
 });
@@ -37,24 +37,23 @@ test('m9d022_http_ciclo_de_ingestao_recusas_e_isolamento', { skip: SKIP }, async
   assert.equal(arq.status, 201, JSON.stringify(arq.body));
   const fileId = arq.body.data.id;
 
-  // Sem classificação: 422 com o código do livro, e a recusa fica gravada.
+  // M9-D920: o arquivo enviado sem classe expressa nasce HIGH (classificação obrigatória), então a primeira ingestão já passa, com a classe HIGH (CONFIDENTIAL na visão antiga).
   const semClasse = await call('POST', '/ai/ingestions', gestor, { sourceKind: 'FILE', sourceRef: fileId });
-  assert.equal(semClasse.status, 422); assert.equal(semClasse.body.error.code, 'AI_INGEST_UNCLASSIFIED'); assert.equal(semClasse.body.error.message, 'Classifique o documento antes de indexá-lo.');
-  const gravada = await call('GET', `/ai/ingestions/${semClasse.body.error.details.ingestionId}`, gestor);
-  assert.equal(gravada.status, 200); assert.equal(gravada.body.data.status, 'REJECTED'); assert.equal(gravada.body.data.step, 'CLASSIFY');
+  assert.equal(semClasse.status, 201, JSON.stringify(semClasse.body)); assert.equal(semClasse.body.data.status, 'INDEXED'); assert.equal(semClasse.body.data.classification, 'CONFIDENTIAL');
 
-  assert.equal((await call('PUT', `/ai/files/${fileId}/classification`, leitura, { classification: 'INTERNAL' })).status, 403, 'classificar é de ai:admin');
+  assert.equal((await call('PUT', `/ai/files/${fileId}/classification`, leitura, { classification: 'INTERNAL' })).status, 403, 'classificar é de ai:admin e de governance:classification:manage (M9-D920)');
   assert.equal((await call('PUT', `/ai/files/${fileId}/classification`, gestor, { classification: 'SECRETO' })).status, 400);
   assert.equal((await call('PUT', `/ai/files/${fileId}/classification`, gestor, { classification: 'INTERNAL' })).status, 200);
 
+  // Mesmo conteúdo e já indexado na primeira chamada (M9-D920): a repetição devolve a mesma ingestão, sem versão nova.
   const ok = await call('POST', '/ai/ingestions', gestor, { sourceKind: 'FILE', sourceRef: fileId });
-  assert.equal(ok.status, 201, JSON.stringify(ok.body)); assert.equal(ok.body.data.status, 'INDEXED'); assert.ok(ok.body.data.chunksCount >= 1);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.equal(ok.body.data.id, semClasse.body.data.id); assert.equal(ok.body.data.status, 'INDEXED'); assert.ok(ok.body.data.chunksCount >= 1);
   const repetida = await call('POST', '/ai/ingestions', gestor, { sourceKind: 'FILE', sourceRef: fileId });
   assert.equal(repetida.status, 200); assert.equal(repetida.body.data.id, ok.body.data.id); assert.equal(repetida.body.meta.replayed, true);
 
   // Infectado (marcado pelo antivírus depois do envio): 422 AI_INGEST_MALWARE.
   const outro = await enviar(gestor, ['Documento marcado como infectado.']);
-  await admin("UPDATE people.files SET scan_status = 'INFECTED', classification = 'INTERNAL' WHERE id = $1", [outro.body.data.id]);
+  await admin("UPDATE people.files SET scan_status = 'INFECTED', classification = 'MEDIUM' WHERE id = $1", [outro.body.data.id]);
   const inf = await call('POST', '/ai/ingestions', gestor, { sourceKind: 'FILE', sourceRef: outro.body.data.id });
   assert.equal(inf.status, 422); assert.equal(inf.body.error.code, 'AI_INGEST_MALWARE');
 
@@ -68,14 +67,14 @@ test('m9d022_http_ciclo_de_ingestao_recusas_e_isolamento', { skip: SKIP }, async
   const nega = await call('POST', '/ai/ingestions', leitura, { sourceKind: 'FILE', sourceRef: fileId });
   assert.equal(nega.status, 403); assert.equal(nega.body.error.code, 'AI_INGEST_NOT_AUTHORIZED');
   const proprio = await enviar(leitura, ['Anotação minha sobre a assembleia.']);
-  await admin("UPDATE people.files SET classification = 'INTERNAL' WHERE id = $1", [proprio.body.data.id]);
+  await admin("UPDATE people.files SET classification = 'MEDIUM' WHERE id = $1", [proprio.body.data.id]);
   assert.equal((await call('POST', '/ai/ingestions', leitura, { sourceKind: 'FILE', sourceRef: proprio.body.data.id })).status, 201);
   assert.equal((await call('POST', '/ai/ingestions', leitura, { sourceKind: 'URL', sourceRef: 'https://a.example.test/x.pdf', classification: 'INTERNAL' })).status, 403);
 
-  // SQL do que ficou gravado (superusuário do cluster descartável): uma linha por pedido que chegou ao pipeline, a recusa de classificação inclusive.
+  // SQL do que ficou gravado (superusuário do cluster descartável): uma linha por pedido que chegou ao pipeline (M9-D920: o arquivo novo já nasce classificado, então a primeira ingestão indexa).
   const gravadas = await admin("SELECT status, step, error_code, source_version, source_kind FROM ai.ingestions WHERE source_id = ANY($1::uuid[]) OR source_kind = 'URL' ORDER BY created_at", [[fileId, outro.body.data.id, proprio.body.data.id]]);
   const resumo = gravadas.rows.map((r) => [r.source_kind, r.status, r.step, r.error_code, r.source_version].join('/'));
-  for (const esperado of ['FILE/REJECTED/CLASSIFY/AI_INGEST_UNCLASSIFIED/1', 'FILE/INDEXED/DONE//2', 'FILE/REJECTED/SCAN/AI_INGEST_MALWARE/1', 'URL/REJECTED/FETCH/AI_INGEST_URL_BLOCKED/1']) assert.ok(resumo.includes(esperado), `${esperado} em ${JSON.stringify(resumo)}`);
+  for (const esperado of ['FILE/INDEXED/DONE//1', 'FILE/REJECTED/SCAN/AI_INGEST_MALWARE/1', 'URL/REJECTED/FETCH/AI_INGEST_URL_BLOCKED/1']) assert.ok(resumo.includes(esperado), `${esperado} em ${JSON.stringify(resumo)}`);
   assert.equal((await admin("SELECT count(*)::int AS n FROM ai.chunks WHERE source_type = 'URL'")).rows[0].n, 0, 'nenhum trecho de URL no índice');
 
   // Outra empresa não vê a ingestão nem indexa o arquivo da primeira: 404 sem revelar existência.

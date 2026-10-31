@@ -37,8 +37,11 @@ test('email_anexo_exige_clean_e_classificacao', async () => {
   const sensivel = await env.criarArquivo(tenant, { classificacao: 'RESTRICTED' });
   await recusa(comAnexo(sensivel), 403, 'INTEGRATION_EMAIL_ATTACHMENT_CLASSIFICATION_BLOCKED');
   await assert.rejects(comAnexo(sensivel), (e) => { assert.equal(e.message, 'Este documento não pode ser enviado como anexo; use o link seguro.'); assert.equal(e.details.reason, 'ABOVE_LIMIT'); return true; });
+  // M9-D920: a classe é obrigatória; o arquivo sem classe informada nasce HIGH (CONFIDENTIAL na visão antiga) e segue a regra do teto como qualquer outro.
   const semClasse = await env.criarArquivo(tenant, { classificacao: null });
-  await assert.rejects(comAnexo(semClasse), (e) => { assert.equal(e.code, 'INTEGRATION_EMAIL_ATTACHMENT_CLASSIFICATION_BLOCKED'); assert.equal(e.details.reason, 'UNCLASSIFIED', 'documento sem classificação não vai (a NAY e o e-mail nunca adivinham)'); return true; });
+  const padrao = await comAnexo(semClasse);
+  assert.equal(padrao.message.attachments[0].fileId, semClasse.id, 'a classe padrão (HIGH) cabe no teto configurado (CONFIDENTIAL)');
+  assert.equal(padrao.message.attachments[0].classification, 'CONFIDENTIAL');
   for (const scan of [null, 'PENDING', 'INFECTED']) {
      
     await recusa(comAnexo(await env.criarArquivo(tenant, { classificacao: 'INTERNAL', scan })), 422, 'INTEGRATION_EMAIL_ATTACHMENT_NOT_CLEAN');

@@ -44,6 +44,16 @@ module.exports = [
     reason: 'O link externo de arquivo avulso (M9-D823) só acrescenta a linha final da marca a texto/CSV já existente; não gera arquivo novo.', sourceFiles: ['features/core-governance/dlp/share/resources/file.js'],
   },
   {
+    code: 'governance.print_pdf', label: 'PDF de impressão (DLP)', mode: 'WORKFLOW_DOCUMENT', onDemand: false,
+    reason: 'Visão de impressão de contrato e laudo (M9-D920): PDF gerado na hora por POST /dlp/print-events, de uso único, com rodapé, campos mascarados, marca d\'água opcional e auditoria dlp.print; não é POST /exports.',
+    sourceFiles: ['features/core-governance/dlp/print/print.render.js'],
+  },
+  {
+    code: 'governance.file_watermark', label: 'Cópia de anexo com marca d\'água (DLP)', mode: 'WORKFLOW_DOCUMENT', onDemand: false,
+    reason: 'Download de anexo HIGH ou RESTRICTED com marca por usuário (M9-D920): cópia gerada na hora a partir do arquivo guardado (que não muda), entregue por endereço assinado de uso único com auditoria files.downloaded.',
+    sourceFiles: ['features/core-governance/dlp/watermark/'],
+  },
+  {
     code: 'governance.exports_engine', label: 'Motor do POST /exports', mode: 'NON_GENERATING', onDemand: false,
     reason: 'Os formatos CSV, XLSX e PDF do próprio POST /exports: é o endpoint, não uma exportação fora dele.', sourceFiles: ['features/core-governance/dlp/exports/'],
   },

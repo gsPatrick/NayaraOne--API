@@ -23,11 +23,11 @@ async function conectar(tenant, providerCode = 'email-sandbox', { config } = {})
 /** Quem envia: o usuário do teste com as permissões informadas (o arquivo é lido pelo dono do upload, por categoria ou por permissão do módulo). */
 const authDe = (tenant, extra = {}) => ({ userId: tenant.userId, groupId: tenant.groupId, companyId: tenant.companyId, permissions: [], ...extra });
 
-/** Arquivo da empresa já enviado pelo usuário do teste. `scan`: CLEAN (padrão) ou outro; `classificacao`: nula até alguém classificar. */
+/** Arquivo da empresa já enviado pelo usuário do teste. `scan`: CLEAN (padrão) ou outro; `classificacao`: M9-D920 tornou a classe obrigatória (padrão HIGH); `null` deixa a classe padrão do banco. */
 async function criarArquivo(tenant, { nome = `anexo-${uniqueSuffix()}.pdf`, mime = 'application/pdf', bytes = 1024, scan = 'CLEAN', classificacao = 'INTERNAL', uploader } = {}) {
   return comTenant(tenant, (t) => File.create({
     groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `qa-m9/email/${uniqueSuffix()}-${nome}`, fileName: nome, mimeType: mime, sizeBytes: bytes,
-    checksumSha256: String(uniqueSuffix()).padEnd(64, 'a').slice(0, 64), scanStatus: scan, classification: classificacao, uploadedByUserId: uploader || tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId,
+    checksumSha256: String(uniqueSuffix()).padEnd(64, 'a').slice(0, 64), scanStatus: scan, ...(classificacao === null ? {} : { classification: classificacao }), uploadedByUserId: uploader || tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId,
   }, { transaction: t }));
 }
 

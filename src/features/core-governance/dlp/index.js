@@ -12,6 +12,8 @@ const anomalyWiring = require('./anomaly.wiring');
 
 // M9-D824: liga a suspensão por anomalia e o destino dos sinais de acesso nos encaixes do guard.
 anomalyWiring.install();
+// M9-D920: o guard conhece a classe de cada anexo (people.files.classification) em vez de dar a todos a classe padrão.
+require('./downloads/download.wiring').install();
 
 // Eventos do catálogo de governança que pertencem a este módulo (ver ../governance.events.js).
 const events = ["dlp.export.blocked"];

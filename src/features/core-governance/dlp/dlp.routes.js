@@ -8,6 +8,7 @@ const policyController = require('./policy.controller');
 const { SHARE_ROUTES } = require('./share/share.routes');
 const anomalyController = require('./anomaly.controller');
 const copyController = require('./copy.controller');
+const printController = require('./print/print.controller');
 
 const MODULE = GOVERNANCE_MODULES.find((item) => item.code === 'dlp');
 
@@ -21,6 +22,9 @@ const router = buildModuleRouter(MODULE, [
   { method: 'post', path: '/dlp/anomalies/:id/review', permission: ADMIN_PERMISSION, handler: anomalyController.reviewOne },
   // Registro de cópia vinda da tela (M9-D825 §3.2b): exige apenas login, porque registra a ação do próprio usuário; o servidor reavalia a política.
   { method: 'post', path: '/dlp/copy-events', permission: null, handler: copyController.createCopyEvent },
+  // Impressão (M9-D920 §3.1): o pedido passa pelo guard antes da visão de impressão (login; o guard confere a permissão do módulo de origem) e o PDF sai por endereço assinado de uso único.
+  { method: 'post', path: '/dlp/print-events', permission: null, handler: printController.postPrintEvent },
+  { method: 'get', path: '/dlp/print-events/:id/pdf', permission: null, handler: printController.getPrintPdf },
   ...SHARE_ROUTES,
 ]);
 

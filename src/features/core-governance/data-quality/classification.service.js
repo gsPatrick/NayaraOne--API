@@ -98,8 +98,17 @@ async function maskSpecFor(tenant, schema, table, column, transaction) {
   return { masking: resolved.masking, maskPattern: resolved.maskPattern };
 }
 
-/** Classe de UM recurso do DLP: `schema.tabela` (a mais alta das colunas da tabela) ou `schema.tabela.coluna`; qualquer outro tipo de recurso não está no registro e recebe a classe padrão. */
+/** Resolvedores por REGISTRO (M9-D920): um tipo de recurso cuja classe está gravada no próprio registro (ex.: `files.file` e a coluna people.files.classification) responde pelo `id` pedido. */
+const recordResolvers = new Map();
+const registerRecordResolver = (type, resolver) => { recordResolvers.set(type, resolver); };
+
+/** Classe de UM recurso do DLP: o resolvedor por registro do tipo (quando há e o pedido traz `id`), `schema.tabela` (a mais alta das colunas da tabela) ou `schema.tabela.coluna`; qualquer outro tipo de recurso não está no registro e recebe a classe padrão. */
 async function classOfResource(tenant, resource, transaction) {
+  const byRecord = resource && resource.id ? recordResolvers.get(resource.type) : null;
+  if (byRecord) {
+    const found = await byRecord(tenant, resource.id, transaction);
+    if (found) return found;
+  }
   const parts = String((resource && resource.type) || '').split('.');
   if (parts.length < 2 || parts.length > 3 || !parts.every((part) => /^[a-z_][a-z0-9_]*$/.test(part))) return defaultClass(tenant, transaction);
   const [schema, table, column] = parts;
@@ -125,4 +134,4 @@ async function coverageOf(tenant, transaction, data = inventory.read()) {
   return { total: inventory.flatten(data.columns).length, registered: rows.length, missing };
 }
 
-module.exports = { listRegistry, listLegacyReview, putEntry, resolveColumn, maskSpecFor, resolveResources, classOfResource, defaultClass, coverageOf, ensureRegistry, AUDIT_ACTION, FINDING_ACTION, readLists };
+module.exports = { listRegistry, listLegacyReview, putEntry, resolveColumn, maskSpecFor, resolveResources, classOfResource, registerRecordResolver, defaultClass, coverageOf, ensureRegistry, AUDIT_ACTION, FINDING_ACTION, readLists };
