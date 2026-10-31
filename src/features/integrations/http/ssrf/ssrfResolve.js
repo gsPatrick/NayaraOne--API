@@ -12,9 +12,9 @@ const defaultLookup = (hostname) => dns.promises.lookup(hostname, { all: true, v
  * busca inteira: um nome com um endereço público e outro interno não passa. O resultado é o que a conexão usa; a busca nunca
  * resolve de novo (anti DNS rebinding). Falha de DNS vira recusa genérica, sem detalhe.
  */
-async function resolveAndValidate(hostname, { resolver = defaultLookup } = {}) {
+async function resolveAndValidate(hostname, { resolver = defaultLookup, allowPrivate = false } = {}) {
   if (net.isIP(hostname)) {
-    if (isBlockedIp(hostname)) throw blocked('PRIVATE_IP', hostname);
+    if (isBlockedIp(hostname, { allowPrivate })) throw blocked('PRIVATE_IP', hostname);
     return [{ address: hostname, family: net.isIP(hostname) }];
   }
   let lista;
@@ -22,7 +22,7 @@ async function resolveAndValidate(hostname, { resolver = defaultLookup } = {}) {
   const enderecos = (Array.isArray(lista) ? lista : [lista]).filter((e) => e && e.address);
   if (!enderecos.length) throw blocked('DNS_FAILED', hostname);
   for (const e of enderecos) {
-    if (isBlockedIp(e.address)) throw blocked('PRIVATE_IP', hostname);
+    if (isBlockedIp(e.address, { allowPrivate })) throw blocked('PRIVATE_IP', hostname);
   }
   return enderecos.map((e) => ({ address: e.address, family: e.family || net.isIP(e.address) }));
 }

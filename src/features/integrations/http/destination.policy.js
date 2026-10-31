@@ -24,10 +24,11 @@ const isLocalException = (host, { environment, nodeEnv = process.env.NODE_ENV } 
  * Confere o destino de uma URL. Devolve { host, local, pin } onde `pin` é { address, family } (ou null quando não há resolvedor ou o host é literal/local).
  * Lança 502 INTEGRATION_EGRESS_BLOCKED (reason PRIVATE_DESTINATION) para IP proibido, nome interno ou nome que resolve para endereço proibido.
  */
-async function resolveDestination(url, { environment, resolver, nodeEnv } = {}) {
+async function resolveDestination(url, { environment, resolver, nodeEnv, privateHosts = [] } = {}) {
   const host = hostOf(url);
   if (!host) throw privateDestination(null);
   if (isLocalException(host, { environment, nodeEnv })) return { host, local: true, pin: null };
+  if (privateHosts.includes(host)) return resolvePrivateHost(host, resolver); // exceção explícita da empresa (integration.egress.private_hosts)
   if (net.isIP(host)) {
     if (isBlockedIp(host)) throw privateDestination(host);
     return { host, local: false, pin: null };
@@ -36,6 +37,15 @@ async function resolveDestination(url, { environment, resolver, nodeEnv } = {}) 
   if (!resolver) return { host, local: false, pin: null };
   try {
     const [alvo] = await resolveAndValidate(host, { resolver });
+    return { host, local: false, pin: { address: alvo.address, family: alvo.family } };
+  } catch { throw privateDestination(host); }
+}
+
+/** Host de rede própria liberado pela empresa: aceita endereço privado (RFC 1918 e ULA), nunca loopback, metadados ou reservadas; a conexão fica presa ao endereço validado. */
+async function resolvePrivateHost(host, resolver) {
+  if (!resolver && !net.isIP(host)) return { host, local: false, pin: null }; // sem resolvedor (teste) não há consulta; o IP literal é conferido sempre
+  try {
+    const [alvo] = await resolveAndValidate(host, { resolver, allowPrivate: true });
     return { host, local: false, pin: { address: alvo.address, family: alvo.family } };
   } catch { throw privateDestination(host); }
 }

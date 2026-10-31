@@ -41,7 +41,7 @@ class StorageS3Adapter extends StorageAdapter {
 
   /** host e caminho do objeto conforme o estilo (path-style ou virtual-hosted) da connection. */
   target(ctx, key) {
-    return s3Target(ctx.connection.config, key);
+    return s3Target(ctx.connection.config, key, { privateHosts: ctx.privateHosts || [] });
   }
 
   async call(ctx, method, key, { body = Buffer.alloc(0), headers = {} } = {}) {

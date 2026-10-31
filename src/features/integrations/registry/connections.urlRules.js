@@ -4,6 +4,7 @@ const AppError = require('../../../utils/AppError');
 const { assertConfiguredBaseUrl } = require('../http/configUrl.policy');
 const { baseHostsOf } = require('../http/providerBaseHosts');
 const { readProviderHosts } = require('../http/providerHosts.params');
+const { readPrivateHosts } = require('../http/privateHosts.params');
 const { s3ConfigProblems } = require('../providers/storage/storage.s3.target');
 
 
@@ -15,7 +16,7 @@ const { s3ConfigProblems } = require('../providers/storage/storage.s3.target');
 async function validarEnderecosDaConfig(provider, configJson, ctx, transaction) {
   const config = configJson || {};
   if (provider.code === 'storage-s3') {
-    const problemas = s3ConfigProblems(config);
+    const problemas = s3ConfigProblems(config, { privateHosts: await readPrivateHosts(provider.code, ctx, transaction) });
     if (problemas.length) throw AppError.unprocessable(`A configuração não confere com o formato do fornecedor: ${problemas.slice(0, 5).join('; ')}.`, 'INTEGRATION_CONFIG_INVALID', { problemas });
     return;
   }

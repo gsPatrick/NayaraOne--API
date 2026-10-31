@@ -40,13 +40,15 @@ class IntegrationHttpClient {
     this.defaultMaxAttempts = Number.isInteger(opts.maxAttempts) && opts.maxAttempts >= 1 ? opts.maxAttempts : undefined;
     // Resolvedor de DNS (M9-D245): padrão = DNS do sistema (em teste, nenhum); `null` desliga a resolução, uma função a substitui.
     this.resolver = opts.resolver === undefined ? defaultResolver() : opts.resolver;
+    // Hosts exatos de rede própria que a empresa liberou para este fornecedor (M9-D244, N7): única exceção à recusa de destino privado.
+    this.privateHosts = [...(opts.privateHosts || [])].map((h) => String(h).toLowerCase());
   }
 
   /** Cópia do cliente com hosts a mais (os da configuração validada do adapter, ex.: a URL base do fornecedor). */
   scoped(hosts = []) {
     return new IntegrationHttpClient({
       providerCode: this.providerCode, connectionId: this.connectionId, timeouts: this.timeouts, allowedHosts: [...this.allowedHosts, ...hosts],
-      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, resolver: this.resolver,
+      environment: this.environment, egressMode: this.egressMode, onEgress: this.onEgress, maxAttempts: this.defaultMaxAttempts, resolver: this.resolver, privateHosts: this.privateHosts,
     });
   }
 
@@ -85,7 +87,7 @@ class IntegrationHttpClient {
   /** Destino público (M9-D245), em qualquer modo: recusa e registra o bloqueio; devolve { pin } com o endereço validado a que a conexão se prende. */
   async checkDestination(url, method) {
     try {
-      const r = await resolveDestination(url, { environment: this.environment, resolver: this.resolver });
+      const r = await resolveDestination(url, { environment: this.environment, resolver: this.resolver, privateHosts: this.privateHosts });
       return { pin: r.pin };
     } catch (err) {
       await this.notify({ decision: 'BLOCKED', code: err.code, host: hostOf(url), method });
@@ -99,7 +101,7 @@ class IntegrationHttpClient {
     // Com connection, o circuito é o persistido (decidido pelo Dispatch Service, M9-D217): aqui nada é contado em memória.
     return resilientFetch({
       circuitKey: circuitKey || this.circuitKey(), url, method, headers, body, timeoutMs: timeoutMs || this.timeoutFor(method), maxAttempts: maxAttempts ?? this.defaultMaxAttempts, circuitManaged: Boolean(this.connectionId), idempotent,
-      fetchImpl: d.pin ? (u, i) => pinnedFetch(u, i, d.pin) : undefined, // DNS fixado (M9-D245)
+      fetchImpl: d.pin ? (u, i) => pinnedFetch(u, i, d.pin) : (u, i) => fetch(u, { ...i, redirect: 'manual' }), // DNS fixado (M9-D245); sem endereço fixado, também sem seguir redirecionamento (M9-D244, N9)
     });
   }
 
@@ -107,7 +109,7 @@ class IntegrationHttpClient {
   async fetch(url, init = {}, opts = {}) {
     const d = await this.guard(url, init.method, opts.allowedHosts);
     const comSinal = init.signal ? init : { ...init, signal: AbortSignal.timeout(this.timeoutFor(init.method)) };
-    return d.pin ? pinnedFetch(url, comSinal, d.pin) : fetch(url, comSinal);
+    return d.pin ? pinnedFetch(url, comSinal, d.pin) : fetch(url, { ...comSinal, redirect: 'manual' });
   }
 
   /** HTTPS com certificado de cliente (mTLS): devolve { statusCode, body } com o corpo já lido como JSON. */

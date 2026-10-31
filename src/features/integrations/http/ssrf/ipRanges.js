@@ -12,12 +12,16 @@ const V4 = [
   ['224.0.0.0', 4], ['240.0.0.0', 4],
 ];
 const V6 = [
-  ['::', 128], ['::1', 128], ['64:ff9b::', 96], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
+  ['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8],
 ];
+// Faixas de rede PRÓPRIA (RFC 1918 e ULA): só uma exceção explícita da empresa para um host nomeado as libera (M9-D244, parâmetro integration.egress.private_hosts).
+const PRIVADAS_V4 = new Set(['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);
+const PRIVADAS_V6 = new Set(['fc00::/7']);
 
 const bloqueios = new net.BlockList();
-V4.forEach(([base, bits]) => bloqueios.addSubnet(base, bits, 'ipv4'));
-V6.forEach(([base, bits]) => bloqueios.addSubnet(base, bits, 'ipv6'));
+const semRedePropria = new net.BlockList();
+V4.forEach(([base, bits]) => { bloqueios.addSubnet(base, bits, 'ipv4'); if (!PRIVADAS_V4.has(`${base}/${bits}`)) semRedePropria.addSubnet(base, bits, 'ipv4'); });
+V6.forEach(([base, bits]) => { bloqueios.addSubnet(base, bits, 'ipv6'); if (!PRIVADAS_V6.has(`${base}/${bits}`)) semRedePropria.addSubnet(base, bits, 'ipv6'); });
 
 /** IPv6 "mapeado" (::ffff:a.b.c.d ou ::ffff:7f00:1) -> o IPv4 de dentro, ou null. */
 function embeddedV4(ip) {
@@ -28,16 +32,20 @@ function embeddedV4(ip) {
   return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
 }
 
-/** true se o IP (texto) está numa faixa proibida; texto que não é IP também conta como proibido (falha fechada). */
-function isBlockedIp(ip) {
+/**
+ * true se o IP (texto) está numa faixa proibida; texto que não é IP também conta como proibido (falha fechada). `allowPrivate` libera só as redes
+ * privadas (10/8, 172.16/12, 192.168/16, fc00::/7): loopback, metadados da nuvem, link-local, multicast e reservadas ficam bloqueados sempre.
+ */
+function isBlockedIp(ip, { allowPrivate = false } = {}) {
+  const lista = allowPrivate ? semRedePropria : bloqueios;
   const familia = net.isIP(ip);
   if (!familia) return true;
   if (familia === 6) {
     const v4 = embeddedV4(ip);
-    if (v4) return bloqueios.check(v4, 'ipv4');
-    return bloqueios.check(ip, 'ipv6');
+    if (v4) return lista.check(v4, 'ipv4');
+    return lista.check(ip, 'ipv6');
   }
-  return bloqueios.check(ip, 'ipv4');
+  return lista.check(ip, 'ipv4');
 }
 
 module.exports = { isBlockedIp, embeddedV4 };
