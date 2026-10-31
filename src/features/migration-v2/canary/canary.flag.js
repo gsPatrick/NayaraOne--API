@@ -6,11 +6,11 @@ const flagsRepo = require('../../core-governance/feature-flags/flags.repository'
 const flagsService = require('../../core-governance/feature-flags/feature-flags.service');
 const raci = require('../raci/raci.service');
 const { registerProtectedKeys } = require('../../core-governance/feature-flags/flags.protected');
-const { flagKey, flagDescription, ACTIVITY, FLAG_KEY_PREFIX, FLAG_OWNER } = require('./canary.constants');
+const { flagKey, flagDescription, ACTIVITY, isCanaryFlagKey, FLAG_OWNER } = require('./canary.constants');
 
 // N1: a API genérica de flags não escreve o estado do canary; só este arquivo (gate, blockers, RACI e MFA ficam no caminho do avanço e da reversão).
 registerProtectedKeys(FLAG_OWNER, {
-  test: (key) => key.startsWith(FLAG_KEY_PREFIX),
+  test: isCanaryFlagKey,
   message: 'O estado do canary de um setor só muda pelo avanço ou pela reversão do setor na migração, que conferem pendências, comparação, responsáveis e MFA.',
 });
 
