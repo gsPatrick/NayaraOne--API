@@ -11,10 +11,11 @@ const { confirmAction } = require('../../../shared/destructive-actions/guard'); 
 const registryRouter = Router();
 registryRouter.use(authMiddleware, tenantMiddleware);
 
+// O catálogo de fornecedores é GLOBAL (vale para todas as empresas): escrever nele exige integration:platform, que nenhum papel de empresa recebe por padrão (M9-D200, reabertura M1).
 const base = '/admin/integrations/registry';
 registryRouter.get(`${base}/providers`, requirePermission('integration:read'), controller.listProviders);
-registryRouter.post(`${base}/providers`, requirePermission('integration:manage'), controller.createProvider);
-registryRouter.patch(`${base}/providers/:code`, requirePermission('integration:manage'), controller.updateProvider);
+registryRouter.post(`${base}/providers`, requirePermission('integration:platform'), controller.createProvider);
+registryRouter.patch(`${base}/providers/:code`, requirePermission('integration:platform'), controller.updateProvider);
 
 registryRouter.get(`${base}/connections`, requirePermission('integration:read'), controller.listConnections);
 registryRouter.post(`${base}/connections`, requirePermission('integration:manage'), controller.createConnection);

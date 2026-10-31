@@ -82,6 +82,8 @@ async function createProvider(payload, ctx, transaction) {
 
 async function updateProvider(code, payload, ctx, transaction) {
   ctxOk(ctx);
+  // A marca de plataforma vem ANTES da leitura com lock: SELECT ... FOR UPDATE exige a política de UPDATE e, sem a marca, a linha ficava invisível (422).
+  await comPlataforma(transaction);
   const provider = await IntegrationProvider.findByPk(code, { transaction, lock: transaction.LOCK.UPDATE });
   if (!provider) throw AppError.unprocessable('Fornecedor não cadastrado no catálogo de integrações.', 'INTEGRATION_PROVIDER_UNKNOWN');
   const antes = provider.toJSON();
@@ -90,7 +92,6 @@ async function updateProvider(code, payload, ctx, transaction) {
     assertCapabilitiesForDomain(mudancas.domain ?? provider.domain, mudancas.capabilities ?? provider.capabilities);
   }
   Object.assign(provider, mudancas);
-  await comPlataforma(transaction);
   await provider.save({ transaction });
   await registrarAuditoria({
     groupId: ctx.groupId, companyId: ctx.companyId, actorUserId: ctx.userId,

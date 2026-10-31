@@ -34,9 +34,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/admin/integrations/registry/connections/:id` | `integration:manage` | não |
 | `GET` | `/api/v1/admin/integrations/registry/connections` | `integration:read` | não |
 | `POST` | `/api/v1/admin/integrations/registry/connections` | `integration:manage` | não |
-| `PATCH` | `/api/v1/admin/integrations/registry/providers/:code` | `integration:manage` | não |
+| `PATCH` | `/api/v1/admin/integrations/registry/providers/:code` | `integration:platform` | não |
 | `GET` | `/api/v1/admin/integrations/registry/providers` | `integration:read` | não |
-| `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:manage` | não |
+| `POST` | `/api/v1/admin/integrations/registry/providers` | `integration:platform` | não |
 | `GET` | `/api/v1/admin/integrations/registry/release-gate` | `integration:read` | não |
 | `GET` | `/api/v1/admin/integrations` | `integration:read` | não |
 | `POST` | `/api/v1/ai/agents/:code/chat` | `ai:use` | não |
