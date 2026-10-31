@@ -1,6 +1,6 @@
 {
-  "commit": "f1e53d2431de695b485dfddd5edc4fd2079f9d37",
-  "inicio": "2026-10-30T22:29:38.095Z",
+  "commit": "a6671401045b7d2b85c61cef376fcb771e53f4e9",
+  "inicio": "2026-10-31T00:50:15.213Z",
   "modo": "entrega",
   "estagios": [
     {
@@ -8,21 +8,21 @@
       "nome": "DEV",
       "tipo": "entrega",
       "status": "VERDE",
-      "duracaoMs": 16756
+      "duracaoMs": 5187
     },
     {
       "numero": 13,
       "nome": "LAB",
       "tipo": "entrega",
       "status": "VERDE",
-      "duracaoMs": 8157
+      "duracaoMs": 2737
     },
     {
       "numero": 14,
       "nome": "failure drills",
       "tipo": "entrega",
       "status": "VERDE",
-      "duracaoMs": 174276
+      "duracaoMs": 133859
     }
   ],
   "resultado": "VERDE"

@@ -1,0 +1,8 @@
+Execução propositalmente vermelha: o teste adv_13_endereco_restrito_payload_publico_sanitizado (M9-D437) foi REMOVIDO de uma cópia da API (a suíte do estágio 7 fica menor, mas nenhum dos testes que sobraram falha).
+$ node scripts/marketing/ci/executar.js --de 7 --ate 7
+# estágio 7: public-field leakage tests
+TESTE EXIGIDO AUSENTE: adv_13_endereco_restrito_payload_publico_sanitizado (o estágio 7 exige estes testes nos arquivos dos seus padrões; apagar ou renomear reprova a esteira).
+# estágio 7: public-field leakage tests => VERMELHO
+MKT_CI_STAGE_FAILED Um estágio do pipeline falhou; a entrega está bloqueada. (estágio 7: public-field leakage tests)
+# esteira do marketing: VERMELHO
+saída do processo: 1

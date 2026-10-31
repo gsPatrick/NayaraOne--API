@@ -24,6 +24,8 @@ after(async () => {
       await admin.query('ALTER TABLE marketing.kill_switch_log DISABLE TRIGGER kill_switch_log_guard').catch(() => null);
       await admin.query("DELETE FROM marketing.kill_switch_log WHERE reason LIKE 'QA-M9 carga%'").catch(() => null);
       await admin.query('ALTER TABLE marketing.kill_switch_log ENABLE TRIGGER kill_switch_log_guard').catch(() => null);
+      // o acionamento commitado registra a chave do switch na empresa; sem apagar, a suíte seguinte (M9-D425, ciclo diário) já a encontra cadastrada
+      await admin.query("DELETE FROM governance.feature_flags WHERE company_id = $1 AND key LIKE 'marketing.%.kill'", [ctx.tenant.companyId]).catch(() => null);
     });
   }
   await sequelize.close();

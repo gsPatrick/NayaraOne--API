@@ -1,6 +1,6 @@
 {
-  "commit": "866ff1afd5be90af9135b53c978474439358e972",
-  "inicio": "2026-10-30T22:20:49.681Z",
+  "commit": "a6671401045b7d2b85c61cef376fcb771e53f4e9",
+  "inicio": "2026-10-31T00:45:48.488Z",
   "modo": "push",
   "estagios": [
     {
@@ -8,77 +8,77 @@
       "nome": "lint",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 76200
+      "duracaoMs": 22321
     },
     {
       "numero": 2,
       "nome": "typecheck",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 15497
+      "duracaoMs": 3592
     },
     {
       "numero": 3,
       "nome": "migrations",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 67960
+      "duracaoMs": 18778
     },
     {
       "numero": 4,
       "nome": "automation idempotency",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 31283
+      "duracaoMs": 104746
     },
     {
       "numero": 5,
       "nome": "consent/suppression tests",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 17808
+      "duracaoMs": 12199
     },
     {
       "numero": 6,
       "nome": "factual grounding",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 13481
+      "duracaoMs": 7457
     },
     {
       "numero": 7,
       "nome": "public-field leakage tests",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 25176
+      "duracaoMs": 15305
     },
     {
       "numero": 8,
       "nome": "provider contract tests",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 27780
+      "duracaoMs": 12564
     },
     {
       "numero": 9,
       "nome": "frequency/quiet-hours",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 23673
+      "duracaoMs": 24348
     },
     {
       "numero": 10,
       "nome": "kill-switch",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 40602
+      "duracaoMs": 24096
     },
     {
       "numero": 11,
       "nome": "tracking tests",
       "tipo": "push",
       "status": "VERDE",
-      "duracaoMs": 10105
+      "duracaoMs": 3718
     }
   ],
   "resultado": "VERDE"
