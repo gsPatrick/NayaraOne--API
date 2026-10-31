@@ -101,6 +101,8 @@ async function cleanExports() {
   }
   // M9-D824: os bloqueios dos testes alimentam a detecção de anomalia; sem limpar, a pessoa de teste ficaria suspensa para os testes seguintes.
   for (const table of ['access_anomalies', 'user_dlp_state', 'access_signals']) await env.adminQuery(`DELETE FROM governance.${table}`).catch(() => null);
+  // Links de compartilhamento (D823) apontam para o pedido com ON DELETE RESTRICT: sobras de outros testes impediriam apagar os pedidos.
+  await env.adminQuery('DELETE FROM governance.share_links WHERE export_job_id IS NOT NULL').catch(() => null);
   await env.adminQuery('DELETE FROM governance.export_jobs');
   await env.adminQuery("DELETE FROM people.files WHERE storage_key LIKE 'dlp-exports/%'");
   await env.adminQuery("DELETE FROM core.mfa_step_ups WHERE user_id IN (SELECT id FROM core.users WHERE email LIKE 'ci-%@ci.nayaraone.test')");
