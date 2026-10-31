@@ -5,6 +5,7 @@ const { registrarAuditoria } = require('../../../engines/audit/auditLog.service'
 const repo = require('./definition.repository');
 const { parseBody, assertComplete, pickDefinition, isUuid } = require('./definition.validation');
 const { definitionHash, rowToDefinition, versionDto, flowDto } = require('./definition.dto');
+const { assertActionUrls } = require('./definition.urls');
 const { notFound, versionImmutable, reasonRequired, invalidBody, incomplete, codeExists } = require('./definition.errors');
 
 const ENTITY = 'marketing.automation_flow';
@@ -43,6 +44,7 @@ async function createAutomation({ tenant, actor, input }, transaction) {
   const problems = await ownerProblems(ownerUserId, tenant, transaction);
   if (isNewFlow && !body.name) problems.push({ field: 'name', reason: 'Informe o nome da automação.' });
   assertComplete(def, problems);
+  await assertActionUrls(def, tenant, transaction); // M9-D433: o texto das ações passa pela regra de URL externa
 
   if (isNewFlow) {
     const code = body.code ? body.code.trim() : `${slug(body.name)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
@@ -83,6 +85,7 @@ async function publishAutomation({ tenant, actor, flowId, input }, transaction) 
   if (target.status === 'PUBLISHED') return { replay: true, flow: flowDto(flow), version: versionDto(target), superseded: null, versions: await summary(flow.id, transaction) };
 
   assertComplete(rowToDefinition(target), await ownerProblems(flow.owner_user_id, tenant, transaction));
+  await assertActionUrls(rowToDefinition(target), tenant, transaction); // a allowlist pode ter mudado desde o rascunho
   const live = await repo.liveVersion(flow.id, transaction);
   let superseded = null;
   if (live && live.id !== target.id) {

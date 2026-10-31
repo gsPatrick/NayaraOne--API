@@ -16,6 +16,7 @@ const { recordOutbound, moveOutbound, audit, STATUS_TEXT } = require('./message.
 const { isOutboundBlocked } = require('../../../killswitch.state');
 const security = require('../../../security');
 const { mktUrlNotAllowed } = require('../../../marketing.errors');
+const { assertMessageTexts } = require('./message.textUrls');
 
 const QUIET = 'QUIET_HOURS';
 const KILL = { reason: 'KILL_SWITCH', code: 'MKT_KILL_SWITCH_ACTIVE', message: 'O kill switch do Marketing está ativo: nenhuma mensagem sai até a reativação.' };
@@ -132,6 +133,7 @@ async function sendMarketingMessage(ctx, rawInput) {
   }
   const text = template ? fillTemplate(template, input.variables, previewConfig) : input.text;
   await assertMessageUrls(input, previewConfig, tenant, transaction);
+  await assertMessageTexts(input, text, tenant, transaction); // texto, assunto, pré-cabeçalho e variáveis (M9-D433, L-5)
   const link = await unsubscribeLinkFor(input, previewConfig, tenant, transaction);
   const rebuild = async () => {
     const to = await recipientAddress(input.personId, input.channel, tenant, transaction);
