@@ -7,6 +7,7 @@ const {
   PortoSeguroInsuranceAdapter,
   YelumInsuranceAdapter,
 } = require('./InsuranceAdapter');
+const { insuranceHttpFor } = require('./insurance.http');
 
 // Mesmo padrão exato de resolveBankAdapter/resolveSignatureAdapter: fallback seguro pra
 // SandboxInsuranceAdapter sempre que o provider real não tiver credencial completa configurada
@@ -55,7 +56,7 @@ async function resolveInsuranceAdapter(tenant, transaction) {
       const baseUrl = environment === 'production'
         ? 'https://portoapi.portoseguro.com.br'
         : 'https://portoapi-hml.portoseguro.com.br';
-      return new PortoSeguroInsuranceAdapter({ clientId, clientSecret, baseUrl, authBaseUrl: baseUrl });
+      return new PortoSeguroInsuranceAdapter({ clientId, clientSecret, baseUrl, authBaseUrl: baseUrl, http: await insuranceHttpFor(tenant, transaction) });
     }
     throw providerConfigMissing('Porto Seguro');
   }
@@ -69,7 +70,7 @@ async function resolveInsuranceAdapter(tenant, transaction) {
       const baseUrl = environment === 'production'
         ? 'https://integracao.grupohdiseguros.com.br'
         : 'https://integracao-tst.grupohdiseguros.com.br';
-      return new YelumInsuranceAdapter({ apiKey, baseUrl });
+      return new YelumInsuranceAdapter({ apiKey, baseUrl, http: await insuranceHttpFor(tenant, transaction) });
     }
     throw providerConfigMissing('Yelum');
   }

@@ -27,7 +27,7 @@ async function makePorto(ctx, meta) {
   ]);
   if (!clientId) throw configMissing('Porto Seguro');
   const baseUrl = environment === 'production' ? 'https://portoapi.portoseguro.com.br' : 'https://portoapi-hml.portoseguro.com.br';
-  return new PortoSeguroInsuranceAdapter({ clientId, clientSecret: segredo.value.reveal(), baseUrl, authBaseUrl: baseUrl });
+  return new PortoSeguroInsuranceAdapter({ clientId, clientSecret: segredo.value.reveal(), baseUrl, authBaseUrl: baseUrl, http: ctx.http });
 }
 
 /** Yelum: a chave de API vem do cofre; o ambiente, da configuração da empresa. */
@@ -38,7 +38,7 @@ async function makeYelum(ctx, meta) {
   const segredo = await ctx.secret('dispatch');
   const environment = await getSetting('procurement.yelum_environment', tenant, transaction, 'sandbox');
   const baseUrl = environment === 'production' ? 'https://integracao.grupohdiseguros.com.br' : 'https://integracao-tst.grupohdiseguros.com.br';
-  return new YelumInsuranceAdapter({ apiKey: segredo.value.reveal(), baseUrl });
+  return new YelumInsuranceAdapter({ apiKey: segredo.value.reveal(), baseUrl, http: ctx.http });
 }
 
 /** O adapter da seguradora real é criado na primeira operação (precisa do segredo do cofre e da configuração da empresa), com o contrato do port. Nenhuma das duas consulta pela chave (`semConsultaPorChave`): o envio incerto vai à revisão humana. */

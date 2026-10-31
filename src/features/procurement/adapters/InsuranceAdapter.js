@@ -1,10 +1,10 @@
 'use strict';
 
 const AppError = require('../../../utils/AppError');
-const { IntegrationHttpClient } = require('../../integrations/http/IntegrationHttpClient');
 const { hostOf } = require('../../integrations/http/egressPolicy');
 
-const httpClient = new IntegrationHttpClient({ providerCode: 'insurance' });
+// M9-D238 (reabertura L6): o cliente HTTP vem de quem monta o adapter (ctx.http do registro, ou insuranceHttpFor no fluxo antigo), já com os
+// tempos da empresa (integration.dispatch.timeout_ms.*) e uma só tentativa por chamada; este arquivo não guarda mais tempo nem tentativas.
 
 // Interface comum (duck-typed, mesmo estilo de BankAdapter.js/SignatureAdapter.js):
 //   async quote(req) -> { externalId, premiumAmount, coverageSummary, raw }
@@ -59,8 +59,8 @@ class SandboxInsuranceAdapter {
 // — timeout/retry classificado/circuit breaker): era `fetch` crua, sem bound de tempo, sem
 // retry e sem circuit breaker — uma seguradora lenta/fora do ar travava a chamada indefinidamente
 // e cada tentativa nova martelava a rede de novo, sem parar. Ver src/utils/resilientFetch.js.
-async function httpRequestJson({ http = httpClient, circuitKey, method, url, headers, body }) {
-  const response = await http.request({ circuitKey, method, url, headers, body });
+async function httpRequestJson({ http, circuitKey, method, url, headers, body, idempotent }) {
+  const response = await http.request({ circuitKey, method, url, headers, body, idempotent });
   let parsed = null;
   const raw = await response.text();
   try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = raw; }
@@ -83,7 +83,8 @@ async function httpRequestJson({ http = httpClient, circuitKey, method, url, hea
 class PortoSeguroInsuranceAdapter {
   get providerName() { return 'porto_seguro'; }
 
-  constructor({ clientId, clientSecret, baseUrl, authBaseUrl }) {
+  constructor({ clientId, clientSecret, baseUrl, authBaseUrl, http }) {
+    if (!http) throw AppError.internal('Cliente HTTP do provider Porto Seguro não informado.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
     if (!clientId || !clientSecret) {
       throw AppError.internal('Configuração do provider Porto Seguro incompleta.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
     }
@@ -95,7 +96,7 @@ class PortoSeguroInsuranceAdapter {
     this.baseUrl = baseUrl || 'https://portoapi-hml.portoseguro.com.br';
     this._accessToken = null;
     this._tokenExpiresAt = 0;
-    this._http = httpClient.scoped([hostOf(this.authBaseUrl), hostOf(this.baseUrl)]); // M9-D244: só os hosts configurados
+    this._http = http.scoped([hostOf(this.authBaseUrl), hostOf(this.baseUrl)]); // M9-D244: só os hosts configurados
   }
 
   async _getAccessToken() {
@@ -106,6 +107,7 @@ class PortoSeguroInsuranceAdapter {
       http: this._http,
       circuitKey: 'insurance:portoseguro',
       method: 'POST',
+      idempotent: true, // pedir token não altera nada no fornecedor: repetir é seguro
       url: `${this.authBaseUrl}/oauth/v2/access-token`,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basicAuth}` },
       body: bodyStr,
@@ -118,12 +120,13 @@ class PortoSeguroInsuranceAdapter {
     return this._accessToken;
   }
 
-  async _request(method, path, payload) {
+  async _request(method, path, payload, { idempotent = false } = {}) {
     const token = await this._getAccessToken();
     const { statusCode, body } = await httpRequestJson({
       http: this._http,
       circuitKey: 'insurance:portoseguro',
       method,
+      idempotent,
       url: `${this.baseUrl}${path}`,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: payload ? JSON.stringify(payload) : undefined,
@@ -136,7 +139,7 @@ class PortoSeguroInsuranceAdapter {
 
   // NOTA: path não confirmado publicamente — ver comentário da classe.
   async quote(req) {
-    const raw = await this._request('POST', '/fianca-locaticia/v1/cotacoes', req);
+    const raw = await this._request('POST', '/fianca-locaticia/v1/cotacoes', req, { idempotent: true }) /* cotar não emite nada: repetir é seguro */;
     return { externalId: raw?.id, premiumAmount: raw?.valorPremio, coverageSummary: raw?.coberturas, raw };
   }
 
@@ -193,7 +196,8 @@ class JuntoSegurosInsuranceAdapter {
 class YelumInsuranceAdapter {
   get providerName() { return 'yelum'; }
 
-  constructor({ apiKey, baseUrl }) {
+  constructor({ apiKey, baseUrl, http }) {
+    if (!http) throw AppError.internal('Cliente HTTP do provider Yelum não informado.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
     if (!apiKey) {
       throw AppError.internal('Configuração do provider Yelum incompleta.', 'PROCUREMENT_INSURANCE_PROVIDER_CONFIG_MISSING');
     }
@@ -201,14 +205,15 @@ class YelumInsuranceAdapter {
     // Confirmado no PDF: homologação "integracao-tst.grupohdiseguros.com.br", produção
     // "integracao.grupohdiseguros.com.br".
     this.baseUrl = baseUrl || 'https://integracao-tst.grupohdiseguros.com.br';
-    this._http = httpClient.scoped([hostOf(this.baseUrl)]); // M9-D244: só o host configurado
+    this._http = http.scoped([hostOf(this.baseUrl)]); // M9-D244: só o host configurado
   }
 
-  async _request(method, path, payload) {
+  async _request(method, path, payload, { idempotent = false } = {}) {
     const { statusCode, body } = await httpRequestJson({
       http: this._http,
       circuitKey: 'insurance:yelum',
       method,
+      idempotent,
       url: `${this.baseUrl}${path}`,
       headers: {
         Accept: 'application/json',
@@ -234,7 +239,7 @@ class YelumInsuranceAdapter {
   // dados (CPF do locatário, endereço, renda etc.) vêm de `req`, montados pelo service layer a
   // partir do que a Nayara já tem cadastrado (Person/Property), não inventados aqui.
   async quote(req) {
-    const raw = await this._request('POST', '/cotador/fianca/v1/quote', req);
+    const raw = await this._request('POST', '/cotador/fianca/v1/quote', req, { idempotent: true }) /* cotar não emite nada: repetir é seguro */;
     const data = raw?.Data;
     return {
       // QuoteNo é Integer na doc da Yelum — stringificado aqui pra bater com o contrato comum
