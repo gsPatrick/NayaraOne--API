@@ -8,6 +8,7 @@ const { requireTemplateManageToAddPublicFields } = require('../../features/marke
 const { requireAutomationManageForCadence } = require('../../features/marketing/automations/cadence/cadence.guard');
 const { requireAutomationManageForAutopublish } = require('../../features/marketing/content/autopublish.guard');
 const { isSloSettingKey } = require('../../features/integrations/health/slo');
+const { isProviderHostsKey } = require('../../features/integrations/http/providerHosts.settings');
 const settingsController = require('./settings.controller');
 
 const settingsRouter = Router();
@@ -20,9 +21,12 @@ const requireAiAdminForAiKeys = (req, res, next) => (isAiSettingKey(req.params.k
 // Metas de SLO das integrações (integration.slo.*) só mudam com integration:manage, além de settings:update (M9-D225).
 const requireIntegrationManageForSlo = (req, res, next) => (isSloSettingKey(req.params.key) ? requirePermission('integration:manage')(req, res, next) : next());
 
+// Hosts extras de fornecedor (integration.egress.provider_hosts) definem o destino do token: só com integration:platform, nunca o ADMIN da empresa (M9-D245, N1).
+const requirePlatformForProviderHosts = (req, res, next) => (isProviderHostsKey(req.params.key) ? requirePermission('integration:platform')(req, res, next) : next());
+
 settingsRouter.get('/settings', requirePermission('settings:read'), settingsController.listSettings);
 settingsRouter.get('/settings/integrations/status', requirePermission('settings:read'), settingsController.getIntegrationsStatus);
 settingsRouter.get('/settings/:key', requirePermission('settings:read'), settingsController.getSetting);
-settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
+settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requirePlatformForProviderHosts, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
 
 module.exports = settingsRouter;

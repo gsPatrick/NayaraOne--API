@@ -11,14 +11,14 @@ const { isInternalOrNumericName } = require('./egressHostRules');
  * Destino público (M9-D245, reabertura G2/M3): vale para TODA chamada do cliente HTTP único, em qualquer modo de saída (inclusive `log`) e para
  * qualquer host, venha ele do código ou da configuração. IP de rede privada, loopback, link-local (metadados da nuvem) ou nome interno é recusado antes
  * de qualquer conexão; o nome é resolvido UMA vez e a conexão usa o endereço validado (DNS fixado, sem nova resolução). A única exceção é o
- * localhost em teste e em SANDBOX, a mesma de `assertSecureScheme`.
+ * localhost com NODE_ENV=test no servidor (nunca pelo campo `environment` da conexão), a mesma de `assertSecureScheme`.
  */
 const privateDestination = (host) => new AppError('Destino não permitido para esta integração.', 502, 'INTEGRATION_EGRESS_BLOCKED', { host, reason: 'PRIVATE_DESTINATION' });
 
 /** Resolvedor padrão: o DNS do sistema; em teste nenhum (os mocks de fetch usam nomes fictícios), e quem prova o DNS injeta o seu. */
 const defaultResolver = () => (process.env.NODE_ENV === 'test' ? null : defaultLookup);
 
-const isLocalException = (host, { environment, nodeEnv = process.env.NODE_ENV } = {}) => LOCAL_HOSTS.includes(host) && (nodeEnv === 'test' || environment === 'SANDBOX');
+const isLocalException = (host, { nodeEnv = process.env.NODE_ENV } = {}) => LOCAL_HOSTS.includes(host) && nodeEnv === 'test';
 
 /**
  * Confere o destino de uma URL. Devolve { host, local, pin } onde `pin` é { address, family } (ou null quando não há resolvedor ou o host é literal/local).

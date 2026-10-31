@@ -3,7 +3,7 @@
 const AppError = require('../../../utils/AppError');
 
 /**
- * Política de saída (M9-D244 3.1 e 3.2): só HTTPS (exceção: localhost em teste e em SANDBOX) e só para os hosts que o fornecedor
+ * Política de saída (M9-D244 3.1 e 3.2): só HTTPS (exceção: localhost só quando o servidor roda com NODE_ENV=test; nunca por campo da conexão) e só para os hosts que o fornecedor
  * declara. Funções puras: decidem pelo texto da URL, ANTES de qualquer consulta de DNS. A URL fornecida por usuário ou terceiro
  * nunca amplia a lista (isso é do ssrfGuard, M9-D245).
  */
@@ -33,13 +33,13 @@ function resolveEgressMode({ mode, environment, nodeEnv = process.env.NODE_ENV }
   return nodeEnv === 'production' ? 'enforce' : 'log';
 }
 
-/** Lança 502 INTEGRATION_TLS_REQUIRED para qualquer coisa que não seja https (ou http local em teste/sandbox). */
-function assertSecureScheme(url, { environment, nodeEnv = process.env.NODE_ENV } = {}) {
+/** Lança 502 INTEGRATION_TLS_REQUIRED para qualquer coisa que não seja https (ou http local com NODE_ENV=test). */
+function assertSecureScheme(url, { nodeEnv = process.env.NODE_ENV } = {}) {
   let u;
   try { u = new URL(String(url)); } catch { throw tlsRequired(null); }
   if (u.protocol === 'https:') return u;
   const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (u.protocol === 'http:' && LOCAL_HOSTS.includes(host) && (nodeEnv === 'test' || environment === 'SANDBOX')) return u;
+  if (u.protocol === 'http:' && LOCAL_HOSTS.includes(host) && nodeEnv === 'test') return u; // N2: o ambiente do SERVIDOR decide, nunca o campo `environment` da conexão
   throw tlsRequired(host);
 }
 

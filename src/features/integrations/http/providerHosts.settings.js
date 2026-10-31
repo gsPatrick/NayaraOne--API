@@ -33,4 +33,8 @@ const PROVIDER_HOSTS_SETTINGS_SCHEMA = Object.freeze({
   },
 });
 
-module.exports = { PROVIDER_HOSTS_SETTINGS_SCHEMA, parseProviderHosts };
+const PROVIDER_HOSTS_KEY = 'integration.egress.provider_hosts';
+/** N1: esta chave decide para onde vai o token do fornecedor; só a equipe da plataforma (integration:platform) a altera, além de settings:update. */
+const isProviderHostsKey = (key) => String(key) === PROVIDER_HOSTS_KEY;
+
+module.exports = { PROVIDER_HOSTS_SETTINGS_SCHEMA, parseProviderHosts, isProviderHostsKey };

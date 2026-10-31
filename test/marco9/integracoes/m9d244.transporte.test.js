@@ -20,14 +20,15 @@ afterEach(() => { global.fetch = fetchOriginal; dns.lookup = lookupOriginal; });
 const falha = async (promessa, status, code) => assert.rejects(promessa, (e) => e.statusCode === status && e.code === code, `esperava ${status} ${code}`);
 const ok = () => new Response('{}', { status: 200 });
 
-test('tls_somente_https_exceto_localhost_teste: http, ftp e file são recusados antes da rede; http://localhost só em teste ou SANDBOX', async () => {
+test('tls_somente_https_exceto_localhost_teste: http, ftp e file são recusados antes da rede; http://localhost só com NODE_ENV=test', async () => {
   for (const url of ['http://api.fornecedor.com.br/x', 'ftp://x.example/a', 'file:///etc/passwd', 'http://evil.example/x', 'x']) {
     assert.throws(() => assertSecureScheme(url, { nodeEnv: 'test' }), (e) => e.statusCode === 502 && e.code === 'INTEGRATION_TLS_REQUIRED', url);
   }
   assert.doesNotThrow(() => assertSecureScheme('https://api.fornecedor.com.br/x', { nodeEnv: 'production' }));
   assert.doesNotThrow(() => assertSecureScheme('http://localhost:3000/x', { nodeEnv: 'test' }));
   assert.doesNotThrow(() => assertSecureScheme('http://127.0.0.1:3000/x', { nodeEnv: 'test' }));
-  assert.doesNotThrow(() => assertSecureScheme('http://localhost:3000/x', { nodeEnv: 'production', environment: 'SANDBOX' }), 'sandbox local');
+  // M9-D245 (N2): o campo environment da conexão não abre a exceção; só o NODE_ENV=test do servidor.
+  assert.throws(() => assertSecureScheme('http://localhost:3000/x', { nodeEnv: 'production', environment: 'SANDBOX' }), /conexão segura/);
   assert.throws(() => assertSecureScheme('http://localhost:3000/x', { nodeEnv: 'production', environment: 'PRODUCTION' }), /conexão segura/);
   assert.throws(() => assertSecureScheme('http://localhost:3000/x', { nodeEnv: 'production', environment: 'HOMOLOG' }));
 
