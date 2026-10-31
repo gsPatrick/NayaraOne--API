@@ -144,6 +144,8 @@ test('m9d908 ensaio interrompido marca ABORTED sem aprovar e o RUNNING vencido �
 test('m9d908 origem alterada entre a carga e o delta não reprova o DRY3 (cada lote é verificado logo depois de aplicado)', { skip: skip() }, async () => {
   const s = await env.scenario(A);
   const load = require('../../../src/features/migration-v2/dryrun/dry.load');
+  const countChanged = async () => (await env.adminQuery("SELECT count(*)::int AS n FROM people.persons WHERE company_id = $1 AND legal_name LIKE 'QA-M9 Cliente Alterado%'", [A.companyId])).rows[0].n;
+  const before = await countChanged(); // rodadas anteriores no mesmo banco deixam linhas: conta só o acréscimo desta
   const original = load.loadAll;
   let calls = 0;
   load.loadAll = async (...args) => {
@@ -163,7 +165,6 @@ test('m9d908 origem alterada entre a carga e o delta não reprova o DRY3 (cada l
     assert.equal(report.quarantine.QUARANTINED || 0, 0, 'nenhuma linha alterada vai à quarentena');
     const deltaBatches = await env.adminQuery("SELECT b.status FROM governance.mig_batches b JOIN governance.mig_runs r ON r.id = b.run_id WHERE b.company_id = $1 AND r.last_delta = true", [A.companyId]);
     assert.ok(deltaBatches.rows.length > 0 && deltaBatches.rows.every((row) => row.status === 'VERIFIED'));
-    const changed = await env.adminQuery("SELECT count(*)::int AS n FROM people.persons WHERE company_id = $1 AND legal_name LIKE 'QA-M9 Cliente Alterado%'", [A.companyId]);
-    assert.equal(changed.rows[0].n, 2, 'o delta levou a alteração ao destino');
+    assert.equal(await countChanged() - before, 2, 'o delta levou a alteração ao destino');
   } finally { load.loadAll = original; s.dispose(); }
 });
