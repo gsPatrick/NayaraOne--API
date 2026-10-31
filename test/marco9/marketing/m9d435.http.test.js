@@ -160,8 +160,8 @@ test('campo_desconhecido_recusado: 400 MKT_VALIDATION em todas as rotas com corp
 test('resposta_sem_segredo_nem_endereco: nenhuma resposta das rotas traz segredo, e-mail, telefone ou CPF', { skip: !http.DISPOSABLE && http.SKIP_DISPOSABLE }, async () => {
   if (http.state.skip) return;
   assert.ok(seen.length >= 20, 'as chamadas anteriores alimentam esta conferência');
-  const patterns = [/[\w.+-]+@[\w-]+\.[\w.]+/, /\(?\d{2}\)?\s?9?\d{4}-?\d{4}\b/, /\d{3}\.\d{3}\.\d{3}-\d{2}/, /"(password|senha|secret|apiKey|api_key|accessToken|refreshToken|authorization)"/i, /Bearer\s+\S+/];
-  // ids (UUID, traceId) e datas têm dígitos que lembram telefone: saem antes da conferência
+  const patterns = [/[\w.+-]+@[\w-]+\.[\w.]+/, /(?<![\w.-])(?:\+?55\s?)?(?:\(\d{2}\)\s?|\d{2}\s?)9?\d{4}-?\d{4}(?![\w-])/, /\d{3}\.\d{3}\.\d{3}-\d{2}/, /"(password|senha|secret|apiKey|api_key|accessToken|refreshToken|authorization)"/i, /Bearer\s+\S+/];
+  // ids (UUID, traceId) e datas saem antes; o telefone exige fronteira de palavra (não casa no meio de hash, código ou contador)
   const plain = (text) => text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '').replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '');
   for (const { route, text } of seen) for (const re of patterns) assert.ok(!re.test(plain(text)), `${route}: ${re} em ${text.slice(0, 200)}`);
 });
