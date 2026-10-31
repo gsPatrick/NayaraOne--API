@@ -4,11 +4,11 @@ const { Router } = require('express');
 const { authMiddleware } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const { analyticsMethodGuard, analyticsReadOnlyTransaction } = require('./readOnly');
-const { createMetricsRouter } = require('./metrics/metrics.routes');
 const { registerDashboardRoutes } = require('./dashboards/dashboard.routes');
 const { registerAccessLogRoutes } = require('./security/accessLog.routes');
 const { registerDrilldownRoutes } = require('./metrics/drilldown.routes');
 const { registerAlertRoutes } = require('./alerts/alert.routes');
+const { createMetricsRouter } = require('./metrics/metrics.routes');
 const { registerExportRoutes } = require('./exports/export.routes');
 
 /**
