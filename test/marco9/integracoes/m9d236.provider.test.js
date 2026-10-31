@@ -21,6 +21,7 @@ before(async () => {
 });
 after(async () => { desligarCofre(); await env.sequelize.close(); process.exit(0); });
 
+const uniqueId = () => crypto.randomBytes(6).toString('hex');
 const iso = () => new Date().toISOString();
 
 test('assinatura_timeout_envelope_unknown_reconcilia', async () => {
@@ -38,12 +39,14 @@ test('assinatura_timeout_envelope_unknown_reconcilia', async () => {
   assert.equal(['SUBMITTED', 'CONFIRMED'].includes(resolvido.status), true, `a consulta pela chave achou o envelope (${resolvido.status})`);
   assert.ok(resolvido.external_resource_id);
   const [s0] = await env.assinaturas(tenant, contrato.version.id);
-  const ev = env.eventoA('signer.signed', { envelopeId: resolvido.external_resource_id, signer: { id: 'sbx-sig-aprendido', email: s0.signer_email, name: 'X' }, signedAt: iso(), evidence: env.EVIDENCIA });
+  // Id do signatário no fornecedor único por rodada: o fornecedor nunca repete id, e o roteamento por id (signature_provider_routing) é global; um id fixo faria a rodada seguinte achar a assinatura da anterior.
+  const idAprendido = `sbx-sig-aprendido-${uniqueId()}`;
+  const ev = env.eventoA('signer.signed', { envelopeId: resolvido.external_resource_id, signer: { id: idAprendido, email: s0.signer_email, name: 'X' }, signedAt: iso(), evidence: env.EVIDENCIA });
   await env.enviar(canal, ev);
   await env.rodar(tenant);
   const depois = await env.assinaturas(tenant, contrato.version.id);
   assert.equal(depois.find((s) => s.id === s0.id).status, 'SIGNED', 'o evento casa o signatário pelo e-mail previsto');
-  assert.equal(depois.find((s) => s.id === s0.id).external_signature_id, 'sbx-sig-aprendido', 'e aprende o id dele no fornecedor');
+  assert.equal(depois.find((s) => s.id === s0.id).external_signature_id, idAprendido, 'e aprende o id dele no fornecedor');
   assert.equal((await env.envelopeDe(tenant, contrato.version.id)).external_envelope_id, resolvido.external_resource_id, 'o envelope aprende o id do fornecedor pelo envio reconciliado');
 });
 
