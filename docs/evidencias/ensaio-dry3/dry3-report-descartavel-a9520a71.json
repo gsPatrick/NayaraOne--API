@@ -1,0 +1,158 @@
+{
+  "AMBIENTE": {
+    "tipo": "ENSAIO EM BANCO DESCARTAVEL COM ORIGEM SINTETICA - NAO E MIGRACAO REAL DA PRODUCAO",
+    "banco": "PostgreSQL local descartavel (scripts/withDisposableDb.js, 127.0.0.1, porta 55000-56999, apagado ao final); API/servicos carregados no mesmo processo contra esse banco; .env nao lido",
+    "origem": "sintetica: conector em memoria (fakeLegacy de test/marco9/_helpers/m9d900Env.js, modo WATERMARK), nao um sistema antigo real nem SELECT count(*) em banco legado",
+    "entidades": [
+      "PERSON"
+    ],
+    "volume_origem_gerado": 100000,
+    "volume_origem_apos_apagados": 99000,
+    "volume_destino": 99000,
+    "volume_real_de_producao_exigido_pelo_livro": "cópia do volume real de produção, todas as linhas por entidade (D908 3.3.1); numero nao definido no livro; exemplo ilustrativo do livro: 2.400.000",
+    "cenario": "limpo",
+    "descricao_cenario": "ENSAIO PRINCIPAL: 100.000 linhas sintéticas de PERSON, datas de borda, 1.000 apagadas na origem entre a carga e o delta, sem alterações entre carga e delta.",
+    "apagados_na_origem_entre_carga_e_delta": 1000,
+    "alterados_na_origem_entre_carga_e_delta": 0,
+    "conflitos_injetados": {
+      "invalidCpf": 0,
+      "duplicateCpf": 0,
+      "nonexistentTime": 0
+    },
+    "duracao_total_ms": 2730374,
+    "commit_api": "a9520a7179dd29320cebe9c33e0bebc8b879c507",
+    "aceite_como_ensaio_real": "DECISAO DO PATRICK; este arquivo NAO substitui docs/governance/dry3-report.json"
+  },
+  "conclusion": "APROVADO",
+  "criteria": {
+    "counts_match": {
+      "ok": true,
+      "code": "GOV_MIG_VOLUME_MISMATCH",
+      "entities": 1,
+      "mismatched": 0
+    },
+    "blockers_zero": {
+      "ok": true,
+      "codes": [],
+      "count": 0
+    },
+    "parallel_clean": {
+      "ok": true,
+      "blockers": 0,
+      "failedRuns": 0
+    },
+    "batches_verified": {
+      "ok": true,
+      "pct": 100,
+      "total": 52,
+      "verified": 52
+    },
+    "clock_tz_validated": {
+      "ok": true,
+      "clock": "OK",
+      "tzChecked": 1000,
+      "tzDivergences": 0
+    },
+    "rollback_simulated": {
+      "ok": true,
+      "activated": 6,
+      "rolledBack": 6,
+      "pendingItems": 0
+    }
+  },
+  "commit": "a9520a7179dd29320cebe9c33e0bebc8b879c507",
+  "generated_at": "2026-10-31T07:05:36.927Z",
+  "report_id": "5ba5d06f-8324-4af3-abcd-8838b2c5337b",
+  "fases": [
+    {
+      "fase": "CLOCK",
+      "status": "DONE",
+      "duracao_ms": 14,
+      "erro": null
+    },
+    {
+      "fase": "LOAD",
+      "status": "DONE",
+      "duracao_ms": 2650625,
+      "erro": null
+    },
+    {
+      "fase": "DELTA",
+      "status": "DONE",
+      "duracao_ms": 5043,
+      "erro": null
+    },
+    {
+      "fase": "VERIFY",
+      "status": "DONE",
+      "duracao_ms": 47773,
+      "erro": null
+    },
+    {
+      "fase": "VOLUME",
+      "status": "DONE",
+      "duracao_ms": 71,
+      "erro": null
+    },
+    {
+      "fase": "TZ_SAMPLE",
+      "status": "DONE",
+      "duracao_ms": 6246,
+      "erro": null
+    },
+    {
+      "fase": "COMPARE",
+      "status": "DONE",
+      "duracao_ms": 17419,
+      "erro": null
+    },
+    {
+      "fase": "ROLLBACK",
+      "status": "DONE",
+      "duracao_ms": 660,
+      "erro": null
+    },
+    {
+      "fase": "TOWER",
+      "status": "DONE",
+      "duracao_ms": 115,
+      "erro": null
+    }
+  ],
+  "volumes": [
+    {
+      "equal": true,
+      "entity": "PERSON",
+      "origin": 99000,
+      "difference": 0,
+      "destination": 99000,
+      "sourceSystem": "T19CFD400D55A"
+    }
+  ],
+  "lotes_por_execucao": [
+    {
+      "last_delta": false,
+      "status": "VERIFIED",
+      "source_count": 2000,
+      "n": 50
+    },
+    {
+      "last_delta": true,
+      "status": "VERIFIED",
+      "source_count": 0,
+      "n": 1
+    },
+    {
+      "last_delta": true,
+      "status": "VERIFIED",
+      "source_count": 121,
+      "n": 1
+    }
+  ],
+  "registros_por_estado": {
+    "RECONCILED": 100000
+  },
+  "quarentena_motivos": [],
+  "blockers": [],
+  "erros": []
+}

@@ -1,0 +1,221 @@
+{
+  "AMBIENTE": {
+    "tipo": "ENSAIO EM BANCO DESCARTAVEL COM ORIGEM SINTETICA - NAO E MIGRACAO REAL DA PRODUCAO",
+    "banco": "PostgreSQL local descartavel (scripts/withDisposableDb.js, 127.0.0.1, porta 55000-56999, apagado ao final); API/servicos carregados no mesmo processo contra esse banco; .env nao lido",
+    "origem": "sintetica: conector em memoria (fakeLegacy de test/marco9/_helpers/m9d900Env.js, modo WATERMARK), nao um sistema antigo real nem SELECT count(*) em banco legado",
+    "entidades": [
+      "PERSON"
+    ],
+    "volume_origem_gerado": 2000,
+    "volume_origem_apos_apagados": 1983,
+    "volume_destino": 1980,
+    "volume_real_de_producao_exigido_pelo_livro": "cópia do volume real de produção, todas as linhas por entidade (D908 3.3.1); numero nao definido no livro; exemplo ilustrativo do livro: 2.400.000",
+    "cenario": "conflitos",
+    "descricao_cenario": "CENÁRIO NEGATIVO: 2.000 linhas + 1 CPF inválido + 1 CPF duplicado + 1 horário inexistente (2018-11-04 00:30 SP). Reprovação esperada pelo livro.",
+    "apagados_na_origem_entre_carga_e_delta": 20,
+    "alterados_na_origem_entre_carga_e_delta": 0,
+    "conflitos_injetados": {
+      "invalidCpf": 1,
+      "duplicateCpf": 1,
+      "nonexistentTime": 1
+    },
+    "duracao_total_ms": 39668,
+    "commit_api": "a9520a7179dd29320cebe9c33e0bebc8b879c507",
+    "aceite_como_ensaio_real": "DECISAO DO PATRICK; este arquivo NAO substitui docs/governance/dry3-report.json"
+  },
+  "conclusion": "REPROVADO",
+  "criteria": {
+    "counts_match": {
+      "ok": false,
+      "code": "GOV_MIG_VOLUME_MISMATCH",
+      "entities": 1,
+      "mismatched": 1
+    },
+    "blockers_zero": {
+      "ok": false,
+      "codes": [
+        "GOV_MIG_QUARANTINE_OPEN",
+        "GOV_MIG_REVIEW_PENDING",
+        "GOV_PARALLEL_MISSING_IN_NEW"
+      ],
+      "count": 5
+    },
+    "parallel_clean": {
+      "ok": false,
+      "blockers": 3,
+      "failedRuns": 0
+    },
+    "batches_verified": {
+      "ok": true,
+      "pct": 100,
+      "total": 4,
+      "verified": 4
+    },
+    "clock_tz_validated": {
+      "ok": true,
+      "clock": "OK",
+      "tzChecked": 998,
+      "tzDivergences": 0
+    },
+    "rollback_simulated": {
+      "ok": true,
+      "activated": 6,
+      "rolledBack": 6,
+      "pendingItems": 0
+    }
+  },
+  "commit": "a9520a7179dd29320cebe9c33e0bebc8b879c507",
+  "generated_at": "2026-10-31T06:20:47.117Z",
+  "report_id": "166c8a45-7cb5-404a-a492-41ee75608843",
+  "fases": [
+    {
+      "fase": "CLOCK",
+      "status": "DONE",
+      "duracao_ms": 12,
+      "erro": null
+    },
+    {
+      "fase": "LOAD",
+      "status": "DONE",
+      "duracao_ms": 34008,
+      "erro": null
+    },
+    {
+      "fase": "DELTA",
+      "status": "DONE",
+      "duracao_ms": 146,
+      "erro": null
+    },
+    {
+      "fase": "VERIFY",
+      "status": "DONE",
+      "duracao_ms": 1636,
+      "erro": null
+    },
+    {
+      "fase": "VOLUME",
+      "status": "FAILED",
+      "duracao_ms": 5,
+      "erro": {
+        "code": "GOV_MIG_VOLUME_MISMATCH",
+        "message": "O volume migrado não confere com a origem."
+      }
+    },
+    {
+      "fase": "TZ_SAMPLE",
+      "status": "DONE",
+      "duracao_ms": 20,
+      "erro": null
+    },
+    {
+      "fase": "COMPARE",
+      "status": "DONE",
+      "duracao_ms": 531,
+      "erro": null
+    },
+    {
+      "fase": "ROLLBACK",
+      "status": "DONE",
+      "duracao_ms": 1042,
+      "erro": null
+    },
+    {
+      "fase": "TOWER",
+      "status": "DONE",
+      "duracao_ms": 64,
+      "erro": null
+    }
+  ],
+  "volumes": [
+    {
+      "equal": false,
+      "entity": "PERSON",
+      "origin": 1983,
+      "difference": 3,
+      "destination": 1980,
+      "sourceSystem": "T3C2C66D47259"
+    }
+  ],
+  "lotes_por_execucao": [
+    {
+      "last_delta": false,
+      "status": "VERIFIED",
+      "source_count": 0,
+      "n": 1
+    },
+    {
+      "last_delta": false,
+      "status": "VERIFIED",
+      "source_count": 2000,
+      "n": 1
+    },
+    {
+      "last_delta": true,
+      "status": "VERIFIED",
+      "source_count": 0,
+      "n": 1
+    },
+    {
+      "last_delta": true,
+      "status": "VERIFIED",
+      "source_count": 117,
+      "n": 1
+    }
+  ],
+  "registros_por_estado": {
+    "RECONCILED": 2000,
+    "QUARANTINED": 2,
+    "PENDING_REVIEW": 1
+  },
+  "quarentena_motivos": [
+    {
+      "state": "PENDING_REVIEW",
+      "reason": "Possível duplicata: o CPF/CNPJ já pertence ao cadastro 190924a3-7582-4b79-a03c-6d0cd06634e5.",
+      "n": 1
+    },
+    {
+      "state": "QUARANTINED",
+      "reason": "CPF/CNPJ inválido.",
+      "n": 1
+    },
+    {
+      "state": "QUARANTINED",
+      "reason": "GOV_MIG_TZ_NONEXISTENT_LOCAL_TIME: O horário informado não existe no fuso de origem. (campo qa908At)",
+      "n": 1
+    }
+  ],
+  "blockers": [
+    {
+      "ref": "T3C2C66D47259",
+      "code": "GOV_MIG_QUARANTINE_OPEN",
+      "entity": "PERSON"
+    },
+    {
+      "ref": "T3C2C66D47259",
+      "code": "GOV_MIG_REVIEW_PENDING",
+      "entity": "PERSON"
+    },
+    {
+      "ref": "par:91af8f77734944efa9c109406a90440440851e67",
+      "code": "GOV_PARALLEL_MISSING_IN_NEW",
+      "entity": "PERSON"
+    },
+    {
+      "ref": "par:3ced99b584d946a376a1cd82e308c80935e6e671",
+      "code": "GOV_PARALLEL_MISSING_IN_NEW",
+      "entity": "PERSON"
+    },
+    {
+      "ref": "par:b2264734160e22cff32857089cc302155af8309e",
+      "code": "GOV_PARALLEL_MISSING_IN_NEW",
+      "entity": "PERSON"
+    }
+  ],
+  "erros": [
+    {
+      "code": "GOV_MIG_VOLUME_MISMATCH",
+      "phase": "VOLUME",
+      "message": "O volume migrado não confere com a origem."
+    }
+  ]
+}
