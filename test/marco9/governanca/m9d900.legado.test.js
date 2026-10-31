@@ -28,7 +28,7 @@ afterEach(async () => {
   await setSetting(K.value, 'A_DEFINIR');
   await setSetting(K.require, true);
 });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 
 test('m9d900 conector SQL com filtro de empresa traz só as linhas dela em todas as leituras', { skip: skip() }, async () => {
   const schema = `legado_${env.suffix()}`.toLowerCase().slice(0, 40);

@@ -6,6 +6,7 @@ const { randomUUID } = require('node:crypto');
 const base = require('./m9d805Env');
 const { dbError } = require('./dbAttempt');
 const { adminQuery } = require('../../m9d801.helpers');
+const { cleanMigration } = require('./m9d900Clean');
 const connectors = require('../../../src/features/migration-v2/ingest/connectors');
 const { executeRun } = require('../../../src/features/migration-v2/ingest/executor');
 const runsService = require('../../../src/features/migration-v2/ingest/runs.service');
@@ -97,4 +98,4 @@ const batchesOf = (system) => q('SELECT * FROM governance.mig_batches WHERE sour
 const recordsOf = (system) => q('SELECT * FROM governance.mig_records WHERE source_system = $1 ORDER BY source_key', [system]);
 const keysOf = (system) => q("SELECT idempotency_key FROM governance.mig_event_keys WHERE idempotency_key LIKE $1 ORDER BY 1", [`${system}:%`]);
 
-module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, cnpj, installSource, run, closedRun, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };
+module.exports = { dbError, ...base, adminQuery, sysName, fakeLegacy, personRecord, cnpj, installSource, run, closedRun, cleanMigration, q, batchesOf, recordsOf, keysOf, openTenantTx, connectors, sequelize };

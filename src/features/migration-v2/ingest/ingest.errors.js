@@ -17,6 +17,7 @@ module.exports = {
   runLimit: () => govError(429, 'GOV_MIG_RUN_LIMIT', 'Há execuções demais em andamento nesta empresa; aguarde alguma terminar.'),
   legacyScopeInvalid: () => govError(422, 'GOV_MIG_LEGACY_SCOPE_INVALID', 'Informe o código desta empresa no sistema antigo em Configurações > Governança.'),
   legacyScopeRequired: () => govError(422, 'GOV_MIG_LEGACY_SCOPE_REQUIRED', 'O grupo tem mais de uma empresa: ligue o filtro por empresa do sistema antigo antes de migrar.'),
+  legacyCodeDuplicate: () => govError(409, 'GOV_MIG_LEGACY_CODE_DUPLICATE', 'Outra empresa do grupo já usa este código no sistema antigo.'),
   batchNotFound: () => govNotFound('Lote não encontrado.'),
   runNotFound: () => govNotFound('Execução não encontrada.'),
 };

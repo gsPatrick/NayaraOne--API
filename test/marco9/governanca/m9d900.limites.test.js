@@ -26,7 +26,7 @@ afterEach(async () => {
   await setSetting(KEYS.process, 5);
   await env.adminQuery("UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now() WHERE company_id = $1 AND status IN ('QUEUED', 'RUNNING', 'PAUSED')", [A().companyId]);
 });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 
 test('m9d900 ATK-4: 25 pedidos simultâneos para a mesma fonte aceitam só um', { skip: skip() }, async () => {
   const legacy = await env.installSource(A(), { mode: 'CDC' });
@@ -74,6 +74,19 @@ test('m9d900 execução ativa vencida pelo prazo deixa de contar', { skip: skip(
   assert.equal(await codeOf(request({ sourceSystem: legacy.system })), 'GOV_MIG_RUN_ALREADY_ACTIVE');
   await env.adminQuery("UPDATE governance.mig_runs SET created_at = now() - interval '13 hours' WHERE id = $1", [runId]);
   assert.ok((await request({ sourceSystem: legacy.system })).runId, 'processo caído há mais que o prazo não trava a fonte para sempre');
+  legacy.dispose();
+});
+
+test('m9d900 execução antiga que ainda grava lotes continua contando; sem atividade recente deixa de contar', { skip: skip() }, async () => {
+  const legacy = await env.installSource(A(), { mode: 'CDC' });
+  legacy.fake.event('1', 'I', 1, env.personRecord());
+  const first = await env.run(A(), { sourceSystem: legacy.system });
+  const [batch] = await env.batchesOf(legacy.system);
+  await env.adminQuery("UPDATE governance.mig_runs SET status = 'RUNNING', finished_at = NULL, created_at = now() - interval '13 hours', started_at = now() - interval '13 hours' WHERE id = $1", [first.runId]);
+  await env.adminQuery("UPDATE governance.mig_batches SET started_at = now() - interval '13 hours', finished_at = now() - interval '2 minutes' WHERE id = $1", [batch.id]);
+  assert.equal(await codeOf(request({ sourceSystem: legacy.system })), 'GOV_MIG_RUN_ALREADY_ACTIVE', 'ainda grava lotes: não é processo caído');
+  await env.adminQuery("UPDATE governance.mig_batches SET finished_at = now() - interval '13 hours' WHERE id = $1", [batch.id]);
+  assert.ok((await request({ sourceSystem: legacy.system })).runId, 'parada há mais que o prazo: libera a fonte');
   legacy.dispose();
 });
 

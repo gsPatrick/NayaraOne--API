@@ -49,6 +49,7 @@ before(async () => {
 
 after(async () => {
   if (DISPOSABLE && tenants) await setPermission(ROLES.gestor, false);
+  if (DISPOSABLE && tenants) await require('../_helpers/m9d900Clean').cleanMigration();
   if (appLoaded) {
     await require('../../../src/models').sequelize.close().catch(() => {});
     setTimeout(() => process.exit(0), 300);

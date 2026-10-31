@@ -21,7 +21,7 @@ afterEach(async () => {
     await env.openTenantTx(tenants.A, (tx) => upsertSetting('migracao.lote.tamanho', 2000, tenants.A, tenants.A.userId, tx));
   }
 });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 const setSetting = (key, value) => env.openTenantTx(A(), (tx) => upsertSetting(key, value, A(), A().userId, tx));
 const codeOf = (promise) => promise.then(() => null, (err) => err.code);

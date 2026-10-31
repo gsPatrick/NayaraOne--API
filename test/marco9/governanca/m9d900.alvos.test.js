@@ -15,7 +15,7 @@ const path = require('node:path');
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 const A = () => tenants.A;
 
 test('m9d900 os parâmetros da migração (da D900, a janela do ETA da D901, os limites de execução, o filtro de empresa do legado e o descarte do conteúdo) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
@@ -41,7 +41,7 @@ test('m9d900 toda parametrização declarada é lida por código de produção',
   for (const name of ['OVERLAP_S', 'BATCH_SIZE', 'MAX_ATTEMPTS', 'BATCH_TIMEOUT_MIN']) assert.match(runner, new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo executor`);
   assert.match(read('control/eta.service.js'), /KEYS\.ETA_WINDOW/, 'KEYS.ETA_WINDOW lido pela Torre de controle');
   assert.match(runner, /KEYS\.EXEC_PER_PROCESS/, 'teto do processo lido pelo executor');
-  for (const name of ['EXEC_PER_SOURCE', 'EXEC_PER_COMPANY', 'EXEC_EXPIRE_MIN']) assert.match(read('ingest/runs.service.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido ao aceitar a execução`);
+  for (const name of ['EXEC_PER_SOURCE', 'EXEC_PER_COMPANY', 'EXEC_EXPIRE_MIN']) assert.match(read('ingest/run.admission.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido ao aceitar a execução ou o replay`);
   for (const name of ['LEGACY_FILTER', 'LEGACY_COLUMN', 'LEGACY_VALUE', 'LEGACY_REQUIRE']) assert.match(read('ingest/connectors/company.scope.js'), new RegExp(`KEYS\\.${name}`), `KEYS.${name} lido pelo filtro de empresa`);
   assert.match(read('ingest/payload.purge.js'), /KEYS\.PAYLOAD_DAYS/, 'prazo de descarte lido pelo job');
 });

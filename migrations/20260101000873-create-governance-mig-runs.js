@@ -2,7 +2,7 @@
 
 /**
  * M9-D900 — governance.mig_runs: uma execução da migração (POST /migration/runs). QUEUED -> RUNNING -> SUCCEEDED | FAILED. Acrescenta a FK de
- * core.external_refs.migration_run_id (M9-D906) para esta tabela. RLS + FORCE pela função do alicerce. Reversível.
+ * core.external_refs.migration_run_id (M9-D906) para esta tabela. `kind` (RUN ou REPLAY, reabertura N3) nasce aqui nos bancos novos; nos já migrados a migration 863 o acrescenta. RLS + FORCE pela função do alicerce. Reversível.
  */
 module.exports = {
   async up(queryInterface) {
@@ -13,6 +13,7 @@ module.exports = {
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         group_id uuid NOT NULL REFERENCES core.groups(id) ON UPDATE CASCADE ON DELETE RESTRICT,
         company_id uuid NOT NULL REFERENCES core.companies(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+        kind varchar(8) NOT NULL DEFAULT 'RUN',
         status varchar(12) NOT NULL DEFAULT 'QUEUED',
         source_system varchar(40) NULL,
         entity varchar(30) NULL,
@@ -23,6 +24,7 @@ module.exports = {
         summary jsonb NULL,
         error text NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT mig_runs_kind_chk CHECK (kind IN ('RUN', 'REPLAY')),
         CONSTRAINT mig_runs_status_chk CHECK (status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED'))
       )`);
       await q('CREATE INDEX IF NOT EXISTS mig_runs_queue_idx ON governance.mig_runs (company_id, status, created_at)');

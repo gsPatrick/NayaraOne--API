@@ -14,6 +14,15 @@ async function insert(tenant, { sourceSystem, entity, lastDelta, requestedBy }, 
   return row;
 }
 
+/** Registro de controle de um replay de lote (N3): já RUNNING, do tipo REPLAY, na fonte do lote. Conta nos limites como uma execução, mas a Torre não o toma por "última execução". */
+async function insertReplay(tenant, { sourceSystem, entity, requestedBy }, transaction) {
+  const [row] = await select(
+    `INSERT INTO governance.mig_runs (group_id, company_id, source_system, entity, kind, status, started_at, requested_by) VALUES (:groupId, :companyId, :sourceSystem, :entity, 'REPLAY', 'RUNNING', now(), :requestedBy) RETURNING ${COLUMNS}`,
+    { groupId: tenant.groupId, companyId: tenant.companyId, sourceSystem, entity, requestedBy: requestedBy || null }, transaction
+  );
+  return row;
+}
+
 async function get(tenant, id, transaction) {
   const [row] = await select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND id = :id`, { companyId: tenant.companyId, id }, transaction);
   return row || null;
@@ -21,7 +30,7 @@ async function get(tenant, id, transaction) {
 
 /** A execução mais recente da empresa (a Torre de controle a usa quando não se pede uma). */
 async function latest(tenant, transaction) {
-  const [row] = await select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId ORDER BY created_at DESC, id DESC LIMIT 1`, { companyId: tenant.companyId }, transaction);
+  const [row] = await select(`SELECT ${COLUMNS} FROM governance.mig_runs WHERE company_id = :companyId AND kind = 'RUN' ORDER BY created_at DESC, id DESC LIMIT 1`, { companyId: tenant.companyId }, transaction);
   return row || null;
 }
 
@@ -68,18 +77,19 @@ async function lockCompany(tenant, transaction) {
 }
 
 /**
- * Execuções ativas (QUEUED, RUNNING ou PAUSED, ainda dentro do prazo `expireMinutes`) da empresa: `total` e as que miram a mesma fonte (`overlapping`). Pedido sem sistema ou
+ * Execuções ativas (QUEUED, RUNNING ou PAUSED, com atividade — início ou lote gravado — dentro do prazo `expireMinutes`, então a execução longa que ainda grava lotes continua contando e só o processo caído expira) da empresa: `total` e as que miram a mesma fonte (`overlapping`). Pedido sem sistema ou
  * sem entidade mira todas, então cruza com qualquer outro.
  */
 async function countActive(tenant, { sourceSystem, entity, expireMinutes }, transaction) {
   const [row] = await select(
     `SELECT count(*)::int AS total,
-            count(*) FILTER (WHERE (:sourceSystem::text IS NULL OR source_system IS NULL OR source_system = :sourceSystem) AND (:entity::text IS NULL OR entity IS NULL OR entity = :entity))::int AS overlapping
-       FROM governance.mig_runs
-      WHERE company_id = :companyId AND status IN ('QUEUED', 'RUNNING', 'PAUSED') AND COALESCE(started_at, created_at) > now() - make_interval(mins => :expireMinutes::int)`,
+            count(*) FILTER (WHERE (:sourceSystem::text IS NULL OR r.source_system IS NULL OR r.source_system = :sourceSystem) AND (:entity::text IS NULL OR r.entity IS NULL OR r.entity = :entity))::int AS overlapping
+       FROM governance.mig_runs r
+      WHERE r.company_id = :companyId AND r.status IN ('QUEUED', 'RUNNING', 'PAUSED')
+        AND GREATEST(COALESCE(r.started_at, r.created_at), COALESCE((SELECT max(COALESCE(b.finished_at, b.started_at, b.created_at)) FROM governance.mig_batches b WHERE b.run_id = r.id), r.created_at)) > now() - make_interval(mins => :expireMinutes::int)`,
     { companyId: tenant.companyId, sourceSystem: sourceSystem || null, entity: entity || null, expireMinutes }, transaction
   );
   return row;
 }
 
-module.exports = { lockCompany, countActive, insert, get, latest, claim, finish, pause, resume, listPaused, listQueued };
+module.exports = { lockCompany, countActive, insert, insertReplay, get, latest, claim, finish, pause, resume, listPaused, listQueued };

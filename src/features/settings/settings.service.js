@@ -8,6 +8,7 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { runSettingGuard } = require('./settingGuards');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
+require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
 const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../features/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');

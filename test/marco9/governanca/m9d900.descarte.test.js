@@ -19,7 +19,7 @@ const payloads = async (system) => (await env.recordsOf(system)).map((r) => [r.s
 
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
 afterEach(async () => { if (env.DISPOSABLE) await setSetting(DAYS, 30); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await env.cleanMigration(); await env.sequelize.close(); });
 
 async function loaded() {
   const legacy = await env.installSource(A(), { mode: 'CDC' });
