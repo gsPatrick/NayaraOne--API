@@ -19,7 +19,7 @@ INSERT INTO "integration"."webhook_inbox"
 VALUES (:groupId, :companyId, :connectionId, :providerCode, :channel, :eventId, :eventType, :apiVersion, true,
         :hash, :raw, CAST(:payload AS jsonb), CAST(:headers AS jsonb), :correlationId, :status, :attempts,
         CASE WHEN :status = 'PROCESSED' THEN now() END, :deadReason)
-ON CONFLICT (provider_code, external_event_id) DO NOTHING
+ON CONFLICT (company_id, provider_code, external_event_id) DO NOTHING
 RETURNING id`;
 
 /** Corpo grande demais não é guardado inteiro: ficam o hash, o tamanho e o resumo (limite configurável). */
@@ -30,7 +30,7 @@ function bodyToStore(raw, body, maxBytes) {
 
 /**
  * receiveEvent — grava um evento JÁ autenticado (assinatura conferida por quem chama). O mesmo
- * (fornecedor, id externo) nunca grava segunda linha: devolve {status:'duplicate'} e conta na métrica. Se o hash do corpo
+ * (empresa, fornecedor, id externo) nunca grava segunda linha: devolve {status:'duplicate'} e conta na métrica. Se o hash do corpo
  * difere do original, é tentativa de adulteração: registra WEBHOOK_PAYLOAD_MISMATCH (HIGH) e mantém o original.
  * `d`: providerCode, externalEventId, rawBody (Buffer|texto), body (já lido), headers, eventType, apiVersion, channel,
  * connectionId, extraHeaders (ex.: {caseRef}), processedInline (quem processa na hora, como o Correspondente, grava já
@@ -62,7 +62,7 @@ async function receiveEvent(ctx, d, transaction) {
   if (rows.length > 0) return { status: 'accepted', id: rows[0].id, payloadHash: hash };
 
   countDuplicate(providerCode);
-  const original = await IntegrationWebhookInbox.findOne({ where: { providerCode, externalEventId: eventId.slice(0, 160) }, attributes: ['id', 'payloadHash'], transaction });
+  const original = await IntegrationWebhookInbox.findOne({ where: { companyId: ctx.companyId, providerCode, externalEventId: eventId.slice(0, 160) }, attributes: ['id', 'payloadHash'], transaction });
   const mismatch = Boolean(original) && original.payloadHash !== hash;
   if (mismatch) {
     await recordError(ctx, {

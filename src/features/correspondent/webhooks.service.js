@@ -186,7 +186,7 @@ async function processFinancingWebhook(providerCodeRaw, rawBody, headers, body, 
       // o lock da linha. Dois webhooks simultâneos válidos são aplicados em fila.
       await financingCase.reload({ transaction, lock: transaction.LOCK.UPDATE });
 
-      // Dedup: a caixa de entrada genérica (integration.webhook_inbox, M9-D203) tem UNIQUE(provider_code, external_event_id) e
+      // Dedup: a caixa de entrada genérica (integration.webhook_inbox, M9-D203) tem UNIQUE(company_id, provider_code, external_event_id) e
       // INSERT ... ON CONFLICT DO NOTHING; o duplicado nunca reaplica o efeito. O evento é processado aqui mesmo,
       // por isso já nasce PROCESSED (o worker genérico não o repete).
       const inboxResult = await receiveEvent(
