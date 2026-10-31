@@ -122,7 +122,7 @@ async function runDryRun(tenant, actor, reportId, { now = new Date() } = {}) {
         afterJson: { conclusion, criteria: Object.fromEntries(Object.entries(criteria).map(([name, value]) => [name, value.ok])) }, reason: `Ensaio DRY3 concluído: ${conclusion}.`,
       }, transaction);
       const saved = await repo.get(tenant, reportId, transaction);
-      exportReport(saved); // dentro da transação: se o arquivo não puder ser escrito, o ensaio não fica COMPLETED (vira ABORTED) e nada é aprovado
+      exportReport(saved, { companyId: tenant.companyId }); // dentro da transação: se o arquivo não puder ser escrito, o ensaio não fica COMPLETED (vira ABORTED) e nada é aprovado
       return saved;
     });
     return final;

@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 
 const ALG = 'HMAC-SHA256';
-const SIGNED = ['conclusion', 'criteria', 'commit', 'generated_at', 'report_id'];
+const SIGNED = ['conclusion', 'criteria', 'commit', 'generated_at', 'report_id', 'company_id'];
 const MIN_KEY = 16;
 
 /** Chave de assinatura do relatório exportado: `MIGRATION_DRY3_SIGNING_KEY` do ambiente (nunca versionada; a mesma no laboratório do ensaio e no ambiente do GO). */

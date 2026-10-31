@@ -57,6 +57,7 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.fuso.amostra_por_entidade` | 1000 | `dryrun/dry.orchestrator.sampleAll` |
 | `migracao.paralelo.prazo_dias` | 7 | `alerts/window.overdue.alertOverdueWindows` |
 | `migracao.dry3.janela_comparacao_min` / `exemplos_no_relatorio` / `dados_pessoais_em_claro` / `timeout_min` | 10 / 10 / desligado / 720 | `dryrun/dry.compare`, `dry.display`, `dry.service.openDryRun` |
+| `migracao.dry3.validade_horas` / `volume_minimo` / `exigir_commit_igual` | 168 / 1000 / ligado | `dryrun/dry.validity` (vínculo do relatório exportado ao GO: idade, volume, commit) |
 
 ## Plano para operações externas no rollback (M9-D907)
 

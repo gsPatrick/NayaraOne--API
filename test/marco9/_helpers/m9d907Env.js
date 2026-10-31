@@ -2,11 +2,8 @@
 
 // Apoio dos testes M9-D907 com banco (não é teste). Rodar SEMPRE em banco descartável (scripts/withDisposableDb.js). Estes testes COMMITAM dados; `cleanup` apaga o que a demanda grava.
 const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const env = require('./m9d904Env');
 const dry = require('../../../src/features/migration-v2/dryrun');
-const { exportReport } = require('../../../src/features/migration-v2/dryrun/dry.export');
 const types = require('../../../src/features/migration-v2/rollback/types.service');
 const report = require('../../../src/features/migration-v2/rollback/report.service');
 const items = require('../../../src/features/migration-v2/rollback/items.service');
@@ -58,11 +55,9 @@ const fail = (promise) => promise.then(() => null, (err) => ({ status: err.statu
  * temporário e uma chave de assinatura só de teste (nunca a de um ambiente real).
  */
 async function markRollbackSimulated(tenant, ok = true) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d907-'));
-  process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
-  process.env.MIGRATION_DRY3_SIGNING_KEY = 'chave-de-teste-nao-usar-em-producao';
+  const reports = require('./m9d908Report');
+  reports.writeReport(tenant, { criteria: reports.criteria({ rollback_simulated: { ok } }) });
   dry.install();
-  exportReport({ id: `qa-m9-${tenant.companyId}`, conclusion: 'APROVADO', criteria: { rollback_simulated: { ok } }, commit: 'qa-m9-commit' });
 }
 
 /** Apaga o relatório exportado do teste e solta o caminho (o GO volta a não encontrar relatório). */
