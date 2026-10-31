@@ -14,6 +14,8 @@ const { buildEmailMessage, previewFields: emailPreview } = require('./email.adap
 const { recipientAddress } = require('./message.recipient');
 const { recordOutbound, moveOutbound, audit, STATUS_TEXT } = require('./message.persist');
 const { isOutboundBlocked } = require('../../../killswitch.state');
+const security = require('../../../security');
+const { mktUrlNotAllowed } = require('../../../marketing.errors');
 
 const QUIET = 'QUIET_HOURS';
 const KILL = { reason: 'KILL_SWITCH', code: 'MKT_KILL_SWITCH_ACTIVE', message: 'O kill switch do Marketing está ativo: nenhuma mensagem sai até a reativação.' };
@@ -39,6 +41,22 @@ function applyPreviewRules(input, message, previewConfig) {
     next[field] = check.text;
   }
   return next;
+}
+
+/**
+ * portalUrl e unsubscribeUrl informados na chamada passam pela mesma regra de URL externa do link rastreável (M9-D433); o link de descadastro montado pelo parâmetro da
+ * empresa (token assinado) é do sistema e vale a regra estática. Reprovada = 422 MKT_URL_NOT_ALLOWED, nada é enviado.
+ */
+async function assertMessageUrls(input, previewConfig, tenant, transaction) {
+  const bad = [];
+  const check = async (field, url, origin) => {
+    const out = await security.validateExternalUrl(url, { tenant, transaction, origin });
+    if (!out.ok) bad.push({ field, url, reasons: out.reasons });
+  };
+  if (input.portalUrl) await check('portalUrl', input.portalUrl);
+  if (input.unsubscribeUrl) await check('unsubscribeUrl', input.unsubscribeUrl);
+  else if (previewConfig.unsubscribeUrl && input.channel === 'EMAIL') await check('unsubscribeUrl', previewConfig.unsubscribeUrl.replace('{token}', 'x'), 'SYSTEM');
+  if (bad.length > 0) throw mktUrlNotAllowed({ urls: bad });
 }
 
 /** Link de descadastro do e-mail de marketing: o informado, ou o do parâmetro com o token assinado. */
@@ -113,6 +131,7 @@ async function sendMarketingMessage(ctx, rawInput) {
     if (!officialTemplate && (await readOfficialTemplateChannels(tenant, transaction)).includes(input.channel)) throw templateNotApproved({ templateId: input.templateId, channel: input.channel, motivo: 'sem referência oficial' });
   }
   const text = template ? fillTemplate(template, input.variables, previewConfig) : input.text;
+  await assertMessageUrls(input, previewConfig, tenant, transaction);
   const link = await unsubscribeLinkFor(input, previewConfig, tenant, transaction);
   const rebuild = async () => {
     const to = await recipientAddress(input.personId, input.channel, tenant, transaction);

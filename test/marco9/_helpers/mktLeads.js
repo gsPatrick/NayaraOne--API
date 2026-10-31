@@ -8,6 +8,8 @@ const { withRollbackTenantTransaction } = require('../../testHelpers');
 
 const { q, uid, readyPerson, addMessage, makeOpportunity, DAY, HOUR, NOON_SP } = env;
 
+const { allowTestUrls } = require('./mktUrlPolicy');
+
 /** Outro usuário real da empresa (o corretor dono da carteira, diferente de quem instala). */
 async function broker(t, tenant) {
   const [row] = await q(t, 'SELECT id FROM core.users WHERE id <> :me AND deleted_at IS NULL ORDER BY id LIMIT 1', { me: tenant.userId });
@@ -17,6 +19,7 @@ async function broker(t, tenant) {
 
 /** Lead com e-mail (e, se pedido, WhatsApp), oportunidade com origem e dono, nome no cadastro. `optIn`: finalidades com OPT_IN nos canais que ele tem. */
 async function lead(t, tenant, { name = 'Ana Souza', source = 'FORM', owner, phone = false, email = true, optIn = [], stage = 'NEW' } = {}) {
+  await allowTestUrls(t, tenant); // M9-D433: o link de descadastro passa pela regra de URL externa
   await upsertSetting('marketing.email.url_descadastro', 'https://www.exemplo.test/descadastro?t={token}', tenant, tenant.userId, t);
   const personId = await readyPerson(t, tenant, { phone: phone ? undefined : null, email: email ? undefined : null, optIn });
   await q(t, 'UPDATE people.persons SET legal_name = :n WHERE id = :p RETURNING id', { n: name, p: personId });

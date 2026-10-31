@@ -24,6 +24,11 @@ const openWindow = (t, tenant, personId, hoursAgo = 2) => env.addMessage(t, tena
 const messageOf = async (t, id) => (await q(t, 'SELECT id, status, delivery_status, purpose, action_key, external_message_id, failure_reason, body FROM crm.messages WHERE id = :id', { id }))[0];
 const byKey = async (t, tenant, key) => (await q(t, 'SELECT id, status, delivery_status, purpose, action_key, external_message_id, failure_reason, body FROM crm.messages WHERE company_id = :c AND action_key = :k', { c: tenant.companyId, k: key }))[0];
 const key = () => sha(uid());
-const send = (t, tenant, input, extra) => messaging.sendMarketingMessage(ctxOf(t, tenant, extra), input);
+const { allowTestUrls } = require('./mktUrlPolicy');
+// M9-D433: portalUrl e unsubscribeUrl passam pela regra de URL externa; os endereços fictícios dos cenários entram na allowlist da empresa (parâmetro, na transação do teste).
+const send = async (t, tenant, input, extra) => {
+  await allowTestUrls(t, tenant);
+  return messaging.sendMarketingMessage(ctxOf(t, tenant, extra), input);
+};
 
 module.exports = { ...env, suppressions, adapters, messaging, ctxOf, makeTemplate, openWindow, messageOf, byKey, key, send };

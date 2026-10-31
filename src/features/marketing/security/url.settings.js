@@ -8,6 +8,8 @@ const { mktError } = require('../marketing.errors');
  *    empresa (URL base do site e domínios próprios do blog) valem sempre.
  *  - encurtadores: encurtadores públicos proibidos (lista do livro: "encurtadores públicos proibidos").
  *  - max_saltos: quantos redirecionamentos são seguidos e verificados (livro: 3). max_comprimento: tamanho máximo da URL (livro: 2048).
+ *  - tlds_reconhecidos: terminações (com, br, io...) que fazem uma palavra solta do texto valer como endereço ("evil.com/login" sem https://); a conferência de URL no texto pega
+ *    também www., //, esquemas malformados e esquemas proibidos sem depender desta lista.
  *  - verificar_destino: liga a verificação de DNS e de redirecionamento (critérios 6 e 7); desligar é decisão do administrador. timeout_s: espera de cada consulta.
  */
 const ALLOWED_KEY = 'marketing.url.dominios_permitidos';
@@ -16,6 +18,7 @@ const MAX_HOPS_KEY = 'marketing.url.max_saltos';
 const MAX_LENGTH_KEY = 'marketing.url.max_comprimento';
 const VERIFY_KEY = 'marketing.url.verificar_destino';
 const TIMEOUT_KEY = 'marketing.url.timeout_s';
+const TLDS_KEY = 'marketing.url.tlds_reconhecidos';
 const NONE = 'nenhum';
 
 const URL_SETTING_DEFAULTS = Object.freeze({
@@ -25,6 +28,7 @@ const URL_SETTING_DEFAULTS = Object.freeze({
   [MAX_LENGTH_KEY]: 2048,
   [VERIFY_KEY]: true,
   [TIMEOUT_KEY]: 5,
+  [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang',
 });
 
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
@@ -45,7 +49,19 @@ const validateDomains = (allowNone) => (key, value) => {
   }
 };
 
+const TLD_RE = /^[a-z]{2,24}$/;
+const parseTlds = (text) => [...new Set(String(text === undefined || text === null ? '' : text).split(',').map((t) => t.trim().toLowerCase().replace(/^\./, '')).filter(Boolean))];
+const DEFAULT_TLDS = Object.freeze(parseTlds(URL_SETTING_DEFAULTS[TLDS_KEY]));
+
+const validateTlds = (key, value) => {
+  const list = parseTlds(value);
+  if (list.length === 0 || !list.every((t) => TLD_RE.test(t))) {
+    throw mktError(422, 'MKT_PARAM_INVALID', 'Valor inválido para o parâmetro.', { key, esperado: 'terminações separadas por vírgula, só letras (ex.: com, br, io)' });
+  }
+};
+
 const URL_SETTINGS_SCHEMA = {
+  [TLDS_KEY]: { type: 'string', validate: validateTlds },
   [ALLOWED_KEY]: { type: 'string', validate: validateDomains(true) },
   [SHORTENERS_KEY]: { type: 'string', validate: validateDomains(false) },
   [MAX_HOPS_KEY]: { type: 'integer', min: 0, max: 10 },
@@ -73,7 +89,7 @@ async function companyDomains(tenant, transaction) {
 
 /** Configuração da empresa já saneada (valor estranho volta ao padrão). */
 async function readUrlConfig(tenant, transaction) {
-  const [allowed, shorteners, hops, length, verify, timeout, company] = await Promise.all([
+  const [allowed, shorteners, hops, length, verify, timeout, company, tlds] = await Promise.all([
     getSetting(ALLOWED_KEY, tenant, transaction, URL_SETTING_DEFAULTS[ALLOWED_KEY]),
     getSetting(SHORTENERS_KEY, tenant, transaction, URL_SETTING_DEFAULTS[SHORTENERS_KEY]),
     getSetting(MAX_HOPS_KEY, tenant, transaction, URL_SETTING_DEFAULTS[MAX_HOPS_KEY]),
@@ -81,7 +97,9 @@ async function readUrlConfig(tenant, transaction) {
     getSetting(VERIFY_KEY, tenant, transaction, URL_SETTING_DEFAULTS[VERIFY_KEY]),
     getSetting(TIMEOUT_KEY, tenant, transaction, URL_SETTING_DEFAULTS[TIMEOUT_KEY]),
     companyDomains(tenant, transaction),
+    getSetting(TLDS_KEY, tenant, transaction, URL_SETTING_DEFAULTS[TLDS_KEY]),
   ]);
+  const tldList = parseTlds(tlds).filter((t) => TLD_RE.test(t));
   const shortList = validDomains(parseDomainList(shorteners));
   return {
     allowedDomains: [...new Set([...company, ...validDomains(parseDomainList(allowed))])],
@@ -90,9 +108,10 @@ async function readUrlConfig(tenant, transaction) {
     maxLength: intOr(length, URL_SETTING_DEFAULTS[MAX_LENGTH_KEY], 64),
     verifyDestination: verify !== false && verify !== 'false',
     timeoutMs: intOr(timeout, URL_SETTING_DEFAULTS[TIMEOUT_KEY], 1) * 1000,
+    tlds: tldList.length ? tldList : DEFAULT_TLDS,
   };
 }
 
 module.exports = {
-  ALLOWED_KEY, SHORTENERS_KEY, MAX_HOPS_KEY, MAX_LENGTH_KEY, VERIFY_KEY, TIMEOUT_KEY, URL_SETTING_DEFAULTS, URL_SETTINGS_SCHEMA, parseDomainList, readUrlConfig,
+  ALLOWED_KEY, SHORTENERS_KEY, MAX_HOPS_KEY, MAX_LENGTH_KEY, VERIFY_KEY, TIMEOUT_KEY, TLDS_KEY, DEFAULT_TLDS, URL_SETTING_DEFAULTS, URL_SETTINGS_SCHEMA, parseDomainList, readUrlConfig,
 };

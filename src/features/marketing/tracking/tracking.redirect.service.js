@@ -6,9 +6,23 @@ const linksRepo = require('./tracking.links.repository');
 const eventsRepo = require('./tracking.events.repository');
 const signing = require('./tracking.signing');
 const { recordEvent } = require('./tracking.events.service');
-const { withUtms } = require('./tracking.url');
+const { withUtms, assertAllowedUrl } = require('./tracking.url');
 const { linkNotFound } = require('./tracking.errors');
 const { trackingConsent } = require('../suppression');
+
+/**
+ * O destino é conferido de novo a cada clique (M9-D433): a regra de URL externa pode ter mudado desde a criação do link (domínio saiu da lista, encurtador novo).
+ * Só as regras da própria URL (origin SYSTEM, sem DNS nem sonda: a rota é pública); reprovado = link inválido (404), sem pista.
+ */
+async function destinationStillAllowed(link, tenant, transaction) {
+  try {
+    await assertAllowedUrl(link.target_url, { tenant, transaction, origin: 'SYSTEM' });
+    return true;
+  } catch (err) {
+    if (err && err.code === 'MKT_URL_NOT_ALLOWED') return false;
+    throw err;
+  }
+}
 
 const SHORT_CODE_RE = /^[A-Za-z0-9_-]{4,64}$/;
 const MINUTE_MS = 60000;
@@ -57,6 +71,7 @@ async function resolveClick({ shortCode, token, session, now = new Date(), trans
     const link = await linksRepo.findByShortCode(shortCode, transaction);
     if (!link || !isUsable(link, now) || !(await signing.verifyLink(routing.company_id, link))) throw linkNotFound();
     const tenant = { groupId: routing.group_id, companyId: routing.company_id };
+    if (!(await destinationStillAllowed(link, tenant, transaction))) throw linkNotFound();
     const identified = await identifyClick(routing, link, token, transaction);
     const sessionHash = sha(`${(session && session.ip) || ''}|${(session && session.userAgent) || ''}`);
     const bucket = Math.floor(now.getTime() / MINUTE_MS);
