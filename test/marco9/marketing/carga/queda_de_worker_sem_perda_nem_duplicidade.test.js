@@ -10,12 +10,13 @@ const { withTenantTransaction } = require('../../../testHelpers');
 const env = require('../../_helpers/mktWorker');
 const carga = require('../../_helpers/mktCarga');
 const jobs = require('../../_helpers/mktCargaJobs');
+const isolamento = require('../../_helpers/mktCargaIsolamento');
 
 const TOTAL = 100;
 const CAI_NA_CHAMADA = 7;
-let ctx; let itemIds = [];
-before(async () => { if (carga.DISPOSABLE) ctx = await env.setup(); });
-after(async () => { if (carga.DISPOSABLE) { env.resetSandbox(); await jobs.limpar(itemIds); } await sequelize.close(); });
+let ctx; let iso; let itemIds = [];
+before(async () => { if (carga.DISPOSABLE) { ctx = await env.setup(); iso = await isolamento.isolar(ctx.tenant.companyId, ['killswitch', 'jobs']); } });
+after(async () => { if (carga.DISPOSABLE) { env.resetSandbox(); await jobs.limpar(itemIds); await iso.restaurar(); } await sequelize.close(); });
 
 test('queda_de_worker_sem_perda_nem_duplicidade', { skip: carga.SKIP }, async (tctx) => {
   env.resetSandbox();

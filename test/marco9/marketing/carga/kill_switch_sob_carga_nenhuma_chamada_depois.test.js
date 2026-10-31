@@ -9,17 +9,19 @@ const { withTenantTransaction } = require('../../../testHelpers');
 const env = require('../../_helpers/mktWorker');
 const carga = require('../../_helpers/mktCarga');
 const jobs = require('../../_helpers/mktCargaJobs');
+const isolamento = require('../../_helpers/mktCargaIsolamento');
 const ks = require('../../../../src/features/marketing/killswitch.service');
 
 const TOTAL = 300;
 const ACIONAR_NA_CHAMADA = Math.max(10, Math.floor(TOTAL / 5));
-let ctx; let itemIds = [];
-before(async () => { if (carga.DISPOSABLE) ctx = await env.setup(); });
+let ctx; let iso; let itemIds = [];
+before(async () => { if (carga.DISPOSABLE) { ctx = await env.setup(); iso = await isolamento.isolar(ctx.tenant.companyId, ['killswitch', 'jobs']); } });
 after(async () => {
   if (carga.DISPOSABLE) {
     await withTenantTransaction(ctx.tenant, (t) => ks.changeKillSwitch({ tenant: ctx.tenant, actorUserId: ctx.tenant.userId, transaction: t, input: { scope: 'GLOBAL', active: false, reason: 'QA-M9 carga: limpeza do kill switch' } })).catch(() => null);
     env.resetSandbox();
     await jobs.limpar(itemIds);
+    await iso.restaurar();
     await carga.withAdmin(async (admin) => {
       await admin.query('ALTER TABLE marketing.kill_switch_log DISABLE TRIGGER kill_switch_log_guard').catch(() => null);
       await admin.query("DELETE FROM marketing.kill_switch_log WHERE reason LIKE 'QA-M9 carga%'").catch(() => null);

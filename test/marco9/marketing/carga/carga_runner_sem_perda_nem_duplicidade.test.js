@@ -9,16 +9,23 @@ const { sequelize } = require('../../../../src/models');
 const { withTenantTransaction } = require('../../../testHelpers');
 const env = require('../../_helpers/mktRunner');
 const carga = require('../../_helpers/mktCarga');
+const isolamento = require('../../_helpers/mktCargaIsolamento');
 
 const TOTAL = 1000;
-let tenant; let flow; let personIds = [];
-before(async () => { if (carga.DISPOSABLE) ({ tenantA: tenant } = await env.prepararTenants()); });
+let tenant; let iso; let flow; let personIds = [];
+before(async () => {
+  if (carga.DISPOSABLE) {
+    ({ tenantA: tenant } = await env.prepararTenants());
+    iso = await isolamento.isolar(tenant.companyId, ['killswitch', 'fluxos']);
+  }
+});
 after(async () => {
   if (carga.DISPOSABLE && tenant) {
     await carga.withAdmin(async (admin) => {
       await carga.cleanupPeople(admin, personIds);
       if (flow) await carga.cleanupFlow(admin, flow);
     });
+    await iso.restaurar();
   }
   await sequelize.close();
 });
