@@ -11,6 +11,7 @@ const { parseSyntheticElements, assertRenderPhrase } = require('./video.syntheti
 const { render } = require('./video.render');
 const { readVideoConfig } = require('./video.settings');
 const { videoInvalid } = require('./video.errors');
+const security = require('../../security');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FORMATS = Object.freeze(['REEL', 'VIDEO']);
@@ -56,7 +57,9 @@ async function assembleReel({ tenant, actor, assembly }, transaction) {
     if (authorization.origin === 'RENDER_PROJETO') kinds.add('RENDER');
   }
   const syntheticKinds = [...kinds].sort();
-  assertRenderPhrase(syntheticKinds, spec.operations.filter((o) => o.op === 'CAPTION').map((o) => o.text), config);
+  const captions = spec.operations.filter((o) => o.op === 'CAPTION').map((o) => o.text);
+  assertRenderPhrase(syntheticKinds, captions, config);
+  await security.assertUrlsAllowed(captions.join('\n'), { tenant, transaction }); // M9-D433: a legenda gravada no vídeo segue a mesma regra de URL externa de todo texto público
 
   const inputsHash = sha256(canonicalJson({ sources: sources.map(({ fileId, sha256: h }) => ({ fileId, sha256: h })), operations: spec.operations, syntheticKinds, format: spec.format, aspectRatio: spec.aspectRatio, durationS: spec.durationS || null }));
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 426))', { replacements: { key: `mkt_video:${tenant.companyId}:${inputsHash}` }, transaction });

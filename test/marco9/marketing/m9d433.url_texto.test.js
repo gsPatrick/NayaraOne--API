@@ -62,17 +62,19 @@ test('texto_comum_nao_vira_url_e_o_https_permitido_passa', async () => {
     await configurar(t);
     const limpo = 'Preço 1.200,50 por m2, foto.jpg e Sr.Silva; fale com contato@nayara.com.br às 10:30. Veja https://nayara.com.br/imovel/12.';
     assert.deepEqual(await security.findDisallowedUrls(limpo, ctx(t)), []);
-    assert.deepEqual(security.extractUrls(limpo), ['https://nayara.com.br/imovel/12']);
+    assert.deepEqual(security.extractCandidates(limpo).filter((c) => c.kind === 'HOSTILE').map((c) => c.url), ['https://nayara.com.br/imovel/12']);
   });
 });
 
 test('terminacoes_reconhecidas_vem_do_parametro', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
-    assert.equal((await security.findDisallowedUrls('veja evil.zzz', ctx(t))).length, 0);
-    assert.equal((await security.findDisallowedUrls('veja evil.zzz/x', ctx(t))).length, 1, 'com caminho, qualquer terminação vale sem consultar a lista');
-    await set(t, 'marketing.url.tlds_reconhecidos', 'zzz, com');
+    // Todo token com forma de domínio é conferido, com qualquer terminação; a lista só separa a abreviação ("Sr.Zzz": terminação fora da lista) do endereço (DI-D433-9).
     assert.equal((await security.findDisallowedUrls('veja evil.zzz', ctx(t))).length, 1);
+    assert.equal((await security.findDisallowedUrls('fale com Sr.Zzz', ctx(t))).length, 0, 'abreviação: não bloqueia, vai à revisão');
+    assert.deepEqual(await security.findReviewUrls('fale com Sr.Zzz', ctx(t)), ['Sr.Zzz']);
+    await set(t, 'marketing.url.tlds_reconhecidos', 'zzz, com');
+    assert.equal((await security.findDisallowedUrls('fale com Sr.Zzz', ctx(t))).length, 1, 'terminação conhecida: é endereço');
     for (const ruim of ['com, 1a', 'c.o.m', ' , ']) await assert.rejects(() => set(t, 'marketing.url.tlds_reconhecidos', ruim), (e) => e.code === 'MKT_PARAM_INVALID', ruim);
   });
 });

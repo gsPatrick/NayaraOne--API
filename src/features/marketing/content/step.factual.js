@@ -49,7 +49,9 @@ async function factualStep({ item, version, tenant, transaction, now }) {
   // regra das fontes (parágrafo com número precisa de referência [n]). A suspeita de injeção continua valendo (DI-D427-6).
   const findings = [...(blog.sources ? own.filter((f) => f.reason === 'INJECTION') : own), ...guardFindings, ...blog.findings];
   const ok = findings.length === 0 && (blog.sources ? true : Boolean(result.ok));
-  return { ok, to: ok ? 'FACT_CHECKED' : 'FACT_CHECK_FAILED', detalhes: { findings, ...(blog.sources ? { fontes: blog.sources } : {}) } };
+  // Abreviação, nome de arquivo e número que parecem endereço não reprovam: o texto segue para a aprovação humana, que vê cada um em `revisao` (DI-D433-9).
+  const review = (await security.findReviewUrls(publicTexts, { tenant, transaction, config: urlConfig })).map((url) => ({ reason: 'URL_REVIEW', url }));
+  return { ok, to: ok ? 'FACT_CHECKED' : 'FACT_CHECK_FAILED', detalhes: { findings, ...(review.length ? { revisao: review } : {}), ...(blog.sources ? { fontes: blog.sources } : {}) } };
 }
 
 module.exports = { factualStep };

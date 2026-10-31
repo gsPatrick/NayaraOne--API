@@ -4,7 +4,7 @@ const { validateExternalUrl } = require('./validateExternalUrl');
 const { REASONS, staticReasons } = require('./urlRules');
 const { readUrlConfig } = require('./url.settings');
 const { mktUrlNotAllowed } = require('../marketing.errors');
-const { extractUrls, stripUrls } = require('./urlText.extract');
+const { extractUrls, extractCandidates, stripUrls } = require('./urlText.extract');
 
 const PLAIN_HTTP = /^https?:\/\/[^/\\]/i;
 const BARE_FORM = /^(?![a-z][a-z0-9+.-]*:|[/\\])/i; // sem esquema e sem barra na frente: domínio solto, www. ou IP nu
@@ -23,7 +23,10 @@ function malformedReasons(url, config) {
 async function findDisallowedUrls(text, ctx = {}) {
   const config = ctx.config || await readUrlConfig(ctx.tenant, ctx.transaction);
   const bad = [];
-  for (const url of extractUrls(text, config)) {
+  const urls = extractCandidates(text, config).filter((c) => c.kind === 'HOSTILE').map((c) => c.url);
+  // Teto por passo (M9-D433, parâmetro marketing.url.max_urls_verificadas): a rede só é consultada para as primeiras URLs; texto com mais que isso é recusado inteiro, sem consulta a mais.
+  if (urls.length > config.maxUrls) return [{ url: `${urls.length} URLs`, reasons: [REASONS.TOO_MANY_URLS], limit: config.maxUrls }];
+  for (const url of urls) {
     if (!PLAIN_HTTP.test(url)) {
       const reasons = malformedReasons(url, config);
       // O domínio da própria empresa (ou da allowlist) escrito sem https:// ("Acesse www.nayara.com.br") não é risco: só o esquema falta (DI-D433-8).
@@ -37,6 +40,12 @@ async function findDisallowedUrls(text, ctx = {}) {
   return bad;
 }
 
+/** Candidatos de baixo risco (abreviação, nome de arquivo, número) que não bloqueiam: o texto segue, mas vai à aprovação humana com finding explícito. */
+async function findReviewUrls(text, ctx = {}) {
+  const config = ctx.config || await readUrlConfig(ctx.tenant, ctx.transaction);
+  return extractCandidates(text, config).filter((c) => c.kind === 'REVIEW').map((c) => c.url);
+}
+
 /** Lança 422 MKT_URL_NOT_ALLOWED se qualquer URL do texto for reprovada (template e conteúdo usam a mesma regra do link rastreável). */
 async function assertUrlsAllowed(text, ctx) {
   const bad = await findDisallowedUrls(text, ctx);
@@ -44,4 +53,4 @@ async function assertUrlsAllowed(text, ctx) {
   return true;
 }
 
-module.exports = { extractUrls, stripUrls, findDisallowedUrls, assertUrlsAllowed };
+module.exports = { extractUrls, extractCandidates, stripUrls, findDisallowedUrls, findReviewUrls, assertUrlsAllowed };

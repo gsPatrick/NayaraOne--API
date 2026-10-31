@@ -34,8 +34,8 @@ test('envio_direto_recusa_url_hostil_no_texto_assunto_preheader_e_variaveis', as
       const comVariavel = base({ variables: { primeiroNome: hostil } });
       await assert.rejects(() => env.send(t, tenant, comVariavel), recusa, `variável: ${hostil}`);
     }
-    // texto limpo, URL permitida, e-mail e palavra colada passam
-    const limpo = await env.send(t, tenant, base({ text: 'Veja https://www.exemplo.test/imovel/1 ou escreva para maria.pro@exemplo.test. Obrigado.Me ligue.' }));
+    // texto limpo, URL permitida, e-mail e abreviação (Av.Paulista) passam
+    const limpo = await env.send(t, tenant, base({ text: 'Veja https://www.exemplo.test/imovel/1 ou escreva para maria.pro@exemplo.test. Visite a Av.Paulista, 100.' }));
     assert.equal(limpo.status, 'SENT');
   });
 });
