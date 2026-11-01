@@ -11,16 +11,23 @@ const { reconcilePaymentIntent } = require('../../features/finance/bankPayments.
 
 const MIN_AGE_MS = 2 * 60 * 1000;
 
+// Coleta as intenções presas (SUBMITTING/SUBMITTED) há mais que MIN_AGE_MS. Precisa rodar numa transação já com o tenant definido.
+// Atenção: o model PaymentIntent declara `updatedAt: 'updated_at'` nas opções, o que RENOMEIA o atributo; o nome certo no where é `updated_at`
+// (usar `updatedAt` gera "column PaymentIntent.updatedAt does not exist" e o job nunca rodava).
+async function findReconcileCandidates(transaction) {
+  return PaymentIntent.findAll({
+    where: { status: ['SUBMITTING', 'SUBMITTED'], updated_at: { [Op.lt]: new Date(Date.now() - MIN_AGE_MS) } },
+    transaction,
+  });
+}
+
 async function reconcileCompany(group, company) {
   const candidates = await sequelize.transaction(async (transaction) => {
     await sequelize.query('SELECT set_config(\'app.group_id\', :g, true), set_config(\'app.company_id\', :c, true)', {
       replacements: { g: group.id, c: company.id },
       transaction,
     });
-    return PaymentIntent.findAll({
-      where: { status: ['SUBMITTING', 'SUBMITTED'], updatedAt: { [Op.lt]: new Date(Date.now() - MIN_AGE_MS) } },
-      transaction,
-    });
+    return findReconcileCandidates(transaction);
   });
   const summary = { checked: 0, resolved: 0, errors: 0 };
   for (const candidate of candidates) {
@@ -73,4 +80,4 @@ function startBankPaymentReconciliationJob({ intervalMs = DEFAULT_INTERVAL_MS } 
   }, intervalMs);
 }
 
-module.exports = { runBankPaymentReconciliationJob, startBankPaymentReconciliationJob, reconcileCompany };
+module.exports = { runBankPaymentReconciliationJob, startBankPaymentReconciliationJob, reconcileCompany, findReconcileCandidates };
