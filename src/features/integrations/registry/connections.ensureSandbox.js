@@ -6,6 +6,7 @@ const { IntegrationConnection, IntegrationProvider } = require('../../../models'
 const AppError = require('../../../utils/AppError');
 const registry = require('./registry.service');
 const { transitionConnection } = require('./connections.transition');
+const { carregarTravada } = require('./connections.service');
 const { getServerEnvironment } = require('./registry.helpers');
 
 const notFound = () => AppError.notFound('Nenhuma integração ativa para este recurso: configure em Integrações.', 'INTEGRATION_CONNECTION_NOT_FOUND');
@@ -27,6 +28,17 @@ async function findActiveByDomain(ctx, domain, transaction) {
 }
 
 /**
+ * Reaproveita o rascunho de forma atômica: trava a linha e relê o status. Quem perdeu a corrida encontra a connection já ACTIVE (ACTIVE -> ACTIVE é sucesso idempotente);
+ * se ela saiu do rascunho para outro estado que não ACTIVE (pausada, recusada) a integração foi parada de propósito: 404.
+ */
+async function ativarRascunho(id, ctx, transaction) {
+  const atual = await carregarTravada(id, ctx, transaction);
+  if (atual.status === 'ACTIVE') return atual;
+  if (atual.status !== 'DRAFT') throw notFound();
+  return transitionConnection(id, 'ACTIVE', ctx, transaction);
+}
+
+/**
  * Connection do fornecedor de laboratório (sandbox, sem credencial nem rede) da empresa (M9-D234, M9-D238 e M9-D241). Fora de produção, a empresa que ainda não
  * cadastrou a integração ganha a connection sozinha na primeira vez, para o módulo de negócio continuar funcionando; em produção, ou com a integração parada de propósito
  * (pausada ou com credencial recusada), é preciso cuidar dela em Integrações: 404 INTEGRATION_CONNECTION_NOT_FOUND. Rascunho do mesmo fornecedor é reaproveitado.
@@ -40,7 +52,7 @@ async function ensureSandboxConnection(ctx, { providerCode, label }, transaction
   const provider = await IntegrationProvider.findByPk(providerCode, { transaction });
   if (!provider || provider.sandboxAvailable !== true) throw notFound();
   const rascunho = existentes.find((c) => c.status === 'DRAFT');
-  if (rascunho) return transitionConnection(rascunho.id, 'ACTIVE', ctx, transaction);
+  if (rascunho) return ativarRascunho(rascunho.id, ctx, transaction);
   const sufixo = existentes.length ? ` #${existentes.length + 1}-${crypto.randomBytes(3).toString('hex')}` : '';
   const criada = await registry.createConnection({ providerCode, environment, label: `${label} (${ctx.companyId.slice(0, 8)})${sufixo}` }, ctx, transaction);
   return transitionConnection(criada.id, 'ACTIVE', ctx, transaction);
