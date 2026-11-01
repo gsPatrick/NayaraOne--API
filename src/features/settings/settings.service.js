@@ -10,6 +10,7 @@ const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
+require('../marketing/mass.settingGuard'); // M9-D402: o teto absoluto de destinatários nunca fica abaixo do limite sem aprovação
 const { AI_SETTINGS_SCHEMA } = require('../../features/ai/ai.settings');
 const { MARKETING_SETTINGS_SCHEMA } = require('../../features/marketing/marketing.settings');
 const { parseBackoffList } = require('../../engines/events/outboxBackoffParse');
