@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const { setupEnv, teardownEnv, call } = require('../../helpers/m9d800Env');
 const env = require('../_helpers/m9d860Env');
 const ledger = require('../../../src/features/core-governance/finops/ledger.service');
+const readModel = require('../../../src/features/core-governance/finops/costReadModel');
 
 let httpSkip;
 before(async () => { ({ httpSkip } = await setupEnv()); });
@@ -17,7 +18,8 @@ after(async () => { await teardownEnv(); });
 test('m9d860 GET /finops/health devolve estimado e faturado separados, sem total misto', async (t) => {
   if (httpSkip) return t.skip(httpSkip);
   const tenants = await env.loadTenants();
-  const day = new Date().toISOString().slice(0, 10);
+  // dia de Brasília (o mesmo fuso do read model e da janela de GET /finops/health); o dia UTC diverge das 21h às 24h BRT
+  const day = readModel.dayKey(new Date());
   const { sequelize } = env;
   const tx = await sequelize.transaction();
   try {
