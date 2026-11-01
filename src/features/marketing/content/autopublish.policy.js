@@ -43,8 +43,9 @@ async function evaluateAutopublish({ item, version, tenant, transaction }) {
   const findings = checks.factual && checks.factual.detalhes && Array.isArray(checks.factual.detalhes.findings) ? checks.factual.detalhes.findings : [];
   if (findings.some((f) => f && f.reason === 'INJECTION')) reasons.push('INJECTION_SUSPECT');
   // URL em revisão (abreviação, nome de arquivo, número ou encurtador parecido com abreviação, finding URL_REVIEW em `detalhes.revisao`): na dúvida, uma pessoa vê antes (MKT-008).
-  const review = checks.factual && checks.factual.detalhes && Array.isArray(checks.factual.detalhes.revisao) ? checks.factual.detalhes.revisao : [];
-  if (review.length > 0) reasons.push('URL_REVIEW');
+  // O passo da marca (texto final renderizado, com as variáveis do pedido) também grava `revisao` (M9-D408, rodada 5): qualquer um dos dois basta.
+  const reviewOf = (step) => (checks[step] && checks[step].detalhes && Array.isArray(checks[step].detalhes.revisao) ? checks[step].detalhes.revisao : []);
+  if (reviewOf('factual').length + reviewOf('branding').length > 0) reasons.push('URL_REVIEW');
   if (!checks.compliance || checks.compliance.ok !== true) reasons.push('NOT_SANITIZED');
   reasons.push(...await templateReasons(version, transaction));
   const matched = matchClasses(await readClasses(tenant, transaction), item.type, requestedChannels(version));

@@ -24,11 +24,11 @@ function registerNay(text = 'Imóvel vendido no Jardim Europa.') {
  * Cria um SOLD_RENTED (imóvel vendido) e percorre o pipeline. `human: true` escreve o texto à mão (sem NAY); `channels` são os canais pretendidos.
  * Devolve { itemId, versionId, status } depois de runPipeline (PENDING_APPROVAL, ou APPROVED/SCHEDULED quando a classe autoriza).
  */
-async function soldContent(t, env, { channels = ['SITE'], human = false, withTemplate = true, now } = {}) {
+async function soldContent(t, env, { channels = ['SITE'], human = false, withTemplate = true, now, variables } = {}) {
   const prop = await tipos.activeProperty(t, env.tenant);
   await tipos.setAvailability(t, prop.propertyId, 'SOLD');
   const tpl = withTemplate ? await fx.publishedTemplate(t, env.tenant, { channel: 'SITE', body: 'Vendido em {{bairro}}: {{texto}}', variables: [{ name: 'bairro', type: 'text' }, { name: 'texto', type: 'text' }] }) : null;
-  const input = { type: 'SOLD_RENTED', sourceEntityType: 'property', sourceEntityId: prop.propertyId, channels, ...(tpl ? { templateId: tpl.id } : {}), ...(human ? { texto: 'Imóvel vendido no Jardim Europa.' } : {}) };
+  const input = { type: 'SOLD_RENTED', sourceEntityType: 'property', sourceEntityId: prop.propertyId, channels, ...(tpl ? { templateId: tpl.id } : {}), ...(human ? { texto: 'Imóvel vendido no Jardim Europa.' } : {}), ...(variables ? { variables } : {}) };
   const out = await service.createAndRun({ tenant: env.tenant, actor: env.tenant.userId, input, now }, fx.sameTx(t));
   return { itemId: out.content.id, status: out.content.status, templateId: tpl && tpl.id, propertyId: prop.propertyId, content: out.content };
 }

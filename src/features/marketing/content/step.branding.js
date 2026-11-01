@@ -61,13 +61,16 @@ async function brandingStep({ item, version, tenant, actor, transaction }, input
   const body = version.body_json;
   const facts = version.facts_snapshot_json || {};
   const renderizado = renderTemplate(template, { variables: input && input.variables, facts, body, item });
-  await security.assertUrlsAllowed(renderizado, { tenant, transaction }); // M9-D433: a variável informada no pedido não leva URL fora da regra ao corpo renderizado
+  // M9-D433: a variável informada no pedido não leva URL fora da regra ao corpo renderizado; o candidato ambíguo (abreviação, arquivo, número) não bloqueia, mas fica em
+  // `revisao` (URL_REVIEW): a autopublicação lê isto e a pessoa que aprova vê cada um (rodada 5, M-3).
+  await security.assertUrlsAllowed(renderizado, { tenant, transaction });
+  const revisao = (await security.findReviewUrls(renderizado, { tenant, transaction })).map((url) => ({ reason: 'URL_REVIEW', url }));
   const nextBody = { ...body, renderizado, marca: template.brand_tokens_json || {}, templateCode: template.code };
   const contentHash = sha256(canonicalJson({ body: nextBody, facts, template: [template.id, template.version_no, template.content_hash] }));
   const created = await repo.insertNextVersion(tenant, actor, version, {
     body: nextBody, templateId: template.id, templateVersionNo: template.version_no, contentHash,
   }, transaction);
-  return { ok: true, detalhes: { templateId: template.id, templateVersionNo: template.version_no, contentHash }, newVersion: created };
+  return { ok: true, detalhes: { templateId: template.id, templateVersionNo: template.version_no, contentHash, ...(revisao.length ? { revisao } : {}) }, newVersion: created };
 }
 
 module.exports = { brandingStep, renderTemplate };
