@@ -108,7 +108,7 @@ test('messaging_inbound_vira_interacao', async () => {
   const [{ n }] = await env.sql(tenant, "SELECT count(*)::int AS n FROM integration.outbox_events WHERE event_type = 'integration.messaging.message.inbound' AND payload_json::text LIKE '%Quero saber%'");
   assert.equal(n, 0, 'o conteúdo da mensagem não vai ao outbox');
   // Remetente desconhecido: lead provisório (pessoa e oportunidade Nova).
-  const novo = '+5521988887777';
+  const novo = `+55219${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`; // número novo a cada execução (o lead provisório fica no banco)
   const id2 = `in-${env.uniqueSuffix()}`;
   await env.enviar(canal, env.inboundA(id2, novo, 'Oi, sou novo aqui', 'Beltrano'));
   await env.rodar(tenant);

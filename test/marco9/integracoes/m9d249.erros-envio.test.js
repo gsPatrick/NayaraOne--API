@@ -10,6 +10,9 @@ const errors = require('../../../src/features/integrations/errors');
 const dispatch = require('../../../src/features/integrations/dispatch');
 const { criar, chave } = require('../../integrations/dispatch/dispatchHelpers');
 
+// Provedor próprio de cada execução: a segunda passada no mesmo banco não soma os erros da primeira.
+const PROVEDOR = `qa-m9-d249-${Math.random().toString(36).slice(2, 8)}`;
+
 let tenants;
 let tokenLeitura;
 let tokenOutro;
@@ -25,7 +28,7 @@ before(async () => {
 
 after(async () => {
   const { tenant } = tenants;
-  await env.sql(tenant, "UPDATE integration.integration_errors SET status = 'IGNORED' WHERE provider_code = 'qa-m9-d249' AND status = 'OPEN'");
+  await env.sql(tenant, `UPDATE integration.integration_errors SET status = 'IGNORED' WHERE provider_code = '${PROVEDOR}' AND status = 'OPEN'`);
   await env.sequelize.close();
   process.exit(0);
 });
@@ -36,7 +39,7 @@ test('admin_get_errors_paginacao_por_cursor', async () => {
   const { tenant } = tenants;
   for (let i = 0; i < 120; i += 1) {
     await env.comTenant(tenant, (t) => errors.recordError(ctx(), {
-      providerCode: 'qa-m9-d249', source: 'DISPATCH', errorClass: 'TRANSIENT', errorCode: `QA_M9_D249_${String(i).padStart(3, '0')}`, message: 'Fornecedor fora do ar.',
+      providerCode: PROVEDOR, source: 'DISPATCH', errorClass: 'TRANSIENT', errorCode: `QA_M9_D249_${String(i).padStart(3, '0')}`, message: 'Fornecedor fora do ar.',
       payload: { token: 'abc', status: 'FORA' },
     }, t));
   }
@@ -44,7 +47,7 @@ test('admin_get_errors_paginacao_por_cursor', async () => {
   let cursor = null;
   const paginas = [];
   do {
-    const r = await chamar(tokenLeitura, 'GET', `/admin/integrations/errors?provider=qa-m9-d249&status=OPEN&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    const r = await chamar(tokenLeitura, 'GET', `/admin/integrations/errors?provider=${PROVEDOR}&status=OPEN&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
     assert.equal(r.status, 200);
     paginas.push(r.corpo.data.items.length);
     vistos.push(...r.corpo.data.items.map((e) => e.errorCode));
@@ -56,16 +59,16 @@ test('admin_get_errors_paginacao_por_cursor', async () => {
   assert.deepEqual([...vistos].sort(), Array.from({ length: 120 }, (_, i) => `QA_M9_D249_${String(i).padStart(3, '0')}`), 'sem lacuna');
   assert.equal(vistos[0], 'QA_M9_D249_119', 'ordem created_at desc');
 
-  const padrao = await chamar(tokenLeitura, 'GET', '/admin/integrations/errors?provider=qa-m9-d249');
+  const padrao = await chamar(tokenLeitura, 'GET', `/admin/integrations/errors?provider=${PROVEDOR}`);
   assert.equal(padrao.corpo.data.items.length, 50, 'limite padrão 50');
-  const maximo = await chamar(tokenLeitura, 'GET', '/admin/integrations/errors?provider=qa-m9-d249&limit=200');
+  const maximo = await chamar(tokenLeitura, 'GET', `/admin/integrations/errors?provider=${PROVEDOR}&limit=200`);
   assert.equal(maximo.corpo.data.items.length, 120);
   assert.equal(maximo.corpo.data.nextCursor, null);
   const item = maximo.corpo.data.items[0];
   assert.equal(item.sanitizedPayload.token, '[REDACTED]', 'erro sanitizado (D207)');
   assert.match(item.createdAt, /-03:00$/);
   if (tokenOutro) {
-    const outro = await chamar(tokenOutro, 'GET', '/admin/integrations/errors?provider=qa-m9-d249');
+    const outro = await chamar(tokenOutro, 'GET', `/admin/integrations/errors?provider=${PROVEDOR}`);
     assert.equal(outro.corpo.data.items.length, 0, 'erros de outra empresa não aparecem');
   }
 });
