@@ -27,7 +27,7 @@ const upsertSetting = catchAsync(async (req, res) => {
     throw AppError.badRequest('O campo "value" é obrigatório.', 'SETTING_VALIDATION');
   }
   const item = await req.withTenantTransaction((t) =>
-    settingsService.upsertSetting(req.params.key, req.body.value, tenantFromAuth(req), req.auth.userId, t, optionsFromAuth(req.auth))
+    settingsService.upsertSetting(req.params.key, req.body.value, tenantFromAuth(req), req.auth.userId, t, { ...optionsFromAuth(req.auth), permissions: req.auth.permissions })
   );
   return success(res, { data: item });
 });

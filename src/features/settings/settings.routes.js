@@ -9,6 +9,8 @@ const { requireAutomationManageForCadence } = require('../../features/marketing/
 const { requireAutomationManageForAutopublish } = require('../../features/marketing/content/autopublish.guard');
 const { isSloSettingKey } = require('../../features/integrations/health/slo');
 const { securityPermissionOf } = require('./settingSecurity');
+const { restrictedPermissionOf } = require('./settingRestricted');
+const { auditDeniedSettingWrite } = require('./settingDenied');
 const { isMigrationGateKey, MIGRATION_ADMIN_PERMISSION } = require('../../features/migration-v2/migration.gateKeys');
 const { isPlatformOnly, PLATFORM_PERMISSION } = require('./settingPlatform');
 const settingsService = require('./settings.service');
@@ -38,5 +40,13 @@ settingsRouter.get('/settings', requirePermission('settings:read'), settingsCont
 settingsRouter.get('/settings/integrations/status', requirePermission('settings:read'), settingsController.getIntegrationsStatus);
 settingsRouter.get('/settings/:key', requirePermission('settings:read'), settingsController.getSetting);
 settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireMigrationAdminForGateKeys, requireSecurityOwner, requirePlatformForPlatformKeys, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
+
+// Tentativa negada de gravar chave protegida (permissão própria, plataforma ou dono): audita em audit.audit_log (M9-D870 R4-L3) e deixa a resposta 403 como está.
+settingsRouter.use(async (err, req, res, next) => {
+  const key = req.method === 'PUT' ? /^\/settings\/([^/]+)$/.exec(req.path) : null;
+  const name = key && decodeURIComponent(key[1]);
+  if (name && (restrictedPermissionOf(name) || isPlatformOnly(settingsService.SETTINGS_SCHEMA[name]))) await auditDeniedSettingWrite(req, { key: name, via: 'PUT /settings', err });
+  return next(err);
+});
 
 module.exports = settingsRouter;

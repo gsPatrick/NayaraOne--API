@@ -85,7 +85,7 @@ function nextState(row, patch, now) {
  * novos sobem a versão em 1, guardam a versão anterior e auditam antes e depois com o motivo. PATCH sem mudança real não gera versão. Chave EXPIRED só volta a ACTIVE
  * com `validUntil` posterior a agora. Chave absorvida das configurações da empresa grava o valor também na configuração (leitores existentes seguem corretos).
  */
-async function updateEntry(tenant, body, actorUserId, transaction, { now = new Date(), owner = null } = {}) {
+async function updateEntry(tenant, body, actorUserId, transaction, { now = new Date(), owner = null, permissions } = {}) {
   const b = body && typeof body === 'object' ? body : {};
   const row = await locateEntry(tenant, b, transaction);
   assertWritable(row.key, owner);
@@ -111,7 +111,7 @@ async function updateEntry(tenant, body, actorUserId, transaction, { now = new D
   }
   const before = snapshotOf(row, live);
   await repo.insertVersion(tenant, row.kind, { ...row, value: current.value }, { replacedBy: actorUserId, reason }, transaction);
-  if (fromSettings && !sameJson(next.value, current.value)) await writeThrough(tenant, row.key, next.value, actorUserId, transaction);
+  if (fromSettings && !sameJson(next.value, current.value)) await writeThrough(tenant, row.key, next.value, actorUserId, transaction, permissions);
   const saved = await repo.update(tenant, row.kind, row.id, { ...next, version: row.version + 1 }, actorUserId, transaction);
   await audit(tenant, row.kind, saved, actorUserId, before, snapshotOf(saved), reason, transaction);
   return { ...viewOf(saved), unchanged: false };

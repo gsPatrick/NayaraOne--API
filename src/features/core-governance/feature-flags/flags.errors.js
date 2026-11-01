@@ -12,10 +12,10 @@ const versionConflict = (details) => govError(409, 'GOV_FLAG_VERSION_CONFLICT', 
 const notFound = () => govError(404, 'GOV_FLAG_NOT_FOUND', 'Chave não encontrada.');
 const inputInvalid = (message, details) => govError(422, 'GOV_FLAG_INPUT_INVALID', message, details);
 const reasonRequired = () => govError(422, 'GOV_FLAG_REASON_REQUIRED', 'Informe o motivo da alteração.');
-const platformOnly = () => govError(403, 'GOV_FLAG_PLATFORM_ONLY', 'Este parâmetro só é alterado pela equipe da plataforma.');
+const platformOnly = (details) => govError(403, 'GOV_FLAG_PLATFORM_ONLY', 'Este parâmetro só é alterado pela equipe da plataforma.', details);
 const expired = () => govError(422, 'GOV_FLAG_EXPIRED', 'A chave expirou: estenda a validade para uma data futura para reativá-la.');
 const sourceLocked = () => govError(422, 'GOV_FLAG_SOURCE_LOCKED', 'Esta configuração vem das Configurações da empresa: só valor, responsável, risco e descrição podem mudar aqui.');
 const expiryRequired = () => govError(422, 'GOV_FLAG_EXPIRY_REQUIRED', 'Flag temporária precisa de data de expiração.');
-const keyProtected = (message) => govError(403, 'GOV_FLAG_KEY_PROTECTED', message || 'Esta chave só muda pelo fluxo do módulo responsável por ela.');
+const keyProtected = (message, details) => govError(403, 'GOV_FLAG_KEY_PROTECTED', message || 'Esta chave só muda pelo fluxo do módulo responsável por ela.', details);
 
 module.exports = { platformOnly, keyProtected, expiryRequired, ownerRequired, ownerInvalid, validityInvalid, valueInvalid, duplicate, versionConflict, notFound, inputInvalid, reasonRequired, expired, sourceLocked };

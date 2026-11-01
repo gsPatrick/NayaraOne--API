@@ -24,12 +24,12 @@ async function login(tenant, profile, password) {
   throw new Error('login não concluiu');
 }
 
-async function start() {
+async function start(extraCodes = []) {
   if (!DISPOSABLE) { state.skip = SKIP_DISPOSABLE; return state; }
   const password = process.env.CI_TENANT_USERS_PASSWORD;
   if (!password) { state.skip = 'seed de dois tenants ausente.'; return state; }
   state.tenants = await loadTenants();
-  await setPermissions('CI GESTOR', CODES);
+  await setPermissions('CI GESTOR', CODES.concat(extraCodes));
   await setPermissions('CI LEITURA', []);
   require('../../../app');
   state.loaded = true;

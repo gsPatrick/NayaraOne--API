@@ -551,11 +551,13 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
     throw AppError.badRequest('Contexto de tenant (groupId/companyId) é obrigatório para configurar settings.', 'SETTING_TENANT_REQUIRED');
   }
 
-  validateAgainstSchema(key, value);
-  // Chave só da plataforma (settingPlatform.js): vale na camada de escrita, para todo caminho; sem `options.platform` a gravação é recusada.
+  // Permissão própria da chave (settingRestricted.js, M9-D870 R4-M1): quem informa as permissões que tem (`options.permissions`: PUT /settings, registro de flags) só grava com a do dono da regra.
+  require('./settingWritePermission').assertWritePermission(key, options.permissions);
+  // Chave só da plataforma (settingPlatform.js): vale na camada de escrita, para todo caminho; sem `options.platform` a gravação é recusada (antes de olhar o valor).
   if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
     throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
   }
+  validateAgainstSchema(key, value);
   // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
   await runSettingGuard(key, value, tenant, actorUserId, transaction);
 

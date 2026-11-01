@@ -18,7 +18,7 @@ function registerProtectedKeys(owner, { test, message }) {
 /** Lança 403 se a chave pertence a um dono diferente de `owner`. */
 function assertWritable(key, owner) {
   for (const [name, rule] of registry) {
-    if (name !== owner && rule.test(String(key))) throw E.keyProtected(rule.message);
+    if (name !== owner && rule.test(String(key))) throw E.keyProtected(rule.message, { key: String(key) });
   }
 }
 
