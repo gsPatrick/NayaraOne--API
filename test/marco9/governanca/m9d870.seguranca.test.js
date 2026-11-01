@@ -73,7 +73,7 @@ test('m9d870 R4-L1: os pisos do livro valem (justificativa 20, retenção de pay
 test('m9d870 R4-L5: POST /feature-flags com chave do dicionário é recusado e não cria entrada divergente', async (t) => {
   if (skipReason()) return t.skip(skipReason());
   const { A } = http.state.tenants;
-  const key = 'governanca.finops.degradacao.ligada';
+  const key = 'governanca.finops.janela_dias';
   const res = await http.call('A:gestor', 'POST', '/feature-flags', { kind: 'CONFIG', key, value: 100, valueType: 'INTEGER', ownerUserId: A.userId, scope: 'COMPANY', scopeRef: A.companyId, risk: 'LOW', reason: 'QA-M9 tentativa de divergir do parâmetro.' });
   assert.equal(res.status, 422, JSON.stringify(res.body));
   assert.match(res.body.error.message, /parâmetro das Configurações/, 'recusado por ser chave do dicionário, não por outro motivo');

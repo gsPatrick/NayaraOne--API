@@ -54,6 +54,7 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 | `governanca.flags.kill_teste_hora` | `5` | hora (Brasília) do job que testa os kill switches. |
 | `governanca.flags.kill_teste_minuto` | `0` | minuto (Brasília) do job que testa os kill switches. |
 | `governanca.flags.kill_teste_tolerancia_min` | `10` | minutos que um teste pode ficar em andamento antes de a execução seguinte considerá-lo interrompido e restaurar o switch (10). |
+| `governanca.flags.negadas_janela_s` | `60` | janela, em segundos, em que as tentativas negadas do mesmo usuário na mesma chave e caminho viram uma linha de auditoria com a contagem das suprimidas (60). |
 
 ## Decisões (ADR)
 - K5: corpo de erro único com `error.traceId`; K4: código novo com prefixo `GOV_` (lista fechada de exceções configurável em `governanca.erros.excecoes_prefixo_gov`).

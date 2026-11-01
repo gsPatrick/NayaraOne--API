@@ -32,7 +32,8 @@ test('m9d403 R4-M1: toda chave de Marketing do dicionário declara a permissão 
   for (const key of publicas) assert.equal(restrictedPermissionOf(key), 'marketing:template:manage', key);
   for (const key of cadencia) assert.equal(restrictedPermissionOf(key), 'marketing:automation:manage', key);
   assert.equal(restrictedPermissionOf('marketing.autopublish.classes'), 'marketing:automation:manage');
-  assert.equal(restrictedPermissionOf('marketing.url.max_urls_verificadas'), null);
+  assert.equal(restrictedPermissionOf('marketing.url.max_urls_verificadas'), 'marketing:automation:manage', 'a política de URL tem dono (M-5)');
+  assert.equal(restrictedPermissionOf('marketing.seo.dias_selo_vendido'), null, 'parâmetro operacional comum');
 });
 
 test('m9d403 R4-M1: PATCH /feature-flags da allowlist com só governance:flags:manage é 403 e nada é gravado', async (t) => {

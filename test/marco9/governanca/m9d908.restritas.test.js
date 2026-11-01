@@ -25,13 +25,13 @@ test('m9d908 R3-L3: cada parâmetro do portão do corte existe no dicionário e 
     assert.ok(SETTINGS_SCHEMA[key], `${key} no dicionário`);
     assert.equal(restrictedPermissionOf(key), 'governance:migration:admin', key);
   }
-  assert.equal(restrictedPermissionOf('mfa.step_up_ttl_minutes'), null);
+  assert.equal(restrictedPermissionOf('governanca.bcp.listagem_limite'), null);
 });
 
 test('m9d908 R3-L3: PUT /settings do portão sem governance:migration:admin é 403; com a permissão, grava', async (t) => {
   if (http.state.skip) return t.skip(http.state.skip);
   const { A } = http.state.tenants;
-  const before = await http.call('A:gestor', 'PUT', '/settings/mfa.step_up_ttl_minutes', { value: 15 });
+  const before = await http.call('A:gestor', 'PUT', '/settings/governanca.bcp.listagem_limite', { value: 15 });
   assert.equal(before.status, 200, 'o gestor tem settings:update: parâmetro comum grava');
   for (const key of GATE_KEYS) {
     const value = key.endsWith('etapas') ? '10,100' : key.includes('exigir') ? false : 24;

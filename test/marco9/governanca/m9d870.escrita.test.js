@@ -7,6 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('../_helpers/m9d870Http');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../../src/features/settings/settings.service');
+const { resetDeniedWindows } = require('../../../src/features/settings/settingDenied');
 const { restrictedPermissionOf } = require('../../../src/features/settings/settingRestricted');
 const { isPlatformOnly } = require('../../../src/features/settings/settingPlatform');
 const { absorbable } = require('../../../src/features/core-governance/feature-flags/flags.settings.adapter');
@@ -23,7 +24,7 @@ const live = async (companyId, key) => (await http.adminQuery('SELECT 1 FROM cor
 
 /** Grava pelo caminho interno (sem permissões de sessão) um valor que o dicionário aceita para a chave. */
 async function seedInternally(key, spec) {
-  for (const value of [sample(spec), 'publicId', 'piscina', 'tipo', '1,3', '09:00', '1', '[]', '99.5% / p95 5 s / p99 12 s / backlog 15 min']) {
+  for (const value of [sample(spec), 'publicId', 'piscina', 'tipo', 'bloquear', 'exemplo.com.br', '1,3', '09:00', '1', '[]', '99.5% / p95 5 s / p99 12 s / backlog 15 min']) {
     const ok = await openTenantTx(tenantA(), (tx) => upsertSetting(key, value, tenantA(), null, tx)).then(() => true, () => false);
     if (ok) return value;
   }
@@ -76,7 +77,7 @@ test('m9d870 R4-M1 e R4-L3: PUT, PATCH e POST de chave protegida dão 403, nada 
   const { A } = http.state.tenants;
   const byPermission = new Map();
   for (const key of blocked().filter((k) => absorbable(k) && !isPlatformOnly(SETTINGS_SCHEMA[k]) && ['boolean', 'integer', 'string'].includes(SETTINGS_SCHEMA[k].type))) if (!byPermission.has(required(key))) byPermission.set(required(key), key);
-  for (const key of ['marketing.public_fields.allowlist', 'marketing.public_fields.features_permitidas', 'marketing.autopublish.classes', blocked().find((k) => k.startsWith('marketing.cadencia.'))]) byPermission.set(`${required(key)}#${key}`, key);
+  for (const key of ['marketing.public_fields.allowlist', 'marketing.public_fields.features_permitidas', 'marketing.autopublish.classes', 'marketing.url.revisao_sem_aprovador', 'marketing.url.dominios_permitidos', blocked().find((k) => k.startsWith('marketing.cadencia.'))]) byPermission.set(`${required(key)}#${key}`, key);
   assert.ok(byPermission.size >= 8, `${byPermission.size} chaves amostradas`);
   for (const key of byPermission.values()) {
     const spec = SETTINGS_SCHEMA[key];
@@ -84,6 +85,7 @@ test('m9d870 R4-M1 e R4-L3: PUT, PATCH e POST de chave protegida dão 403, nada 
     assert.equal((await http.call('A:gestor', 'GET', `/feature-flags?kind=CONFIG&key=${encodeURIComponent(key)}`)).status, 200);
     const entry = (await http.adminQuery('SELECT id, version FROM governance.config_entries WHERE company_id = $1 AND key = $2', [A.companyId, key])).rows[0];
     assert.ok(entry, `${key} absorvida`);
+    resetDeniedWindows(); // a agregação por janela (R5-L2) é testada à parte: aqui cada tentativa conta
     const already = (await denials(A.companyId, key)).length; // a trilha é só de inserção: conta só as linhas novas
     const put = await http.call('A:gestor', 'PUT', `/settings/${key}`, { value: seeded });
     const patchValue = spec.type === 'boolean' ? !sample(spec) : spec.type === 'integer' ? spec.min + 1 : 'publicId';
@@ -103,6 +105,7 @@ test('m9d870 R4-M1 e R4-L3: chave protegida que o registro não absorve por form
   const keys = blocked().filter((k) => !absorbable(k) && !isPlatformOnly(SETTINGS_SCHEMA[k]) && ['boolean', 'integer', 'string'].includes(SETTINGS_SCHEMA[k].type));
   assert.ok(keys.some((k) => k.startsWith('integration.slo.')), 'chaves integration.slo.* enumeradas');
   for (const key of keys.slice(0, 6).concat(keys.filter((k) => k.startsWith('integration.slo.')).slice(0, 2))) {
+    resetDeniedWindows();
     const already = (await denials(A.companyId, key)).length;
     const put = await http.call('A:gestor', 'PUT', `/settings/${key}`, { value: sample(SETTINGS_SCHEMA[key]) });
     assert.equal(put.status, 403, `${key}: ${JSON.stringify(put.body)}`);
