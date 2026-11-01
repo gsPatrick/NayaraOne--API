@@ -10,17 +10,24 @@ const { getServerEnvironment } = require('../../../src/features/integrations/reg
 
 const PROVEDOR = 'messaging-sandbox';
 
-after(async () => { await sequelize.close(); });
-
 const consultar = (tenant, sql, replacements = {}) => comTenant(tenant, async (t) => (await sequelize.query(sql, { replacements, transaction: t }))[0]);
+
+// Deixa o par do teste sem connection ativa nem rascunho (toda linha inserida já nasce com canal de webhook).
+after(async () => {
+  const { tenant } = await carregarTenants();
+  await consultar(tenant, "UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code = :p AND environment = :e AND status <> 'DISABLED'",
+    { c: tenant.companyId, p: PROVEDOR, e: getServerEnvironment() });
+  await sequelize.close();
+});
+
 
 async function prepararRascunho(tenant) {
   const env = getServerEnvironment();
   await consultar(tenant, "UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code = :p AND environment = :e AND status <> 'DISABLED'",
     { c: tenant.companyId, p: PROVEDOR, e: env });
   const [linha] = await consultar(tenant,
-    `INSERT INTO integration.connections (id, group_id, company_id, provider_code, environment, label, status, config_json, policy_json, created_at, updated_at)
-     VALUES (gen_random_uuid(), :g, :c, :p, :e, :l, 'DRAFT', '{}', '{}', now(), now()) RETURNING id`,
+    `INSERT INTO integration.connections (id, group_id, company_id, provider_code, environment, label, status, config_json, policy_json, created_at, updated_at, webhook_channel)
+     VALUES (gen_random_uuid(), :g, :c, :p, :e, :l, 'DRAFT', '{}', '{}', now(), now(), substr(replace(gen_random_uuid()::text, '-', ''), 1, 32)) RETURNING id`,
     { g: tenant.groupId, c: tenant.companyId, p: PROVEDOR, e: env, l: `QA-M9 rascunho ${Date.now()}` });
   return { env, rascunhoId: linha.id };
 }

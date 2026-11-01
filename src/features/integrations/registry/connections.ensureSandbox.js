@@ -1,8 +1,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { Op } = require('sequelize');
-const { IntegrationConnection, IntegrationProvider } = require('../../../models');
+const { Op, QueryTypes } = require('sequelize');
+const { sequelize, IntegrationConnection, IntegrationProvider } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const registry = require('./registry.service');
 const { transitionConnection } = require('./connections.transition');
@@ -44,6 +44,10 @@ async function ativarRascunho(id, ctx, transaction) {
  * (pausada ou com credencial recusada), é preciso cuidar dela em Integrações: 404 INTEGRATION_CONNECTION_NOT_FOUND. Rascunho do mesmo fornecedor é reaproveitado.
  */
 async function ensureSandboxConnection(ctx, { providerCode, label }, transaction) {
+  // Serializa os pedidos do mesmo par empresa/fornecedor/ambiente até o fim da transação: quem chega depois da confirmação do vencedor relê e encontra a ACTIVE.
+  if (transaction) {
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:chave))', { type: QueryTypes.SELECT, transaction, replacements: { chave: `integration.sandbox:${ctx.companyId}:${providerCode}:${getServerEnvironment()}` } });
+  }
   const ativa = await findActiveByProvider(ctx, providerCode, transaction);
   if (ativa) return ativa;
   const environment = getServerEnvironment();
