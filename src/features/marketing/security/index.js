@@ -7,6 +7,8 @@
  */
 const { validateExternalUrl } = require('./validateExternalUrl');
 const { extractUrls, extractCandidates, stripUrls, findDisallowedUrls, findReviewUrls, assertUrlsAllowed } = require('./urlText');
+const { assertTextFieldsSafe, scanTextFields } = require('./urlText.fields');
+const { URL_LIMITS_SCHEMA, readUrlLimits } = require('./urlText.limits');
 const { URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig } = require('./url.settings');
 const { handleCompromised } = require('./compromise.service');
 const { isAuthRevoked, reportAuthRevoked } = require('./compromise.signal');
@@ -22,6 +24,6 @@ async function trackingUrlValidator(rawUrl, ctx) {
 }
 
 module.exports = {
-  validateExternalUrl, extractUrls, extractCandidates, stripUrls, findDisallowedUrls, findReviewUrls, assertUrlsAllowed, trackingUrlValidator, URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig, URL_REASONS: REASONS,
+  validateExternalUrl, extractUrls, extractCandidates, stripUrls, findDisallowedUrls, findReviewUrls, assertUrlsAllowed, assertTextFieldsSafe, scanTextFields, URL_LIMITS_SCHEMA, readUrlLimits, trackingUrlValidator, URL_SETTINGS_SCHEMA, URL_SETTING_DEFAULTS, readUrlConfig, URL_REASONS: REASONS,
   handleCompromised, registerChannelPorts, markPublicPayload, isPublicPayload, assertPublicPayload, isAuthRevoked, reportAuthRevoked, recipientExportGuard, looksLikeExport,
 };

@@ -24,6 +24,7 @@ const { LEAD_PARAMS_SCHEMA } = require('../../features/marketing/automations/lea
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
 const { URL_SETTINGS_SCHEMA } = require('../../features/marketing/security/url.settings');
+const { URL_LIMITS_SCHEMA } = require('../../features/marketing/security/urlText.limits');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
 const { FACTUAL_SETTINGS_SCHEMA } = require('../../features/marketing/content/factual/settings');
 const { CAMPAIGN_SETTINGS_SCHEMA } = require('../../features/marketing/campaigns/campaigns.settings');
@@ -262,6 +263,7 @@ const SETTINGS_SCHEMA = {
   ...SEO_SETTINGS_SCHEMA,
   // Marco 9, M9-D433 — URL externa: domínios extras, encurtadores, saltos, tamanho, verificação de destino e espera.
   ...URL_SETTINGS_SCHEMA,
+  ...URL_LIMITS_SCHEMA, // M9-D414 (rodada 4): tetos de tamanho da varredura de URL e política do candidato ambíguo sem aprovador
   ...BLOG_SETTINGS_SCHEMA,
   // Marco 9, M9-D429 — preview sem dado sensível (tamanho, dicionários, número de contrato, texto seguro) e endereço do descadastro do e-mail.
   ...PREVIEW_SETTINGS_SCHEMA,
