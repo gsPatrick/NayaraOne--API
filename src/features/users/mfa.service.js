@@ -11,7 +11,7 @@ const { getSetting } = require('../settings/settings.service');
 const { recordMfaFailure } = require('../analytics/tech-signals/record');
 const { checkTotp, assertSafeForBoot } = require('./mfa.testWindow');
 
-// DI-MFA-TESTE-1: em produção a variável de janela de teste derruba o boot.
+// DI-MFA-TESTE-1: em produção a variável de janela de teste derruba o boot; fora dela a configuração é resolvida (e avisada) já no boot.
 assertSafeForBoot();
 
 const BCRYPT_ROUNDS = 10;

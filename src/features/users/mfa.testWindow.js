@@ -8,12 +8,13 @@
  * janela padrão da biblioteca, `authenticator` global intocado).
  *
  * A janela ampliada só liga quando TODAS as condições são verdadeiras:
- *  (a) MFA_TOTP_TEST_WINDOW_MINUTES é um inteiro de 1 a 120;
- *  (b) NODE_ENV não é 'production';
- *  (c) o processo roda sobre banco descartável (DISPOSABLE_DB=1, marcado por scripts/withDisposableDb.js);
- *  (d) MFA_TOTP_TEST_WINDOW_I_AM_LOCAL=1.
- * Definida a variável mas falhando (b)-(d) ou (a), o valor é IGNORADO e um erro é registrado uma vez.
- * Em NODE_ENV=production, definir a variável derruba o boot (throw).
+ *  (a) MFA_TOTP_TEST_WINDOW_MINUTES casa /^[1-9]\d{0,2}$/ (sem trim) e vale de 1 a 120;
+ *  (b) NODE_ENV efetivo (trim + lowercase) é 'development' ou 'test' (ausente/vazio/staging etc. = não local);
+ *  (c) DEPLOY_ENVIRONMENT não é 'production' nem 'staging' (trim + lowercase);
+ *  (d) o processo roda sobre banco descartável (DISPOSABLE_DB === '1', marcado por scripts/withDisposableDb.js);
+ *  (e) MFA_TOTP_TEST_WINDOW_I_AM_LOCAL === '1'.
+ * Definida a variável mas falhando alguma condição, o valor é IGNORADO e um erro é registrado uma vez.
+ * Em produção (NODE_ENV ou DEPLOY_ENVIRONMENT = production, após trim/lowercase), definir a variável derruba o boot (throw).
  */
 const { authenticator } = require('otplib');
 const logger = require('../../utils/logger');
@@ -25,32 +26,46 @@ const MAX_MINUTES = 120;
 let ignoredLogged = false;
 let activeLogged = false;
 
+const norm = (x) => String(x || '').trim().toLowerCase();
+const LOCAL_ENVS = ['development', 'test'];
+
 function isDefined(env) {
   return env[VAR] !== undefined && String(env[VAR]).trim() !== '';
 }
 
-/** Falha alto no boot de produção se a variável estiver definida. */
+function isProduction(env) {
+  return norm(env.NODE_ENV) === 'production' || norm(env.DEPLOY_ENVIRONMENT) === 'production';
+}
+
+/**
+ * Falha alto no boot de produção se a variável estiver definida; fora de produção apenas resolve a
+ * janela, de modo que configuração incoerente apareça no log do boot (sem derrubar o processo).
+ */
 function assertSafeForBoot(env = process.env) {
-  if (env.NODE_ENV === 'production' && isDefined(env)) {
-    throw new Error(`${VAR} está definida em NODE_ENV=production: remova a variável (uso só para captura local em banco descartável).`);
+  if (isProduction(env) && isDefined(env)) {
+    throw new Error(`${VAR} está definida em ambiente de produção: remova a variável (uso só para captura local em banco descartável).`);
   }
+  resolveWindowSteps(env);
 }
 
 /** Devolve a janela em passos de 30 s (0 = padrão da biblioteca, sem mudança de comportamento). */
 function resolveWindowSteps(env = process.env) {
-  assertSafeForBoot(env);
+  if (isProduction(env) && isDefined(env)) {
+    throw new Error(`${VAR} está definida em ambiente de produção: remova a variável (uso só para captura local em banco descartável).`);
+  }
   if (!isDefined(env)) return 0;
 
-  const raw = String(env[VAR]).trim();
-  const minutes = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  const raw = String(env[VAR]);
+  const minutes = /^[1-9]\d{0,2}$/.test(raw) ? Number(raw) : NaN;
   const valueOk = Number.isInteger(minutes) && minutes >= 1 && minutes <= MAX_MINUTES;
+  const localEnv = LOCAL_ENVS.includes(norm(env.NODE_ENV)) && !['production', 'staging'].includes(norm(env.DEPLOY_ENVIRONMENT));
   const disposable = env.DISPOSABLE_DB === '1';
   const local = env.MFA_TOTP_TEST_WINDOW_I_AM_LOCAL === '1';
 
-  if (!valueOk || !disposable || !local) {
+  if (!valueOk || !localEnv || !disposable || !local) {
     if (!ignoredLogged) {
       ignoredLogged = true;
-      logger.error({ valorValido: valueOk, bancoDescartavel: disposable, declaradoLocal: local }, 'MFA_TOTP_TEST_WINDOW ignorado: ambiente não descartável');
+      logger.error({ valorValido: valueOk, ambienteLocal: localEnv, bancoDescartavel: disposable, declaradoLocal: local }, 'MFA_TOTP_TEST_WINDOW ignorado: ambiente não descartável');
     }
     return 0;
   }
