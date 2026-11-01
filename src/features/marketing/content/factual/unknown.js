@@ -1,6 +1,7 @@
 'use strict';
 
-const { WORD_PATTERN } = require('./text');
+const { WORD_PATTERN, fold } = require('./text');
+const { parseTerms, DEFAULT_LEGAL_REFS } = require('./settings');
 const { finding } = require('./finding');
 const { derivedNumbersFromFacts } = require('../types/derivedNumbers');
 
@@ -9,6 +10,7 @@ const PHONE = /(?<!\d)(?:\+?55\s*)?\(?\d{2}\)?[\s-]?9?\d{4}[\s-]?\d{4}(?!\d)/g;
 const DATE_NUMERIC = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?![\d/])/g;
 const DATE_WORDS = new RegExp(`(?<!\\d)(\\d{1,2})\\s+de\\s+(${MONTHS.join('|')})(?:\\s+de\\s+(\\d{4}))?`, 'g');
 const WORD_UNITS = new RegExp(`\\b(?:${WORD_PATTERN.replace('um|uma|', '')}|trinta|quarenta|cinquenta|sessenta|cem|mil)\\s+(?:minutos?|metros?|quilometros?|km|andares?|anos?|unidades?|pavimentos?|horas?|dias?|torres?|apartamentos?|casas?)\\b`, 'g');
+const CNPJ = /(?<!\d)\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}(?!\d)/g; // formato oficial do CNPJ: identificador, não afirmação
 const YEAR = /^(?:19|20)\d{2}$/;
 const TOKEN = /(?<![\d.,])\d+(?:[.,]\d+)*/g;
 const SUPERLATIVE = /\b(?:o|a|os|as)\s+(?:maior|menor|melhor|pior|mais\s+[a-z]+|unico|unica)\b(?:\s+\w+){0,4}?\s+(?:d[aeo]s?|em|entre)\b/g;
@@ -34,6 +36,14 @@ function phoneAllowed(digits, allowed) {
   return allowed.some((p) => p.endsWith(national) || national.endsWith(p));
 }
 
+const escapeRegex = (word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** "Decreto 10.123/19", "Lei nº 8.245/91", "CRECI 12345": palavra da lista (parâmetro) + número de documento. Sem palavra da lista o número segue sendo conferido. */
+function legalReferenceRegex(words) {
+  const list = words.map((w) => escapeRegex(fold(w)).replace(/\s+/g, '\\s+')).filter(Boolean);
+  return list.length === 0 ? null : new RegExp(`\\b(?:${list.join('|')})\\b\\.?\\s*(?:n[o\u00ba\u00b0.]{0,2}\\s*)?\\d[\\d./-]*`, 'g');
+}
+
 /** Ordem importa: telefone e data antes dos números soltos, para um trecho não ser lido duas vezes. */
 function numericClaims(doc, options, facts) {
   const derived = derivedNumbersFromFacts(facts); // M9-D409: percentual da redução calculado dos fatos
@@ -45,6 +55,9 @@ function numericClaims(doc, options, facts) {
       if (!explained(m)) findings.push(unexplained(doc.slice(start, end), 'O texto cita um número que não está no cadastro do imóvel: afirmação inexplicável.'));
     }
   };
+  const legal = legalReferenceRegex(options.referenciasLegais || parseTerms(DEFAULT_LEGAL_REFS));
+  take(CNPJ, () => true);
+  if (legal) take(legal, () => true);
   take(PHONE, (m) => phoneAllowed(m[0].replace(/\D/g, ''), options.telefonesEmpresa));
   take(DATE_WORDS, (m) => isContentDate(parts, m[1], MONTHS.indexOf(m[2]) + 1, m[3]));
   take(DATE_NUMERIC, (m) => isContentDate(parts, m[1], m[2], m[3]));

@@ -10,12 +10,15 @@ const { fold } = require('./text');
  *  - tolerancia_area_m2 (MKT-P032): diferença aceita, em m², entre a área do texto e a do cadastro (padrão 0).
  *  - dicionario_features (MKT-P033): lista fechada de sinônimos, "característica: sinônimo, sinônimo; outra: ...". A característica
  *    precisa ser do catálogo de características permitidas (as únicas que o read model público traz).
+ *  - referencias_legais (M9-D407, rodada 5): palavras que, antes de um número, o identificam como documento legal ou registro ("Decreto 10.123/19", "Lei 8.245/91",
+ *    "CRECI 12345"); o número não é afirmação sobre o imóvel e não reprova. O CNPJ no formato oficial (00.000.000/0000-00) também não reprova.
  *  - telefones_empresa: telefones da empresa que o texto pode citar ("nenhum" = nenhum).
  */
 const TOLERANCE_KEY = 'marketing.factual.tolerancia_area_m2';
 const DICTIONARY_KEY = 'marketing.factual.dicionario_features';
 const PHONES_KEY = 'marketing.factual.telefones_empresa';
 const INTERNAL_TERMS_KEY = 'marketing.factual.termos_internos';
+const LEGAL_REFS_KEY = 'marketing.factual.referencias_legais';
 
 const DEFAULT_DICTIONARY = [
   'piscina: piscinas',
@@ -33,7 +36,8 @@ const DEFAULT_DICTIONARY = [
 ].join('; ');
 
 const DEFAULT_INTERNAL_TERMS = 'ocorrência, reclamação, anotação interna, observação interna, nota interna, caso aberto, não conformidade';
-const FACTUAL_SETTING_DEFAULTS = Object.freeze({ [TOLERANCE_KEY]: 0, [DICTIONARY_KEY]: DEFAULT_DICTIONARY, [PHONES_KEY]: 'nenhum', [INTERNAL_TERMS_KEY]: DEFAULT_INTERNAL_TERMS });
+const DEFAULT_LEGAL_REFS = 'cnpj, decreto, lei, portaria, resolução, instrução normativa, medida provisória, processo, creci, matrícula, inscrição, alvará, artigo, art';
+const FACTUAL_SETTING_DEFAULTS = Object.freeze({ [TOLERANCE_KEY]: 0, [DICTIONARY_KEY]: DEFAULT_DICTIONARY, [PHONES_KEY]: 'nenhum', [INTERNAL_TERMS_KEY]: DEFAULT_INTERNAL_TERMS, [LEGAL_REFS_KEY]: DEFAULT_LEGAL_REFS });
 
 /** "ocorrência, Reclamação" -> ['ocorrência','reclamação'] (minúsculas, sem vazios nem repetidos). */
 const parseTerms = (text) => [...new Set(String(text || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
@@ -62,6 +66,7 @@ function parsePhones(text) {
 
 const FACTUAL_SETTINGS_SCHEMA = {
   [INTERNAL_TERMS_KEY]: { type: 'string', validate: (key, value) => { if (parseTerms(value).length === 0 || String(value).length > 1000) throw invalid(key, 'deve ter ao menos um termo, separados por vírgula (até 1000 caracteres).'); } },
+  [LEGAL_REFS_KEY]: { type: 'string', validate: (key, value) => { if (parseTerms(value).length === 0 || String(value).length > 1000) throw invalid(key, 'deve ter ao menos uma palavra, separadas por vírgula (até 1000 caracteres).'); } },
   [TOLERANCE_KEY]: { type: 'integer', min: 0, max: 1000 },
   [DICTIONARY_KEY]: { type: 'string', validate: (key, value) => { parseDictionary(value, key); } },
   [PHONES_KEY]: {
@@ -86,9 +91,10 @@ async function readFactualConfig(tenant, transaction) {
     featureGroups,
     telefonesEmpresa: parsePhones(await getSetting(PHONES_KEY, tenant, transaction, FACTUAL_SETTING_DEFAULTS[PHONES_KEY])),
     termosInternos: parseTerms(await getSetting(INTERNAL_TERMS_KEY, tenant, transaction, DEFAULT_INTERNAL_TERMS)),
+    referenciasLegais: parseTerms(await getSetting(LEGAL_REFS_KEY, tenant, transaction, DEFAULT_LEGAL_REFS)),
   };
 }
 
 module.exports = {
-  TOLERANCE_KEY, DICTIONARY_KEY, PHONES_KEY, INTERNAL_TERMS_KEY, DEFAULT_INTERNAL_TERMS, parseTerms, DEFAULT_DICTIONARY, FACTUAL_SETTING_DEFAULTS, FACTUAL_SETTINGS_SCHEMA, parseDictionary, parsePhones, readFactualConfig,
+  TOLERANCE_KEY, DICTIONARY_KEY, PHONES_KEY, INTERNAL_TERMS_KEY, LEGAL_REFS_KEY, DEFAULT_LEGAL_REFS, DEFAULT_INTERNAL_TERMS, parseTerms, DEFAULT_DICTIONARY, FACTUAL_SETTING_DEFAULTS, FACTUAL_SETTINGS_SCHEMA, parseDictionary, parsePhones, readFactualConfig,
 };
