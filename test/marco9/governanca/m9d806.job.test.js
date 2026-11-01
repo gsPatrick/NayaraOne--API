@@ -12,12 +12,25 @@ const { adminQuery } = require('../../m9d801.helpers');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 
 let tenants;
+const created = { userIds: [] }; // usuário que o teste cria fora de transação; a limpeza o apaga (R4-L2)
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => {
+  try {
+    if (env.DISPOSABLE) {
+      const { userIds } = created;
+      if (userIds.length) {
+        await adminQuery('DELETE FROM core.notifications WHERE user_id = ANY($1::uuid[])', [userIds]);
+        await adminQuery('DELETE FROM core.user_memberships WHERE user_id = ANY($1::uuid[])', [userIds]);
+        await adminQuery('DELETE FROM core.users WHERE id = ANY($1::uuid[])', [userIds]);
+      }
+    }
+  } finally { await env.sequelize.close(); }
+});
 
 test('m9d806 o job avalia os cadastros da empresa e chama notifyPendingDomains', { skip: skip() }, async () => {
-  await withTenantTransaction(tenants.A, (tx) => env.newUser(tenants.A, tx, { roleName: 'ADMIN' }));
+  const admin = await withTenantTransaction(tenants.A, (tx) => env.newUser(tenants.A, tx, { roleName: 'ADMIN' }));
+  created.userIds.push(admin.id);
   const person = await withTenantTransaction(tenants.A, (tx) => env.fullPerson(tenants.A, tx, { legalName: 'QA-M9 Job Varredura' }, { contact: false }));
   const calls = [];
   const original = lifecycle.notifyPendingDomains;
