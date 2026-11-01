@@ -33,6 +33,7 @@ const KEYS = Object.freeze({
   EXEC_PER_PROCESS: 'migracao.execucao.max_no_processo',
   EXEC_EXPIRE_MIN: 'migracao.execucao.expira_min',
   EXEC_REPLAY_EXPIRE_MIN: 'migracao.execucao.expira_replay_min',
+  EXEC_HEARTBEAT_S: 'migracao.execucao.sinal_vida_s',
   LEGACY_FILTER: 'migracao.legado.filtrar_por_empresa',
   LEGACY_COLUMN: 'migracao.legado.coluna_empresa',
   LEGACY_VALUE: 'migracao.legado.codigo_empresa',
@@ -42,7 +43,7 @@ const KEYS = Object.freeze({
 
 const INGEST_SETTING_DEFAULTS = Object.freeze({
   [KEYS.OVERLAP_S]: 120, [KEYS.BATCH_SIZE]: 2000, [KEYS.MAX_ATTEMPTS]: 3, [KEYS.BATCH_TIMEOUT_MIN]: 30, [KEYS.ETA_WINDOW]: 5,
-  [KEYS.EXEC_PER_SOURCE]: 1, [KEYS.EXEC_PER_COMPANY]: 3, [KEYS.EXEC_PER_PROCESS]: 5, [KEYS.EXEC_EXPIRE_MIN]: 720, [KEYS.EXEC_REPLAY_EXPIRE_MIN]: 30,
+  [KEYS.EXEC_PER_SOURCE]: 1, [KEYS.EXEC_PER_COMPANY]: 3, [KEYS.EXEC_PER_PROCESS]: 5, [KEYS.EXEC_EXPIRE_MIN]: 720, [KEYS.EXEC_REPLAY_EXPIRE_MIN]: 30, [KEYS.EXEC_HEARTBEAT_S]: 30,
   [KEYS.LEGACY_FILTER]: false, [KEYS.LEGACY_COLUMN]: 'empresa_id', [KEYS.LEGACY_VALUE]: 'A_DEFINIR', [KEYS.LEGACY_REQUIRE]: true, [KEYS.PAYLOAD_DAYS]: 30,
 });
 
@@ -57,11 +58,12 @@ const INGEST_SETTINGS_SCHEMA = {
   [KEYS.EXEC_PER_PROCESS]: { type: 'integer', min: 1, max: 100 },
   [KEYS.EXEC_EXPIRE_MIN]: { type: 'integer', min: 1, max: 10080 },
   [KEYS.EXEC_REPLAY_EXPIRE_MIN]: { type: 'integer', min: 1, max: 1440 },
+  [KEYS.EXEC_HEARTBEAT_S]: { type: 'integer', min: 1, max: 600 },
   [KEYS.LEGACY_FILTER]: { type: 'boolean' },
   [KEYS.LEGACY_COLUMN]: { type: 'string', validate: (key, value) => { if (!IDENT.test(String(value))) invalid(key, value, 'deve ter só letras, números e _ (até 63 caracteres), começando por letra ou _.'); } },
   [KEYS.LEGACY_VALUE]: { type: 'string', validate: (key, value) => { if (String(value).length > 120) invalid(key, value, 'deve ter no máximo 120 caracteres.'); } },
   [KEYS.LEGACY_REQUIRE]: { type: 'boolean' },
-  [KEYS.PAYLOAD_DAYS]: { type: 'integer', min: 0, max: 3650 },
+  [KEYS.PAYLOAD_DAYS]: { type: 'integer', min: 1, max: 3650 },
 };
 
 module.exports = { KEYS, INGEST_SETTING_DEFAULTS, INGEST_SETTINGS_SCHEMA };

@@ -21,7 +21,7 @@ const A = () => tenants.A;
 test('m9d900 os parâmetros da migração (da D900, a janela do ETA da D901, os limites de execução, o filtro de empresa do legado e o descarte do conteúdo) estão no dicionário, com o padrão do livro, e o administrador consegue lê-los', { skip: skip() }, async () => {
   assert.deepEqual(INGEST_SETTING_DEFAULTS, {
     'migracao.watermark.sobreposicao_s': 120, 'migracao.lote.tamanho': 2000, 'migracao.lote.max_tentativas': 3, 'migracao.lote.timeout_min': 30, 'migracao.eta.janela_lotes': 5,
-    'migracao.execucao.max_por_fonte': 1, 'migracao.execucao.max_por_empresa': 3, 'migracao.execucao.max_no_processo': 5, 'migracao.execucao.expira_min': 720, 'migracao.execucao.expira_replay_min': 30,
+    'migracao.execucao.max_por_fonte': 1, 'migracao.execucao.max_por_empresa': 3, 'migracao.execucao.max_no_processo': 5, 'migracao.execucao.expira_min': 720, 'migracao.execucao.expira_replay_min': 30, 'migracao.execucao.sinal_vida_s': 30,
     'migracao.legado.filtrar_por_empresa': false, 'migracao.legado.coluna_empresa': 'empresa_id', 'migracao.legado.codigo_empresa': 'A_DEFINIR', 'migracao.legado.exigir_filtro_multiempresa': true, 'migracao.payload.retencao_dias': 30,
   });
   for (const key of Object.values(KEYS)) assert.ok(SETTINGS_SCHEMA[key], `${key} no SETTINGS_SCHEMA`);

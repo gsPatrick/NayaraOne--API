@@ -17,7 +17,7 @@ async function insert(tenant, { sourceSystem, entity, lastDelta, requestedBy }, 
 /** Registro de controle de um replay de lote (N3): já RUNNING, do tipo REPLAY, na fonte do lote. Conta nos limites como uma execução, mas a Torre não o toma por "última execução". */
 async function insertReplay(tenant, { sourceSystem, entity, requestedBy }, transaction) {
   const [row] = await select(
-    `INSERT INTO governance.mig_runs (group_id, company_id, source_system, entity, kind, status, started_at, requested_by) VALUES (:groupId, :companyId, :sourceSystem, :entity, 'REPLAY', 'RUNNING', now(), :requestedBy) RETURNING ${COLUMNS}`,
+    `INSERT INTO governance.mig_runs (group_id, company_id, source_system, entity, kind, status, started_at, heartbeat_at, requested_by) VALUES (:groupId, :companyId, :sourceSystem, :entity, 'REPLAY', 'RUNNING', now(), now(), :requestedBy) RETURNING ${COLUMNS}`,
     { groupId: tenant.groupId, companyId: tenant.companyId, sourceSystem, entity, requestedBy: requestedBy || null }, transaction
   );
   return row;
@@ -76,11 +76,16 @@ async function lockCompany(tenant, transaction) {
   await sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))', { transaction, replacements: { key: `mig_run_request:${tenant.companyId}` } });
 }
 
-/** Encerra como FAILED os registros de controle de replay sem fim há mais que `expireMinutes` (processo caído no meio do replay; R3-L6). Devolve quantos encerrou. */
+/** Renova o sinal de vida do registro de controle de um replay ainda RUNNING (R4-L6). */
+async function touch(tenant, id, transaction) {
+  await sequelize.query("UPDATE governance.mig_runs SET heartbeat_at = now() WHERE company_id = :companyId AND id = :id AND status = 'RUNNING'", { transaction, replacements: { companyId: tenant.companyId, id } });
+}
+
+/** Encerra como FAILED os registros de controle de replay sem sinal de vida há mais que `expireMinutes` (processo caído no meio do replay; R3-L6 e R4-L6: o sinal é o início ou a última renovação). Devolve quantos encerrou. */
 async function expireStaleReplays(tenant, expireMinutes, transaction) {
   const rows = await select(
     `UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now(), error = 'Replay interrompido: o registro expirou sem fim.'
-      WHERE company_id = :companyId AND kind = 'REPLAY' AND status = 'RUNNING' AND COALESCE(started_at, created_at) <= now() - make_interval(mins => :expireMinutes::int) RETURNING id`,
+      WHERE company_id = :companyId AND kind = 'REPLAY' AND status = 'RUNNING' AND GREATEST(COALESCE(started_at, created_at), COALESCE(heartbeat_at, started_at, created_at)) <= now() - make_interval(mins => :expireMinutes::int) RETURNING id`,
     { companyId: tenant.companyId, expireMinutes }, transaction
   );
   return rows.length;
@@ -102,4 +107,4 @@ async function countActive(tenant, { sourceSystem, entity, expireMinutes }, tran
   return row;
 }
 
-module.exports = { lockCompany, countActive, expireStaleReplays, insert, insertReplay, get, latest, claim, finish, pause, resume, listPaused, listQueued };
+module.exports = { lockCompany, countActive, expireStaleReplays, touch, insert, insertReplay, get, latest, claim, finish, pause, resume, listPaused, listQueued };

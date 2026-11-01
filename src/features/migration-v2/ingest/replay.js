@@ -13,6 +13,7 @@ const { runBatch, loadSettings } = require('./batch.runner');
 const runs = require('./run.repository');
 const limiter = require('./run.limiter');
 const { admitReplay } = require('./run.admission');
+const heartbeat = require('./run.heartbeat');
 
 const finishTicket = (tenant, id, status, error) => openTenantTx(tenant, (transaction) => runs.finish(tenant, id, status, { replay: true }, error, transaction));
 
@@ -34,7 +35,9 @@ async function replayBatch(tenant, actor, batchId) {
     throw errors.runLimit();
   }
   let connector = null;
+  let stopSignal = () => {};
   try {
+    stopSignal = await heartbeat.start(tenant, ticket.id);
     connector = await connectors.open(source);
     const range = { fromToken: original.from_token, toToken: original.to_token };
     let events;
@@ -48,6 +51,7 @@ async function replayBatch(tenant, actor, batchId) {
     await finishTicket(tenant, ticket.id, 'FAILED', String((err && err.message) || err).slice(0, 500)).catch(() => {});
     throw err;
   } finally {
+    stopSignal();
     limiter.release();
     if (connector) await connector.close().catch(() => {});
   }
