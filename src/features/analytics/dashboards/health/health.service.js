@@ -29,8 +29,11 @@ function qualityOf(src) {
   return null;
 }
 
-/** O indicador não tem dado: sem registro ou INCOMPLETE (nunca o DEGRADED, que tem dado mas não confiável). */
-const hasNoData = (src) => !src.ok && src.status !== 'DEGRADED';
+/**
+ * O indicador não tem dado ATUAL: sem registro, INCOMPLETE (nunca o DEGRADED, que tem dado mas não confiável) ou nunca atualizado (freshness UNKNOWN). Área em que nenhum
+ * indicador tem dado atual é CINZA e nunca vermelha (a leitura do que é "ainda sem atualização" não é um risco medido).
+ */
+const hasNoData = (src) => (!src.ok && src.status !== 'DEGRADED') || !src.freshness || src.freshness.state === 'UNKNOWN';
 
 function kpiLight(src, rule) {
   if (!rule || !src.ok) return null;

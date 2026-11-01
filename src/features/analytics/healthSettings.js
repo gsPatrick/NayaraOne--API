@@ -42,7 +42,7 @@ function validateAreas(key, value) {
 }
 
 const validateRule = (key, value) => {
-  if (!parseRule(value)) throw AppError.badRequest(`O valor de "${key}" deve ter o formato "AMARELO < 60%; VERMELHO < 40%" (operadores <, <=, >, >=, =, !=).`, 'SETTING_INVALID_VALUE', { key, value });
+  if (!parseRule(value)) throw AppError.badRequest(`O valor de "${key}" deve ter o formato "AMARELO < 60%; VERMELHO < 40%" (operadores <, <=, >, >=, =, !=). Valor recebido: "${String(value).slice(0, 120)}".`, 'SETTING_INVALID_VALUE', { key, value });
 };
 
 const HEALTH_SETTINGS_SCHEMA = Object.freeze({

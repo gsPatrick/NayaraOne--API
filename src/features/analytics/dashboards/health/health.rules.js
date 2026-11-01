@@ -12,9 +12,12 @@ const KEYS = Object.freeze(['yellow', 'red']);
 const LIGHT_OF = Object.freeze({ AMARELO: 'yellow', VERMELHO: 'red' });
 const RULE_RE = /^(AMARELO|VERMELHO)\s*(?:se\s+)?(<=|>=|==|!=|<|>|=)\s*(-?\d+(?:[.,]\d+)?)\s*(?:%|p\.p\.)?$/i;
 
+/** Os operadores chegam por vezes como entidade de texto (&gt; &lt; &amp;) quando algum intermediário escapa o corpo; voltam ao sinal antes de ler a regra (DI-D686-5). */
+const unescapeOperators = (text) => String(text).replace(/&gt;/gi, '>').replace(/&lt;/gi, '<').replace(/&amp;/gi, '&');
+
 /** "AMARELO < 99,9%; VERMELHO < 99%" -> { yellow: { operator: 'LT', value: 99.9 }, red: { operator: 'LT', value: 99 } }; null se o texto não for uma regra válida. */
 function parseRule(text) {
-  const sections = String(text === undefined || text === null ? '' : text).split(';').map((s) => s.trim()).filter(Boolean);
+  const sections = unescapeOperators(text === undefined || text === null ? '' : text).split(';').map((s) => s.trim()).filter(Boolean);
   if (!sections.length || sections.length > 2) return null;
   const rule = {};
   for (const section of sections) {

@@ -10,7 +10,10 @@ const { readMetricAsOfUnchecked } = require('../../metrics/registry.asOf');
 const { has, domainPermissionOf } = require('../../security');
 const { formatValue } = require('../dashboard.format');
 const { dimensionUnit } = require('../../metrics/dimensionUnit');
+const { getCriticalityRow } = require('../../metrics/seed/criticality.table');
 
+/** Nome legível do indicador: o da publicação, senão o da tabela de criticidade, e só por último o código. */
+const nameOf = (code, meta) => (meta && meta.name) || (getCriticalityRow(code) || {}).name || code;
 const MISSING = new Set(['ANALYTICS_SNAPSHOT_NOT_AVAILABLE', 'ANALYTICS_METRIC_NOT_FOUND']);
 
 /** Fonte de um indicador: { code, ok, value, unit, name, domain, dims (Map chave -> texto decimal), freshness, status }. `ok` = há valor confiável. */
@@ -20,13 +23,13 @@ async function readSource(ctx, code, asOfDate, meta, transaction) {
   try {
     read = await readMetricAsOfUnchecked(readOf, { metricCode: code, scopeType: 'COMPANY', scopeId: ctx.companyId, asOfDate }, transaction);
   } catch (err) {
-    if (MISSING.has(err.code)) return { code, ok: false, value: null, unit: null, name: (meta && meta.name) || code, domain: meta ? meta.domain : 'GENERAL', dims: new Map(), status: 'INCOMPLETE', freshness: null };
+    if (MISSING.has(err.code)) return { code, ok: false, value: null, unit: null, name: nameOf(code, meta), domain: meta ? meta.domain : 'GENERAL', dims: new Map(), status: 'INCOMPLETE', freshness: null };
     throw err;
   }
   const reliable = read.valueReliable !== false && read.value !== null && read.value !== undefined && !['DEGRADED', 'INCOMPLETE'].includes(read.status);
   const rows = reliable ? await store.listDimensionSnapshots({ metricCode: code, version: read.version, companyId: ctx.companyId, asOfDate }, transaction) : [];
   return {
-    code, ok: reliable, value: reliable ? String(read.value) : null, unit: read.unit, name: (meta && meta.name) || code, domain: meta ? meta.domain : 'GENERAL',
+    code, ok: reliable, value: reliable ? String(read.value) : null, unit: read.unit, name: nameOf(code, meta), domain: meta ? meta.domain : 'GENERAL',
     dims: new Map(rows.map((r) => [r.key, r.value])), status: read.status, freshness: read.freshness, valueNature: read.valueNature, sourceRefs: read.sourceRefs,
   };
 }
