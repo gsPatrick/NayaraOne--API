@@ -9,6 +9,7 @@ const http = require('../_helpers/m9d870Http');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../../src/features/settings/settings.service');
 const { restrictedPermissionOf } = require('../../../src/features/settings/settingRestricted');
 const { isPlatformOnly } = require('../../../src/features/settings/settingPlatform');
+const { absorbable } = require('../../../src/features/core-governance/feature-flags/flags.settings.adapter');
 const { openTenantTx } = require('../../../src/features/core-governance/data-quality/retention.tenantTx');
 
 const tenantA = () => ({ ...http.state.tenants.A });
@@ -74,7 +75,7 @@ test('m9d870 R4-M1 e R4-L3: PUT, PATCH e POST de chave protegida dão 403, nada 
   if (http.state.skip) return t.skip(http.state.skip);
   const { A } = http.state.tenants;
   const byPermission = new Map();
-  for (const key of blocked().filter((k) => !isPlatformOnly(SETTINGS_SCHEMA[k]) && ['boolean', 'integer', 'string'].includes(SETTINGS_SCHEMA[k].type))) if (!byPermission.has(required(key))) byPermission.set(required(key), key);
+  for (const key of blocked().filter((k) => absorbable(k) && !isPlatformOnly(SETTINGS_SCHEMA[k]) && ['boolean', 'integer', 'string'].includes(SETTINGS_SCHEMA[k].type))) if (!byPermission.has(required(key))) byPermission.set(required(key), key);
   for (const key of ['marketing.public_fields.allowlist', 'marketing.public_fields.features_permitidas', 'marketing.autopublish.classes', blocked().find((k) => k.startsWith('marketing.cadencia.'))]) byPermission.set(`${required(key)}#${key}`, key);
   assert.ok(byPermission.size >= 8, `${byPermission.size} chaves amostradas`);
   for (const key of byPermission.values()) {
@@ -93,6 +94,20 @@ test('m9d870 R4-M1 e R4-L3: PUT, PATCH e POST de chave protegida dão 403, nada 
     const rows = (await denials(A.companyId, key)).slice(already);
     assert.deepEqual(rows.map((r) => r.after_json.via).sort(), ['PATCH /feature-flags', 'POST /feature-flags', 'PUT /settings'], `${key}: uma linha de auditoria por tentativa`);
     assert.ok(rows.every((r) => r.after_json.key === key));
+  }
+});
+
+test('m9d870 R4-M1 e R4-L3: chave protegida que o registro não absorve por formato (ex.: integration.slo.CRITICAL) dá 403 no PUT e a tentativa é auditada', async (t) => {
+  if (http.state.skip) return t.skip(http.state.skip);
+  const { A } = http.state.tenants;
+  const keys = blocked().filter((k) => !absorbable(k) && !isPlatformOnly(SETTINGS_SCHEMA[k]) && ['boolean', 'integer', 'string'].includes(SETTINGS_SCHEMA[k].type));
+  assert.ok(keys.some((k) => k.startsWith('integration.slo.')), 'chaves integration.slo.* enumeradas');
+  for (const key of keys.slice(0, 6).concat(keys.filter((k) => k.startsWith('integration.slo.')).slice(0, 2))) {
+    const already = (await denials(A.companyId, key)).length;
+    const put = await http.call('A:gestor', 'PUT', `/settings/${key}`, { value: sample(SETTINGS_SCHEMA[key]) });
+    assert.equal(put.status, 403, `${key}: ${JSON.stringify(put.body)}`);
+    assert.equal(await live(A.companyId, key), 0, `${key}: nada gravado`);
+    assert.equal((await denials(A.companyId, key)).length - already, 1, `${key}: uma linha de auditoria`);
   }
 });
 
