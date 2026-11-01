@@ -16,6 +16,7 @@ const { Sequelize, QueryTypes } = require('sequelize');
 
 const { sequelize, Group, Company } = require('../src/models');
 const { getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
+const { recomporMarketing } = require('./helpers/marketingRecompoe');
 
 const TABLES = ['campaigns', 'campaign_audiences', 'campaign_steps', 'content_items', 'content_versions', 'templates'];
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -278,12 +279,6 @@ test('audiencia_e_etapa_so_referenciam_campanha_da_mesma_empresa', async () => {
   });
 });
 
-const POSTERIORES = [
-  '20260101000752-marketing-template-immutability.js', '20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js',
-  '20260101000761-marketing-campaign-cost.js', '20260101000765-marketing-public-read-models.js', '20260101000775-marketing-content-types-trigger.js',
-  '20260101000771-marketing-publication-jobs-one-active-per-version-channel.js', '20260101000772-marketing-automation-action-receipts.js', // M9-D410 e M9-D414
-];
-
 test('migration_e_idempotente_e_reversivel', async (t) => {
   if (process.env.DISPOSABLE_DB !== '1' || !process.env.DATABASE_ADMIN_URL) {
     t.skip('só roda no banco descartável (DISPOSABLE_DB=1 e DATABASE_ADMIN_URL)');
@@ -295,7 +290,6 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   const parte3 = require(path.resolve(__dirname, '../migrations/20260101000754-marketing-campaign-lifecycle.js')); // M9-D412
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
-  const partes = [parte2, parte3];
   try {
     const inicial = await contagem();
     assert.equal(inicial, 6);
@@ -318,9 +312,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   } finally {
     // Recompõe o banco na ordem MESMO se uma asserção falhar: o down da parte 1 derruba as tabelas com tudo que as migrations
     // posteriores acrescentaram (colunas, gatilhos, funções); sem isso um defeito aqui deixaria o schema pela metade para os outros testes.
-    await migration.up(qi);
-    for (const parte of partes) await parte.up(qi);
-    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
+    await recomporMarketing(admin); // partes 1 e 2, TODAS as migrations posteriores de marketing e o GRANT do runtime (helpers/marketingRecompoe)
     await admin.close();
   }
 });

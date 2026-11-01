@@ -161,15 +161,18 @@ test('checks_de_rastreio_atribuicao_e_avaliacao', async () => {
 
     // review_requests
     if (p) {
-      const rr = (over) => ({ ...base(tenantA), p: p.id, s: uid(), st: 'PENDING', ch: 'EMAIL', sc: null, pr: null, ...over });
-      const rrSql = `INSERT INTO marketing.review_requests (group_id, company_id, person_id, source_entity_type, source_entity_id, status, channel, satisfaction_score, public_rating)
-        VALUES (:g, :c, :p, 'CONTRACT', :s, :st, :ch, :sc, :pr)`;
+      const rr = (over) => ({ ...base(tenantA), p: p.id, s: uid(), st: 'PENDING', ch: 'EMAIL', sc: null, pr: null, ec: null, ...over });
+      const rrSql = `INSERT INTO marketing.review_requests (group_id, company_id, person_id, source_entity_type, source_entity_id, status, channel, satisfaction_score, public_rating, error_code)
+        VALUES (:g, :c, :p, 'CONTRACT', :s, :st, :ch, :sc, :pr, :ec)`;
       await q(rrSql, rr({ sc: 5, pr: 1 }), tx);
       await expectDbError(tx, rrSql, rr({ sc: 0 }), /satisfaction/i);
       await expectDbError(tx, rrSql, rr({ sc: 6 }), /satisfaction/i);
       await expectDbError(tx, rrSql, rr({ pr: 6 }), /public_rating/i);
       await expectDbError(tx, rrSql, rr({ st: 'OPEN' }), /status/i);
-      for (const st of ['PENDING', 'BLOCKED_NEGATIVE', 'SENT', 'DELIVERED', 'COMPLETED', 'FAILED', 'SUPPRESSED']) await q(rrSql, rr({ st }), tx);
+      // FAILED e SUPPRESSED exigem error_code (mkt_review_requests_failed_code_chk); os demais estados não.
+      for (const st of ['FAILED', 'SUPPRESSED']) await expectDbError(tx, rrSql, rr({ st }), /failed_code|error_code/i);
+      for (const st of ['PENDING', 'BLOCKED_NEGATIVE', 'SENT', 'DELIVERED', 'COMPLETED']) await q(rrSql, rr({ st }), tx);
+      for (const st of ['FAILED', 'SUPPRESSED']) await q(rrSql, rr({ st, ec: 'MKT_TESTE' }), tx);
     }
   });
 });

@@ -12,9 +12,9 @@ const {
   TABLES, base, prepararTenants, sha, uid,
 } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction } = require('./testHelpers');
+const { recomporMarketing } = require('./helpers/marketingRecompoe');
 
 // Migrations posteriores que alteram as tabelas da parte 2 (D414 definição da automação; D431 atribuição e links).
-const POSTERIORES = ['20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js', '20260101000771-marketing-publication-jobs-one-active-per-version-channel.js', '20260101000772-marketing-automation-action-receipts.js'];
 const RECIBOS = '20260101000772-marketing-automation-action-receipts.js'; // M9-D414: o recibo das ações aponta para automation_runs e cai antes da parte 2
 
 let tenantA;
@@ -99,8 +99,7 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
   } finally {
     // O down derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, checks, gatilhos): recompõe na ordem
     // MESMO se uma asserção falhar, para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
-    await migration.up(qi);
-    for (const file of POSTERIORES) await require(path.resolve(__dirname, '../migrations', file)).up(qi);
+    await recomporMarketing(admin); // partes 1 e 2, TODAS as migrations posteriores de marketing e o GRANT do runtime (helpers/marketingRecompoe)
     await admin.close();
   }
 });
