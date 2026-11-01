@@ -62,6 +62,8 @@ async function cleanClients() {
   await env.adminQuery('DELETE FROM governance.api_consumers WHERE app_key IS NULL');
   // Leads de teste: melhor esforço (banco descartável; chaves estrangeiras de eventos podem impedir a limpeza e não atrapalham os testes).
   await env.adminQuery("DELETE FROM crm.opportunities WHERE next_action LIKE '%QA-M9%'").catch(() => {});
+  // R5-L1: os parâmetros que os testes gravam não ficam no banco (outros arquivos, como o m9d870.escrita, exigem zero linhas de chave protegida).
+  await env.adminQuery("DELETE FROM core.tenant_settings WHERE key IN ('governanca.api.cliente.token_validade_s', 'governanca.api.cliente.segredo_custo', 'governanca.api.externo.lead_prazo_horas')");
   consumersApi.clearContextCache();
   consumersApi.resetUsageThrottle();
 }
