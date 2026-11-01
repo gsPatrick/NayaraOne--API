@@ -32,8 +32,7 @@ const HOSTIS = [
   ['Acesse evil.Com', 'evil.Com'], ['Visite evil.Net', 'evil.Net'], ['Veja evil.Org', 'evil.Org'], ['Veja evil.Br', 'evil.Br'], ['Veja my.Evil.Com', 'my.Evil.Com'], ['Veja evil.Рф', 'evil.Рф'],
   ['Acesse:evil.com/login', 'evil.com/login'], ['Site:evil.com/login', 'evil.com/login'], ['Veja _evil.com/x_', 'evil.com/x'], ['Aguarde...evil.com/x', 'evil.com/x'],
   ['Aguarde…evil.com/x', 'evil.com/x'], ['Veja:www.evil.com', 'www.evil.com'], ['Veja::evil.com/x', 'evil.com/x'], ['a:evil.com/x', 'evil.com/x'], ['link/evil.com/x', 'evil.com/x'],
-  ['Veja (evil.com)', 'evil.com'], ['Veja "evil.com"', 'evil.com'], ['evil.lol', 'evil.lol'], ['evil.sh', 'evil.sh'], ['evil.kz', 'evil.kz'], ['evil.travel', 'evil.travel'],
-  ['evil.中国', 'evil.中国'], ['2130706433/x', '2130706433/x'], ['127.1/x', '127.1/x'], ['0x7f000001/x', '0x7f000001/x'], ['@evil.com/x', 'evil.com/x'], ['Veja 1.2.3.4/x', '1.2.3.4/x'],
+  ['Veja (evil.com)', 'evil.com'], ['Veja "evil.com"', 'evil.com'], ['2130706433/x', '2130706433/x'], ['127.1/x', '127.1/x'], ['0x7f000001/x', '0x7f000001/x'], ['@evil.com/x', 'evil.com/x'], ['Veja 1.2.3.4/x', '1.2.3.4/x'],
   ['mailto:a@evil.com', 'mailto:a@evil.com'], ['tel:+5511999999999', 'tel:+5511999999999'], ['sms:123', 'sms:123'], ['nayara.com.br:8080@evil.com', 'nayara.com.br:8080@evil.com'],
   ['nayara.com.br@evil.com/x', 'nayara.com.br@evil.com/x'], ['evil。com/login', 'evil.com/login'], ['https:evil.com', 'https:evil.com'], ['hxxps://evil.com', 'hxxps://evil.com'],
   ['evil.in/login', 'evil.in/login'], ['evil.zip/a', 'evil.zip/a'], ['Evil.Net/x', 'Evil.Net/x'],
@@ -41,7 +40,10 @@ const HOSTIS = [
 const LEGITIMOS = ['maria.pro@nayara.com.br', 'jose.me@x.com', 'ana.co@x.com', 'Escreva para maria.pro@nayara.com.br', 'Preço R$ 1.000,00 em 10.12.2026', 'pi 3.14 e v1.2.3', 'e/ou km/h', 'versão 1.2.3.4x',
   'Fale com @maria hoje', 'Às 10:30, sala 2', 'R$ 1.500/mês'];
 const REVISAO = [['Av.Paulista/Centro', 'Av.Paulista/Centro'], ['S.Paulo/SP', 'S.Paulo/SP'], ['Sr.Silva/Sra.Souza', 'Sr.Silva/Sra.Souza'], ['Rua.das.Flores/100', 'Rua.das.Flores/100'], ['Av.Paulista', 'Av.Paulista'],
-  ['Sr.Silva', 'Sr.Silva'], ['foto.jpg', 'foto.jpg'], ['planta.pdf', 'planta.pdf']];
+  ['Sr.Silva', 'Sr.Silva'], ['foto.jpg', 'foto.jpg'], ['planta.pdf', 'planta.pdf'],
+  // Rodada 5 (fail-to-review): terminação fora da lista é ambígua, com ou sem caminho, e vai à revisão humana; nunca bloqueia por heurística.
+  ['evil.lol/x', 'evil.lol/x'], ['evil.sh/x', 'evil.sh/x'], ['evil.kz/x', 'evil.kz/x'], ['evil.travel/x', 'evil.travel/x'], ['evil.中国/x', 'evil.中国/x'], ['Sala.Comercial/Térreo', 'Sala.Comercial/Térreo'], ['Trav.das.Flores/10', 'Trav.das.Flores/10'],
+  ['evil.lol', 'evil.lol'], ['evil.sh', 'evil.sh'], ['evil.kz', 'evil.kz'], ['evil.travel', 'evil.travel'], ['evil.中国', 'evil.中国'], ['Trav.das Flores', 'Trav.das']];
 
 test('formas_hostis_de_todas_as_rodadas_sao_extraidas_como_bloqueaveis', () => {
   for (const [texto, url] of HOSTIS) assert.deepEqual(kinds(texto), [`HOSTILE:${url}`], texto);
@@ -50,7 +52,7 @@ test('formas_hostis_de_todas_as_rodadas_sao_extraidas_como_bloqueaveis', () => {
 test('texto_legitimo_nao_e_url_e_abreviacao_arquivo_e_numero_vao_a_revisao_sem_bloquear', () => {
   for (const texto of LEGITIMOS) assert.deepEqual(security.extractUrls(texto), [], texto);
   for (const [texto, url] of REVISAO) assert.deepEqual(kinds(texto), [`REVIEW:${url}`], texto);
-  assert.deepEqual(kinds('Av.Evil/login'), ['HOSTILE:Av.Evil/login'], 'caminho em minúscula não é abreviação colada');
+  assert.deepEqual(kinds('Av.Evil/login'), ['REVIEW:Av.Evil/login'], 'terminação fora da lista com caminho: ambíguo, revisão humana (rodada 5)');
   assert.deepEqual(kinds('Bit.ly'), ['HOSTILE:Bit.ly'], 'terminação conhecida nunca é abreviação');
 });
 
@@ -73,7 +75,7 @@ test('mesmo_extrator_no_blog_titulo_renderizado_e_revisao_vira_finding_sem_repro
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
     const texto = 'Casa de 3 quartos em bairro tranquilo.';
-    for (const [title, body] of [['Acesse evil.Com', {}], ['Casa nova', { renderizado: 'Visite evil.Net' }], ['Casa nova', { renderizado: 'Veja:evil.com/login' }], ['Casa nova', { renderizado: 'Aguarde…evil.lol' }]]) {
+    for (const [title, body] of [['Acesse evil.Com', {}], ['Casa nova', { renderizado: 'Visite evil.Net' }], ['Casa nova', { renderizado: 'Veja:evil.com/login' }], ['Casa nova', { renderizado: 'Aguarde…evil.com/x' }]]) {
       const r = await factualResult(t, tenant, texto, undefined, { title, body });
       assert.equal(r.status, 'FACT_CHECK_FAILED', `${title} ${JSON.stringify(body)}`);
     }
@@ -137,9 +139,11 @@ test('extensoes_de_arquivo_vem_do_parametro', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
     assert.deepEqual(await security.findReviewUrls('Veja foto.jpg', ctx(t)), ['foto.jpg']);
-    await set(t, 'marketing.url.extensoes_arquivo', 'png');
-    assert.deepEqual(await security.findReviewUrls('Veja foto.jpg', ctx(t)), []);
-    assert.deepEqual(await hostis(t, 'Veja foto.jpg'), ['foto.jpg'], 'fora da lista de extensões é endereço');
+    assert.deepEqual(await hostis(t, 'Veja arquivo.zip'), ['arquivo.zip'], 'zip é terminação conhecida e não está na lista de extensões: endereço');
+    await set(t, 'marketing.url.extensoes_arquivo', 'png, zip');
+    assert.deepEqual(await hostis(t, 'Veja foto.jpg'), [], 'fora da lista de extensões, sem caminho e sem terminação conhecida: continua ambíguo, nunca bloqueia');
+    assert.deepEqual(await security.findReviewUrls('Veja arquivo.zip', ctx(t)), ['arquivo.zip']);
+    assert.deepEqual(await hostis(t, 'Veja arquivo.zip'), [], 'extensão da lista vai à revisão em vez de bloquear');
     for (const ruim of ['', 'a.b', 'jpg;pdf']) await assert.rejects(() => set(t, 'marketing.url.extensoes_arquivo', ruim), (e) => e.statusCode >= 400 && e.statusCode < 500, ruim);
   });
 });

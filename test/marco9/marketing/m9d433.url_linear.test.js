@@ -64,7 +64,7 @@ test('credencial_email_e_arroba_seguem_a_regra_sem_regex_de_retrocesso', () => {
   assert.deepEqual(security.extractCandidates('Escreva para maria.pro@nayara.com.br ou jose.me@x.com'), []);
   assert.deepEqual(kinds('nayara.com.br@evil.com/x'), ['HOSTILE:nayara.com.br@evil.com/x']);
   assert.deepEqual(kinds('nayara.com.br:8080@evil.com'), ['HOSTILE:nayara.com.br:8080@evil.com']);
-  assert.deepEqual(kinds('Veja evil.com/login@nayara.com.br'), ['HOSTILE:evil.com/login'], 'caminho antes do arroba continua sendo varrido (o e-mail depois dele não esconde o endereço)');
+  assert.deepEqual(kinds('Veja evil.com/login@nayara.com.br'), ['HOSTILE:evil.com/login@nayara.com.br'], 'arroba depois de um caminho não é e-mail: o endereço inteiro é lido (rodada 5, M-1)');
   assert.deepEqual(kinds('@evil.com/x'), ['HOSTILE:evil.com/x']);
 });
 

@@ -17,21 +17,24 @@ const TOO_BIG_TOTAL = 'TEXTO_GRANDE_DEMAIS';
 const REVIEW_REQUIRED = 'REVISAO_HUMANA_NECESSARIA';
 
 /** Todo texto de um valor, em qualquer profundidade (array e objeto aninhados; chave de objeto também é lida). Número e booleano viram texto. Devolve [{ field, value, variable }]. */
-function leafTexts(value, path, out = [], depth = 0) {
+function leafTexts(value, path, out = [], depth = 0, budget = { left: Infinity }) {
   if (value === null || value === undefined) return out;
-  if (depth > MAX_DEPTH) { out.push({ field: `${path}(profundidade)`, value: JSON.stringify(value).slice(0, 4), variable: true, deep: true }); return out; }
+  if (budget.left <= 0) { if (!out.tooMany) { out.tooMany = true; out.push({ field: `${path}(itens)`, value: '', variable: true, tooMany: true }); } return out; }
+  budget.left -= 1;
+  if (depth > MAX_DEPTH) { out.push({ field: `${path}(profundidade)`, value: '', variable: true, deep: true }); return out; }
   if (typeof value === 'string') out.push({ field: path, value, variable: true });
   else if (typeof value === 'number' || typeof value === 'boolean') out.push({ field: path, value: String(value), variable: true });
-  else if (Array.isArray(value)) value.forEach((item, i) => leafTexts(item, `${path}[${i}]`, out, depth + 1));
-  else if (typeof value === 'object') for (const [k, v] of Object.entries(value)) { out.push({ field: `${path}.${k}(chave)`, value: k, variable: true }); leafTexts(v, `${path}.${k}`, out, depth + 1); }
+  else if (Array.isArray(value)) for (let i = 0; i < value.length && !out.tooMany; i += 1) leafTexts(value[i], `${path}[${i}]`, out, depth + 1, budget);
+  else if (typeof value === 'object') for (const k of Object.keys(value)) { if (out.tooMany) break; out.push({ field: `${path}.${k}(chave)`, value: k, variable: true }); leafTexts(value[k], `${path}.${k}`, out, depth + 1, budget); }
   return out;
 }
 
 /** Campos de texto soltos [{ field, value }] + folhas de variáveis; só o que for texto não vazio entra. */
-function collectFields(texts, variables, root = 'variables.') {
+function collectFields(texts, variables, root = 'variables.', maxItems = Infinity) {
   const fields = [];
   for (const [field, value] of texts) if (typeof value === 'string' && value) fields.push({ field, value, variable: false });
-  for (const [name, value] of Object.entries(variables || {})) fields.push(...leafTexts(value, `${root}${name}`));
+  const budget = { left: maxItems };
+  for (const name of Object.keys(variables || {})) { if (fields.tooMany) break; leafTexts(variables[name], `${root}${name}`, fields, 0, budget); }
   return fields;
 }
 
@@ -42,7 +45,8 @@ function sizeProblems(fields, limits) {
   for (const f of fields) {
     const limit = f.variable ? limits.maxVariable : limits.maxField;
     total += f.value.length;
-    if (f.deep) bad.push({ field: f.field, url: null, reasons: [TOO_BIG_FIELD], limit: MAX_DEPTH });
+    if (f.tooMany) bad.push({ field: f.field, url: null, reasons: [TOO_BIG_TOTAL], limit: limits.maxTotal });
+    else if (f.deep) bad.push({ field: f.field, url: null, reasons: [TOO_BIG_FIELD], limit: MAX_DEPTH });
     else if (f.value.length > limit) bad.push({ field: f.field, url: null, reasons: [TOO_BIG_FIELD], limit, size: f.value.length });
   }
   if (bad.length === 0 && total > limits.maxTotal) bad.push({ field: '(total)', url: null, reasons: [TOO_BIG_TOTAL], limit: limits.maxTotal, size: total });
@@ -56,7 +60,7 @@ function sizeProblems(fields, limits) {
 async function scanTextFields(texts, variables, ctx) {
   const { tenant, transaction } = ctx;
   const limits = ctx.limits || await readUrlLimits(tenant, transaction);
-  const fields = collectFields(texts, variables, ctx.leafRoot);
+  const fields = collectFields(texts, variables, ctx.leafRoot, limits.maxTotal);
   const oversize = sizeProblems(fields, limits);
   if (oversize.length > 0) return { bad: oversize, review: [], limits };
   const config = ctx.config || await readUrlConfig(tenant, transaction);
@@ -70,6 +74,17 @@ async function scanTextFields(texts, variables, ctx) {
   return { bad, review, limits };
 }
 
+/**
+ * Só os tetos de tamanho (sem extrair nada), para o ponto que NÃO recusa candidato ambíguo (o pipeline de conteúdo manda o ambíguo à aprovação humana): variável do pedido
+ * de conteúdo, antes de renderizar o template. Lança 422 MKT_URL_NOT_ALLOWED (CAMPO_GRANDE_DEMAIS / TEXTO_GRANDE_DEMAIS), nunca 500.
+ */
+async function assertTextSizes(texts, variables, ctx) {
+  const limits = ctx.limits || await readUrlLimits(ctx.tenant, ctx.transaction);
+  const bad = sizeProblems(collectFields(texts, variables, ctx.leafRoot, limits.maxTotal), limits);
+  if (bad.length > 0) throw mktUrlNotAllowed({ urls: bad });
+  return true;
+}
+
 /** Lança 422 MKT_URL_NOT_ALLOWED se algum campo for recusado, passar de teto ou (com blockReview) tiver candidato ambíguo sem aprovador. */
 async function assertTextFieldsSafe(texts, variables, ctx) {
   const { bad, review, limits } = await scanTextFields(texts, variables, ctx);
@@ -78,4 +93,4 @@ async function assertTextFieldsSafe(texts, variables, ctx) {
   return { review };
 }
 
-module.exports = { leafTexts, collectFields, sizeProblems, scanTextFields, assertTextFieldsSafe, TOO_BIG_FIELD, TOO_BIG_TOTAL, REVIEW_REQUIRED };
+module.exports = { leafTexts, collectFields, sizeProblems, scanTextFields, assertTextFieldsSafe, assertTextSizes, TOO_BIG_FIELD, TOO_BIG_TOTAL, REVIEW_REQUIRED };

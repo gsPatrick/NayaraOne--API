@@ -70,7 +70,9 @@ test('terminacoes_reconhecidas_vem_do_parametro', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
     // Todo token com forma de domínio é conferido, com qualquer terminação; a lista só separa a abreviação ("Sr.Zzz": terminação fora da lista) do endereço (DI-D433-9).
-    assert.equal((await security.findDisallowedUrls('veja evil.zzz', ctx(t))).length, 1);
+    assert.equal((await security.findDisallowedUrls('veja evil.zzz/login', ctx(t))).length, 0, 'terminação fora da lista é ambígua (rodada 5): revisão, não bloqueio');
+    assert.deepEqual(await security.findReviewUrls('veja evil.zzz/login', ctx(t)), ['evil.zzz/login']);
+    assert.deepEqual(await security.findReviewUrls('veja evil.zzz', ctx(t)), ['evil.zzz']);
     assert.equal((await security.findDisallowedUrls('fale com Sr.Zzz', ctx(t))).length, 0, 'abreviação: não bloqueia, vai à revisão');
     assert.deepEqual(await security.findReviewUrls('fale com Sr.Zzz', ctx(t)), ['Sr.Zzz']);
     await set(t, 'marketing.url.tlds_reconhecidos', 'zzz, com');

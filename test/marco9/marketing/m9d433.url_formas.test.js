@@ -27,10 +27,12 @@ const ctx = (t) => ({ tenant, transaction: t });
 const hostis = async (t, texto) => (await security.findDisallowedUrls(texto, ctx(t))).map((b) => b.url);
 
 const COM_CAMINHO = ['evil.in/login', 'evil.fr/x', 'evil.es/x', 'evil.it/x', 'evil.ng/x', 'evil.ninja/x', 'evil.zip/x', 'evil.mov/x', 'evil.gov/x', 'evil.edu/x', 'evil.museum/x', 'evil.xn--p1ai/x',
-  'evil.рф/x', 'пример.рф/x', 'evil.qualquercoisa/login', 'a.b.evil.sbs#frag', 'evil.zzzz/x'];
+  'evil.рф/x', 'пример.рф/x', 'a.b.evil.sbs#frag'];
+// Terminação fora da lista (rodada 5, fail-to-review): é reconhecida como candidato, mas vai à revisão humana em vez de bloquear.
+const SO_REVISAO = ['evil.qualquercoisa/login', 'evil.zzzz/x'];
 
 test('terminacao_qualquer_com_caminho_e_reconhecida_sem_lista', () => {
-  for (const url of COM_CAMINHO) assert.deepEqual(security.extractUrls(`Entre em ${url} agora`, { tlds: ['com'] }), [url], url);
+  for (const url of [...COM_CAMINHO, ...SO_REVISAO]) assert.deepEqual(security.extractUrls(`Entre em ${url} agora`, { tlds: ['com'] }), [url], url);
 });
 
 test('endereco_pelado_usa_a_lista_ampliada_de_terminacoes', () => {
@@ -54,6 +56,7 @@ test('hostil_e_reprovada_e_legitimo_passa_com_banco: domínio da própria empres
   await withRollbackTenantTransaction(tenant, async (t) => {
     await configurar(t);
     for (const url of COM_CAMINHO) assert.deepEqual(await hostis(t, `Veja ${url}`), [url], url);
+    for (const url of SO_REVISAO) assert.deepEqual(await security.findReviewUrls(`Veja ${url}`, ctx(t)), [url], url);
     for (const ok of ['Acesse www.nayara.com.br', 'Veja nayara.com.br/imovel/1', 'Portal: anuncio.portal.example.com/a', 'Escreva para maria.pro@nayara.com.br', 'Av.Paulista/Centro e foto.jpg']) {
       assert.deepEqual(await hostis(t, ok), [], ok);
     }

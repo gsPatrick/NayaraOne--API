@@ -35,7 +35,7 @@ const URL_SETTING_DEFAULTS = Object.freeze({
   [TIMEOUT_KEY]: 5,
   [MAX_URLS_KEY]: 20,
   [FILE_EXT_KEY]: 'jpg, jpeg, png, gif, webp, svg, pdf, doc, docx, xls, xlsx, ppt, pptx, csv, txt, rtf, html, htm, php, asp, aspx, mp4, mp3, wav, json, xml',
-  [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang, in, fr, es, it, ng, nl, ch, se, jp, kr, au, ca, mx, cl, pe, uy, eu, za, tr, ir, id, vn, sg, hk, tw, su, gov, edu, mil, zip, mov, ninja, sbs, cfd, rest, bond, museum, men, loan, win, bid, review, stream, download, cam, monster, quest, party, trade, date, science, accountant, racing, рф',
+  [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang, in, fr, es, it, ng, nl, ch, se, jp, kr, au, ca, mx, cl, pe, uy, eu, za, tr, ir, id, vn, sg, hk, tw, su, gov, edu, mil, zip, mov, ninja, sbs, cfd, rest, bond, museum, men, loan, win, bid, review, stream, download, cam, monster, quest, party, trade, date, science, accountant, racing, рф, भारत, বাংলা, ਭਾਰਤ, ભારત, భారత్, ಭಾರತ, ഭാരതം, ලංකා, ଭାରତ, संगठन, சிங்கப்பூர், भारतम्, भारोत, कॉम, नेट, ভারত',
 });
 
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
@@ -56,7 +56,7 @@ const validateDomains = (allowNone) => (key, value) => {
   }
 };
 
-const TLD_RE = /^(?:xn--[a-z0-9-]{2,59}|\p{L}{2,24})$/u;
+const TLD_RE = /^(?:xn--[a-z0-9-]{2,59}|\p{L}[\p{L}\p{M}]{1,23})$/u;
 const parseTlds = (text) => [...new Set(String(text === undefined || text === null ? '' : text).split(',').map((t) => t.trim().toLowerCase().replace(/^\./, '')).filter(Boolean))];
 const DEFAULT_TLDS = Object.freeze(parseTlds(URL_SETTING_DEFAULTS[TLDS_KEY]));
 
