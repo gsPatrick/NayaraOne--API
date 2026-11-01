@@ -19,7 +19,7 @@ const EXCEPTIONS = {
   'core.role_permissions': 'ligação papel-permissão; só é alcançada por core.roles (RLS+FORCE) e não guarda dado de negócio',
   'integration.providers': 'catálogo global de fornecedores (D200): RLS ligada com leitura aberta e escrita só de plataforma; sem FORCE porque o dono da migration/seed precisa gravar o catálogo',
   'public.SequelizeMeta': 'controle do runner de migrations; não é dado de negócio',
-  'real_estate.property_addresses': 'não tem empresa própria: é 1:1 com real_estate.properties (RLS+FORCE) e todo acesso passa pelo JOIN com properties; a linha é criada antes do imóvel, então uma política por EXISTS recusaria o INSERT (DI-D800-R4L3-1)',
+  'real_estate.property_addresses': 'não tem empresa própria: é 1:1 com real_estate.properties (RLS+FORCE) e a linha é criada antes do imóvel (uma política por EXISTS recusaria o INSERT) e o isolamento é do serviço de imóveis, que só aceita addressId de imóvel da MESMA empresa e responde 404 igual para inexistente e de outra empresa, provado em m9d800.endereco_empresa (DI-D800-R4L3-1, revisada na R5-M2)',
   'correspondent.webhook_pending': 'webhook de financiamento de um caso ainda desconhecido: chega sem JWT e sem empresa (é isso que a tabela guarda até o caso existir), então não há tenant para aplicar; só o worker de webhook a lê, nunca uma rota de tenant (DI-D800-R4L3-2)',
 };
 

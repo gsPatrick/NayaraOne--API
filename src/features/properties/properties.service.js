@@ -8,6 +8,7 @@ const { publishPropertyCreated, publishPropertyUpdated, publishPropertyPublished
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { ADDRESS_VISIBILITIES } = require('./publicReadModel/constants');
+const { assertAddressBelongsToCompany } = require('./propertyAddress.guard');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyEntity } = require('../core-governance/data-quality/evidence');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
@@ -112,7 +113,7 @@ async function createProperty(payload, actorUserId, transaction) {
 
   await assertRegistryNumberUnique(groupId, registryNumber || null, transaction);
 
-  const resolvedAddressId = addressId || (await createOrReuseAddress(address, transaction));
+  const resolvedAddressId = addressId ? await assertAddressBelongsToCompany(addressId, companyId, transaction) : await createOrReuseAddress(address, transaction);
 
   const property = await Property.create(
     {
@@ -354,7 +355,7 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     property.availabilityStatus = normalized;
   }
   if (addressId !== undefined) {
-    property.addressId = addressId;
+    property.addressId = await assertAddressBelongsToCompany(addressId, property.companyId, transaction);
   } else if (address !== undefined) {
     property.addressId = await createOrReuseAddress(address, transaction);
   }

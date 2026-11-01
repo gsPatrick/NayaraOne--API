@@ -11,6 +11,8 @@ let fallbackKey = null;
 function key() {
   const secret = process.env.JWT_ACCESS_SECRET;
   if (secret) return crypto.createHmac('sha256', secret).update('governance.dlp.grant.url').digest();
+  // R5/R3-L2: sem o segredo de acesso não existe chave efêmera fora do teste (falha fechada, igual ao JWT).
+  if (process.env.NODE_ENV !== 'test') throw new Error('JWT_ACCESS_SECRET ausente: endereço assinado indisponível.');
   fallbackKey = fallbackKey || crypto.randomBytes(32);
   return fallbackKey;
 }
