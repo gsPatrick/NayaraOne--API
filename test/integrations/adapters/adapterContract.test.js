@@ -36,9 +36,18 @@ const comTenant = async (fn) => {
   } catch (e) { await t.rollback(); throw e; }
 };
 const config = (k, v) => comTenant((t) => settingsService.upsertSetting(k, v, tenant, tenant.userId, t));
+const pausadas = []; // connections ACTIVE que o teste pausou (voltam ao estado no fim, para não deixar a empresa sem ACTIVE para os outros arquivos)
+const criadas = [];
 const conexao = (providerCode) => comTenant(async (t) => {
-  await sequelize.query("UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND provider_code = :p AND environment = 'SANDBOX' AND status = 'ACTIVE'", { replacements: { c: tenant.companyId, p: providerCode }, transaction: t });
-  return registryService.createConnection({ providerCode, environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}` }, ctx, t);
+  const [ativas] = await sequelize.query("UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND provider_code = :p AND environment = 'SANDBOX' AND status = 'ACTIVE' RETURNING id", { replacements: { c: tenant.companyId, p: providerCode }, transaction: t });
+  pausadas.push(...ativas.map((l) => l.id));
+  const nova = await registryService.createConnection({ providerCode, environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}` }, ctx, t);
+  criadas.push(nova.id);
+  return nova;
+});
+const restauraConexoes = () => comTenant(async (t) => {
+  if (criadas.length) await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE id IN (:ids)", { replacements: { ids: criadas }, transaction: t });
+  if (pausadas.length) await sequelize.query("UPDATE integration.connections SET status = 'ACTIVE' WHERE id IN (:ids) AND status = 'PAUSED'", { replacements: { ids: pausadas }, transaction: t });
 });
 
 before(async () => {
@@ -47,7 +56,7 @@ before(async () => {
   registerBuiltInAdapters();
 });
 afterEach(() => { adapterRegistry.unregister('qa-m9-d209-x'); registerBuiltInAdapters(); });
-after(async () => { await config('integration.health.check_timeout_ms', 5000); await sequelize.close(); });
+after(async () => { await config('integration.health.check_timeout_ms', 5000); await restauraConexoes(); await sequelize.close(); });
 
 /** Adapter mínimo e válido de um domínio, para os cenários. */
 function adapterValido(Port, code, caps, extra = {}) {

@@ -129,13 +129,29 @@ test('connections_ativacao_concorrente', async () => {
   }
 });
 
+// Hermético: connections de outros testes (webhooks do Correspondente deixam uma ACTIVE de financing-sandbox) mudariam
+// o estado que a migração das contas legadas atribui. Dentro da transação do teste (desfeita no fim), desativa as da empresa
+// e remove as contas legadas dela.
+async function isolarConexoesDaEmpresa(transaction) {
+  // Contas legadas de outros testes (ativas e mais antigas) tirariam o ACTIVE da "Conta A" na migração.
+  await sequelize.query("SET LOCAL app.integration_legacy_write = 'on'", { transaction });
+  await sequelize.query('DELETE FROM correspondent.provider_accounts WHERE company_id = :c', { replacements: { c: tenant.companyId }, transaction });
+  await sequelize.query("SET LOCAL app.integration_legacy_write = 'off'", { transaction }); // a prova de somente leitura precisa do gatilho armado
+  await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND status <> 'DISABLED'", { replacements: { c: tenant.companyId }, transaction });
+}
+
 test('migracao_provider_accounts_idempotente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await isolarConexoesDaEmpresa(transaction);
     await sequelize.query("SET LOCAL app.integration_legacy_write = 'on'", { transaction });
     const base = { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox' };
     const a1 = await ProviderAccount.create({ ...base, label: 'Conta A', secretRef: 'vault:qa-m9/a', active: true }, { transaction });
     const a2 = await ProviderAccount.create({ ...base, label: 'Conta B', secretRef: 'vault:qa-m9/b', active: true }, { transaction });
     const a3 = await ProviderAccount.create({ ...base, label: 'Conta C', secretRef: 'vault:qa-m9/c', active: false }, { transaction });
+    // A migração desempata contas ativas por created_at; datas em milissegundos iguais cairiam no id aleatório. Datas distintas fixas.
+    await sequelize.query("UPDATE correspondent.provider_accounts SET created_at = now() - interval '3 minutes' WHERE id = :a", { replacements: { a: a1.id }, transaction });
+    await sequelize.query("UPDATE correspondent.provider_accounts SET created_at = now() - interval '2 minutes' WHERE id = :a", { replacements: { a: a2.id }, transaction });
+    await sequelize.query("UPDATE correspondent.provider_accounts SET created_at = now() - interval '1 minute' WHERE id = :a", { replacements: { a: a3.id }, transaction });
     const primeira = await registry.migrateLegacyProviderAccounts(ctx, transaction);
     assert.equal(primeira.inserted, 3);
     const segunda = await registry.migrateLegacyProviderAccounts(ctx, transaction);
@@ -213,6 +229,7 @@ test('connections_producao_exige_mfa_recente_configuravel', async () => {
 
 test('correspondente_usa_o_registro_e_o_legado_e_somente_leitura', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await isolarConexoesDaEmpresa(transaction);
     const conta = await providerAccountsService.registerProviderAccount(
       { groupId: tenant.groupId, companyId: tenant.companyId, providerCode: 'sandbox', label: `QA-M9 ${uniqueSuffix()}`, secretRef: 'vault:qa-m9/corr' },
       tenant.userId, transaction

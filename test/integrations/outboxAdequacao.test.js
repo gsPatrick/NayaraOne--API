@@ -82,7 +82,8 @@ async function despacha() {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: ct });
     return Company.findByPk(tenant.companyId, { transaction: ct });
   });
-  return dispatchPendingEventsForCompany(group, company, { limit: 500 });
+  // Hermético: eventos PENDING que outros testes deixam na empresa vêm antes (occurred_at ASC); o limite cobre todo o acúmulo, não só 500 linhas.
+  return dispatchPendingEventsForCompany(group, company, { limit: 100000 });
 }
 
 test('outbox_evento_com_destino_cria_dispatch', async () => {
