@@ -4,6 +4,7 @@ const { Role, Permission, RolePermission, UserMembership } = require('../../mode
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertNoPlatformPermission } = require('../../shared/platform-permissions');
+const { assertRoleNotPlatform } = require('../../shared/platform-permissions/platformRole');
 
 // "core"."roles" tem RLS (company_id = current_setting('app.company_id')), então toda query
 // aqui recebe `transaction` já aberta por `req.withTenantTransaction`.
@@ -119,6 +120,7 @@ async function getRole(id, transaction) {
  */
 async function updateRole(id, payload, actorUserId, transaction) {
   const role = await getRoleModel(id, transaction);
+  await assertRoleNotPlatform(role.id, transaction); // R4-L4: papel do operador de plataforma não é alterado pela empresa
   if (role.isSystem) {
     throw AppError.conflict('Papéis de sistema não podem ser editados.', 'ROLE_IS_SYSTEM');
   }
@@ -172,6 +174,7 @@ async function updateRole(id, payload, actorUserId, transaction) {
  */
 async function removeRole(id, actorUserId, transaction) {
   const role = await getRoleModel(id, transaction);
+  await assertRoleNotPlatform(role.id, transaction); // R4-L4
   if (role.isSystem) {
     throw AppError.conflict('Papéis de sistema não podem ser excluídos.', 'ROLE_IS_SYSTEM');
   }

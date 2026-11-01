@@ -3,6 +3,7 @@
 const { UserMembership, Role, Unit, Company, RolePermission, Permission } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { PLATFORM_PERMISSION_CODES, assertNoPlatformPermission } = require('../../shared/platform-permissions');
+const { assertRoleNotPlatform } = require('../../shared/platform-permissions/platformRole');
 
 // CRUD puro de UserMembership. A resolução de roles/permissões efetivas vive em
 // effectivePermissions.service.js.
@@ -77,6 +78,7 @@ async function revokeMembership(id, actorUserId, transaction) {
   if (!membership) {
     throw AppError.notFound('Vínculo (membership) não encontrado.', 'MEMBERSHIP_NOT_FOUND');
   }
+  await assertRoleNotPlatform(membership.roleId, transaction); // R4-L4: o vínculo do operador de plataforma não é revogado pela empresa
   membership.status = 'REVOKED';
   membership.updatedBy = actorUserId || null;
   await membership.save({ transaction });
