@@ -11,6 +11,7 @@ const { IntegrationConnection, AuditLog } = require('../../../src/models');
 const registry = require('../../../src/features/integrations/registry/registry.service');
 const settingsService = require('../../../src/features/settings/settings.service');
 const secrets = require('../../../src/features/integrations/secrets');
+const { semMfa } = require('../../marco9/_helpers/semMfa');
 
 const DIA = 24 * 3600 * 1000;
 const VALOR = 'valor-do-cofre-QA-M9-abcdef';
@@ -29,8 +30,10 @@ after(() => sequelize.close());
 const refDe = (suf = uniqueSuffix(), empresa = tenant.companyId) => `company/${empresa}/qa-m9-${suf}/api-key`;
 const novaConexao = (over = {}) => ({ providerCode: 'bank-sandbox', environment: 'SANDBOX', label: `QA-M9 ${uniqueSuffix()}`, ...over });
 const loja = () => secrets.createHttpVaultStore({ mode: 'sandbox', clock: relogio });
+// Chave `platformOnly` só grava com a marca de plataforma (D870); as demais, como o ADMIN da empresa.
 async function config(transaction, chave, valor) {
-  await settingsService.upsertSetting(chave, valor, tenant, tenant.userId, transaction);
+  const platform = settingsService.SETTINGS_SCHEMA[chave]?.platformOnly === true;
+  await settingsService.upsertSetting(chave, valor, tenant, tenant.userId, transaction, { platform });
 }
 async function recusa(promessa, code, status) {
   await assert.rejects(promessa, (err) => {
@@ -234,6 +237,7 @@ test('secret_bank_rotacao_antes_de_90_dias_nao_alerta_e_mfa_na_mudanca', async (
     assert.equal(f.state, 'OK');
     assert.equal(f.alert, null);
     // Mudar o segredo de uma connection BANK exige MFA recente (o seed não tem MFA).
+    await semMfa(tenant.userId, transaction); // hermético: outro arquivo pode ter deixado MFA habilitado para o usuário do seed
     await config(transaction, 'integration.secret.mfa_on_bank_secret_change', true);
     await assert.rejects(registry.updateConnection(nova.c.id, { secretRef: refDe('troca') }, ctx, transaction),
       (err) => ['MFA_REQUIRED_NOT_ENABLED', 'MFA_STEP_UP_REQUIRED'].includes(err.code));

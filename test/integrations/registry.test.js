@@ -90,7 +90,8 @@ test('connections_rls_isolamento_entre_empresas', async (t) => {
     await sequelize.query('SET LOCAL app.company_id = :c', { transaction, replacements: { c: otherTenant.companyId } });
     await sequelize.query('SET LOCAL app.group_id = :g', { transaction, replacements: { g: otherTenant.groupId } });
     assert.equal(await IntegrationConnection.findByPk(a.id, { transaction }), null);
-    assert.equal((await registry.listConnections(otherTenant, {}, transaction)).length, 0);
+    // Sem assumir que a outra empresa não tem connection própria (outros arquivos deixam dados gravados): a connection da empresa A não aparece.
+    assert.equal((await registry.listConnections(otherTenant, {}, transaction)).some((x) => x.id === a.id), false);
     await recusa(registry.getConnection(a.id, otherTenant, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
     await recusa(registry.updateConnection(a.id, { label: 'invasao' }, otherTenant, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);
     const [, meta] = await sequelize.query("UPDATE integration.connections SET label = 'invasao' WHERE id = :id", { transaction, replacements: { id: a.id } });

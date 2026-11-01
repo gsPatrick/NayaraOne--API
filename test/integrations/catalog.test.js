@@ -171,6 +171,8 @@ test('catalogo_providers_existentes_migrados', async () => {
 test('catalogo_dominio_sem_connection_aciona_contingencia', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const chamadas = [];
+    // Hermético: connections ativas deixadas por outros arquivos tornariam a resolução ambígua; nesta transação (com rollback) a empresa fica sem nenhuma.
+    await sequelize.query('UPDATE integration.connections SET status = \'DISABLED\' WHERE company_id = :c', { replacements: { c: tenant.companyId }, transaction });
     contingency.registerContingencyHandler('MESSAGING', async (info) => { chamadas.push(info); });
     // Sem connection ativa: 404 com o código do livro e a contingência é acionada com o contexto.
     await recusa(registry.resolveConnection({ companyId: tenant.companyId, domain: 'MESSAGING' }, transaction), 'INTEGRATION_CONNECTION_NOT_FOUND', 404);

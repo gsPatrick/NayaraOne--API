@@ -12,6 +12,7 @@ const registry = require('../../src/features/integrations/registry/registry.serv
 const settingsService = require('../../src/features/settings/settings.service');
 const providerAccountsService = require('../../src/features/correspondent/providerAccounts.service');
 const { setupEnv, teardownEnv, novaConexao, recusa } = require('../helpers/integrationsRegistryEnv');
+const { semMfa } = require('../marco9/_helpers/semMfa');
 
 let tenant;
 let ctx;
@@ -196,6 +197,7 @@ test('connections_auditoria_antes_depois', async () => {
 
 test('connections_producao_exige_mfa_recente_configuravel', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await semMfa(tenant.userId, transaction); // hermético: outro arquivo pode ter deixado MFA habilitado para o usuário do seed
     await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', true, tenant, tenant.userId, transaction);
     const c = await registry.createConnection(novaConexao({ environment: 'SANDBOX' }), ctx, transaction);
     await registry.updateConnection(c.id, { label: `${c.label} ok` }, ctx, transaction); // fora de produção não pede MFA
