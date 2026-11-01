@@ -10,6 +10,8 @@ let A;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) { A = (await env.loadTenants()).A; await env.cleanup(A); } });
 afterEach(async () => { if (env.DISPOSABLE) await env.cleanup(A); });
+// A auditoria é só de acréscimo e o cleanup não a apaga (R4-L2): cada teste conta só o que ele mesmo gerou, a partir do instante do banco em que começou, e passa em qualquer passada no mesmo banco.
+const since = async () => (await env.adminQuery('SELECT clock_timestamp() AS t')).rows[0].t;
 after(async () => { await env.sequelize.close(); });
 
 test('m9d907 inventário semeado cobre as saídas externas, cada tipo com compensação, procedimento e responsável', { skip: skip() }, async () => {
@@ -40,13 +42,14 @@ test('m9d907 PUT sem compensação é 422 GOV_ROLLBACK_COMPENSATION_REQUIRED e n
 });
 
 test('m9d907 PUT grava, atualiza e audita o antes e o depois; o tipo reversível dispensa só o procedimento', { skip: skip() }, async () => {
+  const start = await since();
   await env.putTypes(A, [env.goodType('QA907_A', { operations: ['qa907OpA'] })]);
   const first = (await env.listTypes(A)).types.find((t) => t.code === 'QA907_A');
   assert.deepEqual([first.reversibility, first.owner, first.operations, first.entity], ['IRREVERSIBLE', 'QA-M9', ['qa907OpA'], 'QA907_ENTITY']);
   await env.putTypes(A, [env.goodType('QA907_A', { reversibility: 'REVERSIBLE', procedure: '', compensation: 'Desfaz sozinho.', owner: 'TI' })]);
   const after = (await env.listTypes(A)).types.find((t) => t.code === 'QA907_A');
   assert.deepEqual([after.reversibility, after.owner, after.operations], ['REVERSIBLE', 'TI', ['qa907OpA']], 'sem informar operations, as ligações ficam');
-  const audits = (await env.adminQuery("SELECT * FROM audit.audit_log WHERE company_id = $1 AND action = 'migration.external_op_type.saved' AND after_json->>'code' = 'QA907_A' ORDER BY occurred_at", [A.companyId])).rows;
+  const audits = (await env.adminQuery("SELECT * FROM audit.audit_log WHERE company_id = $1 AND action = 'migration.external_op_type.saved' AND after_json->>'code' = 'QA907_A' AND occurred_at >= $2 ORDER BY occurred_at", [A.companyId, start])).rows;
   assert.equal(audits.length, 2);
   assert.equal(audits[0].before_json, null);
   assert.equal(audits[1].before_json.reversibility, 'IRREVERSIBLE');
@@ -64,13 +67,14 @@ test('m9d907 uma operação de envio pertence a um só tipo', { skip: skip() }, 
 });
 
 test('m9d907 tipo sem compensação gera blocker na Torre e o fecha quando o plano é cadastrado', { skip: skip() }, async () => {
+  const start = await since();
   await env.listTypes(A);
   await env.adminQuery("INSERT INTO governance.external_op_types (group_id, company_id, code, module, reversibility, entity) VALUES ($1, $2, 'QA907_SEM_PLANO', 'QA', 'IRREVERSIBLE', 'QA907_ENTITY')", [A.groupId, A.companyId]);
   const open = await env.towerBlockers(A, 'GOV_ROLLBACK_COMPENSATION_REQUIRED');
   assert.deepEqual(open.map((b) => [b.entity, b.ref, b.detail.type, b.detail.missing]), [['QA907_ENTITY', 'type:QA907_SEM_PLANO', 'QA907_SEM_PLANO', ['compensation', 'procedure', 'owner']]]);
   await env.putTypes(A, [env.goodType('QA907_SEM_PLANO')]);
   assert.equal((await env.towerBlockers(A, 'GOV_ROLLBACK_COMPENSATION_REQUIRED')).length, 0, 'plano cadastrado fecha o blocker');
-  const trail = (await env.adminQuery("SELECT action FROM audit.audit_log WHERE company_id = $1 AND action IN ('migration.blocker.opened', 'migration.blocker.closed') AND after_json->>'code' = 'GOV_ROLLBACK_COMPENSATION_REQUIRED' ORDER BY occurred_at", [A.companyId])).rows.map((r) => r.action);
+  const trail = (await env.adminQuery("SELECT action FROM audit.audit_log WHERE company_id = $1 AND action IN ('migration.blocker.opened', 'migration.blocker.closed') AND after_json->>'code' = 'GOV_ROLLBACK_COMPENSATION_REQUIRED' AND occurred_at >= $2 ORDER BY occurred_at", [A.companyId, start])).rows.map((r) => r.action);
   assert.deepEqual(trail, ['migration.blocker.opened', 'migration.blocker.closed']);
 });
 
