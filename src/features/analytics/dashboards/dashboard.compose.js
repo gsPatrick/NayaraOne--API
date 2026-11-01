@@ -11,6 +11,7 @@ const { buildBody } = require('./dashboard.shape');
 const { loadOrderList } = require('./dashboard.order');
 const { readMetricView } = require('./dashboard.metricView');
 const { buildQualityBanner } = require('./dashboard.banner');
+const { withReasons } = require('./dashboard.banner.detail');
 const { evaluateBlock } = require('../quality/status.block');
 const { defaultPeriodOf } = require('../metrics/query.period');
 const { isMatrix, matrixCodes, composeMatrix, bannerViewsOf } = require('./dashboard.matrix');
@@ -56,7 +57,9 @@ async function composeWidgets(ctx, widgets, asOfDate, transaction, period = defa
     const dependsOn = !w.metric && w.config && w.config.dependsOn;
     if (Array.isArray(dependsOn) && dependsOn.length) composed[i] = { ...w, block: await evaluateBlock(ctx, dependsOn, asOfDate, transaction) };
   }
-  const { banner, quality } = buildQualityBanner(bannerViewsOf(composed), composed.filter((c) => c.block && c.block.deferred));
+  const views = bannerViewsOf(composed);
+  const deferred = composed.filter((c) => c.block && c.block.deferred);
+  const { banner, quality } = withReasons(buildQualityBanner(views, deferred), views, deferred);
   return { widgets: composed.map((c) => (c.type === 'QUALITY_BANNER' ? { ...c, banner } : c)), quality };
 }
 
