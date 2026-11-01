@@ -33,7 +33,7 @@ function buildQualityBanner(views, blocks = []) {
   }
   for (const b of blocks) { // métrica de que um bloco depende e que não é widget do painel também entra na faixa (uma vez)
     for (const r of b.block.reasons) {
-      if (!degradedMetrics.some((d) => d.metricCode === r.metricCode)) degradedMetrics.push({ metricCode: r.metricCode, title: b.title, problem: r.problem, reason: r.reason, status: null, checks: [], inheritedFrom: [] });
+      if (!degradedMetrics.some((d) => d.metricCode === r.metricCode)) degradedMetrics.push({ metricCode: r.metricCode, title: r.name || r.metricCode, problem: r.problem, reason: r.reason, status: null, checks: [], inheritedFrom: [] });
     }
   }
   const visible = degradedMetrics.length > 0;

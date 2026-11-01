@@ -73,7 +73,7 @@ async function runBlock(spec, widget, env, tx) {
   const hidden = list.length - visible.length + (Array.isArray(out) ? 0 : out.hidden || 0);
   return {
     ...base, deferred: false, items: visible.slice(0, limit).map(withMetric(env.sources)).map(clean), total: visible.length, shown: Math.min(limit, visible.length), hiddenCount: hidden, hiddenText: hidden > 0 ? hiddenText(hidden) : null,
-    viewAllHref: visible.length > limit ? `/painel/centro-de-comando?bloco=${spec.key}` : null, ...(out.totals ? { totals: visibleTotals(out.totals, visible) } : {}),
+    viewAllHref: visible.length > 0 && env.onlyBlock !== spec.key ? `/painel/centro-de-comando?bloco=${spec.key}` : null, ...(out.totals ? { totals: visibleTotals(out.totals, visible) } : {}),
   };
 }
 

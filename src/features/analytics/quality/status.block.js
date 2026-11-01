@@ -24,7 +24,7 @@ async function metricProblem(ctx, metricCode, asOfDate, transaction) {
   try {
     read = await readMetricAsOfUnchecked(readOf(ctx), { metricCode, scopeType: 'COMPANY', scopeId: ctx.companyId, asOfDate }, transaction);
   } catch (err) {
-    if (MISSING.has(err.code)) return { metricCode, status: 'INCOMPLETE', problem: 'INCOMPLETE', reason: REASON_TEXT.INCOMPLETE };
+    if (MISSING.has(err.code)) return { metricCode, status: 'INCOMPLETE', problem: 'INCOMPLETE', reason: REASON_TEXT.INCOMPLETE, lastUpdateAt: null };
     throw err;
   }
   const state = read.freshness && read.freshness.state;
@@ -32,7 +32,7 @@ async function metricProblem(ctx, metricCode, asOfDate, transaction) {
   if (state === 'EXPIRED' || state === 'UNKNOWN') problem = state;
   else if (read.status === 'DEGRADED' || read.status === 'INCOMPLETE') problem = read.status;
   else if (read.status === 'STALE' || state === 'STALE') problem = 'STALE';
-  return { metricCode, status: read.status, problem, reason: problem ? REASON_TEXT[problem] : null };
+  return { metricCode, status: read.status, problem, reason: problem ? REASON_TEXT[problem] : null, lastUpdateAt: (read.freshness && read.freshness.sourceSnapshotAt) || null };
 }
 
 /** { deferred, concludes, text, reasons: [{ metricCode, problem, reason }] } para as métricas de que o bloco depende. */
@@ -40,7 +40,12 @@ async function evaluateBlock(ctx, metricCodes, asOfDate, transaction) {
   const reasons = [];
   for (const code of [...new Set(metricCodes || [])]) {
     const m = await metricProblem(ctx, code, asOfDate, transaction);
-    if (m.problem) reasons.push({ metricCode: code, problem: m.problem, reason: m.reason });
+    if (m.problem) reasons.push({ metricCode: code, problem: m.problem, reason: m.reason, lastUpdateAt: m.lastUpdateAt });
+  }
+  if (reasons.length) { // rótulo legível da fonte: a tela nunca mostra o código cru do indicador
+    const { listMetricMeta } = require('../dashboardReadStore.service'); // tardio: evita ciclo com a camada de painéis
+    const names = new Map((await listMetricMeta(reasons.map((r) => r.metricCode), transaction)).map((m) => [m.metricCode, m.name]));
+    for (const r of reasons) r.name = names.get(r.metricCode) || r.metricCode;
   }
   const deferred = reasons.length > 0;
   return { deferred, concludes: !deferred, text: deferred ? DEFERRED_TEXT : null, reasons };
