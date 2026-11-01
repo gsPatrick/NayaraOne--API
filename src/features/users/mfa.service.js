@@ -9,6 +9,10 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getSetting } = require('../settings/settings.service');
 const { recordMfaFailure } = require('../analytics/tech-signals/record');
+const { checkTotp, assertSafeForBoot } = require('./mfa.testWindow');
+
+// DI-MFA-TESTE-1: em produção a variável de janela de teste derruba o boot.
+assertSafeForBoot();
 
 const BCRYPT_ROUNDS = 10;
 const RECOVERY_CODE_COUNT = 8;
@@ -134,7 +138,7 @@ async function confirmMfa(userId, code, actorContext, transaction) {
   }
 
   const secret = decryptSecret(credential.secretEncrypted);
-  const isValid = code && authenticator.check(String(code), secret);
+  const isValid = code && checkTotp(String(code), secret);
   if (!isValid) {
     throw AppError.badRequest('Código TOTP inválido.', 'MFA_INVALID_CODE');
   }
@@ -231,7 +235,7 @@ async function verifyMfa(userId, code, actorContext, transaction, requestMeta = 
   }
 
   const secret = decryptSecret(credential.secretEncrypted);
-  let valid = authenticator.check(String(code), secret);
+  let valid = checkTotp(String(code), secret);
   let usedRecoveryCode = false;
 
   if (!valid && credential.recoveryCodesHash.length > 0) {
@@ -334,7 +338,7 @@ async function disableMfa(userId, code, actorContext, transaction) {
   }
   assertNotLocked(credential);
   const secret = decryptSecret(credential.secretEncrypted);
-  if (!code || !authenticator.check(String(code), secret)) {
+  if (!code || !checkTotp(String(code), secret)) {
     await registerFailedAttempt(credential, userId, actorContext, transaction);
     throw AppError.unauthorized('Código TOTP inválido — não é possível desabilitar o MFA.', 'MFA_INVALID_CODE');
   }
