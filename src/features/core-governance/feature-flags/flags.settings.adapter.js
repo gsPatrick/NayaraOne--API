@@ -58,10 +58,15 @@ async function absorbTenantSettings(tenant, actorUserId, params, transaction) {
 function assertNotPlatformOnly(key) {
   if (isPlatformOnly(SETTINGS_SCHEMA[key])) throw E.platformOnly();
   // Chaves da NAY (ai:admin) e metas de SLO (integration:manage) têm permissão própria que o registro não declara: só mudam pelas Configurações.
-  if (SETTINGS_SCHEMA[key] && restrictedPermissionOf(key)) throw E.keyProtected('Esta chave tem permissão própria (NAY ou integrações): altere-a em Configurações.');
+  const needed = SETTINGS_SCHEMA[key] ? restrictedPermissionOf(key) : null;
+  // governance:flags:manage é a permissão que a rota do registro já exigiu: as chaves dela (governanca.flags.*, confirmação) mudam por aqui; as demais exigem o dono da regra.
+  if (needed && needed !== 'governance:flags:manage') throw E.keyProtected('Esta chave tem permissão própria (NAY, integrações, migração, DLP ou API): altere-a em Configurações.');
 }
 
 /** Grava o valor na configuração da empresa pelo serviço existente (validação do dicionário e trava do dono da regra incluídas). */
 const writeThrough = (tenant, key, value, actorUserId, transaction) => upsertSetting(key, value, { groupId: tenant.groupId, companyId: tenant.companyId }, actorUserId, transaction);
 
-module.exports = { liveValues, absorbTenantSettings, writeThrough, absorbable, assertNotPlatformOnly };
+/** A chave pertence ao dicionário de Configurações (SETTINGS_SCHEMA). */
+const isDictionaryKey = (key) => Boolean(SETTINGS_SCHEMA[key]);
+
+module.exports = { liveValues, absorbTenantSettings, writeThrough, absorbable, assertNotPlatformOnly, isDictionaryKey };

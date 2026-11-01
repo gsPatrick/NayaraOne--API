@@ -8,7 +8,7 @@ const E = require('./flags.errors');
 const { parseCreate, parsePatch, parseReason, isMissing } = require('./flags.input');
 const { readFlagsParams } = require('./flags.params');
 const { viewOf, snapshotOf } = require('./flags.view');
-const { liveValues, absorbTenantSettings, writeThrough, assertNotPlatformOnly } = require('./flags.settings.adapter');
+const { liveValues, absorbTenantSettings, writeThrough, assertNotPlatformOnly, isDictionaryKey } = require('./flags.settings.adapter');
 const repo = require('./flags.repository');
 const { assertWritable } = require('./flags.protected');
 
@@ -62,6 +62,8 @@ async function createEntry(tenant, body, actorUserId, transaction, { trustedOwne
   const input = parseCreate(body, tenant, params);
   assertWritable(input.key, owner);
   assertNotPlatformOnly(input.key);
+  // R4-L5: chave do dicionário de Configurações já é do registro (absorvida, com o tipo e o valor do parâmetro); criar outra à mão divergiria do parâmetro real.
+  if (isDictionaryKey(input.key)) throw E.inputInvalid('Esta chave é um parâmetro das Configurações: ela já aparece no registro; altere o valor com PATCH.', { field: 'key' });
   if (!trustedOwner) await assertOwnerActive(tenant, input.ownerUserId, transaction);
   const otherKind = input.kind === KINDS.FLAG ? KINDS.CONFIG : KINDS.FLAG;
   if (await repo.keyExistsInKind(tenant, otherKind, input.key, transaction)) throw E.duplicate();

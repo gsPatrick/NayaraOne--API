@@ -11,6 +11,7 @@ const { STAGES_KEY, REQUIRE_COMPARISON_KEY } = require('./canary/canary.settings
 const MIGRATION_ADMIN_PERMISSION = 'governance:migration:admin';
 const GATE_KEYS = Object.freeze([KEYS.VALIDITY_HOURS, KEYS.MIN_VOLUME, KEYS.SAME_COMMIT, REQUIRE_COMPARISON_KEY, STAGES_KEY]);
 
-const isMigrationGateKey = (key) => GATE_KEYS.includes(String(key));
+// R4-L1: toda chave `migracao.` do dicionário (relógio e NTP, escopo do legado, dado pessoal em claro no ensaio, retenção do payload, tetos de execução, expiração de replay) é parâmetro de segurança do corte.
+const isMigrationGateKey = (key) => GATE_KEYS.includes(String(key)) || String(key).startsWith('migracao.');
 
 module.exports = { MIGRATION_ADMIN_PERMISSION, GATE_KEYS, isMigrationGateKey };

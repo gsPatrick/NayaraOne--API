@@ -6,6 +6,8 @@
  * não pode escrever nelas: `restrictedPermissionOf` diz qual permissão a chave exige (ou null) para quem precisa recusar o caminho que não a traz.
  * As áreas donas das regras são carregadas sob demanda para não criar ciclo com o serviço de parâmetros.
  */
+const { securityPermissionOf } = require('./settingSecurity');
+
 const RULES = Object.freeze([
   { permission: 'ai:admin', matches: (key) => require('../ai/ai.settings').isAiSettingKey(key) },
   { permission: 'integration:manage', matches: (key) => require('../integrations/health/slo').isSloSettingKey(key) },
@@ -15,7 +17,7 @@ const RULES = Object.freeze([
 /** Permissão extra que a chave exige (ou null quando ela é comum). */
 function restrictedPermissionOf(key) {
   const rule = RULES.find((r) => r.matches(String(key)));
-  return rule ? rule.permission : null;
+  return rule ? rule.permission : securityPermissionOf(key);
 }
 
 module.exports = { restrictedPermissionOf };

@@ -36,7 +36,7 @@ test('m9d870 R3-M1: toda chave da NAY e toda meta de SLO do dicionário exige a 
   assert.ok(ai.length > 10 && slo.length === 4);
   for (const key of ai) assert.equal(restrictedPermissionOf(key), 'ai:admin', key);
   for (const key of slo) assert.equal(restrictedPermissionOf(key), 'integration:manage', key);
-  assert.equal(restrictedPermissionOf('governanca.flags.risco_config_absorvida'), null);
+  assert.equal(restrictedPermissionOf('governanca.api.paginacao.tamanho_padrao'), null);
 });
 
 test('m9d870 R3-M1: PATCH /feature-flags de chave da NAY com só governance:flags:manage é 403 e nada é gravado', async (t) => {

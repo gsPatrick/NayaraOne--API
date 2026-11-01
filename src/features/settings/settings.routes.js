@@ -8,6 +8,7 @@ const { requireTemplateManageToAddPublicFields } = require('../../features/marke
 const { requireAutomationManageForCadence } = require('../../features/marketing/automations/cadence/cadence.guard');
 const { requireAutomationManageForAutopublish } = require('../../features/marketing/content/autopublish.guard');
 const { isSloSettingKey } = require('../../features/integrations/health/slo');
+const { securityPermissionOf } = require('./settingSecurity');
 const { isMigrationGateKey, MIGRATION_ADMIN_PERMISSION } = require('../../features/migration-v2/migration.gateKeys');
 const { isPlatformOnly, PLATFORM_PERMISSION } = require('./settingPlatform');
 const settingsService = require('./settings.service');
@@ -30,9 +31,12 @@ const requireMigrationAdminForGateKeys = (req, res, next) => (isMigrationGateKey
 // A mesma regra vale na camada de escrita (upsertSetting), que cobre os caminhos sem esta rota (M9-D870 R3-M1).
 const requirePlatformForPlatformKeys = (req, res, next) => (isPlatformOnly(settingsService.SETTINGS_SCHEMA[req.params.key]) ? requirePermission(PLATFORM_PERMISSION)(req, res, next) : next());
 
+// Chaves de segurança da governança (DLP, limite de requisições, confirmação, flags) exigem a permissão do dono da regra além de settings:update (M9-D870 R4-L1).
+const requireSecurityOwner = (req, res, next) => { const permission = securityPermissionOf(req.params.key); return permission ? requirePermission(permission)(req, res, next) : next(); };
+
 settingsRouter.get('/settings', requirePermission('settings:read'), settingsController.listSettings);
 settingsRouter.get('/settings/integrations/status', requirePermission('settings:read'), settingsController.getIntegrationsStatus);
 settingsRouter.get('/settings/:key', requirePermission('settings:read'), settingsController.getSetting);
-settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireMigrationAdminForGateKeys, requirePlatformForPlatformKeys, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
+settingsRouter.put('/settings/:key', requirePermission('settings:update'), requireAiAdminForAiKeys, requireIntegrationManageForSlo, requireMigrationAdminForGateKeys, requireSecurityOwner, requirePlatformForPlatformKeys, requireTemplateManageToAddPublicFields, requireAutomationManageForCadence, requireAutomationManageForAutopublish, settingsController.upsertSetting);
 
 module.exports = settingsRouter;

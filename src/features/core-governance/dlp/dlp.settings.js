@@ -81,7 +81,7 @@ function validateDefaultClass(key, value) {
 const DLP_SETTINGS_SCHEMA = {
   [DEFAULT_CLASS_KEY]: { type: 'string', validate: validateDefaultClass },
   [PURPOSES_KEY]: { type: 'string', validate: validatePurposes },
-  [JUSTIFICATION_MIN_KEY]: { type: 'integer', min: 1, max: 2000 },
+  [JUSTIFICATION_MIN_KEY]: { type: 'integer', min: 20, max: 2000 },
   [VOLUME_KEY]: { type: 'string', validate: classMapValidator(positiveInt) },
   [EXPIRY_KEY]: { type: 'string', validate: classMapValidator((v) => positiveInt(v) && Number(v) <= 8760) },
   [WATERMARK_KEY]: { type: 'string', validate: classMapValidator(onOff) },
