@@ -60,7 +60,7 @@ Todo parâmetro `governanca.*` lido pelo módulo consta neste README; o valor mu
 - Padrão do projeto de deixar o administrador decidir: tudo que é regra alternativa, limite, prazo, canal ou liga/desliga vira parâmetro, nunca valor fixo no código.
 - Decisões de implementação do bloco: `Maturacao/demandas/decisoes-de-implementacao.md`.
 
-## Chaves com dono (protegidas)
+### Chaves com dono (protegidas)
 Um módulo pode registrar chaves que só ele escreve (`flags.protected.registerProtectedKeys(dono, { test, message })`) e passa `{ owner: dono }` ao `createEntry`/`updateEntry`. POST e PATCH `/feature-flags` nunca passam o dono: a chave protegida responde 403 `GOV_FLAG_KEY_PROTECTED` sem gravar. Hoje: as flags `migracao.setor.<setor>.novo_sistema` do canary da migração (dono `migration.canary`, M9-D904; teste `m9d870.protegidas`).
 
 ## Como testar
