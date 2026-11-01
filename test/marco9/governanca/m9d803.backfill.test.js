@@ -39,10 +39,13 @@ async function seedSources(tx) {
 
 test('m9d803 backfill é idempotente e traz os registros abertos já existentes', { skip: skip() }, async () => {
   await run(async (tx) => {
+    // fontes abertas que outros arquivos deixaram commitadas no mesmo banco entram na varredura da empresa: a linha de base é medida antes de semear
+    const baseline = (await runBackfill(tenant, tx, new Date('2026-10-28T08:55:00Z'))).upserted;
     const s = await seedSources(tx);
     const first = await runBackfill(tenant, tx, new Date('2026-10-28T09:00:00Z'));
-    assert.equal(first.upserted, 4);
-    const rows = await items(tx);
+    assert.equal(first.upserted, baseline + 4);
+    const mine = new Set([s.project.id, s.stage.id, s.guarantee.id, s.kase.id]);
+    const rows = (await items(tx)).filter((r) => mine.has(r.source_id));
     assert.equal(rows.length, 4);
     const byId = Object.fromEntries(rows.map((r) => [r.source_id, r]));
     assert.equal(byId[s.stage.id].source_type, 'CONSTRUCTION');
@@ -54,8 +57,8 @@ test('m9d803 backfill é idempotente e traz os registros abertos já existentes'
     for (const row of rows) { assert.ok(isValidDeepLink(row.deep_link), row.deep_link); assert.equal(row.status, 'OPEN'); }
 
     const second = await runBackfill(tenant, tx, new Date('2026-10-28T09:05:00Z'));
-    assert.equal(second.upserted, 4);
-    assert.equal((await items(tx)).length, 4, 'reexecução não duplica');
+    assert.equal(second.upserted, baseline + 4);
+    assert.equal((await items(tx)).filter((r) => mine.has(r.source_id)).length, 4, 'reexecução não duplica');
   });
 });
 

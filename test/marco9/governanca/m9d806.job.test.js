@@ -14,10 +14,13 @@ const { upsertSetting } = require('../../../src/features/settings/settings.servi
 let tenants;
 const created = { userIds: [] }; // usuário que o teste cria fora de transação; a limpeza o apaga (R4-L2)
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
-before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
+// O aviso de domínio pendente é uma vez por dia (chave dq.domain_pending:<domínio>:<dia> em calendar_alert_log): uma execução anterior no mesmo dia/banco consome a chave.
+const clearDomainClaims = (companyId) => adminQuery("DELETE FROM governance.calendar_alert_log WHERE company_id = $1 AND alert_key LIKE 'dq.domain\\_pending:%'", [companyId]);
+before(async () => { if (env.DISPOSABLE) { tenants = await env.loadTenants(); await clearDomainClaims(tenants.A.companyId); } });
 after(async () => {
   try {
     if (env.DISPOSABLE) {
+      await clearDomainClaims(tenants.A.companyId);
       const { userIds } = created;
       if (userIds.length) {
         await adminQuery('DELETE FROM core.notifications WHERE user_id = ANY($1::uuid[])', [userIds]);

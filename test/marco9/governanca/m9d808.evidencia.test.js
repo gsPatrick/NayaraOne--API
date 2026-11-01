@@ -46,9 +46,10 @@ test('m9d808 uma evidência única vale para o lote: conta bancária de forneced
   assert.deepEqual(await codeOf(withTenantTransaction(A(), (tx) => execute(tx, body))), [422, 'GOV_EVIDENCE_REQUIRED']);
   const lot = await withTenantTransaction(A(), (tx) => execute(tx, { ...body, change_evidence: OTHER() }));
   assert.equal(lot.lot.affectedCount, 3, 'uma conta por fornecedor');
-  const accounts = (await adminQuery('SELECT pix_key FROM finance.bank_accounts WHERE owner_person_id = ANY($1)', [suppliers.map((s) => s.id)])).rows;
+  const accounts = (await adminQuery('SELECT id, pix_key FROM finance.bank_accounts WHERE owner_person_id = ANY($1)', [suppliers.map((s) => s.id)])).rows;
   assert.deepEqual(accounts.map((a) => a.pix_key), ['nova-chave@qa-m9.test', 'nova-chave@qa-m9.test', 'nova-chave@qa-m9.test']);
-  const evidence = (await adminQuery("SELECT field, source, value_after_hash FROM governance.field_change_evidence WHERE company_id = $1 AND entity_type = 'BANK_ACCOUNT' AND note LIKE 'Conferido com a certidão%' AND field = 'pixKey'", [A().companyId])).rows;
+  // só as contas DESTE teste (outras execuções no mesmo banco deixam evidências com a mesma nota)
+  const evidence = (await adminQuery("SELECT field, source, value_after_hash FROM governance.field_change_evidence WHERE company_id = $1 AND entity_type = 'BANK_ACCOUNT' AND entity_id = ANY($2) AND note LIKE 'Conferido com a certidão%' AND field = 'pixKey'", [A().companyId, accounts.map((a) => a.id)])).rows;
   assert.equal(evidence.length, 3);
   assert.ok(evidence.every((e) => e.source === 'OTHER' && /^[0-9a-f]{64}$/.test(e.value_after_hash)));
   const items = (await adminQuery('SELECT record_type FROM governance.bulk_change_items WHERE bulk_change_id = $1', [lot.lot.id])).rows;

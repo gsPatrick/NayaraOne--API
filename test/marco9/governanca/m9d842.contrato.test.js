@@ -48,6 +48,7 @@ after(async () => {
   api.writeReports(report, process.env.CONTRACT_REPORT_DIR || require('node:path').resolve(__dirname, '../../../docs/evidencias/ci'));
   if (started) await started.restore();
   await env.cleanExports().catch(() => {});
+  await env.cleanContractClients().catch(() => {}); // credenciais externas criadas pelo contrato
   await purgeKillSwitchResidue(CONTRACT_SWITCH_PATTERNS).catch(() => {}); // o probe do contrato só existia neste processo; o switch não pode sobrar
   await env.adminQuery("DELETE FROM core.mfa_credentials WHERE user_id IN (SELECT id FROM core.users WHERE email LIKE 'ci-%@ci.nayaraone.test')").catch(() => {});
   await require('../../../src/models').sequelize.close().catch(() => {});

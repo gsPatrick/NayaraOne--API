@@ -51,6 +51,9 @@ const alertsOf = async (reference) => (await env.adminQuery("SELECT user_id, tit
 async function clean833() {
   await env.adminQuery('DELETE FROM governance.bcp_payment_pendings');
   await env.adminQuery('DELETE FROM governance.manual_operation_checks');
+  // linhas de extrato e contas que o teste criou (a conciliação casa por valor e data: sobras de uma execução anterior seriam casadas no lugar da linha nova)
+  await env.adminQuery("DELETE FROM finance.bank_transactions WHERE external_transaction_id LIKE 'm9d833-%'");
+  await env.adminQuery("DELETE FROM finance.bank_accounts WHERE account_number LIKE 'm9d833-%'");
   await env.adminQuery("DELETE FROM core.tenant_settings WHERE key = 'governanca.calendario.feriados'");
   await env.cleanImports();
 }

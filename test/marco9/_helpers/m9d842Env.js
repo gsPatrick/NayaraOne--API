@@ -29,6 +29,7 @@ async function startContractApi(doc, port) {
   const makerId = (await env.adminQuery("SELECT id FROM core.users WHERE email = 'ci-a-maker@ci.nayaraone.test'")).rows[0].id;
   const { emailFor } = require('../../../scripts/seed-ci-two-tenants');
   const vars = { loginEmail: emailFor('A', 'leitura'), loginPassword: process.env.CI_TENANT_USERS_PASSWORD, userId: A.userId, companyId: A.companyId, groupId: A.groupId, makerUserId: makerId, userIdB: B.userId, companyIdB: B.companyId };
+  await cleanContractClients(); // credenciais de uma execução anterior neste banco têm o mesmo nome e a criação seria recusada
   const external = await externalClients(http, vars);
   return { http, tokens: { gestor: http.tokens.gestor, maker: http.tokens.maker, gestorB: http.tokens.gestorB, ...external.tokens }, vars: { ...vars, ...external.vars }, restore, tenants: http.tenants };
 }
@@ -49,6 +50,23 @@ async function externalClients(http, vars) {
   return { tokens: { client: full.accessToken, clientLimited: limited.accessToken }, vars: { clientId: full.clientId, clientSecret: full.clientSecret } };
 }
 
+/**
+ * Remove o que os exemplos positivos do contrato criam e que o próprio contrato recusa repetir (409): credenciais e consumidores externos, o lead externo, o orçamento do ambiente e a
+ * política de degradação. Sem isso a segunda execução no mesmo banco falha nesses exemplos (credencial/lead/orçamento já existem).
+ */
+async function cleanContractClients() {
+  await env.adminQuery('DELETE FROM governance.api_clients');
+  await env.adminQuery('DELETE FROM governance.api_consumer_usage');
+  await env.adminQuery('DELETE FROM governance.api_consumers WHERE app_key IS NULL');
+  const lead = "SELECT id FROM people.persons WHERE legal_name = 'QA-M9 Lead do contrato'";
+  await env.adminQuery(`DELETE FROM crm.opportunities WHERE person_id IN (${lead})`);
+  await env.adminQuery(`DELETE FROM people.person_contacts WHERE person_id IN (${lead})`);
+  await env.adminQuery("DELETE FROM people.persons WHERE legal_name = 'QA-M9 Lead do contrato'");
+  await env.adminQuery('DELETE FROM governance.budget_alerts');
+  await env.adminQuery('DELETE FROM governance.budgets');
+  await env.adminQuery('DELETE FROM governance.degradation_policies');
+}
+
 /** MFA recente para o ator do exemplo (inserção no cluster descartável, nunca por HTTP). */
 const grantMfaFor = (example, tenants) => {
   const tenant = example.as === 'gestorB' ? tenants.B : tenants.A;
@@ -58,4 +76,4 @@ const grantMfaFor = (example, tenants) => {
 /** Tira a verificação recente do ator do exemplo (o MFA habilitado fica). */
 const revokeMfaFor = (example, tenants) => env.revokeMfa((example.as === 'gestorB' ? tenants.B : tenants.A).userId);
 
-module.exports = { ...env, startContractApi, grantMfaFor, revokeMfaFor, contractPermissions, loadContract, CONTRACT_FILE, SCOPE_FILE, EXAMPLES_DIR };
+module.exports = { ...env, startContractApi, cleanContractClients, grantMfaFor, revokeMfaFor, contractPermissions, loadContract, CONTRACT_FILE, SCOPE_FILE, EXAMPLES_DIR };

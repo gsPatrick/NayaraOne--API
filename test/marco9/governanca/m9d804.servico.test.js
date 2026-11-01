@@ -23,13 +23,15 @@ const codeOf = async (promise) => promise.then(() => null, (err) => err.code);
 test('m9d804 troca de steward preserva histórico', { skip: skip() }, async () => {
   await run(async (tx) => {
     const ana = await env.newUser(A(), tx); const bruno = await env.newUser(A(), tx);
+    // designações de outros arquivos no mesmo banco (de outros usuários) ficam no histórico do domínio: aqui só contam as linhas dos dois usuários deste teste
+    const own = async () => (await env.history(A(), 'PESSOAS', tx)).filter((r) => [ana.id, bruno.id].includes(r.user_id));
     await put('PESSOAS', [{ role: 'STEWARD', userId: ana.id }], tx);
     const first = await put('PESSOAS', [{ role: 'STEWARD', userId: ana.id }], tx);
     assert.equal(first.stewards.length, 1, 'repetir a mesma designação vigente é idempotente');
-    assert.equal((await env.history(A(), 'PESSOAS', tx)).length, 1, 'sem linha nova');
+    assert.equal((await own()).length, 1, 'sem linha nova');
     const view = await put('PESSOAS', [{ role: 'STEWARD', userId: bruno.id }], tx);
     assert.deepEqual(view.stewards.map((s) => s.userId), [bruno.id]);
-    const rows = await env.history(A(), 'PESSOAS', tx);
+    const rows = await own();
     assert.equal(rows.length, 2, 'o histórico não é apagado');
     const anaRow = rows.find((r) => r.user_id === ana.id); const brunoRow = rows.find((r) => r.user_id === bruno.id);
     assert.ok(anaRow.valid_until, 'linha da Ana fechada');
