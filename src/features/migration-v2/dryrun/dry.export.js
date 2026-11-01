@@ -3,25 +3,15 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 const logger = require('../../../utils/logger');
 const { sign } = require('./dry.signature');
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const { resolveCommit, treeDirty, REPO_ROOT } = require('./dry.commit');
+
 const DEFAULT_FILE = path.join('docs', 'governance', 'dry3-report.json');
 
-const VERSION_FILE = path.join(REPO_ROOT, 'VERSION');
-const clean = (text) => String(text == null ? '' : text).trim().slice(0, 64);
-
-/**
- * Hash do commit em que o ensaio rodou, na ordem: GIT_COMMIT do ambiente; arquivo VERSION da raiz da API (a imagem Docker grava ali o SHA do build, o contêiner não tem .git);
- * `git rev-parse HEAD` do repositório (desenvolvimento); sem nenhum deles, "unknown". Um VERSION vazio ou "unknown" (build sem GIT_SHA) não conta como commit.
- */
-function currentCommit({ versionFile = VERSION_FILE } = {}) {
-  if (clean(process.env.GIT_COMMIT)) return clean(process.env.GIT_COMMIT);
-  try { const fromImage = clean(fs.readFileSync(versionFile, 'utf8')); if (fromImage && fromImage !== 'unknown') return fromImage; } catch (err) { /* sem VERSION fora da imagem: segue para o git */ }
-  try { return clean(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString()) || 'unknown'; } catch (err) { return 'unknown'; }
-}
+/** Hash do commit em que o ensaio rodou (ordem e regras em dry.commit.resolveCommit). */
+const currentCommit = (options) => resolveCommit(options).commit;
 
 /** Arquivo-base: `MIGRATION_DRY3_REPORT_PATH` (laboratório e testes) ou docs/governance/dry3-report.json; com NODE_ENV=test e sem caminho explícito, no diretório temporário (um teste nunca sobrescreve o oficial). */
 function basePath() {
@@ -58,11 +48,13 @@ function exportReport(report, { companyId } = {}) {
     conclusion: report.conclusion,
     criteria: report.criteria,
     commit: report.commit || currentCommit(),
+    dirty: treeDirty(), // árvore com alteração não commitada: o SHA não descreve o código do ensaio; o GO recusa (R4-L7)
     generated_at: new Date().toISOString(),
     report_id: report.id,
     company_id: companyId || null, // vínculo à empresa: assinado, para o GO de outra empresa não aceitar este relatório
   };
   const signature = sign(body); // assinatura HMAC com a chave do ambiente: o GO só aceita relatório assinado e intacto
+  if (body.dirty) logger.warn({ reportId: report.id }, 'migration.dry3.export.dirty_tree');
   if (signature) Object.assign(body, signature); else logger.warn({ reportId: report.id }, 'migration.dry3.export.unsigned');
   const text = `${JSON.stringify(body, null, 2)}\n`;
   writeAtomic(file, text);

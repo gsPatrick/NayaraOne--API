@@ -40,7 +40,8 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 | `migracao.execucao.max_por_empresa` | 3 | `ingest/run.admission` (teto de ativas da empresa, replays incluídos; acima, 429 `GOV_MIG_RUN_LIMIT`) |
 | `migracao.execucao.max_no_processo` | 5 | `ingest/batch.runner.loadSettings` e `ingest/run.limiter` (teto de execuções rodando no processo; as demais ficam QUEUED para o job) |
 | `migracao.execucao.expira_min` | 720 | `ingest/run.repository.countActive` (execução ativa sem atividade — início ou lote gravado — há mais que isso deixa de contar) |
-| `migracao.execucao.expira_replay_min` | 30 | `ingest/run.repository.expireStaleReplays` (chamada por `run.admission.assertRoom`: registro de replay sem fim há mais que isso vira FAILED e libera a vaga) |
+| `migracao.execucao.expira_replay_min` | 30 | `ingest/run.repository.expireStaleReplays` (chamada por `run.admission.assertRoom`: registro de replay sem sinal de vida há mais que isso vira FAILED e libera a vaga; o sinal é o início ou o último `heartbeat_at`) |
+| `migracao.execucao.sinal_vida_s` | 30 | `ingest/run.heartbeat` (a cada tantos segundos o replay renova `mig_runs.heartbeat_at`; replay longo e vivo não expira) |
 | `migracao.legado.filtrar_por_empresa`, `.coluna_empresa`, `.codigo_empresa` | desligado, `empresa_id`, `A_DEFINIR` | `ingest/connectors/company.scope` (filtro de empresa em toda leitura do legado; o código é único no grupo: 409 `GOV_MIG_LEGACY_CODE_DUPLICATE`, trava em `settings/legadoEmpresa.guard`) |
 | `migracao.legado.exigir_filtro_multiempresa` | ligado | `ingest/connectors/company.scope` (grupo com várias empresas sem filtro: 422 `GOV_MIG_LEGACY_SCOPE_REQUIRED`; com a exigência desligada a execução grava `migration.legacy.unfiltered`) |
 | `migracao.payload.retencao_dias` | 30 | `ingest/payload.purge` (dias, depois de RECONCILED, até anular `mig_records.source_payload`; job `migrationRunJob`) |
@@ -74,3 +75,10 @@ Feature fora das oito pastas de `core-governance`: a migração tem ciclo de vid
 - `PARALLEL_COMPARE_JOB_DISABLED=true` desliga o job da comparação paralela (M9-D903).
 - Replay: `POST /migration/batches/:id/replay` (permissão `governance:migration:run`) ou `replay.replayBatch(tenant, actor, batchId)`: novo lote com `replay_of`, mesmo `root_hash`, original intacto. O replay passa pelos mesmos limites da execução (registro de controle em `mig_runs` com `kind = 'REPLAY'`; 409/429 como acima).
 - Limites: o `POST /migration/runs` é serializado por empresa (`pg_advisory_xact_lock`) e recusado acima dos limites `migracao.execucao.*`; o legado é lido com o filtro de empresa quando o grupo tem várias.
+
+## Caminho oficial do relatório DRY3 até o GO (M9-D908, reabertura R4)
+
+1. O ensaio roda no laboratório (banco descartável) com a mesma imagem que será promovida: o `VERSION` da imagem (ou `GIT_COMMIT`) é o commit do relatório.
+2. O relatório fica num volume montado fora da imagem, apontado por `MIGRATION_DRY3_REPORT_PATH` (`/dados/governance/dry3-report.json`, por exemplo); não é versionado em `docs/governance/` (a imagem não é gravável e o SHA dela nunca seria o do commit que contém o relatório). O mesmo volume e a mesma `MIGRATION_DRY3_SIGNING_KEY` são montados no ambiente do GO e no fechamento do bloco (D940).
+3. O GO compara o commit do relatório com o da imagem em execução, normalizado (minúsculas; SHA abreviado de 7 ou mais caracteres vale) e recusa relatório de ensaio com alteração não commitada (`dirty`, árvore suja no laboratório). Ambas as exigências seguem `migracao.dry3.exigir_commit_igual`.
+4. Sem `.git` no contêiner o commit vem de `GIT_COMMIT` ou do `VERSION`; sem nenhum dos dois o GO recusa (`unknown` nunca confere).

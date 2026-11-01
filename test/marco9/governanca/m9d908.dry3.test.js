@@ -30,7 +30,7 @@ test('m9d908 DRY3 completo aprovado com relatório e projeção', { skip: skip()
     assert.ok(report.durationMs === undefined || report.finishedAt, 'relatório fechado');
     // exportação para o fechamento do bloco F
     const file = s.exported.read();
-    assert.deepEqual(Object.keys(file).sort(), ['commit', 'company_id', 'conclusion', 'criteria', 'generated_at', 'report_id', 'signature', 'signature_alg']);
+    assert.deepEqual(Object.keys(file).sort(), ['commit', 'company_id', 'conclusion', 'criteria', 'dirty', 'generated_at', 'report_id', 'signature', 'signature_alg']);
     assert.equal(file.conclusion, 'APROVADO');
     assert.match(file.commit, /^[0-9a-f]{7,40}$|^unknown$/);
     assert.ok(Date.now() - new Date(file.generated_at) < 120000);

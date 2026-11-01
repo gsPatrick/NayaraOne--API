@@ -19,6 +19,7 @@ function useTempExport(tenant) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d908-'));
   process.env.MIGRATION_DRY3_REPORT_PATH = path.join(dir, 'dry3-report.json');
   process.env.MIGRATION_DRY3_SIGNING_KEY = 'chave-de-teste-nao-usar-em-producao'; // só de teste: assina o relatório exportado
+  if (!process.env.GIT_COMMIT) process.env.GIT_COMMIT = require('../../../src/features/migration-v2/dryrun/dry.export').currentCommit(); // commit fixo: o ensaio de teste não depende da árvore de trabalho estar limpa
   dry.install();
   const file = tenant ? require('../../../src/features/migration-v2/dryrun/dry.export').exportPath(tenant.companyId) : process.env.MIGRATION_DRY3_REPORT_PATH; // arquivo da empresa (R3-L4)
   return { file, base: process.env.MIGRATION_DRY3_REPORT_PATH, read: () => JSON.parse(fs.readFileSync(file, 'utf8')), exists: () => fs.existsSync(file) };

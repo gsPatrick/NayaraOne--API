@@ -23,6 +23,7 @@ const REASONS = Object.freeze({
   BATCHES_PENDING: 'O ensaio DRY3 exportado tem lotes que não foram todos verificados',
   VOLUME_BELOW_MINIMUM: 'O ensaio DRY3 exportado não atingiu o volume mínimo de linhas exigido',
   OTHER_COMMIT: 'O relatório exportado do ensaio DRY3 é de outro commit que não o em execução.',
+  DIRTY_TREE: 'O ensaio DRY3 exportado rodou com alteração não commitada no código: o commit registrado não descreve o que foi testado.',
   BAD_DATE: 'O relatório exportado do ensaio DRY3 tem data de geração ausente ou inválida (data de geração).',
   EXPIRED: 'O relatório exportado do ensaio DRY3 é mais velho que o prazo de validade permitido.',
 });

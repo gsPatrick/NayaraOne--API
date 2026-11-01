@@ -2,6 +2,7 @@
 
 const { getSetting } = require('../../settings/settings.service');
 const { currentCommit } = require('./dry.export');
+const { sameCommit } = require('./dry.commit');
 const { CRITERIA } = require('./dry.criteria');
 const { KEYS, DRY_SETTING_DEFAULTS } = require('./dry.settings');
 
@@ -27,7 +28,10 @@ async function bindingProblem(report, tenant, transaction, { now = new Date() } 
   const minimum = Number(await read(tenant, KEYS.MIN_VOLUME, transaction));
   const rows = Number(criteria.counts_match.rows);
   if (!Number.isFinite(rows) || rows < minimum) return { reason: 'VOLUME_BELOW_MINIMUM', rows: Number.isFinite(rows) ? rows : null, minimum };
-  if (await read(tenant, KEYS.SAME_COMMIT, transaction) !== false && (report.commit !== currentCommit() || report.commit === 'unknown')) return { reason: 'OTHER_COMMIT' };
+  if (await read(tenant, KEYS.SAME_COMMIT, transaction) !== false) {
+    if (!sameCommit(report.commit, currentCommit())) return { reason: 'OTHER_COMMIT' };
+    if (report.dirty === true) return { reason: 'DIRTY_TREE' };
+  }
   const generated = Date.parse(report.generated_at);
   const maxHours = Number(await read(tenant, KEYS.VALIDITY_HOURS, transaction));
   if (Number.isNaN(generated) || generated - now.getTime() > FUTURE_TOLERANCE_MS) return { reason: 'BAD_DATE' };
