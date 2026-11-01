@@ -63,6 +63,7 @@ test('autopublicacao_exige_todos_os_portoes: cada portao reprovado sozinho recus
     FACTUAL_NOT_OK: (t, itemId) => setChecks(t, itemId, { factual: { ok: false, at: new Date().toISOString(), detalhes: { findings: [{ reason: 'MISMATCH' }] } } }),
     NOT_SANITIZED: (t, itemId) => setChecks(t, itemId, { compliance: { ok: false, at: new Date().toISOString(), detalhes: {} } }),
     INJECTION_SUSPECT: (t, itemId) => setChecks(t, itemId, { factual: { ok: true, at: new Date().toISOString(), detalhes: { findings: [{ reason: 'INJECTION' }] } } }),
+    URL_REVIEW: (t, itemId) => setChecks(t, itemId, { factual: { ok: true, at: new Date().toISOString(), detalhes: { findings: [], revisao: [{ reason: 'URL_REVIEW', url: 'Rb.gy/Abc12' }] } } }),
     TEMPLATE_NOT_PUBLISHED: (t, itemId, tpl) => env.fx.q(t, "UPDATE marketing.templates SET status = 'RETIRED' WHERE id = :t", { t: tpl }),
     NO_CLASS: (t) => env.setClasses(t, ctx.tenant, []),
     KILL_SWITCH: (t) => change(t, ctx.tenant, { scope: 'CHANNEL', targetId: 'SITE', active: true }),

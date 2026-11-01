@@ -30,7 +30,7 @@ async function templateReasons(version, transaction) {
 
 /**
  * M9-D408 item 2 — decide se o conteúdo sai sozinho. TODAS as condições: conteúdo gerado pela NAY (`model_name`), status COMPLIANCE_CHECKED, validador
- * factual ok, sem suspeita de injeção, sanitização ok, template PUBLISHED na versão que o conteúdo usa (o banco já impede publicado ser editado, então o hash do template é coerente), classe ativa que cubra todos os canais
+ * factual ok, sem suspeita de injeção, sem URL em revisão (`detalhes.revisao`), sanitização ok, template PUBLISHED na versão que o conteúdo usa (o banco já impede publicado ser editado, então o hash do template é coerente), classe ativa que cubra todos os canais
  * pretendidos e kill switch inativo para os canais e a campanha. Qualquer falha devolve `reasons` (todas, não só a primeira) e o conteúdo vai para aprovação
  * humana. Contrato da porta de M9-D406: { autopublish, classId?, channels?, quando?, reasons }.
  */
@@ -42,6 +42,9 @@ async function evaluateAutopublish({ item, version, tenant, transaction }) {
   if (!checks.factual || checks.factual.ok !== true) reasons.push('FACTUAL_NOT_OK');
   const findings = checks.factual && checks.factual.detalhes && Array.isArray(checks.factual.detalhes.findings) ? checks.factual.detalhes.findings : [];
   if (findings.some((f) => f && f.reason === 'INJECTION')) reasons.push('INJECTION_SUSPECT');
+  // URL em revisão (abreviação, nome de arquivo, número ou encurtador parecido com abreviação, finding URL_REVIEW em `detalhes.revisao`): na dúvida, uma pessoa vê antes (MKT-008).
+  const review = checks.factual && checks.factual.detalhes && Array.isArray(checks.factual.detalhes.revisao) ? checks.factual.detalhes.revisao : [];
+  if (review.length > 0) reasons.push('URL_REVIEW');
   if (!checks.compliance || checks.compliance.ok !== true) reasons.push('NOT_SANITIZED');
   reasons.push(...await templateReasons(version, transaction));
   const matched = matchClasses(await readClasses(tenant, transaction), item.type, requestedChannels(version));

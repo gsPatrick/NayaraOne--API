@@ -51,6 +51,20 @@ test('autopublicacao_so_vale_para_conteudo_da_nay: texto humano na classe autori
   });
 });
 
+test('autopublicacao_nao_ocorre_com_url_em_revisao: URL em revisao (abreviacao, encurtador parecido com abreviacao) vai a PENDING_APPROVAL com motivo proprio', async () => {
+  await inTx(async (t) => {
+    await env.setClasses(t, ctx.tenant, [env.SOLD_CLASS]);
+    for (const text of ['Imóvel vendido no Jardim Europa. Ab.lol/Login', 'Imóvel vendido na Av.Paulista.']) {
+      env.registerNay(text);
+      const c = await env.soldContent(t, ctx);
+      assert.equal(c.status, 'PENDING_APPROVAL', text);
+      assert.equal((await env.jobsOf(t, c.itemId)).length, 0);
+      assert.equal((await env.itemOf(t, c.itemId)).approved_by, null);
+      assert.equal((await env.eventsOf(t, c.itemId)).length, 0);
+    }
+  });
+});
+
 test('autopublica_com_a_classe_ativa: APPROVED por SYSTEM_AUTOPUBLISH, hash gravado, evento autopublished true e job agendado', async () => {
   await inTx(async (t) => {
     await env.setClasses(t, ctx.tenant, [env.SOLD_CLASS]);
