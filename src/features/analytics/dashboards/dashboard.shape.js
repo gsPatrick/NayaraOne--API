@@ -10,6 +10,7 @@ const { dimensionUnit } = require('../metrics/dimensionUnit');
 const { natureLabel } = require('../metrics/registry.natures');
 const { formatValue } = require('./dashboard.format');
 const { sortItems } = require('./dashboard.order');
+const { readModelLabel } = require('./dashboard.readModelLabels');
 
 function parseKey(key) {
   const parts = String(key).split(':');
@@ -17,8 +18,9 @@ function parseKey(key) {
   return { group: parts[0], id: parts[1], measure: parts.slice(2).join(':') };
 }
 
-/** "VISIT_SCHEDULED" -> "Visit scheduled": rótulo legível do código quando o Front não tem tradução própria. */
+/** "VISIT_SCHEDULED" -> "Visit scheduled": rótulo legível do código quando o Front não tem tradução própria. Read model (rm_...) usa o nome em português do catálogo. */
 function humanize(id) {
+  if (/^rm_[a-z]/.test(String(id))) return readModelLabel(id); // M9-D682 (F08): o quadro de freshness lista a fonte pelo nome, nunca "Rm ai cost"
   const text = String(id).replace(/_/g, ' ').toLowerCase();
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
