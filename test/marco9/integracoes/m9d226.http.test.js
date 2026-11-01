@@ -7,6 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d249Env');
 const env226 = require('../_helpers/m9d226Env');
+const { semMfa } = require('../_helpers/semMfa');
 
 let tenants;
 let chamar;
@@ -48,8 +49,10 @@ test('contingencia_http_troca_aprovada_exige_permissao_e_mfa', async () => {
   const sem = await chamar(tokenLe, 'POST', `/admin/integrations/contingency/dispatches/${id}/switch`, { approve: true });
   assert.equal(sem.status, 403, 'só integration:read não troca');
   assert.equal(sem.corpo.error?.code || sem.corpo.code, 'PERMISSION_DENIED');
-  const semMfa = await chamar(tokenGerencia, 'POST', `/admin/integrations/contingency/dispatches/${id}/switch`, { approve: true });
-  assert.ok([401, 403].includes(semMfa.status), `sem MFA recente a troca é recusada (${semMfa.status})`);
-  assert.match(JSON.stringify(semMfa.corpo), /MFA/);
+  // Outros arquivos habilitam MFA (e verificam) para o usuário do seed e o estado fica gravado: aqui o usuário volta a não ter MFA, gravado de fato (a API lê em outra transação).
+  await env.comTenant(tenant, (t) => semMfa(tenant.userId, t));
+  const recusada = await chamar(tokenGerencia, 'POST', `/admin/integrations/contingency/dispatches/${id}/switch`, { approve: true });
+  assert.ok([401, 403].includes(recusada.status), `sem MFA recente a troca é recusada (${recusada.status})`);
+  assert.match(JSON.stringify(recusada.corpo), /MFA/);
   assert.ok(tenant.companyId);
 });
