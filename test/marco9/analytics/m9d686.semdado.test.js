@@ -4,6 +4,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const e686 = require('../_helpers/m9d686Env');
+const { NOW, registry } = require('../_helpers/painelBiEnv');
 const { AREAS } = require('../../../src/features/analytics/dashboards/health/health.areas');
 
 const { seedHealth, openHealth, areaOf, alertOf, clearHealth } = e686;
@@ -48,4 +49,23 @@ test('m9d686 os motivos usam o nome do indicador, sem código, e o resumo soma a
   const counted = { VERDE: 0, AMARELO: 0, VERMELHO: 0, CINZA: 0 };
   for (const a of res.body.data.areas) counted[a.light.color] += 1;
   assert.deepEqual([s.verde, s.amarelo, s.vermelho, s.cinza], [counted.VERDE, counted.AMARELO, counted.VERMELHO, counted.CINZA]);
+});
+
+test('m9d686 indicador com valor e freshness UNKNOWN (nunca atualizado, leitura de dia passado) com alerta crítico aberto deixa a área CINZA', async () => {
+  await clearHealth(env);
+  const never = areaCodes('COMMERCIAL');
+  // grava o valor VERDE de cada indicador sem instante de fonte; o relógio avança dois dias para o dia lido virar histórico, onde o valor continua confiável e a freshness é UNKNOWN
+  await seedHealth(env, {}, { never });
+  await alertOf(env, env.tenantA, { metricCode: 'crm.portfolio_without_next_action', severity: 'CRITICAL', status: 'OPEN' });
+  registry.clock.setClock(() => new Date(NOW.getTime() + 2 * 86400000));
+  try {
+    const row = areaOf(await openHealth(env), 'COMMERCIAL');
+    const first = row.kpis.find((k) => k.metricCode === never[0]);
+    assert.ok(first, 'KPI da área presente');
+    assert.deepEqual([row.light.color, row.light.text, row.noData], ['CINZA', 'Sem dados suficientes', true]);
+    assert.equal(row.openAlerts, 1);
+  } finally {
+    registry.clock.setClock(() => NOW);
+    await clearHealth(env);
+  }
 });
