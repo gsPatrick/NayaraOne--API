@@ -38,6 +38,15 @@ const URL_SETTING_DEFAULTS = Object.freeze({
   [TLDS_KEY]: 'com, net, org, br, io, co, info, biz, app, dev, xyz, online, site, top, club, shop, store, link, click, me, tv, cc, us, uk, de, pt, ar, ru, cn, tk, ml, ga, cf, gq, ly, to, gl, ws, pw, live, work, page, cloud, tech, pro, vip, icu, buzz, fun, one, ink, wang, in, fr, es, it, ng, nl, ch, se, jp, kr, au, ca, mx, cl, pe, uy, eu, za, tr, ir, id, vn, sg, hk, tw, su, gov, edu, mil, zip, mov, ninja, sbs, cfd, rest, bond, museum, men, loan, win, bid, review, stream, download, cam, monster, quest, party, trade, date, science, accountant, racing, рф, भारत, বাংলা, ਭਾਰਤ, ભારત, భారత్, ಭಾರತ, ഭാരതം, ලංකා, ଭାରତ, संगठन, சிங்கப்பூர், भारतम्, भारोत, कॉम, नेट, ভারত',
 });
 
+/** Rótulos dos campos na tela (mesmos de marketingUrlGroups.js): a mensagem de erro diz o campo e o formato, nunca a chave técnica. */
+const FIELD_LABELS = Object.freeze({
+  [ALLOWED_KEY]: 'Domínios extras permitidos',
+  [SHORTENERS_KEY]: 'Encurtadores públicos proibidos',
+  [TLDS_KEY]: 'Terminações conhecidas de endereço',
+  [FILE_EXT_KEY]: 'Extensões de arquivo que não bloqueiam o texto',
+});
+const invalidParam = (key, esperado, extra) => mktError(422, 'MKT_PARAM_INVALID', `${FIELD_LABELS[key] || 'Parâmetro'}: use ${esperado}.`, { key, esperado, ...extra });
+
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 const getSetting = (...args) => require('../../settings/settings.service').getSetting(...args);
 
@@ -52,7 +61,7 @@ const validateDomains = (allowNone) => (key, value) => {
   const list = parseDomainList(value);
   const bad = list.filter((d) => !DOMAIN_RE.test(d));
   if ((!allowNone && list.length === 0) || bad.length > 0) {
-    throw mktError(422, 'MKT_PARAM_INVALID', 'Valor inválido para o parâmetro.', { key, esperado: 'domínios separados por vírgula (ex.: portal.com.br, rede.com)', invalidos: bad });
+    throw invalidParam(key, allowNone ? 'domínios separados por vírgula, como portal.com.br, rede.com (ou a palavra nenhum)' : 'pelo menos um domínio, separados por vírgula, como bit.ly, tinyurl.com', { invalidos: bad });
   }
 };
 
@@ -63,7 +72,7 @@ const DEFAULT_TLDS = Object.freeze(parseTlds(URL_SETTING_DEFAULTS[TLDS_KEY]));
 const validateTlds = (key, value) => {
   const list = parseTlds(value);
   if (list.length === 0 || !list.every((t) => TLD_RE.test(t))) {
-    throw mktError(422, 'MKT_PARAM_INVALID', 'Valor inválido para o parâmetro.', { key, esperado: 'terminações separadas por vírgula, só letras (ex.: com, br, io)' });
+    throw invalidParam(key, 'terminações separadas por vírgula, só letras, como com, br, io');
   }
 };
 
@@ -73,7 +82,7 @@ const DEFAULT_FILE_EXTENSIONS = Object.freeze(parseExtensions(URL_SETTING_DEFAUL
 const validateExtensions = (key, value) => {
   const list = parseExtensions(value);
   if (list.length === 0 || !list.every((t) => /^[a-z0-9]{1,10}$/.test(t))) {
-    throw mktError(422, 'MKT_PARAM_INVALID', 'Valor inválido para o parâmetro.', { key, esperado: 'extensões separadas por vírgula, letras e números (ex.: jpg, pdf)' });
+    throw invalidParam(key, 'extensões separadas por vírgula, letras e números, como jpg, pdf');
   }
 };
 
