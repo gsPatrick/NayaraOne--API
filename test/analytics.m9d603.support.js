@@ -31,6 +31,14 @@ async function setup() {
   fs.writeFileSync(path.join(formulaDir, 'sem_testes.js'), NO_TESTS_FORMULA);
   const readModel = `rm_m9d603_${uniqueSuffix()}`.replace(/[^a-z0-9_]/gi, '').toLowerCase();
   await admin.query(`CREATE TABLE analytics.${readModel} (id int)`);
+  // Muitos envs derivados deste setup não chamam `teardown` daqui: o read model de teste (sem RLS) e a pasta de fórmulas são removidos no fechamento
+  // da conexão admin, que todo teardown executa. Assim nenhum arquivo deixa `analytics.rm_m9d603_*` para o m9d800 (RLS sem empresa) e o seguinte.
+  const fecharAdmin = admin.close.bind(admin);
+  admin.close = async (...args) => {
+    await admin.query(`DROP TABLE IF EXISTS analytics.${readModel}`).catch(() => {});
+    fs.rmSync(formulaDir, { recursive: true, force: true });
+    return fecharAdmin(...args);
+  };
   return { admin, tenantA, tenantB, formulaDir, readModel };
 }
 

@@ -6,6 +6,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('../_helpers/analyticsHttpEnv');
 const bi = require('../_helpers/biObrasJuridicoEnv');
+const { limparMaterializacoes } = require('../_helpers/analyticsResiduo');
 const kit = require('../_helpers/m9d640Env');
 const sc = require('../_helpers/m9d640Scenario');
 const oracle = require('../_helpers/m9d640Oracle');
@@ -21,6 +22,7 @@ let env;
 let src;
 before(async () => {
   env = await http.setup();
+  await limparMaterializacoes(env.admin, env.tenantA.companyId); // parte de um estado limpo: outros arquivos no mesmo banco deixam read models da agenda para esta empresa
   clock.setClock(bi.NOW);
   src = { admin: env.admin, created: [] };
   const t = env.tenantA;

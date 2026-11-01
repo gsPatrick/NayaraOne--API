@@ -3,6 +3,7 @@
 // Apoio da M9-D627: grava as FONTES de Marketing e Atendimento por conexão de superusuário (sem FK, só o que o teste precisa) e guarda
 // os ids para a limpeza no fim. Banco descartável apenas.
 const crypto = require('node:crypto');
+const { limparMaterializacoes } = require('./analyticsResiduo');
 
 const uuid = () => crypto.randomUUID();
 const MODELS = ['rm_mkt_campaigns', 'rm_mkt_delivery', 'rm_mkt_frequency', 'rm_mkt_reviews', 'rm_mkt_automation', 'rm_support_satisfaction', 'rm_support_complaints', 'rm_support_sla'];
@@ -70,6 +71,8 @@ async function cleanup(env) {
     await env.admin.query("DELETE FROM integration.outbox_events WHERE event_type IN ('analytics.read_model.rebuilt', 'crm.message.status_changed') AND company_id IN (:c)", { replacements: { c: companies }, transaction });
     await env.admin.query("DELETE FROM core.tenant_settings WHERE key = 'analytics.marketing_atendimento.janela_reconferencia_dias' AND company_id IN (:c)", { replacements: { c: companies }, transaction });
   });
+  // a passada da agenda (`schedule`) materializa os read models de TODOS os domínios para as duas empresas, não só os de Marketing/Atendimento
+  await limparMaterializacoes(env.admin, companies, { snapshots: false });
 }
 
 module.exports = { uuid, MODELS, insert, message, campaign, opportunity, attribution, suppression, review, run, feedbackCase, update, cleanup };
