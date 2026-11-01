@@ -257,6 +257,7 @@ const db = { sequelize, Sequelize };
 for (const [name, definer] of Object.entries(modelDefiners)) {
   db[name] = definer(sequelize);
 }
+require('./timestampAliases').defineTimestampAliases(sequelize);
 
 /**
  * Associações inferidas a partir das FKs documentadas (ver src/documentacao/models/*.md

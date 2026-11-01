@@ -37,9 +37,9 @@ function buildOpportunityWhere(filters = {}) {
   if (filters.personId) where.personId = filters.personId;
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.createdFrom || filters.createdTo) {
-    where.createdAt = {};
-    if (filters.createdFrom) where.createdAt[Op.gte] = filters.createdFrom;
-    if (filters.createdTo) where.createdAt[Op.lte] = filters.createdTo;
+    where.created_at = {};
+    if (filters.createdFrom) where.created_at[Op.gte] = filters.createdFrom;
+    if (filters.createdTo) where.created_at[Op.lte] = filters.createdTo;
   }
   return where;
 }

@@ -10,18 +10,25 @@ const bank = require('../../features/finance/bank');
 // (SUBMITTED) ficava presa para sempre. Este job consulta o banco para cada uma delas
 // (idempotente: confirmBankPayment só age enquanto a intenção está incerta/em trânsito).
 
+// Coleta as intenções presas (SUBMITTING/SUBMITTED) há mais que a idade mínima da empresa. Precisa rodar numa transação já com o tenant definido.
+// Atenção: o model PaymentIntent declara `updatedAt: 'updated_at'` nas opções, o que RENOMEIA o atributo; o nome certo no where é `updated_at`
+// (usar `updatedAt` gera "column PaymentIntent.updatedAt does not exist" e o job nunca rodava).
+async function findReconcileCandidates({ groupId, companyId }, transaction) {
+  // M9-D237: idade mínima da consulta é parâmetro da empresa (integration.bank.reconcile_min_age_min, padrão 2 minutos).
+  const { reconcileMinAgeMin } = await bank.readBankParams({ groupId, companyId }, transaction);
+  return PaymentIntent.findAll({
+    where: { status: ['SUBMITTING', 'SUBMITTED'], updated_at: { [Op.lt]: new Date(Date.now() - reconcileMinAgeMin * 60 * 1000) } },
+    transaction,
+  });
+}
+
 async function reconcileCompany(group, company) {
   const candidates = await sequelize.transaction(async (transaction) => {
     await sequelize.query('SELECT set_config(\'app.group_id\', :g, true), set_config(\'app.company_id\', :c, true)', {
       replacements: { g: group.id, c: company.id },
       transaction,
     });
-    // M9-D237: idade mínima da consulta é parâmetro da empresa (integration.bank.reconcile_min_age_min, padrão 2 minutos).
-    const { reconcileMinAgeMin } = await bank.readBankParams({ groupId: group.id, companyId: company.id }, transaction);
-    return PaymentIntent.findAll({
-      where: { status: ['SUBMITTING', 'SUBMITTED'], updatedAt: { [Op.lt]: new Date(Date.now() - reconcileMinAgeMin * 60 * 1000) } },
-      transaction,
-    });
+    return findReconcileCandidates({ groupId: group.id, companyId: company.id }, transaction);
   });
   const summary = { checked: 0, resolved: 0, errors: 0 };
   for (const candidate of candidates) {
@@ -87,4 +94,4 @@ function startBankPaymentReconciliationJob({ intervalMs = DEFAULT_INTERVAL_MS } 
   }, intervalMs);
 }
 
-module.exports = { runBankPaymentReconciliationJob, startBankPaymentReconciliationJob, reconcileCompany };
+module.exports = { runBankPaymentReconciliationJob, startBankPaymentReconciliationJob, reconcileCompany, findReconcileCandidates };

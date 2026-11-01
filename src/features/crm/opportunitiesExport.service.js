@@ -92,7 +92,8 @@ function toExportRow(opportunity) {
   const json = opportunity.toJSON ? opportunity.toJSON() : opportunity;
   const row = {};
   for (const field of EXPORT_FIELDS) {
-    const value = json[field];
+    // o model renomeia createdAt para created_at: no toJSON a chave é created_at
+    const value = field === 'createdAt' ? (json.createdAt ?? json.created_at) : json[field];
     row[field] = value instanceof Date ? value.toISOString() : value === undefined ? null : value;
   }
   return row;
