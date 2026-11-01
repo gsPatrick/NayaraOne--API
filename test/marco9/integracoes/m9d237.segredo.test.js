@@ -3,7 +3,6 @@
 // Marco 9, M9-D237 — segredos do banco no SecretStore (migração idempotente que tira o valor de tenant_settings), cofre real em produção e Santander no registro.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { Op } = require('sequelize');
 const env = require('../_helpers/m9d237Env');
 const { useTempSecretStore } = require('../_helpers/mktSecretStore');
 const settingsService = require('../../../src/features/settings/settings.service');
@@ -19,28 +18,12 @@ let tenant;
 before(async () => { tenant = await env.carregar(); });
 after(async () => { await sequelize.close(); });
 
-
 const ordem = [['status', 'ASC'], ['created_at', 'ASC']]; // a mesma escolha do código (bank.secrets): a connection mais antiga do menor status
 
 // Hermético: tudo dentro de uma transação descartada (nada fica no banco para a próxima passada) e as connections `bank-santander` que outros testes deixaram ficam sem
 // referência dentro dela, para a migração e a leitura olharem a mesma connection e a referência canônica ser a esperada.
-/**
- * Isolamento da segunda passagem no mesmo banco: a migração escolhe a connection `bank-santander` mais antiga e de menor status; connections que outras passagens e outros testes
- * deixaram (outra referência, produção) mudariam qual é lida. Durante o teste elas ficam com um status que ordena por último e depois voltam exatamente como estavam.
- */
-async function isolarConexoesBancarias() {
-  const antes = await noBanco("SELECT id, status FROM integration.connections WHERE company_id = :c AND provider_code = 'bank-santander'", { c: tenant.companyId });
-  if (antes.length) await noBanco("UPDATE integration.connections SET status = 'ZZ_ISOLADA' WHERE company_id = :c AND provider_code = 'bank-santander'", { c: tenant.companyId });
-  return async () => {
-    // as criadas pelo próprio teste ficam isoladas; as que já existiam voltam ao status de antes
-    await noBanco("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code = 'bank-santander' AND status <> 'ZZ_ISOLADA' AND id NOT IN (:ids)", { c: tenant.companyId, ids: antes.length ? antes.map((l) => l.id) : ['00000000-0000-0000-0000-000000000000'] });
-    for (const l of antes) await noBanco('UPDATE integration.connections SET status = :s WHERE id = :id', { s: l.status, id: l.id });
-  };
-}
-
 test('m9_d237_segredo_lido_pelo_secretstore', async () => {
   const desligar = useTempSecretStore();
-  const restaurar = await isolarConexoesBancarias();
   try {
     await env.withRollbackTenantTransaction(tenant, async (t) => {
       const upsert = (chave, valor) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t);
@@ -81,7 +64,7 @@ test('banco_credencial_cofre_obrigatorio_em_producao', async () => {
   try {
     // dentro de uma transação descartada: a connection marcada como produção não pode ficar no banco para a próxima passada
     await env.withRollbackTenantTransaction(tenant, async (t) => {
-      conta = await semMfaNaTroca(() => registry.createConnection({
+      const conta = await semMfaNaTroca(() => registry.createConnection({
         providerCode: 'bank-santander', environment: 'SANDBOX', label: `QA-M9 banco prod ${uniqueSuffix()}`, secretRef: `company/${tenant.companyId}/bank/prod-${uniqueSuffix()}`,
       }, env.ctxDe(), t), t);
       // criar connection de produção exige MFA ao vivo; o teste cria em sandbox e marca a produção direto no banco para provar a regra de leitura do segredo
@@ -90,10 +73,7 @@ test('banco_credencial_cofre_obrigatorio_em_producao', async () => {
       await assert.rejects(readConnectionSecret(connection, tenant, { purpose: 'dispatch', transaction: t }), (e) => e.code === 'INTEGRATION_SECRET_DRIVER_FORBIDDEN');
       await assert.rejects(bank.readBankWebhookSecretFromVault(connection, tenant, t), (e) => e.code === 'INTEGRATION_SECRET_DRIVER_FORBIDDEN', 'o webhook do banco também não lê de cofre local em produção');
     });
-  } finally {
-    await noBanco("UPDATE integration.connections SET environment = 'SANDBOX' WHERE id = :id", { id: conta.id }).catch(() => {});
-    desligar();
-  }
+  } finally { desligar(); }
 });
 
 test('banco_santander_registrado_no_registro_de_adapters', async () => {
