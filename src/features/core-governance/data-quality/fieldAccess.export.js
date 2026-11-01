@@ -43,7 +43,7 @@ async function applyRequestPolicy(tenant, entry, columns, listed, transaction) {
 async function maskExportRows(actor, entry, columns, rows, { approved, maskText, transaction }) {
   const entity = entityOf(entry);
   const decided = await fieldAccess.resolveFields(entity, columns.map((c) => ({ field: columnOf(c), minClassification: c.classification })), actor, 'EXPORT', {
-    transaction, approved, maskText, originPermission: entry.permission,
+    transaction, approved, maskText, originPermission: entry.permission, rowCount: rows.length,
   });
   const byKey = new Map(columns.map((c, index) => [c.key, decided[index]]));
   const kept = columns.filter((c) => byKey.get(c.key).visible);

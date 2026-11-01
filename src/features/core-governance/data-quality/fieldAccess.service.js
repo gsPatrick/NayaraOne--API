@@ -109,7 +109,8 @@ async function resolveInside(entity, items, actor, context, opts, transaction) {
       out.push({ ...protectedItem(item.field, item.value, ctx, 'FAIL_CLOSED'), ref });
     }
   }
-  await audit.recordClearRead(tenant, cleared, context, transaction);
+  // M9-D822 (F17): `opts.rowCount` = quantas linhas foram lidas de fato; com 0 linhas nenhum valor foi visto e não há leitura em claro a registrar.
+  await audit.recordClearRead(tenant, opts.rowCount === 0 ? [] : cleared, context, transaction, opts.rowCount);
   return out;
 }
 

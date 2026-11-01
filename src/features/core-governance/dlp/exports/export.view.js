@@ -6,7 +6,7 @@ const { signDownloadUrl } = require('./export.url');
 function exportView(job, { userId, now, urlMinutes } = {}) {
   const view = {
     exportJobId: job.id, resourceType: job.resourceType, format: job.format, status: job.status, classification: job.classification, purpose: job.purpose,
-    filter: job.filter, columns: job.columns, watermark: job.watermark, rowCount: job.rowCount, fileName: job.fileName, fileSha256: job.fileSha256, expiresAt: job.expiresAt,
+    filter: job.filter, columns: job.columns, watermark: job.watermark, rowCount: job.rowCount, empty: job.status === 'READY' && Number(job.rowCount) === 0, fileName: job.fileName, fileSha256: job.fileSha256, expiresAt: job.expiresAt,
     warnings: (job.obligations && Array.isArray(job.obligations.warnings)) ? job.obligations.warnings : [], requestedAt: job.requestedAt, generatedAt: job.generatedAt, expiredAt: job.expiredAt, errorCode: job.errorCode, downloadCount: job.downloadCount,
   };
   if (job.status === 'READY' && userId && now && new Date(job.expiresAt) > now) view.downloadUrl = signDownloadUrl({ jobId: job.id, userId, now, urlMinutes, fileExpiresAt: job.expiresAt }).url;

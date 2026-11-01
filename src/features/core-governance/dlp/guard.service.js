@@ -24,11 +24,14 @@ async function audit(tenant, req, result, entityId, transaction) {
   const base = {
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: req.actorUserId, action: `${AUDIT_PREFIX}${req.action.toLowerCase()}`, entityType: 'ExportJob', entityId,
   };
-  const details = { action: req.action, resourceType: req.resourceType, classification: result.classification, decision: result.decision, blockReason: result.blockReason, trace: result.trace };
+  // M9-D822 (F17): a finalidade e a justificativa informadas ficam no rastro (o texto, não só o PASS/FAIL), para quem lê a auditoria saber por que o pedido foi feito.
+  const why = { ...(req.purpose ? { purpose: req.purpose } : {}), ...(req.justification ? { justification: req.justification } : {}) };
+  const details = { action: req.action, resourceType: req.resourceType, classification: result.classification, decision: result.decision, blockReason: result.blockReason, trace: result.trace, ...why };
+  const because = req.purpose || req.justification ? ` Finalidade: ${req.purpose || 'não informada'}. Justificativa: ${String(req.justification || 'não informada').slice(0, 300)}` : '';
   if (result.decision === 'DENY') {
-    return registrarTentativaBloqueada({ ...base, beforeJson: details, reason: `Pedido de ${req.action} bloqueado pelo DLP (${result.blockReason}).` }, transaction);
+    return registrarTentativaBloqueada({ ...base, beforeJson: details, reason: `Pedido de ${req.action} bloqueado pelo DLP (${result.blockReason}).${because}` }, transaction);
   }
-  return registrarAuditoria({ ...base, beforeJson: null, afterJson: details, reason: `Pedido de ${req.action} liberado pelo DLP.` }, transaction);
+  return registrarAuditoria({ ...base, beforeJson: null, afterJson: details, reason: `Pedido de ${req.action} liberado pelo DLP.${because}` }, transaction);
 }
 
 /** Sinal de acesso (M9-D824) de uma decisão do guard, leve ou completa. */

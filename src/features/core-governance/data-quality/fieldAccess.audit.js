@@ -6,11 +6,12 @@ const CLEAR_READ_ACTION = 'governance.field_access.clear_read';
 const FAIL_CLOSED_ACTION = 'governance.field_access.fail_closed';
 
 /** Leitura em claro de campo HIGH ou RESTRICTED (M9-D915 §3.2): grava as referências e o contexto, nunca o valor. Uma linha por chamada. */
-async function recordClearRead(tenant, refs, context, transaction) {
+async function recordClearRead(tenant, refs, context, transaction, rowCount = null) {
   if (!refs.length) return;
   await registrarAuditoria({
     groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: tenant.userId || null, action: CLEAR_READ_ACTION, entityType: 'DataClassification', entityId: null,
-    beforeJson: null, afterJson: { context, fields: refs }, reason: `Leitura em claro de ${refs.length} campo(s) HIGH ou RESTRICTED (${context}).`,
+    beforeJson: null, afterJson: { context, fields: refs, ...(rowCount === null ? {} : { rowCount }) },
+    reason: `Leitura em claro de ${refs.length} campo(s) HIGH ou RESTRICTED (${context}${rowCount === null ? '' : `, ${rowCount} linha(s)`}).`,
   }, transaction);
 }
 
