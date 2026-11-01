@@ -6,6 +6,7 @@
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { cleanMigrationSettings } = require('../_helpers/m9d900Clean');
 const env = require('../_helpers/m9d900Env');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { admitReplay } = require('../../../src/features/migration-v2/ingest/run.admission');
@@ -29,7 +30,7 @@ afterEach(async () => {
   await env.adminQuery("UPDATE governance.mig_runs SET status = 'FAILED', finished_at = now() WHERE company_id = $1 AND status IN ('QUEUED', 'RUNNING', 'PAUSED')", [A().companyId]);
   await env.cleanMigration();
 });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await cleanMigrationSettings(); await env.sequelize.close(); });
 
 test('m9d900 R3-L6: replay interrompido há mais que o prazo do replay deixa de segurar a vaga e vira FAILED', { skip: skip() }, async () => {
   const system = env.sysName();

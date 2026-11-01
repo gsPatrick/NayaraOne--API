@@ -6,12 +6,20 @@ const { DISPOSABLE, SKIP_DISPOSABLE, adminQuery, loadTenants } = require('../../
 
 const GOVERNANCE_PERMISSIONS = ['governance:data-quality:read', 'governance:data-quality:manage', 'governance:data-quality:bulk'];
 
+// Linhas de role_permissions que ESTE helper inseriu, por papel: `setPermissions(papel, [])` remove também as concedidas fora de GOVERNANCE_PERMISSIONS (ex.: governance:api:manage),
+// que antes ficavam no papel e faziam o gestor virar dono de módulos nos arquivos seguintes do mesmo banco (m9d870.modulos).
+const inseridas = new Map();
+
 /** Define exatamente quais permissões de dados mestres o perfil (por nome do papel, nas duas empresas) tem. */
 async function setPermissions(roleName, codes) {
   await adminQuery('DELETE FROM core.role_permissions rp USING core.roles r, core.permissions p WHERE rp.role_id = r.id AND rp.permission_id = p.id AND r.name = $1 AND p.code = ANY($2)', [roleName, GOVERNANCE_PERMISSIONS]);
+  const anteriores = inseridas.get(roleName) || [];
+  inseridas.delete(roleName);
+  if (anteriores.length) await adminQuery('DELETE FROM core.role_permissions WHERE id = ANY($1::uuid[])', [anteriores]);
   if (!codes.length) return;
-  await adminQuery(`INSERT INTO core.role_permissions (id, role_id, permission_id, created_at, updated_at)
-    SELECT gen_random_uuid(), r.id, p.id, now(), now() FROM core.roles r CROSS JOIN core.permissions p WHERE r.name = $1 AND p.code = ANY($2)`, [roleName, codes]);
+  const { rows } = await adminQuery(`INSERT INTO core.role_permissions (id, role_id, permission_id, created_at, updated_at)
+    SELECT gen_random_uuid(), r.id, p.id, now(), now() FROM core.roles r CROSS JOIN core.permissions p WHERE r.name = $1 AND p.code = ANY($2) RETURNING id`, [roleName, codes]);
+  inseridas.set(roleName, rows.map((r) => r.id));
 }
 
 /** { baseUrl, tenants, tokens, call, skip, close } — `logins` = { apelido: [tenant, perfil] }. */

@@ -5,6 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { cleanMigrationSettings } = require('../_helpers/m9d900Clean');
 const env = require('../_helpers/m9d903Env');
 const { KEYS, PARALLEL_SETTING_DEFAULTS } = require('../../../src/features/migration-v2/parallel/parallel.settings');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../../src/features/settings/settings.service');
@@ -12,7 +13,7 @@ const { SETTINGS_SCHEMA, upsertSetting } = require('../../../src/features/settin
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
 before(async () => { if (env.DISPOSABLE) tenants = await env.loadTenants(); });
-after(async () => { await env.sequelize.close(); });
+after(async () => { if (env.DISPOSABLE) await cleanMigrationSettings(); await env.sequelize.close(); });
 
 test('m9d903 os três parâmetros estão no dicionário de Configurações e no catálogo com o padrão do livro', () => {
   const csv = fs.readFileSync(path.resolve(__dirname, '../../../../Maturacao/demandas/parametros.csv'), 'utf8');

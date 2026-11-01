@@ -9,7 +9,7 @@ const { withRollbackTenantTransaction } = require('../../testHelpers');
 
 const skip = DISPOSABLE ? false : SKIP_DISPOSABLE;
 process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'segredo-de-teste-m9d852';
-after(async () => { if (DISPOSABLE) { await require('../../../src/models').sequelize.close().catch(() => {}); } setTimeout(() => process.exit(0), 200); });
+after(async () => { if (DISPOSABLE) { await require('../_helpers/m9d852Env').desativarConexoesCriadas().catch(() => {}); await require('../../../src/models').sequelize.close().catch(() => {}); } setTimeout(() => process.exit(0), 200); });
 
 const run = async (fn) => { const tenants = await loadTenants(); return withRollbackTenantTransaction(tenants.A, (tx) => fn(tenants.A, tx)); };
 const req = (tenant, over = {}) => ({ auth: { ...tenant, permissions: [] }, params: {}, query: {}, body: {}, ...over });

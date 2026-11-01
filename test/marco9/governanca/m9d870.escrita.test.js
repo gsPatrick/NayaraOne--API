@@ -55,12 +55,15 @@ test('m9d870 R4-M1: a camada de escrita recusa toda chave protegida do dicionár
   for (const must of ['marketing.public_fields.allowlist', 'marketing.public_fields.features_permitidas', 'marketing.autopublish.classes']) assert.ok(keys.includes(must), must);
   assert.ok(keys.some((k) => k.startsWith('marketing.cadencia.')));
   const A = tenantA();
+  // outros arquivos no mesmo banco podem ter deixado parâmetros protegidos vivos (gravados por quem tem a permissão): o que se afirma é que ESTE teste não gravou nenhum
+  const liveKeys = async () => (await http.adminQuery('SELECT key FROM core.tenant_settings WHERE company_id = $1 AND key = ANY($2) AND deleted_at IS NULL ORDER BY key', [A.companyId, keys])).rows.map((r) => r.key);
+  const antes = await liveKeys();
   for (const key of keys) {
     const err = await openTenantTx(A, (tx) => upsertSetting(key, sample(SETTINGS_SCHEMA[key]), A, A.userId, tx, { permissions: state.perms })).then(() => null, (e) => e);
     assert.ok(err && err.statusCode === 403, `${key}: ${err && err.statusCode}`);
     assert.ok(['SETTING_PERMISSION_REQUIRED', 'SETTING_PLATFORM_ONLY'].includes(err.code), `${key}: ${err.code}`);
   }
-  assert.equal((await http.adminQuery('SELECT 1 FROM core.tenant_settings WHERE company_id = $1 AND key = ANY($2) AND deleted_at IS NULL', [A.companyId, keys])).rowCount, 0, 'nada foi gravado');
+  assert.deepEqual(await liveKeys(), antes, 'nada foi gravado');
 });
 
 test('m9d870 R4-M1: com a permissão do dono a camada grava (marketing:template:manage na allowlist)', async (t) => {

@@ -7,11 +7,36 @@ const { DISPOSABLE, SKIP_DISPOSABLE, adminQuery } = require('../../m9d801.helper
 
 const ACTION_PERMISSIONS = ['legal:approve', 'properties:delete', 'finance:settle', 'finance:update', 'procurement:approve', 'governance:dlp:export', 'users:update', 'governance:api:manage', 'integration:manage', 'integration:retry', 'ai:admin', 'construction:update', 'governance:data-quality:manage', 'governance:data-quality:bulk', 'governance:data-quality:read'];
 
-/** Garante (sem duplicar) as permissões das ações destrutivas no papel do perfil. */
+// Permissões que ESTE helper concedeu (as que o papel ainda não tinha): são revogadas em `stopHttp`, para o perfil gestor voltar ao que os demais
+// arquivos (m9d870.*, que contam com o gestor SEM as permissões de dono) esperam.
+const concedidas = [];
+// Connections que `insertConnection` criou: a ACTIVE do ai-sandbox/provedor fica única por empresa (connections_one_active), então uma segunda passada no mesmo banco quebrava; saem de cena em `stopHttp`.
+const conexoesCriadas = [];
+
+/** Garante (sem duplicar) as permissões das ações destrutivas no papel do perfil e guarda as linhas que criou. */
 async function grantActionPermissions(roleName) {
-  await adminQuery(`INSERT INTO core.role_permissions (id, role_id, permission_id, created_at, updated_at)
+  const { rows } = await adminQuery(`INSERT INTO core.role_permissions (id, role_id, permission_id, created_at, updated_at)
     SELECT gen_random_uuid(), r.id, p.id, now(), now() FROM core.roles r CROSS JOIN core.permissions p
-    WHERE r.name = $1 AND p.code = ANY($2) AND NOT EXISTS (SELECT 1 FROM core.role_permissions x WHERE x.role_id = r.id AND x.permission_id = p.id)`, [roleName, ACTION_PERMISSIONS]);
+    WHERE r.name = $1 AND p.code = ANY($2) AND NOT EXISTS (SELECT 1 FROM core.role_permissions x WHERE x.role_id = r.id AND x.permission_id = p.id) RETURNING id`, [roleName, ACTION_PERMISSIONS]);
+  concedidas.push(...rows.map((r) => r.id));
+}
+
+async function revokeActionPermissions() {
+  if (!concedidas.length) return;
+  const ids = concedidas.splice(0);
+  await adminQuery('DELETE FROM core.role_permissions WHERE id = ANY($1::uuid[])', [ids]);
+}
+
+async function desativarConexoesCriadas() {
+  if (!conexoesCriadas.length) return;
+  const ids = conexoesCriadas.splice(0);
+  await adminQuery("UPDATE integration.connections SET status = 'DISABLED' WHERE id = ANY($1::uuid[]) AND status IN ('ACTIVE', 'PAUSED', 'AUTH_FAILED')", [ids]);
+}
+
+async function stopHttp(...args) {
+  await revokeActionPermissions().catch(() => {}); // antes: o stopHttp agenda o process.exit
+  await desativarConexoesCriadas().catch(() => {});
+  return http.stopHttp(...args);
 }
 
 async function startHttp(port) {
@@ -106,7 +131,8 @@ async function insertConnection(tenant, status = 'ACTIVE') {
      VALUES (gen_random_uuid(),$1,$2,$3,'SANDBOX',$4,$5,$6,$6,now(),now()) RETURNING id, label`,
     [tenant.groupId, tenant.companyId, provider.code, `QA-M9 integração ${suffix()}`, status, tenant.userId]
   );
+  conexoesCriadas.push(row.id);
   return { id: row.id, label: row.label };
 }
 
-module.exports = { insertEntry, insertIntent, insertProject, insertConnection, DISPOSABLE, SKIP_DISPOSABLE, adminQuery, startHttp, stopHttp: http.stopHttp, insertProperty, insertOwnerlessOffer, insertContract, insertBilling, setSetting, exists, statusOf, auditRows };
+module.exports = { insertEntry, insertIntent, insertProject, insertConnection, desativarConexoesCriadas, DISPOSABLE, SKIP_DISPOSABLE, adminQuery, startHttp, stopHttp, insertProperty, insertOwnerlessOffer, insertContract, insertBilling, setSetting, exists, statusOf, auditRows };
