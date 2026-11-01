@@ -12,6 +12,8 @@ const { montarAmbiente, pdf } = require('../_helpers/ssrfEnv');
 
 let tenant;
 const abertos = [];
+// Conteúdo único por passada: a quarentena é só de acréscimo e outro teste (TTL) vence as linhas da empresa; reaproveitar o hash de uma passada anterior devolveria a linha EXPIRED.
+const rodada = require('node:crypto').randomUUID();
 before(async () => { ({ tenant } = await carregarTenants()); storage.ensureStorageRegistered(); });
 afterEach(async () => { while (abertos.length) await abertos.pop().fechar(); });
 after(async () => { await sequelize.close(); });
@@ -23,7 +25,7 @@ test('ssrf_conteudo_vai_para_quarentena', async () => {
   assert.equal(hasQuarantineSink(), true, 'carregar a quarentena registra o destino real');
   const a = await montarAmbiente((req, res) => {
     res.setHeader('content-type', 'application/pdf');
-    res.end(Buffer.from(`%PDF-1.4 documento assinado ${req.url}`));
+    res.end(Buffer.from(`%PDF-1.4 documento assinado ${rodada} ${req.url}`));
   });
   abertos.push(a);
   // O download volta marcado QUARANTINED e o conteúdo está gravado em files.quarantine (não só entregue a um destino qualquer).
@@ -49,7 +51,7 @@ test('ssrf_conteudo_vai_para_quarentena', async () => {
 });
 
 test('ssrf_conteudo_recusado_nunca_chega_a_quarentena', async () => {
-  const a = await montarAmbiente((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<script>1</script>'); });
+  const a = await montarAmbiente((req, res) => { res.setHeader('content-type', 'text/html'); res.end(`<script>${rodada}</script>`); });
   abertos.push(a);
   const antes = await comTenant(tenant, async (t) => (await sequelize.query('SELECT count(*)::int AS n FROM files.quarantine WHERE company_id = :c', { replacements: { c: tenant.companyId }, transaction: t }))[0][0].n);
   await assert.rejects(comTenant(tenant, (t) => a.buscar('https://foto.example.test/x.html', { tenant: ctx(), transaction: t })), (e) => e.statusCode === 415);

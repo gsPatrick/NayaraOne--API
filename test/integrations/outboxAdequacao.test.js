@@ -219,8 +219,12 @@ test('outbox_migration_aditiva_reversivel', async (t) => {
   const qi = admin.getQueryInterface();
   const colunas = async () => (await admin.query("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema = 'integration' AND table_name = 'outbox_events' AND column_name IN ('connection_id','target_domain')"))[0];
   const indice = async () => (await admin.query("SELECT 1 FROM pg_indexes WHERE schemaname = 'integration' AND tablename = 'outbox_events' AND indexname = 'outbox_events_status_next_retry_idx'"))[0].length;
+  let guardados = [];
   try {
     await admin.query("DELETE FROM integration.outbox_events WHERE idempotency_key LIKE 'qa-m9-d204:%'");
+    // Hermético: eventos que outros testes (e passagens anteriores no mesmo banco) gravaram com destino/connection fariam o down recusar. Guarda os valores, zera, e devolve no fim.
+    guardados = (await admin.query('SELECT id, target_domain, connection_id FROM integration.outbox_events WHERE target_domain IS NOT NULL OR connection_id IS NOT NULL'))[0];
+    if (guardados.length) await admin.query('UPDATE integration.outbox_events SET target_domain = NULL, connection_id = NULL WHERE target_domain IS NOT NULL OR connection_id IS NOT NULL');
     const antes = (await admin.query('SELECT count(*)::int AS n FROM integration.outbox_events'))[0][0].n;
     const cols = await colunas();
     assert.equal(cols.length, 2);
@@ -240,6 +244,13 @@ test('outbox_migration_aditiva_reversivel', async (t) => {
     await assert.rejects(migration.down(qi), /target_domain|connection_id/);
     await admin.query("DELETE FROM integration.outbox_events WHERE event_type = 'qa_m9.down'");
   } finally {
+    if (guardados.length) {
+      await admin.query(
+        `UPDATE integration.outbox_events o SET target_domain = g.target_domain, connection_id = g.connection_id
+           FROM jsonb_to_recordset(:g::jsonb) AS g(id uuid, target_domain text, connection_id uuid) WHERE o.id = g.id`,
+        { replacements: { g: JSON.stringify(guardados) } },
+      );
+    }
     await admin.close();
   }
 });

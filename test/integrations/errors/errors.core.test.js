@@ -277,13 +277,19 @@ test('errors_webhook_canal_desconhecido_contador_sem_payload', async () => {
     assert.ok(nomes.length > 0, 'a tabela do contador agregado existe');
     assert.ok(!nomes.includes('company_id'), 'sem empresa');
     assert.ok(!nomes.some((n) => /payload|body|header|raw/.test(n)), 'sem payload');
+    // Hermético: o contador é por hora e fornecedor e outros testes (webhook de canal desconhecido, outras passagens no mesmo banco) já o incrementaram; vale a diferença.
+    // recordUnknownWebhook desliga a marca de administração ao terminar: cada leitura a liga de novo.
+    const hitsDe = async (codigo) => {
+      await sequelize.query("SET LOCAL app.integration_platform_admin = 'on'", { transaction });
+      const [linhas] = await sequelize.query('SELECT COALESCE(sum(hits), 0)::int AS n FROM integration.platform_unknown_webhooks WHERE provider_code = :c', { replacements: { c: codigo }, transaction });
+      return linhas[0].n;
+    };
+    const desconhecidoAntes = await hitsDe('(desconhecido)');
+    const financiamentoAntes = await hitsDe('financing-sandbox');
     for (let i = 0; i < 3; i += 1) await errors.recordUnknownWebhook('canal-que-nao-existe-xyz', transaction);
     await errors.recordUnknownWebhook('financing-sandbox', transaction);
-    await sequelize.query("SET LOCAL app.integration_platform_admin = 'on'", { transaction });
-    const [linhas] = await sequelize.query('SELECT provider_code, hits FROM integration.platform_unknown_webhooks ORDER BY provider_code', { transaction });
-    const desconhecido = linhas.find((l) => l.provider_code === '(desconhecido)');
-    assert.equal(desconhecido.hits, 3, 'códigos fora do catálogo são agregados num só contador');
-    assert.equal(linhas.find((l) => l.provider_code === 'financing-sandbox').hits, 1);
+    assert.equal(await hitsDe('(desconhecido)') - desconhecidoAntes, 3, 'códigos fora do catálogo são agregados num só contador');
+    assert.equal(await hitsDe('financing-sandbox') - financiamentoAntes, 1);
     const [[depois]] = await sequelize.query('SELECT count(*)::int AS n FROM integration.integration_errors', { transaction });
     assert.equal(depois.n, antes.n, 'nenhuma linha de erro de empresa');
   } finally {
