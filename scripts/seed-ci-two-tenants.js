@@ -60,6 +60,14 @@ const PROFILES = [
       'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',
     ],
   },
+  // Prova de máscara em tela (M9-D825, roteiro QA-M9): lê Pessoas, Imóveis e contas bancárias SEM a
+  // permissão dedicada (CPF e conta saem mascarados) e o par COM ela (valor em claro e auditado).
+  { key: 'mascarado', roleName: 'CI LEITURA MASCARADA', permissions: ['people:read', 'finance:read', 'properties:read'] },
+  {
+    key: 'claro',
+    roleName: 'CI LEITURA EM CLARO',
+    permissions: ['people:read', 'finance:read', 'properties:read', 'governance:dlp:view-restricted'],
+  },
 ];
 
 function emailFor(tenantKey, profileKey) {
