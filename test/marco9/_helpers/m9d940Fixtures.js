@@ -25,10 +25,14 @@ const INDICE_CONFIG = { prefixo: 'NAY', digitos: 3, offset_data_simples: '-03:00
 const escrever = (arquivo, conteudo) => fs.writeFileSync(arquivo, typeof conteudo === 'string' ? conteudo : `${JSON.stringify(conteudo, null, 2)}\n`);
 
 /** Relatório DRY3 aprovado, no formato exportado pela M9-D908 (`mudancas` sobrescreve campos de primeiro nível; `criterios` os critérios). */
+const COMMIT_TESTE = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+const EMPRESA_TESTE = '11111111-2222-4333-8444-555555555555';
+
 function relatorioDry3(mudancas = {}, criterios = {}, { assinar = true } = {}) {
   const criteria = Object.fromEntries(CRITERIOS.map((c) => [c, { ok: true }]));
   criteria.batches_verified = { ok: true, total: 4, verified: 4, pct: 100 };
-  const corpo = { conclusion: 'APROVADO', criteria: { ...criteria, ...criterios }, commit: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', generated_at: '2026-10-31T12:00:00.000Z', report_id: 'rel-m9d940', ...mudancas };
+  criteria.counts_match = { ok: true, rows: 5000 };
+  const corpo = { conclusion: 'APROVADO', criteria: { ...criteria, ...criterios }, commit: COMMIT_TESTE, dirty: false, company_id: EMPRESA_TESTE, generated_at: new Date().toISOString(), report_id: 'rel-m9d940', ...mudancas };
   if (!assinar) return corpo;
   const anterior = process.env.MIGRATION_DRY3_SIGNING_KEY;
   process.env.MIGRATION_DRY3_SIGNING_KEY = CHAVE_TESTE;
@@ -86,10 +90,10 @@ function ambiente({ lineage = true } = {}) {
 /** Roda o comando de fechamento (sem herdar o contexto do `node --test` que roda os testes). */
 function fechar(amb, extra = [], env = {}) {
   const { NODE_TEST_CONTEXT: _c, ...limpo } = process.env;
-  const r = spawnSync(process.execPath, [SCRIPT, '--config', amb.cfgPath, ...extra], { cwd: RAIZ, env: { MIGRATION_DRY3_SIGNING_KEY: CHAVE_TESTE, ...limpo, ...env }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [SCRIPT, '--config', amb.cfgPath, ...extra], { cwd: RAIZ, env: { MIGRATION_DRY3_SIGNING_KEY: CHAVE_TESTE, ...limpo, GIT_COMMIT: COMMIT_TESTE, ...env }, encoding: 'utf8' });
   return { status: r.status, out: `${r.stdout}${r.stderr}`, stdout: r.stdout, stderr: r.stderr };
 }
 
 const linha = (r, nome) => r.stdout.split('\n').find((l) => l.includes(nome)) || '';
 
-module.exports = { CHAVE_TESTE, RAIZ, SCRIPT, ambiente, fechar, relatorioDry3, suiteMinima, mapaDosNove, escrever, linha, NOMES_DO_LIVRO, CRITERIOS };
+module.exports = { COMMIT_TESTE, EMPRESA_TESTE, CHAVE_TESTE, RAIZ, SCRIPT, ambiente, fechar, relatorioDry3, suiteMinima, mapaDosNove, escrever, linha, NOMES_DO_LIVRO, CRITERIOS };
