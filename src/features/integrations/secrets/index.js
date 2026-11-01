@@ -12,6 +12,7 @@ const cache = require('./secretCache');
 const { readConnectionSecret } = require('./secretReader');
 const { rotateStoredSecret } = require('./secretRotation');
 const { rotateConnectionSecret } = require('./connectionRotation');
+const { uniqueCanonicalRef } = require('./secretRefCanonical');
 const { evaluateConnectionSecret, enforceSecretExpiry } = require('./secretExpiry');
 
 module.exports = {
@@ -21,5 +22,5 @@ module.exports = {
   assertDriverAllowed: policy.assertDriverAllowed, isValidRef: refs.isValidRef, webhookRefOf: refs.webhookRefOf,
   registerSecretIncidentReporter: incidents.registerSecretIncidentReporter, clearSecretIncidentReporters: incidents.clearSecretIncidentReporters,
   clearSecretCache: cache.clearSecretCache,
-  readConnectionSecret, rotateStoredSecret, rotateConnectionSecret, evaluateConnectionSecret, enforceSecretExpiry,
+  readConnectionSecret, rotateStoredSecret, rotateConnectionSecret, evaluateConnectionSecret, enforceSecretExpiry, uniqueCanonicalRef,
 };

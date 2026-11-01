@@ -5,7 +5,7 @@ const logger = require('../../../utils/logger');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { getDecryptedSetting, getSetting } = require('../../settings/settings.service');
 const registry = require('../../integrations/registry/registry.service');
-const { getSecretStore, readConnectionSecret, webhookRefOf, isValidRef } = require('../../integrations/secrets');
+const { getSecretStore, readConnectionSecret, webhookRefOf, isValidRef, uniqueCanonicalRef } = require('../../integrations/secrets');
 const { catalogLegacy: { toCatalogCode } } = require('../../integrations');
 
 /**
@@ -36,7 +36,7 @@ async function readFromVault(connection, tenant, transaction) {
 async function migrateToVault({ tenant, connection, catalogCode, providerCode, valor }, transaction) {
   let store;
   try { store = getSecretStore(); } catch { return false; }
-  const canonica = `company/${tenant.companyId}/financing/${catalogCode}`;
+  const canonica = await uniqueCanonicalRef(connection, `company/${tenant.companyId}/financing/${catalogCode}`, transaction);
   const anterior = connection.secretRef || null;
   let atual = connection;
   if (!isValidRef(anterior) || !anterior.startsWith(`company/${tenant.companyId}/`)) {

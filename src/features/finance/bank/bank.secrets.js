@@ -5,7 +5,7 @@ const logger = require('../../../utils/logger');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { getDecryptedSetting, getSetting } = require('../../settings/settings.service');
 const registry = require('../../integrations/registry/registry.service');
-const { getSecretStore, readConnectionSecret, webhookRefOf, isValidRef } = require('../../integrations/secrets');
+const { getSecretStore, readConnectionSecret, webhookRefOf, isValidRef, uniqueCanonicalRef } = require('../../integrations/secrets');
 const { providerCodeOf } = require('./bank.constants');
 const { configuredProviderKey } = require('./bank.connection');
 
@@ -33,7 +33,7 @@ async function migrateOne({ ctx, item, providerKey }, transaction) {
   try { store = getSecretStore(); } catch { return null; } // sem cofre configurado, o valor antigo segue valendo
   const code = item.code(providerKey);
   const connection = await findOrCreateConnection(ctx, code, transaction);
-  const canonica = `company/${ctx.companyId}/bank/${code}`;
+  const canonica = await uniqueCanonicalRef(connection, `company/${ctx.companyId}/bank/${code}`, transaction);
   const anterior = connection.secretRef || null;
   let atual = connection;
   if (!isValidRef(anterior) || !anterior.startsWith(`company/${ctx.companyId}/`)) {

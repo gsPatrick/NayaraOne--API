@@ -101,8 +101,8 @@ test('m9_d240_segredo_lido_pelo_secretstore', async () => {
     const r1 = await webhooks.processFinancingWebhook('sandbox', ...Object.values(assinado(segredo, corpo1)), corpo1);
     assert.equal(r1.processed, true, 'o primeiro webhook valida com o valor antigo e migra');
     assert.equal(await segredoGuardado(), 0, 'depois da migração o valor deixa de existir em tenant_settings');
-    const connection = await withTenantTransaction(tenant, (t) => IntegrationConnection.findOne({ where: { companyId: tenant.companyId, providerCode: 'financing-sandbox', status: 'ACTIVE' }, transaction: t }));
-    assert.equal(connection.secretRef, `company/${tenant.companyId}/financing/financing-sandbox`, 'a referência legada vault:... ficou no formato do cofre');
+    const connection = await withTenantTransaction(tenant, (t) => IntegrationConnection.findOne({ where: { companyId: tenant.companyId, providerCode: 'financing-sandbox', status: 'ACTIVE' }, order: [['created_at', 'ASC']], transaction: t })); // a mesma escolha do código
+    assert.ok(connection.secretRef.startsWith(`company/${tenant.companyId}/financing/financing-sandbox`), 'a referência legada vault:... ficou no formato do cofre (única por connection)');
     const lido = await withTenantTransaction(tenant, (t) => readConnectionSecret(connection, tenant, { purpose: 'webhook', kind: 'webhook', transaction: t }));
     assert.equal(lido.value.reveal(), segredo, 'o webhook agora é lido pelo SecretStore (readConnectionSecret)');
     // o segundo webhook valida só pelo cofre; a migração é idempotente (não há mais o que migrar e nada se duplica)
