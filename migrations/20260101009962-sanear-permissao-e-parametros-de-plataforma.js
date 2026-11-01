@@ -18,10 +18,13 @@ const PLATFORM_ONLY_KEYS = [
   'integration.ssrf.content_types', 'integration.egress.provider_hosts', 'integration.egress.private_hosts',
 ];
 
+// Papel do OPERADOR legítimo: criado pela operação (roles.created_by nulo) ou com a permissão concedida pela operação (role_permissions.created_by nulo).
+// R5-L2: um ADMIN que editou o papel do operador antes da trava recriou as permissões com autor; o papel continua sendo do operador (roles.created_by nulo).
 const OPERADORES = `SELECT DISTINCT m.user_id FROM core.user_memberships m
-  JOIN core.role_permissions rp ON rp.role_id = m.role_id AND rp.created_by IS NULL
+  JOIN core.roles r ON r.id = m.role_id
+  JOIN core.role_permissions rp ON rp.role_id = m.role_id
   JOIN core.permissions p ON p.id = rp.permission_id AND p.code = ANY(ARRAY[:codes]::text[])
-  WHERE m.status = 'ACTIVE' AND m.deleted_at IS NULL`;
+  WHERE m.status = 'ACTIVE' AND m.deleted_at IS NULL AND (rp.created_by IS NULL OR r.created_by IS NULL)`;
 
 const AUDITORIA = `INSERT INTO audit.audit_log (id, group_id, company_id, user_id, action, entity_type, entity_id, before_json, after_json, reason, occurred_at, created_at, updated_at)
   VALUES (gen_random_uuid(), :g, :c, NULL, :action, :tipo, :id, :b::jsonb, :a::jsonb, :r, now(), now(), now())`;
@@ -32,7 +35,20 @@ async function sanear(q) {
   const [papeis] = await q(
     `SELECT rp.id AS rp_id, rp.role_id, r.group_id, r.company_id, r.name, p.code, rp.created_by
        FROM core.role_permissions rp JOIN core.permissions p ON p.id = rp.permission_id JOIN core.roles r ON r.id = rp.role_id
-      WHERE p.code = ANY(ARRAY[:codes]::text[]) AND rp.created_by IS NOT NULL`, { codes });
+      WHERE p.code = ANY(ARRAY[:codes]::text[]) AND rp.created_by IS NOT NULL AND r.created_by IS NOT NULL`, { codes });
+  // R5-L2: papel de origem da operação (roles.created_by nulo) nunca perde permissão aqui, mesmo editado antes da trava; fica registrado o antes e o depois (uma vez por papel).
+  const [preservadas] = await q(
+    `SELECT rp.role_id, r.group_id, r.company_id, r.name, p.code, rp.created_by
+       FROM core.role_permissions rp JOIN core.permissions p ON p.id = rp.permission_id JOIN core.roles r ON r.id = rp.role_id
+      WHERE p.code = ANY(ARRAY[:codes]::text[]) AND rp.created_by IS NOT NULL AND r.created_by IS NULL
+        AND NOT EXISTS (SELECT 1 FROM audit.audit_log a WHERE a.action = 'roles.platform_permission_preserved' AND a.entity_id = r.id)`, { codes });
+  for (const r of preservadas) {
+    await q(AUDITORIA, {
+      g: r.group_id, c: r.company_id, action: 'roles.platform_permission_preserved', tipo: 'Role', id: r.role_id,
+      b: JSON.stringify({ roleName: r.name, permission: r.code, grantedBy: r.created_by }), a: JSON.stringify({ roleName: r.name, permission: r.code, preserved: true }),
+      r: 'Migration 20260101009962: papel criado pela operação da plataforma (operador legítimo); a permissão foi mantida mesmo com autor de empresa. Conferir a edição na trilha.',
+    });
+  }
   const [chaves] = await q(
     `SELECT id, group_id, company_id, key, value, updated_by FROM core.tenant_settings
       WHERE key = ANY(ARRAY[:keys]::text[]) AND updated_by IS NOT NULL AND updated_by NOT IN (${OPERADORES})`, { keys: PLATFORM_ONLY_KEYS, codes });
@@ -52,7 +68,7 @@ async function sanear(q) {
     });
     await q('DELETE FROM core.tenant_settings WHERE id = :id', { id: k.id });
   }
-  return { permissoes: papeis.length, parametros: chaves.length };
+  return { permissoes: papeis.length, parametros: chaves.length, preservadas: preservadas.length };
 }
 
 const TABELAS = ['core.roles', 'core.tenant_settings', 'audit.audit_log'];

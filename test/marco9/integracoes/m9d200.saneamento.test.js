@@ -17,7 +17,7 @@ const linhas = async (sql, replacements, t) => (await sequelize.query(sql, { rep
 
 async function papel(tenant, t, { autor }) {
   const p = await Permission.findOne({ where: { code: PLATFORM_PERMISSION_CODES[0] }, transaction: t });
-  const r = await Role.create({ groupId: tenant.groupId, companyId: tenant.companyId, name: `QA-M9 ${uniqueSuffix()}`, isSystem: false }, { transaction: t });
+  const r = await Role.create({ groupId: tenant.groupId, companyId: tenant.companyId, name: `QA-M9 ${uniqueSuffix()}`, isSystem: false, createdBy: autor ? tenant.userId : null }, { transaction: t });
   await RolePermission.create({ roleId: r.id, permissionId: p.id, createdBy: autor ? tenant.userId : null }, { transaction: t });
   return r;
 }
