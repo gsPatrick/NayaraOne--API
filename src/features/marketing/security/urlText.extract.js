@@ -1,87 +1,96 @@
 'use strict';
 
-const net = require('node:net');
-const { DEFAULT_TLDS, DEFAULT_FILE_EXTENSIONS } = require('./url.settings');
+const { normalizeForUrls } = require('./urlText.normalize');
+const { classify, isDomainShape } = require('./urlText.classify');
 
 /**
- * Extração das URLs escritas num texto (M9-D433), por REGRA DE DESENHO e não por lista de exceções (DI-D433-9).
- * 1. Normaliza: NFKC (largura total vira normal, "…" vira "..."), tira invisíveis e troca o ponto ideográfico por ponto.
- * 2. Esquemas: qualquer esquema seguido de "/" ou "\", esquemas de código e de contato sem barra (javascript:, data:, mailto:, sms:, tel:, https:evil.com), "//host" e a credencial
- *    na URL ("nayara.com.br@evil.com/x", "usuario:senha@host") são candidatos, sempre conferidos.
- * 3. O resto vira "fichas": separa por espaço e pelos separadores que se colam a um endereço (: _ ( ) [ ] < > aspas vírgula ponto e vírgula | ! * = e reticências); a barra, o
- *    "?" e o "#" ficam na ficha. Ficha cujo começo não é domínio ("link/evil.com/x") perde esse começo até o próximo "/". Ficha com forma de domínio (rótulos separados por ponto e
- *    terminação alfabética de 2+ letras, inclusive IDN e punycode, em qualquer caixa) é candidata, com ou sem caminho, www. ou porta, sem lista fechada. IP em decimal, octal,
- *    hexadecimal ou curto com caminho também.
- * 4. Só o que é provadamente texto comum NÃO é URL: e-mail (parte local antes do @) e menção "@nome" sem caminho. Candidatos de baixo risco são marcados REVIEW (não bloqueiam,
- *    vão à aprovação humana com finding): abreviação ("Av.Paulista", "Sr.Silva", "S.Paulo/SP": primeira palavra com maiúscula e até 3 letras, terminação fora da lista de
- *    terminações conhecidas e sem caminho minúsculo) e nome de arquivo ("foto.jpg", extensão da lista de extensões e fora da lista de terminações). O resto é HOSTILE.
+ * Extração das URLs escritas num texto (M9-D433, DI-D433-9 e DI-D433-10): TOKENIZAÇÃO LINEAR, sem regex com retrocesso e sem lista de separadores.
+ * 1. Normaliza (urlText.normalize): decodifica %xx e entidades, NFKC, tira invisíveis e controles.
+ * 2. Esquemas: qualquer esquema seguido de "/" ou "\", esquemas de código e de contato sem barra (javascript:, data:, mailto:, sms:, tel:, https:evil.com) e "//host"
+ *    são candidatos HOSTILE (cada regex tem tamanho de esquema limitado, então o custo é linear).
+ * 3. Arroba: "usuario:senha@host", "dominio@host/caminho" e "@host/caminho" são candidatos; e-mail ("maria.pro@nayara.com.br") não é URL e fica fora da varredura.
+ * 4. O resto: percorre o texto formando as MAIORES SEQUÊNCIAS de caracteres de domínio (letras e dígitos Unicode, hífen e ponto entre rótulos). QUALQUER outro caractere é
+ *    fronteira, então nenhum separador precisa ser listado (Acesse–evil.com, evil.com{, ~evil.com, +evil.com valem como evil.com). A sequência com forma de domínio ou
+ *    de IP é candidata, e porta, caminho e consulta que a seguem são lidos até espaço, aspas ou fecha-parênteses. A classificação é de urlText.classify.
  */
 const TAIL = '[^\\s<>"\'`)\\]}]';
 const SCHEME_SLASH = new RegExp(`\\b[a-z][a-z0-9+.-]{1,19}:[/\\\\]${TAIL}*`, 'giu');
 const CODE_SCHEME = new RegExp(`\\b(?:javascript|data|vbscript|blob|about|mailto|sms|smsto|tel|callto|facetime|https?):(?![/\\\\])${TAIL}+`, 'giu');
 const SCHEME_RELATIVE = new RegExp(`(?<![\\p{L}\\p{N}_:/\\\\.@-])(?:\\/\\/|\\\\\\\\)[\\p{L}\\p{N}]${TAIL}*`, 'giu');
-const LABEL = '[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?';
-const GENERIC_TLD = '(?:xn--[a-z0-9-]{2,59}|\\p{L}{2,24})';
-const USERINFO_PATH = new RegExp(`(?<![\\p{L}\\p{N}_@.-])[\\p{L}\\p{N}._%+-]+@(?:${LABEL}\\.)+${GENERIC_TLD}(?![\\p{L}\\p{N}-])(?=[/?#])${TAIL}*`, 'giu');
-const USERINFO_PASSWORD = new RegExp(`(?<![\\p{L}\\p{N}_@.-])[\\p{L}\\p{N}._%+-]+:[^\\s@/]+@(?:${LABEL}\\.)+${GENERIC_TLD}(?![\\p{L}\\p{N}-])${TAIL}*`, 'giu');
-const DOMAIN = new RegExp(`^(?:${LABEL}\\.)+${GENERIC_TLD}$`, 'iu');
-const SEPARATORS = /[\s:_()[\]<>"'`“”‘’«»,;|!*=\\]+/u;
-const INVISIBLE = /[\u00AD\u200B-\u200D\u2060\uFEFF]/g;
-const IDEOGRAPHIC_DOTS = /[。．｡․]/g;
-const OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
-const IP4 = new RegExp(`^(?:${OCTET}\\.){3}${OCTET}$`);
-const IP_ODD = /^(?:\d{7,10}|0x[0-9a-f]{1,8}|(?:0[0-7]*|\d+|0x[0-9a-f]+)(?:\.(?:0[0-7]*|\d+|0x[0-9a-f]+)){1,3})$/i; // decimal longo, hexadecimal, octal e forma curta (127.1)
-const ABBREVIATION = /^\p{Lu}\p{L}{0,2}$/u;
-const GLUED_TAIL = /^(?:\/[\p{Lu}\d][\p{L}\p{N}.]*)+\/?$/u; // "/SP", "/Centro", "/100", "/Sra.Souza": palavra com maiúscula ou número, sem "?" nem "#"
+const RUN = /[\p{L}\p{N}][\p{L}\p{N}-]*(?:\.[\p{L}\p{N}][\p{L}\p{N}-]*)*/uy;
+const RUN_GLOBAL = /[\p{L}\p{N}][\p{L}\p{N}-]*(?:\.[\p{L}\p{N}][\p{L}\p{N}-]*)*/gu;
+const PORT = /:\d{1,5}(?![\p{L}\p{N}])/uy;
+const PATH = /[^\s<>"'`)\]}]*/uy;
+const USER_BOUNDARY = /[\s<>"'`()[\]{},;|]/u;
+const EMAIL_LOCAL = /^[\p{L}\p{N}._%+'-]*$/u;
+const TRAILING = /[.,;:!?_\-*=]+$/;
 
-/** Texto normalizado para a conferência de URL (o que o leitor vê como endereço, não os caracteres que o escondem). */
-const normalizeForUrls = (text) => String(text).replace(INVISIBLE, '').normalize('NFKC').replace(IDEOGRAPHIC_DOTS, '.');
+const blankSpans = (text, spans) => {
+  if (spans.length === 0) return text;
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+  let out = '';
+  let at = 0;
+  for (const [start, end] of sorted) { if (start >= at) { out += text.slice(at, start) + ' '.repeat(end - start); at = end; } }
+  return out + text.slice(at);
+};
 
-const lower = (list) => new Set((list || []).map((t) => String(t).toLowerCase()));
+const sticky = (re, text, at) => { re.lastIndex = at; const m = re.exec(text); return m ? m[0] : null; };
 
-function classifyDomain(head, tail, config) {
-  const labels = head.split('.');
-  const tld = labels[labels.length - 1].toLowerCase();
-  const tlds = lower(config.tlds && config.tlds.length ? config.tlds : DEFAULT_TLDS);
-  const extensions = lower(config.fileExtensions && config.fileExtensions.length ? config.fileExtensions : DEFAULT_FILE_EXTENSIONS);
-  const shortener = (config.shorteners || []).some((s) => head.toLowerCase() === s || head.toLowerCase().endsWith(`.${s}`));
-  if (shortener || /^www\./i.test(head) || tlds.has(tld)) return 'HOSTILE';
-  if (ABBREVIATION.test(labels[0]) && labels.length >= 2 && (tail === '' || GLUED_TAIL.test(tail))) return 'REVIEW';
-  if (extensions.has(tld) && tail === '') return 'REVIEW';
-  return 'HOSTILE';
+/** Porta, caminho e consulta depois de uma sequência que termina em `end`. Devolve o índice final do endereço. */
+function addressEnd(text, end) {
+  let at = end;
+  if (text[at] === '.' && '/?#'.includes(text[at + 1] || ' ')) at += 1; // "evil.com./login"
+  const port = sticky(PORT, text, at);
+  if (port) at += port.length;
+  if ('/?#'.includes(text[at] || ' ')) at += sticky(PATH, text, at).length;
+  return at;
 }
 
-const PRIVATE = new net.BlockList();
-for (const [net4, bits] of [['127.0.0.0', 8], ['10.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16], ['169.254.0.0', 16], ['100.64.0.0', 10], ['224.0.0.0', 3]]) PRIVATE.addSubnet(net4, bits);
-PRIVATE.addAddress('0.0.0.0');
-
-/** IP em forma estranha: decimal longo e hexadecimal são sempre HOSTILE; a forma curta (127.1, 1.500/mês) só se normaliza para rede interna ou multicast; senão é número (REVIEW). */
-function oddIpKind(head) {
-  if (!head.includes('.')) return 'HOSTILE';
-  let host = null;
-  try { host = new URL(`http://${head}`).hostname; } catch (err) { return 'HOSTILE'; }
-  return net.isIPv4(host) && !PRIVATE.check(host) ? 'REVIEW' : 'HOSTILE';
-}
-
-/** Candidatos de UMA ficha: [{ url, kind }]. Pode devolver mais de um (partes separadas por reticências) e nenhum (texto comum). */
-function fromToken(raw, config, depth = 0) {
-  let tok = raw.replace(/^[^\p{L}\p{N}@/]+/u, '').replace(/[.,;!?-]+$/u, '');
-  if (!tok || depth > 6) return [];
-  if (/\.{2,}/.test(tok)) return tok.split(/\.{2,}/).flatMap((part) => fromToken(part, config, depth + 1));
-  if (tok.startsWith('@')) {
-    const mention = tok.slice(1);
-    return /[/?#]/.test(mention) ? fromToken(mention, config, depth + 1).map((c) => ({ ...c, kind: 'HOSTILE' })) : [];
+/** Passo do arroba: devolve { found, maskSpans, hostileSpans }. Cada trecho entre arrobas é lido uma vez (custo linear). */
+function atPass(text) {
+  const found = [];
+  const maskSpans = [];
+  const hostileSpans = [];
+  let previousAt = -1;
+  for (let i = text.indexOf('@'); i !== -1; i = text.indexOf('@', i + 1)) {
+    let start = i;
+    while (start > previousAt + 1 && !USER_BOUNDARY.test(text[start - 1])) start -= 1;
+    previousAt = i;
+    const host = sticky(RUN, text, i + 1);
+    if (!host || !isDomainShape(host)) { maskSpans.push([start, i + 1]); continue; }
+    const end = addressEnd(text, i + 1 + host.length);
+    const user = text.slice(start, i);
+    const hasPath = /[/?#]/.test(text.slice(i + 1 + host.length, end));
+    const credential = user.includes(':');
+    if (!hasPath && !credential) { maskSpans.push([EMAIL_LOCAL.test(user) ? start : i, i + 1 + host.length]); continue; } // e-mail (se antes do arroba há caminho, aquilo continua sendo varrido)
+    const kind = credential && !hasPath && !user.slice(0, user.indexOf(':')).includes('.') && !/^\d+$/.test(user.slice(0, user.indexOf(':'))) ? 'REVIEW' : 'HOSTILE';
+    const url = (user ? text.slice(start, end) : text.slice(i + 1, end)).replace(TRAILING, '');
+    found.push({ url, kind });
+    (kind === 'HOSTILE' ? hostileSpans : maskSpans).push([start, end]);
+    if (kind === 'HOSTILE') maskSpans.push([start, end]);
   }
-  if (tok.includes('@')) return []; // e-mail: parte local antes do @ (a credencial na URL já saiu na etapa dos esquemas)
-  tok = tok.replace(/^\/+/, '');
-  const head = tok.split(/[/?#]/)[0];
-  const tail = tok.slice(head.length);
-  if (DOMAIN.test(head)) return [{ url: tok, kind: classifyDomain(head, tail, config) }];
-  if (IP4.test(head)) return [{ url: tok, kind: 'HOSTILE' }];
-  if (IP_ODD.test(head) && /^[/?#]/.test(tail)) return [{ url: tok, kind: oddIpKind(head) }]; // decimal, octal, hexadecimal e curto só com caminho (3.14 e 1.000 são números)
-  const slash = tok.indexOf('/');
-  if (slash > 0 && !head.includes('.')) return fromToken(tok.slice(slash + 1), config, depth + 1); // "link/evil.com/x": o começo colado sai
-  return [];
+  return { found, maskSpans, hostileSpans };
+}
+
+/** Passo das sequências de domínio sobre o texto já sem e-mails e sem o que o passo do arroba achou. */
+function runPass(text, config) {
+  const found = [];
+  const spans = [];
+  RUN_GLOBAL.lastIndex = 0;
+  let m;
+  while ((m = RUN_GLOBAL.exec(text)) !== null) {
+    const head = m[0];
+    const runEnd = m.index + head.length;
+    // Só lê porta e caminho de quem já é endereço (o caminho é lido até o fim da ficha; fazer isso para cada sequência comum tornaria a varredura quadrática).
+    if (!classify(head, '/', config)) continue;
+    const end = addressEnd(text, runEnd);
+    const kind = classify(head, text.slice(runEnd, end).replace(/^\./, ''), config);
+    if (!kind) continue;
+    found.push({ url: text.slice(m.index, end).replace(TRAILING, ''), kind });
+    spans.push([m.index, end]);
+    RUN_GLOBAL.lastIndex = end;
+  }
+  return { found, spans };
 }
 
 /** { found: [{ url, kind }], rest } (rest = o texto normalizado com cada trecho achado trocado por espaços). */
@@ -89,17 +98,15 @@ function scan(text, config = {}) {
   let rest = normalizeForUrls(text);
   const found = [];
   const blank = (match) => { found.push({ url: match.replace(/[.,;:!?]+$/, ''), kind: 'HOSTILE' }); return ' '.repeat(match.length); };
-  for (const re of [SCHEME_SLASH, CODE_SCHEME, SCHEME_RELATIVE, USERINFO_PASSWORD, USERINFO_PATH]) rest = rest.replace(re, blank);
-  const parts = rest.split(new RegExp(`(${SEPARATORS.source})`, 'u'));
-  rest = parts.map((part) => {
-    if (!part) return part;
-    const hits = fromToken(part, config);
-    if (hits.length === 0) return part;
-    found.push(...hits);
-    return ' '.repeat(part.length);
-  }).join('');
+  for (const re of [SCHEME_SLASH, CODE_SCHEME, SCHEME_RELATIVE]) rest = rest.replace(re, blank);
+  const at = atPass(rest);
+  for (const c of at.found) found.push(c);
+  const scanText = blankSpans(rest, at.maskSpans);
+  rest = blankSpans(rest, at.hostileSpans);
+  const runs = runPass(scanText, config);
+  for (const c of runs.found) found.push(c);
   const seen = new Set();
-  return { found: found.filter((c) => c.url && !seen.has(c.url) && seen.add(c.url)), rest };
+  return { found: found.filter((c) => c.url && !seen.has(c.url) && seen.add(c.url)), rest: blankSpans(rest, runs.spans) };
 }
 
 /** Todas as URLs achadas (bloqueáveis e de revisão) como texto, na ordem de aparição. */

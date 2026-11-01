@@ -39,9 +39,9 @@ const HOSTIS = [
   ['evil.in/login', 'evil.in/login'], ['evil.zip/a', 'evil.zip/a'], ['Evil.Net/x', 'Evil.Net/x'],
 ];
 const LEGITIMOS = ['maria.pro@nayara.com.br', 'jose.me@x.com', 'ana.co@x.com', 'Escreva para maria.pro@nayara.com.br', 'Preço R$ 1.000,00 em 10.12.2026', 'pi 3.14 e v1.2.3', 'e/ou km/h', 'versão 1.2.3.4x',
-  'Fale com @maria hoje', 'Às 10:30, sala 2'];
+  'Fale com @maria hoje', 'Às 10:30, sala 2', 'R$ 1.500/mês'];
 const REVISAO = [['Av.Paulista/Centro', 'Av.Paulista/Centro'], ['S.Paulo/SP', 'S.Paulo/SP'], ['Sr.Silva/Sra.Souza', 'Sr.Silva/Sra.Souza'], ['Rua.das.Flores/100', 'Rua.das.Flores/100'], ['Av.Paulista', 'Av.Paulista'],
-  ['Sr.Silva', 'Sr.Silva'], ['foto.jpg', 'foto.jpg'], ['planta.pdf', 'planta.pdf'], ['R$ 1.500/mês', '1.500/mês']];
+  ['Sr.Silva', 'Sr.Silva'], ['foto.jpg', 'foto.jpg'], ['planta.pdf', 'planta.pdf']];
 
 test('formas_hostis_de_todas_as_rodadas_sao_extraidas_como_bloqueaveis', () => {
   for (const [texto, url] of HOSTIS) assert.deepEqual(kinds(texto), [`HOSTILE:${url}`], texto);
@@ -98,6 +98,7 @@ test('envio_direto_recusa_forma_hostil_em_texto_assunto_preheader_e_variavel_arr
         await assert.rejects(() => env.send(t, A, input), (e) => e.statusCode === 422 && e.code === 'MKT_URL_NOT_ALLOWED', JSON.stringify(over));
         assert.equal(await env.byKey(t, A, input.actionKey), undefined, 'nada é gravado nem enviado');
       }
+      await upsertSetting('marketing.url.revisao_sem_aprovador', 'permitir', A, A.userId, t); // M9-D414 (rodada 4): sem aprovador o ambíguo é recusado por padrão; com a política permissiva a abreviação não bloqueia
       assert.equal((await env.send(t, A, base({ text: 'Visite a Av.Paulista, 100' }))).status, 'SENT', 'abreviação não bloqueia o envio');
     });
   } finally { off(); }

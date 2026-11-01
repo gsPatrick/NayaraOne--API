@@ -28,7 +28,7 @@ const NONE = 'nenhum';
 
 const URL_SETTING_DEFAULTS = Object.freeze({
   [ALLOWED_KEY]: NONE,
-  [SHORTENERS_KEY]: 'bit.ly, tinyurl.com, t.co, goo.gl, is.gd, ow.ly, buff.ly, rebrand.ly, cutt.ly, shorturl.at, tiny.cc',
+  [SHORTENERS_KEY]: 'bit.ly, tinyurl.com, t.co, goo.gl, is.gd, ow.ly, buff.ly, rebrand.ly, cutt.ly, shorturl.at, tiny.cc, rb.gy, t.ly, s.id, v.gd, bit.do, lnkd.in, tr.ee, soo.gd, clck.ru, qr.net, 0rz.tw',
   [MAX_HOPS_KEY]: 3,
   [MAX_LENGTH_KEY]: 2048,
   [VERIFY_KEY]: true,
@@ -67,6 +67,7 @@ const validateTlds = (key, value) => {
   }
 };
 
+const DEFAULT_SHORTENERS = Object.freeze(parseDomainList(URL_SETTING_DEFAULTS[SHORTENERS_KEY]));
 const parseExtensions = parseTlds;
 const DEFAULT_FILE_EXTENSIONS = Object.freeze(parseExtensions(URL_SETTING_DEFAULTS[FILE_EXT_KEY]));
 const validateExtensions = (key, value) => {
@@ -134,5 +135,5 @@ async function readUrlConfig(tenant, transaction) {
 }
 
 module.exports = {
-  ALLOWED_KEY, SHORTENERS_KEY, MAX_HOPS_KEY, MAX_LENGTH_KEY, VERIFY_KEY, TIMEOUT_KEY, TLDS_KEY, MAX_URLS_KEY, FILE_EXT_KEY, DEFAULT_TLDS, DEFAULT_FILE_EXTENSIONS, URL_SETTING_DEFAULTS, URL_SETTINGS_SCHEMA, parseDomainList, readUrlConfig,
+  ALLOWED_KEY, SHORTENERS_KEY, MAX_HOPS_KEY, MAX_LENGTH_KEY, VERIFY_KEY, TIMEOUT_KEY, TLDS_KEY, MAX_URLS_KEY, FILE_EXT_KEY, DEFAULT_TLDS, DEFAULT_FILE_EXTENSIONS, DEFAULT_SHORTENERS, URL_SETTING_DEFAULTS, URL_SETTINGS_SCHEMA, parseDomainList, readUrlConfig,
 };
