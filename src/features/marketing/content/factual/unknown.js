@@ -3,6 +3,7 @@
 const { WORD_PATTERN, fold } = require('./text');
 const { parseTerms, DEFAULT_LEGAL_REFS } = require('./settings');
 const { finding } = require('./finding');
+const { rx } = require('../../../../shared/redaction');
 const { derivedNumbersFromFacts } = require('../types/derivedNumbers');
 
 const MONTHS = Object.freeze(['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']);
@@ -10,7 +11,6 @@ const PHONE = /(?<!\d)(?:\+?55\s*)?\(?\d{2}\)?[\s-]?9?\d{4}[\s-]?\d{4}(?!\d)/g;
 const DATE_NUMERIC = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?![\d/])/g;
 const DATE_WORDS = new RegExp(`(?<!\\d)(\\d{1,2})\\s+de\\s+(${MONTHS.join('|')})(?:\\s+de\\s+(\\d{4}))?`, 'g');
 const WORD_UNITS = new RegExp(`\\b(?:${WORD_PATTERN.replace('um|uma|', '')}|trinta|quarenta|cinquenta|sessenta|cem|mil)\\s+(?:minutos?|metros?|quilometros?|km|andares?|anos?|unidades?|pavimentos?|horas?|dias?|torres?|apartamentos?|casas?)\\b`, 'g');
-const CNPJ = /(?<!\d)\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}(?!\d)/g; // formato oficial do CNPJ: identificador, não afirmação
 const YEAR = /^(?:19|20)\d{2}$/;
 const TOKEN = /(?<![\d.,])\d+(?:[.,]\d+)*/g;
 const SUPERLATIVE = /\b(?:o|a|os|as)\s+(?:maior|menor|melhor|pior|mais\s+[a-z]+|unico|unica)\b(?:\s+\w+){0,4}?\s+(?:d[aeo]s?|em|entre)\b/g;
@@ -56,7 +56,7 @@ function numericClaims(doc, options, facts) {
     }
   };
   const legal = legalReferenceRegex(options.referenciasLegais || parseTerms(DEFAULT_LEGAL_REFS));
-  take(CNPJ, () => true);
+  take(rx('cnpjFormatted'), () => true); // CNPJ no formato oficial (biblioteca única de redaction): identificador, não afirmação
   if (legal) take(legal, () => true);
   take(PHONE, (m) => phoneAllowed(m[0].replace(/\D/g, ''), options.telefonesEmpresa));
   take(DATE_WORDS, (m) => isContentDate(parts, m[1], MONTHS.indexOf(m[2]) + 1, m[3]));
