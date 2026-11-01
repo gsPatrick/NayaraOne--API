@@ -11,11 +11,14 @@ const { getDefinition, assertChannelsAllowed } = require('./types/validate');
 const { assertSchedulingNotPaused } = require('../degradation.guard');
 const { contentNotApproved } = require('./pipeline.errors');
 const { finishAutopublish } = require('./autopublish.finish');
+const security = require('../security');
 
 /** Os passos do pipeline, cada um em UMA transação do chamador (o executeStep trava o item e é idempotente). */
 const runFactualCheck = (ctx, t) => executeStep('factual', { ...ctx, input: null }, t, factualStep);
-const applyTemplate = (ctx, t) => {
+const applyTemplate = async (ctx, t) => {
   const input = { templateId: ctx.templateId || null, templateCode: ctx.templateCode || null, variables: ctx.variables || null };
+  // M9-D433 (rodada 5): o teto de tamanho das variáveis do pedido vale ANTES de qualquer cálculo sobre elas (hash do passo, renderização, varredura de URL).
+  await security.assertTextSizes([], input.variables, { tenant: ctx.tenant, transaction: t });
   return executeStep('branding', { ...ctx, input }, t, (step) => brandingStep(step, input));
 };
 const applyCompliance = (ctx, t) => executeStep('compliance', { ...ctx, input: null }, t, complianceStep);
