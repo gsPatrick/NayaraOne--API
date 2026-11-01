@@ -10,12 +10,13 @@ const { suppress } = require('../../../../src/features/marketing/suppression/sup
 const env = require('../../_helpers/mktMsgEnv');
 const { useTempSecretStore } = require('../../_helpers/mktSecretStore');
 const g = require('../../_helpers/mktGuardas');
+const { isolarConexoesDeCanal } = require('../../_helpers/mktConexoesLimpas');
 
 const NOME = 'guard_send_requires_cansend';
 let A;
 let offVault;
 let espiao;
-before(async () => { ({ a: A } = await env.tenants()); offVault = useTempSecretStore(); });
+before(async () => { ({ a: A } = await env.tenants()); await isolarConexoesDeCanal(A); offVault = useTempSecretStore(); });
 beforeEach(() => { env.adapters.resetSandbox(); espiao = g.espiarCanais(); });
 afterEach(() => espiao.restaurar());
 after(async () => { offVault(); await sequelize.close(); });

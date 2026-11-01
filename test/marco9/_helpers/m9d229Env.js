@@ -27,7 +27,11 @@ async function conectar(tenant, provider = 'messaging-sandbox', { config } = {})
   return canal;
 }
 
-const pausar = (tenant) => sql(tenant, "UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND status = 'ACTIVE' AND provider_code LIKE 'messaging-%'", { c: tenant.companyId });
+/**
+ * Tira de cena as connections de mensageria da empresa ao fim do arquivo. DISABLED (e não PAUSED): o framework trata PAUSED/AUTH_FAILED como "integração parada de propósito" e
+ * recusa criar a connection de laboratório (ensureSandboxConnection), o que quebraria os arquivos seguintes do mesmo banco (Marketing, via MKT_CHANNEL_CONNECTION_INACTIVE).
+ */
+const pausar = (tenant) => sql(tenant, "UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND status IN ('ACTIVE', 'PAUSED', 'AUTH_FAILED') AND provider_code LIKE 'messaging-%'", { c: tenant.companyId });
 
 /** Pessoa com o telefone como WhatsApp principal. Devolve { id, phone }. */
 async function pessoa(tenant, phone = `+55119${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`) {

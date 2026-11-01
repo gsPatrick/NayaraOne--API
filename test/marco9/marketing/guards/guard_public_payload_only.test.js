@@ -11,12 +11,13 @@ const { sendToChannel } = require('../../../../src/features/marketing/publicatio
 const { adapters } = require('../../../../src/features/marketing/publications');
 const { prepararTenants } = require('../../../helpers/marketingExecucao');
 const g = require('../../_helpers/mktGuardas');
+const { isolarConexoesDeCanal } = require('../../_helpers/mktConexoesLimpas');
 
 const NOME = 'guard_public_payload_only';
 const DTO = { titulo: 'Casa em Pituba', texto: 'Casa nova.', bairro: 'Pituba', ocorrenciaInterna: 'infiltração no teto', proprietarioCpf: '123.456.789-09', documento: 'matrícula 12345' };
 let A;
 let espiao;
-before(async () => { ({ tenantA: A } = await prepararTenants()); });
+before(async () => { ({ tenantA: A } = await prepararTenants()); await isolarConexoesDeCanal(A); });
 beforeEach(() => { adapters.resetSandbox(); espiao = g.espiarCanais(); });
 afterEach(() => espiao.restaurar());
 after(async () => { await sequelize.close(); });

@@ -39,7 +39,12 @@ beforeEach(async () => {
   clearCircuitCache();
   await limparTudo(tenant);
 });
-after(async () => { secrets.setSecretStoreForTests(null); dispatch.registerUnknownReconciler(null); restaurar(); await sequelize.close(); });
+after(async () => {
+  secrets.setSecretStoreForTests(null); dispatch.registerUnknownReconciler(null); restaurar();
+  // o teste de 401 deixa a connection de mensageria em AUTH_FAILED; fora de cena (DISABLED), para o framework voltar a criar a de laboratório nos arquivos seguintes
+  await comTenant(tenant, (t) => sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code LIKE 'messaging-%' AND status IN ('ACTIVE', 'PAUSED', 'AUTH_FAILED')", { replacements: { c: tenant.companyId }, transaction: t }));
+  await sequelize.close();
+});
 
 const rodar = (now) => dispatch.runDispatchCycle(ctx(), { now: now || new Date() });
 

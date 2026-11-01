@@ -10,12 +10,15 @@ const { withTenantTransaction } = require('../../../testHelpers');
 const env = require('../../_helpers/mktRunner');
 const carga = require('../../_helpers/mktCarga');
 const isolamento = require('../../_helpers/mktCargaIsolamento');
+const { isolarConexoesDeCanal, garantirConexaoDeCanal } = require('../../_helpers/mktConexoesLimpas');
 
 const TOTAL = 1000;
 let tenant; let iso; let flow; let personIds = [];
 before(async () => {
   if (carga.DISPOSABLE) {
     ({ tenantA: tenant } = await env.prepararTenants());
+    await isolarConexoesDeCanal(tenant);
+    await garantirConexaoDeCanal(tenant, 'messaging-sandbox', 'Marketing: MESSAGING'); // a carga dispara 1000 envios em paralelo: a connection do canal já existe antes
     iso = await isolamento.isolar(tenant.companyId, ['killswitch', 'fluxos']);
   }
 });

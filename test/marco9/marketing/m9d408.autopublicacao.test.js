@@ -150,7 +150,7 @@ test('falha_ao_agendar_depois_de_aprovar_desfaz_a_autopublicacao_e_volta_a_PENDI
     env.registerNay();
     const first = await env.soldContent(t, ctx); // a conexão do sandbox já existe (de outro arquivo) ou nasce agora: o teste não presume qual
     assert.equal(first.status, 'SCHEDULED', 'com a conexão do sandbox ativa, a autopublicação agenda');
-    await env.fx.q(t, "UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND provider_code = 'site-sandbox'", { c: ctx.tenant.companyId });
+    await env.fx.q(t, "UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND provider_code = 'site-sandbox' AND status = 'ACTIVE'", { c: ctx.tenant.companyId });
     const second = await env.soldContent(t, ctx);
     assert.equal(second.status, 'PENDING_APPROVAL');
     const item = await env.itemOf(t, second.itemId);
