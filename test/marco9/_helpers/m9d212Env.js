@@ -23,4 +23,7 @@ const outboxDe = (tenant, inboxId) => sql(tenant, "SELECT * FROM integration.out
 const vencer = (tenant, inboxId) => sql(tenant, "UPDATE integration.webhook_inbox SET next_attempt_at = now() - interval '1 second' WHERE id = :id", { id: inboxId });
 const antigo = (tenant, inboxId, dias) => sql(tenant, 'UPDATE integration.webhook_inbox SET received_at = now() - make_interval(days => :d) WHERE id = :id', { id: inboxId, d: dias });
 
-module.exports = { ...env, evento, enviar, rodar, linha, outboxDe, vencer, antigo, comTenant };
+/** Erros de UM canal (connection_id): o provider é compartilhado entre testes e passagens no mesmo banco, então contar por provider não é hermético. */
+const errosDoCanal = (tenant, canal, code) => sql(tenant, 'SELECT * FROM integration.integration_errors WHERE company_id = :c AND connection_id = :k AND error_code = :e ORDER BY created_at DESC', { c: tenant.companyId, k: canal.conn.id, e: code });
+
+module.exports = { ...env, errosDoCanal, evento, enviar, rodar, linha, outboxDe, vencer, antigo, comTenant };

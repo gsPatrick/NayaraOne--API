@@ -49,7 +49,7 @@ test('intake_falha_transitoria_retry_e_esgota', async () => {
   assert.deepEqual(historico[5], ['DEAD_LETTER', 6], 'a 6ª tentativa esgota e vai à fila morta');
   assert.equal(l.dead_letter_reason, 'ATTEMPTS_EXHAUSTED');
   assert.equal((await env.outboxDe(tenant, l.id)).length, 0);
-  const [erro] = await env.erros(tenant, c.provider, 'ATTEMPTS_EXHAUSTED');
+  const [erro] = await env.errosDoCanal(tenant, c, 'ATTEMPTS_EXHAUSTED');
   assert.equal(erro.sanitized_payload.status, 'DELIVERED', 'o erro leva o conteúdo sanitizado (campos do esquema)');
   assert.equal(erro.sanitized_payload.id, ev.id);
 });
@@ -69,7 +69,7 @@ test('intake_dlq_attempts_exhausted_mantem_raw_pela_janela_e_depois_anula', asyn
   assert.equal(depois.payload_raw, null, 'passada a janela o corpo é anulado');
   assert.equal(depois.payload, null);
   assert.equal(depois.payload_hash, l.payload_hash, 'o hash fica');
-  assert.ok((await env.erros(tenant, c.provider, 'ATTEMPTS_EXHAUSTED'))[0].sanitized_payload, 'resta o conteúdo sanitizado no erro');
+  assert.ok((await env.errosDoCanal(tenant, c, 'ATTEMPTS_EXHAUSTED'))[0].sanitized_payload, 'resta o conteúdo sanitizado no erro');
 });
 
 test('intake_correspondente_regressao', () => {

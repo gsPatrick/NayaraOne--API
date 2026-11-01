@@ -18,7 +18,7 @@ before(async () => {
 });
 after(async () => { desligarCofre(); await env.sequelize.close(); process.exit(0); });
 
-const erroDe = (c, codigo) => env.erros(tenant, c.provider, codigo);
+const erroDe = (c, codigo) => env.errosDoCanal(tenant, c, codigo);
 
 test('intake_worker_processa_uma_vez', async () => {
   const c = await env.criarCanal(tenant);

@@ -87,7 +87,7 @@ test('intake_evento_sem_id_vai_para_dlq_com_200', async () => {
   assert.ok(morta, 'linha DEAD_LETTER com o motivo EVENT_ID_MISSING');
   assert.equal(morta.status, 'DEAD_LETTER');
   assert.equal(morta.payload_raw, null);
-  const [erro] = await env.erros(tenant, c.provider, 'INTEGRATION_WEBHOOK_EVENT_ID_MISSING');
+  const [erro] = await env.errosDoCanal(tenant, c, 'INTEGRATION_WEBHOOK_EVENT_ID_MISSING');
   assert.ok(erro, 'o código INTEGRATION_WEBHOOK_EVENT_ID_MISSING fica só no registro de erro');
   assert.equal(erro.message, 'Evento sem identificador externo; enviado para a fila de erros.');
   await env.rodar(tenant);
