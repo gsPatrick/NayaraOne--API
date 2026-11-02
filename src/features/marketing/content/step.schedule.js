@@ -7,7 +7,7 @@ const { TEMPLATE_CHANNELS } = require('./template.constants');
 const { parseWhen } = require('./pipeline.time');
 const { readMinLeadMinutes } = require('./pipeline.settings');
 const { scheduleTooSoon, contentInvalid } = require('./pipeline.errors');
-const { loadLocked, readCheck } = require('./pipeline.core');
+const { loadLocked, readCheck, newCheck, hashInput } = require('./pipeline.core');
 const { getSchedulePort } = require('./pipeline.schedulePort');
 
 function normalizeChannels(channels) {
@@ -63,7 +63,18 @@ async function scheduleMore({ tenant, actor, itemId }, prepared, transaction) {
     return { itemId: item.id, status: fresh.status, versionId: version.id, step: null, replay: false, approvalInvalidated: check };
   }
   const jobs = await publications().scheduleJobs({ tenant, actor, item, version, prepared }, transaction);
-  return { itemId: item.id, status: item.status, versionId: version.id, step: readCheck(version, 'schedule'), replay: jobs.every((j) => j.replay), jobs };
+  const replay = jobs.every((j) => j.replay);
+  const step = replay ? readCheck(version, 'schedule') : await refreshScheduleCheck({ version, actor, prepared }, transaction);
+  return { itemId: item.id, status: item.status, versionId: version.id, step, replay, jobs };
+}
+
+/** O detalhe do passo `schedule` reflete o último agendamento (quando e canais) e lista todos os jobs da versão; repetir o pedido (replay) não o altera. */
+async function refreshScheduleCheck({ version, actor, prepared }, transaction) {
+  const all = await repo.listJobs(version.id, transaction);
+  const input = { channels: prepared.channels, when: prepared.when.toISOString() };
+  const check = newCheck(true, { when: input.when, channels: prepared.channels, jobIds: all.map((j) => j.id) }, hashInput('schedule', version, input));
+  await repo.writeCheck(version.id, 'schedule', check, actor, transaction);
+  return check;
 }
 
 module.exports = { prepareSchedule, scheduleStep, scheduleMore };

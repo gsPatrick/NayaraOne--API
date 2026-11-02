@@ -151,3 +151,22 @@ test('falha_em_uma_rede_nao_bloqueia_outras: o job da rede com falha de envio fi
     assert.equal(out.status, 'SCHEDULED');
   });
 });
+
+test('reagendar_com_outro_canal_atualiza_o_detalhe_do_passo: step.detalhes reflete o ultimo agendamento', async () => {
+  await env.withRollbackTenantTransaction(ctx.tenant, async (t) => {
+    const item = await env.approvedItem(t, ctx);
+    const first = await env.schedule(t, ctx, item.itemId, { channels: ['SITE'], when: env.inMinutes(60).toISOString() });
+    assert.deepEqual(first.step.detalhes.channels, ['SITE']);
+    const when2 = env.inMinutes(120);
+    const second = await env.schedule(t, ctx, item.itemId, { channels: ['LINKEDIN'], when: when2.toISOString() });
+    assert.deepEqual(second.step.detalhes.channels, ['LINKEDIN']);
+    assert.equal(second.step.detalhes.when, when2.toISOString());
+    const [row] = await env.fx.q(t, 'SELECT checks_json->\'schedule\' AS s FROM marketing.content_versions WHERE id = :v', { v: item.versionId });
+    assert.deepEqual(row.s.detalhes.channels, ['LINKEDIN'], 'o passo gravado reflete o ultimo agendamento');
+    assert.equal(row.s.detalhes.jobIds.length, 2, 'jobIds lista todos os jobs do item');
+    // repetir o mesmo pedido e replay: o detalhe nao muda
+    const again = await env.schedule(t, ctx, item.itemId, { channels: ['LINKEDIN'], when: when2.toISOString() });
+    assert.equal(again.replay, true);
+    assert.deepEqual(again.step.detalhes.channels, ['LINKEDIN']);
+  });
+});
