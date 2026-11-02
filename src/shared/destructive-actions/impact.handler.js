@@ -7,7 +7,7 @@ const { loadImpact } = require('./guard.load');
 
 /** Corpo da rota de impacto (M9-D852 §3.1): contagens, valor, impedimentos, itens afetados, impactToken e o que a tela deve exigir. */
 function impactBody(key, loaded, impactToken) {
-  const { entry, impact, level, code, params, label } = loaded;
+  const { entry, impact, level, code, params, label, notice } = loaded;
   return {
     actionKey: key,
     action: entry.action,
@@ -21,6 +21,7 @@ function impactBody(key, loaded, impactToken) {
     mfaRequired: entry.mfa === 'sim',
     record: { id: loaded.id || null, code, label, codeLabel: entry.codeLabel },
     confirm: { understood: level >= 2, typedCode: level >= 3, justification: level >= 3, justificationMin: level >= 3 ? params.justificationMin : 0 },
+    ...(notice ? { notice } : {}), // aviso claro da própria consulta (ex.: item de revisão não tem união)
   };
 }
 

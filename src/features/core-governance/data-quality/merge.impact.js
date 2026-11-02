@@ -36,11 +36,15 @@ async function totalAmountCents(entityType, otherId, transaction) {
 }
 
 /** GET /data-quality/queue/:id/impact?survivorId= — {counts, totalAmountCents, blockers} do que a união moveria (linha 8 do inventário da M9-D852). */
-async function impactOf(tenant, itemId, survivorId, transaction) {
+async function impactOf(tenant, itemId, survivorId, transaction, { preview = false } = {}) {
   if (!isUuid(itemId)) throw errors.itemNotFound();
   const [item] = await q('SELECT * FROM governance.review_queue_items WHERE id = :id AND company_id = :companyId', transaction, { id: itemId, companyId: tenant.companyId });
   if (!item) throw errors.itemNotFound();
-  if (item.kind !== KINDS.MERGE_CANDIDATE) throw errors.decisionInvalid();
+  if (item.kind !== KINDS.MERGE_CANDIDATE) {
+    // Item de revisão não tem par nem união: a CONSULTA responde vazia (o aviso vai no provedor); a decisão MERGED segue recusada.
+    if (preview) return { review: true, survivorId: null, absorbedId: null, counts: {}, totalAmountCents: 0, blockers: [] };
+    throw errors.decisionInvalid();
+  }
   const survivor = survivorId || item.primary_id;
   if (![item.primary_id, item.secondary_id].includes(survivor)) throw errors.survivorInvalid();
   const other = survivor === item.primary_id ? item.secondary_id : item.primary_id;

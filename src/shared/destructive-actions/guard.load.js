@@ -25,6 +25,7 @@ async function loadImpact(req, key, { preview = false, id = req.params && req.pa
     level: levels.effectiveLevel(key, params.levelsText),
     code: loaded.code == null ? '' : String(loaded.code),
     label: loaded.label || null,
+    notice: loaded.notice || null,
   };
 }
 
