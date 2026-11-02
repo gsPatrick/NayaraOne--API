@@ -106,18 +106,7 @@ module.exports = {
     } finally {
       await q('ALTER TABLE "correspondent"."integration_errors" FORCE ROW LEVEL SECURITY;');
     }
-    await q(`
-      CREATE FUNCTION "correspondent".integration_errors_read_only() RETURNS trigger LANGUAGE plpgsql AS $f$
-      BEGIN
-        IF current_setting('app.integration_legacy_write', true) = 'on' THEN
-          RETURN COALESCE(NEW, OLD);
-        END IF;
-        RAISE EXCEPTION 'correspondent.integration_errors é legado somente leitura: use integration.integration_errors'
-          USING ERRCODE = 'restrict_violation';
-      END $f$;
-    `);
-    await q(`CREATE TRIGGER integration_errors_read_only BEFORE INSERT OR UPDATE OR DELETE ON "correspondent"."integration_errors"
-      FOR EACH ROW EXECUTE FUNCTION "correspondent".integration_errors_read_only();`);
+    // O gatilho de somente leitura do legado NÃO nasce aqui: ele é criado pela migration 20260101009964 (última), junto com o deploy da API do Marco 9.
 
     // Permissão integration:retry (resolver e reprocessar) concedida ao ADMIN.
     await q(

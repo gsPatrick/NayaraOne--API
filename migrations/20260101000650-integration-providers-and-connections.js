@@ -142,19 +142,7 @@ module.exports = {
     }
     await q(`ALTER TABLE "integration"."connections" FORCE ROW LEVEL SECURITY;`);
 
-    // Legado somente leitura.
-    await q(`
-      CREATE FUNCTION "correspondent".provider_accounts_read_only() RETURNS trigger LANGUAGE plpgsql AS $f$
-      BEGIN
-        IF current_setting('app.integration_legacy_write', true) = 'on' THEN
-          RETURN COALESCE(NEW, OLD);
-        END IF;
-        RAISE EXCEPTION 'correspondent.provider_accounts é legado somente leitura: use integration.connections'
-          USING ERRCODE = 'restrict_violation';
-      END $f$;
-    `);
-    await q(`CREATE TRIGGER provider_accounts_read_only BEFORE INSERT OR UPDATE OR DELETE ON "correspondent"."provider_accounts"
-      FOR EACH ROW EXECUTE FUNCTION "correspondent".provider_accounts_read_only();`);
+    // O gatilho de somente leitura do legado NÃO nasce aqui: ele é criado pela migration 20260101009964 (última), junto com o deploy da API do Marco 9.
 
     const [[{ exists }]] = await q("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;");
     if (exists) {

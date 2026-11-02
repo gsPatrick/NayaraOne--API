@@ -104,18 +104,7 @@ module.exports = {
 
     await q(BACKFILL_SQL);
 
-    await q(`
-      CREATE FUNCTION "correspondent".webhook_inbox_read_only() RETURNS trigger LANGUAGE plpgsql AS $f$
-      BEGIN
-        IF current_setting('app.integration_legacy_write', true) = 'on' THEN
-          RETURN NEW;
-        END IF;
-        RAISE EXCEPTION 'correspondent.webhook_inbox é legado somente leitura: use integration.webhook_inbox'
-          USING ERRCODE = 'restrict_violation';
-      END $f$;
-    `);
-    await q(`CREATE TRIGGER webhook_inbox_read_only BEFORE INSERT OR UPDATE ON "correspondent"."webhook_inbox"
-      FOR EACH ROW EXECUTE FUNCTION "correspondent".webhook_inbox_read_only();`);
+    // O gatilho de somente leitura do legado NÃO nasce aqui: ele é criado pela migration 20260101009964 (última), junto com o deploy da API do Marco 9.
 
     await q(`
       DO $g$
