@@ -29,11 +29,17 @@ after(async () => { if (env.DISPOSABLE) { await env.clearSettings(LIMIT); await 
 test('m9d843 601ª chamada devolve 429 com Retry-After', { skip: skip() }, async () => {
   await env.setSetting(A, LIMIT, 600);
   await env.resetCounters();
-  await env.waitSafeWindow(30);
   let last;
-  for (let i = 1; i <= 600; i += 1) {
-    last = await ping('gestorA');
-    assert.equal(last.status, 200, `chamada ${i}`);
+  for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+    await env.resetCounters();
+    await env.waitSafeWindow(4);
+    const janela = await env.windowStart();
+    for (let i = 1; i <= 600; i += 1) {
+      last = await ping('gestorA');
+      assert.equal(last.status, 200, `chamada ${i}`);
+    }
+    // sob carga a sequência pode cruzar a virada do minuto: se a janela mudou, o contador reiniciou e a sequência é refeita
+    if ((await env.windowStart()) === janela) break;
   }
   assert.deepEqual([last.headers.get('x-ratelimit-limit'), last.headers.get('x-ratelimit-remaining')], ['600', '0'], 'cabeçalhos na 600ª');
   assert.ok(Number(last.headers.get('x-ratelimit-reset')) > Date.now() / 1000 - 1, 'X-RateLimit-Reset em epoch');
@@ -60,7 +66,7 @@ test('m9d843 limites são por credencial e isolados entre empresas', { skip: ski
 
 test('m9d843 dois processos somam no mesmo contador: 300 + 301 chamadas, a 601ª devolve 429', { skip: skip() }, async () => {
   await env.resetCounters();
-  await env.waitSafeWindow(30);
+  await env.waitSafeWindow(4);
   const key = userKey(A, A.userId);
   const run = (n) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(__dirname, '../_helpers/m9d843Hits.js'), key, String(n)], { env: { ...process.env, LOG_LEVEL: 'silent' } });
@@ -77,7 +83,7 @@ test('m9d843 dois processos somam no mesmo contador: 300 + 301 chamadas, a 601ª
 
 test('m9d843 rota sem credencial é limitada por IP', { skip: skip() }, async () => {
   await env.resetCounters();
-  await env.waitSafeWindow(30);
+  await env.waitSafeWindow(4);
   const call = () => fetch(`${http.baseUrl}/crm/carts/public/token-que-nao-existe`);
   let res;
   for (let i = 1; i <= 60; i += 1) {
