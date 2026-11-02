@@ -30,7 +30,7 @@ O liga/desliga de cada módulo é `governanca.modulos.<módulo>.habilitado` (lis
 | `governanca.ui.exibir_debug` | `false` | corpo de erro 500 com o campo `debug` (mensagem e stack) fora de produção; desligado por padrão e proibido em produção (lido por `errorHandler`). |
 | `governanca.acoes.impacto_validade_min` | `10` | minutos de validade do `impactToken` devolvido pela simulação de impacto. |
 | `governanca.acoes.impacto_itens_max` | `50` | quantos itens afetados a tela lista no impacto de uma ação destrutiva. |
-| `governanca.erros.excecoes_prefixo_gov` | `PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR` | códigos de erro da plataforma que ficam sem o prefixo `GOV_` (decisão K4). |
+| `governanca.erros.excecoes_prefixo_gov` | `PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR, ROUTE_NOT_FOUND` | códigos de erro da plataforma que ficam sem o prefixo `GOV_` (decisão K4). |
 | `governanca.permissoes.perfis_gestao` | `GESTAO, GESTÃO, DIRETOR, GERENTE, GESTOR` | nomes dos perfis tratados como Gestão nas permissões do bloco. |
 | `governanca.permissoes.perfis_financeiro` | `FINANCEIRO` | nomes dos perfis tratados como Financeiro nas permissões do bloco. |
 

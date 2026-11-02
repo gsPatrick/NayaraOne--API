@@ -4,7 +4,7 @@
 A auditoria cega da parte 3 do bloco de governança apontou a contradição K4 (prefixo `GOV_`) entre o livro e/ou entre as demandas. Demandas afetadas: D800, D843 e todas com código.
 
 ## Decisão
-Todo código criado pelos blocos E e F (HTTP, job, CI, bloqueio de migração, estado de tela) tem `GOV_`; 115 renomeações feitas. Exceção fechada de 6 códigos que já existem na plataforma: `PERMISSION_DENIED`, `MISSING_ACCESS_TOKEN`, `MFA_STEP_UP_REQUIRED`, `MFA_REQUIRED_NOT_ENABLED`, `INTERNAL_ERROR`, `VALIDATION_ERROR`. Script `checkErrorCodes.js` reprova o resto
+Todo código criado pelos blocos E e F (HTTP, job, CI, bloqueio de migração, estado de tela) tem `GOV_`; 115 renomeações feitas. Exceção fechada de 6 códigos que já existem na plataforma: `PERMISSION_DENIED`, `MISSING_ACCESS_TOKEN`, `MFA_STEP_UP_REQUIRED`, `MFA_REQUIRED_NOT_ENABLED`, `INTERNAL_ERROR`, `VALIDATION_ERROR`; em 02/11/2026 entrou o sétimo, `ROUTE_NOT_FOUND` (404 de rota inexistente, DI-D843-8). Script `checkErrorCodes.js` reprova o resto
 
 ## Alternativas
 Renomear os 6 códigos já existentes da plataforma com o prefixo `GOV_`. Rejeitada por padrão porque quebraria clientes atuais; a exceção é fechada, vem do parâmetro `governanca.erros.excecoes_prefixo_gov` e `checkErrorCodes.js` reprova o resto (decisão 2 da seção 8 da correção, aguardando confirmação do Patrick).

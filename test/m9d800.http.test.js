@@ -129,7 +129,7 @@ test('m9d800 a lista de exceções ao prefixo GOV_ configurada pelo administrado
     const outra = await call('B:gestor', 'GET', '/feature-flags');
     assert.equal(outra.body.error.code, 'PERMISSION_DENIED');
   } finally {
-    await withTenant((tx) => upsertSetting('governanca.erros.excecoes_prefixo_gov', 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR', tenant, user.id, tx));
+    await withTenant((tx) => upsertSetting('governanca.erros.excecoes_prefixo_gov', 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR, ROUTE_NOT_FOUND', tenant, user.id, tx));
   }
   const restaurado = await call('A:leitura', 'GET', '/calendar');
   assert.equal(restaurado.body.error.code, 'PERMISSION_DENIED');
@@ -139,7 +139,7 @@ test('m9d800 configurações de governança registradas no dicionário com os pa
   const { SETTINGS_SCHEMA } = require('../src/features/settings/settings.service');
   const gov = require('../src/features/core-governance/governance.settings');
   assert.equal(SETTINGS_SCHEMA['governanca.erros.excecoes_prefixo_gov'].type, 'string');
-  assert.equal(gov.GOVERNANCE_SETTING_DEFAULTS['governanca.erros.excecoes_prefixo_gov'], 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR');
+  assert.equal(gov.GOVERNANCE_SETTING_DEFAULTS['governanca.erros.excecoes_prefixo_gov'], 'PERMISSION_DENIED, MISSING_ACCESS_TOKEN, MFA_STEP_UP_REQUIRED, MFA_REQUIRED_NOT_ENABLED, INTERNAL_ERROR, VALIDATION_ERROR, ROUTE_NOT_FOUND');
   for (const mod of EXPECTED_MODULES) {
     const key = `governanca.modulos.${mod.replace(/-/g, '_')}.habilitado`;
     assert.equal(SETTINGS_SCHEMA[key].type, 'boolean', key);

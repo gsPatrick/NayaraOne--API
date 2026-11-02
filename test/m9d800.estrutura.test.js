@@ -66,7 +66,7 @@ test('m9d800 catálogo de eventos tem exatamente os 7 tipos do livro', async () 
 
 test('m9d800 corpo de erro de governança tem formato único com error.traceId e código com prefixo GOV_ (exceto a lista fechada)', async () => {
   const errors = require('../src/features/core-governance/governance.errors');
-  assert.deepEqual(errors.DEFAULT_PREFIX_EXCEPTIONS, ['PERMISSION_DENIED', 'MISSING_ACCESS_TOKEN', 'MFA_STEP_UP_REQUIRED', 'MFA_REQUIRED_NOT_ENABLED', 'INTERNAL_ERROR', 'VALIDATION_ERROR']);
+  assert.deepEqual(errors.DEFAULT_PREFIX_EXCEPTIONS, ['PERMISSION_DENIED', 'MISSING_ACCESS_TOKEN', 'MFA_STEP_UP_REQUIRED', 'MFA_REQUIRED_NOT_ENABLED', 'INTERNAL_ERROR', 'VALIDATION_ERROR', 'ROUTE_NOT_FOUND']);
   const nf = errors.govNotFound();
   assert.equal(nf.statusCode, 404);
   assert.equal(nf.code, 'GOV_NOT_FOUND');
