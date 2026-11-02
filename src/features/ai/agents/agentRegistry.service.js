@@ -76,12 +76,12 @@ async function createVersion(ctx, rawCode, payload, transaction) {
 /** Edita campos de uma versão em DRAFT; fora de DRAFT é 409 AI_AGENT_IMMUTABLE (o banco repete a regra por gatilho). */
 async function updateDraft(ctx, rawCode, rawVersion, patch, transaction) {
   ctxOk(ctx);
+  const overrides = validateAgentFields(patch || {});
+  if (!Object.keys(overrides).length) throw E.invalid('Informe ao menos um campo para alterar.');
   const code = normalizeCode(rawCode);
   if (code) await repo.lockCode(ctx, code, transaction);
   const current = await requireOwn(ctx, rawCode, rawVersion, transaction, { lock: true });
   if (current.status !== 'DRAFT') throw E.immutable();
-  const overrides = validateAgentFields(patch || {});
-  if (!Object.keys(overrides).length) return current;
   const fields = { ...Object.fromEntries(CAMPOS.map((k) => [k, current[k]])), ...overrides };
   await assertAgentPairEvaluated(ctx, current.code, current.modelPolicy, fields.modelPolicy, transaction);
   const configHash = computeConfigHash({ code: current.code, ...fields, tools: current.tools });

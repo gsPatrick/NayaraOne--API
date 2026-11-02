@@ -44,6 +44,7 @@ async function updateDraft(ctx, id, body, transaction) {
   if (!V.isUuid(id)) throw E.notFound();
   const c = V.parseContent(body, { partial: true });
   if (c.factKey !== undefined) throw E.invalid('A chave do fato não muda; cadastre outro conhecimento.');
+  if (!Object.keys(c).length) throw E.invalid('Informe ao menos um campo para alterar.');
   V.assertNoSecret(c);
   return guarded(async () => {
     const row = await repo.findById(ctx, id, transaction, { lock: true });
