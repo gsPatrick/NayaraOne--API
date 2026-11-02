@@ -209,6 +209,9 @@ async function updateProviderAccount(accountId, payload, actorUserId, groupId, c
   if (enviado.active !== undefined && typeof enviado.active !== 'boolean') {
     throw AppError.badRequest('O campo "ativa" precisa ser verdadeiro ou falso.', 'PROVIDER_ACCOUNT_VALIDATION');
   }
+  if (!Object.keys(patch).length && enviado.active === undefined) {
+    throw AppError.badRequest('Informe ao menos um campo para alterar.', 'PROVIDER_ACCOUNT_VALIDATION');
+  }
   if (patch.label && patch.label.toLowerCase() !== atual.label.toLowerCase() && await nomeEmUso(companyId, atual.providerCode, patch.label, atual.id, transaction)) {
     throw AppError.conflict('Já existe uma conta ativa deste provider com este nome.', 'PROVIDER_ACCOUNT_DUPLICATE');
   }
