@@ -40,7 +40,19 @@ test('conta_do_provider_edicao_sem_campo_da_400_e_com_campo_da_200', async () =>
   const ok = await chamar(token, 'PATCH', `/provider-accounts/${contaId}`, { label: `QA-M9 conta vazia ${sufixo} editada` });
   assert.equal(ok.status, 200, textoDe(ok));
   assert.match(textoDe(ok), /editada/);
-  const ativa = await chamar(token, 'PATCH', `/provider-accounts/${contaId}`, { active: true });
+  // Hermético: outra conta ativa do mesmo provider (deixada por passada ou teste anterior no mesmo banco) não pode impedir a ativação;
+  // as outras são pausadas só durante a chamada e voltam a ACTIVE depois, para não afetar os demais testes do banco.
+  const outras = await env.sql(tenant, "UPDATE integration.connections SET status = 'PAUSED' WHERE provider_code = 'financing-sandbox' AND environment = 'SANDBOX' AND status = 'ACTIVE' AND id <> :id RETURNING id", { id: contaId });
+  let ativa;
+  try {
+    ativa = await chamar(token, 'PATCH', `/provider-accounts/${contaId}`, { active: true });
+  } finally {
+    await env.sql(tenant, "UPDATE integration.connections SET status = 'PAUSED' WHERE id = :id", { id: contaId });
+    for (const o of (Array.isArray(outras) ? outras : [])) {
+      const id = o.id ?? o[0]?.id;
+      if (id) await env.sql(tenant, "UPDATE integration.connections SET status = 'ACTIVE' WHERE id = :id", { id });
+    }
+  }
   assert.equal(ativa.status, 200, textoDe(ativa));
 });
 

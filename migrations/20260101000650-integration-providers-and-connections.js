@@ -29,6 +29,7 @@ ON CONFLICT DO NOTHING;
 `;
 
 module.exports = {
+  BACKFILL_SQL,
   up: async (queryInterface) => {
     const q = (sql, opts) => queryInterface.sequelize.query(sql, opts);
     const domainList = DOMAINS.map((d) => `'${d}'`).join(', ');
