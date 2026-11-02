@@ -124,9 +124,15 @@ async function listConnections(ctx, filtro, transaction) {
   return IntegrationConnection.findAll({ where, order: [['providerCode', 'ASC'], ['environment', 'ASC'], ['label', 'ASC']], transaction });
 }
 
+/** Campos que a edição altera de fato (ambiente, fornecedor e status só são conferidos: não mudam por aqui). */
+const CAMPOS_EDITAVEIS = ['label', 'configJson', 'policyJson', 'apiVersion', 'secretRef', 'webhookChannel'];
+
 async function updateConnection(id, patch, ctx, transaction, opts = {}) {
-  const c = await carregarTravada(id, ctx, transaction);
   const p = patch || {};
+  if (!CAMPOS_EDITAVEIS.some((campo) => p[campo] !== undefined)) {
+    throw AppError.badRequest('Informe ao menos um campo para alterar.', 'VALIDATION_ERROR');
+  }
+  const c = await carregarTravada(id, ctx, transaction);
   if (p.environment !== undefined && p.environment !== c.environment) {
     throw AppError.badRequest('O ambiente de uma integração não muda: crie outra.', 'VALIDATION_ERROR');
   }

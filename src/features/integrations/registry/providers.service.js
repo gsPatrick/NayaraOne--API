@@ -12,6 +12,9 @@ const { validatePolicyJson } = require('../dispatch/retry/retry.limits');
 
 /** Catálogo global de fornecedores (`integration.providers`, M9-D200). */
 
+/** Campos do fornecedor que a edição aceita (o código é a chave e não muda). */
+const CAMPOS_DO_FORNECEDOR = ['displayName', 'domain', 'criticality', 'status', 'capabilities', 'supportedVersions', 'defaultPolicyJson', 'configSchema', 'sandboxAvailable'];
+
 function validarProvider(p, { parcial = false } = {}) {
   const saida = {};
   if (!parcial || p.displayName !== undefined) saida.displayName = texto(p.displayName, 'nome', 120, { obrigatorio: true });
@@ -84,6 +87,9 @@ async function updateProvider(code, payload, ctx, transaction) {
   ctxOk(ctx);
   // A marca de plataforma vem ANTES da leitura com lock: SELECT ... FOR UPDATE exige a política de UPDATE e, sem a marca, a linha ficava invisível (422).
   await comPlataforma(transaction);
+  if (!CAMPOS_DO_FORNECEDOR.some((campo) => (payload || {})[campo] !== undefined)) {
+    throw AppError.badRequest('Informe ao menos um campo para alterar.', 'VALIDATION_ERROR');
+  }
   const provider = await IntegrationProvider.findByPk(code, { transaction, lock: transaction.LOCK.UPDATE });
   if (!provider) throw AppError.unprocessable('Fornecedor não cadastrado no catálogo de integrações.', 'INTEGRATION_PROVIDER_UNKNOWN');
   const antes = provider.toJSON();

@@ -20,6 +20,7 @@ function rotatedAfterCompromise(c) {
  * `opts.testConnectionOk` = test-connection verde (só ele leva AUTH_FAILED -> ACTIVE, D250).
  */
 async function transitionConnection(id, toStatus, ctx, transaction, opts = {}) {
+  if (typeof toStatus !== 'string' || !toStatus.trim()) throw AppError.badRequest('Informe o status de destino.', 'VALIDATION_ERROR');
   const c = await carregarTravada(id, ctx, transaction);
   const de = c.status;
   const invalida = () => AppError.conflict(`Transição de status inválida: ${de} -> ${toStatus}.`, 'INTEGRATION_CONNECTION_INVALID_TRANSITION');
