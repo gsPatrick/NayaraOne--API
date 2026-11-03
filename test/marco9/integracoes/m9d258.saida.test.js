@@ -52,7 +52,10 @@ test('autocheck_ligada_ao_integration_dod_exit_1', () => {
     fs.mkdirSync(path.join(raiz, 'scripts'));
     fs.writeFileSync(path.join(raiz, 'scripts/integrationAutocheck.js'), 'console.log("Está blindado? NÃO."); process.exit(1);\n');
     const { ambienteReal } = require('../../../scripts/int-ci/lib/dodAmbiente');
-    assert.equal(ambienteReal(raiz).autochecagem().code, 1);
+    // Sem a declaração do CI (CI_SEM_REPOS_IRMAOS) o script roda de verdade; o caso declarado é de m9d253.irmaos.test.js.
+    const declarado = process.env.CI_SEM_REPOS_IRMAOS;
+    delete process.env.CI_SEM_REPOS_IRMAOS;
+    try { assert.equal(ambienteReal(raiz).autochecagem().code, 1); } finally { if (declarado !== undefined) process.env.CI_SEM_REPOS_IRMAOS = declarado; }
   } finally { fs.rmSync(raiz, { recursive: true, force: true }); }
   // O script real sai com 1 e INTEGRATION_DOD_AUTOCHECK_FAILED quando o fato falta (pasta de demandas inexistente).
   const p = spawnSync('node', ['scripts/integrationAutocheck.js', '--demandas', path.join(os.tmpdir(), 'm9d258-nao-existe')], { cwd: RAIZ, encoding: 'utf8', env: { ...process.env, DISPOSABLE_DB: '' } });
