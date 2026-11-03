@@ -146,3 +146,17 @@ test('ci_typecheck_confere_os_ports_e_falha_com_erro_de_tipo', () => {
   const ruim = spawnSync(path.join(RAIZ, 'node_modules', '.bin', 'tsc'), ['--noEmit', '--allowJs', '--checkJs', '-p', path.join(dir, 'tsconfig.json')], { encoding: 'utf8' });
   assert.notEqual(ruim.status, 0, 'erro de tipo reprova o typecheck');
 });
+
+test('runner_de_brinquedo_nao_apaga_os_junit_reais_da_etapa_em_curso', () => {
+  // A etapa 9 roda este arquivo dentro de reports/int-ci/: o runner de brinquedo (que zera a pasta de relatórios ao começar na etapa 3 ou antes) apagava os JUnit reais e
+  // o offlineRelatorio da própria etapa terminava em "sem JUnit". Agora o brinquedo usa uma pasta própria (INT_CI_PASTA_RELATORIOS).
+  const fs = require('node:fs');
+  const real = path.join(RAIZ, E.RELATORIOS);
+  fs.mkdirSync(real, { recursive: true });
+  const sentinela = path.join(real, `m9d254-sentinela-${process.pid}.xml`);
+  fs.writeFileSync(sentinela, '<testsuites/>');
+  try {
+    assert.equal(executar(etapasDeBrinquedo()).status, 0);
+    assert.ok(fs.existsSync(sentinela), 'o runner de brinquedo não pode apagar a pasta de relatórios real');
+  } finally { fs.rmSync(sentinela, { force: true }); }
+});

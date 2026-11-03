@@ -43,10 +43,13 @@ function substituir(argv, provider) {
   return argv.map((t) => String(t).replace(/\{provider\}/g, provider));
 }
 
+/** Pasta dos JUnit da execução. INT_CI_PASTA_RELATORIOS só existe para os testes do próprio runner (m9d254): sem ela, rodar o runner de brinquedo dentro da etapa 9 apagava os JUnit reais da etapa em curso. */
+const pastaDeRelatorios = () => process.env.INT_CI_PASTA_RELATORIOS || path.join(E.ROOT, E.RELATORIOS);
+
 function executarComando({ argv, env }, saida) {
   return new Promise((resolve) => {
     // reports/int-ci/ é ignorada pelo git: no checkout limpo (CI) a pasta não existe e o reporter junit falharia com ENOENT.
-    fs.mkdirSync(path.join(E.ROOT, 'reports', 'int-ci'), { recursive: true });
+    fs.mkdirSync(pastaDeRelatorios(), { recursive: true });
     const filho = spawn(argv[0], argv.slice(1), { cwd: E.ROOT, env: { ...process.env, DRILL_PG_PORT: String(55000 + Math.floor(Math.random() * 2000)), ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
     filho.stdout.on('data', (d) => saida.escrever(d.toString()));
     filho.stderr.on('data', (d) => saida.escrever(d.toString()));
@@ -86,7 +89,7 @@ async function main() {
   const a = argumentos(process.argv.slice(2));
   const etapas = E.carregar(a.etapas);
   // Os JUnit e o registro de conexões externas (M9-D258) são de UMA execução das etapas de teste: quem começa na etapa 3 ou antes zera os da execução anterior.
-  const pasta = path.join(E.ROOT, E.RELATORIOS);
+  const pasta = pastaDeRelatorios();
   if (a.de <= 3) fs.rmSync(pasta, { recursive: true, force: true });
   fs.mkdirSync(pasta, { recursive: true });
   const saida = escritor(a.log);

@@ -28,7 +28,7 @@ function executar(etapas, args = [], env = {}) {
   const relatorio = path.join(dir, 'relatorio.json');
   fs.writeFileSync(arquivo, JSON.stringify({ etapas }));
   fs.writeFileSync(marca, '');
-  const r = spawnSync('node', [EXECUTAR, '--etapas', arquivo, '--relatorio', relatorio, ...args], { cwd: RAIZ, encoding: 'utf8', env: { ...process.env, M9D254_MARCA: marca, DISPOSABLE_DB: '', ...env } });
+  const r = spawnSync('node', [EXECUTAR, '--etapas', arquivo, '--relatorio', relatorio, ...args], { cwd: RAIZ, encoding: 'utf8', env: { ...process.env, M9D254_MARCA: marca, DISPOSABLE_DB: '', INT_CI_PASTA_RELATORIOS: path.join(dir, 'int-ci'), ...env } });
   const marcas = fs.readFileSync(marca, 'utf8').split('\n').filter(Boolean).map(Number);
   const rel = fs.existsSync(relatorio) ? JSON.parse(fs.readFileSync(relatorio, 'utf8')) : null;
   return { status: r.status, saida: `${r.stdout}${r.stderr}`, marcas, relatorio: rel };
