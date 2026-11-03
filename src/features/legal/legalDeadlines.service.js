@@ -8,6 +8,7 @@ const { publishLegalDeadlineCreated } = require('./legalEvents.service');
 const { assertCriticalDeadlineAccountability, normalizeNote } = require('./legalDeadlineAccountability');
 const { normalizeOptionalText, requireText } = require('./legalText');
 const { assertResponsibleInTenant } = require('./legalDeadlineResponsible');
+const { DEADLINE_CRITICALITIES, normalizeCriticality, assertFinalDeadlineState } = require('./legalDeadlineInvariants');
 
 /**
  * computeSeverity — DECISÃO DE ENGENHARIA: severidade não é uma coluna persistida (o doc só
@@ -29,7 +30,6 @@ function computeSeverity(deadline, now = new Date()) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Valores que o prazo realmente assume (computeSeverity, job de alerta e reabertura usam so estes).
 const DEADLINE_STATUSES = ['PENDING', 'DONE'];
-const DEADLINE_CRITICALITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 function assertValidDate(value, field) {
   const t = value instanceof Date ? value.getTime() : typeof value === 'string' || typeof value === 'number' ? new Date(value).getTime() : NaN;
@@ -43,13 +43,7 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
   const { dueAt } = payload;
   const responsibleUserId = await assertResponsibleInTenant(payload.responsibleUserId, legalCase, transaction);
   // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): criticidade.
-  if (payload.criticality !== undefined && payload.criticality !== null && typeof payload.criticality !== 'string') {
-    throw AppError.badRequest('"criticality" deve ser um texto.', 'LEGAL_DEADLINE_VALIDATION');
-  }
-  const criticality = normalizeOptionalText(payload.criticality, 'criticality')?.toUpperCase() || 'MEDIUM';
-  if (!DEADLINE_CRITICALITIES.includes(criticality)) {
-    throw AppError.badRequest(`"criticality" deve ser um de: ${DEADLINE_CRITICALITIES.join(', ')}.`, 'LEGAL_DEADLINE_VALIDATION');
-  }
+  const criticality = normalizeCriticality(payload.criticality) || 'MEDIUM';
   if (!payload.description || !dueAt) {
     throw AppError.badRequest('Os campos "description" e "dueAt" são obrigatórios.', 'LEGAL_DEADLINE_VALIDATION');
   }
@@ -187,6 +181,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
     throw AppError.badRequest('"conclusionEvidenceFileId" deve ser o identificador (UUID) de um arquivo.', 'LEGAL_DEADLINE_VALIDATION');
   }
   const changeReason = normalizeOptionalText(payload.changeReason, 'changeReason');
+  const criticality = normalizeCriticality(payload.criticality);
 
   // Atribuicao/troca de responsavel pelo PATCH (antes o campo era ignorado em silencio e o
   // responsavel anterior permanecia). null/'' remove; usuario precisa ter vinculo ativo na empresa.
@@ -195,16 +190,21 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
     ? await assertResponsibleInTenant(payload.responsibleUserId, deadline, transaction)
     : deadline.responsibleUserId;
   const responsibleChanged = responsibleProvided && (nextResponsible || null) !== (deadline.responsibleUserId || null);
-  if (responsibleChanged && !nextResponsible && deadline.status === 'PENDING' && new Date(deadline.dueAt).getTime() < Date.now()) {
-    throw AppError.badRequest(
-      'Um prazo pendente e já vencido precisa de um responsável definido, para que alguém seja notificado de verdade.',
-      'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
-    );
-  }
-  if (responsibleChanged && !nextResponsible && deadline.status === 'PENDING' && deadline.criticality === 'CRITICAL') {
-    const lockedCase = await getLegalCaseForUpdate(deadline.legalCaseId, transaction);
-    assertCriticalDeadlineAccountability({ responsibleUserId: null }, lockedCase);
-  }
+  // Regra unica: as invariantes (prazo CRITICAL pendente exige responsavel efetivo e escalonamento;
+  // PENDING vencido exige responsavel) sao avaliadas sobre o estado FINAL da requisicao.
+  const finalStatusForRules = status !== undefined ? status : deadline.status;
+  const criticalityChanged = criticality !== undefined && criticality !== deadline.criticality;
+  const dueAtWillChange = dueAt !== undefined && new Date(dueAt).getTime() !== new Date(deadline.dueAt).getTime();
+  await assertFinalDeadlineState({
+    final: {
+      status: finalStatusForRules,
+      responsibleUserId: nextResponsible || null,
+      dueAt: dueAt !== undefined ? dueAt : deadline.dueAt,
+      criticality: criticality !== undefined ? criticality : deadline.criticality,
+    },
+    touched: responsibleChanged || criticalityChanged || dueAtWillChange || finalStatusForRules !== deadline.status,
+    getLockedCase: () => getLegalCaseForUpdate(deadline.legalCaseId, transaction),
+  });
 
   // ACHADO REAL (auditoria técnica independente da Nayara, A08): concluir um prazo (status ->
   // DONE) era aceito sem nenhuma evidência nem nota documentando o que foi feito — "{status:
@@ -260,13 +260,6 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
   // seja: um prazo reaberto ficava, na prática, sem alerta e sem escalonamento para sempre.
   // Agora, reabrir (status -> PENDING) ou mudar dueAt reseta o ciclo de alerta.
   const reopening = status !== undefined && status === 'PENDING' && deadline.status !== 'PENDING';
-  // Auditoria da cliente (Marco 5, contorno): reabrir um prazo CRITICAL concluido o devolve a
-  // PENDING; o criterio de responsavel efetivo + destino de escalonamento e refeito aqui, para
-  // nao existir prazo CRITICAL pendente sem ninguem avisado.
-  if (reopening && deadline.criticality === 'CRITICAL') {
-    const legalCase = await getLegalCaseForUpdate(deadline.legalCaseId, transaction);
-    assertCriticalDeadlineAccountability(deadline, legalCase);
-  }
   if (reopening || dueAtChanged) {
     deadline.lastAlertedSeverity = null;
     deadline.firstOverdueAlertedAt = null;
@@ -277,6 +270,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction) {
 
   if (status !== undefined) deadline.status = status;
   if (description !== undefined) deadline.description = description;
+  if (criticalityChanged) deadline.criticality = criticality;
   if (dueAt !== undefined) deadline.dueAt = dueAt;
   if (responsibleChanged) deadline.responsibleUserId = nextResponsible;
   if (conclusionEvidenceFileId !== undefined) deadline.conclusionEvidenceFileId = conclusionEvidenceFileId;
