@@ -45,6 +45,8 @@ function substituir(argv, provider) {
 
 function executarComando({ argv, env }, saida) {
   return new Promise((resolve) => {
+    // reports/int-ci/ é ignorada pelo git: no checkout limpo (CI) a pasta não existe e o reporter junit falharia com ENOENT.
+    fs.mkdirSync(path.join(E.ROOT, 'reports', 'int-ci'), { recursive: true });
     const filho = spawn(argv[0], argv.slice(1), { cwd: E.ROOT, env: { ...process.env, DRILL_PG_PORT: String(55000 + Math.floor(Math.random() * 2000)), ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
     filho.stdout.on('data', (d) => saida.escrever(d.toString()));
     filho.stderr.on('data', (d) => saida.escrever(d.toString()));
