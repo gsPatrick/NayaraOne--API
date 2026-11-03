@@ -27,8 +27,10 @@ function main() {
   }
   r.problemas.forEach((p) => console.error(`mapa: ${p}`));
   r.ausentes.forEach((a) => console.error(`${CODIGO_AUSENTE}: ${MENSAGEM_AUSENTE} ${a.nome} (item ${a.item}, ${a.demanda}, ${a.motivo}).`));
-  const presentes = r.total - r.ausentes.length;
-  console.log(`testes adversariais do bloco de governança: ${r.itens} itens, ${presentes} de ${r.total} nomes presentes e ativos, ${r.ausentes.length} ausentes, ${r.problemas.length} problemas no mapa`);
+  const naoAplicaveis = r.naoAplicaveis || [];
+  const presentes = r.total - r.ausentes.length - naoAplicaveis.length;
+  console.log(`testes adversariais do bloco de governança: ${r.itens} itens, ${presentes} de ${r.total} nomes presentes e ativos, ${r.ausentes.length} ausentes, ${r.problemas.length} problemas no mapa${naoAplicaveis.length ? `, ${naoAplicaveis.length} NAO_APLICAVEL_NO_CI (nao verificado)` : ''}`);
+  naoAplicaveis.forEach((a) => console.log(`NAO_APLICAVEL_NO_CI: ${a.nome} (item ${a.item}, ${a.demanda}) mora em ${a.raizes.join(', ')}, ausente neste CI (CI_SEM_REPOS_IRMAOS=1); coberto na suíte local`));
   if (o.json) {
     try { fs.mkdirSync(path.dirname(o.json), { recursive: true }); fs.writeFileSync(o.json, `${JSON.stringify(r, null, 2)}\n`); } catch (e) { console.error(`GOV_ADVERSARIAL_READ_ERROR: não foi possível gravar ${o.json}: ${e.code || e.message}`); return 2; }
   }

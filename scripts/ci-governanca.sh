@@ -29,8 +29,14 @@ testes_com_banco() {
     CLAMAV_HOST="${CLAMAV_HOST:-127.0.0.1}" CLAMAV_PORT="${CLAMAV_PORT:-3310}" \
     bash -c 'node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test exec node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination="$0" "${@:1}"' \
     "$SAIDA/$nome.junit.xml" "$@"
-  node scripts/governance-ci/checkJunit.js "$SAIDA/$nome.junit.xml"
-  resumo "- $nome: verde, nenhum teste pulado ($SAIDA/$nome.junit.xml)"
+  local conferencia
+  conferencia="$(node scripts/governance-ci/checkJunit.js "$SAIDA/$nome.junit.xml")"
+  echo "$conferencia"
+  if echo "$conferencia" | grep -q '^NAO_APLICAVEL_NO_CI'; then
+    resumo "- $nome: verde nos executados; ATENÇÃO, parte NÃO APLICÁVEL NO CI (artefato dos repositórios irmãos ausente, coberta na suíte local): $(echo "$conferencia" | tail -1)"
+  else
+    resumo "- $nome: verde, nenhum teste pulado ($SAIDA/$nome.junit.xml)"
+  fi
 }
 
 case "$CONTROLE" in
@@ -50,8 +56,17 @@ case "$CONTROLE" in
   flags)         npm run sync:flags && npm run check:flags -- --out "$SAIDA/flags-check.json" && resumo "- flags: verde" ;;
   finops)        testes_com_banco finops test/marco9/governanca/m9d86[123].*.test.js ;;
   accessibility)
+    # As checagens de acessibilidade (axe, contraste, teclado, mensagens, a11yStatic) moram no Front (script test:a11y). Sem o Front a etapa FALHA, salvo no CI que declarou
+    # CI_SEM_REPOS_IRMAOS=1 (workflow: a branch do Front ainda não está no remoto): aí diz NÃO APLICÁVEL, nunca verde.
     FRONT="${GOV_CI_FRONT:-../NayaraOne--FRONT}"
-    [ -d "$FRONT" ] || { echo "GOV_CI_FRONT_MISSING: repositório do Front não encontrado em $FRONT." >&2; exit 2; }
+    if [ ! -d "$FRONT" ]; then
+      if [ "${CI_SEM_REPOS_IRMAOS:-}" = "1" ]; then
+        resumo "- accessibility: NÃO APLICÁVEL NO CI (NAO_APLICAVEL_NO_CI: Front ausente em $FRONT, CI_SEM_REPOS_IRMAOS=1); NÃO executou nenhuma checagem, coberta pelo test:a11y da suíte local do Front"
+        exit 0
+      fi
+      echo "GOV_CI_FRONT_MISSING: repositório do Front não encontrado em $FRONT." >&2; exit 2
+    fi
+    grep -q '"test:a11y"' "$FRONT/package.json" || { echo "GOV_CI_A11Y_SCRIPT_MISSING: o package.json do Front não tem o script test:a11y." >&2; exit 2; }
     npm run test:a11y --prefix "$FRONT"
     resumo "- accessibility: verde (test:a11y do Front)" ;;
   aud)           testes_com_banco aud test/marco9/governanca/m9d809.aud*.test.js ;;

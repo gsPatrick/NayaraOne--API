@@ -1,6 +1,7 @@
 {
   "descricao": "Os 10 testes adversariais do Caderno do Marco 9, bloco de governança (§11), com o nome exato do teste que os prova. M9-D890: scripts/checkAdversarialMap.js reprova se faltar, se estiver skip/todo ou se a lista deixar de ter 10 itens.",
   "raizes": ["test", "../NayaraOne--FRONT/test"],
+  "nomes_no_front": ["m9d850 UI endpoint 403 não vira tela vazia enganosa"],
   "itens": [
     { "n": 1, "frase": "Calendar replay não duplica; source concluído fecha item", "demanda": "M9-D802", "testes": ["m9d802 calendar replay não duplica", "m9d802 source concluído fecha item"] },
     { "n": 2, "frase": "Bulk master data sem permissão bloqueia", "demanda": "M9-D808", "testes": ["m9d808 bulk master data sem permissão bloqueia"] },

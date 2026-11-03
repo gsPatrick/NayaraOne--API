@@ -2,7 +2,10 @@
 
 // M9-D825 — comportamento do componente ProtectedValue do Front (NayaraOne--FRONT/lib/dlp/protectedValue.logic.js), provado sobre a lógica pura que o componente
 // usa, com área de transferência e rede simuladas. Sem Playwright (regra do projeto neste ciclo): o roteiro de tela está na seção 9 da demanda.
-const { test } = require('node:test');
+const { testeComIrmaos } = require('../../helpers/repoIrmao');
+
+// A lógica pura do componente mora no Front: ausente, os testes falham; no CI sem o Front (CI_SEM_REPOS_IRMAOS=1) viram NAO_APLICAVEL_NO_CI.
+const test = testeComIrmaos(['NayaraOne--FRONT/lib/dlp/protectedValue.logic.js']);
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');

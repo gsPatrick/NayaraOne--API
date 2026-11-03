@@ -4,6 +4,8 @@
  * Mapa dos 10 testes adversariais do bloco de governança (M9-D890, Caderno §11). O mapa (docs/governance/adversarial-map.json) lista as frases do livro e o NOME EXATO do teste
  * de cada uma. A verificação procura a declaração `test('<nome>'` / `it('<nome>'` nos arquivos de teste (API e Front) e reprova o nome ausente e o nome declarado com skip ou todo
  * (opção `{ skip }`/`{ todo }` ou modificador `.skip`/`.todo`). Erro de leitura não vira "ok": quem chama sai com 2.
+ * Exceção declarada: com CI_SEM_REPOS_IRMAOS=1 (CI que só tem a API) uma raiz de teste que mora num repositório irmão (começa por ../) e não existe é dispensada, e os nomes do mapa
+ * listados em `nomes_no_front` (os que só existem lá) saem como `naoAplicaveis` (NÃO verificados, ditos como tais), nunca como presentes. Nome fora dessa lista continua exigido na API.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -76,22 +78,28 @@ function lerMapa(arquivo) {
  */
 function verificarMapa({ mapa = MAPA_PADRAO, raizes = null } = {}) {
   const dados = lerMapa(mapa);
-  const pastas = raizes || (dados.raizes || ['test']).map((r) => path.resolve(RAIZ_API, r));
+  const todasAsPastas = raizes || (dados.raizes || ['test']).map((r) => path.resolve(RAIZ_API, r));
+  const declarado = process.env.CI_SEM_REPOS_IRMAOS === '1' && !raizes;
+  const dispensadas = declarado ? (dados.raizes || ['test']).filter((r) => r.startsWith('../') && !fs.existsSync(path.resolve(RAIZ_API, r))) : [];
+  const pastas = todasAsPastas.filter((p) => !dispensadas.some((r) => path.resolve(RAIZ_API, r) === p));
   const textos = pastas.flatMap((p) => arquivosDeTeste(p)).map((arq) => {
     try { return fs.readFileSync(arq, 'utf8'); } catch (e) { throw new LeituraError(`não foi possível ler ${arq}: ${e.code || e.message}`); }
   });
   const problemas = problemasDoMapa(dados);
   const ausentes = [];
+  const naoAplicaveis = [];
+  const soNoFront = new Set(dispensadas.length ? dados.nomes_no_front || [] : []);
   let total = 0;
   for (const it of dados.itens || []) {
     for (const nome of it.testes || []) {
       total += 1;
       const achadas = textos.flatMap((t) => declaracoes(t, nome));
-      if (!achadas.length) ausentes.push({ nome, item: it.n, demanda: it.demanda, motivo: 'ausente' });
+      if (!achadas.length && soNoFront.has(nome)) naoAplicaveis.push({ nome, item: it.n, demanda: it.demanda, raizes: dispensadas });
+      else if (!achadas.length) ausentes.push({ nome, item: it.n, demanda: it.demanda, motivo: 'ausente' });
       else if (achadas.every((a) => a.ignorado)) ausentes.push({ nome, item: it.n, demanda: it.demanda, motivo: 'skip ou todo' });
     }
   }
-  return { ok: problemas.length === 0 && ausentes.length === 0, problemas, ausentes, total, itens: (dados.itens || []).length };
+  return { ok: problemas.length === 0 && ausentes.length === 0, problemas, ausentes, naoAplicaveis, total, itens: (dados.itens || []).length };
 }
 
 module.exports = { verificarMapa, problemasDoMapa, declaracoes, LeituraError, MAPA_PADRAO, CODIGO_AUSENTE, MENSAGEM_AUSENTE, ITENS_DO_LIVRO };
