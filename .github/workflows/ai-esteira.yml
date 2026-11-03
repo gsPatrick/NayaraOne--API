@@ -38,7 +38,7 @@ jobs:
       - run: npm ci
       - name: Estágios 1 a 12 (param no primeiro vermelho)
         run: bash scripts/ci-estagios-ai.sh docs/evidencias/ci/esteira-ai.log --ate 12
-      - name: Estágios 13 a 16 (portões de ambiente: registro humano em ai.release_gates)
+      - name: 'Estágios 13 a 16 (portões de ambiente: registro humano em ai.release_gates)'
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.portoes }}
         env:
           AI_CI_RELEASE_DATABASE_URL: ${{ secrets.AI_CI_RELEASE_DATABASE_URL }}
