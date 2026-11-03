@@ -1,6 +1,7 @@
 'use strict';
 
 const AppError = require('../../../../utils/AppError');
+const { isSandboxBlocked } = require('../../../../utils/sandboxPolicy');
 const adapterRegistry = require('../../../integrations/registry/adapterRegistry');
 const { ensureSandboxConnection, findActiveByDomain } = require('../../../integrations/registry/connections.ensureSandbox');
 
@@ -11,8 +12,8 @@ const issuerNotConfigured = () => AppError.unprocessable(
   'NFSE_ISSUER_NOT_CONFIGURED',
 );
 
-/** Produção e homologação publicada: o emissor de laboratório (sandbox) nunca emite nota, que viraria um documento fiscal falso gravado como oficial. */
-const hardEnvironment = () => ['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production';
+/** Só produção real (utils/sandboxPolicy.js): o emissor de laboratório (sandbox) não emite nota ali, que viraria um documento fiscal falso gravado como oficial. Em homologação ele fica disponível. */
+const hardEnvironment = () => isSandboxBlocked();
 
 /** Registra o adapter de laboratório quando o servidor não passou pelo boot (scripts e testes de serviço). */
 function ensureFiscalAdapterRegistered() {

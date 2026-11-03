@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishLegalCaseCreated } = require('./legalEvents.service');
 const { publishLegalCaseUpdated } = require('./legalBiEvents.service');
+const { assertCaseKeepsCriticalAccountability } = require('./legalDeadlineAccountability');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -130,6 +131,16 @@ async function getLegalCase(id, transaction) {
 }
 
 /**
+ * Le o processo com FOR UPDATE: serializa quem mexe em responsavel/escalonamento do processo e quem
+ * cria/reabre prazo CRITICAL pendente (que depende deles). Ordem de lock unica: processo primeiro.
+ */
+async function getLegalCaseForUpdate(id, transaction) {
+  const legalCase = await LegalCase.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  if (!legalCase) throw AppError.notFound('Processo jurídico não encontrado.', 'LEGAL_CASE_NOT_FOUND');
+  return legalCase;
+}
+
+/**
  * assertNotOnLegalHold — gap real (auditoria Nayara, §16/JUR-010/011): um processo em legal
  * hold não pode ter status/fase alterados (é exatamente o que a retenção legal existe para
  * impedir — mudar o estado do processo durante uma disputa/investigação, mesmo sem apagar
@@ -192,7 +203,7 @@ async function setLegalHold(id, payload, actorUserId, transaction) {
 }
 
 async function updateLegalCase(id, payload, actorUserId, transaction) {
-  const legalCase = await getLegalCase(id, transaction);
+  const legalCase = await getLegalCaseForUpdate(id, transaction);
   const beforeJson = legalCase.toJSON();
   const { status, summary, responsibleUserId, escalationUserId, phase } = payload;
   // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
@@ -203,6 +214,15 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
     phaseChanging: phase !== undefined && phase !== legalCase.phase,
   });
   const previousPhase = legalCase.phase;
+  const nextResponsible = responsibleUserId !== undefined ? responsibleUserId : legalCase.responsibleUserId;
+  const nextEscalation = escalationUserId !== undefined ? escalationUserId : legalCase.escalationUserId;
+  if (nextResponsible !== legalCase.responsibleUserId || nextEscalation !== legalCase.escalationUserId) {
+    // Prazo CRITICAL pendente depende do responsavel/escalonamento do processo (auditoria Marco 5).
+    await assertCaseKeepsCriticalAccountability(
+      { id: legalCase.id, responsibleUserId: nextResponsible || null, escalationUserId: nextEscalation || null },
+      transaction
+    );
+  }
   if (status !== undefined) legalCase.status = status;
   if (summary !== undefined) legalCase.summary = summary;
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
@@ -340,6 +360,7 @@ async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
 }
 
 module.exports = {
+  getLegalCaseForUpdate,
   CASE_RISK_LEVELS,
   createLegalCase,
   listLegalCases,

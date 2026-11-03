@@ -40,7 +40,7 @@ const guaranteesService = require('../src/features/legal/guarantees.service');
 const inspectionsService = require('../src/features/legal/inspections.service');
 const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
 const AppError = require('../src/utils/AppError');
-const { Notification, User } = require('../src/models');
+const { Notification, User, UserMembership } = require('../src/models');
 
 let tenant;
 
@@ -62,6 +62,12 @@ test('R3-1: prazo OVERDUE com responsável próprio, processo SEM responsável �
     const [deadlineOwner] = await User.findOrCreate({
       where: { email: `homo-qa-r3-deadline-owner-${suffix}@nayaraone.dev` },
       defaults: { name: `HOMO QA — Dono do prazo R3 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    // Responsavel do prazo precisa ter vinculo ativo na empresa (validado na criacao do prazo).
+    await UserMembership.findOrCreate({
+      where: { userId: deadlineOwner.id, groupId: tenant.groupId, companyId: tenant.companyId },
+      defaults: { userId: deadlineOwner.id, groupId: tenant.groupId, companyId: tenant.companyId, status: 'ACTIVE' },
+      transaction,
     });
 
     // Processo deliberadamente SEM responsibleUserId — o cenário exato da auditora.

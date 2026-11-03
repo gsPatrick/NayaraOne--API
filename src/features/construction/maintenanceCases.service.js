@@ -19,6 +19,7 @@ const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
 // DECISÃO DE ENGENHARIA: status de MaintenanceCase (pós-obra/garantia) é STRING(32) livre nas
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
 // em finance.approval_requests e crm.opportunities (aberto -> em andamento -> resolvido/fechado).
+const { assertClosedCaseStillMeetsRequirements, isBlankRootCause } = require('./maintenanceCaseClosedRules');
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 // Grafo de transição válido — mesmo usado no front (app/painel/obras/pos-obra/[id]/page.js,
 // NEXT_STATUS_OPTIONS). CLOSED é terminal: reabertura exige fluxo próprio (fora de escopo aqui).
@@ -367,6 +368,17 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
       }
     }
     maintenanceCase.status = normalizedStatus;
+  }
+  // Auditoria da cliente (Marco 6): chamado que continua FECHADO mantem os requisitos de
+  // fechamento em qualquer atualizacao (nao da pra retirar causa raiz, evidencias ou atendimento).
+  if (previousStatus === 'CLOSED') {
+    const blankRoot = rootCauseCode !== undefined && isBlankRootCause(rootCauseCode);
+    assertClosedCaseStillMeetsRequirements({
+      rootCauseCode: blankRoot ? null : rootCauseCode !== undefined ? validateRootCauseCode(rootCauseCode) : maintenanceCase.rootCauseCode,
+      beforeMediaFileIds: beforeMediaFileIds !== undefined ? validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds') : maintenanceCase.beforeMediaFileIds,
+      afterMediaFileIds: afterMediaFileIds !== undefined ? validateMediaFileIds(afterMediaFileIds, 'afterMediaFileIds') : maintenanceCase.afterMediaFileIds,
+      actionCount: await WarrantyAction.count({ where: { warrantyCaseId: id }, transaction }),
+    });
   }
   if (description !== undefined) maintenanceCase.description = description;
   if (responsibleUserId !== undefined) maintenanceCase.responsibleUserId = responsibleUserId;

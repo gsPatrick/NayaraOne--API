@@ -179,7 +179,7 @@ async function compareSimulations(financingCaseId, groupId, companyId, transacti
       rate: s.rate === null || s.rate === undefined ? null : Number(s.rate),
       rateInformed: s.rate !== null && s.rate !== undefined,
       totalCost: totalCost(s),
-      createdAt: s.createdAt,
+      createdAt: s.get('created_at') || s.get('createdAt') || null,
       lowestPayment: s.id === lowestPaymentSimulationId,
       lowestTotalCost: s.id === lowestTotalCostSimulationId,
     })),

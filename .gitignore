@@ -1,4 +1,6 @@
 node_modules/
+# sem a barra, para também ignorar um atalho (symlink) chamado node_modules, que já foi versionado por engano na branch de entrega (commit 081fc440)
+node_modules
 uploads/
 .env
 .env.*.local
@@ -16,3 +18,4 @@ reports/offline-run.json
 reports/offline-run-ia.json
 # JUnit e registro de conexões da execução offline da suíte da NAY (M9-D047).
 reports/ai-ci/
+!docs/evidencias/regressao/*.log

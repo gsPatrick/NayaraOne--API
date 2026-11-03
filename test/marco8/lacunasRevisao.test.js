@@ -487,8 +487,9 @@ test('M8-DIMOB-LAYOUT-01: versão do layout, colunas, ordem, separador e aviso v
     const linhas = arquivo.content.replace('﻿', '').split('\n');
     assert.equal(linhas[0], `# layout|LEIAUTE-${ano}-A`, 'sem aviso quando a empresa apaga o texto');
     assert.match(linhas[1], new RegExp(`^# batch\\|${batch.id}\\|ano\\|${ano}\\|versao\\|1\\|status\\|DRAFT\\|hash\\|${batch.snapshotHash}$`));
-    assert.equal(linhas[2], 'contrato|valor_no_ano|locador_documento');
-    assert.ok(linhas.slice(3).filter(Boolean).every((l) => l.split('|').length === 3), 'toda linha tem exatamente as 3 colunas escolhidas');
+    assert.equal(linhas[2], `# modelo|${batch.fileModelHash}`);
+    assert.equal(linhas[3], 'contrato|valor_no_ano|locador_documento');
+    assert.ok(linhas.slice(4).filter(Boolean).every((l) => l.split('|').length === 3), 'toda linha tem exatamente as 3 colunas escolhidas');
     assert.doesNotMatch(arquivo.content, /formato interno/);
   });
 });

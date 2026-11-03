@@ -1,6 +1,7 @@
 'use strict';
 
 const { getSetting } = require('../../settings/settings.service');
+const { isSandboxBlocked } = require('../../../utils/sandboxPolicy');
 const adapterRegistry = require('../../integrations/registry/adapterRegistry');
 const { catalogLegacy: { toCatalogCode } } = require('../../integrations');
 const { ensureFinancingConnection } = require('../dispatch/financingConnection');
@@ -35,12 +36,12 @@ async function resolveFinancingProviderAdapter(tenant, transaction) {
 
 // Resolução por CÓDIGO de provider (não por empresa) — usada pelo roteamento do webhook ("POST /webhooks/financing/:provider"), que recebe o provider na própria URL e
 // precisa do adapter ANTES de saber a empresa. É a instância do registro (sem connection): só as operações puras (assinatura e mapa de status) saem daqui.
-// O sandbox aprova sozinho: em produção/staging ele não existe (um caso sandbox lá seria um "banco" falso).
+// O sandbox aprova sozinho: só em produção real ele não existe (um caso sandbox lá seria um "banco" falso); em desenvolvimento, CI e homologação fica disponível (utils/sandboxPolicy.js).
 function resolveFinancingProviderAdapterByCode(providerCode) {
   const codigo = String(providerCode || '').toLowerCase();
   if (!LEGACY_CODES.includes(codigo)) return null;
   ensureFinancingAdapters();
-  if (codigo === 'sandbox' && (['production', 'staging'].includes(process.env.DEPLOY_ENVIRONMENT) || process.env.NODE_ENV === 'production')) return null;
+  if (codigo === 'sandbox' && isSandboxBlocked()) return null;
   const adapter = adapterRegistry.instantiate(toCatalogCode(codigo));
   return adapter && adapter.legacyAdapterSync ? adapter.legacyAdapterSync() : null;
 }

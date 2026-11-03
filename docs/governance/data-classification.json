@@ -2071,6 +2071,8 @@
   ],
   "correspondent.dimob_batches": [
    "created_by",
+   "file_model_hash",
+   "file_model_json",
    "layout_version",
    "reference_year",
    "snapshot_hash",
