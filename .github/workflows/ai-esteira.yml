@@ -24,6 +24,8 @@ jobs:
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      # o checkout traz só a API: testes que leem Maturacao/ ou o Front viram NAO_APLICAVEL_NO_CI (visível), só se o artefato realmente faltar
+      CI_SEM_REPOS_IRMAOS: '1'
     services:
       clamav:
         image: clamav/clamav:stable

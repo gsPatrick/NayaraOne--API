@@ -42,10 +42,10 @@ test('m9d047_dod_check_falha_se_item_sem_prova', () => {
   // Sem execução offline nenhuma, nenhum item tem prova.
   const semExecucao = executar(matrizReal(), ambienteIaVerde({ relatorioOffline: () => null }).amb);
   assert.equal([...semExecucao.stderr.matchAll(/DoD item \d+ sem prova/g)].length, 16);
-  // O script real, sem relatório da execução offline, reprova de verdade e imprime as quatro perguntas.
+  // O script real (modo estrito, sem a dispensa do CI que só tem a API), sem relatório da execução offline, reprova de verdade e imprime as quatro perguntas.
   const vazia = fs.mkdtempSync(path.join(os.tmpdir(), 'dod-ia-'));
   let real;
-  try { real = spawnSync('node', ['scripts/ai-dod-check.js', '--raiz', vazia], { cwd: API, encoding: 'utf8' }); } finally { fs.rmSync(vazia, { recursive: true, force: true }); }
+  try { real = spawnSync('node', ['scripts/ai-dod-check.js', '--raiz', vazia], { cwd: API, encoding: 'utf8', env: { ...process.env, CI_SEM_REPOS_IRMAOS: '' } }); } finally { fs.rmSync(vazia, { recursive: true, force: true }); }
   assert.equal(real.status, 1);
   assert.match(real.stderr, /AI_DOD_ITEM_MISSING DoD item \d+ sem prova/);
   for (const texto of ['Marcelo consegue fazer sozinho?', 'Está blindado?', 'Tem caminho técnico?', 'Outro programador assume?']) assert.match(real.stdout, new RegExp(texto.replace('?', '\\?')));
@@ -165,4 +165,21 @@ test('m9d047_item_14_exige_redaction_e_rls_verdes', () => {
   const mesmo = matrizReal();
   mesmo.itens.find((i) => i.n === 14).provas[0].teste = 'm9d005_empresa_b_404';
   assert.match(problemasDaMatriz(mesmo).join(' '), /repete um nome de teste|mesmo teste como redaction e como RLS/);
+});
+
+test('m9d047_dod_sem_pasta_de_demandas_so_dispensa_com_ci_sem_repos_irmaos_e_diz_na_saida', () => {
+  const vazia = fs.mkdtempSync(path.join(os.tmpdir(), 'dod-sem-demandas-'));
+  try {
+    const rodar = (extra) => spawnSync('node', ['scripts/ai-dod-check.js'], { cwd: API, encoding: 'utf8', env: { ...process.env, CI_SEM_REPOS_IRMAOS: '', ANALYTICS_DEMANDAS_DIR: vazia, ...extra } });
+    // Sem a variável a ausência das demandas continua reprovando: nada de dispensa silenciosa.
+    const exige = rodar({});
+    assert.equal(exige.status, 1);
+    assert.doesNotMatch(exige.stdout, /NAO_APLICAVEL_NO_CI/);
+    assert.match(exige.stdout, /M9-D010 ausente/);
+    // Com a variável a parte das demandas e a autochecagem saem NAO_APLICAVEL_NO_CI, ditas na saída; os testes e o relatório adversarial seguem exigidos.
+    const ci = rodar({ CI_SEM_REPOS_IRMAOS: '1' });
+    assert.match(ci.stdout, /NAO_APLICAVEL_NO_CI: demandas em Maturacao\/demandas\/marco-9 ausentes/);
+    assert.doesNotMatch(ci.stdout, /M9-D010 ausente/);
+    assert.match(ci.stdout, /autochecagem NAO_APLICAVEL_NO_CI/);
+  } finally { fs.rmSync(vazia, { recursive: true, force: true }); }
 });

@@ -11,7 +11,8 @@ function executar(matriz, amb) {
   const problemas = problemasDaMatriz(matriz);
   if (problemas.length) return { code: 1, stdout: '', stderr: `${limpar(problemas.map((p) => `${CODIGO} matriz do DoD recusada: ${p}`).join('\n'))}\n` };
   const itens = avaliarItens(matriz, amb);
-  return renderizar({ itens, autochecagem: autochecar(itens, amb) });
+  // CI que só tem a API (CI_SEM_REPOS_IRMAOS=1, demandas ausentes): os itens são avaliados só pelos testes verdes e pelo relatório adversarial; a parte das demandas e a autochecagem saem NAO_APLICAVEL_NO_CI.
+  return renderizar({ itens, autochecagem: amb.semDemandas ? null : autochecar(itens, amb), semDemandas: Boolean(amb.semDemandas) });
 }
 
 module.exports = { executar };

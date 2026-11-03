@@ -46,7 +46,7 @@ function falhasDoAdversarial(amb) {
 }
 
 function avaliarItem(it, amb, relatorio) {
-  const falhas = [...falhasDeTestes(it, amb, relatorio), ...falhasDeDemandas(it, amb), ...(it.relatorioAdversarial ? falhasDoAdversarial(amb) : [])];
+  const falhas = [...falhasDeTestes(it, amb, relatorio), ...(amb.semDemandas ? [] : falhasDeDemandas(it, amb)), ...(it.relatorioAdversarial ? falhasDoAdversarial(amb) : [])];
   const grupos = [...new Set(it.provas.map((x) => x.grupo).filter(Boolean))];
   return { n: it.n, item: it.item, ok: falhas.length === 0, falhas, grupos, provas: it.provas.map((x) => x.teste), demandas: it.demandas };
 }

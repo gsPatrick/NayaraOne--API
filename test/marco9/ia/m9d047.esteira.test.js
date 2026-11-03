@@ -4,6 +4,7 @@
 // (reports/offline-run-ia.json, 0 chamadas externas) e o fio com a autochecagem da M9-D258 (escopo ia-nay). Sem banco.
 
 const { test } = require('node:test');
+const { testeComIrmaos } = require('../../helpers/repoIrmao');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -19,6 +20,8 @@ const { problemasOffline } = require('../../../scripts/int-autocheck/lib/relator
 const { arquivosDaPasta } = require('../../../scripts/int-autocheck/lib/ambienteSuite');
 
 const API = path.join(__dirname, '..', '..', '..');
+// O _PLANO.md e o mapa de passos moram em Maturacao/demandas/marco-9 (pasta irmã, sem remoto): ausentes no CI que só tem a API (CI_SEM_REPOS_IRMAOS=1) o teste vira NAO_APLICAVEL_NO_CI; sem a variável, continua exigindo.
+const testeComPlano = testeComIrmaos(['Maturacao/demandas/marco-9/_PLANO.md']);
 
 test('m9d047_runbook_de_operacao_da_ia_tem_as_7_secoes', () => {
   const texto = fs.readFileSync(path.join(API, 'docs/runbooks/ai/operacao.md'), 'utf8');
@@ -47,7 +50,8 @@ test('m9d047_esteira_da_ia_grava_o_relatorio_offline_de_toda_a_suite', () => {
   const estagios = E.carregar(path.join(API, 'scripts/ai-ci/estagios.json'));
   const comandos = estagios[11].comandos;
   assert.equal(estagios[11].nome, 'privacy/log redaction');
-  assert.deepEqual(comandos.slice(-2), [['node', 'scripts/ai-ci/offlineIa.js'], ['node', 'scripts/ai-dod-check.js']]);
+  // A execução offline roda em cluster PRÓPRIO e limpo (os estágios 4 a 11 já deixaram dados no cluster da esteira; os testes de HTTP criam registros fixos e dariam 409).
+  assert.deepEqual(comandos.slice(-2), [['node', 'scripts/withDisposableDb.js', '--', 'env', 'LOG_LEVEL=info', 'bash', '-c', 'node scripts/seed-ci-two-tenants.js >/dev/null && node scripts/ai-ci/offlineIa.js'], ['node', 'scripts/ai-dod-check.js']]);
   assert.equal(estagios[11].banco, true, 'só em banco descartável');
   // Fora de banco descartável a execução recusa (o .env aponta para a homologação real).
   const sem = spawnSync('node', ['scripts/ai-ci/offlineIa.js'], { cwd: API, encoding: 'utf8', env: { ...process.env, DISPOSABLE_DB: '' } });
@@ -59,7 +63,7 @@ test('m9d047_esteira_da_ia_grava_o_relatorio_offline_de_toda_a_suite', () => {
   assert.match(ignorado, /^reports\/offline-run-ia\.json$/m);
 });
 
-test('m9d047_marcelo_sozinho_responde_sim_com_runbook_e_relatorio_offline', () => {
+testeComPlano('m9d047_marcelo_sozinho_responde_sim_com_runbook_e_relatorio_offline', () => {
   // Fatos reais do repositório (runbook de verdade) com o relatório da execução offline sintético e todo verde: as verificações (b) e (c) da D258 passam.
   const real = ambienteReal({});
   assert.deepEqual(real.runbookIa(), [], 'o runbook docs/runbooks/ai/operacao.md está completo');

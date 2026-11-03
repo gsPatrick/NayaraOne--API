@@ -7,6 +7,7 @@
  * "AI_DOD_ITEM_MISSING DoD item N sem prova" na saída de erro e exit 1. Somente leitura: sem banco, sem MFA, sem segredo.
  * Uso: node scripts/ai-dod-check.js [--demandas <pasta>] [--raiz <pasta da API>] [--matriz <arquivo>]
  */
+const fs = require('node:fs');
 const path = require('node:path');
 const { carregar, ARQUIVO } = require('./ai-dod/lib/matriz');
 const { ambienteReal } = require('./ai-dod/lib/ambiente');
@@ -20,7 +21,10 @@ try {
   const matriz = carregar(valor('--matriz') ? path.resolve(valor('--matriz')) : ARQUIVO);
   const demandas = valor('--demandas');
   const raiz = valor('--raiz');
-  const r = executar(matriz, ambienteReal({ demandas: demandas && path.resolve(demandas), raiz: raiz && path.resolve(raiz), relatorioAdversarial: matriz.relatorioAdversarial }));
+  const amb = ambienteReal({ demandas: demandas && path.resolve(demandas), raiz: raiz && path.resolve(raiz), relatorioAdversarial: matriz.relatorioAdversarial });
+  // Só com CI_SEM_REPOS_IRMAOS=1 (workflow que faz checkout só da API) E a pasta de demandas realmente ausente; sem a variável a ausência reprova.
+  const semDemandas = process.env.CI_SEM_REPOS_IRMAOS === '1' && !demandas && !fs.existsSync(path.join(require('./analytics/sprints/demandasMd').pastaPadrao(), 'marco-9'));
+  const r = executar(matriz, semDemandas ? { ...amb, semDemandas: true } : amb);
   process.stdout.write(r.stdout);
   process.stderr.write(r.stderr);
   process.exit(r.code);
