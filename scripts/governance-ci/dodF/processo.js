@@ -7,6 +7,7 @@ const path = require('node:path');
 const { contar, detalharPulados, casosDoXml } = require('../checkJunit');
 const { LeituraError } = require('./erros');
 const { RAIZ_API } = require('./config');
+const { expandirGlobs } = require('./globs');
 
 const LIMITE_SAIDA = 256 * 1024 * 1024;
 
@@ -27,7 +28,7 @@ function rodarSuite(globs, { env = process.env } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dod-f-'));
   const junit = path.join(dir, 'suite.junit.xml');
   try {
-    const r = rodar(process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...globs], { env: { ...limpo, NODE_ENV: 'test' } });
+    const r = rodar(process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...expandirGlobs(globs).map((a) => path.resolve(RAIZ_API, a))], { env: { ...limpo, NODE_ENV: 'test' } });
     let xml;
     try { xml = fs.readFileSync(junit, 'utf8'); } catch (e) { throw new LeituraError(`relatório JUnit da suíte não foi gerado: ${e.code || e.message}`); }
     const c = contar(xml);

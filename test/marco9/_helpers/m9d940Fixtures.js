@@ -87,13 +87,13 @@ function ambiente({ lineage = true } = {}) {
   return { dir, cfg, cfgPath, salvar, saida: cfg.saida };
 }
 
-const FRASE_ADIAMENTO = 'ensaio com dados reais da cliente: Marco 10, decisão do Patrick de 03/11/2026';
+const FRASE_ADIAMENTO = 'ensaio com dados reais da cliente: Marco 10, decisão do Patrick de 02/11/2026';
 
 /** Liga o adiamento do DRY3 real (DI-D940-6) no ambiente: sem relatório exportado, arquivo de decisões (com ou sem o registro) e suíte do ensaio descartável (verde ou vermelha). */
 function adiar(amb, { registro = true, verde = true, decisoes = true } = {}) {
   fs.rmSync(amb.cfg.dry3.arquivo, { force: true });
   const arquivo = path.join(amb.dir, 'decisoes.md');
-  if (decisoes) fs.writeFileSync(arquivo, `# Decisões\n- DI-D908-9 | D908 | outra decisão | x\n${registro ? `- DI-D940-6 | D940 | DRY3 real | ${FRASE_ADIAMENTO} | Patrick, 03/11/2026\n` : ''}`);
+  if (decisoes) fs.writeFileSync(arquivo, `# Decisões\n- DI-D908-9 | D908 | outra decisão | x\n${registro ? `- DI-D940-6 | D940 | DRY3 real | ${FRASE_ADIAMENTO} | Patrick, 02/11/2026\n` : ''}`);
   const suite = suiteMinima(amb.dir, 'ensaio.descartavel.test.js', verde ? "test('ensaio descartável', () => {});" : "test('ensaio descartável', () => { throw new Error('vermelho'); });");
   amb.cfg.dry3.adiamento = { arquivo_decisoes: arquivo, id: 'DI-D940-6', frase: FRASE_ADIAMENTO, suites: [suite] };
   amb.salvar();

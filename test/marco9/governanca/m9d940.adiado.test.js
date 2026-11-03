@@ -1,6 +1,6 @@
 'use strict';
 
-// M9-D940, decisão do Patrick de 03/11/2026 (DI-D940-6): o ensaio DRY3 com dados reais da cliente fica no Marco 10. O item sai ADIADO_MARCO_10 (visível, contado à parte) SOMENTE com o
+// M9-D940, decisão do Patrick de 02/11/2026 (DI-D940-6): o ensaio DRY3 com dados reais da cliente fica no Marco 10. O item sai ADIADO_MARCO_10 (visível, contado à parte) SOMENTE com o
 // registro da decisão E o ensaio descartável verde; sem registro, com descartável vermelho ou com relatório real reprovado, falha. Relatório real válido continua mandando.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -32,7 +32,7 @@ test('m9d940 adiado: com registro e ensaio descartável verde o item sai ADIADO_
   const amb = kit.adiar(kit.ambiente());
   const r = kit.fechar(amb, DRY3);
   assert.equal(r.status, 0, r.out);
-  assert.match(kit.linha(r, 'DRY3'), /^ADIADO_MARCO_10 Migração v2 DRY3: ADIADO_MARCO_10: ensaio com dados reais da cliente fica no Marco 10 \(decisão do Patrick de 03\/11\/2026, DI-D940-6\); NAO foi conferido relatório real/);
+  assert.match(kit.linha(r, 'DRY3'), /^ADIADO_MARCO_10 Migração v2 DRY3: ADIADO_MARCO_10: ensaio com dados reais da cliente fica no Marco 10 \(decisão do Patrick de 02\/11\/2026, DI-D940-6\); NAO foi conferido relatório real/);
   assert.doesNotMatch(kit.linha(r, 'DRY3'), /^OK /);
 });
 
@@ -107,4 +107,30 @@ test('m9d940 adiado: suíte com teste NAO_APLICAVEL_NO_CI vira o item NAO_APLICA
   const sem = kit.fechar(amb, ['--itens', 'dlp'], { CI_SEM_REPOS_IRMAOS: '' });
   assert.equal(sem.status, 1, sem.out);
   assert.match(kit.linha(sem, 'DLP'), /^FALHA DLP: suíte: 1 teste\(s\) pulado\(s\)/);
+});
+
+test('m9d940 adiado: ensaio descartável com teste NAO_APLICAVEL_NO_CI falha, nunca ADIADO', () => {
+  const amb = kit.adiar(kit.ambiente());
+  amb.cfg.dry3.adiamento.suites = [kit.suiteMinima(amb.dir, 'ensaio.na.test.js', "test('lê o irmão', { skip: 'NAO_APLICAVEL_NO_CI: x ausente' }, () => {});\ntest('roda', () => {});")];
+  amb.salvar();
+  const r = kit.fechar(amb, DRY3, { CI_SEM_REPOS_IRMAOS: '1' });
+  assert.equal(r.status, 1, r.out);
+  assert.match(kit.linha(r, 'DRY3'), /^FALHA Migração v2 DRY3: .*ensaio descartável ficou incompleto/);
+  assert.doesNotMatch(r.out, /ADIADO_MARCO_10 Migração/);
+});
+
+test('m9d940 expandirGlobs expande padrões sem depender do shell nem do node --test (Node 20 não expande glob)', () => {
+  const os = require('node:os');
+  const { expandirGlobs } = require('../../../scripts/governance-ci/dodF/globs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d940-glob-'));
+  for (const n of ['a21.x.test.js', 'a23.y.test.js', 'a26.z.test.js', 'b21.x.test.js', 'a21.x.helper.js']) fs.writeFileSync(path.join(dir, n), '');
+  const rel = (l) => l.map((a) => path.basename(a));
+  assert.deepEqual(rel(expandirGlobs([path.join(dir, 'a2[0-5].*.test.js')])), ['a21.x.test.js', 'a23.y.test.js']);
+  assert.deepEqual(rel(expandirGlobs([path.join(dir, '*.x.test.js')])), ['a21.x.test.js', 'b21.x.test.js']);
+  assert.deepEqual(rel(expandirGlobs([path.join(dir, 'b21.x.test.js')])), ['b21.x.test.js']);
+  assert.throws(() => expandirGlobs([path.join(dir, 'zzz.*.test.js')]), /não encontrou nenhum arquivo/);
+  assert.throws(() => expandirGlobs([path.join(dir, 'nao-existe.test.js')]), /inexistente/);
+  // os padrões reais da configuração expandem para arquivos existentes
+  const cfg = require('../../../docs/governance/dod-bloco-f.json');
+  for (const s of [...cfg.registry.suites, ...cfg.dlp.suites, ...cfg.dry3.adiamento.suites]) assert.ok(expandirGlobs([s]).length > 0, s);
 });
