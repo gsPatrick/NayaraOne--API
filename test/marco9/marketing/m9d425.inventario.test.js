@@ -6,6 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { motivoNaoAplicavel } = require('../../helpers/repoIrmao');
 const { DISPOSABLE, SKIP_DISPOSABLE } = require('../../m9d801.helpers');
 
 process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'segredo-de-teste-m9d425';
@@ -30,7 +31,7 @@ test('a_rota_do_marketing_usa_o_guarda_nivel_2_sem_mfa_e_nivel_3_com_mfa_e_tem_r
   assert.deepEqual([D.inventory.get(KEYS[0]).level, D.inventory.get(KEYS[0]).mfa, D.inventory.get(KEYS[1]).level, D.inventory.get(KEYS[1]).mfa], [2, 'não', 3, 'sim']);
 });
 
-test('parametro_do_motivo_esta_no_dicionario_no_catalogo_na_tela_e_e_lido_pelo_codigo', () => {
+test('parametro_do_motivo_esta_no_dicionario_no_catalogo_na_tela_e_e_lido_pelo_codigo', { skip: motivoNaoAplicavel(['Maturacao/demandas/parametros.csv', 'NayaraOne--FRONT/app/painel/configuracoes']) }, () => {
   const key = 'marketing.killswitch.motivo_min_caracteres';
   const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
   assert.deepEqual(SETTINGS_SCHEMA[key], { type: 'integer', min: 3, max: 500 });

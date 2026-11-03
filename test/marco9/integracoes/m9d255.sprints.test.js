@@ -12,6 +12,10 @@ const A = require('../../../scripts/int-sprint/lib/avaliar');
 const { avaliarSprint } = require('../../../scripts/int-sprint/lib/portao');
 const { gerarDocumento } = require('../../../scripts/int-sprint/lib/documento');
 const { montarFonte } = require('../_helpers/intSprintFonte');
+const { motivoNaoAplicavel } = require('../../helpers/repoIrmao');
+
+// As três provas abaixo leem as demandas reais de Maturacao/ (só existe ao lado da API na máquina de quem desenvolve): ausente, falham; no CI com CI_SEM_REPOS_IRMAOS=1 viram NAO_APLICAVEL_NO_CI.
+const DEMANDAS_REAIS = { skip: motivoNaoAplicavel(['Maturacao/demandas/marco-9']) };
 
 const raiz = path.join(__dirname, '..', '..', '..');
 const fontes = [];
@@ -21,7 +25,7 @@ after(() => fontes.forEach((f) => f.limpar()));
 const real = () => { const demandas = carregarDemandas(pastaPadrao()); return { demandas, mapa: lerMapa(demandas.get('M9-D255').texto) }; };
 const semExigencia = { testes: [], comandos: [], semTeste: [] };
 
-test('sprints_cobrem_todas_as_demandas_do_bloco', () => {
+test('sprints_cobrem_todas_as_demandas_do_bloco', DEMANDAS_REAIS, () => {
   const { demandas, mapa } = real();
   assert.deepEqual(mapa.sprints.map((s) => s.codigo), ['I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9']);
   assert.equal(mapa.passos.length, 11, 'os 11 passos do livro');
@@ -40,7 +44,7 @@ test('sprints_cobrem_todas_as_demandas_do_bloco', () => {
   assert.deepEqual(A.cobertura(m, falsa).inexistentes, ['M9-D200']);
 });
 
-test('sprints_ordem_respeita_dependencias', () => {
+test('sprints_ordem_respeita_dependencias', DEMANDAS_REAIS, () => {
   const { demandas, mapa } = real();
   assert.deepEqual(A.dependenciasIncoerentes(mapa, demandas), [], 'nenhuma demanda depende de sprint posterior');
   for (const s of mapa.sprints) {
@@ -93,7 +97,7 @@ test('portao_de_sprint_script_sai_com_1_e_codigo', () => {
   assert.match(painel.stdout, /I1 tema I1: em andamento \(1\/2 verificadas\)/);
 });
 
-test('sprints_documento_atualizado', () => {
+test('sprints_documento_atualizado', DEMANDAS_REAIS, () => {
   const { demandas, mapa } = real();
   const arquivo = fs.readFileSync(path.join(raiz, 'docs', 'integrations', 'SPRINTS.md'), 'utf8');
   assert.equal(arquivo, gerarDocumento(mapa, demandas), 'docs/integrations/SPRINTS.md é o gerado da tabela da M9-D255 (rode --gerar-doc)');

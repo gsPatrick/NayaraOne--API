@@ -8,6 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { motivoNaoAplicavel } = require('./helpers/repoIrmao');
 
 const { sequelize } = require('../src/models');
 const { withRollbackTenantTransaction } = require('./testHelpers');
@@ -145,7 +146,7 @@ test('ci_falha_com_cadencia_literal_no_codigo', () => {
   assert.deepEqual(scanDirectory(path.join(__dirname, '..', 'src', 'features', 'marketing')), []);
 });
 
-test('parametros_do_csv_existem_no_dicionario_e_na_tela', () => {
+test('parametros_do_csv_existem_no_dicionario_e_na_tela', { skip: motivoNaoAplicavel(['Maturacao/demandas/parametros.csv', 'NayaraOne--FRONT/app/painel/configuracoes/marketingCadenceGroups.js']) }, () => {
   const root = path.join(__dirname, '..', '..');
   const csv = fs.readFileSync(path.join(root, 'Maturacao', 'demandas', 'parametros.csv'), 'utf8');
   const { SETTINGS_SCHEMA } = (() => { const s = require('../src/features/settings/settings.service'); return { SETTINGS_SCHEMA: s.SETTINGS_SCHEMA }; })();

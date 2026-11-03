@@ -18,6 +18,8 @@ jobs:
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      # O CI faz checkout só da API: Maturacao/ (sem remoto) e NayaraOne--FRONT não existem aqui. Declarado: o que depende deles sai NAO_APLICAVEL_NO_CI (pulado e dito), nunca passou.
+      CI_SEM_REPOS_IRMAOS: '1'
     services:
       clamav:
         image: clamav/clamav:stable
@@ -72,6 +74,8 @@ jobs:
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      # O CI faz checkout só da API: Maturacao/ (sem remoto) e NayaraOne--FRONT não existem aqui. Declarado: o que depende deles sai NAO_APLICAVEL_NO_CI (pulado e dito), nunca passou.
+      CI_SEM_REPOS_IRMAOS: '1'
     services:
       clamav:
         image: clamav/clamav:stable

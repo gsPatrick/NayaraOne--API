@@ -5,6 +5,7 @@
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { motivoNaoAplicavel } = require('../../helpers/repoIrmao');
 const { sequelize } = require('../../../src/models');
 const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { prepararTenants } = require('../../helpers/marketingExecucao');
@@ -104,7 +105,7 @@ test('o_pipeline_usa_o_validador_completo_e_a_porta_continua_substituivel', asyn
   });
 });
 
-test('parametros_do_validador_constam_no_catalogo_e_o_padrao_do_codigo_e_o_do_catalogo', () => {
+test('parametros_do_validador_constam_no_catalogo_e_o_padrao_do_codigo_e_o_do_catalogo', { skip: motivoNaoAplicavel(['Maturacao/demandas/parametros.csv']) }, () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const csv = fs.readFileSync(path.join(__dirname, '../../../../Maturacao/demandas/parametros.csv'), 'utf8');
