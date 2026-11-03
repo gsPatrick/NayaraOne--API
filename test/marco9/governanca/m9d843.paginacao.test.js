@@ -24,7 +24,7 @@ const SHAPE = ['page', 'pageSize', 'total', 'totalPages'];
 
 before(async () => {
   if (!env.DISPOSABLE) return;
-  restore = await env.withRolePermissions({ 'CI GESTOR': PERMISSIONS });
+  restore = await env.grantTracked('CI GESTOR', Object.keys(PERMISSIONS));
   http = await startHttp({ port: process.env.PORT, grants: {}, logins: { gestorA: ['A', 'gestor'], gestorB: ['B', 'gestor'] } });
   await env.cleanBcp();
   await env.setSectorRoles(http.tenants.A, { FINANCEIRO: ['CI GESTOR'] });

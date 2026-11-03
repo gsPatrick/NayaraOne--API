@@ -23,4 +23,16 @@ const countOf = async (scopeKey) => Number(((await env.adminQuery('SELECT COALES
 const idemRows = async (companyId, like = '%') => (await env.adminQuery('SELECT * FROM governance.idempotency_keys WHERE company_id = $1 AND scope LIKE $2 ORDER BY created_at', [companyId, like])).rows;
 const cleanIdem = () => env.adminQuery('DELETE FROM governance.idempotency_keys');
 
-module.exports = { ...env, setSetting, clearSettings, waitSafeWindow, windowStart, resetCounters, countOf, idemRows, cleanIdem };
+/** Concede permissões a um perfil guardando as linhas que ESTE teste inseriu (as que já existiam não são tocadas); a função devolvida remove exatamente essas linhas. */
+async function grantTracked(roleName, codes) {
+  const inserted = [];
+  for (const code of codes) {
+    const find = () => env.adminQuery('SELECT rp.id FROM core.role_permissions rp JOIN core.roles r ON r.id = rp.role_id JOIN core.permissions p ON p.id = rp.permission_id WHERE r.name = $1 AND p.code = $2', [roleName, code]);
+    if ((await find()).rowCount > 0) continue;
+    await env.setRolePermission(roleName, code, true);
+    inserted.push(...(await find()).rows.map((row) => row.id));
+  }
+  return async () => { if (inserted.length) await env.adminQuery('DELETE FROM core.role_permissions WHERE id = ANY($1::uuid[])', [inserted]); };
+}
+
+module.exports = { ...env, grantTracked, setSetting, clearSettings, waitSafeWindow, windowStart, resetCounters, countOf, idemRows, cleanIdem };
