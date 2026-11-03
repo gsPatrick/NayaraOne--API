@@ -14,6 +14,9 @@ module.exports = {
   },
 
   down: async (queryInterface) => {
+    // providers_no_delete (migration 650) barra DELETE; o seed só remove o que ele mesmo inseriu, então o gatilho é suspenso só aqui
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" DISABLE TRIGGER providers_no_delete');
     await queryInterface.sequelize.query("DELETE FROM \"integration\".\"providers\" WHERE code IN ('signature-zapsign', 'signature-alt-sandbox') AND NOT EXISTS (SELECT 1 FROM \"integration\".\"connections\" c WHERE c.provider_code IN ('signature-zapsign', 'signature-alt-sandbox'));");
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" ENABLE TRIGGER providers_no_delete');
   },
 };

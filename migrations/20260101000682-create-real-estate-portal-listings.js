@@ -58,6 +58,9 @@ module.exports = {
   down: async (queryInterface) => {
     const q = (sql) => queryInterface.sequelize.query(sql);
     await q('DROP TABLE IF EXISTS "real_estate"."portal_listings";');
+    // providers_no_delete (migration 650) barra DELETE; o seed só remove o que ele mesmo inseriu, então o gatilho é suspenso só aqui
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" DISABLE TRIGGER providers_no_delete');
     await q(`DELETE FROM "integration"."providers" WHERE code IN (${CODIGOS.map((c) => `'${c}'`).join(', ')}) AND NOT EXISTS (SELECT 1 FROM "integration"."connections" c WHERE c.provider_code IN (${CODIGOS.map((c) => `'${c}'`).join(', ')}));`);
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" ENABLE TRIGGER providers_no_delete');
   },
 };

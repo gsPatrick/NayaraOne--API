@@ -71,5 +71,7 @@ module.exports = {
   },
   async down(queryInterface) {
     await queryInterface.sequelize.query('DROP TABLE IF EXISTS governance.cost_ledger');
+    // a função é criada no up desta migration; a 861 só a usa e, ao ser desfeita antes, não precisa dela
+    await queryInterface.sequelize.query('DROP FUNCTION IF EXISTS governance.apply_group_rls(regclass)');
   },
 };

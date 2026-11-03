@@ -15,6 +15,9 @@ module.exports = {
 
   down: async (queryInterface) => {
     await queryInterface.sequelize.query("UPDATE \"integration\".\"providers\" SET capabilities = '[\"quote\",\"propose\",\"getPolicy\",\"getStatus\"]'::jsonb WHERE code = 'insurance-sandbox';");
+    // providers_no_delete (migration 650) barra DELETE; o seed só remove o que ele mesmo inseriu, então o gatilho é suspenso só aqui
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" DISABLE TRIGGER providers_no_delete');
     await queryInterface.sequelize.query("DELETE FROM \"integration\".\"providers\" WHERE code IN ('insurance-porto-seguro', 'insurance-yelum', 'insurance-junto-seguros', 'insurance-manual') AND NOT EXISTS (SELECT 1 FROM \"integration\".\"connections\" c WHERE c.provider_code IN ('insurance-porto-seguro', 'insurance-yelum', 'insurance-junto-seguros', 'insurance-manual'));");
+    await queryInterface.sequelize.query('ALTER TABLE "integration"."providers" ENABLE TRIGGER providers_no_delete');
   },
 };
