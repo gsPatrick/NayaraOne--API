@@ -28,10 +28,22 @@ function faltasDa(ev, amb) {
   return [`evidência desconhecida: ${JSON.stringify(ev)}`];
 }
 
+/** Item 15: a autochecagem pode declarar-se NAO_APLICAVEL_NO_CI (dodAmbiente.js); aí não gera falta, mas também não conta como evidência. */
+function avaliarEvidencias(item, amb) {
+  const faltas = [];
+  const naoAplicavel = [];
+  for (const ev of item.evidencias) {
+    const r = ev.autochecagem && amb.autochecagem ? amb.autochecagem() : null;
+    if (r && r.naoAplicavel) naoAplicavel.push(r.motivo);
+    else faltas.push(...(r ? (r.code !== 0 ? [`autochecagem reprovou (saída ${r.code})`] : []) : faltasDa(ev, amb)));
+  }
+  return { faltas, naoAplicavel };
+}
+
 function avaliar(itens, amb) {
   const resultados = itens.map((item) => {
-    const faltas = item.evidencias.flatMap((ev) => faltasDa(ev, amb));
-    return { n: item.n, livro: item.livro, ok: faltas.length === 0, faltas };
+    const { faltas, naoAplicavel } = avaliarEvidencias(item, amb);
+    return { n: item.n, livro: item.livro, ok: faltas.length === 0, faltas, naoAplicavel };
   });
   return { itens: resultados, ok: resultados.every((r) => r.ok) };
 }
@@ -43,11 +55,12 @@ function executar(itens, amb, matrizMd) {
   const r = avaliar(itens, amb);
   out.push('# Definition of Done das integrações');
   for (const it of r.itens) {
-    out.push(`${it.ok ? 'OK   ' : 'FALTA'} ${String(it.n).padStart(2)} ${it.livro}`);
+    out.push(`${it.ok ? (it.naoAplicavel.length ? 'NAO_APLICAVEL_NO_CI' : 'OK   ') : 'FALTA'} ${String(it.n).padStart(2)} ${it.livro}${it.naoAplicavel.map((m) => ` (${m})`).join('')}`);
     for (const f of it.faltas) err.push(`${CODIGO_FALTA} ${MENSAGEM_FALTA} item ${it.n} (${it.livro}): ${f}`);
   }
-  const okItens = r.itens.filter((x) => x.ok).length;
-  out.push(`${okItens} de ${r.itens.length} itens com evidência`);
+  const okItens = r.itens.filter((x) => x.ok && !x.naoAplicavel.length).length;
+  const semCalculo = r.itens.filter((x) => x.naoAplicavel.length).length;
+  out.push(`${okItens} de ${r.itens.length} itens com evidência${semCalculo ? `, ${semCalculo} NAO_APLICAVEL_NO_CI (nao verificado aqui, coberto na suíte local)` : ''}`);
   const linhas = lerMatriz(matrizMd);
   const problemas = problemasDaMatriz(matrizMd, amb.existeTeste);
   const okPrincipios = linhas.filter((l) => l.demandas.length && l.testes.length && l.testes.every((t) => amb.existeTeste(t))).length;

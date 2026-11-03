@@ -53,6 +53,12 @@ function ambienteReal(raiz) {
       : { ok: false, problemas: ['manifesto ausente'], ausentes: [] }),
     autochecagem: () => {
       if (!existeArquivo('scripts/integrationAutocheck.js')) return null;
+      // A autochecagem lê as demandas D200 a D399 e o mapa de sprints em Maturacao/demandas/marco-9 (sem remoto). O CI que só tem a API declara CI_SEM_REPOS_IRMAOS=1: o item 15 sai
+      // NAO_APLICAVEL_NO_CI (dito na saída, não contado como OK) e continua exigido, por inteiro, na suíte local. Sem a variável, a pasta ausente reprova.
+      const demandas = require('../../analytics/sprints/demandasMd').pastaPadrao();
+      if (process.env.CI_SEM_REPOS_IRMAOS === '1' && !fs.existsSync(path.join(demandas, 'marco-9'))) {
+        return { code: 0, naoAplicavel: true, motivo: 'a autochecagem lê as demandas em Maturacao/demandas/marco-9, ausentes neste CI (CI_SEM_REPOS_IRMAOS=1); NAO foi calculada aqui, coberta na suíte local' };
+      }
       const r = spawnSync('node', ['scripts/integrationAutocheck.js'], { cwd: raiz, encoding: 'utf8' });
       return { code: r.status, output: `${r.stdout || ''}${r.stderr || ''}` };
     },
