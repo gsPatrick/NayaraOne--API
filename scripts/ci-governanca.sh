@@ -72,7 +72,11 @@ case "$CONTROLE" in
   aud)           testes_com_banco aud test/marco9/governanca/m9d809.aud*.test.js ;;
   adversarial)   node scripts/checkAdversarialMap.js --json "$SAIDA/adversarial-map.json" | tee "$SAIDA/adversarial-map.txt"
                  resumo "- adversarial: $(head -1 "$SAIDA/adversarial-map.txt")" ;;
-  dod-f)         # M9-D940: o fechamento do bloco F (sobe o próprio banco descartável); etapa final do CI do marco
-                 npm run check:dod-f && resumo "- dod-f: bloco F fechado ($SAIDA/../dod-bloco-f.json)" ;;
+  dod-f)         # M9-D940: o fechamento do bloco F (sobe o próprio banco descartável); etapa final do CI do marco. Itens ADIADO_MARCO_10 (DRY3 real, decisão DI-D940-6) e
+                 # NAO_APLICAVEL_NO_CI (Maturacao ausente) aparecem na saída e no resumo, contados à parte; nunca "OK".
+                 npm run check:dod-f | tee "$SAIDA/dod-f.txt"
+                 resumo "- dod-f: bloco F sem item reprovado ($SAIDA/../dod-bloco-f.json); $(grep '^Contagem:' "$SAIDA/dod-f.txt")"
+                 grep -E '^(ADIADO_MARCO_10|NAO_APLICAVEL_NO_CI) ' "$SAIDA/dod-f.txt" > "$SAIDA/dod-f.itens-a-parte.txt" || [ $? -eq 1 ]
+                 while IFS= read -r l; do resumo "  - ${l:0:300}"; done < "$SAIDA/dod-f.itens-a-parte.txt" ;;
   *) echo "uso: bash scripts/ci-governanca.sh calendar|lineage|dlp|bcp|openapi|flags|finops|accessibility|aud|adversarial|dod-f" >&2; exit 2 ;;
 esac

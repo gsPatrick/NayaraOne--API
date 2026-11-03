@@ -2,6 +2,7 @@
   "descricao": "Os nove testes do livro do bloco F (Caderno, Testes/DoD), com o nome exato do teste que os prova. M9-D940: scripts/checkDodBlocoF.js reprova (GOV_ADVERSARIAL_MISSING) se faltar, se estiver skip/todo ou se a lista deixar de ter 9 itens.",
   "itens_do_livro": 9,
   "raizes": ["test", "../Maturacao/indice-documental/testes"],
+  "nomes_no_front": ["m9d931 obsolete document excluded do Caderno Final"],
   "itens": [
     { "n": 1, "frase": "CDC replay", "demanda": "M9-D900", "testes": ["m9d900 CDC replay produz o mesmo estado e o mesmo hash"] },
     { "n": 2, "frase": "Control Tower totals", "demanda": "M9-D901", "testes": ["m9d901 Control Tower totals fecham com o total"] },

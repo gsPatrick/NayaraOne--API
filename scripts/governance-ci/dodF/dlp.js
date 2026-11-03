@@ -22,11 +22,15 @@ async function piso() {
 async function verificar({ cfg }) {
   const etapas = [['piso', piso], ['suíte', async () => rodarSuite(cfg.dlp.suites)]];
   const partes = [];
+  let naoAplicavel = 0;
   for (const [rotulo, etapa] of etapas) {
     const r = await etapa();
     if (!r.ok) return { nome: NOME, ok: false, motivo: `${rotulo}: ${r.motivo}` };
+    naoAplicavel += r.naoAplicavel || 0;
     partes.push(`${rotulo}: ${r.motivo}`);
   }
+  // Parte da suíte não executou por falta de artefato irmão (CI só com a API): o item não é "OK", é NAO_APLICAVEL_NO_CI (visível e contado à parte).
+  if (naoAplicavel) return { nome: NOME, ok: true, situacao: 'NAO_APLICAVEL_NO_CI', motivo: `NAO_APLICAVEL_NO_CI em ${naoAplicavel} teste(s), o resto verde; ${partes.join('; ')}` };
   return { nome: NOME, ok: true, motivo: partes.join('; ') };
 }
 

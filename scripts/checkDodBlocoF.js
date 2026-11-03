@@ -5,13 +5,13 @@
  * Fechamento do bloco F (M9-D940): o ÚNICO comando que confere o DoD do livro (Migração v2 DRY3, governance registry, lineage crítico, DLP, manifest documental) e os nove testes
  * nomeados do bloco. Uma linha por item (OK ou FALHA <motivo>); o registro da execução (data, commit, itens) vai para docs/evidencias/ci/dod-bloco-f.json.
  *   node scripts/checkDodBlocoF.js [--config <arq>] [--saida <arq>] [--itens dry3,registry,lineage,dlp,manifest,adversarial]
- * Saída: 0 só com todos OK; 1 com item reprovado (GOV_DOD_F_ITEM_FAILED); 2 se algo não pôde ser lido ou verificado (GOV_DOD_F_INVALID). Com --itens a execução é PARCIAL: não é o
+ * Linha por item: OK, ADIADO_MARCO_10 (DRY3 real adiado por decisão registrada do Patrick, DI-D940-6), NAO_APLICAVEL_NO_CI (pasta irmã ausente, CI_SEM_REPOS_IRMAOS=1) ou FALHA; os dois últimos são contados à parte. Saída: 0 só sem FALHA/ERRO; 1 com item reprovado (GOV_DOD_F_ITEM_FAILED); 2 se algo não pôde ser lido ou verificado (GOV_DOD_F_INVALID). Com --itens a execução é PARCIAL: não é o
  * fechamento e não grava o registro. Registry e DLP rodam em banco descartável (sobe sozinho; nunca o compartilhado). Banco local já pronto: DISPOSABLE_DB=1 e DATABASE_ADMIN_URL.
  */
 const path = require('node:path');
 const { lerConfig, daRaiz, CONFIG_PADRAO } = require('./governance-ci/dodF/config');
 const { LeituraError, CODIGO_INVALIDO, MENSAGEM_INVALIDO } = require('./governance-ci/dodF/erros');
-const { executar, linhas, mensagensDeErro, ITENS } = require('./governance-ci/dodF');
+const { executar, linhas, mensagensDeErro, contagem, ITENS } = require('./governance-ci/dodF');
 const { gravar } = require('./governance-ci/dodF/registro');
 const { reexecutarEmBancoDescartavel, informarStatus } = require('./governance-ci/dodF/banco');
 
@@ -39,6 +39,8 @@ async function main(argv) {
   if (o.itens) { console.log(`PARCIAL: ${chaves.join(', ')}. Isto não é o fechamento do bloco F.`); return r.codigo; }
   const registro = gravar(o.saida || daRaiz(cfg.saida), r);
   console.log(`Fechamento do bloco F: ${registro.resultado} em ${registro.generated_at} (commit ${registro.commit.slice(0, 8)}).`);
+  const c = contagem(r.resultados);
+  console.log(`Contagem: OK=${c.OK || 0} ADIADO_MARCO_10=${c.ADIADO_MARCO_10 || 0} NAO_APLICAVEL_NO_CI=${c.NAO_APLICAVEL_NO_CI || 0} reprovados=${c.FALHA || 0} erros_de_leitura=${c.ERRO || 0}`);
   return r.codigo;
 }
 

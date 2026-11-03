@@ -29,8 +29,12 @@ async function executar({ cfg, chaves = Object.keys(ITENS) }) {
   return { resultados, codigo };
 }
 
-/** Linhas do relatório: uma por item, `OK` ou `FALHA <motivo>`. */
-const linhas = (resultados) => resultados.map((r) => (r.ok ? `OK ${r.nome}: ${r.motivo}` : `${r.erro ? 'ERRO' : 'FALHA'} ${r.nome}: ${r.motivo}`));
+/** Linhas do relatório: uma por item, `OK`, `ADIADO_MARCO_10`, `NAO_APLICAVEL_NO_CI` ou `FALHA <motivo>`. */
+const situacaoDe = (r) => (r.ok ? r.situacao || 'OK' : r.erro ? 'ERRO' : 'FALHA');
+const linhas = (resultados) => resultados.map((r) => `${situacaoDe(r)} ${r.nome}: ${r.motivo}`);
+
+/** Contagem por situação: ADIADO_MARCO_10 e NAO_APLICAVEL_NO_CI aparecem à parte, nunca somados a OK. */
+const contagem = (resultados) => resultados.reduce((c, r) => ({ ...c, [situacaoDe(r)]: (c[situacaoDe(r)] || 0) + 1 }), {});
 
 function mensagensDeErro(resultados) {
   const falhas = resultados.filter((r) => !r.ok && !r.erro).map((r) => `${CODIGO_ITEM}: ${mensagemItem(r.nome)}`);
@@ -38,4 +42,4 @@ function mensagensDeErro(resultados) {
   return erros.length ? [`${CODIGO_INVALIDO}: ${MENSAGEM_INVALIDO}`, ...erros.map((r) => `  ${r.nome}: ${r.motivo}`), ...falhas] : falhas;
 }
 
-module.exports = { executar, linhas, mensagensDeErro, ITENS };
+module.exports = { executar, linhas, mensagensDeErro, contagem, situacaoDe, ITENS };

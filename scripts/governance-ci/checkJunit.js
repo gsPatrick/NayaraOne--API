@@ -39,4 +39,4 @@ function main(arquivo) {
 }
 
 if (require.main === module) process.exit(main(process.argv[2]));
-module.exports = { contar };
+module.exports = { contar, detalharPulados, casosDoXml: (xml) => [...xml.matchAll(/<testcase\b[^>]*?(?:\/>|>[\s\S]*?<\/testcase>)/g)].map((m) => m[0]) };

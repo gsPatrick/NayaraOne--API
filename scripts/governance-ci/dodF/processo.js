@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { contar } = require('../checkJunit');
+const { contar, detalharPulados, casosDoXml } = require('../checkJunit');
 const { LeituraError } = require('./erros');
 const { RAIZ_API } = require('./config');
 
@@ -32,8 +32,12 @@ function rodarSuite(globs, { env = process.env } = {}) {
     try { xml = fs.readFileSync(junit, 'utf8'); } catch (e) { throw new LeituraError(`relatório JUnit da suíte não foi gerado: ${e.code || e.message}`); }
     const c = contar(xml);
     if (!c.testes) return { ok: false, motivo: 'a suíte não executou nenhum teste' };
-    if (c.pulados.length) return { ok: false, motivo: `${c.pulados.length} teste(s) pulado(s) no banco descartável (${c.pulados.slice(0, 3).join('; ')})` };
+    // Única exceção, a mesma do checkJunit: com CI_SEM_REPOS_IRMAOS=1, o teste pulado com a mensagem NAO_APLICAVEL_NO_CI (artefato irmão ausente) não reprova, mas é contado à parte.
+    const naoAplicaveis = env.CI_SEM_REPOS_IRMAOS === '1' ? detalharPulados(casosDoXml(xml)).filter((d) => /^NAO_APLICAVEL_NO_CI\b/.test(d.mensagem)) : [];
+    const pulados = c.pulados.filter((n) => !naoAplicaveis.some((d) => d.nome === n));
+    if (pulados.length) return { ok: false, motivo: `${pulados.length} teste(s) pulado(s) no banco descartável (${pulados.slice(0, 3).join('; ')})` };
     if (r.status !== 0) return { ok: false, motivo: `a suíte falhou (${c.testes} testes; ${(r.out.match(/^# fail (\d+)/m) || [])[1] || '?'} com falha)` };
+    if (naoAplicaveis.length) return { ok: true, naoAplicavel: naoAplicaveis.length, motivo: `${c.testes} testes, ${c.testes - naoAplicaveis.length} executados, ${naoAplicaveis.length} NAO_APLICAVEL_NO_CI (artefato irmão ausente, coberto na suíte local: ${naoAplicaveis.map((d) => d.nome).slice(0, 3).join('; ')}), nenhum outro pulado` };
     return { ok: true, motivo: `${c.testes} testes, nenhum pulado` };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }

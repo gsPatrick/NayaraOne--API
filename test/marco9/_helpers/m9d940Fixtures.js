@@ -87,6 +87,19 @@ function ambiente({ lineage = true } = {}) {
   return { dir, cfg, cfgPath, salvar, saida: cfg.saida };
 }
 
+const FRASE_ADIAMENTO = 'ensaio com dados reais da cliente: Marco 10, decisão do Patrick de 03/11/2026';
+
+/** Liga o adiamento do DRY3 real (DI-D940-6) no ambiente: sem relatório exportado, arquivo de decisões (com ou sem o registro) e suíte do ensaio descartável (verde ou vermelha). */
+function adiar(amb, { registro = true, verde = true, decisoes = true } = {}) {
+  fs.rmSync(amb.cfg.dry3.arquivo, { force: true });
+  const arquivo = path.join(amb.dir, 'decisoes.md');
+  if (decisoes) fs.writeFileSync(arquivo, `# Decisões\n- DI-D908-9 | D908 | outra decisão | x\n${registro ? `- DI-D940-6 | D940 | DRY3 real | ${FRASE_ADIAMENTO} | Patrick, 03/11/2026\n` : ''}`);
+  const suite = suiteMinima(amb.dir, 'ensaio.descartavel.test.js', verde ? "test('ensaio descartável', () => {});" : "test('ensaio descartável', () => { throw new Error('vermelho'); });");
+  amb.cfg.dry3.adiamento = { arquivo_decisoes: arquivo, id: 'DI-D940-6', frase: FRASE_ADIAMENTO, suites: [suite] };
+  amb.salvar();
+  return amb;
+}
+
 /** Roda o comando de fechamento (sem herdar o contexto do `node --test` que roda os testes). */
 function fechar(amb, extra = [], env = {}) {
   const { NODE_TEST_CONTEXT: _c, ...limpo } = process.env;
@@ -96,4 +109,4 @@ function fechar(amb, extra = [], env = {}) {
 
 const linha = (r, nome) => r.stdout.split('\n').find((l) => l.includes(nome)) || '';
 
-module.exports = { COMMIT_TESTE, EMPRESA_TESTE, CHAVE_TESTE, RAIZ, SCRIPT, ambiente, fechar, relatorioDry3, suiteMinima, mapaDosNove, escrever, linha, NOMES_DO_LIVRO, CRITERIOS };
+module.exports = { adiar, FRASE_ADIAMENTO, COMMIT_TESTE, EMPRESA_TESTE, CHAVE_TESTE, RAIZ, SCRIPT, ambiente, fechar, relatorioDry3, suiteMinima, mapaDosNove, escrever, linha, NOMES_DO_LIVRO, CRITERIOS };

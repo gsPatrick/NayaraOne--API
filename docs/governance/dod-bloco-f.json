@@ -1,7 +1,15 @@
 {
   "descricao": "Configuração do fechamento do bloco F (M9-D940): onde ficam as provas e quais suítes valem. scripts/checkDodBlocoF.js lê este arquivo; nada disso fica fixo no código.",
   "saida": "docs/evidencias/ci/dod-bloco-f.json",
-  "dry3": { "arquivo": "docs/governance/dry3-report.json" },
+  "dry3": {
+    "arquivo": "docs/governance/dry3-report.json",
+    "adiamento": {
+      "arquivo_decisoes": "../Maturacao/demandas/decisoes-de-implementacao.md",
+      "id": "DI-D940-6",
+      "frase": "ensaio com dados reais da cliente: Marco 10, decisão do Patrick de 03/11/2026",
+      "suites": ["test/marco9/governanca/m9d908.*.test.js"]
+    }
+  },
   "registry": {
     "suites": [
       "test/marco9/governanca/m9d910.*.test.js",

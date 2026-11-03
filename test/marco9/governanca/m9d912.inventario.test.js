@@ -7,6 +7,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { DISPOSABLE, SKIP_DISPOSABLE } = require('../../m9d801.helpers');
+const { testeComIrmaos } = require('../../helpers/repoIrmao');
 
 process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'segredo-de-teste-m9d912';
 const skip = DISPOSABLE ? false : SKIP_DISPOSABLE;
@@ -45,7 +46,7 @@ test('m9d912 não existe rota de exclusão de arquivo e o inventário da M9-D852
   assert.ok(D.registry.registeredKeys().includes('legal_hold.release'));
 });
 
-test('m9d912 os parâmetros da retenção legal estão no esquema, no catálogo e são lidos pelo código', () => {
+testeComIrmaos(['Maturacao/demandas/parametros.csv'])('m9d912 os parâmetros da retenção legal estão no esquema, no catálogo e são lidos pelo código', () => {
   const settings = require('../../../src/features/core-governance/data-quality/legalHold.settings');
   const { DATA_QUALITY_SETTING_DEFAULTS, DATA_QUALITY_SETTINGS_SCHEMA } = require('../../../src/features/core-governance/data-quality/data-quality.settings');
   const csv = fs.readFileSync(path.join(ROOT, '../Maturacao/demandas/parametros.csv'), 'utf8');
